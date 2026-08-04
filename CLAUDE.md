@@ -2,7 +2,7 @@
 
 **Muster** — a local-first client for coordinating multi-party transactions inside conversations, on the Logos stack. The conversation is the security boundary. The first mission is education: walk people through the entire transaction lifecycle, showing at each step how Logos maintains privacy and security and where other stacks leak (`docs/00-vision.md`). The end state is a usable client for doing things together, securely and privately.
 
-Built as logos-core modules: a Nim backend (`muster-module.lgx`) and a QML frontend (`muster-ui.lgx`), hosted by logos-basecamp (GUI) and `logoscore` (headless). Full requirements: `docs/01-furps.md`. Phase plan: `docs/02-implementation-plan.md`. UI reference: the v2 HTML prototype (tokens, components, copy voice).
+Built as logos-core modules: a Nim backend (`muster-module.lgx`) and a QML frontend (`muster-ui.lgx`), hosted by logos-basecamp (GUI) and `logoscore` (headless). Full requirements: `docs/01-furps.md`. Phase plan: `docs/02-implementation-plan.md`. UI reference: `ui/prototype/coordination-prototype-v2.html` (tokens, components, copy voice) — a self-contained, no-crypto HTML/JS simulation of the six-step legend. It is not the app; it drives the QML build in P4 and should keep pace with the FURPS/plan as they evolve, but where prototype and FURPS conflict, FURPS wins.
 
 ## Invariants — violating any of these is a bug, whatever the tests say
 
@@ -37,6 +37,7 @@ Built as logos-core modules: a Nim backend (`muster-module.lgx`) and a QML front
 module/   Nim backend → muster-module.lgx
   src/    api · schemas · dcbor · crypto · log · intents · drivers · transport · plugins
 ui/       QML frontend → muster-ui.lgx (theme from prototype tokens; logos-qt-mcp tests)
+  prototype/  coordination-prototype-v2.html — the standalone HTML reference build
 infra/    anvil fixtures (Safe 1.4.1)
 docs/     vision · furps · plan · adr/
 ```

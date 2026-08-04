@@ -1,0 +1,1680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Muster — prototype v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#E4E6E0;
+  --surface:#F7F8F5;
+  --ink:#1A1F1C;
+  --muted:#656E66;
+  --rule:#C6CBC3;
+  --signal:#4B33C4;
+  --signal-soft:#EAE6FA;
+  --settled:#1E6B52;
+  --settled-soft:#DFEDE6;
+  --alarm:#A32D1E;
+  --alarm-soft:#F6E3DF;
+  --outside:#23282A;
+  --outside-ink:#DCE2DE;
+  --outside-rule:#3A4144;
+  --outside-accent:#8FA3F5;
+  --ui:"Instrument Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:"DM Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:#B9BEB7;
+  background-image:radial-gradient(circle at 50% -10%,#CDD2CA 0%,#A5ABA4 100%);
+  background-attachment:fixed;
+  font-family:var(--ui);color:var(--ink);
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  padding:28px 16px 56px;-webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+
+.masthead{max-width:400px;width:100%;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-end;gap:14px}
+.masthead h1{font-size:15px;font-weight:600;letter-spacing:-0.01em;margin:0 0 4px}
+.masthead p{font-family:var(--mono);font-size:10.5px;line-height:1.5;color:#3B423C;margin:0;max-width:250px}
+.resetbtn{
+  font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  background:none;border:1.5px solid #4C544D;color:#333A34;border-radius:999px;padding:6px 12px;flex:none;
+}
+.resetbtn:hover{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+
+.phone{
+  width:400px;max-width:100%;height:840px;
+  background:var(--paper);border:2px solid var(--ink);border-radius:26px;
+  overflow:hidden;position:relative;box-shadow:0 26px 64px rgba(20,30,24,.3);
+}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--paper)}
+.screen[hidden]{display:none}
+
+/* ---------- chrome ---------- */
+.topbar{padding:18px 20px 10px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex:none}
+.topbar h2{margin:0;font-size:26px;letter-spacing:-0.035em;font-weight:600;line-height:1.05}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:6px}
+.bar-actions{display:flex;gap:7px;flex:none}
+.icon-btn{
+  background:none;border:1.5px solid var(--ink);border-radius:999px;width:34px;height:34px;
+  display:grid;place-items:center;font-size:15px;line-height:1;flex:none;transition:background .12s,color .12s;
+}
+.icon-btn:hover{background:var(--ink);color:var(--paper)}
+.scroll{flex:1;min-height:0;overflow-y:auto;padding:0 20px 22px}
+
+/* ---------- filter chips ---------- */
+.chips{display:flex;gap:6px;padding:2px 20px 8px;flex:none;flex-wrap:wrap}
+.chip{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;padding:6px 11px;border-radius:999px;
+  border:1.5px solid var(--rule);background:var(--surface);transition:all .12s;
+}
+.chip:hover{border-color:var(--ink)}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.chip .ct{opacity:.6;margin-left:5px}
+
+/* ---------- home rows ---------- */
+.group-label{
+  font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+  margin:18px 0 8px;display:flex;align-items:center;gap:8px;
+}
+.group-label::after{content:"";flex:1;height:1px;background:var(--rule)}
+.group-label.hot{color:var(--signal)}
+.group-label.hot::after{background:var(--signal);opacity:.32}
+
+.row{
+  width:100%;text-align:left;background:var(--surface);border:1.5px solid var(--rule);border-radius:12px;
+  padding:13px 14px;margin-bottom:8px;display:block;transition:border-color .12s,transform .12s;
+}
+.row:hover{border-color:var(--ink);transform:translateY(-1px)}
+.row.live{border-color:var(--ink);border-left:5px solid var(--signal);padding-left:11px}
+.row.done{opacity:.72}
+.row-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.row-verb{font-size:15.5px;font-weight:600;letter-spacing:-0.02em;line-height:1.25}
+.row-when{font-family:var(--mono);font-size:10px;color:var(--muted);flex:none}
+.row-acct{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;display:block}
+.row-bottom{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
+.row-verb-wrap{display:flex;align-items:baseline;gap:8px;flex:1}
+.row-chev{font-family:var(--mono);font-size:13px;color:var(--muted);flex:none;align-self:center}
+.row:hover .row-chev{color:var(--ink)}
+
+.fault{
+  position:absolute;top:0;left:0;right:0;z-index:60;background:var(--alarm);color:#fff;
+  font-family:var(--mono);font-size:10px;line-height:1.55;padding:9px 12px;
+}
+.fault[hidden]{display:none}
+.fault b{font-weight:500}
+
+.pinned{
+  flex:none;background:var(--signal-soft);border-bottom:1.5px solid var(--rule);
+  padding:9px 12px;display:flex;align-items:center;gap:10px;
+}
+.pinned[hidden]{display:none}
+.pinned .t{flex:1;font-family:var(--mono);font-size:10px;color:var(--signal);line-height:1.5}
+.pinned .t b{font-weight:500}
+.pinned button{flex:none;background:var(--signal);color:#fff;border:none;border-radius:7px;padding:8px 12px;font-size:12px;font-weight:600}
+.pinned button:hover{background:#3B27A6}
+.pinned.warn{background:var(--alarm-soft);border-bottom-color:rgba(163,45,30,.3)}
+.pinned.warn .t{color:var(--alarm)}
+.pinned.warn button{background:var(--alarm)}
+.flash{animation:flash .9s ease-out}
+@keyframes flash{0%{box-shadow:0 0 0 0 rgba(75,51,196,.55)}100%{box-shadow:0 0 0 14px rgba(75,51,196,0)}}
+.state{font-family:var(--mono);font-size:10px;letter-spacing:.03em;padding:3px 7px;border-radius:4px;background:var(--signal-soft);color:var(--signal);flex:none}
+.state.wait{background:#E7E9E4;color:var(--muted)}
+.state.done{background:var(--settled-soft);color:var(--settled)}
+.state.queue{background:#EFE7DC;color:#8A5A22}
+
+.empty{
+  border:1.5px dashed var(--rule);border-radius:12px;padding:22px 18px;text-align:center;margin-top:14px;
+}
+.empty p{font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.6;margin:0 0 12px}
+
+/* ---------- faces ---------- */
+.faces{display:flex}
+.face{
+  width:24px;height:24px;border-radius:999px;flex:none;display:grid;place-items:center;
+  font-family:var(--mono);font-size:8.5px;font-weight:500;color:#fff;border:1.5px solid var(--surface);margin-right:-7px;
+}
+.face.sm{width:20px;height:20px;font-size:7.5px}
+
+/* ---------- new activity ---------- */
+.step{margin-top:20px}
+.step h3{font-size:18px;letter-spacing:-0.025em;margin:0 0 3px;font-weight:600}
+.step .hint{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin:0 0 11px;line-height:1.55}
+.verbs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.verb{
+  background:var(--surface);border:1.5px solid var(--rule);border-radius:12px;padding:13px 12px;text-align:left;
+  min-height:86px;display:flex;flex-direction:column;justify-content:space-between;transition:border-color .12s,background .12s;
+}
+.verb:hover{border-color:var(--ink)}
+.verb[aria-pressed="true"]{background:var(--signal-soft);border-color:var(--signal)}
+.verb .glyph{font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.08em}
+.verb .name{font-size:14.5px;font-weight:600;letter-spacing:-0.02em;line-height:1.18}
+
+.person{
+  width:100%;display:flex;align-items:center;gap:11px;background:none;border:none;
+  border-bottom:1px solid var(--rule);padding:10px 2px;text-align:left;
+}
+.person:last-child{border-bottom:none}
+.person .nm{font-size:14.5px;font-weight:500;flex:1}
+.person .sub{font-family:var(--mono);font-size:9.5px;color:var(--muted);display:block;font-weight:400;margin-top:2px}
+.person .tick{width:20px;height:20px;border-radius:5px;border:1.5px solid var(--muted);flex:none;display:grid;place-items:center;font-size:11px;color:transparent}
+.person[aria-pressed="true"] .tick{background:var(--signal);border-color:var(--signal);color:#fff}
+
+.acctpick{
+  width:100%;text-align:left;background:var(--surface);border:1.5px solid var(--rule);border-radius:11px;
+  padding:12px 13px;margin-bottom:7px;display:block;transition:border-color .12s,background .12s;
+}
+.acctpick:hover{border-color:var(--ink)}
+.acctpick[aria-pressed="true"]{border-color:var(--signal);background:var(--signal-soft)}
+.acctpick .t{font-size:14px;font-weight:600;letter-spacing:-0.015em}
+.acctpick .d{font-family:var(--mono);font-size:9.5px;color:var(--muted);margin-top:4px;line-height:1.55;display:block}
+
+.footer-act{flex:none;padding:13px 20px 18px;border-top:1px solid var(--rule);background:var(--paper)}
+.primary{
+  width:100%;background:var(--ink);color:var(--paper);border:none;border-radius:10px;padding:15px;
+  font-size:15px;font-weight:600;letter-spacing:-0.01em;transition:opacity .12s;
+}
+.primary:disabled{opacity:.26;cursor:not-allowed}
+.scopeline{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:center;margin-top:9px;line-height:1.55}
+
+/* ---------- accounts screen ---------- */
+.acct-card{
+  background:var(--surface);border:1.5px solid var(--rule);border-radius:12px;padding:14px;margin-bottom:9px;
+}
+.acct-card .hd{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.acct-card .nm{font-size:15px;font-weight:600;letter-spacing:-0.02em}
+.acct-card .drv{font-family:var(--mono);font-size:9.5px;color:var(--signal);letter-spacing:.06em;text-transform:uppercase;flex:none}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px dashed var(--rule);font-family:var(--mono);font-size:10.5px}
+.kv:last-child{border-bottom:none}
+.kv span:first-child{color:var(--muted)}
+.kv b{font-weight:500;text-align:right}
+.acct-card .bal{font-family:var(--mono);font-size:19px;font-weight:500;margin:8px 0 6px;letter-spacing:-0.02em}
+
+/* ---------- THE ROOM ---------- */
+.roomhead{flex:none;padding:13px 18px 0}
+.roomhead .back{background:none;border:none;padding:0;font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:9px}
+.roomhead .back:hover{color:var(--ink)}
+.roomtitle{font-size:20px;font-weight:600;letter-spacing:-0.03em;margin:0 0 4px;line-height:1.15}
+.account-chip{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--muted);flex-wrap:wrap}
+.account-chip b{font-weight:500;color:var(--ink)}
+.account-chip .sep{opacity:.45}
+
+.room{
+  flex:1;min-height:0;margin:11px 13px 0;border:2px solid var(--ink);border-bottom:none;border-radius:14px 14px 0 0;
+  background:var(--surface);display:flex;flex-direction:column;overflow:hidden;position:relative;
+}
+.nameplate{
+  flex:none;background:var(--ink);color:var(--paper);padding:9px 13px;display:flex;align-items:center;
+  justify-content:space-between;gap:10px;border:none;width:100%;text-align:left;
+}
+.nameplate .lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;opacity:.6}
+.nameplate .who-in{display:flex;align-items:center;gap:9px;margin-top:3px}
+.nameplate .face{border-color:var(--ink)}
+.nameplate .names{font-size:12px;font-weight:500}
+.nameplate .more{font-family:var(--mono);font-size:14px;opacity:.6;flex:none}
+.nameplate:hover .more{opacity:1}
+
+.thread{flex:1;min-height:0;overflow-y:auto;padding:15px 13px 10px;display:flex;flex-direction:column;gap:11px}
+.thread > *{flex:0 0 auto}
+
+.sys{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:center;line-height:1.6;padding:2px 10px}
+.sys b{color:var(--ink);font-weight:500}
+.sys.warn{color:#8A5A22}
+.sys.warn b{color:#8A5A22}
+
+.seam{display:flex;align-items:center;gap:9px;padding:4px 0}
+.seam::before,.seam::after{content:"";flex:1;height:0;border-top:1.5px dashed var(--signal);opacity:.5}
+.seam span{font-family:var(--mono);font-size:9.5px;color:var(--signal);letter-spacing:.03em;flex:none}
+
+.msg{max-width:82%;display:flex;flex-direction:column;gap:4px}
+.msg .who-said{font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.03em}
+.msg .bubble{background:var(--paper);border-radius:12px 12px 12px 3px;padding:9px 12px;font-size:13.5px;line-height:1.45}
+.msg.me{align-self:flex-end}
+.msg.me .bubble{background:var(--ink);color:var(--surface);border-radius:12px 12px 3px 12px}
+.msg.me .who-said{text-align:right}
+
+/* fact */
+.fact{border:1.5px solid var(--rule);border-radius:10px;background:var(--paper);padding:11px 12px;width:100%;text-align:left;display:block}
+.fact:hover{border-color:var(--ink)}
+.fact .k{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.fact .v{display:block;font-family:var(--mono);font-size:15.5px;font-weight:500;margin-top:3px;letter-spacing:-0.01em}
+.fact .prov{display:block;margin-top:8px;padding-top:7px;border-top:1px dashed var(--rule);font-family:var(--mono);font-size:9.5px;color:var(--muted);line-height:1.55}
+.fact .ok{color:var(--settled)}
+.fact .no{color:var(--alarm)}
+
+/* choice */
+.choice{border:1.5px solid var(--rule);border-radius:10px;background:var(--paper);padding:11px 12px}
+.choice .q{font-size:13.5px;font-weight:600;letter-spacing:-0.015em;line-height:1.3}
+.choice .askedby{font-family:var(--mono);font-size:9.5px;color:var(--muted);margin-top:3px}
+.opt{
+  width:100%;text-align:left;margin-top:7px;border:1.5px solid var(--rule);border-radius:8px;background:var(--surface);
+  padding:9px 10px;display:flex;align-items:center;gap:9px;position:relative;overflow:hidden;
+}
+.opt:hover{border-color:var(--ink)}
+.opt[aria-pressed="true"]{border-color:var(--signal)}
+.opt .fill{position:absolute;inset:0 auto 0 0;background:var(--signal-soft);z-index:0;transition:width .4s cubic-bezier(.2,.8,.3,1)}
+.opt .txt{position:relative;z-index:1;flex:1;font-size:13px;font-weight:500}
+.opt .n{position:relative;z-index:1;font-family:var(--mono);font-size:10.5px;color:var(--muted);flex:none}
+.choice .bind{
+  width:100%;margin-top:9px;border:1.5px solid var(--signal);background:var(--signal);color:#fff;border-radius:8px;
+  padding:10px;font-size:13px;font-weight:600;
+}
+
+/* ---------- intent ---------- */
+.intent{
+  border:2px solid var(--ink);border-radius:10px;background:var(--paper);overflow:hidden;
+  transition:transform .3s cubic-bezier(.3,.8,.3,1),margin .34s,border-radius .34s,background .34s,color .34s,border-color .34s;
+}
+.intent.draft{border-style:dashed;border-color:var(--muted)}
+.intent .head{padding:10px 12px 0;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.intent .kind{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--signal)}
+.intent.draft .kind{color:var(--muted)}
+.intent .nonce{font-family:var(--mono);font-size:9.5px;color:var(--muted);text-align:right;flex:none}
+.intent .effect{padding:6px 12px 10px}
+.intent .amount{font-family:var(--mono);font-size:22px;font-weight:500;letter-spacing:-0.02em;line-height:1.1}
+.intent .amount.unset{color:var(--muted);font-size:16px}
+.intent .dest{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:5px;word-break:break-all;line-height:1.45}
+
+/* status rail */
+.rail{display:flex;gap:0;padding:0 12px 10px;align-items:center}
+.rail .st{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;position:relative}
+.rail .st::before{content:"";position:absolute;top:4px;left:-50%;width:100%;height:1.5px;background:var(--rule)}
+.rail .st:first-child::before{display:none}
+.rail .st.on::before{background:var(--signal)}
+.rail .dot{width:9px;height:9px;border-radius:999px;border:1.5px solid var(--rule);background:var(--paper);position:relative;z-index:1}
+.rail .st.on .dot{background:var(--signal);border-color:var(--signal)}
+.rail .st.now .dot{box-shadow:0 0 0 3px var(--signal-soft)}
+.rail .lb{font-family:var(--mono);font-size:8px;letter-spacing:.03em;color:var(--muted);text-align:center;line-height:1.2}
+.rail .st.on .lb{color:var(--ink)}
+
+.approvals{border-top:1.5px solid var(--rule);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.slots{display:flex;gap:5px;flex-wrap:wrap}
+.slot{
+  width:25px;height:25px;border-radius:999px;flex:none;display:grid;place-items:center;
+  font-family:var(--mono);font-size:8.5px;font-weight:500;border:1.5px dashed var(--muted);color:transparent;background:none;
+  transition:transform .3s cubic-bezier(.3,1.5,.5,1),background .2s,border-color .2s;
+}
+.slot.filled{border-style:solid;border-color:transparent;color:#fff}
+.slot.anon.filled{background:var(--ink);color:var(--paper);font-size:10px}
+.slot.pop{transform:scale(1.24)}
+.threshold{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-align:right;line-height:1.35;flex:none}
+.threshold b{color:var(--ink);font-weight:500;display:block;font-size:12.5px}
+
+.roundlbl{
+  padding:0 12px 9px;font-family:var(--mono);font-size:9.5px;color:var(--muted);line-height:1.5;
+  display:flex;align-items:center;gap:6px;
+}
+.roundlbl .pill{background:var(--signal-soft);color:var(--signal);border-radius:4px;padding:2px 6px;flex:none}
+
+/* verification strip */
+.verify{
+  margin:0 12px 10px;border-radius:8px;padding:9px 10px;font-family:var(--mono);font-size:9.5px;line-height:1.55;
+  background:var(--settled-soft);color:var(--settled);border:1.5px solid rgba(30,107,82,.3);
+  width:calc(100% - 24px);text-align:left;display:block;
+}
+.verify.bad{background:var(--alarm-soft);color:var(--alarm);border-color:rgba(163,45,30,.35)}
+.verify .hd{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.verify .caret{opacity:.55}
+.verify .body{margin-top:8px;padding-top:8px;border-top:1px dashed currentColor;display:none}
+.verify.open .body{display:block}
+.verify .lnk{display:flex;justify-content:space-between;gap:10px;padding:2px 0;word-break:break-all}
+.verify .lnk span:first-child{opacity:.7;flex:none}
+
+.blocked{
+  margin:0 12px 10px;background:var(--alarm);color:#fff;border-radius:8px;padding:10px;
+  font-family:var(--mono);font-size:9.5px;line-height:1.6;
+}
+.conflict{
+  margin:0 12px 10px;background:#EFE7DC;color:#7A4E1C;border:1.5px solid #D9C3A2;border-radius:8px;padding:9px 10px;
+  font-family:var(--mono);font-size:9.5px;line-height:1.6;
+}
+
+.intent-act{padding:0 12px 12px;display:flex;gap:7px;flex-wrap:wrap}
+.act{
+  flex:1;min-width:110px;border-radius:8px;padding:11px 8px;font-size:13px;font-weight:600;
+  border:1.5px solid var(--ink);background:none;transition:background .12s,color .12s;
+}
+.act.go{background:var(--signal);border-color:var(--signal);color:#fff}
+.act.go:hover{background:#3B27A6;border-color:#3B27A6}
+.act.go:disabled{opacity:.35;cursor:not-allowed}
+.act.ghost:hover{background:var(--ink);color:var(--surface)}
+.act.sm{flex:none;min-width:0;padding:11px 13px}
+
+/* public state */
+.intent.leaving{transform:translateY(-5px) scale(1.025)}
+.intent.public{
+  margin:0 -13px;border-radius:0;border-left:none;border-right:none;
+  background:var(--outside);color:var(--outside-ink);border-color:var(--outside);
+}
+.intent.public .kind{color:var(--outside-accent)}
+.intent.public .dest,.intent.public .nonce,.intent.public .threshold,.intent.public .roundlbl{color:#96A19B}
+.intent.public .approvals{border-top-color:var(--outside-rule)}
+.intent.public .leftroom{padding:10px 13px;font-family:var(--mono);font-size:9.5px;line-height:1.65;border-top:1px dashed var(--outside-rule);color:#96A19B}
+.intent.public .leftroom b{color:var(--outside-ink);font-weight:500}
+.intent.public .conf{
+  display:flex;align-items:center;gap:7px;padding:9px 13px;font-family:var(--mono);font-size:10px;
+  border-top:1px dashed var(--outside-rule);color:#96A19B;
+}
+.intent.public .conf .pulse{width:7px;height:7px;border-radius:999px;background:var(--outside-accent);animation:pulse 1.1s ease-in-out infinite}
+.intent.public .conf.final .pulse{background:#5FBE96;animation:none}
+.intent.public .conf b{color:var(--outside-ink);font-weight:500}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+
+/* ---------- composer ---------- */
+.composer{flex:none;border-top:1.5px solid var(--rule);background:var(--surface);padding:9px 12px calc(9px + env(safe-area-inset-bottom))}
+.composer .line{display:flex;gap:8px;align-items:center}
+.composer input{
+  flex:1;border:1.5px solid var(--rule);border-radius:999px;background:var(--paper);padding:11px 14px;
+  font-family:inherit;font-size:13.5px;color:var(--ink);min-width:0;
+}
+.composer input::placeholder{color:var(--muted)}
+.composer input:focus{outline:none;border-color:var(--ink)}
+.act-btn{flex:none;width:41px;height:41px;border-radius:999px;background:var(--ink);color:var(--surface);border:none;font-size:19px;line-height:1;display:grid;place-items:center}
+.act-btn:hover{background:var(--signal)}
+.roomscope{font-family:var(--mono);font-size:9.5px;color:var(--muted);text-align:center;padding:8px 4px 0;line-height:1.55}
+.roomscope .dot{color:var(--settled)}
+.roomscope .warnflag{color:var(--alarm)}
+
+/* ---------- sheets ---------- */
+.sheet-wrap{position:absolute;inset:0;z-index:30;display:flex;align-items:flex-end}
+.sheet-wrap[hidden]{display:none}
+.scrim{position:absolute;inset:0;background:rgba(20,26,22,.52);border:none;width:100%;height:100%}
+.sheet{
+  position:relative;width:100%;background:var(--surface);border-top:2px solid var(--ink);
+  border-radius:16px 16px 0 0;padding:15px 18px 22px;max-height:88%;overflow-y:auto;
+  animation:rise .26s cubic-bezier(.2,.8,.3,1);
+}
+@keyframes rise{from{transform:translateY(100%)}to{transform:none}}
+.sheet h3{margin:0 0 3px;font-size:18.5px;letter-spacing:-0.025em;font-weight:600}
+.sheet .sub{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin:0 0 14px;line-height:1.6}
+.sheet-sec{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);
+  margin:16px 0 8px;display:flex;align-items:center;gap:8px;
+}
+.sheet-sec::after{content:"";flex:1;height:1px;background:var(--rule)}
+.member{display:flex;align-items:center;gap:10px;padding:8px 0}
+.member .nm{flex:1;font-size:14px;font-weight:500}
+.member .role{font-family:var(--mono);font-size:9.5px;color:var(--muted);flex:none}
+.member .role.reads{color:#8A5A22}
+
+.leaks{background:var(--outside);color:var(--outside-ink);border-radius:10px;padding:12px 13px;font-family:var(--mono);font-size:10.5px;line-height:1.6}
+.leaks .row2{display:flex;justify-content:space-between;gap:10px;padding:3px 0}
+.leaks .row2 span:first-child{color:#96A19B}
+.leaks .cap{font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:var(--outside-accent);margin-bottom:7px}
+
+.tmpl{
+  width:100%;text-align:left;background:var(--paper);border:1.5px solid var(--rule);border-radius:10px;
+  padding:11px 12px;margin-bottom:7px;display:block;
+}
+.tmpl:hover{border-color:var(--ink)}
+.tmpl .t{font-size:14px;font-weight:600;letter-spacing:-0.015em}
+.tmpl .d{font-family:var(--mono);font-size:9.5px;color:var(--muted);margin-top:3px;line-height:1.55;display:block}
+
+.plug{border:1.5px solid var(--rule);border-radius:10px;background:var(--paper);padding:11px 12px;margin-bottom:8px}
+.plug .t{font-size:14px;font-weight:600;letter-spacing:-0.015em;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.plug .hash{font-family:var(--mono);font-size:9px;color:var(--muted);flex:none}
+.plug .perm{font-family:var(--mono);font-size:9.5px;line-height:1.65;margin-top:7px}
+.plug .perm .y{color:var(--settled)}
+.plug .perm .n{color:var(--muted)}
+
+.toggle{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;
+  background:var(--alarm-soft);border:1.5px solid rgba(163,45,30,.3);border-radius:10px;padding:11px 12px;margin-top:4px;
+}
+.toggle .t{font-size:13.5px;font-weight:600;color:var(--alarm);letter-spacing:-0.015em}
+.toggle .d{font-family:var(--mono);font-size:9.5px;color:#8A4A3C;margin-top:3px;line-height:1.55;display:block}
+.switch{width:40px;height:23px;border-radius:999px;background:var(--rule);flex:none;position:relative;transition:background .18s}
+.switch::after{content:"";position:absolute;top:2.5px;left:2.5px;width:18px;height:18px;border-radius:999px;background:var(--surface);transition:transform .18s}
+.toggle[aria-pressed="true"] .switch{background:var(--alarm)}
+.toggle[aria-pressed="true"] .switch::after{transform:translateX(17px)}
+
+/* compose intent form */
+.field{margin-bottom:11px}
+.field label{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:5px}
+.field input,.field select{
+  width:100%;border:1.5px solid var(--rule);border-radius:9px;background:var(--paper);padding:11px 12px;
+  font-family:var(--mono);font-size:14px;color:var(--ink);
+}
+.field input:focus,.field select:focus{outline:none;border-color:var(--ink)}
+.pickrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.pickrow button{
+  font-family:var(--mono);font-size:10px;border:1.5px solid var(--rule);background:var(--paper);
+  border-radius:999px;padding:6px 10px;
+}
+.pickrow button:hover{border-color:var(--ink)}
+
+.legend{max-width:400px;width:100%;margin-top:20px;font-family:var(--mono);font-size:10.5px;line-height:1.8;color:#2C332D}
+.legend b{font-weight:500}
+.legend ol{margin:6px 0 0;padding-left:17px}
+.legend li{margin-bottom:4px}
+
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+@media (max-height:920px){body{padding-top:14px}.phone{height:min(840px,calc(100vh - 130px))}}
+@media (max-width:430px){.phone{border-radius:0;border-left:none;border-right:none}}
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <div>
+    <h1>Muster — prototype v2</h1>
+    <p>The room is the security boundary. Drivers differ underneath; the room never changes shape.</p>
+  </div>
+  <button class="resetbtn" id="reset">Reset</button>
+</div>
+
+<div class="phone">
+  <div class="fault" id="fault" hidden></div>
+
+  <!-- ============ HOME ============ -->
+  <section class="screen" id="s-home">
+    <div class="topbar">
+      <div>
+        <span class="eyebrow" id="home-eyebrow"></span>
+        <h2>What's in flight</h2>
+      </div>
+      <div class="bar-actions">
+        <button class="icon-btn" id="go-accounts" aria-label="Accounts">▣</button>
+        <button class="icon-btn" id="go-new" aria-label="Start something new">+</button>
+      </div>
+    </div>
+    <div class="chips" id="home-chips"></div>
+    <div class="scroll" id="home-list"></div>
+  </section>
+
+  <!-- ============ ACCOUNTS ============ -->
+  <section class="screen" id="s-accounts" hidden>
+    <div class="topbar">
+      <div>
+        <span class="eyebrow">Capabilities you can bring into a room</span>
+        <h2>Accounts</h2>
+      </div>
+      <button class="icon-btn" id="acct-back" aria-label="Back">←</button>
+    </div>
+    <div class="scroll" id="acct-list"></div>
+  </section>
+
+  <!-- ============ NEW ACTIVITY ============ -->
+  <section class="screen" id="s-new" hidden>
+    <div class="topbar">
+      <div>
+        <span class="eyebrow">New</span>
+        <h2>What do you<br>want to do?</h2>
+      </div>
+      <button class="icon-btn" id="new-back" aria-label="Back">←</button>
+    </div>
+    <div class="scroll">
+      <div class="verbs" id="verb-grid"></div>
+
+      <div class="step">
+        <h3>Who's doing it with you?</h3>
+        <p class="hint">Only these people can read the room. Add someone later and they see the thread from that point forward.</p>
+        <div id="people-list"></div>
+      </div>
+
+      <div class="step" id="acct-step">
+        <h3>Which account?</h3>
+        <p class="hint">The account sets the approval policy. The room looks the same either way.</p>
+        <div id="acct-choices"></div>
+      </div>
+    </div>
+    <div class="footer-act">
+      <button class="primary" id="open-room" disabled>Pick an activity</button>
+      <p class="scopeline" id="new-scope">Nothing is shared until the room opens.</p>
+    </div>
+  </section>
+
+  <!-- ============ ROOM ============ -->
+  <section class="screen" id="s-room" hidden>
+    <div class="roomhead">
+      <button class="back" id="room-back">← in flight</button>
+      <h2 class="roomtitle" id="room-title"></h2>
+      <span class="account-chip" id="room-account"></span>
+    </div>
+
+    <div class="room">
+      <button class="nameplate" id="nameplate">
+        <span>
+          <span class="lbl">In the room</span>
+          <span class="who-in">
+            <span class="faces" id="np-faces"></span>
+            <span class="names" id="np-names"></span>
+          </span>
+        </span>
+        <span class="more">ⓘ</span>
+      </button>
+
+      <div class="pinned" id="pinned" hidden></div>
+
+      <div class="thread" id="thread"></div>
+
+      <div class="composer">
+        <div class="line">
+          <input id="msg-input" placeholder="Say something" autocomplete="off">
+          <button class="act-btn" id="open-templates" aria-label="Propose an action">+</button>
+        </div>
+        <p class="roomscope" id="room-scope"></p>
+      </div>
+    </div>
+
+    <!-- scope sheet -->
+    <div class="sheet-wrap" id="scope-sheet" hidden>
+      <button class="scrim" data-close aria-label="Close"></button>
+      <div class="sheet" role="dialog" aria-label="Who can see this">
+        <h3>Who can see this</h3>
+        <p class="sub" id="scope-sub"></p>
+
+        <div class="sheet-sec">In the room</div>
+        <div id="scope-members"></div>
+        <div class="pickrow" id="add-people"></div>
+
+        <div class="sheet-sec">Loaded here</div>
+        <div id="scope-plugins"></div>
+
+        <div class="sheet-sec">Leaves the room</div>
+        <div class="leaks" id="leaks"></div>
+
+        <div class="sheet-sec">Stays in the room</div>
+        <p class="sub" style="margin:0">Every message. Who proposed it. Who hesitated. The quotes you compared. Anyone who read without signing.</p>
+
+        <div class="sheet-sec">Demo switch</div>
+        <button class="toggle" id="tamper" aria-pressed="false">
+          <span>
+            <span class="t">Run a lying plugin</span>
+            <span class="d">Next proposal encodes something other than what it displays. The client re-derives the payload and refuses.</span>
+          </span>
+          <span class="switch"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- template sheet -->
+    <div class="sheet-wrap" id="tmpl-sheet" hidden>
+      <button class="scrim" data-close aria-label="Close"></button>
+      <div class="sheet" role="dialog" aria-label="Propose an action">
+        <h3>Propose an action</h3>
+        <p class="sub" id="tmpl-sub"></p>
+        <div id="tmpl-list"></div>
+      </div>
+    </div>
+
+    <!-- compose intent sheet -->
+    <div class="sheet-wrap" id="compose-sheet" hidden>
+      <button class="scrim" data-close aria-label="Close"></button>
+      <div class="sheet" role="dialog" aria-label="Build the effect">
+        <h3 id="compose-title">Transfer tokens</h3>
+        <p class="sub" id="compose-sub"></p>
+        <div class="field">
+          <label>Amount</label>
+          <input id="f-amount" inputmode="decimal" placeholder="0.00">
+          <div class="pickrow" id="amount-picks"></div>
+        </div>
+        <div class="field">
+          <label>Asset</label>
+          <select id="f-asset"></select>
+        </div>
+        <div class="field">
+          <label>Recipient</label>
+          <input id="f-dest" placeholder="0x… or a name">
+          <div class="pickrow" id="dest-picks"></div>
+        </div>
+        <div class="field">
+          <label>Why</label>
+          <input id="f-memo" placeholder="Stays in the room">
+        </div>
+        <button class="primary" id="do-compose">Put it in the room</button>
+        <p class="scopeline" id="compose-scope"></p>
+      </div>
+    </div>
+
+    <!-- fact provenance sheet -->
+    <div class="sheet-wrap" id="fact-sheet" hidden>
+      <button class="scrim" data-close aria-label="Close"></button>
+      <div class="sheet" role="dialog" aria-label="Where this came from">
+        <h3>Where this came from</h3>
+        <p class="sub" id="fact-sub"></p>
+        <div id="fact-detail"></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="legend">
+  <b>Worth poking at:</b>
+  <ol>
+    <li><b>Pay out August invoices</b> — sign, then submit, and watch it cross the edge</li>
+    <li>Propose a second transfer in that room — sequential nonce, so it queues</li>
+    <li><b>Release the Q3 grant</b> — two rounds, anonymous slots, parallel nullifiers</li>
+    <li>Nameplate → <b>Run a lying plugin</b> → propose anything → the client blocks the signature</li>
+    <li>Nameplate → add someone → the seam in the thread marks what they can't read</li>
+    <li><b>Offsite costs</b> — no multisig at all, same room, same components</li>
+  </ol>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* =========================================================
+   people
+   ========================================================= */
+const P = {
+  you  :{n:"You",   i:"YOU",c:"#4B33C4"},
+  joe  :{n:"Joe",   i:"JO", c:"#1E6B52"},
+  jb   :{n:"JB",    i:"JB", c:"#A3512B"},
+  ana  :{n:"Ana",   i:"AN", c:"#7A2F63"},
+  dev  :{n:"Devon", i:"DE", c:"#2C5F86"},
+  mira :{n:"Mira",  i:"MI", c:"#6B6320"},
+  sol  :{n:"Sol",   i:"SO", c:"#3F5B3A"}
+};
+
+/* =========================================================
+   accounts = drivers. everything policy-shaped lives here.
+   ========================================================= */
+const ACCOUNTS = {
+  opsafe:{
+    id:"opsafe", label:"Ops Safe", driver:"safe", env:"Base",
+    threshold:2, signers:3, anon:false,
+    rounds:["Signatures"],
+    serial:"sequential", nonce:47,
+    balance:"41,208.55 USDC",
+    assets:["USDC","ETH","SNT"],
+    address:"0x2b91…44ae",
+    finality:"3 confirmations",
+    note:"One nonce at a time. A second proposal waits its turn."
+  },
+  logostreasury:{
+    id:"logostreasury", label:"Logos treasury", driver:"threshold", env:"Logos",
+    threshold:4, signers:7, anon:true,
+    rounds:["Nonce commitments","Partial signatures"],
+    serial:"parallel", nonce:null,
+    balance:"1,240,000 LOGOS",
+    assets:["LOGOS"],
+    address:"membership commitment",
+    finality:"threshold proof · final",
+    note:"Nullifier per intent, so proposals run in parallel. The chain learns the count, never the names."
+  },
+  personal:{
+    id:"personal", label:"Your wallet", driver:"eoa", env:"Base",
+    threshold:1, signers:1, anon:false,
+    rounds:["Signature"],
+    serial:"sequential", nonce:812,
+    balance:"3,940.12 USDC",
+    assets:["USDC","ETH"],
+    address:"0x91cd…7b02",
+    finality:"3 confirmations",
+    note:"No multisig. Same room, same components, threshold of one."
+  },
+  devices:{
+    id:"devices", label:"You + your devices", driver:"safe", env:"Base",
+    threshold:2, signers:2, anon:false,
+    rounds:["Signatures"],
+    serial:"sequential", nonce:14,
+    balance:"88,300.00 USDC",
+    assets:["USDC","ETH"],
+    address:"0x5ea2…9931",
+    finality:"3 confirmations",
+    note:"Coordinating with yourself is still a room. Laptop proposes, Keycard confirms."
+  }
+};
+
+const PLUGINS = {
+  transfer:{name:"Token transfer",   hash:"bafy…4k1p", reads:["room roster","account balance"], denies:["message text","other rooms"]},
+  balance :{name:"Signed balance",   hash:"bafy…9wq2", reads:["account address"],               denies:["message text","roster"]},
+  quote   :{name:"Price quote",      hash:"bafy…z7m0", reads:["asset pair"],                    denies:["amounts","roster","message text"]},
+  decide  :{name:"Group decision",   hash:"bafy…c3rr", reads:["room roster"],                   denies:["account keys","balances"]},
+  split   :{name:"Cost split",       hash:"bafy…t8xv", reads:["room roster"],                   denies:["account keys"]}
+};
+
+const VERBS = [
+  {id:"pay",    g:"01",name:"Pay someone",          acct:["opsafe","personal","devices"], tmpl:["transfer","balance","decide"]},
+  {id:"treas",  g:"02",name:"Move treasury funds",  acct:["opsafe","logostreasury","devices"], tmpl:["transfer","balance","decide"]},
+  {id:"split",  g:"03",name:"Split a cost",         acct:["personal"], tmpl:["split","transfer"]},
+  {id:"decide", g:"04",name:"Decide something",     acct:["opsafe","logostreasury","personal"], tmpl:["decide","transfer"]},
+  {id:"buy",    g:"05",name:"Buy together",         acct:["opsafe","personal"], tmpl:["transfer","quote"]},
+  {id:"swap",   g:"06",name:"Swap or bridge",       acct:["opsafe","personal","devices"], tmpl:["quote","transfer"]}
+];
+
+const TEMPLATES = {
+  transfer:{plugin:"transfer",title:"Transfer tokens",  d:"Builds a transfer against the room's account", form:true},
+  balance :{plugin:"balance", title:"Attach a signed balance", d:"Your own node reads it and signs what it saw", form:false},
+  quote   :{plugin:"quote",   title:"Attach a price quote",    d:"Whoever supplies it signs it — the room sees who", form:false},
+  decide  :{plugin:"decide",  title:"Ask for a decision",      d:"A choice that can bind into the next intent", form:false},
+  split   :{plugin:"split",   title:"Split what's owed",       d:"Even shares, settles to personal wallets", form:false}
+};
+
+/* =========================================================
+   pseudo-hash so payloads look real and stay deterministic
+   ========================================================= */
+function hash(str){
+  let x = 0x811c9dc5;
+  for(let i=0;i<str.length;i++){ x ^= str.charCodeAt(i); x = Math.imul(x,0x01000193)>>>0; }
+  let y = Math.imul(x ^ 0x9e3779b9, 0x85ebca6b)>>>0;
+  const a = x.toString(16).padStart(8,"0"), b = y.toString(16).padStart(8,"0");
+  return "0x"+a+"…"+b.slice(4);
+}
+
+/* =========================================================
+   seed state
+   ========================================================= */
+let ROOMS = {};
+let roomOrder = [];
+let uid = 0;
+const nid = p => p + (++uid);
+
+function seed(){
+  uid = 0;
+  ROOMS = {};
+  roomOrder = [];
+  ACCOUNTS.opsafe.nonce = 47;
+
+  addRoom({
+    id:"payout", title:"Pay out August contributor invoices", account:"opsafe", when:"14m",
+    members:[{id:"you",role:"signer"},{id:"joe",role:"signer"},{id:"jb",role:"signer"},{id:"ana",role:"reads only"}],
+    plugins:["transfer","balance","decide"],
+    blocks:[
+      {k:"sys",h:"Room opened by <b>Joe</b> · 4 people · <b>Ana</b> reads but can't sign"},
+      {k:"msg",who:"joe",t:"Three invoices cleared review. 12,400 USDC out of Ops."},
+      {k:"fact",id:nid("f"),label:"Ops Safe balance",value:"41,208.55 USDC",
+        by:"joe",method:"read by Joe's own node against a local RPC",verified:true,
+        detail:"Joe ran the read himself and signed the result. You checked the signature and the block header it commits to. If Joe lied, the proof fails — you would not be trusting Joe, you would be trusting arithmetic."},
+      {k:"msg",who:"jb",t:"Recipient matches the address I confirmed on Keycard last week."},
+      mkIntent({template:"transfer",amount:"12,400",asset:"USDC",dest:"0x7f3a…c19d",destLabel:"contributor payouts",
+        memo:"August invoices",account:"opsafe",preSigned:["joe"]})
+    ]
+  });
+
+  addRoom({
+    id:"grant", title:"Release the Q3 ecosystem grant", account:"logostreasury", when:"2h",
+    members:[{id:"you",role:"signer"},{id:"mira",role:"signer"},{id:"dev",role:"signer"}],
+    plugins:["transfer","balance"],
+    blocks:[
+      {k:"sys",h:"Room opened by <b>Mira</b> · the signer set is a membership commitment — you see <b>how many</b> signed, never <b>who</b>"},
+      {k:"msg",who:"mira",t:"Milestone 2 artifacts are in storage. Hash checks out against the proposal."},
+      {k:"fact",id:nid("f"),label:"Milestone bundle",value:"bafy…q7xk",
+        by:"mira",method:"content-addressed, fetched and hashed locally",verified:true,
+        detail:"The bundle is addressed by its own hash, so fetching it is verifying it. What Mira supplied was the pointer, not the trust."},
+      mkIntent({template:"transfer",amount:"90,000",asset:"LOGOS",dest:"grant escrow",destLabel:"unlocks on milestone 3",
+        memo:"Q3 grant",account:"logostreasury",preSigned:["?","?"],roundIndex:0})
+    ]
+  });
+
+  addRoom({
+    id:"offsite", title:"Split the Lisbon offsite costs", account:"personal", when:"1d",
+    members:[{id:"you",role:"signer"},{id:"dev",role:"signer"},{id:"ana",role:"signer"},{id:"jb",role:"signer"}],
+    plugins:["split","transfer"],
+    blocks:[
+      {k:"sys",h:"Room opened by <b>Ana</b> · four wallets, no shared account — the room is the only thing holding this together"},
+      {k:"msg",who:"ana",t:"Venue and dinners came to 1,840 EUR. Devon fronted all of it."},
+      {k:"choice",id:nid("c"),q:"Split it how?",by:"ana",
+        options:[{t:"Even four ways",n:2},{t:"By nights stayed",n:1}],voted:null,resolved:false},
+      {k:"msg",who:"dev",t:"Either works. Whatever settles fastest."}
+    ]
+  });
+
+  addRoom({
+    id:"nodes", title:"Renew the node infrastructure", account:"devices", when:"Fri", settled:true,
+    members:[{id:"you",role:"signer"},{id:"joe",role:"signer"}],
+    plugins:["transfer"],
+    blocks:[
+      {k:"sys",h:"Room opened by <b>you</b> · laptop proposes, Keycard confirms"},
+      {k:"msg",who:"joe",t:"Invoice renewed for twelve months. Same provider."},
+      (function(){
+        const it = mkIntent({template:"transfer",amount:"4,800",asset:"USDC",dest:"0xd1c8…3a77",destLabel:"infra provider",
+          memo:"Annual renewal",account:"devices",preSigned:["joe","you"]});
+        it.status="final"; it.confirmations=3;
+        return it;
+      })()
+    ]
+  });
+}
+
+function addRoom(r){
+  r.blocks = r.blocks || [];
+  r.tamper = false;
+  ROOMS[r.id] = r;
+  roomOrder.push(r.id);
+}
+
+function mkIntent(o){
+  const acct = ACCOUNTS[o.account];
+  const filled = (o.preSigned||[]).slice();
+  const it = {
+    k:"intent", id:nid("i"), template:o.template, account:o.account,
+    effect:{ amount:o.amount, asset:o.asset, dest:o.dest, destLabel:o.destLabel, memo:o.memo },
+    filled, need:acct.threshold, of:acct.signers, anon:acct.anon,
+    rounds:acct.rounds, roundIndex:o.roundIndex||0, roundFilled:[],
+    nonce: acct.serial==="sequential" ? acct.nonce : null,
+    serial:acct.serial,
+    tampered:!!o.tampered,
+    status: filled.length>=acct.threshold ? "executable" : (filled.length? "collecting":"proposed"),
+    confirmations:0,
+    queuedBehind:o.queuedBehind||null,
+    verifyOpen:false
+  };
+  it.displayHash = hash(JSON.stringify(it.effect));
+  it.payloadHash = it.tampered ? hash(JSON.stringify(it.effect)+"·tampered") : it.displayHash;
+  return it;
+}
+
+/* =========================================================
+   helpers
+   ========================================================= */
+const $ = s => document.querySelector(s);
+const el = (t,c,h)=>{const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e;};
+
+/* surface anything that breaks instead of swallowing it */
+function fault(msg){
+  const f = document.getElementById("fault");
+  if(!f) return;
+  f.hidden = false;
+  f.innerHTML = `<b>Something broke.</b> ${String(msg)}`;
+}
+window.addEventListener("error", e => fault(e.message + (e.lineno? " · line "+e.lineno : "")));
+window.addEventListener("unhandledrejection", e => fault(e.reason));
+function guard(fn){
+  return function(){ try{ return fn.apply(this,arguments); }catch(err){ fault(err && err.message || err); throw err; } };
+}
+
+/* one delegated handler for everything tappable — survives any re-render */
+document.querySelector(".phone").addEventListener("click", guard(function(ev){
+  const t = ev.target.closest("[data-act]");
+  if(!t) return;
+  const act = t.dataset.act, arg = t.dataset.arg;
+  if(act==="open-room")  return openRoom(arg);
+  if(act==="intent-go")  return advanceById(arg);
+  if(act==="intent-scope"){ buildScopeSheet(); return openSheet("#scope-sheet"); }
+  if(act==="intent-verify") return toggleVerify(arg);
+  if(act==="jump")       return jumpTo(arg);
+}));
+const esc = s => String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const face = (id,sm) => {
+  const p = P[id]; if(!p) return "";
+  return `<span class="face${sm?" sm":""}" style="background:${p.c}">${p.i}</span>`;
+};
+
+function show(id){
+  ["s-home","s-new","s-room","s-accounts"].forEach(s=>{ $("#"+s).hidden = (s!==id); });
+  const sc = $("#"+id+" .scroll"); if(sc) sc.scrollTop=0;
+}
+function scrollThread(){ const t=$("#thread"); requestAnimationFrame(()=>{ t.scrollTop=t.scrollHeight; }); }
+
+/* room-level derived status */
+function pendingIntent(room){
+  for(let i=room.blocks.length-1;i>=0;i--){
+    const b=room.blocks[i];
+    if(b.k==="intent" && b.status!=="final" && b.status!=="submitted") return b;
+  }
+  return null;
+}
+function roomStatus(room){
+  const it = pendingIntent(room);
+  if(!it){
+    const anyFinal = room.blocks.some(b=>b.k==="intent" && (b.status==="final"||b.status==="submitted"));
+    if(anyFinal) return {label:"confirmed · final",cls:"done",bucket:"settled"};
+    return {label:"nothing proposed yet",cls:"wait",bucket:"flight"};
+  }
+  if(it.queuedBehind) return {label:"queued · nonce "+it.nonce,cls:"queue",bucket:"flight"};
+  if(it.status==="draft") return {label:"draft",cls:"wait",bucket:"flight"};
+  const mine = it.filled.includes("you");
+  if(it.status==="executable") return {label:"ready to submit",cls:"",bucket:"needs"};
+  if(!mine && !it.anon) return {label:it.filled.length+" of "+it.need+" signed",cls:"",bucket:"needs"};
+  if(it.anon && it.filled.length<it.need) return {label:it.filled.length+" of "+it.need+" signed",cls:it.roundIndex===0?"":"wait",bucket:it.filled.includes("you")?"flight":"needs"};
+  return {label:it.filled.length+" of "+it.need+" signed",cls:"wait",bucket:"flight"};
+}
+
+/* =========================================================
+   HOME
+   ========================================================= */
+let homeFilter = "needs";
+
+function buildHome(){
+  const buckets = {needs:[],flight:[],settled:[]};
+  roomOrder.forEach(id=>{
+    const r = ROOMS[id];
+    const st = roomStatus(r);
+    buckets[st.bucket].push({r,st});
+  });
+
+  $("#home-eyebrow").textContent =
+    buckets.needs.length ? `${buckets.needs.length} waiting on you` : "nothing waiting on you";
+
+  const chips = $("#home-chips"); chips.innerHTML="";
+  [["needs","Needs you",buckets.needs.length],
+   ["flight","In flight",buckets.flight.length],
+   ["settled","Settled",buckets.settled.length]].forEach(([k,label,n])=>{
+    const b = el("button","chip",`${label}<span class="ct">${n}</span>`);
+    b.setAttribute("aria-pressed", String(homeFilter===k));
+    b.addEventListener("click",()=>{ homeFilter=k; buildHome(); });
+    chips.appendChild(b);
+  });
+
+  const wrap = $("#home-list"); wrap.innerHTML="";
+  const list = buckets[homeFilter];
+  const heads = {needs:"Needs your signature",flight:"Waiting on others",settled:"Settled"};
+  wrap.appendChild(el("div","group-label"+(homeFilter==="needs"?" hot":""), heads[homeFilter]));
+
+  if(!list.length){
+    const e = el("div","empty");
+    e.innerHTML = `<p>${homeFilter==="needs"?"Nothing needs your signature.":homeFilter==="flight"?"Nothing else is open.":"Nothing has settled yet."}</p>`;
+    const b = el("button","primary","Start something");
+    b.addEventListener("click",()=>{ show("s-new"); });
+    e.appendChild(b);
+    wrap.appendChild(e);
+    return;
+  }
+
+  list.forEach(({r,st})=>{
+    const acct = ACCOUNTS[r.account];
+    const faces = r.members.filter(m=>m.id!=="you").map(m=>face(m.id)).join("");
+    const b = el("button","row"+(st.bucket==="needs"?" live":"")+(st.bucket==="settled"?" done":""));
+    b.dataset.act = "open-room";
+    b.dataset.arg = r.id;
+    b.innerHTML = `
+      <span class="row-top">
+        <span class="row-verb-wrap"><span class="row-verb">${esc(r.title)}</span></span>
+        <span class="row-when">${r.when||"now"}</span>
+      </span>
+      <span class="row-acct">▣ ${esc(acct.label)} · ${acct.threshold} of ${acct.signers} · ${esc(acct.env)}</span>
+      <span class="row-bottom">
+        <span class="faces">${faces}</span>
+        <span class="state ${st.cls}">${st.label}</span>
+        <span class="row-chev">›</span>
+      </span>`;
+    wrap.appendChild(b);
+  });
+}
+
+/* =========================================================
+   ACCOUNTS
+   ========================================================= */
+function buildAccounts(){
+  const wrap = $("#acct-list"); wrap.innerHTML="";
+  Object.values(ACCOUNTS).forEach(a=>{
+    const rooms = roomOrder.filter(id=>ROOMS[id].account===a.id).map(id=>ROOMS[id].title);
+    const c = el("div","acct-card");
+    c.innerHTML = `
+      <div class="hd"><span class="nm">${esc(a.label)}</span><span class="drv">${esc(a.driver)}</span></div>
+      <div class="bal">${esc(a.balance)}</div>
+      <div class="kv"><span>policy</span><b>${a.threshold} of ${a.signers}${a.anon?" · anonymous set":""}</b></div>
+      <div class="kv"><span>approval rounds</span><b>${a.rounds.join(" → ")}</b></div>
+      <div class="kv"><span>ordering</span><b>${a.serial}${a.serial==="sequential"?" · nonce "+a.nonce:" · nullifier"}</b></div>
+      <div class="kv"><span>finality</span><b>${esc(a.finality)}</b></div>
+      <div class="kv"><span>address</span><b>${esc(a.address)}</b></div>
+      <div class="kv"><span>used in</span><b>${rooms.length?esc(rooms.join(", ")):"—"}</b></div>
+      <div class="kv" style="border-bottom:none"><span style="line-height:1.6">${esc(a.note)}</span></div>`;
+    wrap.appendChild(c);
+  });
+}
+
+/* =========================================================
+   NEW ACTIVITY
+   ========================================================= */
+let pickedVerb=null, pickedPeople=new Set(), pickedAcct=null;
+
+function buildNew(){
+  pickedVerb=null; pickedPeople=new Set(); pickedAcct=null;
+
+  const g = $("#verb-grid"); g.innerHTML="";
+  VERBS.forEach(v=>{
+    const b = el("button","verb",`<span class="glyph">${v.g}</span><span class="name">${esc(v.name)}</span>`);
+    b.setAttribute("aria-pressed","false");
+    b.addEventListener("click",()=>{
+      pickedVerb=v; pickedAcct=null;
+      [...g.children].forEach(c=>c.setAttribute("aria-pressed","false"));
+      b.setAttribute("aria-pressed","true");
+      buildAcctChoices(); syncNew();
+    });
+    g.appendChild(b);
+  });
+
+  const pl = $("#people-list"); pl.innerHTML="";
+  ["joe","jb","ana","dev","mira","sol"].forEach(id=>{
+    const b = el("button","person",
+      `${face(id)}<span class="nm">${P[id].n}</span><span class="tick">✓</span>`);
+    b.setAttribute("aria-pressed","false");
+    b.addEventListener("click",()=>{
+      if(pickedPeople.has(id)){pickedPeople.delete(id);b.setAttribute("aria-pressed","false");}
+      else{pickedPeople.add(id);b.setAttribute("aria-pressed","true");}
+      syncNew();
+    });
+    pl.appendChild(b);
+  });
+
+  $("#acct-choices").innerHTML = "";
+  $("#acct-step").style.display="none";
+  syncNew();
+}
+
+function buildAcctChoices(){
+  const wrap = $("#acct-choices"); wrap.innerHTML="";
+  $("#acct-step").style.display = "block";
+  pickedVerb.acct.forEach(aid=>{
+    const a = ACCOUNTS[aid];
+    const b = el("button","acctpick",
+      `<span class="t">${esc(a.label)}</span>
+       <span class="d">${a.threshold} of ${a.signers}${a.anon?" · anonymous":""} · ${a.rounds.length} round${a.rounds.length>1?"s":""} · ${a.serial}<br>${esc(a.balance)} available</span>`);
+    b.setAttribute("aria-pressed","false");
+    b.addEventListener("click",()=>{
+      pickedAcct = aid;
+      [...wrap.children].forEach(c=>c.setAttribute("aria-pressed","false"));
+      b.setAttribute("aria-pressed","true");
+      syncNew();
+    });
+    wrap.appendChild(b);
+  });
+}
+
+function syncNew(){
+  const btn = $("#open-room"), n = pickedPeople.size;
+  if(!pickedVerb){ btn.disabled=true; btn.textContent="Pick an activity"; }
+  else if(!pickedAcct){ btn.disabled=true; btn.textContent="Pick an account"; }
+  else { btn.disabled=false; btn.textContent = n? `Open the room with ${n} ${n===1?"person":"people"}` : "Open the room — just you"; }
+
+  const a = pickedAcct?ACCOUNTS[pickedAcct]:null;
+  $("#new-scope").innerHTML = !pickedVerb
+    ? "Nothing is shared until the room opens."
+    : (n===0
+        ? "A room with one person is still a room. Your devices coordinate the same way."
+        : `${n+1} people will be able to read this room. Nobody else.`)
+      + (a? `<br>Approvals: ${a.threshold} of ${a.signers}${a.anon?", anonymous":""}.` : "");
+}
+
+function createRoom(){
+  const a = ACCOUNTS[pickedAcct];
+  const members = [{id:"you",role:"signer"}].concat([...pickedPeople].map(id=>({id,role:"signer"})));
+  const id = "r"+(++uid);
+  addRoom({
+    id, title:pickedVerb.name+(pickedPeople.size?" with "+[...pickedPeople].map(p=>P[p].n).join(", "):""),
+    account:pickedAcct, when:"now", members,
+    plugins:pickedVerb.tmpl,
+    blocks:[
+      {k:"sys",h:`Room opened by <b>you</b> · ${members.length} ${members.length===1?"person":"people"} · <b>${esc(a.label)}</b>, ${a.threshold} of ${a.signers}`},
+      {k:"sys",h:`Loaded here: <b>${pickedVerb.tmpl.map(t=>PLUGINS[TEMPLATES[t].plugin].name).join(", ")}</b>. Nothing else can read this room.`}
+    ]
+  });
+  openRoom(id);
+}
+
+/* =========================================================
+   ROOM
+   ========================================================= */
+let cur = null;
+
+function openRoom(id){
+  cur = ROOMS[id];
+  const a = ACCOUNTS[cur.account];
+
+  $("#room-title").textContent = cur.title;
+  $("#room-account").innerHTML =
+    `▣ <b>${esc(a.label)}</b> <span class="sep">·</span> ${a.threshold} of ${a.signers}${a.anon?" anon":""} <span class="sep">·</span> ${esc(a.env)} <span class="sep">·</span> ${a.serial==="sequential"?"nonce "+a.nonce:"parallel"}`;
+
+  renderNameplate();
+  renderScopeLine();
+  buildScopeSheet();
+  buildTemplateSheet();
+  buildThread();
+  show("s-room");
+}
+
+function renderNameplate(){
+  const ids = cur.members.map(m=>m.id);
+  $("#np-faces").innerHTML = ids.slice(0,5).map(i=>face(i)).join("");
+  $("#np-names").textContent = cur.members.map(m=>P[m.id].n).join(", ");
+}
+
+function renderScopeLine(){
+  const signers = cur.members.filter(m=>m.role==="signer").length;
+  const readers = cur.members.length - signers;
+  $("#room-scope").innerHTML =
+    `<span class="dot">●</span> end-to-end · ${cur.members.length} can read` +
+    (readers?` · ${readers} can't sign`:"") +
+    (cur.tamper?` · <span class="warnflag">lying plugin armed</span>`:"");
+}
+
+function buildScopeSheet(){
+  const a = ACCOUNTS[cur.account];
+  $("#scope-sub").textContent = a.anon
+    ? "Signatures prove membership without naming the signer. The room still knows exactly who is reading."
+    : "This room is the whole audience. There is no server-side copy and no admin view.";
+
+  const sm = $("#scope-members"); sm.innerHTML="";
+  cur.members.forEach(m=>{
+    sm.appendChild(el("div","member",
+      `${face(m.id)}<span class="nm">${P[m.id].n}</span><span class="role${m.role==="reads only"?" reads":""}">${m.role}</span>`));
+  });
+
+  const add = $("#add-people"); add.innerHTML="";
+  const absent = Object.keys(P).filter(k=>k!=="you" && !cur.members.some(m=>m.id===k));
+  absent.slice(0,4).forEach(id=>{
+    const b = el("button",null,"+ "+P[id].n);
+    b.addEventListener("click",()=>addMember(id));
+    add.appendChild(b);
+  });
+  if(!absent.length) add.appendChild(el("div","sub","Everyone you know is already in here."));
+
+  const pl = $("#scope-plugins"); pl.innerHTML="";
+  (cur.plugins||[]).forEach(t=>{
+    const p = PLUGINS[TEMPLATES[t].plugin];
+    pl.appendChild(el("div","plug",
+      `<div class="t">${esc(p.name)}<span class="hash">${esc(p.hash)}</span></div>
+       <div class="perm">
+         <div class="y">can read — ${p.reads.join(", ")}</div>
+         <div class="n">cannot read — ${p.denies.join(", ")}</div>
+         <div class="n">never holds keys · never signs</div>
+       </div>`));
+  });
+
+  const it = pendingIntent(cur) || cur.blocks.filter(b=>b.k==="intent").pop();
+  $("#leaks").innerHTML = it
+    ? `<div class="cap">Public forever once submitted</div>
+       <div class="row2"><span>amount</span><b>${esc(it.effect.amount)} ${esc(it.effect.asset)}</b></div>
+       <div class="row2"><span>recipient</span><b>${esc(it.effect.dest)}</b></div>
+       <div class="row2"><span>account</span><b>${esc(a.address)}</b></div>
+       <div class="row2"><span>who signed</span><b>${a.anon?"only the count":"every signer address"}</b></div>
+       <div class="row2"><span>timing</span><b>block timestamp</b></div>`
+    : `<div class="cap">Nothing proposed yet</div><div class="row2"><span>nothing</span><b>leaves this room</b></div>`;
+
+  $("#tamper").setAttribute("aria-pressed", String(!!cur.tamper));
+}
+
+function addMember(id){
+  cur.members.push({id,role:"signer"});
+  cur.blocks.push({k:"seam",t:`${P[id].n} can read from here`});
+  cur.blocks.push({k:"sys",h:`<b>${P[id].n}</b> joined. Everything above stayed where it was — the room re-keys forward, not backward.`});
+  renderNameplate(); renderScopeLine(); buildScopeSheet(); buildThread(); scrollThread();
+  closeSheets();
+}
+
+function buildTemplateSheet(){
+  const a = ACCOUNTS[cur.account];
+  $("#tmpl-sub").textContent = `Loaded because this room coordinates around ${a.label}. Each one emits blocks — none of them get a canvas.`;
+  const tl = $("#tmpl-list"); tl.innerHTML="";
+  (cur.plugins||["transfer"]).forEach(t=>{
+    const T = TEMPLATES[t], p = PLUGINS[T.plugin];
+    const b = el("button","tmpl",
+      `<span class="t">${esc(T.title)}</span><span class="d">${esc(T.d)} · ${esc(p.name)} ${esc(p.hash)}</span>`);
+    b.addEventListener("click",()=>{ closeSheets(); runTemplate(t); });
+    tl.appendChild(b);
+  });
+}
+
+/* =========================================================
+   thread rendering
+   ========================================================= */
+function buildThread(){
+  const t = $("#thread"); t.innerHTML="";
+  cur.blocks.forEach(b=>t.appendChild(renderBlock(b)));
+  renderPinned();
+  scrollThread();
+}
+
+function renderBlock(b){
+  if(b.k==="sys")  return el("div","sys"+(b.warn?" warn":""), b.h);
+  if(b.k==="seam") return el("div","seam",`<span>${esc(b.t)}</span>`);
+
+  if(b.k==="msg"){
+    const d = el("div","msg"+(b.who==="you"?" me":""));
+    d.innerHTML = `<span class="who-said">${P[b.who].n}</span><span class="bubble">${esc(b.t)}</span>`;
+    return d;
+  }
+
+  if(b.k==="fact"){
+    const d = el("button","fact");
+    d.innerHTML = `<span class="k">${esc(b.label)}</span>
+      <span class="v">${esc(b.value)}</span>
+      <span class="prov">supplied by <b>${P[b.by].n}</b> · ${esc(b.method)}<br>
+      ${b.verified?`<span class="ok">✓ you verified it locally</span>`:`<span class="no">unverified — you are trusting ${P[b.by].n}</span>`}</span>`;
+    d.addEventListener("click",()=>openFact(b));
+    return d;
+  }
+
+  if(b.k==="choice") return renderChoice(b);
+  if(b.k==="intent") return renderIntent(b);
+  return el("div");
+}
+
+/* ---- choice ---- */
+function renderChoice(b){
+  const d = el("div","choice");
+  const total = b.options.reduce((s,o)=>s+o.n,0) || 1;
+  let html = `<div class="q">${esc(b.q)}</div><div class="askedby">asked by ${P[b.by].n} · ${total} of ${cur.members.length} answered</div>`;
+  b.options.forEach((o,i)=>{
+    const pct = Math.round(o.n/total*100);
+    html += `<button class="opt" data-i="${i}" aria-pressed="${b.voted===i}">
+      <span class="fill" style="width:${b.voted===null?0:pct}%"></span>
+      <span class="txt">${esc(o.t)}</span><span class="n">${b.voted===null?"":o.n}</span></button>`;
+  });
+  if(b.voted!==null && !b.resolved) html += `<button class="bind">Turn the winner into an intent</button>`;
+  d.innerHTML = html;
+
+  d.querySelectorAll(".opt").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      if(b.voted!==null) return;
+      const i = +btn.dataset.i;
+      b.options[i].n++; b.voted = i;
+      buildThread();
+    });
+  });
+  const bind = d.querySelector(".bind");
+  if(bind) bind.addEventListener("click",()=>{
+    b.resolved = true;
+    const share = b.voted===0 ? "460" : "395";
+    const it = mkIntent({template:"transfer",amount:share,asset:"EUR-e",dest:"Devon",destLabel:"your share of the offsite",
+      memo:b.options[b.voted].t,account:cur.account});
+    cur.blocks.push({k:"sys",h:`Decision carried into the transfer: <b>${esc(b.options[b.voted].t)}</b>. The choice and the intent are the same thread.`});
+    cur.blocks.push(it);
+    buildThread(); buildHome(); scrollThread();
+  });
+  return d;
+}
+
+/* ---- fact sheet ---- */
+function openFact(b){
+  $("#fact-sub").textContent = `${b.label} — ${b.value}`;
+  $("#fact-detail").innerHTML = `
+    <div class="member">${face(b.by)}<span class="nm">${P[b.by].n}</span><span class="role">supplier</span></div>
+    <div class="sheet-sec">How it got here</div>
+    <p class="sub" style="margin:0 0 12px">${esc(b.method)}</p>
+    <div class="sheet-sec">What that means</div>
+    <p class="sub" style="margin:0 0 12px">${esc(b.detail)}</p>
+    <div class="sheet-sec">Check</div>
+    <div class="verify open" style="width:100%">
+      <div class="hd"><span>${b.verified?"✓ signature and proof check out":"no proof attached"}</span></div>
+      <div class="body">
+        <div class="lnk"><span>signed by</span><span>${P[b.by].n}</span></div>
+        <div class="lnk"><span>digest</span><span>${hash(b.label+b.value)}</span></div>
+        <div class="lnk"><span>re-checked</span><span>just now, on your device</span></div>
+      </div>
+    </div>`;
+  openSheet("#fact-sheet");
+}
+
+/* ---- intent ---- */
+function statusRail(it){
+  const steps = ["proposed","collecting","executable","submitted","final"];
+  const labels = ["proposed","collecting","ready","submitted","final"];
+  const idx = Math.max(0, steps.indexOf(it.status==="draft"?"proposed":it.status));
+  return `<div class="rail">${steps.map((s,i)=>
+    `<div class="st${i<=idx?" on":""}${i===idx?" now":""}"><span class="dot"></span><span class="lb">${labels[i]}</span></div>`
+  ).join("")}</div>`;
+}
+
+function slotsHTML(it){
+  let out="";
+  for(let i=0;i<it.of;i++){
+    const has = it.filled[i];
+    if(has===undefined) out += `<span class="slot${it.anon?" anon":""}"></span>`;
+    else if(it.anon)    out += `<span class="slot anon filled">✓</span>`;
+    else                out += `<span class="slot filled" style="background:${P[has].c}">${P[has].i}</span>`;
+  }
+  return out;
+}
+
+function intentInner(it){
+  const a = ACCOUNTS[it.account];
+  const have = it.filled.length, ready = have>=it.need;
+  const mine = it.filled.includes("you");
+  const draft = it.status==="draft";
+  const mismatch = it.payloadHash !== it.displayHash;
+  const blocked = mismatch || !!it.queuedBehind;
+
+  const round = it.rounds.length>1
+    ? `<div class="roundlbl"><span class="pill">round ${it.roundIndex+1} of ${it.rounds.length}</span> ${esc(it.rounds[it.roundIndex])}</div>`
+    : "";
+
+  const verify = `
+    <button class="verify${mismatch?" bad":""}${it.verifyOpen?" open":""}" data-act="intent-verify" data-arg="${it.id}">
+      <span class="hd">
+        <span>${mismatch
+          ? "✗ what you'd sign is not what this says"
+          : "✓ your client re-derived this effect — payload matches"}</span>
+        <span class="caret">${it.verifyOpen?"−":"+"}</span>
+      </span>
+      <span class="body">
+        <span class="lnk"><span>shown</span><span>${esc(it.effect.amount)} ${esc(it.effect.asset)} → ${esc(it.effect.dest)}</span></span>
+        <span class="lnk"><span>re-derived</span><span>${it.displayHash}</span></span>
+        <span class="lnk"><span>payload</span><span>${it.payloadHash}</span></span>
+        <span class="lnk"><span>domain</span><span>${esc(a.env)} · ${esc(a.address)}${it.nonce!==null?" · nonce "+it.nonce:" · nullifier"}</span></span>
+        <span class="lnk"><span>plugin</span><span>${esc(PLUGINS[TEMPLATES[it.template].plugin].hash)}</span></span>
+      </span>
+    </button>`;
+
+  const blockedNote = mismatch
+    ? `<div class="blocked">Signing is disabled. The plugin displayed one effect and encoded another. Nothing about this is recoverable by reading more carefully — the client caught it because it built the payload itself and compared.</div>`
+    : "";
+  const conflictNote = it.queuedBehind
+    ? `<div class="conflict">Queued behind nonce ${it.queuedBehind}. This account orders its transactions, so two intents can't be live at once. Settle the one above or drop it.</div>`
+    : "";
+
+  const label = draft ? "Draft · unsigned"
+    : `${TEMPLATES[it.template].title} · ${it.need} of ${it.of}${it.anon?" anon":""}`;
+
+  return `
+    <div class="head">
+      <span class="kind">${esc(label)}</span>
+      <span class="nonce">${it.nonce!==null?"nonce "+it.nonce:"nullifier · parallel"}</span>
+    </div>
+    <div class="effect">
+      <div class="amount${it.effect.amount==="—"?" unset":""}">${esc(it.effect.amount)} ${esc(it.effect.asset)}</div>
+      <div class="dest">to ${esc(it.effect.dest)}${it.effect.destLabel?" ("+esc(it.effect.destLabel)+")":""}${it.effect.memo?" · "+esc(it.effect.memo):""}</div>
+    </div>
+    ${statusRail(it)}
+    <div class="approvals">
+      <span class="slots">${slotsHTML(it)}</span>
+      <span class="threshold"><b>${have} of ${it.need}</b>${ready?"ready to submit":"signatures collected"}</span>
+    </div>
+    ${round}
+    ${verify}
+    ${blockedNote}${conflictNote}
+    <div class="intent-act">
+      <button class="act go" data-act="intent-go" data-arg="${it.id}" ${blocked||(mine&&!ready)?"disabled":""}>
+        ${ready ? "Submit" : (mine ? "Signed — waiting" : (it.rounds.length>1 && it.roundIndex===0 ? "Commit a nonce" : "Add your signature"))}
+      </button>
+      <button class="act ghost sm" data-act="intent-scope">Who sees this</button>
+    </div>`;
+}
+
+function renderIntent(it){
+  const d = el("div","intent"+(it.status==="draft"?" draft":""));
+  d.id = it.id;
+
+  if(it.status==="submitted" || it.status==="final"){
+    d.classList.add("public");
+    d.innerHTML = publicInner(it);
+    return d;
+  }
+
+  d.innerHTML = intentInner(it);
+  return d;
+}
+
+function findIntent(id){
+  for(const b of cur.blocks) if(b.k==="intent" && b.id===id) return b;
+  return null;
+}
+function advanceById(id){
+  const it = findIntent(id), d = document.getElementById(id);
+  if(!it || !d) return fault("lost track of proposal "+id);
+  advance(it,d);
+}
+function toggleVerify(id){
+  const it = findIntent(id), d = document.getElementById(id);
+  if(!it || !d) return;
+  it.verifyOpen = !it.verifyOpen;
+  d.innerHTML = intentInner(it);
+}
+function jumpTo(id){
+  const d = document.getElementById(id);
+  if(!d) return;
+  d.scrollIntoView({block:"center",behavior:"smooth"});
+  d.classList.add("flash");
+  setTimeout(()=>d.classList.remove("flash"),900);
+}
+
+function publicInner(it){
+  const a = ACCOUNTS[it.account];
+  const final = it.status==="final";
+  return `
+    <div class="head"><span class="kind">Submitted · public</span><span class="nonce">${it.nonce!==null?"nonce "+it.nonce:"nullifier"}</span></div>
+    <div class="effect">
+      <div class="amount">${esc(it.effect.amount)} ${esc(it.effect.asset)}</div>
+      <div class="dest">to ${esc(it.effect.dest)}${it.effect.destLabel?" ("+esc(it.effect.destLabel)+")":""}</div>
+    </div>
+    <div class="approvals">
+      <span class="slots">${slotsHTML(it)}</span>
+      <span class="threshold"><b>${final?"final":"settling"}</b>${esc(a.finality)}</span>
+    </div>
+    <div class="conf${final?" final":""}">
+      <span class="pulse"></span>
+      <span>${final ? `<b>Final.</b> ${a.anon?"The chain recorded a threshold proof.":"The chain recorded every signer address."}`
+                    : `<b>${it.confirmations}</b> of 3 confirmations`}</span>
+    </div>
+    <div class="leftroom">
+      This left the room. <b>${esc(it.effect.amount)} ${esc(it.effect.asset)}</b>, the recipient and the timing are public and permanent.
+      ${a.anon
+        ? "Who signed stayed inside — the chain saw a count, not a roster."
+        : "Everything said to get here — the quotes, the hesitation, who read without signing — stayed inside."}
+    </div>`;
+}
+
+/* advance: commit round → sign → submit */
+function advance(it,d){
+  const a = ACCOUNTS[it.account];
+
+  // multi-round: first round is nonce commitment
+  if(it.rounds.length>1 && it.roundIndex===0){
+    it.roundIndex = 1;
+    it.filled.push(it.anon?"?":"you");
+    it.status = it.filled.length>=it.need ? "executable" : "collecting";
+    refresh(it,d);
+    pushSys(`Nonce commitment recorded. Round 2 opens — partial signatures combine into one, so the chain sees a single signature no matter how many of you signed.`);
+    return;
+  }
+
+  if(it.filled.length < it.need){
+    it.filled.push(it.anon?"?":"you");
+    it.status = it.filled.length>=it.need ? "executable" : "collecting";
+    refresh(it,d);
+    const slots = d.querySelectorAll(".slot.filled");
+    const last = slots[slots.length-1];
+    if(last){ last.classList.add("pop"); setTimeout(()=>last.classList.remove("pop"),280); }
+    if(it.status==="executable"){
+      pushSys(it.anon
+        ? `Threshold met. The partials combine into one signature — the chain learns <b>${it.need} of ${it.of} agreed</b> and nothing else.`
+        : `Threshold met. Any of you can submit it now.`);
+    }
+    buildHome();
+    return;
+  }
+
+  // submit
+  it.status = "submitted";
+  d.classList.add("leaving");
+  setTimeout(()=>{
+    d.classList.remove("leaving");
+    d.classList.add("public");
+    d.innerHTML = publicInner(it);
+    scrollThread();
+    if(a.serial==="sequential") a.nonce++;
+    // unqueue anything waiting on this
+    cur.blocks.forEach(b=>{
+      if(b.k==="intent" && b.queuedBehind===it.nonce){
+        b.queuedBehind = null; b.nonce = a.nonce;
+        pushSys(`Nonce ${it.nonce} cleared. The queued proposal moved to nonce ${b.nonce} and is live.`);
+        buildThread();
+      }
+    });
+    let c = 0;
+    const tick = setInterval(()=>{
+      c++; it.confirmations = c;
+      if(c>=3){ it.status="final"; clearInterval(tick); }
+      const node = document.getElementById(it.id);
+      if(node){ node.innerHTML = publicInner(it); }
+      buildHome();
+    }, 1200);
+    renderPinned();
+    buildHome();
+  },320);
+}
+
+function refresh(it,d){
+  d.innerHTML = intentInner(it);
+  renderPinned();
+}
+
+function renderPinned(){
+  const p = $("#pinned");
+  const it = pendingIntent(cur);
+  if(!it){ p.hidden = true; return; }
+  const mismatch = it.payloadHash !== it.displayHash;
+  const ready = it.filled.length >= it.need;
+  const mine = it.filled.includes("you");
+  p.hidden = false;
+  p.className = "pinned" + (mismatch ? " warn" : "");
+  const line = mismatch
+    ? `<b>Blocked proposal</b> · the payload doesn't match what it shows`
+    : it.queuedBehind
+      ? `<b>Queued proposal</b> · ${esc(it.effect.amount)} ${esc(it.effect.asset)} · behind nonce ${it.queuedBehind}`
+      : `<b>${ready ? "Ready to submit" : mine ? "You've signed" : "Needs your signature"}</b> · ${esc(it.effect.amount)} ${esc(it.effect.asset)} · ${it.filled.length} of ${it.need}`;
+  p.innerHTML = `<span class="t">${line}</span>
+    <button data-act="jump" data-arg="${it.id}">Review</button>`;
+}
+function pushSys(h,warn){
+  cur.blocks.push({k:"sys",h,warn:!!warn});
+  $("#thread").appendChild(el("div","sys"+(warn?" warn":""),h));
+  scrollThread();
+}
+
+/* =========================================================
+   templates → blocks
+   ========================================================= */
+let composeTemplate = null;
+
+function runTemplate(t){
+  const T = TEMPLATES[t];
+  if(T.form){ openCompose(t); return; }
+
+  if(t==="balance"){
+    const a = ACCOUNTS[cur.account];
+    cur.blocks.push({k:"fact",id:nid("f"),label:a.label+" balance",value:a.balance,
+      by:"you",method:"read by your own node, signed locally",verified:true,
+      detail:"You ran the read. Nobody supplied this to you, so there is nobody to trust. This is the version of a data feed that does not need a reputation."});
+    buildThread(); scrollThread(); return;
+  }
+  if(t==="quote"){
+    cur.blocks.push({k:"fact",id:nid("f"),label:"USDC / ETH quote",value:"1 ETH = 3,412.90 USDC",
+      by:"jb",method:"fetched by JB's self-hosted bot, signed on the way in",verified:false,
+      detail:"No proof is attached, so the room is trusting JB — and it says so. That is different from trusting an oracle you have never met, and the difference is visible on the card instead of buried in a docs page."});
+    buildThread(); scrollThread(); return;
+  }
+  if(t==="decide"){
+    cur.blocks.push({k:"choice",id:nid("c"),q:"What should we do?",by:"you",
+      options:[{t:"Go ahead now",n:0},{t:"Wait for the next cycle",n:0}],voted:null,resolved:false});
+    buildThread(); scrollThread(); return;
+  }
+  if(t==="split"){
+    cur.blocks.push({k:"choice",id:nid("c"),q:"Split it how?",by:"you",
+      options:[{t:"Even shares",n:0},{t:"By nights stayed",n:0}],voted:null,resolved:false});
+    buildThread(); scrollThread(); return;
+  }
+}
+
+function openCompose(t){
+  composeTemplate = t;
+  const a = ACCOUNTS[cur.account];
+  $("#compose-title").textContent = TEMPLATES[t].title;
+  $("#compose-sub").textContent = `Against ${a.label}. You review the effect; your client builds the payload and checks the two agree.`;
+
+  const sel = $("#f-asset"); sel.innerHTML="";
+  a.assets.forEach(x=>{ const o=document.createElement("option"); o.value=x; o.textContent=x; sel.appendChild(o); });
+
+  $("#f-amount").value=""; $("#f-dest").value=""; $("#f-memo").value="";
+
+  const ap = $("#amount-picks"); ap.innerHTML="";
+  ["250","1,000","12,400"].forEach(v=>{
+    const b=el("button",null,v);
+    b.addEventListener("click",()=>{ $("#f-amount").value=v; syncCompose(); });
+    ap.appendChild(b);
+  });
+
+  const dp = $("#dest-picks"); dp.innerHTML="";
+  cur.members.filter(m=>m.id!=="you").forEach(m=>{
+    const b=el("button",null,P[m.id].n);
+    b.addEventListener("click",()=>{ $("#f-dest").value=P[m.id].n; syncCompose(); });
+    dp.appendChild(b);
+  });
+  const b2=el("button",null,"0x7f3a…c19d");
+  b2.addEventListener("click",()=>{ $("#f-dest").value="0x7f3a…c19d"; syncCompose(); });
+  dp.appendChild(b2);
+
+  syncCompose();
+  openSheet("#compose-sheet");
+}
+
+function syncCompose(){
+  const a = ACCOUNTS[cur.account];
+  const pend = pendingIntent(cur);
+  const willQueue = a.serial==="sequential" && pend && pend.status!=="draft";
+  $("#compose-scope").innerHTML = cur.tamper
+    ? `The armed plugin will encode something else. Your client will catch it.`
+    : willQueue
+      ? `${a.label} orders its transactions — this will queue behind nonce ${pend.nonce}.`
+      : `Visible to the ${cur.members.length} people in this room. Nowhere else until it's submitted.`;
+}
+
+$("#f-amount").addEventListener("input",syncCompose);
+$("#f-dest").addEventListener("input",syncCompose);
+
+function doCompose(){
+  const a = ACCOUNTS[cur.account];
+  const amount = $("#f-amount").value.trim() || "—";
+  const asset  = $("#f-asset").value;
+  const dest   = $("#f-dest").value.trim() || "unset";
+  const memo   = $("#f-memo").value.trim();
+
+  const pend = pendingIntent(cur);
+  const willQueue = a.serial==="sequential" && pend && pend.status!=="draft" && pend.status!=="final";
+
+  const it = mkIntent({template:composeTemplate,amount,asset,dest,destLabel:"",memo,account:cur.account,
+    tampered:cur.tamper, queuedBehind: willQueue ? pend.nonce : null});
+  if(willQueue) it.nonce = a.nonce+1;
+
+  cur.blocks.push(it);
+  if(cur.tamper){
+    cur.blocks.push({k:"sys",warn:true,h:`The <b>${PLUGINS[TEMPLATES[composeTemplate].plugin].name}</b> plugin proposed this. Your client rebuilt the payload from what's shown and the two don't match.`});
+    cur.tamper = false;
+    renderScopeLine(); buildScopeSheet();
+  }
+  closeSheets(); buildThread(); buildHome(); scrollThread();
+}
+
+/* =========================================================
+   sheets + wiring
+   ========================================================= */
+function openSheet(sel){ $(sel).hidden=false; }
+function closeSheets(){ ["#scope-sheet","#tmpl-sheet","#compose-sheet","#fact-sheet"].forEach(s=>$(s).hidden=true); }
+document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",closeSheets));
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeSheets(); });
+
+$("#go-new").addEventListener("click",()=>{ buildNew(); show("s-new"); });
+$("#new-back").addEventListener("click",()=>{ buildHome(); show("s-home"); });
+$("#go-accounts").addEventListener("click",()=>{ buildAccounts(); show("s-accounts"); });
+$("#acct-back").addEventListener("click",()=>{ buildHome(); show("s-home"); });
+$("#room-back").addEventListener("click",()=>{ closeSheets(); buildHome(); show("s-home"); });
+$("#nameplate").addEventListener("click",()=>{ buildScopeSheet(); openSheet("#scope-sheet"); });
+$("#open-templates").addEventListener("click",()=>{ buildTemplateSheet(); openSheet("#tmpl-sheet"); });
+$("#open-room").addEventListener("click",createRoom);
+$("#do-compose").addEventListener("click",doCompose);
+
+$("#tamper").addEventListener("click",()=>{
+  cur.tamper = !cur.tamper;
+  $("#tamper").setAttribute("aria-pressed",String(cur.tamper));
+  renderScopeLine();
+});
+
+$("#msg-input").addEventListener("keydown",e=>{
+  if(e.key==="Enter" && e.target.value.trim()){
+    const b={k:"msg",who:"you",t:e.target.value.trim()};
+    cur.blocks.push(b);
+    $("#thread").appendChild(renderBlock(b));
+    scrollThread();
+    e.target.value="";
+  }
+});
+
+$("#reset").addEventListener("click",()=>{ seed(); homeFilter="needs"; buildHome(); show("s-home"); });
+
+seed(); buildHome(); buildNew(); show("s-home");
+})();
+</script>
+</body>
+</html>

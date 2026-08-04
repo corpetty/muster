@@ -12,6 +12,7 @@ Muster's first mission is education — it walks people through the entire trans
 | [docs/01-furps.md](docs/01-furps.md) | Normative FURPS+ requirements (stable IDs, referenced in commits and tests) |
 | [docs/02-implementation-plan.md](docs/02-implementation-plan.md) | Stack decisions, reuse from logos-core-poc2, phases P0–P6, ADR gates |
 | [CLAUDE.md](CLAUDE.md) | Invariants, working agreements, commands |
+| [ui/prototype/coordination-prototype-v2.html](ui/prototype/coordination-prototype-v2.html) | Standalone HTML/JS simulation the FURPS were written against — tokens, components, copy voice, the six-step legend. No real crypto; not the app. |
 
 ## Shape
 
