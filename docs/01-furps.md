@@ -23,8 +23,8 @@ Requirement IDs are stable. Reference them in commits and tests.
 - **F-11** A choice block can bind its winning option into a proposed intent in the same thread.
 - **F-12** Plugins are pure functions: `(conversation context, user input) → typed blocks + proposed effects`. Plugins never sign, never hold keys, and have no ambient network access. Declared data dependencies are satisfied by user-run bots or the user's own node. Distribution is signed, content-addressed bundles; installing one is trusting a hash, not a registry.
 - **F-13** The render vocabulary is closed: `message`, `intent`, `fact`, `choice`, `artifact`, `receipt`, plus system notices. Plugins never get a canvas. Additions to the vocabulary are core releases.
-- **F-14** Identity: one secp256k1 keypair is both chat author and transaction signer. Keycard is the hardware signer backend (v1).
-- **F-15** Transport is Logos Messaging: one content topic per conversation, payloads end-to-end encrypted to the member set, store-node catchup for offline members.
+- **F-14** Identity: one secp256k1 keypair is both chat author and transaction signer. Keycard is the hardware signer backend (v1). **Contested** — the platform's chat/account layer is Ed25519/X25519, so consuming it would split identity across two curves and put F-9's role derivation on an unauthenticated binding. Resolve at ADR-010 before P3.
+- **F-15** Transport is Logos Messaging: one content topic per conversation, payloads end-to-end encrypted to the member set, store-node catchup for offline members. This design makes a client's subscription set and its publish/fetch timing observable to a store node — see FS-9, which is a disclosure obligation, not a defect to hide.
 - **F-16** Membership epochs: adding a member re-keys the conversation forward; prior epochs are not decryptable by them. Removing a member rotates the epoch immediately. The UI's seam claim depends on this being true.
 - **F-17** Artifacts and plugin bundles are content-addressed in Logos Storage, behind a storage interface with a local content-addressed store as the first implementation.
 - **F-18** The home surface is a query over intents: `needs-you`, `waiting-on-others`, `settled`. Composition is verb → people → account; the account list is filtered by the verb, and the room opens scoped.
@@ -38,8 +38,9 @@ Requirement IDs are stable. Reference them in commits and tests.
 - **FS-4** Key material lives in the OS keystore or Keycard. It never appears in the log, in exports, or in anything reachable by a plugin.
 - **FS-5** Plugin bundles are verified against their content hash before load. The capability manifest is enforced at runtime: no network, no key APIs, no storage outside declared scopes.
 - **FS-6** The re-materialization check (F-4) cannot be disabled by configuration, plugin, or user preference.
-- **FS-7** For anonymous-membership drivers, signer identity must not leak through UI state, local logs, timing, or ordering. Slots render as count-only.
+- **FS-7** For anonymous-membership drivers, signer identity must not leak through UI state, local logs, timing, or ordering **within the client**. Slots render as count-only. This requirement is scoped to what the client controls; it does not cover what a store node observes at the transport layer (FS-9), and must never be cited as though it did.
 - **FS-8** No telemetry, no phone-home, no automatic update fetch. Updates are manual or an explicitly enabled signed feed.
+- **FS-9** **Metadata honesty.** The client must not claim protection it does not deliver. Concretely, under F-15 a store node observes which content topics a client subscribes to — its conversation set — and the timing of publishes and fetches. That is the conversation graph, pseudonymously, and end-to-end encryption does not hide it. Every surface describing what stays inside the room names this limit where it applies. Closing it requires a mixnet at the transport layer, not an application change; until then it is stated plainly rather than implied away. Running your own store node is not a fix — it protects the operator's own metadata, not that of the people they talk to, and can invert the threat.
 
 ## U — Usability
 

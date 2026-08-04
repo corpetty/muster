@@ -22,11 +22,11 @@ The comparison column writes itself from the status quo:
 |---|---|---|
 | Compose & propose | Proposal lives in an E2E-encrypted conversation; store nodes see ciphertext | Proposals sit in a coordination service's database (e.g. a transaction service), visible to its operator, often behind an unauthenticated read API |
 | Review | Participants review the semantic effect; the client re-derives the materialization and refuses on mismatch | Signers approve opaque calldata or a hash they cannot independently reconstruct; blind signing is the norm |
-| Collect signatures | Contributions travel over the conversation transport, bound to environment/account/slot/expiry; useless anywhere else | Signatures pool in a centralized service; collection progress, signer identities, and timing are public or operator-visible |
+| Collect signatures | Contributions travel over the conversation transport, bound to environment/account/slot/expiry; useless anywhere else. *What* is being signed and *by whom* stays inside; that this conversation is active, and when, does not (FS-9) | Signatures pool in a centralized service; collection progress, signer identities, and timing are public or operator-visible |
 | Submit | The submitted card names exactly what became public and what stayed inside | Whole coordination history often becomes linkable on-chain and in indexers; RPC providers see origin metadata |
 | Settle & finality | Finality is driver-described; reorgs surface honestly as state transitions | Finality is assumed; reorgs silently rewrite history in UIs |
 | Membership over time | Epoch re-keying: new members provably cannot read the past; removal rotates keys immediately | Chat and signing membership conflated or unmanaged; departed members retain full history |
-| Infrastructure | No server-side state, no telemetry; store nodes and RPC are untrusted and user-chosen | Vendor servers hold application state; telemetry and phone-home are default |
+| Infrastructure | No server-side state, no telemetry; store nodes and RPC are untrusted and user-chosen — but untrusted is not blind: a store node still learns the conversation graph from subscription shape and timing (FS-9). Closing that needs a mixnet, not an app change | Vendor servers hold application state; telemetry and phone-home are default |
 
 This table is illustrative, not normative — the walkthrough's claims about *Logos* must trace to a FURPS requirement and its test, and claims about *others* must cite observable, current behavior of the named system.
 
@@ -35,6 +35,8 @@ This table is illustrative, not normative — the walkthrough's claims about *Lo
 - Every "Logos protects X" claim maps to a requirement ID in `01-furps.md` and at least one test that fails if it stops being true.
 - Every "others leak X" claim is specific and verifiable — name the system, the step, and the observer. No strawmen: where a conventional stack does something well, say so.
 - The walkthrough never simulates a guarantee the running code doesn't enforce. The prototype's re-materialization strip was theater; in Muster it is the check (F-4).
+- **Separate content from metadata, and say where the line is (FS-9).** Muster protects message and effect *content* strongly. It does not hide the conversation graph: with one content topic per conversation, a store node sees which topics a client subscribes to and when it publishes and fetches. A curriculum that teaches "who can see what at every step" and then quietly omits the observer who sees the most is not teaching, it is marketing. Name the gap at the step where it applies, name what would close it (a mixnet, not an app change), and do not let "untrusted infrastructure" stand in for "blind infrastructure."
+- Where a comparison is *unfavourable* at a given step, keep it in. The teaching value of a stack is what it makes visible, including about itself.
 
 ## Sequencing
 
