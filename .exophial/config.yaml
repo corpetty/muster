@@ -1,0 +1,65 @@
+coordination_repo: ""
+poll_interval: 5
+inspect_interval: 5
+
+dispatcher:
+  max_workers: 10
+  task_timeout: 3600
+
+# Commit-boundary acceptance gate the integrator re-runs in-worktree for pebbles
+# with NO linked spec (a linked spec is graded in-process by spec_oracle.run_spec).
+# gate:
+#   command: ["your-static-gate-command"]
+#   timeout: 1800
+
+# Where `exophial spec generate` writes unified spec instances (repo-relative).
+spec_dir: "contracts/specs"
+
+# Config-owned worker-model routing (exo-a98 / worker-model ADR D2/D3). At
+# PROVISION/SPAWN the dispatcher reads the pebble's derived difficulty class and
+# sets the worker's model from THIS table — so an autonomous worker NEVER inherits
+# ~/.claude's interactive session default (whatever the operator last picked with
+# `/model`). No model id is hardcoded in engine code: abstract `tiers` map to
+# concrete ids here, and `routing` maps a difficulty class to a tier. The table
+# MUST carry an explicit `default` routing row — a MISSING `worker_model` section
+# or `default` row FAILS LOUD rather than letting the worker inherit. Difficulty
+# banding from V_spec (ADR D1) is not built yet, so every pebble routes `default`
+# today; the extra tiers/rows activate for free once specs commit a difficulty_class.
+worker_model:
+  tiers:
+    default: "sonnet"
+    frontier: "opus"
+  routing:
+    default: default
+
+# The ONE LLM transport this deployment reaches a model through (exo-698c / ADR
+# docs/decisions/2026-07-16-llm-transport-seam.md). Config-selected, fail-loud: a
+# MISSING `llm_transport` row makes the seam raise rather than guess a default, and
+# no call site outside `llm_transport.py` names how to reach a model. The default
+# `claude_cli` backend uses `claude --print` over OAuth (no API key), so Tier-2
+# conflict resolution works on keyless hosts. `anthropic_sdk` is the API-key-gated
+# alternative (it cannot honor a json_schema request — it raises, never degrades).
+llm_transport:
+  backend: claude_cli
+  # model: ""        # optional per-backend model/tier override
+  # executable: ""   # optional claude_cli binary override (default "claude")
+
+# Config-owned model routing for the intake spec-derivation call (exo-beb), the
+# intake-side sibling of worker_model above (same ADR, D2/D3): no model id is
+# hardcoded in engine code, so a criticality with no routing row, or a tier with
+# no model/budget, fails loud rather than inheriting ~/.claude's interactive
+# session default. `small` handles negligible/marginal filings cheaply; catastrophic
+# and critical criteria route to `frontier` since those require top-strength
+# (metamorphic/model_check/proof_obligation) oracle proposals.
+intake_derivation:
+  tiers:
+    small: "sonnet"
+    frontier: "opus"
+  thinking_budgets:
+    small: 4000
+    frontier: 31999
+  routing:
+    negligible: small
+    marginal: small
+    critical: frontier
+    catastrophic: frontier

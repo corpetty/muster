@@ -1,0 +1,157 @@
+{
+  "id": "derived-exo-d7c",
+  "original_statement": "Deterministic CDE encoding of signing-path values: the same value always encodes to the same bytes \u2014 CDE bytewise-lex map ordering (never length-first), shortest integers, no indefinite lengths, no floats",
+  "restatement": "Any value the module encodes for a signing payload must always produce exactly one byte sequence: (s1) encoding the same value twice, in any construction order, always yields identical bytes; (s2) map keys serialize in bytewise-lexicographic order of their encoded bytes, never sorted by key length first, regardless of insertion order; (s3) integers always use the shortest valid encoding for their value, with no non-canonical padding; (s4) the encoder never emits indefinite-length markers or floating-point values on the signing path.",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "Encoding the same value twice, in any construction order, always yields identical bytes."
+    },
+    {
+      "id": "s2",
+      "text": "Map keys serialize in bytewise-lexicographic order of their encoded bytes, never sorted by key length first, regardless of insertion order."
+    },
+    {
+      "id": "s3",
+      "text": "Integers always use the shortest valid encoding for their value, with no non-canonical padding."
+    },
+    {
+      "id": "s4",
+      "text": "The encoder never emits indefinite-length markers or floating-point values on the signing path."
+    }
+  ],
+  "goal": "A committed CDE implementation in the module core where any value maps to exactly one byte sequence \u2014 bytewise-lex map ordering, shortest-form integers, no indefinite-length items, no floats \u2014 verified by golden test vectors (the P0 exit bar in docs/02-implementation-plan.md).",
+  "acceptance_criteria": [
+    "Encoding the same value twice, in any construction order, always yields identical bytes.",
+    "Map keys serialize in bytewise-lexicographic order of their encoded bytes, never sorted by key length first, regardless of insertion order.",
+    "Integers always use the shortest valid encoding for their value, with no non-canonical padding.",
+    "The encoder never emits indefinite-length markers or floating-point values on the signing path."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Encoding the same value twice, in any construction order, always yields identical bytes."
+    },
+    {
+      "id": "c2",
+      "text": "Map keys serialize in bytewise-lexicographic order of their encoded bytes, never sorted by key length first, regardless of insertion order."
+    },
+    {
+      "id": "c3",
+      "text": "Integers always use the shortest valid encoding for their value, with no non-canonical padding."
+    },
+    {
+      "id": "c4",
+      "text": "The encoder never emits indefinite-length markers or floating-point values on the signing path."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s1",
+      "proves": "An encoder with any hidden nondeterminism (unstable map/struct iteration, non-reproducible handling) is caught on re-encoding the same value.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_cde_reencode_stable.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "stable": {
+            "kind": "flag",
+            "field": "bytes_equal"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "stable"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "Encoding the same value twice, in any construction order, always yields identical bytes.",
+      "clause_id": "c1"
+    },
+    {
+      "type": "metamorphic",
+      "restatement_clause_id": "s2",
+      "proves": "Encoding the same map content via two different key-insertion orders yields byte-identical output, and the emitted key order matches the bytewise-lex sort of each key's own encoded bytes \u2014 order is a canonical function of content, not insertion order or key length.",
+      "relation_class": "equivalence",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_cde_map_order_equivalence.nim"
+      ],
+      "cwd": "module",
+      "description": "Map keys serialize in bytewise-lexicographic order of their encoded bytes, never sorted by key length first, regardless of insertion order.",
+      "clause_id": "c2"
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s3",
+      "proves": "An encoder that zero-pads or picks a wider-than-necessary integer width is caught at a magnitude-boundary value, where encoded length exceeds the canonical minimum.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_cde_shortest_int.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "minimal": {
+            "kind": "eq",
+            "field": "encoded_len",
+            "other": "canonical_min_len"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "minimal"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "Integers always use the shortest valid encoding for their value, with no non-canonical padding.",
+      "clause_id": "c3"
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s4",
+      "proves": "An encoder that silently falls back to a non-canonical form for an indefinite-length or float input is caught \u2014 it must reject such inputs outright rather than encode them.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_cde_rejects_noncanonical.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "rejected": {
+            "kind": "flag",
+            "field": "input_rejected"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "rejected"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "The encoder never emits indefinite-length markers or floating-point values on the signing path.",
+      "clause_id": "c4"
+    }
+  ],
+  "criticality": "catastrophic"
+}

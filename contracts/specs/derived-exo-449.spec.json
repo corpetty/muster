@@ -1,0 +1,78 @@
+{
+  "id": "derived-exo-449",
+  "original_statement": "Domain-separated hash-input records: every hash on the signing path is a typed, domain-separated hash-input record \u2014 never ad-hoc concatenation",
+  "restatement": "Every hash the module computes on the signing path must go through a typed, domain-separated hash-input record, never raw concatenated bytes: (s1) every hash call site takes such a record as input, never ad-hoc concatenation; (s2) hashing the same underlying content bytes under two different domains always produces different digests \u2014 domain separation is load-bearing, not decorative.",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "Every hash call site on the signing path takes a typed, domain-separated hash-input record as input \u2014 never raw concatenated bytes."
+    },
+    {
+      "id": "s2",
+      "text": "Hashing the same underlying content bytes under two different domains (record types/contexts) always produces different digests."
+    }
+  ],
+  "goal": "A committed, typed hash-input record wrapper in the module core, used at every hash call site on the signing path, so hashing domain-separates by construction \u2014 verified by a test demonstrating two different domains hashing identical underlying content yield different digests (mirroring FS-3).",
+  "acceptance_criteria": [
+    "Every hash call site on the signing path takes a typed, domain-separated hash-input record as input \u2014 never raw concatenated bytes.",
+    "Hashing the same underlying content bytes under two different domains (record types/contexts) always produces different digests."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Every hash call site on the signing path takes a typed, domain-separated hash-input record as input \u2014 never raw concatenated bytes."
+    },
+    {
+      "id": "c2",
+      "text": "Hashing the same underlying content bytes under two different domains (record types/contexts) always produces different digests."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "metamorphic",
+      "restatement_clause_id": "s1",
+      "proves": "The real hash-input-record encoding matches an independently-implemented reference encoder for the same domain-separated record scheme, given the same domain tag and content \u2014 proving hashing goes through the structured record type as specified, not an ad-hoc concatenation that happens to look similar.",
+      "relation_class": "equivalence",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_hash_input_record_equivalence.nim"
+      ],
+      "cwd": "module",
+      "description": "Every hash call site on the signing path takes a typed, domain-separated hash-input record as input \u2014 never raw concatenated bytes.",
+      "clause_id": "c1"
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s2",
+      "proves": "Hashing identical underlying content under two or more distinct domains never produces a colliding digest across sampled trials \u2014 domain separation actually changes the hash, not just the record's cosmetic shape.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_hash_domain_separation.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "unique_digests": {
+            "kind": "distinct",
+            "collection": "digests"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "unique_digests"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "Hashing the same underlying content bytes under two different domains (record types/contexts) always produces different digests.",
+      "clause_id": "c2"
+    }
+  ],
+  "criticality": "catastrophic"
+}

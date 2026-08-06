@@ -1,0 +1,76 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "exophial hook fix_worktree_index"
+          },
+          {
+            "type": "command",
+            "command": "pb prime"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pb prime"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "exophial hook block_worktree_leak"
+          },
+          {
+            "type": "command",
+            "command": "exophial hook block_ssh"
+          },
+          {
+            "type": "command",
+            "command": "exophial hook doctrine_preflight"
+          },
+          {
+            "type": "command",
+            "command": "exophial hook fix_worktree_index",
+            "if": "Bash(git commit:*)"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__plugin_playwright_playwright__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "exophial hook doctrine_preflight"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "exophial hook block_memory_rule_write"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "exophial hook statusline"
+  }
+}
