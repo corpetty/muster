@@ -1,0 +1,128 @@
+{
+  "id": "derived-exo-307",
+  "original_statement": "Every signing payload commits to environment, account, slot, and expiry. A signature must be worthless anywhere else.",
+  "restatement": "Every signing payload must structurally commit to its exact context and be unusable outside it: (s1) the payload's encoded bytes change when any one of environment, account, slot, or expiry changes, holding the rest fixed; (s2) a signature collected under one (environment, account, slot, expiry) context fails verification under every other context; (s3) a signing payload past its committed expiry fails verification even when every other field is otherwise valid.",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "Every signing payload's encoded bytes change when any one of the four fields (environment, account, slot, expiry) changes, holding the rest fixed."
+    },
+    {
+      "id": "s2",
+      "text": "A signature collected under one (environment, account, slot, expiry) context fails verification under every other context."
+    },
+    {
+      "id": "s3",
+      "text": "A signing payload past its committed expiry fails verification, even when every other field is otherwise valid."
+    }
+  ],
+  "goal": "Every signing payload structurally commits to (environment id, account/membership commitment, serialization slot, expiry), verification fails whenever any of those four don't match the exact context the signature was made for, and an expired payload is rejected even if otherwise valid.",
+  "acceptance_criteria": [
+    "Every signing payload's encoded bytes change when any one of the four fields (environment, account, slot, expiry) changes, holding the rest fixed.",
+    "A signature collected under one (environment, account, slot, expiry) context fails verification under every other context.",
+    "A signing payload past its committed expiry fails verification, even when every other field is otherwise valid."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Every signing payload's encoded bytes change when any one of the four fields (environment, account, slot, expiry) changes, holding the rest fixed."
+    },
+    {
+      "id": "c2",
+      "text": "A signature collected under one (environment, account, slot, expiry) context fails verification under every other context."
+    },
+    {
+      "id": "c3",
+      "text": "A signing payload past its committed expiry fails verification, even when every other field is otherwise valid."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s1",
+      "proves": "Each of the four context fields is structurally load-bearing in the encoded payload, not decorative metadata \u2014 changing any one alone always changes the signed bytes.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_replay_binding_field_binds.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "field_binds": {
+            "kind": "flag",
+            "field": "field_binds"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "field_binds"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "Every signing payload's encoded bytes change when any one of the four fields (environment, account, slot, expiry) changes, holding the rest fixed.",
+      "clause_id": "c1"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s2",
+      "proves": "A signature collected under one context verifies at exactly that context and nowhere else, across an explored space of alternate (environment, account, slot, expiry) contexts \u2014 directly discharging FS-3's own required test.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_replay_binding_context_stepper.nim"
+      ],
+      "initial": [
+        {
+          "context_state_id": "origin",
+          "context_binding_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "context_binding_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 100,
+      "cwd": "module",
+      "description": "A signature collected under one (environment, account, slot, expiry) context fails verification under every other context.",
+      "clause_id": "c2"
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s3",
+      "proves": "An otherwise-fully-valid but expired signing payload is rejected \u2014 expiry is enforced independently of the other three fields matching.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_replay_binding_expiry_rejected.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "expiry_rejected": {
+            "kind": "flag",
+            "field": "expiry_rejected"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "expiry_rejected"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "A signing payload past its committed expiry fails verification, even when every other field is otherwise valid.",
+      "clause_id": "c3"
+    }
+  ],
+  "criticality": "catastrophic"
+}

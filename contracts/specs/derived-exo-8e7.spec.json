@@ -1,0 +1,128 @@
+{
+  "id": "derived-exo-8e7",
+  "original_statement": "Effects are reviewed; materializations are signed; the client re-derives the materialization and refuses on mismatch. This check lives in the module core and cannot be disabled",
+  "restatement": "Given a reviewed effect, the module core must independently re-derive the materialization and refuse to sign whenever it disagrees with the driver-supplied one, and this check must be unconditional: (s1) the client independently computes what the materialization should be, without trusting the driver's copy; (s2) if the driver-supplied materialization differs from the client's independent derivation in any way, the client refuses to sign; (s3) this check cannot be bypassed by any configuration flag, plugin, or user preference.",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "Given a reviewed effect, the client independently computes what the materialization should be, without trusting the driver's copy."
+    },
+    {
+      "id": "s2",
+      "text": "If the driver-supplied materialization differs from the client's independent derivation in any way, the client refuses to sign."
+    },
+    {
+      "id": "s3",
+      "text": "This check cannot be bypassed by any configuration flag, plugin, or user preference \u2014 it is unconditional module-core behavior."
+    }
+  ],
+  "goal": "A module-core check that independently re-derives the materialization from the reviewed effect, refuses to sign on any mismatch, and cannot be bypassed by configuration, plugin, or user preference.",
+  "acceptance_criteria": [
+    "Given a reviewed effect, the client independently computes what the materialization should be, without trusting the driver's copy.",
+    "If the driver-supplied materialization differs from the client's independent derivation in any way, the client refuses to sign.",
+    "This check cannot be bypassed by any configuration flag, plugin, or user preference \u2014 it is unconditional module-core behavior."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Given a reviewed effect, the client independently computes what the materialization should be, without trusting the driver's copy."
+    },
+    {
+      "id": "c2",
+      "text": "If the driver-supplied materialization differs from the client's independent derivation in any way, the client refuses to sign."
+    },
+    {
+      "id": "c3",
+      "text": "This check cannot be bypassed by any configuration flag, plugin, or user preference \u2014 it is unconditional module-core behavior."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s1",
+      "proves": "The client's independent-derivation path is real and actually reproduces the driver's own honestly-computed materialization \u2014 not stubbed to always match without doing the work.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_materialization_derivation_agrees.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "agrees": {
+            "kind": "flag",
+            "field": "agrees"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "agrees"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "Given a reviewed effect, the client independently computes what the materialization should be, without trusting the driver's copy.",
+      "clause_id": "c1"
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s2",
+      "proves": "Not just 'does it accept the good case' but 'does it reject every bad case' \u2014 a materialization tampered in any single field, across many random trials, is always refused.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_materialization_mismatch_refused.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "refused": {
+            "kind": "flag",
+            "field": "refused"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "refused"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "If the driver-supplied materialization differs from the client's independent derivation in any way, the client refuses to sign.",
+      "clause_id": "c2"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s3",
+      "proves": "Every reachable configuration state (toggling one setting/plugin/flag at a time from the default) still refuses a mismatched materialization \u2014 a config surface that quietly suppresses the check anywhere in that reachable space is caught as a counterexample.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_config_reachability_stepper.nim"
+      ],
+      "initial": [
+        {
+          "config_id": "default",
+          "mismatch_refused": true
+        }
+      ],
+      "invariant": {
+        "field": "mismatch_refused",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 50,
+      "cwd": "module",
+      "description": "This check cannot be bypassed by any configuration flag, plugin, or user preference \u2014 it is unconditional module-core behavior.",
+      "clause_id": "c3"
+    }
+  ],
+  "criticality": "catastrophic"
+}

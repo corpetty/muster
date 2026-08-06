@@ -1,0 +1,167 @@
+{
+  "id": "derived-exo-51e",
+  "original_statement": "Plugins never sign, never hold keys, never touch the network. They emit typed blocks only; there is no plugin canvas.",
+  "restatement": "Plugin code must run entirely outside the trust boundary: (s1) no signing operation is reachable from plugin code, through any invocation path; (s2) plugin code cannot read or otherwise access key material; (s3) plugin code cannot make a network call, directly or indirectly; (s4) a plugin's only output to the host is a typed block, and any non-typed-block output is rejected.",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "No signing operation is reachable from plugin code, through any invocation path."
+    },
+    {
+      "id": "s2",
+      "text": "Plugin code cannot read or otherwise access key material."
+    },
+    {
+      "id": "s3",
+      "text": "Plugin code cannot make a network call, directly or indirectly."
+    },
+    {
+      "id": "s4",
+      "text": "A plugin's only output to the host is a typed block; any non-typed-block output (raw markup, direct canvas/draw calls) is rejected."
+    }
+  ],
+  "goal": "Plugin code runs in a sandbox with no reachable path to signing, key material, or the network, and its only interface to the host is emitting typed blocks \u2014 no plugin canvas exists to paint outside that contract.",
+  "acceptance_criteria": [
+    "No signing operation is reachable from plugin code, through any invocation path.",
+    "Plugin code cannot read or otherwise access key material.",
+    "Plugin code cannot make a network call, directly or indirectly.",
+    "A plugin's only output to the host is a typed block; any non-typed-block output (raw markup, direct canvas/draw calls) is rejected."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "No signing operation is reachable from plugin code, through any invocation path."
+    },
+    {
+      "id": "c2",
+      "text": "Plugin code cannot read or otherwise access key material."
+    },
+    {
+      "id": "c3",
+      "text": "Plugin code cannot make a network call, directly or indirectly."
+    },
+    {
+      "id": "c4",
+      "text": "A plugin's only output to the host is a typed block; any non-typed-block output (raw markup, direct canvas/draw calls) is rejected."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s1",
+      "proves": "No signing operation succeeds from within the plugin sandbox, across an explored space of distinct invocation vectors (direct call, captured host callback, reflection) \u2014 not just the one obvious path a hand-written test would try.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_plugin_sign_unreachable_stepper.nim"
+      ],
+      "initial": [
+        {
+          "attempt_vector_id": "direct_call",
+          "sign_succeeded": false
+        }
+      ],
+      "invariant": {
+        "field": "sign_succeeded",
+        "op": "eq",
+        "value": false
+      },
+      "max_states": 30,
+      "cwd": "module",
+      "description": "No signing operation is reachable from plugin code, through any invocation path.",
+      "clause_id": "c1"
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s2",
+      "proves": "Every attempt to read or access key material from the plugin sandbox, across many randomized attempt shapes, is blocked.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_plugin_key_access_blocked.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "blocked": {
+            "kind": "flag",
+            "field": "blocked"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "blocked"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "Plugin code cannot read or otherwise access key material.",
+      "clause_id": "c2"
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s3",
+      "proves": "Every attempt to make a network call from the plugin sandbox, across many randomized attempt shapes, is blocked.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_plugin_network_blocked.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "blocked": {
+            "kind": "flag",
+            "field": "blocked"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "blocked"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "Plugin code cannot make a network call, directly or indirectly.",
+      "clause_id": "c3"
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s4",
+      "proves": "A plugin cannot smuggle non-typed-block output (raw markup, direct canvas draw calls) past the host \u2014 every malformed/non-typed output across many randomized trial shapes is rejected.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_plugin_output_typed_only.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "rejected_or_typed": {
+            "kind": "flag",
+            "field": "rejected_or_typed"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "rejected_or_typed"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "A plugin's only output to the host is a typed block; any non-typed-block output (raw markup, direct canvas/draw calls) is rejected.",
+      "clause_id": "c4"
+    }
+  ],
+  "criticality": "catastrophic"
+}

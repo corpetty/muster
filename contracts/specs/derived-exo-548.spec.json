@@ -1,0 +1,128 @@
+{
+  "id": "derived-exo-548",
+  "original_statement": "State equals reduce(log). Nothing exists that can't be rebuilt from log plus keys. Reducers are idempotent; convergence under reorder and duplication holds regardless of delivery order.",
+  "restatement": "Client state must always be reconstructible from the log alone, with no hidden state and no sensitivity to delivery order: (s1) state derived by cold-start replay of the log always equals state maintained incrementally as events arrive; (s2) applying the same event twice never changes state beyond applying it once; (s3) any duplicated or reordered delivery of the same event set converges to identical state on every client, regardless of arrival order.",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "State derived by cold-start replay of the log always equals state maintained incrementally as events arrive."
+    },
+    {
+      "id": "s2",
+      "text": "Applying the same event twice never changes state beyond applying it once \u2014 reducers are idempotent."
+    },
+    {
+      "id": "s3",
+      "text": "Any duplicated or reordered delivery of the same event set converges to identical state on every client, regardless of arrival order."
+    }
+  ],
+  "goal": "State is always reduce(log), cold start re-derives it entirely from the persisted log plus keys, reducers are idempotent, and clients converge to identical state regardless of delivery order or duplication.",
+  "acceptance_criteria": [
+    "State derived by cold-start replay of the log always equals state maintained incrementally as events arrive.",
+    "Applying the same event twice never changes state beyond applying it once \u2014 reducers are idempotent.",
+    "Any duplicated or reordered delivery of the same event set converges to identical state on every client, regardless of arrival order."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "State derived by cold-start replay of the log always equals state maintained incrementally as events arrive."
+    },
+    {
+      "id": "c2",
+      "text": "Applying the same event twice never changes state beyond applying it once \u2014 reducers are idempotent."
+    },
+    {
+      "id": "c3",
+      "text": "Any duplicated or reordered delivery of the same event set converges to identical state on every client, regardless of arrival order."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s1",
+      "proves": "Nothing exists in client state that the log can't rebuild \u2014 a cold-start replay always reproduces exactly the state built incrementally, across many randomized event sequences.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_state_cold_start_matches.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "matches": {
+            "kind": "flag",
+            "field": "matches"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "matches"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "State derived by cold-start replay of the log always equals state maintained incrementally as events arrive.",
+      "clause_id": "c1"
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s2",
+      "proves": "A reducer applied twice to the same event never drifts state further than applying it once, across many randomized event/state pairs \u2014 the idempotence at-least-once delivery depends on.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_reducer_idempotent.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "idempotent": {
+            "kind": "flag",
+            "field": "idempotent"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "idempotent"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "Applying the same event twice never changes state beyond applying it once \u2014 reducers are idempotent.",
+      "clause_id": "c2"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s3",
+      "proves": "Every explored delivery-order permutation and duplication of a fixed event set converges to the same canonical state hash \u2014 not just the one in-order, no-duplicates sequence a hand-written test would try.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_convergence_reorder_stepper.nim"
+      ],
+      "initial": [
+        {
+          "delivery_state_id": "in_order_no_dup",
+          "converged": true
+        }
+      ],
+      "invariant": {
+        "field": "converged",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 150,
+      "cwd": "module",
+      "description": "Any duplicated or reordered delivery of the same event set converges to identical state on every client, regardless of arrival order.",
+      "clause_id": "c3"
+    }
+  ],
+  "criticality": "critical"
+}

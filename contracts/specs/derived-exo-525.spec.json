@@ -1,0 +1,128 @@
+{
+  "id": "derived-exo-525",
+  "original_statement": "Membership epochs are real: adding a member re-keys forward; they cannot read earlier epochs. Removing a member rotates the epoch immediately. The UI seam depends on this.",
+  "restatement": "The module core's membership keying scheme must make epochs real, not cosmetic: (s1) adding a member advances the key epoch, and the new member's derived key set is disjoint from every prior epoch's keys; (s2) across the full reachable membership/epoch state space, no member can decrypt content from any epoch before their join epoch; (s3) removing a member rotates the epoch immediately \u2014 content encrypted right after a removal is unreadable with the removed member's last-held key.",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "Adding a member advances the key epoch, and the new member's derived key set is disjoint from every prior epoch's keys."
+    },
+    {
+      "id": "s2",
+      "text": "Across the full reachable membership/epoch state space (any sequence of adds and removes), no member can decrypt content from any epoch before their join epoch."
+    },
+    {
+      "id": "s3",
+      "text": "Removing a member rotates the epoch immediately \u2014 content encrypted right after a removal is unreadable with the removed member's last-held key."
+    }
+  ],
+  "goal": "A module-core keying scheme where adding a member advances the epoch and hands the new member only forward-facing key material, and removing a member rotates the epoch immediately \u2014 both enforced structurally, not by convention.",
+  "acceptance_criteria": [
+    "Adding a member advances the key epoch, and the new member's derived key set is disjoint from every prior epoch's keys.",
+    "Across the full reachable membership/epoch state space (any sequence of adds and removes), no member can decrypt content from any epoch before their join epoch.",
+    "Removing a member rotates the epoch immediately \u2014 content encrypted right after a removal is unreadable with the removed member's last-held key."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Adding a member advances the key epoch, and the new member's derived key set is disjoint from every prior epoch's keys."
+    },
+    {
+      "id": "c2",
+      "text": "Across the full reachable membership/epoch state space (any sequence of adds and removes), no member can decrypt content from any epoch before their join epoch."
+    },
+    {
+      "id": "c3",
+      "text": "Removing a member rotates the epoch immediately \u2014 content encrypted right after a removal is unreadable with the removed member's last-held key."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s1",
+      "proves": "A newly added member's derived key set never overlaps any epoch that predates their join \u2014 the forward-secrecy boundary is real at the moment of joining, not just eventually.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_epoch_new_member_disjoint.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "disjoint": {
+            "kind": "flag",
+            "field": "disjoint"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "disjoint"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "Adding a member advances the key epoch, and the new member's derived key set is disjoint from every prior epoch's keys.",
+      "clause_id": "c1"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s2",
+      "proves": "Every reachable (membership-set, epoch) state, reached by any sequence of adds and removes, is free of a pre-join-epoch decrypt leak \u2014 not just the single add/remove sequence a hand-written test happens to try.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_epoch_membership_stepper.nim"
+      ],
+      "initial": [
+        {
+          "membership_state_id": "empty",
+          "leak_detected": false
+        }
+      ],
+      "invariant": {
+        "field": "leak_detected",
+        "op": "eq",
+        "value": false
+      },
+      "max_states": 200,
+      "cwd": "module",
+      "description": "Across the full reachable membership/epoch state space (any sequence of adds and removes), no member can decrypt content from any epoch before their join epoch.",
+      "clause_id": "c2"
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s3",
+      "proves": "Epoch rotation on removal is immediate, not lazy or eventual \u2014 content encrypted in the very next step after a removal is already unreadable with the removed member's last key, across many random remove-then-encrypt trials.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_epoch_removal_immediate.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "decrypt_failed": {
+            "kind": "flag",
+            "field": "decrypt_failed"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "decrypt_failed"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "Removing a member rotates the epoch immediately \u2014 content encrypted right after a removal is unreadable with the removed member's last-held key.",
+      "clause_id": "c3"
+    }
+  ],
+  "criticality": "catastrophic"
+}
