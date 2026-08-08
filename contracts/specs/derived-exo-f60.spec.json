@@ -56,17 +56,28 @@
   ],
   "acceptance_tests": [
     {
-      "type": "metamorphic",
+      "type": "model_check",
       "restatement_clause_id": "s1",
-      "proves": "Permuting which member signs which slot over a fixed set of contributions leaves the UI-observable state identical. An identity that reached UI state \u2014 including one a component merely declines to render \u2014 changes the state under permutation, so this pins 'absent' rather than 'unshown'.",
-      "relation_class": "equivalence",
+      "proves": "Across the explored space of signer-to-slot assignments over a fixed set of contributions, the UI-observable state matches the baseline at every reachable assignment. An identity that reached UI state \u2014 including one a component merely declines to render \u2014 diverges under some permutation, so this pins 'absent' rather than 'unshown' over the whole assignment space.",
       "run": [
         "nim",
         "r",
         "-d:release",
-        "tests/probes/probe_anon_ui_state_permutation_equivalence.nim"
+        "tests/probes/probe_anon_ui_state_permutation_stepper.nim"
       ],
       "cwd": "module",
+      "initial": [
+        {
+          "assignment": "identity",
+          "ui_state_matches_baseline": true
+        }
+      ],
+      "invariant": {
+        "field": "ui_state_matches_baseline",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 60,
       "description": "UI state exposes counts, never identities. For an anonymous driver, the state the UI can observe carries only n-of-m slots filled \u2014 no field anywhere in UI-reachable state names or distinguishes which member filled which slot.",
       "clause_id": "c1"
     },
@@ -123,17 +134,29 @@
       "clause_id": "c3"
     },
     {
-      "type": "metamorphic",
+      "type": "model_check",
       "restatement_clause_id": "s4",
-      "proves": "Under signer permutation the sequence and content of emitted state-update events \u2014 logical clock values, event ordering, batching boundaries \u2014 are identical, with no wall clock measured. Catches a client that coalesces or defers updates differently per signer, while making no wall-clock side-channel claim the oracle could not honestly enforce.",
-      "relation_class": "equivalence",
+      "proves": "Across the explored space of signer assignments crossed with delivery batching, the sequence and content of emitted state-update events \u2014 logical clock values, event ordering, batching boundaries \u2014 matches the baseline at every reachable state, with no wall clock measured. Catches a client that coalesces or defers updates differently per signer, while making no wall-clock side-channel claim the oracle could not honestly enforce.",
       "run": [
         "nim",
         "r",
         "-d:release",
-        "tests/probes/probe_anon_logical_timing_equivalence.nim"
+        "tests/probes/probe_anon_logical_timing_stepper.nim"
       ],
       "cwd": "module",
+      "initial": [
+        {
+          "assignment": "identity",
+          "batching": "immediate",
+          "logical_event_sequence_matches_baseline": true
+        }
+      ],
+      "invariant": {
+        "field": "logical_event_sequence_matches_baseline",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 60,
       "description": "Logical timing leaks nothing. The sequence and content of emitted state-update events \u2014 logical clock values, event ordering, batching boundaries \u2014 are independent of signer identity. This is scoped to what the client controls and makes no wall-clock side-channel claim.",
       "clause_id": "c4"
     },

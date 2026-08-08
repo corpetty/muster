@@ -1,0 +1,9 @@
+# Pebbles runtime locks — transient, one per `pb` invocation, left behind on
+# exit. The SQLite cache beside them is already ignored by `.pebbles/.gitignore`,
+# which pebbles ships and owns; this file stays ours.
+.pebbles/*.lock
+
+# Nix build outputs — `nix build '.#module'` / '.#ui' symlink these into the
+# worktree (see CLAUDE.md § Commands).
+result
+result-*

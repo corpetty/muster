@@ -19,19 +19,37 @@ It conforms to the pipeline FSM
 the SPECIFY `needs-input → author` branch) — this skill adds **no workflow**; it
 orchestrates ops that already exist.
 
-## Muster-local note (installed 2026-08-07)
+## Muster-local note (installed 2026-08-07; tracking HEAD since 2026-08-08)
 
 This copy was hand-installed (not shipped by `exophial init`, which only seeds
 `.claude/doctrine/`) after the native `exophial discuss` Textual TUI proved
-unreliable in this environment. Two adjustments versus upstream:
+unreliable in this environment. Muster **tracks exophial HEAD**, not a pin
+(moved off `0.2.0+6b362fef` on 2026-08-08). Adjustments versus upstream:
 
 - The upstream doc below references `exophial issue ingest` / `exophial spec
-  generate` as CLI verbs. The pinned install here (`exophial 0.2.0+6b362fef`)
-  does not expose those as top-level subcommands — call the same underlying ops
-  directly instead: `exophial.ops.ingest.ingest_issue(...)` and
+  generate` as CLI verbs. No build through HEAD (`ab26cdb`) exposes those as
+  top-level subcommands — call the same underlying ops directly instead:
+  `exophial.ops.ingest.ingest_issue(...)` and
   `exophial.ops.intake.generate_spec(...)` (plus `validate_spec` for the
-  pre-check in step 4). Same gates, same schema, Python call instead of a CLI
-  wrapper that doesn't exist in this build yet.
+  pre-check in step 4, which takes a `Spec` — `Spec.from_dict(...)` — not a raw
+  dict). Same gates, same schema, Python call instead of a CLI wrapper that
+  doesn't exist in this build yet. Run them with the tool venv's interpreter at
+  `~/.local/share/uv/tools/exophial/bin/python`; `generate_spec` also shells out
+  to `pb`, so pebbles must be on PATH.
+- **`relation_class` is narrower than the prose below suggests.** HEAD accepts
+  only `conservation | no_arbitrage | monotonicity` — the three with landed
+  executors. `equivalence` and `round_trip` are schema-invalid. An invariance
+  claim ("transform the input, the observable is unchanged") belongs in a
+  `model_check` whose stepper enumerates the transform space, NOT in a
+  `conservation` relation: `|sum(flows)| <= tolerance` lets per-field deltas
+  cancel, so a genuinely divergent output would score green.
+- **`proof_obligation` is not authorable here.** exo-178's gate parses the
+  `postcondition` in isolation, with no behavior theory in front of it, so it
+  rejects any postcondition referencing the projector's declared symbols —
+  including the spec schema's own documented example `(and (>= m a) (>= m b))`.
+  Only closed formulas over built-in theory survive, and their truth is
+  independent of the implementation. Use `model_check` for schema-wide coverage
+  until this is fixed upstream.
 - The TUI (`tui/discuss.py`) references in step 2b/3 below are how upstream
   implements the restatement-block and per-criterion approval. Driven manually
   here, the *same two hard gates* still apply and must not be skipped:

@@ -77,17 +77,28 @@
       "clause_id": "c1"
     },
     {
-      "type": "metamorphic",
+      "type": "model_check",
       "restatement_clause_id": "s2",
-      "proves": "Encoding the same map content via two different key-insertion orders yields byte-identical output, and the emitted key order matches the bytewise-lex sort of each key's own encoded bytes \u2014 order is a canonical function of content, not insertion order or key length.",
-      "relation_class": "equivalence",
+      "proves": "Across the explored space of key-insertion permutations for the same map content, every reachable state yields byte-identical output whose key order matches the bytewise-lex sort of each key's own encoded bytes \u2014 order is a canonical function of content, never of insertion order or key length. Canonical map ordering is a claim over ALL permutations, so exploring the permutation space is the honest oracle; the prior pairwise comparison undertested it.",
       "run": [
         "nim",
         "r",
         "-d:release",
-        "tests/probes/probe_cde_map_order_equivalence.nim"
+        "tests/probes/probe_cde_map_order_stepper.nim"
       ],
       "cwd": "module",
+      "initial": [
+        {
+          "insertion_order": "identity",
+          "matches_canonical_encoding": true
+        }
+      ],
+      "invariant": {
+        "field": "matches_canonical_encoding",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 80,
       "description": "Map keys serialize in bytewise-lexicographic order of their encoded bytes, never sorted by key length first, regardless of insertion order.",
       "clause_id": "c2"
     },

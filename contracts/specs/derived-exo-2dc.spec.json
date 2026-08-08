@@ -38,17 +38,28 @@
   ],
   "acceptance_tests": [
     {
-      "type": "metamorphic",
+      "type": "model_check",
       "restatement_clause_id": "s1",
-      "proves": "The core's own routing behavior is identical whether fed garbage bytes or a well-formed contribution of the same structural shape \u2014 proving it never actually inspects content, only routes opaque blobs to the driver.",
-      "relation_class": "equivalence",
+      "proves": "Across the explored space of contribution-byte payloads at a fixed structural shape \u2014 well-formed, garbage, truncated, adversarial \u2014 the core's own routing behavior matches the baseline at every reachable state, proving it never inspects content and only routes opaque blobs to the driver. Quantifies over the payload space rather than comparing one garbage/well-formed pair.",
       "run": [
         "nim",
         "r",
         "-d:release",
-        "tests/probes/probe_core_opaque_routing_equivalence.nim"
+        "tests/probes/probe_core_opaque_routing_stepper.nim"
       ],
       "cwd": "module",
+      "initial": [
+        {
+          "payload_class": "well_formed",
+          "routing_matches_baseline": true
+        }
+      ],
+      "invariant": {
+        "field": "routing_matches_baseline",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 40,
       "description": "The core's own routing behavior is unaffected by what contribution bytes actually contain \u2014 it never parses or interprets their content.",
       "clause_id": "c1"
     },

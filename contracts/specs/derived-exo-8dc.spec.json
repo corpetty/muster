@@ -65,17 +65,28 @@
   ],
   "acceptance_tests": [
     {
-      "type": "metamorphic",
+      "type": "model_check",
       "restatement_clause_id": "s1",
-      "proves": "Fed the same local log + keys under two environments \u2014 every store node and RPC endpoint reachable, versus all of them black-holed \u2014 the reduced state is identical. A single field that lives server-side, or a reducer that needs a fetch to reconstruct, makes the offline run diverge.",
-      "relation_class": "equivalence",
+      "proves": "Across the explored space of endpoint-reachability configurations \u2014 all up, all black-holed, partial, flapping \u2014 a cold start from the same local log + keys reconstructs state matching the local baseline at every reachable configuration. A field that lives server-side, or a reducer needing a fetch, diverges. Partial and flapping reachability are the realistic failure modes the prior online/offline pair never reached.",
       "run": [
         "nim",
         "r",
         "-d:release",
-        "tests/probes/probe_offline_cold_start_equivalence.nim"
+        "tests/probes/probe_offline_cold_start_stepper.nim"
       ],
       "cwd": "module",
+      "initial": [
+        {
+          "reachability": "all_up",
+          "state_matches_local_baseline": true
+        }
+      ],
+      "invariant": {
+        "field": "state_matches_local_baseline",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 40,
       "description": "No server-side application state exists. The client's full state is derivable from local log + keys, so a cold start with every configured store node and RPC endpoint unreachable still reconstructs everything already known locally.",
       "clause_id": "c1"
     },
@@ -106,17 +117,28 @@
       "clause_id": "c2"
     },
     {
-      "type": "metamorphic",
+      "type": "model_check",
       "restatement_clause_id": "s3",
-      "proves": "Replacing the entire shipped default endpoint/module set with a disjoint operator-supplied set yields identical reduced state over the same operation sequence AND zero dials to any retired default \u2014 a hardcoded or unremovable default surfaces as a nonzero dial count to the set the user replaced.",
-      "relation_class": "equivalence",
+      "proves": "Across the explored space of operator-supplied endpoint sets replacing the shipped defaults, every reachable state yields reduced state matching the baseline AND zero dials to any retired default \u2014 a hardcoded or unremovable default surfaces as a nonzero dial count to the set the user replaced.",
       "run": [
         "nim",
         "r",
         "-d:release",
-        "tests/probes/probe_default_substitution_equivalence.nim"
+        "tests/probes/probe_default_substitution_stepper.nim"
       ],
       "cwd": "module",
+      "initial": [
+        {
+          "endpoint_set": "shipped_defaults",
+          "matches_baseline_and_no_default_dials": true
+        }
+      ],
+      "invariant": {
+        "field": "matches_baseline_and_no_default_dials",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 40,
       "description": "Defaults are replaceable. Every entry in that list can be changed or removed by the user, defaults included. There is no privileged endpoint or module the user cannot replace, and the client operates correctly against an arbitrary operator-supplied set.",
       "clause_id": "c3"
     },
