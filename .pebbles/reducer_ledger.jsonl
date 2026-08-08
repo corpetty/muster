@@ -6,3 +6,5 @@
 {"type": "comment", "issue_id": "exo-51e", "payload": {"body": "spec: contracts/specs/derived-exo-51e.spec.json"}}
 {"type": "comment", "issue_id": "exo-548", "payload": {"body": "spec: contracts/specs/derived-exo-548.spec.json"}}
 {"type": "comment", "issue_id": "exo-2dc", "payload": {"body": "spec: contracts/specs/derived-exo-2dc.spec.json"}}
+{"type": "comment", "issue_id": "exo-8dc", "payload": {"body": "spec: contracts/specs/derived-exo-8dc.spec.json"}}
+{"type": "comment", "issue_id": "exo-f60", "payload": {"body": "spec: contracts/specs/derived-exo-f60.spec.json"}}

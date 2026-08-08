@@ -1,0 +1,169 @@
+{
+  "id": "derived-exo-f60",
+  "original_statement": "Anonymous drivers stay anonymous end to end: no signer identity in UI state, logs, or ordering.",
+  "restatement": "When a driver declares an anonymous membership model, nothing the client retains or displays can be traced back to which member signed what. Anonymity is a property of the client's own state, not of its rendering \u2014 the identity must be absent, not merely unshown. (s1) UI-observable state carries only n-of-m slot counts, with no field naming or distinguishing which member filled which slot; (s2) no log record on any path, including debug, error, and crash paths, contains a signer identifier or a value resolving to one; (s3) the order contributions appear in UI state and in the log depends on arrival and log position only, never on who signed them; (s4) the client's logical timing \u2014 the sequence and content of emitted state-update events \u2014 is independent of signer identity; (s5) no client-held artifact at all (log, reduced state, cache, crash dump, export) contains a path back to a signer identity.",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "UI state exposes counts, never identities. For an anonymous driver, the state the UI can observe carries only n-of-m slots filled \u2014 no field anywhere in UI-reachable state names or distinguishes which member filled which slot."
+    },
+    {
+      "id": "s2",
+      "text": "Local logs carry no signer identity. At every level and on every path \u2014 including debug, error, and crash paths \u2014 no log record contains a signer identifier or any value that resolves to one."
+    },
+    {
+      "id": "s3",
+      "text": "Ordering leaks nothing. The order contributions appear in UI state and in the log is independent of who signed them: permuting the signers across the same set of contributions produces the same observable ordering."
+    },
+    {
+      "id": "s4",
+      "text": "Logical timing leaks nothing. The sequence and content of emitted state-update events \u2014 logical clock values, event ordering, batching boundaries \u2014 are independent of signer identity. This is scoped to what the client controls and makes no wall-clock side-channel claim."
+    },
+    {
+      "id": "s5",
+      "text": "Anonymity covers everything retained, not just what's shown. No client-held artifact \u2014 log, reduced state, cache, crash dump, or export \u2014 contains a path back to a signer identity."
+    }
+  ],
+  "goal": "For an anonymous-membership driver, no client-held state, log, ordering, or retained artifact can be traced back to which member signed what \u2014 identity is absent from the client, not merely unrendered.",
+  "acceptance_criteria": [
+    "UI state exposes counts, never identities. For an anonymous driver, the state the UI can observe carries only n-of-m slots filled \u2014 no field anywhere in UI-reachable state names or distinguishes which member filled which slot.",
+    "Local logs carry no signer identity. At every level and on every path \u2014 including debug, error, and crash paths \u2014 no log record contains a signer identifier or any value that resolves to one.",
+    "Ordering leaks nothing. The order contributions appear in UI state and in the log is independent of who signed them: permuting the signers across the same set of contributions produces the same observable ordering.",
+    "Logical timing leaks nothing. The sequence and content of emitted state-update events \u2014 logical clock values, event ordering, batching boundaries \u2014 are independent of signer identity. This is scoped to what the client controls and makes no wall-clock side-channel claim.",
+    "Anonymity covers everything retained, not just what's shown. No client-held artifact \u2014 log, reduced state, cache, crash dump, or export \u2014 contains a path back to a signer identity."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "UI state exposes counts, never identities. For an anonymous driver, the state the UI can observe carries only n-of-m slots filled \u2014 no field anywhere in UI-reachable state names or distinguishes which member filled which slot."
+    },
+    {
+      "id": "c2",
+      "text": "Local logs carry no signer identity. At every level and on every path \u2014 including debug, error, and crash paths \u2014 no log record contains a signer identifier or any value that resolves to one."
+    },
+    {
+      "id": "c3",
+      "text": "Ordering leaks nothing. The order contributions appear in UI state and in the log is independent of who signed them: permuting the signers across the same set of contributions produces the same observable ordering."
+    },
+    {
+      "id": "c4",
+      "text": "Logical timing leaks nothing. The sequence and content of emitted state-update events \u2014 logical clock values, event ordering, batching boundaries \u2014 are independent of signer identity. This is scoped to what the client controls and makes no wall-clock side-channel claim."
+    },
+    {
+      "id": "c5",
+      "text": "Anonymity covers everything retained, not just what's shown. No client-held artifact \u2014 log, reduced state, cache, crash dump, or export \u2014 contains a path back to a signer identity."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "metamorphic",
+      "restatement_clause_id": "s1",
+      "proves": "Permuting which member signs which slot over a fixed set of contributions leaves the UI-observable state identical. An identity that reached UI state \u2014 including one a component merely declines to render \u2014 changes the state under permutation, so this pins 'absent' rather than 'unshown'.",
+      "relation_class": "equivalence",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_anon_ui_state_permutation_equivalence.nim"
+      ],
+      "cwd": "module",
+      "description": "UI state exposes counts, never identities. For an anonymous driver, the state the UI can observe carries only n-of-m slots filled \u2014 no field anywhere in UI-reachable state names or distinguishes which member filled which slot.",
+      "clause_id": "c1"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s2",
+      "proves": "Across the reachable logging state space (debug, info, warn, error, verification-failure, crash, shutdown), no emitted record contains a signer identifier or a value resolving to one \u2014 catching the error-path log line that names a signer while the happy path stays clean.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_anon_log_paths.nim"
+      ],
+      "initial": [
+        {
+          "log_path": "startup",
+          "signer_identity_in_record": false
+        }
+      ],
+      "invariant": {
+        "field": "signer_identity_in_record",
+        "op": "eq",
+        "value": false
+      },
+      "max_states": 50,
+      "cwd": "module",
+      "description": "Local logs carry no signer identity. At every level and on every path \u2014 including debug, error, and crash paths \u2014 no log record contains a signer identifier or any value that resolves to one.",
+      "clause_id": "c2"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s3",
+      "proves": "Over all explored delivery interleavings (varied arrival orders, signers, duplicates, retries), the observable order is a function of arrival and log position only and never of signer \u2014 catching a reducer that sorts or buckets by signer key, quantified over interleavings rather than a single permutation pair.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_anon_ordering_interleavings.nim"
+      ],
+      "initial": [
+        {
+          "interleaving": "arrival_order",
+          "ordering_signer_independent": true
+        }
+      ],
+      "invariant": {
+        "field": "ordering_signer_independent",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 60,
+      "cwd": "module",
+      "description": "Ordering leaks nothing. The order contributions appear in UI state and in the log is independent of who signed them: permuting the signers across the same set of contributions produces the same observable ordering.",
+      "clause_id": "c3"
+    },
+    {
+      "type": "metamorphic",
+      "restatement_clause_id": "s4",
+      "proves": "Under signer permutation the sequence and content of emitted state-update events \u2014 logical clock values, event ordering, batching boundaries \u2014 are identical, with no wall clock measured. Catches a client that coalesces or defers updates differently per signer, while making no wall-clock side-channel claim the oracle could not honestly enforce.",
+      "relation_class": "equivalence",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_anon_logical_timing_equivalence.nim"
+      ],
+      "cwd": "module",
+      "description": "Logical timing leaks nothing. The sequence and content of emitted state-update events \u2014 logical clock values, event ordering, batching boundaries \u2014 are independent of signer identity. This is scoped to what the client controls and makes no wall-clock side-channel claim.",
+      "clause_id": "c4"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s5",
+      "proves": "The stepper enumerates every retained record type x field across the whole declared retention schema \u2014 log records, reduced-state records, cache entries, export format, crash dumps \u2014 and no reachable field is identity-derived while every signature-valued field is typed anonymity-set-wide (ring or blind) rather than member-bound. Coverage is the ENTIRE declared schema, not a sampled run: a byte-comparison oracle cannot do this job here, because signature values differ per run even for the same signer set, so permutation equivalence would fail on a correct implementation and any relaxation of it passes vacuously. (Authored as model_check rather than the confirmed proof_obligation because exo-178's authoring gate parses a postcondition in isolation, which admits only closed formulas whose truth no implementation can affect \u2014 see this spec's commit message.)",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_anon_retention_schema_stepper.nim"
+      ],
+      "initial": [
+        {
+          "record_type": "log_record",
+          "field_index": 0,
+          "identity_derived_field": false
+        }
+      ],
+      "invariant": {
+        "field": "identity_derived_field",
+        "op": "eq",
+        "value": false
+      },
+      "max_states": 80,
+      "cwd": "module",
+      "description": "Anonymity covers everything retained, not just what's shown. No client-held artifact \u2014 log, reduced state, cache, crash dump, or export \u2014 contains a path back to a signer identity.",
+      "clause_id": "c5"
+    }
+  ],
+  "criticality": "catastrophic"
+}

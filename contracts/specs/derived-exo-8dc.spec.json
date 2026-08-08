@@ -1,0 +1,192 @@
+{
+  "id": "derived-exo-8dc",
+  "original_statement": "No server, no telemetry. Store nodes and RPC are untrusted, user-configurable infrastructure.",
+  "restatement": "The client must be complete on the user's own machine and must never contact a destination the user has not been shown and cannot change. Shipping sensible defaults \u2014 core and standard Logos modules, default store nodes and RPC endpoints \u2014 is expected; concealing them or fixing them in place is not. (s1) No server-side application state exists, so a cold start with every configured endpoint unreachable still reconstructs everything already known locally; (s2) every endpoint and module the client will contact or load, shipped defaults included, is enumerable and shown to the user in-app before traffic goes to it, and no destination outside that visible list is reachable; (s3) every entry in that list can be changed or removed by the user, defaults included \u2014 there is no privileged endpoint or module the user cannot replace; (s4) nothing a store node or RPC endpoint returns is accepted on its authority \u2014 a lying or omitting node degrades availability, never integrity; (s5) on every code path, including error and crash paths, the client originates no request to any destination outside the visible list; (s6) updates are manual or come from an explicitly enabled, default-off signed feed.",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "No server-side application state exists. The client's full state is derivable from local log + keys, so a cold start with every configured store node and RPC endpoint unreachable still reconstructs everything already known locally."
+    },
+    {
+      "id": "s2",
+      "text": "Defaults are disclosed. Every endpoint and module the client will contact or load \u2014 shipped defaults included \u2014 is enumerable and shown to the user in-app before traffic goes to it. No destination is reachable that isn't in that visible list."
+    },
+    {
+      "id": "s3",
+      "text": "Defaults are replaceable. Every entry in that list can be changed or removed by the user, defaults included. There is no privileged endpoint or module the user cannot replace, and the client operates correctly against an arbitrary operator-supplied set."
+    },
+    {
+      "id": "s4",
+      "text": "Remote infrastructure is untrusted. Nothing a store node or RPC endpoint returns is accepted on its authority \u2014 every datum is independently verified locally (signature, hash-link, re-derivation) before it can change state. A lying or omitting node degrades availability, never integrity."
+    },
+    {
+      "id": "s5",
+      "text": "No telemetry, no phone-home. On every code path, including error and crash paths, the client originates no request to any destination outside the visible list \u2014 no analytics, no crash reporting, no beacon."
+    },
+    {
+      "id": "s6",
+      "text": "No automatic update fetch. Updates are manual, or come from an explicitly enabled (default-off) signed feed."
+    }
+  ],
+  "goal": "The client holds all of its own state and contacts only destinations the user has been shown and can replace \u2014 defaults included \u2014 with nothing a store node or RPC endpoint says accepted on its authority.",
+  "acceptance_criteria": [
+    "No server-side application state exists. The client's full state is derivable from local log + keys, so a cold start with every configured store node and RPC endpoint unreachable still reconstructs everything already known locally.",
+    "Defaults are disclosed. Every endpoint and module the client will contact or load \u2014 shipped defaults included \u2014 is enumerable and shown to the user in-app before traffic goes to it. No destination is reachable that isn't in that visible list.",
+    "Defaults are replaceable. Every entry in that list can be changed or removed by the user, defaults included. There is no privileged endpoint or module the user cannot replace, and the client operates correctly against an arbitrary operator-supplied set.",
+    "Remote infrastructure is untrusted. Nothing a store node or RPC endpoint returns is accepted on its authority \u2014 every datum is independently verified locally (signature, hash-link, re-derivation) before it can change state. A lying or omitting node degrades availability, never integrity.",
+    "No telemetry, no phone-home. On every code path, including error and crash paths, the client originates no request to any destination outside the visible list \u2014 no analytics, no crash reporting, no beacon.",
+    "No automatic update fetch. Updates are manual, or come from an explicitly enabled (default-off) signed feed."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "No server-side application state exists. The client's full state is derivable from local log + keys, so a cold start with every configured store node and RPC endpoint unreachable still reconstructs everything already known locally."
+    },
+    {
+      "id": "c2",
+      "text": "Defaults are disclosed. Every endpoint and module the client will contact or load \u2014 shipped defaults included \u2014 is enumerable and shown to the user in-app before traffic goes to it. No destination is reachable that isn't in that visible list."
+    },
+    {
+      "id": "c3",
+      "text": "Defaults are replaceable. Every entry in that list can be changed or removed by the user, defaults included. There is no privileged endpoint or module the user cannot replace, and the client operates correctly against an arbitrary operator-supplied set."
+    },
+    {
+      "id": "c4",
+      "text": "Remote infrastructure is untrusted. Nothing a store node or RPC endpoint returns is accepted on its authority \u2014 every datum is independently verified locally (signature, hash-link, re-derivation) before it can change state. A lying or omitting node degrades availability, never integrity."
+    },
+    {
+      "id": "c5",
+      "text": "No telemetry, no phone-home. On every code path, including error and crash paths, the client originates no request to any destination outside the visible list \u2014 no analytics, no crash reporting, no beacon."
+    },
+    {
+      "id": "c6",
+      "text": "No automatic update fetch. Updates are manual, or come from an explicitly enabled (default-off) signed feed."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "metamorphic",
+      "restatement_clause_id": "s1",
+      "proves": "Fed the same local log + keys under two environments \u2014 every store node and RPC endpoint reachable, versus all of them black-holed \u2014 the reduced state is identical. A single field that lives server-side, or a reducer that needs a fetch to reconstruct, makes the offline run diverge.",
+      "relation_class": "equivalence",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_offline_cold_start_equivalence.nim"
+      ],
+      "cwd": "module",
+      "description": "No server-side application state exists. The client's full state is derivable from local log + keys, so a cold start with every configured store node and RPC endpoint unreachable still reconstructs everything already known locally.",
+      "clause_id": "c1"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s2",
+      "proves": "Across every reachable normal-operation state (send, fetch, catchup, retry, reconnect), each outbound dial's destination is a member of the set the disclosure API returns \u2014 so a default baked into a code path the settings surface never enumerates is caught by reachability.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_endpoint_disclosure_stepper.nim"
+      ],
+      "initial": [
+        {
+          "op": "idle",
+          "all_dials_disclosed": true
+        }
+      ],
+      "invariant": {
+        "field": "all_dials_disclosed",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 40,
+      "cwd": "module",
+      "description": "Defaults are disclosed. Every endpoint and module the client will contact or load \u2014 shipped defaults included \u2014 is enumerable and shown to the user in-app before traffic goes to it. No destination is reachable that isn't in that visible list.",
+      "clause_id": "c2"
+    },
+    {
+      "type": "metamorphic",
+      "restatement_clause_id": "s3",
+      "proves": "Replacing the entire shipped default endpoint/module set with a disjoint operator-supplied set yields identical reduced state over the same operation sequence AND zero dials to any retired default \u2014 a hardcoded or unremovable default surfaces as a nonzero dial count to the set the user replaced.",
+      "relation_class": "equivalence",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_default_substitution_equivalence.nim"
+      ],
+      "cwd": "module",
+      "description": "Defaults are replaceable. Every entry in that list can be changed or removed by the user, defaults included. There is no privileged endpoint or module the user cannot replace, and the client operates correctly against an arbitrary operator-supplied set.",
+      "clause_id": "c3"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s4",
+      "proves": "Over the reachable adversarial-node action space (forge, mutate, omit, duplicate, reorder, replay), no datum ever changes client state without passing local verification \u2014 pinning 'availability may degrade, integrity never does' as a reachability property rather than a happy-path assertion.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_adversarial_store_node.nim"
+      ],
+      "initial": [
+        {
+          "adversary": "honest",
+          "accepted_unverified": false
+        }
+      ],
+      "invariant": {
+        "field": "accepted_unverified",
+        "op": "eq",
+        "value": false
+      },
+      "max_states": 60,
+      "cwd": "module",
+      "description": "Remote infrastructure is untrusted. Nothing a store node or RPC endpoint returns is accepted on its authority \u2014 every datum is independently verified locally (signature, hash-link, re-derivation) before it can change state. A lying or omitting node degrades availability, never integrity.",
+      "clause_id": "c4"
+    },
+    {
+      "type": "metamorphic",
+      "restatement_clause_id": "s5",
+      "proves": "Total outbound requests equals total requests attributable to a user-initiated operation, and the balance holds under fault injection (network failure, malformed payload, verification failure, panic, shutdown). An unattributed dial \u2014 a beacon, a crash report on the error path \u2014 breaks conservation.",
+      "relation_class": "conservation",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_outbound_request_conservation.nim"
+      ],
+      "cwd": "module",
+      "description": "No telemetry, no phone-home. On every code path, including error and crash paths, the client originates no request to any destination outside the visible list \u2014 no analytics, no crash reporting, no beacon.",
+      "clause_id": "c5"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s6",
+      "proves": "Across reachable lifecycle states (first launch, relaunch, long idle, resume from sleep, version-bump-available) with the signed feed default-off, no update fetch ever originates without explicit enablement \u2014 catching a fetch on a lifecycle edge nobody thought to test.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_update_fetch_lifecycle.nim"
+      ],
+      "initial": [
+        {
+          "lifecycle": "first_launch",
+          "unconsented_update_fetch": false
+        }
+      ],
+      "invariant": {
+        "field": "unconsented_update_fetch",
+        "op": "eq",
+        "value": false
+      },
+      "max_states": 30,
+      "cwd": "module",
+      "description": "No automatic update fetch. Updates are manual, or come from an explicitly enabled (default-off) signed feed.",
+      "clause_id": "c6"
+    }
+  ],
+  "criticality": "catastrophic"
+}
