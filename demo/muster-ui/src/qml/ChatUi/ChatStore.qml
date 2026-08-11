@@ -127,6 +127,30 @@ QtObject {
             backend.sendPrivate(currentConversationId, keysJson, amount);
     }
 
+    // ── proposals ────────────────────────────────────────────────────────
+    // Every proposal in the open conversation, and the one it is currently
+    // about. Both are folds over the thread, so they arrive with it rather
+    // than being tracked here.
+    readonly property var intents: backend ? backend.intents : []
+    readonly property var liveIntent: backend ? backend.liveIntent : ({})
+
+    function proposePayment(keysJson, label, amount, threshold) {
+        if (backend && currentConversationId !== "")
+            backend.proposePayment(currentConversationId, keysJson, label, amount, threshold);
+    }
+    function approveIntent(intentId) {
+        if (backend && currentConversationId !== "")
+            backend.approveIntent(currentConversationId, intentId);
+    }
+    function dropIntent(intentId, reason) {
+        if (backend && currentConversationId !== "")
+            backend.dropIntent(currentConversationId, intentId, reason);
+    }
+    function submitIntent(intentId) {
+        if (backend && currentConversationId !== "")
+            backend.submitIntent(currentConversationId, intentId);
+    }
+
     // The run's logs: every failure it reported, every run each writer kept, and
     // the directory they share.
     readonly property var errors: backend ? backend.errors : []

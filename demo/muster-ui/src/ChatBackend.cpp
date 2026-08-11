@@ -396,6 +396,10 @@ bool ChatBackend::showConversationMessages(const QString& convoId)
     // conversation shows how far it has got and what happened — including one
     // this instance did not start.
     rebuildJourney(msgs);
+    // And its proposals, from the same read — opening a room shows what it is
+    // currently deciding, not just what it has said.
+    setIntents(intentsForMessages(msgs));
+    setLiveIntent(liveIntentForMessages(msgs));
     return true;
 }
 
@@ -659,7 +663,7 @@ void ChatBackend::applyMessageReceived(const QVariantList& args)
         noteJourneyMessage(content, false, ts);
         // ...and it may have changed what this conversation is asking of you.
         // Deferred: refreshActions reads every thread (see deferToEventLoop).
-        deferToEventLoop([this] { refreshActions(); });
+        deferToEventLoop([this] { refreshActions(); refreshIntents(); });
         // A message from someone not yet on the roster means the group grew;
         // refetch (deferred: sync module read from inside an event callback).
         if (!sender.isEmpty() && !m_memberModel->contains(sender))
@@ -688,7 +692,7 @@ void ChatBackend::applyMessageSent(const QVariantList& args)
     if (convoId == currentConversationId()) {
         m_messageModel->addMessage(QStringLiteral("Me"), content, when, true);
         noteJourneyMessage(content, true, ts);
-        deferToEventLoop([this] { refreshActions(); });
+        deferToEventLoop([this] { refreshActions(); refreshIntents(); });
     }
 }
 
@@ -707,7 +711,7 @@ void ChatBackend::applyConversationCreated(const QVariantList& args)
 
     // A new conversation is a new row on the home surface. Deferred: this runs
     // inside a module event callback and refreshActions reads every thread.
-    deferToEventLoop([this] { refreshActions(); });
+    deferToEventLoop([this] { refreshActions(); refreshIntents(); });
 
     if (!m_conversationModel->contains(convoId)) {
         m_conversationModel->addConversation(convoId, displayName, description, now, isGroup, QString());

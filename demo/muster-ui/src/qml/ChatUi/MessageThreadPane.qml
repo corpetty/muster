@@ -53,6 +53,28 @@ Rectangle {
     // paying one that arrived.
     signal shareAddressRequested
     signal payRequested(string keysJson, string label)
+    // The proposals in this conversation, folded by the backend. Handed to
+    // every card so one read serves the whole thread.
+    property var intents: []
+    // The one the room is currently about, for the pinned banner.
+    property var liveIntent: null
+
+    // Bring the live proposal's card into view. The banner is a pointer, not a
+    // second place to act, so this scrolls to the card rather than duplicating
+    // its buttons — there is one set of controls for a decision.
+    function showLiveIntent() {
+        if (!root.liveIntent || !root.messageModel)
+            return;
+        const row = root.messageModel.rowOfIntent(String(root.liveIntent.intentId || ""));
+        if (row >= 0)
+            threadList.positionViewAtIndex(row, ListView.Center);
+    }
+    // Raised by a proposal card: put a payment to the room, weigh in on one,
+    // abandon one, or pay one that has reached its threshold.
+    signal proposeRequested(string keysJson, string label)
+    signal approveRequested(string intentId)
+    signal dropRequested(string intentId)
+    signal submitRequested(string intentId)
     // The composer's "ask for an address" action.
     signal addressRequested
     // Requests the conversation's details; emitted from the header's toggle.
@@ -155,6 +177,19 @@ Rectangle {
             onDetailsToggled: root.detailsRequested()
         }
 
+        // U-3: what the room is deciding, held above the thread so it is in
+        // view before anyone scrolls for it. Sits under the header, where the
+        // scope line already qualifies everything below.
+        PinnedIntent {
+            Layout.fillWidth: true
+            Layout.leftMargin: Theme.spacing.medium
+            Layout.rightMargin: Theme.spacing.medium
+            Layout.topMargin: Theme.spacing.tiny
+            visible: root.hasConversation && active
+            intent: root.liveIntent
+            onReviewRequested: root.showLiveIntent()
+        }
+
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -183,6 +218,7 @@ Rectangle {
                     width: ListView.view.width
                     groupContext: root.currentIsGroup
                     walletReady: root.walletReady
+                    intents: root.intents
                     onContextMenuRequested: function (text) {
                         messageMenu.copyText = text;
                         messageMenu.popup();
@@ -190,6 +226,18 @@ Rectangle {
                     onShareAddressRequested: root.shareAddressRequested()
                     onPayRequested: function (keysJson, label) {
                         root.payRequested(keysJson, label);
+                    }
+                    onProposeRequested: function (keysJson, label) {
+                        root.proposeRequested(keysJson, label);
+                    }
+                    onApproveRequested: function (intentId) {
+                        root.approveRequested(intentId);
+                    }
+                    onDropRequested: function (intentId) {
+                        root.dropRequested(intentId);
+                    }
+                    onSubmitRequested: function (intentId) {
+                        root.submitRequested(intentId);
                     }
                 }
             }

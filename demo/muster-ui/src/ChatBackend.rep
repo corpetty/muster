@@ -77,6 +77,22 @@ class ChatBackend
     // context rather than the index.
     PROP(QVariantList actions READONLY)
 
+    // ── intents ──────────────────────────────────────────────────────────
+    // Every proposal in the open conversation, oldest first. One map each:
+    // `intentId`, `amount`, `denom`, `keys`, `label`, `threshold`, `members`,
+    // `proposer` (address), `proposedByMe`, `approvals` (count),
+    // `approvedByMe`, `approvers` (list of {label, initials, ramp, isMe}),
+    // `state`, `reason`, `tx`, `atMs`.
+    //
+    // `state` is one of "proposed" | "collecting" | "ready" | "final" |
+    // "dropped" — the prototype's rail, minus the submitted step, because a
+    // shielded transfer gives us no observable moment between "sent" and
+    // "accepted" to render as its own state.
+    PROP(QVariantList intents READONLY)
+    // The one proposal the room is currently about, or an empty map. Same
+    // shape as an `intents` row. Pinned above the thread (U-3).
+    PROP(QVariantMap liveIntent READONLY)
+
     // ── wallet (lez_core) ────────────────────────────────────────────────
     // The execution-zone wallet this instance owns. Separate from chatStatus:
     // the conversation works whether or not the wallet ever opens, and saying
@@ -130,6 +146,20 @@ class ChatBackend
     // Pay `amount` to the shielded keys from an address-share card, then post
     // the receipt into the same conversation.
     SLOT(void sendPrivate(QString conversationId, QString toKeysJson, QString amount))
+
+    // Put a payment to the room before making it. `threshold` is how many
+    // members must approve — the proposer's own approval is counted, so a
+    // threshold of 1 is a proposal that is immediately ready, not a send.
+    SLOT(void proposePayment(QString conversationId, QString toKeysJson, QString label,
+                             QString amount, int threshold))
+    // Add this member's approval. Approving twice is not two approvals: the
+    // fold deduplicates by author.
+    SLOT(void approveIntent(QString conversationId, QString intentId))
+    // Abandon a proposal. Anyone in the room may; the thread records who.
+    SLOT(void dropIntent(QString conversationId, QString intentId, QString reason))
+    // Pay a proposal that has reached its threshold. Only the proposer can:
+    // the money leaves their account, so nobody else's approval can spend it.
+    SLOT(void submitIntent(QString conversationId, QString intentId))
 
     SLOT(void createConversation(QString peerAddress))
     // Start something with someone: open a conversation and let the verb act.

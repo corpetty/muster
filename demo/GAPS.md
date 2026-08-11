@@ -49,6 +49,25 @@ Source material for the week-one *Discovery* article. Every row follows the rule
 
 ---
 
+## 3b. Agreeing to pay
+
+**What happens:** instead of paying an address outright, a member proposes the payment to the room, picks how many people must agree, and the card collects approvals until it is ready. Whoever proposed it then pays.
+
+**Protected.** An approval is an ordinary message, so it inherits the conversation's authentication exactly as text does: it carries its author, and nobody in the room can forge one, replay someone else's, or approve twice — the fold deduplicates by author. The count on the card is a real count of real members. It is also collected **without a coordination service**: there is no server that learns what was proposed, who has agreed, who has not, and when. **[verified — approvals go through the same `send_message` path; attribution is the message's own `sender`, matched against `list_group_members`. See `ChatBackendIntent.cpp`.]**
+
+**The contrast worth drawing.** This is the cleanest comparison in the demo after the label system. The usual multisig flow pools proposals and signatures in a hosted transaction service, where the operator — and frequently anyone with the URL — sees the proposal, the signer set, who has signed and the timing, all *before* anything reaches a chain. The negotiation leaks before the transaction does. Here that entire stage is inside the encrypted room. **[from source — the documented shape of hosted multisig coordination; not separately measured.]**
+
+**Leaks.**
+- **The zone does not enforce the threshold.** This is the honest limit and it must not be soft-pedalled: the account that pays is single-key. Whoever proposed the payment could have paid it without waiting for anyone, and the only record that they *did* wait is the conversation. "2 of 3" is enforced by the room, not by the chain, and an outside observer sees an ordinary shielded transfer with no policy attached to it. **[verified as absent — nothing in our code or `lez_core` reaches a threshold check; the transfer call is the same one a direct send makes.]**
+- **An approval is not bound to what it approves.** Approvals name a proposal by an id this app minted. Nothing commits to an execution environment, an account, a serialization slot or an expiry, so their scope is this conversation by convention rather than by construction. **[verified as absent — we build no signing payloads.]**
+
+**What would close the first:** an account whose policy the zone itself enforces, so the threshold is checked where the money moves rather than where it was agreed.
+**Status: `partial`.** `logos-co/lez-multisig` implements exactly this flow — Squads-style on-chain proposals, M-of-N, `ChainedCall` into a target program — and `lez_core` exposes `send_generic_public_transaction` to drive it. But it runs against a **local sequencer**; there is no documented deployment to the public testnet this demo uses, its proposal state and calls are **public accounts**, and its members must be fresh nonce-0 keypairs claimed at creation. So today the choice is **a chain-enforced threshold or a shielded amount, not both** — which is itself the most useful thing this section can teach, and worth stating as a live trade rather than a missing feature. *(Read off the repo 2026-08-11; re-check before publishing.)*
+
+**What would close the second:** replay binding — signing payloads that commit to environment, account, slot and expiry. **Status: `none`** here; it is F-5 in the real client.
+
+---
+
 ## 4. Paying
 
 **What happens:** `transfer_private` from Bob's shielded account to Alice's shielded keys.

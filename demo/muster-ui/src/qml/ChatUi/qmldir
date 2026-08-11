@@ -18,6 +18,8 @@ StatusBar 1.0 StatusBar.qml
 MessageDelegate 1.0 MessageDelegate.qml
 MusterCard 1.0 MusterCard.qml
 SendDialog 1.0 SendDialog.qml
+ProposeDialog 1.0 ProposeDialog.qml
+PinnedIntent 1.0 PinnedIntent.qml
 WalletCard 1.0 WalletCard.qml
 JobStrip 1.0 JobStrip.qml
 ScopeLine 1.0 ScopeLine.qml

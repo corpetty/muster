@@ -1,9 +1,11 @@
 #include "MessageListModel.h"
 
 #include "Identity.h"
+#include "MusterMessage.h"
 #include "TimeFormat.h"
 
 #include <QDate>
+#include <QJsonObject>
 #include <QLocale>
 #include <algorithm>
 #include <utility>
@@ -17,6 +19,20 @@ int MessageListModel::rowCount(const QModelIndex& parent) const
 {
     if (parent.isValid()) return 0;
     return m_items.size();
+}
+
+int MessageListModel::rowOfIntent(const QString& intentId) const
+{
+    if (intentId.isEmpty())
+        return -1;
+    for (int i = 0; i < m_items.size(); ++i) {
+        const QJsonObject card = MusterMessage::cardOf(m_items.at(i).content);
+        if (card.value(QStringLiteral("type")).toString() != QLatin1String("intent-propose"))
+            continue;
+        if (card.value(QStringLiteral("intentId")).toString() == intentId)
+            return i;
+    }
+    return -1;
 }
 
 QVariant MessageListModel::data(const QModelIndex& index, int role) const

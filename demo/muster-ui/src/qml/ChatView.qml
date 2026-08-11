@@ -172,6 +172,24 @@ Rectangle {
                     sendDialog.availableBalance = store.privateBalance;
                     sendDialog.open();
                 }
+                intents: store.intents
+                liveIntent: store.liveIntent
+                onProposeRequested: function (keysJson, label) {
+                    proposeDialog.keysJson = keysJson;
+                    proposeDialog.peerLabel = label;
+                    proposeDialog.availableBalance = store.privateBalance;
+                    proposeDialog.memberCount = store.memberCount;
+                    proposeDialog.open();
+                }
+                onApproveRequested: function (intentId) {
+                    store.approveIntent(intentId);
+                }
+                onDropRequested: function (intentId) {
+                    store.dropIntent(intentId, "");
+                }
+                onSubmitRequested: function (intentId) {
+                    store.submitIntent(intentId);
+                }
             }
 
             // Always on screen, because "who can see this" is not a question
@@ -277,6 +295,16 @@ Rectangle {
         id: sendDialog
         onConfirmed: function (amount) {
             store.sendPrivate(sendDialog.keysJson, amount);
+        }
+    }
+
+    // The same card's other action: put the payment to the room first. Asks
+    // for an amount and how many people must agree before it can be paid.
+    ProposeDialog {
+        id: proposeDialog
+        onConfirmed: function (amount, threshold) {
+            store.proposePayment(proposeDialog.keysJson, proposeDialog.peerLabel,
+                                 amount, threshold);
         }
     }
 

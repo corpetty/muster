@@ -595,12 +595,27 @@ void ChatBackend::sendPrivate(QString conversationId, QString toKeysJson, QStrin
         report(QStringLiteral("Amount must be a whole number above zero."));
         return;
     }
+    // A direct send is a payment with no proposal behind it, which is the only
+    // difference between the two paths — so it is the only thing that differs
+    // in the call.
+    payForIntent(conversationId, toKeysJson, value, QString());
+}
+
+void ChatBackend::payForIntent(const QString& conversationId, const QString& toKeysJson,
+                               quint64 value, const QString& intentId)
+{
+    if (walletBusy())
+        return;
+    if (conversationId.isEmpty() || toKeysJson.isEmpty() || value == 0) {
+        report(QStringLiteral("Nothing to pay to."));
+        return;
+    }
 
     setWalletError(QString());
     setWalletJob(tr("Paying %1 LEZ").arg(value));
     beginStage(QStringLiteral("syncing"));
 
-    QTimer::singleShot(0, this, [this, conversationId, toKeysJson, value] {
+    QTimer::singleShot(0, this, [this, conversationId, toKeysJson, value, intentId] {
         if (!ensureWalletOpen())
             return;
 
@@ -619,7 +634,7 @@ void ChatBackend::sendPrivate(QString conversationId, QString toKeysJson, QStrin
         beginStage(QStringLiteral("sending"));
         modules().lez_core.transfer_privateAsync(
             m_privateAccount, toKeysJson, amountLe16Hex(value),
-            [this, conversationId, value](QString tx) {
+            [this, conversationId, value, intentId](QString tx) {
                 if (tx.isEmpty()) {
                     failWallet(QStringLiteral("The payment failed"),
                                QStringLiteral("the zone did not accept it — your balance is "
@@ -629,15 +644,18 @@ void ChatBackend::sendPrivate(QString conversationId, QString toKeysJson, QStrin
                 walletSave();
 
                 // The receipt goes back into the same conversation, so both
-                // sides see the payment where they agreed it.
+                // sides see the payment where they agreed it. Carrying the
+                // intent id is what closes the proposal it settles.
                 sendMessage(conversationId,
-                            MusterMessage::sendReceipt(QString::number(value), tx, true));
+                            MusterMessage::sendReceipt(QString::number(value), tx, true,
+                                                       intentId));
 
                 deferToEventLoop([this] {
                     QString e;
                     syncToTip(&e);
                     readWalletState();
                     endStage();
+                    refreshIntents();
                 });
             },
             Timeout(kProveMs));

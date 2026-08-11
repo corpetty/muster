@@ -16,6 +16,7 @@ logos_module(
         src/MusterMessage.h
         src/ChatBackendWallet.cpp
         src/ChatBackendJourney.cpp
+        src/ChatBackendIntent.cpp
         src/ConversationListModel.h
         src/ConversationListModel.cpp
         src/MessageListModel.h
@@ -82,6 +83,8 @@ if(CHAT_UI_QML_DEVTOOLS)
             src/qml/ChatUi/VisibilityClaims.qml
             src/qml/ChatUi/VisibilityPanel.qml
             src/qml/ChatUi/SendDialog.qml
+            src/qml/ChatUi/ProposeDialog.qml
+            src/qml/ChatUi/PinnedIntent.qml
             src/qml/ChatUi/WalletCard.qml
             src/qml/ChatUi/JobStrip.qml
             src/qml/ChatUi/ScopeLine.qml
