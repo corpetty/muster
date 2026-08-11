@@ -66,6 +66,17 @@ class ChatBackend
     // sentence for the user), and `atMs`.
     PROP(QVariantList journeyTrail READONLY)
 
+    // The home surface: one row per conversation, ordered by what it wants
+    // from you — needs-you, then waiting, then settled, then idle — and most
+    // recent first inside each band. Each row carries `conversationId`,
+    // `displayName`, `avatarInitials`, `avatarRamp`, `action`, `state`,
+    // `detail` and `lastActivityMs`.
+    //
+    // This is what the app opens on. People come back to do something, so the
+    // first thing they see is what there is to do, with who it is with as the
+    // context rather than the index.
+    PROP(QVariantList actions READONLY)
+
     // ── wallet (lez_core) ────────────────────────────────────────────────
     // The execution-zone wallet this instance owns. Separate from chatStatus:
     // the conversation works whether or not the wallet ever opens, and saying
@@ -121,6 +132,11 @@ class ChatBackend
     SLOT(void sendPrivate(QString conversationId, QString toKeysJson, QString amount))
 
     SLOT(void createConversation(QString peerAddress))
+    // Start something with someone: open a conversation and let the verb act.
+    // "request" sends the ask for an address as the room's first message, so
+    // choosing the activity up front actually does the first step rather than
+    // just labelling the room. verb is "pay" | "request" | "talk".
+    SLOT(void startActivity(QString verb, QString peerAddress))
     SLOT(void createGroupConversation(QString name, QString description))
     SLOT(void addGroupMember(QString conversationId, QString peerAddress))
     SLOT(void sendMessage(QString conversationId, QString content))

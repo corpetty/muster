@@ -26,6 +26,11 @@ Rectangle {
     // The roster behind the header's facepile.
     property var memberModel: null
     property int memberCount: 0
+    // Invited but not yet committed by the group; they cannot read anything
+    // yet, which the scope line says rather than counting them as readers.
+    property int pendingMemberCount: 0
+    // What is in flight in this conversation, as a headline for the header.
+    property string action: ""
     // Whether the details panel the header's toggle opens is showing.
     property bool detailsShown: false
     required property bool hasConversation
@@ -143,6 +148,9 @@ Rectangle {
             avatarRamp: root.avatarRamp
             memberModel: root.memberModel
             memberCount: root.memberCount
+            pendingMemberCount: root.pendingMemberCount
+            online: root.online
+            action: root.action
             detailsShown: root.detailsShown
             onDetailsToggled: root.detailsRequested()
         }
@@ -207,7 +215,7 @@ Rectangle {
             Layout.fillWidth: true
             Layout.leftMargin: Theme.spacing.xlarge
             Layout.rightMargin: Theme.spacing.xlarge
-            Layout.topMargin: Theme.spacing.medium
+            Layout.topMargin: Theme.spacing.tiny
             Layout.bottomMargin: Theme.spacing.large
             //: Placeholder in the composer, naming the conversation it sends to
             placeholder: root.title !== "" ? qsTr("Message %1").arg(root.title) : qsTr("Type a message...")

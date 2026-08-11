@@ -49,6 +49,7 @@ public slots:
     void sendPrivate(QString conversationId, QString toKeysJson, QString amount) override;
 
     void createConversation(QString peerAddress) override;
+    void startActivity(QString verb, QString peerAddress) override;
     void createGroupConversation(QString name, QString description) override;
     void addGroupMember(QString conversationId, QString peerAddress) override;
     void sendMessage(QString conversationId, QString content) override;
@@ -179,6 +180,10 @@ private:
     // of zone calls — never call it from inside a module event callback.
     void readWalletState();
 
+    // The verb chosen for a conversation being opened, acted on once the
+    // module reports it created. Cleared as soon as it is used.
+    QString m_pendingVerb;
+
     bool m_walletOpen = false;
     QString m_privateAccount;
     QString m_publicAccount;
@@ -193,6 +198,13 @@ private:
     // Re-read the whole thread. Called when a conversation is loaded, so the
     // journey is correct for one this instance did not start.
     void rebuildJourney(const QVariantList& messages);
+    // What one conversation is asking of the user, read from its messages:
+    // {state, action, detail}. State is needs-you | waiting | settled | idle.
+    QVariantMap actionForMessages(const QVariantList& messages) const;
+    // Rebuild the whole home list, one entry per conversation, needs-you first.
+    // Makes synchronous module reads for every conversation, so never call it
+    // straight from an event callback — defer it.
+    void refreshActions();
 
     QVariantList m_journeyTrail;
 };

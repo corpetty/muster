@@ -84,6 +84,10 @@ ColumnLayout {
     }
 
     // ── send-receipt ─────────────────────────────────────────────────────
+    // The one moment something leaves the room. The prototype changes visual
+    // ground exactly here and nowhere else, because this is the only step
+    // where the boundary is actually crossed — so the card carries the outside
+    // ground inside it, and names what the chain got.
     ColumnLayout {
         visible: root.cardType === "send-receipt"
         Layout.fillWidth: true
@@ -98,16 +102,85 @@ ColumnLayout {
             font.weight: Theme.typography.weightMedium
         }
 
+        // What crossed. Same fields the visibility panel uses at every step, so
+        // a reader who has seen them there can compare — and here almost all of
+        // them read "not disclosed", which is the point of having paid seven
+        // minutes for it.
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.topMargin: 2
+            Layout.preferredHeight: crossing.implicitHeight + 2 * Theme.spacing.small
+            radius: Theme.spacing.radiusSmall
+            color: ChatTheme.outside
+
+            ColumnLayout {
+                id: crossing
+                anchors.fill: parent
+                anchors.margins: Theme.spacing.small
+                spacing: 2
+
+                LogosText {
+                    Layout.fillWidth: true
+                    text: qsTr("WHAT LEFT THE ROOM")
+                    color: ChatTheme.outsideAccent
+                    font.family: Theme.typography.mono
+                    font.pixelSize: Theme.typography.badgeText
+                    font.weight: Theme.typography.weightMedium
+                }
+
+                Repeater {
+                    model: root.card && root.card.shielded
+                        ? [{ k: qsTr("amount"), v: qsTr("not disclosed"), w: true },
+                           { k: qsTr("who paid"), v: qsTr("not disclosed"), w: true },
+                           { k: qsTr("who was paid"), v: qsTr("not disclosed"), w: true },
+                           { k: qsTr("that it happened"), v: qsTr("on the record"), w: false },
+                           { k: qsTr("when"), v: qsTr("block timestamp"), w: false }]
+                        : [{ k: qsTr("amount"), v: root.card ? String(root.card.amount) : "", w: false },
+                           { k: qsTr("who paid"), v: qsTr("on the record"), w: false },
+                           { k: qsTr("who was paid"), v: qsTr("on the record"), w: false },
+                           { k: qsTr("when"), v: qsTr("block timestamp"), w: false }]
+
+                    delegate: RowLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+
+                        LogosText {
+                            text: modelData.k
+                            color: "#96A19B"
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        // Withheld is the good outcome, so it takes the accent.
+                        LogosText {
+                            text: modelData.v
+                            color: modelData.w ? ChatTheme.outsideAccent : ChatTheme.outsideInk
+                            horizontalAlignment: Text.AlignRight
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                            font.weight: Theme.typography.weightMedium
+                        }
+                    }
+                }
+            }
+        }
+
+        // The tx id, last and quietest: it is the thing you would take to an
+        // explorer, and the least interesting fact on the card.
         LogosText {
             Layout.fillWidth: true
+            visible: root.card && root.card.tx
             wrapMode: Text.WrapAnywhere
-            text: root.card && root.card.shielded
-                ? qsTr("private → private · nothing on-chain names either side")
-                : qsTr("public transfer")
-            color: root.isMe ? Theme.colors.getColor(ChatTheme.bubbleOwnText, 0.6)
+            maximumLineCount: 1
+            elide: Text.ElideRight
+            text: root.card && root.card.tx ? String(root.card.tx) : ""
+            color: root.isMe ? Theme.colors.getColor(ChatTheme.bubbleOwnText, 0.5)
                              : Theme.palette.textTertiary
             font.family: Theme.typography.mono
-            font.pixelSize: Theme.typography.secondaryText
+            font.pixelSize: Theme.typography.badgeText
         }
     }
 

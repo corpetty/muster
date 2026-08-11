@@ -194,6 +194,7 @@ void ChatBackend::initialiseModule()
     // the m_initialSnapshotDone gate — which previously left history missing
     // until a reconnect that never came.
     rehydrateConversations();
+    refreshActions();
     m_initialSnapshotDone = true;
 
     // Seed delivery state from the snapshot in case delivery_state_changed
@@ -425,6 +426,16 @@ void ChatBackend::createConversation(QString peerAddress)
     // appliers handle the UI side from there.
 }
 
+// Start something with someone. The verb is remembered, not sent: the room has
+// to exist before anything can be said in it, so the activity acts on
+// conversation_created. That is also what makes choosing it up front worth
+// doing — "ask to be paid" opens a room that has already asked.
+void ChatBackend::startActivity(QString verb, QString peerAddress)
+{
+    m_pendingVerb = verb;
+    createConversation(peerAddress);
+}
+
 void ChatBackend::createGroupConversation(QString name, QString description)
 {
     if (chatStatus() != ChatBackendSimpleSource::Online || !isContextReady()) {
@@ -646,6 +657,9 @@ void ChatBackend::applyMessageReceived(const QVariantList& args)
         // Advance the journey with it: an arriving card is how the other side
         // moves this conversation forward.
         noteJourneyMessage(content, false, ts);
+        // ...and it may have changed what this conversation is asking of you.
+        // Deferred: refreshActions reads every thread (see deferToEventLoop).
+        deferToEventLoop([this] { refreshActions(); });
         // A message from someone not yet on the roster means the group grew;
         // refetch (deferred: sync module read from inside an event callback).
         if (!sender.isEmpty() && !m_memberModel->contains(sender))
@@ -674,6 +688,7 @@ void ChatBackend::applyMessageSent(const QVariantList& args)
     if (convoId == currentConversationId()) {
         m_messageModel->addMessage(QStringLiteral("Me"), content, when, true);
         noteJourneyMessage(content, true, ts);
+        deferToEventLoop([this] { refreshActions(); });
     }
 }
 
@@ -690,6 +705,10 @@ void ChatBackend::applyConversationCreated(const QVariantList& args)
         name.isEmpty() ? fallbackDisplayName(convoId, peerLabel, isGroup) : name;
     const QDateTime now = QDateTime::currentDateTime();
 
+    // A new conversation is a new row on the home surface. Deferred: this runs
+    // inside a module event callback and refreshActions reads every thread.
+    deferToEventLoop([this] { refreshActions(); });
+
     if (!m_conversationModel->contains(convoId)) {
         m_conversationModel->addConversation(convoId, displayName, description, now, isGroup, QString());
     } else {
@@ -701,6 +720,18 @@ void ChatBackend::applyConversationCreated(const QVariantList& args)
     // Open a conversation we just created, so creating a chat or group lands
     // the user in it. Deferred: selectConversation makes a synchronous module
     // read and this runs inside a module event callback (see deferToEventLoop).
+    // The activity the user picked, now that there is a room to do it in.
+    // Deferred like the selection below: this runs inside an event callback.
+    if (isOutgoing && !m_pendingVerb.isEmpty()) {
+        const QString verb = m_pendingVerb;
+        m_pendingVerb.clear();
+        if (verb == QLatin1String("request"))
+            deferToEventLoop([this, convoId] { requestAddress(convoId); });
+        else if (verb == QLatin1String("pay"))
+            // Paying needs somewhere to pay to, so the first move is the ask.
+            deferToEventLoop([this, convoId] { requestAddress(convoId); });
+    }
+
     if (isOutgoing) {
         deferToEventLoop([this, convoId] { selectConversation(convoId); });
     } else if (convoId != currentConversationId()) {

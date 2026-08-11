@@ -84,6 +84,10 @@ if(CHAT_UI_QML_DEVTOOLS)
             src/qml/ChatUi/SendDialog.qml
             src/qml/ChatUi/WalletCard.qml
             src/qml/ChatUi/JobStrip.qml
+            src/qml/ChatUi/ScopeLine.qml
+            src/qml/ChatUi/ActionsPane.qml
+            src/qml/ChatUi/ActionDelegate.qml
+            src/qml/ChatUi/NewActivityDialog.qml
             src/qml/ChatUi/DayChip.qml
             src/qml/ChatUi/Facepile.qml
             src/qml/ChatUi/ThreadHeader.qml

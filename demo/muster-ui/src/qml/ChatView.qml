@@ -83,19 +83,19 @@ Rectangle {
                 Layout.fillHeight: true
                 spacing: Theme.spacing.medium
 
-                ConversationsPane {
-                    id: conversationsPane
+                // The home surface. What there is to do leads; the person it
+                // is with is the context on each row.
+                ActionsPane {
+                    id: actionsPane
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    conversationModel: store.conversationModel
+                    actions: store.actions
                     currentConversationId: root.selectedConversationId
                     online: store.online
-                    onConversationSelected: function (conversation) {
-                        root.pendingSelection = conversation;
-                        store.selectConversation(conversation.conversationId);
+                    onConversationSelected: function (conversationId) {
+                        store.selectConversation(conversationId);
                     }
-                    onNewConversationRequested: newConvDialog.open()
-                    onNewGroupRequested: newGroupDialog.open()
+                    onNewActivityRequested: newActivityDialog.open()
                 }
 
                 AccountCard {
@@ -152,9 +152,11 @@ Rectangle {
                 conversationId: root.selectedConversationId
                 memberModel: store.memberModel
                 memberCount: store.memberCount
+                pendingMemberCount: store.pendingMemberCount
+                action: store.currentAction
                 detailsShown: root.detailsShown
                 hasConversation: root.selectedConversationId !== ""
-                hasConversations: conversationsPane.count > 0
+                hasConversations: actionsPane.count > 0
                 online: store.online
                 ready: root.selectionLoaded
                 walletReady: store.walletReady
@@ -242,6 +244,17 @@ Rectangle {
         errors: store.errors
         runs: store.logRuns
         logDir: store.logDir
+    }
+
+    // What you want to do, then who with, then which account — the order the
+    // app is arguing for, rather than "one person or a group?".
+    NewActivityDialog {
+        id: newActivityDialog
+        walletReady: store.walletReady
+        privateBalance: store.privateBalance
+        onActivityChosen: function (verb, peerAddress) {
+            store.startActivity(verb, peerAddress);
+        }
     }
 
     NewConversationDialog {

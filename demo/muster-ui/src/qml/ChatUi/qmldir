@@ -20,6 +20,10 @@ MusterCard 1.0 MusterCard.qml
 SendDialog 1.0 SendDialog.qml
 WalletCard 1.0 WalletCard.qml
 JobStrip 1.0 JobStrip.qml
+ScopeLine 1.0 ScopeLine.qml
+ActionsPane 1.0 ActionsPane.qml
+ActionDelegate 1.0 ActionDelegate.qml
+NewActivityDialog 1.0 NewActivityDialog.qml
 DayChip 1.0 DayChip.qml
 Facepile 1.0 Facepile.qml
 ThreadHeader 1.0 ThreadHeader.qml

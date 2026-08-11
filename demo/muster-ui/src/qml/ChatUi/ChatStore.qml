@@ -40,6 +40,10 @@ QtObject {
     readonly property string journeyStep: backend ? backend.journeyStep : "discovery"
     readonly property var journeyTrail: backend ? backend.journeyTrail : []
 
+    // The home surface: one row per conversation, ordered by what it wants
+    // from you. This is what the app opens on.
+    readonly property var actions: backend ? backend.actions : []
+
     // ── wallet ───────────────────────────────────────────────────────────
     // The execution-zone wallet this instance owns. Deliberately separate from
     // `online`: the conversation works whether or not the wallet ever opens.
@@ -50,6 +54,27 @@ QtObject {
     // this becomes non-empty rather than from a backend clock, which keeps the
     // two processes from having to agree about time.
     readonly property string walletJob: backend ? backend.walletJob : ""
+
+    // What this conversation is *for*, right now, as a headline.
+    //
+    // The app is about what you are doing before it is about who you are doing
+    // it with, so this is what the thread names itself by. A job in flight wins
+    // — it is the most present thing — otherwise it is read from how far the
+    // journey has got, which is itself read off the thread.
+    readonly property string currentAction: {
+        if (walletJob !== "")
+            return walletJob;
+        switch (journeyStep) {
+        case "address":
+            return qsTr("Ready to pay");
+        case "payment":
+            return qsTr("Paid");
+        case "conversation":
+            return qsTr("Talking");
+        default:
+            return "";
+        }
+    }
     readonly property string walletError: backend ? backend.walletError : ""
     readonly property string privateBalance: backend ? backend.privateBalance : ""
     readonly property string publicBalance: backend ? backend.publicBalance : ""
@@ -143,6 +168,12 @@ QtObject {
     function createConversation(address) {
         if (backend)
             backend.createConversation(address);
+    }
+    // What you want to do, who with — the account is implicit while there is
+    // only one. The verb acts once the room exists.
+    function startActivity(verb, address) {
+        if (backend)
+            backend.startActivity(verb, address);
     }
     function createGroup(name, description) {
         if (backend)

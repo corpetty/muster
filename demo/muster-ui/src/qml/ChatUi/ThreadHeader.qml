@@ -19,6 +19,14 @@ Rectangle {
     // The roster behind the facepile; omitted for a conversation with no group.
     property var memberModel: null
     property int memberCount: 0
+    // Invited but not yet committed; they cannot read anything yet.
+    property int pendingMemberCount: 0
+    // Whether delivery is up, so the scope line does not claim a live boundary
+    // when nothing is being delivered.
+    property bool online: false
+    // What is in flight here, as a headline — "Paying 100 LEZ", "They need an
+    // address". Empty when nothing is, and the conversation's name leads again.
+    property string action: ""
     // Whether the details panel this toggle opens is showing.
     property bool detailsShown: false
 
@@ -46,15 +54,47 @@ Rectangle {
             Layout.fillWidth: true
             spacing: 2
 
+            // What is happening leads; who it is with follows. People come back
+            // to this app to do something, not to chat — so the headline is the
+            // action in flight, and the name of the person it is with is the
+            // context for it rather than the other way round.
+            //
+            // Falls back to the name when there is nothing in flight, because a
+            // conversation with no action is still a conversation.
             LogosText {
                 objectName: "threadTitle"
-                text: root.title
+                text: root.action !== "" ? root.action : root.title
                 textFormat: Text.PlainText
                 color: Theme.palette.text
                 font.pixelSize: Theme.typography.subtitleText
                 font.weight: Theme.typography.weightBold
                 elide: Text.ElideRight
                 Layout.fillWidth: true
+            }
+
+            // The counterparty, demoted to the subtitle when something is
+            // happening. "with Bob" reads as the answer to a question the
+            // headline just raised.
+            LogosText {
+                objectName: "threadWith"
+                visible: root.action !== "" && root.title !== ""
+                text: qsTr("with %1").arg(root.title)
+                textFormat: Text.PlainText
+                color: Theme.palette.textSecondary
+                font.pixelSize: Theme.typography.secondaryText
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+
+            // The boundary, at the top where the conversation is named rather
+            // than down by the composer: it qualifies everything below it.
+            ScopeLine {
+                objectName: "scopeLine"
+                Layout.fillWidth: true
+                Layout.topMargin: 1
+                memberCount: root.memberCount
+                pendingCount: root.pendingMemberCount
+                online: root.online
             }
 
             LogosText {
@@ -82,8 +122,13 @@ Rectangle {
             }
         }
 
+        // The nameplate: who is actually in the room, beside the line claiming
+        // how many can read it. Shown for a direct conversation too — two faces
+        // next to "2 can read" is what makes that number checkable instead of
+        // asserted, which is the whole difference between drawing a boundary
+        // and describing one.
         Facepile {
-            visible: root.isGroup && root.memberCount > 0
+            visible: root.memberCount > 0
             memberModel: root.memberModel
             memberCount: root.memberCount
             ringColor: Theme.palette.background
