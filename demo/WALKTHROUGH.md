@@ -54,13 +54,17 @@ When it lands, a receipt card appears in the thread on both sides: *100 LEZ, pri
 
 ## 6. Where it is broken
 
-> **⚠️ Known bug, unfixed as of this draft.** The sender is debited and the receipt renders on both sides — but **the recipient's balance never moves.** Alice went from 150 to 50; Bob stayed at 0.
+> **⚠️ Known bug, still unfixed — and the obvious explanation has now been ruled out.** The sender is debited and the receipt renders on both sides, but **the recipient's balance never moves.**
 >
-> Ruled out with evidence: it is not sync timing (Bob had synced *past* Alice's block height and re-read his balance afterwards), and it is not the wrong account (the keys he shared and the balance being read resolve to the same account, confirmed by matching the stored identifier against his wallet's own account list).
+> Measured properly this time, with both peers freshly minted and both private accounts registered on-chain — confirmed by transaction hash, not by the absence of an error. The sender paid 10 of her 150. The zone proved for 7.4 minutes and returned success with a transaction id. She went 150 → 140. He went 0 → 0, re-read five times with a full sync each, over several minutes.
 >
-> The leading hypothesis is that a private account must be registered on-chain before it can be credited — the public account is registered before the faucet will pay it, and the private one never was. That call has been added and is **not yet confirmed as the fix**.
+> So the leading hypothesis — that a private account must be registered before it can be credited — **is wrong**. What remains: note detection needing a receiving-side scan the wallet does not perform, or `get_private_account_keys` not returning the thing `transfer_private` actually credits.
 >
-> **This section comes out, or becomes a fix note, before publication.** Until a recipient has actually been credited, the honest claim is that everything up to and including *initiating* a private payment works, and the receiving side is unproven.
+> Getting to that answer meant clearing three things that were hiding it, each worth knowing on its own. `register_private_account` *proves*, so through the generated sync client it hit a hardcoded 20-second timeout and had never once succeeded. It also demands an uninitialized account, so it works at creation or never — a peer minted by an older build cannot be repaired, only replaced. And `lez_core` turns out to have a third failure convention: seventeen of its methods return a JSON envelope carrying `success: false` rather than the empty string the others use, so the ordinary check reads a hard failure as success. That last one meant a failed shielding step reported nothing at all — and could have let a *payment* post a receipt for a transfer the zone had rejected, which is the one thing this app must never do.
+>
+> One trap for anyone repeating this: the balance read immediately after a transfer is stale. The sender showed 150 → 150 right after the proof and 150 → 140 on the next refresh. The first number is not evidence of anything.
+>
+> **This section comes out, or becomes a fix note, before publication.** Until a recipient has actually been credited, the honest claim is that everything up to and including *initiating* a private payment works, and the receiving side does not.
 
 ## What this was built on
 

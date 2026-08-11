@@ -19,6 +19,7 @@
 #include "MusterMessage.h"
 
 #include <QCryptographicHash>
+#include <QDebug>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -105,6 +106,38 @@ void writeJsonFile(const QString& path, const QJsonObject& o)
     QFile f(path);
     if (f.open(QIODevice::WriteOnly))
         f.write(QJsonDocument(o).toJson(QJsonDocument::Compact));
+}
+
+// The result of a zone call that moves value or registers an account.
+//
+// `lez_core` has three failure conventions, not the two the labbook first
+// recorded. Seventeen of its methods — every `transfer_*`, `claim_pinata`,
+// both `register_*`, the vault and generic-transaction calls — return a *JSON
+// envelope* rather than a bare transaction id:
+//
+//     {"success": false, "tx_hash": "", "error": "…: wallet FFI error 99"}
+//
+// A failure is therefore non-empty, well-formed and truthy, so the obvious
+// `if (tx.isEmpty())` reads it as success. That is not hypothetical: it is why
+// a shielding step that had hard-failed took the success branch, left the
+// prize sitting in the public account, and reported nothing (measured
+// 2026-08-11). Every call site here goes through this.
+struct ZoneResult {
+    bool ok = false;
+    QString tx;
+    QString error;
+};
+
+ZoneResult zoneResult(const QString& raw)
+{
+    const QJsonObject o = QJsonDocument::fromJson(raw.toUtf8()).object();
+    // Empty or unparseable is the *older* convention — a bare empty string on
+    // failure — so it is a failure here too rather than a parse bug to ignore.
+    if (o.isEmpty())
+        return {};
+    return { o.value(QStringLiteral("success")).toBool(),
+             o.value(QStringLiteral("tx_hash")).toString(),
+             o.value(QStringLiteral("error")).toString() };
 }
 
 } // namespace
@@ -291,6 +324,7 @@ bool ChatBackend::ensureWalletOpen()
     m_privateAccount = meta.value(QStringLiteral("privateAccount")).toString();
     m_publicAccount = meta.value(QStringLiteral("publicAccount")).toString();
 
+    bool freshAccount = false;
     if (m_privateAccount.isEmpty()) {
         m_privateAccount = modules().lez_core.create_account_private(&err);
         if (!err.ok() || m_privateAccount.isEmpty()) {
@@ -300,21 +334,52 @@ bool ChatBackend::ensureWalletOpen()
             m_walletOpen = false;
             return false;
         }
-        // Register it on-chain, the same way a public account is registered
-        // before the faucet will pay it. HYPOTHESIS, not yet confirmed: an
-        // unregistered private account can be *sent* to — the sender's transfer
-        // succeeds and their balance drops — but the note is never credited to
-        // the recipient, which is exactly the symptom we hit on the first
-        // two-peer payment (2026-08-11: Alice 150 -> 50, Bob stayed at 0, with
-        // Bob synced past the transfer and the account ids verified to match).
-        // If this turns out not to be the cause, the next suspects are note
-        // detection needing a scan this code does not perform, or the shielded
-        // keys from get_private_account_keys not being what transfer_private
-        // credits.
-        modules().lez_core.register_private_account(m_privateAccount, &err);
         walletSave();
         meta.insert(QStringLiteral("privateAccount"), m_privateAccount);
         writeJsonFile(metaPath, meta);
+        freshAccount = true;
+    }
+
+    // Register it on-chain, the same way a public account is registered before
+    // the faucet will pay it.
+    //
+    // HYPOTHESIS, not yet confirmed: an unregistered private account can be
+    // *sent* to — the sender's transfer succeeds and their balance drops — but
+    // the note is never credited to the recipient, which is exactly the symptom
+    // the first two-peer payment hit (2026-08-11: Alice 150 -> 50, Bob stayed
+    // at 0, with Bob synced past the transfer and the account ids verified to
+    // match). If this turns out not to be the cause, the next suspects are note
+    // detection needing a scan this code does not perform, or the shielded keys
+    // from get_private_account_keys not being what transfer_private credits.
+    //
+    // Registration is only ever possible here, at creation, and there is no
+    // repair path for an account that missed it. `wallet_ffi` rejects a second
+    // attempt with `Guest panicked: Account must be uninitialized` — measured
+    // 2026-08-11 on both demo peers, whose accounts were minted before this
+    // call existed. So a peer created by an older build cannot be fixed in
+    // place; it has to be re-minted, which costs its identity.
+    //
+    // Attempting it on every open is worse than useless: the call runs a
+    // *prover* before it fails, which blocks the wallet long enough for every
+    // other lez_core call to hit the generated client's 20s timeout. An
+    // earlier draft of this did exactly that and wedged the other peer.
+    //
+    // And because it proves, it cannot be called here at all: this function is
+    // synchronous, and the generated sync client hardcodes 20s. That is why
+    // the first attempt never worked even on a fresh account — it timed out
+    // before the zone had finished, every time, and the empty `error` field
+    // that came back said nothing about why. Registration is therefore a step
+    // openWallet performs asynchronously; this only records that it is owed.
+    // `freshAccount` only, never "not yet flagged": an account minted in an
+    // earlier run is already initialized, so a retry is a guaranteed prover
+    // run followed by a guaranteed panic. If registration failed the first
+    // time, the peer is unfixable and has to be re-minted — which is worth
+    // knowing loudly rather than retrying quietly.
+    m_privateAccountNeedsRegistration = freshAccount;
+    if (!freshAccount && !meta.value(QStringLiteral("privateAccountRegistered")).toBool()) {
+        report(tr("This peer's private account was never registered on-chain, and cannot be "
+                  "now — payments to it may not be credited. Re-mint the peer "
+                  "(make clean-peer) to fix it."));
     }
     return true;
 }
@@ -330,8 +395,16 @@ QString ChatBackend::ensurePublicAccount()
         return {};
 
     // A public account only exists on-chain once it is registered; the faucet
-    // will not pay one that isn't.
-    modules().lez_core.register_public_account(id, &err);
+    // will not pay one that isn't. Unlike the private registration this one
+    // completes well inside the sync client's 20s, but it returns the same
+    // envelope — so it gets the same check rather than being discarded.
+    const ZoneResult reg = zoneResult(modules().lez_core.register_public_account(id, &err));
+    if (!err.ok() || !reg.ok) {
+        report(tr("Could not register the public account on-chain%1 — the faucet will "
+                  "refuse to pay it.")
+                   .arg(reg.error.isEmpty() ? QString()
+                                            : QStringLiteral(": %1").arg(reg.error)));
+    }
     walletSave();
 
     m_publicAccount = id;
@@ -392,17 +465,60 @@ void ChatBackend::openWallet()
             setWalletStatus(ChatBackendSimpleSource::WalletError);
             return;
         }
-        beginStage(QStringLiteral("syncing"));
-        QString error;
-        if (!syncToTip(&error)) {
-            // A wallet that opened but could not reach the tip is still usable
-            // for reading; say so rather than calling the whole thing failed.
-            report(QStringLiteral("Wallet opened but could not sync: ") + error);
+
+        // A newly minted private account has to be registered on-chain before
+        // anything can be credited to it, and registering *proves*, so it takes
+        // minutes and only the async client will wait that long. The wallet is
+        // deliberately not Ready until this settles: Ready is what ungates
+        // sharing an address, and an address shared before registration lands
+        // is an invitation to a payment that may vanish.
+        if (m_privateAccountNeedsRegistration) {
+            m_privateAccountNeedsRegistration = false;
+            beginStage(QStringLiteral("registering"));
+            modules().lez_core.register_private_accountAsync(
+                m_privateAccount,
+                [this](QString raw) {
+                    const ZoneResult res = zoneResult(raw);
+                    if (!res.ok) {
+                        report(tr("Could not register the private account on-chain%1 — "
+                                  "payments to it may not be credited. The zone logs the "
+                                  "real reason to the app's stdout as [wallet-ffi].")
+                                   .arg(res.error.isEmpty()
+                                            ? QString()
+                                            : QStringLiteral(": %1").arg(res.error)));
+                    } else {
+                        const QString metaPath = walletDir() + QStringLiteral("/meta.json");
+                        QJsonObject meta = readJsonFile(metaPath);
+                        meta.insert(QStringLiteral("privateAccountRegistered"), true);
+                        writeJsonFile(metaPath, meta);
+                        // Positive signal, in the log rather than the error
+                        // strip: an absent failure is not evidence this ran.
+                        qInfo() << "[muster] registered private account" << m_privateAccount
+                                << "tx" << res.tx;
+                    }
+                    walletSave();
+                    deferToEventLoop([this] { finishWalletOpen(); });
+                },
+                Timeout(kProveMs));
+            return;
         }
-        readWalletState();
-        endStage();
-        setWalletStatus(ChatBackendSimpleSource::WalletReady);
+
+        finishWalletOpen();
     });
+}
+
+void ChatBackend::finishWalletOpen()
+{
+    beginStage(QStringLiteral("syncing"));
+    QString error;
+    if (!syncToTip(&error)) {
+        // A wallet that opened but could not reach the tip is still usable
+        // for reading; say so rather than calling the whole thing failed.
+        report(QStringLiteral("Wallet opened but could not sync: ") + error);
+    }
+    readWalletState();
+    endStage();
+    setWalletStatus(ChatBackendSimpleSource::WalletReady);
 }
 
 void ChatBackend::fundWallet()
@@ -486,13 +602,15 @@ void ChatBackend::fundWallet()
 
         beginStage(QStringLiteral("claiming"));
         logos::CallError err;
-        const QString claim =
-            modules().lez_core.claim_pinata(kPinataId, publicAccount, amountLe16Hex(solution), &err);
-        if (!err.ok() || claim.isEmpty()) {
+        const ZoneResult claim = zoneResult(
+            modules().lez_core.claim_pinata(kPinataId, publicAccount, amountLe16Hex(solution), &err));
+        if (!err.ok() || !claim.ok) {
             failWallet(QStringLiteral("The faucet refused the claim"),
-                       err.ok() ? QStringLiteral("the zone returned nothing — the puzzle may have "
-                                                 "been solved by someone else first")
-                                : QString::fromStdString(err.message));
+                       !err.ok()      ? QString::fromStdString(err.message)
+                       : claim.error.isEmpty()
+                           ? QStringLiteral("the zone returned nothing — the puzzle may have "
+                                            "been solved by someone else first")
+                           : claim.error);
             return;
         }
         walletSave();
@@ -525,13 +643,17 @@ void ChatBackend::fundWallet()
         // leaves the view responsive while the zone works.
         modules().lez_core.transfer_shielded_ownedAsync(
             publicAccount, m_privateAccount, amountLe16Hex(funded),
-            [this](QString tx) {
-                // An empty result is this call's failure signal, as everywhere
-                // else on lez_core.
-                if (tx.isEmpty()) {
-                    report(QStringLiteral("Funded, but shielding did not complete. The prize is "
-                                          "safe in the public account — press Fund again to "
-                                          "retry shielding it."));
+            [this](QString raw) {
+                // The envelope, not emptiness: a failed shield comes back as
+                // well-formed JSON carrying success:false, and treating that as
+                // a transaction id is what silently left the prize public.
+                const ZoneResult res = zoneResult(raw);
+                if (!res.ok) {
+                    report(tr("Funded, but shielding did not complete%1. The prize is safe in "
+                              "the public account — press Fund again to retry shielding it.")
+                               .arg(res.error.isEmpty()
+                                        ? QString()
+                                        : QStringLiteral(" (%1)").arg(res.error)));
                 } else {
                     walletSave();
                 }
@@ -604,8 +726,14 @@ void ChatBackend::sendPrivate(QString conversationId, QString toKeysJson, QStrin
 void ChatBackend::payForIntent(const QString& conversationId, const QString& toKeysJson,
                                quint64 value, const QString& intentId)
 {
-    if (walletBusy())
+    // Say so rather than returning silently. A press that produces nothing at
+    // all reads as a broken button, and the wallet is busy for *minutes* here —
+    // long enough that someone will press it, see nothing, and press again.
+    if (walletBusy()) {
+        report(tr("The wallet is busy (%1) — wait for that to finish, then pay.")
+                   .arg(walletStage().isEmpty() ? tr("working") : walletStage()));
         return;
+    }
     if (conversationId.isEmpty() || toKeysJson.isEmpty() || value == 0) {
         report(QStringLiteral("Nothing to pay to."));
         return;
@@ -634,11 +762,20 @@ void ChatBackend::payForIntent(const QString& conversationId, const QString& toK
         beginStage(QStringLiteral("sending"));
         modules().lez_core.transfer_privateAsync(
             m_privateAccount, toKeysJson, amountLe16Hex(value),
-            [this, conversationId, value, intentId](QString tx) {
-                if (tx.isEmpty()) {
+            [this, conversationId, value, intentId](QString raw) {
+                // The envelope decides, not emptiness. This is the most
+                // important of the three sites: a failed transfer returns
+                // well-formed JSON, so the old check posted a receipt for a
+                // payment the zone had rejected — a card asserting that money
+                // moved when it had not, which is the one thing this demo
+                // must never do.
+                const ZoneResult res = zoneResult(raw);
+                if (!res.ok) {
                     failWallet(QStringLiteral("The payment failed"),
-                               QStringLiteral("the zone did not accept it — your balance is "
-                                              "unchanged"));
+                               res.error.isEmpty()
+                                   ? QStringLiteral("the zone did not accept it — your balance "
+                                                    "is unchanged")
+                                   : res.error);
                     return;
                 }
                 walletSave();
@@ -647,7 +784,7 @@ void ChatBackend::payForIntent(const QString& conversationId, const QString& toK
                 // sides see the payment where they agreed it. Carrying the
                 // intent id is what closes the proposal it settles.
                 sendMessage(conversationId,
-                            MusterMessage::sendReceipt(QString::number(value), tx, true,
+                            MusterMessage::sendReceipt(QString::number(value), res.tx, true,
                                                        intentId));
 
                 deferToEventLoop([this] {

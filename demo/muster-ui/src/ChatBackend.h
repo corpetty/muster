@@ -193,7 +193,17 @@ private:
     // module reports it created. Cleared as soon as it is used.
     QString m_pendingVerb;
 
+    // Sync to the tip, publish the balances, and declare the wallet Ready.
+    // Split out of openWallet because registering a new private account is an
+    // async step that has to complete first, so there are two paths into it.
+    void finishWalletOpen();
+
     bool m_walletOpen = false;
+    // Set when ensureWalletOpen has just minted the private account, meaning
+    // registration is owed and openWallet must perform it before Ready. Only
+    // ever true for an account created in this run — an older one cannot be
+    // registered at all.
+    bool m_privateAccountNeedsRegistration = false;
     QString m_privateAccount;
     QString m_publicAccount;
 

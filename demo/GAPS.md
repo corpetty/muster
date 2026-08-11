@@ -86,9 +86,28 @@ Whether that figure is expected, hardware-bound, or a symptom of something misco
 
 ## 4b. The open bug, stated plainly
 
-On the first two-peer payment (2026-08-11), the sender's private balance fell from 150 to 50, the receipt card rendered on both sides — and **the recipient's balance never moved**. Ruled out: sync timing (the recipient had synced *past* the sender's height and re-read afterwards) and account identity (the shared keys and the balance read resolve to the same account, verified by converting the stored hex to base58 and matching it against the wallet's own account list). The leading hypothesis is that a private account must be registered on-chain before it can be credited; a `register_private_account` call has been added but is **not yet confirmed as the fix**.
+A shielded payment debits the sender and **never credits the recipient**. This has now been reproduced under controlled conditions, and the leading hypothesis for it has been **refuted**.
 
-It is in this document because the article should not describe a payment pipeline as working end to end until a recipient has actually been credited. Everything up to and including *initiating* a shielded payment is real; the receiving side is unproven. **[verified as a symptom; cause unconfirmed.]**
+**The measurement (2026-08-11, two freshly minted peers, LEZ testnet).** Both peers' private accounts were created *and registered on-chain* — confirmed by transaction hash, not by absence of error. The sender held 150 private and paid 10. The zone proved for **7.4 minutes** and returned success with a transaction id. Afterwards:
+
+| | before | after |
+|---|---|---|
+| sender, private | 150 | **140** |
+| recipient, private | 0 | **0** |
+
+The recipient's balance was re-read five times, each with a full sync to tip, over several minutes. It never moved. Reproduced by `muster-ui/doctests/credit/run-credit.mjs`, which drives both instances and prints the two numbers that matter.
+
+**So registration is not the fix.** The hypothesis was that a private account must be registered on-chain before it can be credited. Both accounts were registered this time and the recipient was still not credited, so the cause lies elsewhere. The remaining suspects, in order: note detection needing a scan the wallet does not perform on the receiving side, or `get_private_account_keys` not returning the thing `transfer_private` actually credits.
+
+**Three findings that had to be cleared out of the way first**, each of which had been quietly hiding the real behaviour:
+
+- **`register_private_account` proves, so it must be async.** Called through the generated sync client it hit the hardcoded 20-second timeout every time. The call had been in the code for a day and had *never once succeeded*.
+- **It also requires an uninitialized account.** A second attempt is rejected with `Guest panicked: Account must be uninitialized`, so registration is only possible at creation and a peer minted by an older build cannot be repaired — it has to be re-minted.
+- **`lez_core` has a third failure convention.** Seventeen of its methods return a JSON envelope (`{"success": false, …}`) rather than a bare transaction id, so the usual empty-string check reads a hard failure as success. That is why a shielding step that had failed reported nothing and left the prize in the public account — and why a *payment* could have posted a receipt for a transfer the zone rejected. Every call site now parses the envelope.
+
+**A trap for anyone measuring this:** the balance read immediately after a transfer is stale. The sender showed 150 → 150 right after the proof and 150 → 140 on the next refresh. Do not conclude anything from the first read — which is very likely how the original report came to say the sender was debited by a different amount than it was.
+
+It is in this document because the article must not describe the payment pipeline as working end to end. Everything up to and including *initiating* a shielded payment is real and measured; **the receiving side does not work**, and we do not yet know why. **[verified: symptom reproduced, hypothesis refuted, cause unknown.]**
 
 ## 5. What this build does not do at all
 

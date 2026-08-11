@@ -99,6 +99,58 @@ A number this large is a product fact, not just a tuning constant: a payment tha
 
 **Do module calls from inside the callback via a queued deferral**, not directly — calling straight back into the transport re-enters its handler while the notifier is disabled, which is the ~20 s stall `logos-chat-ui` documents.
 
+## 4. There is a *third* failure convention: a non-empty JSON envelope (2026-08-11)
+
+The table in §1 lists two shapes. There is a third, and it is the most dangerous of the three because the obvious check reads it as success.
+
+`register_private_account`, `register_public_account` and the `transfer_*` family return `tstr`, but the string is a JSON envelope built by `transferResultToJson`:
+
+```json
+{"success": false, "tx_hash": "", "error": "register_private_account: wallet FFI error 99"}
+```
+
+A failure is therefore **non-empty**, well-formed, and truthy. `if (tx.isEmpty())` passes it straight through. We logged "registered private account … tx {…success:false…}" for a call that had hard-failed — precisely the reasoning error §1 exists to prevent, committed again in a shape §1 did not cover.
+
+**Parse the envelope and read `success`.** Do not infer from emptiness, and do not infer from `CallError` either — both were clear here.
+
+`wallet FFI error 99` is `INTERNAL_ERROR`, the catch-all in `WalletFfiError` (`wallet-ffi/include/wallet_ffi.h`). It carries no information; the reason is in the app's stdout, per §2:
+
+```
+[wallet-ffi] Registration failed: TransactionBuildError(ProgramProveFailed("Guest panicked: Account must be uninitialized"))
+```
+
+## 5. A private account can only be registered while uninitialized (2026-08-11)
+
+That guest panic is the substantive finding. `register_private_account` must be called on a **freshly created, never-used** account. There is no retro-fit: an account that has already been used is rejected permanently.
+
+Two consequences:
+
+- **Register at creation or never.** Put the call in the branch that just minted the account. A peer created by a build that lacked the call cannot be repaired in place; it has to be re-minted, at the cost of its identity.
+- **Do not "just try it on every open" as a repair.** The call runs a **prover before it fails**, so a doomed attempt blocks the wallet long enough for every other `lez_core` call to hit the generated client's 20 s timeout. A draft that did this wedged the second peer entirely: `save`, `get_balance`, `get_current_block_height` and `get_last_synced_block` all returned `callRemoteMethod failed or timed out`. The symptom looked like a dead module and was self-inflicted.
+
+This also constrains the hypothesis the call was added for: since neither existing demo peer can now be registered, testing whether registration is what makes a shielded payment credit its recipient **requires two freshly minted peers**, and re-funding both from the faucet.
+
+## 6. The balance immediately after a transfer is stale (2026-08-11)
+
+`syncToTip` then `get_balance`, run in the transfer's own callback, returns the **pre-transfer** figure. The sender read 150 → 150 straight after a successful 7.4-minute proof, and 150 → 140 on the next refresh a minute later.
+
+This matters more than it sounds: it is almost certainly how the original bug report came to describe a debit that did not match the amount sent. **Never conclude anything from the first post-transfer read.** Refresh again, and treat a single reading as unconfirmed.
+
+## 7. Registration is *not* why a shielded payment fails to credit (2026-08-11)
+
+The result the three findings above were in the way of. With two freshly minted peers, **both private accounts registered on-chain and confirmed by transaction hash**:
+
+| | before | after |
+|---|---|---|
+| sender, private | 150 | **140** |
+| recipient, private | 0 | **0** |
+
+The zone proved for 7.4 minutes and returned success with a transaction id. The recipient's balance was re-read five times, each after a full sync to tip, over several minutes. It never moved.
+
+**The registration hypothesis is refuted.** Remaining suspects, in order: note detection needing a receiving-side scan the wallet does not perform, or `get_private_account_keys` not returning the thing `transfer_private` actually credits. Worth asking whoever owns the zone before spending more time on it — three of the four things that looked like the bug turned out to be reporting artefacts in this module's error conventions, and the fourth may be too.
+
+Reproducer: `demo/muster-ui/doctests/credit/run-credit.mjs`, which drives two instances over the inspector protocol and prints the two numbers that decide it.
+
 ## Related
 
 - [[qml-errors-are-invisible-to-nix-build]] — the other "green build, dead app" trap in this stack, from the same afternoon. Same root lesson: in this stack, only C++ and contracts are checked by the build; everything resolved at runtime needs the app actually launched.
