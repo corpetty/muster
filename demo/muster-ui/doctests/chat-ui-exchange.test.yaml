@@ -1,0 +1,80 @@
+name: "Tutorial: Run the automated message-exchange test"
+output: chat-ui-exchange.md
+project_name: logos-chat-ui
+release: ""
+
+intro: |
+  A conversation takes two people: one shares their address, the other pastes
+  it into **New DM**, sends a first message, and the reply flows back. That
+  round-trip spans **two** app instances, so the single-window walkthrough in
+  *The Logos Chat UI* tutorial can't express it — and neither can the doc-test
+  `ui_test` driver on its own, which works against one instance and can only set
+  literal field values (it can't read one window's address out and paste it
+  into another).
+
+  `logos-chat-ui` ships an automated test for exactly this. The `exchange` app
+  drives the real two-party round-trip over the live network between two headless
+  instances, then exposes the receiving window so the finished thread can be
+  captured. This tutorial runs that test and shows its result; the full
+  step-by-step flow — address, first message, reply — with screenshots of **both**
+  windows is in
+  [docs/two-instance-exchange.md](../docs/two-instance-exchange.md).
+
+what_you_build: "A verified end-to-end message round-trip between two chat UI instances, captured from the receiving window."
+
+what_you_learn:
+  - "How the `exchange` app runs the full two-party round-trip headless over the live network"
+  - "Why a two-window exchange needs a dedicated runner rather than the single-instance `ui_test` driver"
+  - "Where the step-by-step, both-windows walkthrough and its regeneration script live"
+
+prerequisites:
+  - |
+    **Nix** with flakes enabled. Install from [nixos.org](https://nixos.org/download.html), then:
+
+    ```bash
+    mkdir -p ~/.config/nix
+    echo 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
+    ```
+  - "**A Linux or macOS machine.** Nix provides every toolchain (Qt, CMake, Rust) during the builds."
+  - "**Network access.** The two delivery nodes discover each other over the configured network preset; an isolated sandbox won't complete the exchange."
+
+sections:
+  - title: "Run the automated exchange"
+    step: true
+    text: |
+      The `exchange` app launches two instances offscreen and runs the real
+      round-trip over the live network — Alice shares her address, Bob opens a
+      conversation with it and, once she joins, sends the first message, Alice
+      replies — then opens the capture port onto the live receiving window so
+      the finished thread is on screen. The whole round-trip happens while the
+      launch is still coming up, so the screenshot below captures the
+      already-completed conversation.
+    steps:
+      - title: "Run the round-trip and show the result"
+        ui_test:
+          setup:
+            - "nix build 'github:logos-co/logos-qt-mcp{release}' -o result-mcp"
+          qt_mcp: "result-mcp"
+          # Opens the default inspector port 3768: the qt-mcp test framework
+          # always connects to QML_INSPECTOR_PORT (default 3768), so the captured
+          # window must be reachable there. The round-trip runs on its own
+          # inspector ports (4768/4769) during this (unbounded) launch wait;
+          # 3768 opens (proxied onto the live window) only once the exchange is
+          # done, so the capture below runs against the already-finished window.
+          launch: "nix run 'github:logos-co/logos-chat-ui{release}#exchange'"
+          launch_timeout: 1800
+          tests:
+            - name: "Round-trip complete"
+              action: wait_for
+              # Exact message texts — the inspector's findByProperty matches the
+              # whole `text` property, not a substring (verified against
+              # logos-qt-mcp). These mirror run-exchange.mjs's BOB_MSG / ALICE_REPLY.
+              texts: ["Hi Alice, it's Bob 👋", "Hi Bob, got it"]
+              timeout: 90000
+              text: |
+                The receiving window after the round-trip: the peer's opening
+                message and the reply, each end-to-end-encrypted and carried over
+                `delivery_module`. The same exchange, step by step across both
+                windows, is in
+                [docs/two-instance-exchange.md](../docs/two-instance-exchange.md).
+              screenshot: "exchange.png"

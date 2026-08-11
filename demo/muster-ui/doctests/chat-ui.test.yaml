@@ -1,0 +1,123 @@
+name: "Tutorial: The Logos Chat UI"
+output: chat-ui.md
+project_name: logos-chat-ui
+release: ""
+
+intro: |
+  `chat_ui` is a Logos **UI module**: a QML view backed by a small C++ class
+  (the *universal* typed-backend authoring model) that drives the Rust
+  `chat_module` — end-to-end-encrypted conversations carried over
+  `delivery_module`. You write a `.rep` view contract and a `*Backend` deriving
+  `LogosUiPluginContext`; the plugin glue, the typed `modules().chat_module`
+  caller, and the QtRO wiring are generated.
+
+  This tour builds the app, watches it connect to the network, and shares your
+  address (what a peer needs to start a conversation with you).
+
+  > **The two-party exchange has its own tutorial.** A message exchange is
+  > inherently two-party, so it gets its own walkthrough — *Run the automated
+  > message-exchange test* — which drives the real round-trip between two windows
+  > and shows the result, with the step-by-step flow in
+  > [docs/two-instance-exchange.md](../docs/two-instance-exchange.md). This
+  > tutorial covers everything a single window shows: connecting, and sharing
+  > your own address.
+
+what_you_build: "A running Logos chat app, connected to the network and sharing your address from the GUI."
+
+what_you_learn:
+  - "How a `type: ui_qml`, `interface: universal` module is built and run"
+  - "The connection lifecycle: init is non-blocking and the UI goes Online when delivery connects"
+  - "Sharing your address — what a peer needs to open an encrypted conversation with you"
+
+prerequisites:
+  - |
+    **Nix** with flakes enabled. Install from [nixos.org](https://nixos.org/download.html), then:
+
+    ```bash
+    mkdir -p ~/.config/nix
+    echo 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
+    ```
+  - "**A Linux or macOS machine.** Nix provides every toolchain (Qt, CMake, Rust) during the builds."
+  - "**Network access.** The two delivery nodes discover each other over the configured network preset; an isolated sandbox won't complete the exchange."
+
+sections:
+  - title: "Build the chat UI"
+    step: true
+    text: |
+      The module builds with the standard `mkLogosQmlModule` flake output —
+      `chat_ui_plugin.so` (the C++ backend + generated glue) and
+      `chat_ui_replica_factory.so` (the QtRO replica for the QML view).
+    steps:
+      - title: "Build the plugin"
+        run: "nix build 'github:logos-co/logos-chat-ui{release}' -o result"
+        code_block: |
+          nix build 'github:logos-co/logos-chat-ui'
+        check_file: "result/lib/chat_ui_plugin.{ext}"
+        post_text: |
+          The build runs the universal UI codegen (`logos-qt-generator --backend
+          ui`) over `src/ChatBackend.rep`, compiles `ChatBackend` (which derives
+          `ChatBackendSimpleSource` + `LogosUiPluginContext`), and emits the
+          `chat_ui_plugin` / replica-factory glue around it.
+
+  - title: "What the chat UI does"
+    text: |
+      The window is a two-pane messenger:
+
+      - **Left:** your conversations, under a **New chat** button (start a
+        direct message from someone's address, or a group), with your own
+        account card at the foot: its short form, the delivery state
+        (`Stopped` → `Initialising...` → `Online`), and your address with a
+        copy button beside it.
+      - **Right:** the message thread for the selected conversation, under a
+        header carrying its avatar, its description and who is in it, and a
+        composer with the send action at its end.
+
+      Under the hood the backend calls `modules().chat_module` — typed methods
+      (`init`, `get_address`, `create_conversation`, `send_message`, …)
+      and string-keyed event subscriptions (`message_received`,
+      `delivery_state_changed`, …) that push updates into the view with no
+      polling. `init` kicks off the delivery node asynchronously and returns
+      immediately; the UI flips to **Online** when the
+      `delivery_state_changed` event reports the network is up.
+
+  - title: "Launch and connect, then share your address"
+    step: true
+    text: |
+      Run the app headless (offscreen Qt) and drive it: wait for the network to
+      come up, then copy your address — the everything-a-single-window-shows
+      half of the tour.
+    steps:
+      - title: "Drive the app"
+        ui_test:
+          launch: "nix run 'github:logos-co/logos-chat-ui{release}'"
+          setup:
+            - "nix build 'github:logos-co/logos-qt-mcp{release}' -o result-mcp"
+          qt_mcp: "result-mcp"
+          tests:
+            - name: "Window opens"
+              action: wait_for
+              texts: ["New chat"]
+              timeout: 30000
+              text: "The chat window opens; the account card starts at **Stopped** while delivery boots."
+            - name: "Network connects"
+              action: wait_for
+              texts: ["Online"]
+              timeout: 90000
+              text: |
+                `init` returned right away and the delivery node bootstrapped in
+                the background. When it connects, the `delivery_state_changed`
+                event lands and the state flips to **Online** — **New chat**
+                enables and the backend reads `get_address()` onto the account
+                card. That address is what a peer needs to open a conversation
+                with you; your key package was published to the registry during
+                `init`, so the address alone is enough.
+              screenshot: "connected.png"
+            - name: "Copy your address"
+              action: click_object
+              find_by: "objectName"
+              find_value: "copyMyAddressButton"
+            - name: "Copied confirmation"
+              action: wait_for
+              texts: ["Copied to clipboard"]
+              timeout: 10000
+              text: "Copied — you'd send this to whoever you want to chat with."

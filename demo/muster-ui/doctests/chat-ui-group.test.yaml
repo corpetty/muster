@@ -1,0 +1,81 @@
+name: "Tutorial: Run the automated group-chat test"
+output: chat-ui-group.md
+project_name: logos-chat-ui
+release: ""
+
+intro: |
+  A group conversation goes further than a DM: one person creates it,
+  invites others by address, and every message fans out to the whole roster with
+  the sender attributed. That spans **three** app instances and grows by
+  membership commits over the live network — more than the single-window
+  walkthrough in *The Logos Chat UI* tutorial can express, and more than the
+  doc-test `ui_test` driver can orchestrate on its own (it works against one
+  instance and can't read one window's address out to invite it into another).
+
+  `logos-chat-ui` ships an automated test for exactly this. The `group` app
+  drives the real three-party flow over the live network between three headless
+  instances — Alice creates the group, invites Bob and Carol, and once the roster
+  converges sends a message that reaches both — then exposes the newest member's
+  window so the finished group can be captured.
+
+what_you_build: "A verified three-member, end-to-end-encrypted group conversation across three chat UI instances, captured from a receiving member's window."
+
+what_you_learn:
+  - "How the `group` app forms a three-member group and fans a message out to it, headless over the live network"
+  - "How the group UI adds a members pane and per-message sender attribution over a DM"
+  - "Why a multi-window group needs a dedicated runner rather than the single-instance `ui_test` driver"
+
+prerequisites:
+  - |
+    **Nix** with flakes enabled. Install from [nixos.org](https://nixos.org/download.html), then:
+
+    ```bash
+    mkdir -p ~/.config/nix
+    echo 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
+    ```
+  - "**A Linux or macOS machine.** Nix provides every toolchain (Qt, CMake, Rust) during the builds."
+  - "**Network access.** The three delivery nodes discover each other over the configured network preset; an isolated sandbox won't complete the flow. Expect membership changes to take minutes."
+
+sections:
+  - title: "Run the automated group chat"
+    step: true
+    text: |
+      The `group` app launches three instances offscreen and runs the real flow
+      over the live network — Alice creates the group, invites Bob and Carol,
+      and once all three are in she sends a message that fans out to both — then
+      opens the capture port onto Carol's live window so her copy of the group is
+      on screen. The whole flow happens while the launch is still coming up, so
+      the screenshot below captures the already-formed group: the creator's
+      message, received with its sender label, beside the three-member roster.
+    steps:
+      - title: "Run the group flow and show the result"
+        ui_test:
+          setup:
+            - "nix build 'github:logos-co/logos-qt-mcp{release}' -o result-mcp"
+          qt_mcp: "result-mcp"
+          # Opens the default inspector port 3768: the qt-mcp test framework
+          # always connects to QML_INSPECTOR_PORT (default 3768), so the captured
+          # window must be reachable there. The group flow runs on its own
+          # inspector ports (4768/4769/4770) during this (unbounded) launch wait;
+          # 3768 opens (proxied onto Carol's live window) only once the flow is
+          # done, so the capture below runs against the already-finished window.
+          # Larger than the exchange's 1800: forming a three-member group runs
+          # two sequential membership commits plus the fan-out before Carol's
+          # window opens on 3768, so the port-wait must cover a longer flow.
+          launch: "nix run 'github:logos-co/logos-chat-ui{release}#group'"
+          launch_timeout: 2700
+          tests:
+            - name: "Group message received"
+              action: wait_for
+              # Exact strings — the inspector's findByProperty matches the whole
+              # `text` property, not a substring (verified against logos-qt-mcp).
+              # "Hello team 👋" mirrors run-group.mjs's GROUP_MSG; "Members" is
+              # the members-pane header, present only for a group conversation.
+              texts: ["Hello team 👋", "Members"]
+              timeout: 90000
+              text: |
+                Carol's window after the group formed: Alice's message, received
+                with its sender label and end-to-end-encrypted over
+                `delivery_module`, beside the members pane listing the
+                three-member roster.
+              screenshot: "group.png"

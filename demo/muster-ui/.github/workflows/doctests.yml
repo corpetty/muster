@@ -1,0 +1,273 @@
+name: Doc-Tests
+
+# Runs the executable doc-tests end-to-end via the shared doctest CLI, against
+# the commit of logos-chat-ui under test. Each spec builds this UI module and
+# drives it headless (offscreen Qt):
+#   - chat-ui           build + connect + share-address GUI walkthrough (screenshots)
+#   - chat-ui-exchange  runs the real two-party round-trip and captures the result
+#   - chat-ui-group     forms a real three-party group and captures the result
+#
+# The dedicated two-instance-exchange.yml job stays the robust gate for the
+# round-trip and regenerates docs/two-instance-exchange.md's screenshots.
+#
+# Each run publishes the two-column HTML report to:
+#   https://<owner>.github.io/<repo>/pr-<N>/<os>/      (pull requests)
+#   https://<owner>.github.io/<repo>/master/<os>/      (pushes to master)
+# and (for PRs) posts/updates a comment with the links. The repo's GitHub Pages
+# must be enabled once (deploy from the gh-pages branch); see the README.
+#
+# Note: pull requests opened from forks get a read-only GITHUB_TOKEN, so the
+# Pages push and PR comment are skipped for them; the downloadable artifact is
+# still produced. PRs from branches in this repo get the full clickable links.
+
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+concurrency:
+  group: doctests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  doctests:
+    name: doc-tests (${{ matrix.os }})
+    environment: ${{ github.ref == 'refs/heads/master' && 'public-cache' || '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Nix and Logos cache
+        if: matrix.os != 'macos-latest'
+        uses: logos-co/setup-nix-cache-action@v1
+        with:
+          attic-token-ci: ${{ secrets.ATTIC_TOKEN_CI }}
+          attic-token-public: ${{ secrets.ATTIC_TOKEN_PUBLIC }}
+
+      # macOS runs without the Logos cache: the delivery .lgx cached in Attic
+      # lacks the libiconv its librln.dylib loads and crashes the doc-test when
+      # substituted; building from source realises the dependency. Drop this
+      # once the repinned delivery module bundles what its dylibs load.
+      - name: Setup Nix (macOS, no Logos cache)
+        if: matrix.os == 'macos-latest'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      # Resolve the commit under test. For pull requests this is the PR's head
+      # commit (not the synthetic merge commit); for pushes it's the pushed
+      # commit. Passed to --release-for below so the doc-test builds chat-ui
+      # against THIS commit instead of the latest release.
+      #
+      # Fork PRs are the exception: their head commit lives in the fork, not in
+      # logos-co/logos-chat-ui, so nix could not fetch
+      # `github:logos-co/logos-chat-ui/<sha>`. We blank the SHA for forks
+      # (--release-for repo= → pins that repo to latest), so the doc-test still
+      # runs for fork PRs, just against master.
+      - name: Resolve commit under test
+        id: commit
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && \
+             [ "${{ github.event.pull_request.head.repo.fork }}" = "true" ]; then
+            echo "sha=" >> "$GITHUB_OUTPUT"
+            echo "Fork PR detected — doc-test will run against latest master."
+          else
+            echo "sha=${{ github.event.pull_request.head.sha || github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Pre-build the standalone app the doctest launches. The spec drives it via
+      # `nix run github:logos-co/logos-chat-ui/<sha>`; building that same ref's
+      # runner here puts it in the store so the launch is instant — otherwise the
+      # build runs inside the doctest's 120s inspector-wait and times out. The app
+      # exposes no buildable package attr, so recover the runner derivation from
+      # its program string's context (a pinned github ref, so the lock matches the
+      # spec's). Fork PRs blank the SHA → build the default branch, as the spec does.
+      - name: Pre-build the chat UI app
+        shell: bash
+        run: |
+          ref="github:logos-co/logos-chat-ui"
+          [ -n "${{ steps.commit.outputs.sha }}" ] && ref="$ref/${{ steps.commit.outputs.sha }}"
+          sys="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          drv="$(nix eval --impure --raw --expr \
+            "builtins.head (builtins.attrNames (builtins.getContext (builtins.getFlake \"$ref\").apps.\"$sys\".default.program))")"
+          nix build --no-link "$drv^*" -L
+
+      # The runner is the shared `doctest` CLI, invoked directly via its flake
+      # (github:logos-co/logos-doctest). --release-for pins the {release}
+      # placeholder for logos-chat-ui to the commit under test, so every
+      # `github:logos-co/logos-chat-ui{release}` URL in the spec becomes
+      # `.../<sha>` and the module is built against this PR/push.
+      # The workspace tests-and-doctests pipeline parses this block to discover
+      # the spec list — keep every spec here.
+      - name: Run doc-tests
+        shell: bash
+        run: |
+          # Spec list. The two-party exchange and three-party group specs need live
+          # P2P networking that GitHub's macOS runners can't provide (each has its
+          # own dedicated ubuntu gate: two-instance-exchange.yml and group-chat.yml),
+          # so they run on ubuntu only; macOS keeps the single-instance chat-ui spec.
+          # Every path stays listed for the workspace tests-and-doctests spec discovery.
+          specs=(
+            doctests/chat-ui.test.yaml
+            doctests/chat-ui-exchange.test.yaml
+            doctests/chat-ui-group.test.yaml
+          )
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            specs=(doctests/chat-ui.test.yaml)
+          fi
+          # --continue-on-fail so the run walks every step and the published report
+          # is complete. The job still fails (non-zero exit) if any step failed.
+          nix run github:logos-co/logos-doctest -- run \
+            "${specs[@]}" \
+            --verbose \
+            --continue-on-fail \
+            --release-for logos-chat-ui=${{ steps.commit.outputs.sha }} \
+            --report "${{ runner.temp }}/chat-ui-doctest-report.html"
+
+      - name: Stage report for upload
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p report-out
+          # Name it index.html so the published directory URL renders directly.
+          if [ -f "${{ runner.temp }}/chat-ui-doctest-report.html" ]; then
+            cp "${{ runner.temp }}/chat-ui-doctest-report.html" report-out/index.html
+          else
+            echo "<h1>No report produced</h1>" > report-out/index.html
+          fi
+
+      - name: Upload execution report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chat-ui-doctest-report-${{ matrix.os }}
+          path: report-out/index.html
+          if-no-files-found: warn
+
+      - name: Verify markdown generation
+        run: |
+          for spec in doctests/chat-ui.test.yaml doctests/chat-ui-exchange.test.yaml doctests/chat-ui-group.test.yaml; do
+            out="/tmp/$(basename "$spec" .test.yaml).md"
+            nix run github:logos-co/logos-doctest -- generate \
+              "$spec" \
+              --release-for logos-chat-ui=${{ steps.commit.outputs.sha }} \
+              -o "$out"
+            test -s "$out"
+          done
+          echo "Generated markdown successfully"
+
+  publish-report:
+    name: Publish report to GitHub Pages
+    needs: doctests
+    # Run even when tests fail — a failing run is exactly when you want to open
+    # the report. Skip on forks, where GITHUB_TOKEN can't push or comment.
+    if: ${{ always() && github.event.pull_request.head.repo.fork != true }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write          # push to the gh-pages branch
+      pull-requests: write      # post/update the PR comment
+
+    # Serialize Pages pushes so two refs can't race on the gh-pages branch.
+    concurrency:
+      group: gh-pages-publish
+      cancel-in-progress: false
+
+    steps:
+      - name: Download all reports
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          # No `name:` → downloads every artifact into artifacts/<name>/...
+
+      - name: Arrange site directory
+        id: arrange
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="pr-${{ github.event.pull_request.number }}"
+          else
+            BASE="master"
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+
+          mkdir -p "site/$BASE"
+          found=""
+          for os in ubuntu-latest macos-latest; do
+            src="artifacts/chat-ui-doctest-report-$os/index.html"
+            if [ -f "$src" ]; then
+              mkdir -p "site/$BASE/$os"
+              cp "$src" "site/$BASE/$os/index.html"
+              found="$found $os"
+            fi
+          done
+          echo "found=$found" >> "$GITHUB_OUTPUT"
+
+          # Landing page for this ref linking to each OS report.
+          {
+            echo "<!doctype html><meta charset=utf-8>"
+            echo "<title>logos-chat-ui doc-test reports — $BASE</title>"
+            echo "<style>body{font:16px system-ui;margin:40px;max-width:640px}a{color:#2563eb}</style>"
+            echo "<h1>logos-chat-ui doc-test reports</h1>"
+            echo "<p><strong>$BASE</strong> · commit <code>${GITHUB_SHA::7}</code></p><ul>"
+            for os in ubuntu-latest macos-latest; do
+              if [ -d "site/$BASE/$os" ]; then
+                echo "<li><a href=\"./$os/\">$os</a></li>"
+              fi
+            done
+            echo "</ul>"
+          } > "site/$BASE/index.html"
+
+      - name: Deploy to gh-pages
+        if: steps.arrange.outputs.found != ''
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          keep_files: true          # don't wipe other PRs' directories
+          commit_message: "Publish doc-test reports for ${{ steps.arrange.outputs.base }} (${{ github.sha }})"
+
+      - name: Comment on PR with report links
+        if: ${{ github.event_name == 'pull_request' && steps.arrange.outputs.found != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const base = "${{ steps.arrange.outputs.base }}";
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const root = `https://${owner}.github.io/${repo}/${base}`;
+            const oses = "${{ steps.arrange.outputs.found }}".trim().split(/\s+/).filter(Boolean);
+
+            const links = oses.map(os => `- [\`${os}\` report](${root}/${os}/)`).join("\n");
+            const marker = "<!-- chat-ui-doctest-report-links -->";
+            const body =
+              `${marker}\n` +
+              `### 📊 Doc-test report\n\n` +
+              `The chat UI built against this commit, driven headless to connect ` +
+              `and share its address, rendered alongside the commands ` +
+              `actually run and their output ` +
+              `(updated each run, commit \`${context.sha.slice(0,7)}\`):\n\n` +
+              `${links}\n\n` +
+              `_Pages can take a minute to update after the run finishes._`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner, repo, issue_number: context.issue.number, per_page: 100,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: context.issue.number, body });
+            }

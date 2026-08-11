@@ -1,0 +1,17 @@
+# Local tooling downloads (Basecamp AppImage, etc.) — never committed
+.tools/
+
+# Per-peer runtime state for the two-instance demo (alice/bob user dirs)
+.run/
+
+# Nix build outputs
+result
+result-*
+
+# Scaffold/LEZ local caches and wallet state
+.scaffold/
+
+# Chain env files written by the infra step (contain dev private keys)
+.env
+.env.*
+!.env.example

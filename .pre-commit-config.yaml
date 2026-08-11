@@ -113,6 +113,11 @@ repos:
         args: [--unsafe]
       - id: check-added-large-files
         args: [--maxkb=1000]
+        # A nix flake.lock pins the whole transitive input graph, so it is
+        # legitimately large — demo/muster-ui's is ~3.6MB — and it has to be
+        # committed or the build stops being reproducible, which is the point
+        # of having one. The 1000KB rule still applies to everything else.
+        exclude: '(^|/)flake\.lock$'
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: mixed-line-ending
