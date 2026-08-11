@@ -1,0 +1,137 @@
+class ChatBackend
+{
+    ENUM ChatStatus {
+        Stopped = 0,
+        Initialising = 1,
+        Online = 2,
+        Error = 3
+    }
+
+    PROP(ChatStatus chatStatus READONLY)
+    // This account's own address, the string a peer needs to reach it. Fetched
+    // once the module comes online, so the view can show it from first paint.
+    PROP(QString myAddress READONLY)
+    // Short form of myAddress, on the same rule as a roster row's label, and
+    // the two-letter form its avatar carries.
+    PROP(QString myLabel READONLY)
+    PROP(QString myInitials READONLY)
+    PROP(QString currentConversationId)
+    // The conversation whose messages and roster the models currently hold.
+    // Empty while a selection is being loaded, so the view can tell a loaded
+    // thread from the rows of the conversation left behind.
+    PROP(QString loadedConversationId READONLY)
+    // Derived from the current conversation, kept here (not read off the model)
+    // because the models reach QML as QtRO replicas that don't proxy the model's
+    // Q_INVOKABLE lookups (isGroupFor/displayNameFor/descriptionFor).
+    PROP(bool currentIsGroup READONLY)
+    PROP(QString currentDisplayName READONLY)
+    PROP(QString currentDescription READONLY)
+    // The current conversation's avatar identity, on the same rule as the
+    // conversation model's rows.
+    PROP(QString currentAvatarInitials READONLY)
+    PROP(int currentAvatarRamp READONLY)
+    // How many members the current conversation has committed; pending invites
+    // are listed in memberModel but not counted here. Exposed as a property (not
+    // read off memberModel) because the model reaches QML as a QtRO replica
+    // whose rowCount() a non-view caller can't rely on.
+    PROP(int memberCount READONLY)
+    // Members invited into the current group and awaiting its commit.
+    PROP(int pendingMemberCount READONLY)
+    // The other participant's address in the current direct conversation, empty
+    // for a group or while the roster is unknown.
+    PROP(QString currentPeerAddress READONLY)
+    // The directory this run's logs are in — the chat module's instance
+    // directory, which this view borrows for want of one of its own. Empty when
+    // no log was opened, which is what leaves the view with none to offer.
+    PROP(QString logDir READONLY)
+    // The runs that directory holds, newest first within a writer, one map per
+    // run: `writer` naming who wrote it ("chat_ui" or "chat_module"), `label`,
+    // `sizeLabel` and `fileCount` for display, `path` for the file being written,
+    // `paths` for all of them one per line, and `current` for the run in
+    // progress.
+    PROP(QVariantList logRuns READONLY)
+    // Every failure this run reported, newest first, one map per entry: `when`,
+    // `message`, and `count` for a message that repeated.
+    PROP(QVariantList errors READONLY)
+
+    // ── journey ──────────────────────────────────────────────────────────
+    // Where this conversation has got to in the transaction, and how it got
+    // there. Both are read back off the thread rather than tracked alongside
+    // it, so they cannot disagree with what is on screen.
+    //
+    // One of "discovery" | "conversation" | "address" | "payment". A step is
+    // reached when its evidence appears and never un-reached.
+    PROP(QString journeyStep READONLY)
+    // What happened, oldest first, one map per milestone: `step`, `what` (a
+    // sentence for the user), and `atMs`.
+    PROP(QVariantList journeyTrail READONLY)
+
+    // ── wallet (lez_core) ────────────────────────────────────────────────
+    // The execution-zone wallet this instance owns. Separate from chatStatus:
+    // the conversation works whether or not the wallet ever opens, and saying
+    // so on screen is cheaper than pretending one implies the other.
+    ENUM WalletStatus {
+        WalletClosed = 0,
+        WalletOpening = 1,
+        WalletReady = 2,
+        WalletError = 3
+    }
+    PROP(WalletStatus walletStatus READONLY)
+    // True while a zone call is in flight. Zone work is synchronous and can run
+    // for minutes (zk proving), so the view needs this to stay honest about a
+    // window where nothing appears to happen.
+    PROP(bool walletBusy READONLY)
+    // What the wallet is doing right now — "syncing", "mining", "claiming",
+    // "shielding", "sending". Shown verbatim; a stage the user can name is a
+    // stage they can wait out.
+    PROP(QString walletStage READONLY)
+    // A one-line name for the long-running thing in flight — "Paying 100 LEZ",
+    // "Funding" — or empty when nothing is. Separate from `walletStage`, which
+    // says which part of it is happening: the job outlives the stages, and the
+    // view times it from when this becomes non-empty. A private payment takes
+    // minutes of proving, so it is a job you started, not a button you are
+    // waiting on, and the interface should say which.
+    PROP(QString walletJob READONLY)
+    PROP(QString walletError READONLY)
+    // Balances as decimal strings, the shape the zone returns. Empty until the
+    // first read lands, which is not the same as zero.
+    PROP(QString privateBalance READONLY)
+    PROP(QString publicBalance READONLY)
+    // This wallet's shielded receiving keys (lez_core.get_private_account_keys),
+    // the payload shareAddress puts in a card. Empty until the wallet is ready.
+    PROP(QString myReceiveKeys READONLY)
+    // The recovery phrase, set once when this instance mints a new wallet and
+    // never read back from storage. Shown once, then the view is expected to
+    // stop displaying it.
+    PROP(QString newWalletMnemonic READONLY)
+
+    // Open the wallet for this instance, creating one if none exists. Safe to
+    // call more than once.
+    SLOT(void openWallet())
+    // Claim from the zone's PoW faucet and shield the prize into the private
+    // account, so the balance that funds a payment is already private.
+    SLOT(void fundWallet())
+    SLOT(void refreshBalances())
+    // Ask the peer for somewhere to pay.
+    SLOT(void requestAddress(QString conversationId))
+    // Answer that ask with this wallet's shielded receiving keys.
+    SLOT(void shareAddress(QString conversationId))
+    // Pay `amount` to the shielded keys from an address-share card, then post
+    // the receipt into the same conversation.
+    SLOT(void sendPrivate(QString conversationId, QString toKeysJson, QString amount))
+
+    SLOT(void createConversation(QString peerAddress))
+    SLOT(void createGroupConversation(QString name, QString description))
+    SLOT(void addGroupMember(QString conversationId, QString peerAddress))
+    SLOT(void sendMessage(QString conversationId, QString content))
+    SLOT(void selectConversation(QString conversationId))
+    SLOT(void refreshMembers())
+    // Re-reads the log directory, both writers' runs. The files grow, rotate and
+    // get pruned while the app runs, so the view asks for a fresh list when it is
+    // about to show one rather than holding what the last read found.
+    SLOT(void refreshSessionLogs())
+
+    // A message the module refused, so the composer can offer the text back.
+    SIGNAL(sendFailed(QString conversationId, QString content))
+    SIGNAL(error(QString message))
+}

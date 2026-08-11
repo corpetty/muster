@@ -1,0 +1,58 @@
+name: Two-instance exchange
+
+# Drives a real bidirectional message exchange between two logos-chat-ui windows
+# over logos-qt-mcp (doctests/exchange/run-exchange.sh) and regenerates the
+# screenshots embedded in docs/two-instance-exchange.md. This doubles as an
+# end-to-end GUI integration test: the job fails if the round-trip does not
+# complete. The freshly captured screenshots are uploaded as an artifact so a
+# reviewer can compare them against the committed copies and refresh them when
+# the UI changes.
+#
+# This job is Linux only: it launches two standalone app instances on one host,
+# which the script keeps apart via distinct data dirs and inspector ports. macOS
+# still exercises the round-trip through the exchange spec
+# in doctests.yml; this job is the dedicated, robust gate for it.
+
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+concurrency:
+  group: two-instance-exchange-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exchange:
+    name: two-instance exchange (ubuntu-latest)
+    environment: ${{ github.ref == 'refs/heads/master' && 'public-cache' || '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Nix and Logos cache
+        uses: logos-co/setup-nix-cache-action@v1
+        with:
+          attic-token-ci: ${{ secrets.ATTIC_TOKEN_CI }}
+          attic-token-public: ${{ secrets.ATTIC_TOKEN_PUBLIC }}
+
+      # The exchange runs against the commit under test (FLAKE defaults to the
+      # checked-out tree) and needs a real network: the two delivery nodes find
+      # each other on the logos.test fleet, and init publishes each instance's
+      # key package to the key-package registry.
+      - name: Run the exchange and regenerate screenshots
+        run: |
+          nix shell nixpkgs#nodejs --command \
+            bash doctests/exchange/run-exchange.sh "$PWD/docs/images/exchange"
+
+      - name: Upload regenerated screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: two-instance-exchange-screenshots
+          path: docs/images/exchange/*.png
+          if-no-files-found: warn

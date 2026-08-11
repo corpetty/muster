@@ -1,0 +1,36 @@
+module ChatUi
+singleton ChatTheme 1.0 ChatTheme.qml
+singleton VisibilityClaims 1.0 VisibilityClaims.qml
+VisibilityPanel 1.0 VisibilityPanel.qml
+ChatStore 1.0 ChatStore.qml
+PanelHeader 1.0 PanelHeader.qml
+DetailRow 1.0 DetailRow.qml
+DetailsPanel 1.0 DetailsPanel.qml
+ChatIconButton 1.0 ChatIconButton.qml
+Avatar 1.0 Avatar.qml
+AccountCard 1.0 AccountCard.qml
+EmptyState 1.0 EmptyState.qml
+SelectableText 1.0 SelectableText.qml
+ClipboardProxy 1.0 ClipboardProxy.qml
+ChatMenuItem 1.0 ChatMenuItem.qml
+MessageComposer 1.0 MessageComposer.qml
+StatusBar 1.0 StatusBar.qml
+MessageDelegate 1.0 MessageDelegate.qml
+MusterCard 1.0 MusterCard.qml
+SendDialog 1.0 SendDialog.qml
+WalletCard 1.0 WalletCard.qml
+JobStrip 1.0 JobStrip.qml
+DayChip 1.0 DayChip.qml
+Facepile 1.0 Facepile.qml
+ThreadHeader 1.0 ThreadHeader.qml
+MessageSkeleton 1.0 MessageSkeleton.qml
+ConversationDelegate 1.0 ConversationDelegate.qml
+MemberDelegate 1.0 MemberDelegate.qml
+ConversationsPane 1.0 ConversationsPane.qml
+MessageThreadPane 1.0 MessageThreadPane.qml
+MembersPane 1.0 MembersPane.qml
+NewConversationDialog 1.0 NewConversationDialog.qml
+NewGroupDialog 1.0 NewGroupDialog.qml
+MemberAddInfoDialog 1.0 MemberAddInfoDialog.qml
+AddMemberDialog 1.0 AddMemberDialog.qml
+SessionLogsDialog 1.0 SessionLogsDialog.qml
