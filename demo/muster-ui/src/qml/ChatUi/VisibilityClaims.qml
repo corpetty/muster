@@ -240,6 +240,25 @@ QtObject {
         },
         {
             step: root.stepPayment,
+            kind: "gap",
+            title: qsTr("Your balance is a sum of accounts you never created"),
+            body: qsTr("A private account's address is derived from your viewing key and an "
+                     + "identifier. The address you shared carries no identifier, so the sender's "
+                     + "client picks one at random — and the money arrives at an account neither "
+                     + "of you can predict, while the account you published stays at zero. This "
+                     + "build works around that by adding up every private account it can find "
+                     + "after syncing, which is why a payment can appear without the address you "
+                     + "gave out ever changing. A single payment can still only be spent from one "
+                     + "of those accounts, so a balance may be larger than anything you can send "
+                     + "at once."),
+            fix: qsTr("The recipient's identifier travelling with the address they publish, so a "
+                    + "payment lands where it was sent."),
+            status: "none",
+            evidence: qsTr("reported upstream with a standalone reproducer — demo/poc/. "
+                         + "Workaround lives in ChatBackendWallet.cpp readWalletState")
+        },
+        {
+            step: root.stepPayment,
             kind: "others-leak",
             title: qsTr("Elsewhere, the transfer is the disclosure"),
             body: qsTr("A public-chain transfer puts the amount, both addresses and the timestamp "

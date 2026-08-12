@@ -1,5 +1,11 @@
 # `demo/` — the speed build
 
+> **Demonstrative only. Do not put value you care about through this.**
+>
+> This is something to watch and argue with, not something to use. It carries none of the guarantees the real client is specified to have — no signed log, no re-derivation of what you sign, no replay binding — and it is currently **working around an upstream bug by adding up private accounts it finds by scanning**, because a payment does not arrive at the address you published. That workaround is disclosed on screen and in `GAPS.md`. It is not a design, and it comes out when the zone fixes the underlying issue.
+>
+> Honest status of the payment journey today: you can propose it, agree it and send it, and the money reaches the recipient's *wallet* — but not the account they advertised, and a balance shown here may be larger than any single payment can spend. Finding exactly this class of problem is what a prototype is for.
+
 **This directory deliberately violates the invariants in the repo root `CLAUDE.md`.** That is its purpose. Read this before reading anything else in here, and before citing any of it as how Muster works.
 
 ## What this is

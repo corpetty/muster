@@ -75,7 +75,9 @@ When it lands, a receipt card appears in the thread on both sides: *100 LEZ, pri
 >
 > **This section becomes a fix note before publication, not a deletion.** The honest claim today is that everything up to and including *initiating* a private payment works, and that the recipient's client cannot see the money — which, for a user watching their balance, is indistinguishable from not being paid.
 >
-> There is a workaround open to us: enumerate accounts after syncing and treat new private accounts as received notes, rather than polling the one id we published. It would complete the journey. It should ship labelled as a workaround with the upstream issue beside it, because "your balance is the sum of accounts you did not create" is exactly the sort of thing this document exists to disclose rather than smooth over.
+> The build now works around it: after syncing it adds up every private account it can find, and spends from the one holding the note. A peer whose payment had been stranded went from showing `0` to showing the 10 it had actually been paid. The journey completes.
+>
+> That is a workaround and it says so on screen. The wallet card notes, beside the number, that the balance includes accounts you never created and that one send draws on one of them. The visibility panel carries it as an open gap with the fix named. It comes out when a payment arrives at the address it was sent to — and until then this is a thing to watch, not a thing to use.
 
 ## What this was built on
 

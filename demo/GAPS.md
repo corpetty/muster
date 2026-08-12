@@ -120,7 +120,15 @@ private b719ff50…259a balance=10   <-- the payment
 
 It is in this document because the article must not describe the payment pipeline as working end to end. Everything up to and including *initiating* a shielded payment is real and measured; **the recipient's client shows nothing**, and until either the zone addresses the account it advertised or this app enumerates accounts after syncing, a user watching their balance has no way to know they were paid. **[verified: symptom reproduced twice, cause identified, reported upstream.]**
 
-**There is a workaround available to us**, not yet implemented: after syncing, call `list_accounts` and treat newly appearing private accounts as received notes, rather than polling the one id we published. Worth doing — it would make the journey complete end to end — but it should be written as a workaround with the upstream issue named beside it, not quietly, because "your balance is the sum of accounts you did not create" is exactly the kind of thing this document exists to disclose.
+**The workaround is now in**, and it is labelled as one everywhere it shows. After syncing, the wallet enumerates `list_accounts` and sums every private account it can see, rather than polling the one id it published; payments are spent from the largest of those, because a note is held by the account it landed in and not by the one we created. Verified on a peer whose payment had been stranded: it had shown `0`, and now shows the 10 it was actually paid.
+
+It is a workaround, not a design, and it has a visible cost that is disclosed rather than smoothed over:
+
+- **The balance is a sum over accounts the user never created.** The wallet card says so, next to the number, whenever that is true — not in a panel someone has to open.
+- **A single payment can only draw on one of those accounts**, so the figure shown may be larger than anything one send can spend.
+- The `payment` step in the visibility panel carries this as a `gap` with status `none`, naming the fix (the recipient's identifier travelling with the address they publish) and pointing at the upstream report.
+
+It comes out — along with the summing in `readWalletState` — the moment a payment arrives at the address it was sent to. Until then this build does not conform to what the real client is specified to do, and `README.md` leads with that.
 
 ## 5. What this build does not do at all
 

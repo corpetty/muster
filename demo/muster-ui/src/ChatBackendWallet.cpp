@@ -415,15 +415,96 @@ QString ChatBackend::ensurePublicAccount()
     return id;
 }
 
+QString ChatBackend::spendFromAccount() const
+{
+    // Part of the same workaround as readWalletState: spend from an account
+    // that actually holds a note. A single transfer cannot draw on several
+    // accounts, so this picks the largest rather than the sum — which means a
+    // balance can be displayed that no single payment can spend. That is a
+    // real limitation of working around this rather than fixing it, and it is
+    // why the wallet card says where the money is.
+    return m_fundedPrivateAccounts.isEmpty() ? m_privateAccount : m_fundedPrivateAccounts.first();
+}
+
 void ChatBackend::readWalletState()
 {
     if (!m_walletOpen)
         return;
     logos::CallError err;
 
-    const QString priv = modules().lez_core.get_balance(m_privateAccount, false, &err);
-    if (err.ok())
-        setPrivateBalance(priv.trimmed().isEmpty() ? QStringLiteral("0") : priv.trimmed());
+    // ── WORKAROUND (upstream bug, see demo/poc/) ─────────────────────────
+    //
+    // The private balance is the sum over *every* private account this wallet
+    // knows, not the balance of the one account we created and published.
+    //
+    // Why: a private account id is derived from (viewing key, identifier), the
+    // keys a recipient hands out carry no identifier, and so the zone's client
+    // picks one at random for each payment. Money paid to us therefore lands
+    // at an account derived from a number we have never seen — our advertised
+    // account stays at zero while a brand-new account holds the funds. Syncing
+    // does discover it (it is our viewing key), so it appears in
+    // list_accounts; nothing else points at it.
+    //
+    // This is a workaround, not a fix, and it is disclosed as one: the
+    // `authorization`/`payment` claims in VisibilityClaims.qml say that a
+    // balance here is a sum over accounts the user never created. Delete this
+    // and go back to reading m_privateAccount once the zone addresses the
+    // account whose keys were actually shared.
+    //
+    // Full write-up and a standalone reproducer: demo/poc/.
+    QStringList spendable;
+    quint64 total = 0;
+    bool sawAny = false;
+    const QVariantList accounts = modules().lez_core.list_accounts(&err);
+    if (err.ok()) {
+        for (const QVariant& v : accounts) {
+            const QVariantMap a = v.toMap();
+            if (a.value(QStringLiteral("is_public")).toBool())
+                continue;
+            const QString id = a.value(QStringLiteral("account_id")).toString();
+            if (id.isEmpty())
+                continue;
+            logos::CallError balErr;
+            const QString b = modules().lez_core.get_balance(id, false, &balErr).trimmed();
+            if (!balErr.ok() || b.isEmpty())
+                continue;
+            sawAny = true;
+            const quint64 n = b.toULongLong();
+            total += n;
+            if (n > 0)
+                spendable.append(id);
+        }
+    }
+    // Keep the discovered accounts in balance order, largest first: a payment
+    // has to be spent from an account that actually holds the note, and the
+    // one we created is usually not it.
+    std::sort(spendable.begin(), spendable.end(), [this](const QString& a, const QString& b) {
+        logos::CallError e;
+        return modules().lez_core.get_balance(a, false, &e).trimmed().toULongLong()
+             > modules().lez_core.get_balance(b, false, &e).trimmed().toULongLong();
+    });
+    m_fundedPrivateAccounts = spendable;
+
+    // Money is held somewhere we did not publish — which is what has to be
+    // said on screen beside the number.
+    bool elsewhere = false;
+    for (const QString& id : spendable) {
+        if (id != m_privateAccount) {
+            elsewhere = true;
+            break;
+        }
+    }
+    setReceivedElsewhere(elsewhere);
+
+    if (sawAny) {
+        setPrivateBalance(QString::number(total));
+    } else {
+        // Fall back to the account we know about rather than reporting zero
+        // for a listing that failed.
+        const QString priv = modules().lez_core.get_balance(m_privateAccount, false, &err);
+        if (err.ok())
+            setPrivateBalance(priv.trimmed().isEmpty() ? QStringLiteral("0") : priv.trimmed());
+    }
 
     // A public balance lives on-chain, not in the wallet, so it comes from the
     // sequencer rather than from lez_core.
@@ -761,7 +842,9 @@ void ChatBackend::payForIntent(const QString& conversationId, const QString& toK
         // enough for that, and it keeps the window responsive meanwhile.
         beginStage(QStringLiteral("sending"));
         modules().lez_core.transfer_privateAsync(
-            m_privateAccount, toKeysJson, amountLe16Hex(value),
+            // Not m_privateAccount: money received from someone else is held
+            // by a different, discovered account (see readWalletState).
+            spendFromAccount(), toKeysJson, amountLe16Hex(value),
             [this, conversationId, value, intentId](QString raw) {
                 // The envelope decides, not emptiness. This is the most
                 // important of the three sites: a failed transfer returns

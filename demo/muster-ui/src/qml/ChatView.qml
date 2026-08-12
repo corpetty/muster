@@ -119,6 +119,7 @@ Rectangle {
                     statusLabel: store.walletLabel
                     privateBalance: store.privateBalance
                     publicBalance: store.publicBalance
+                    receivedElsewhere: store.receivedElsewhere
                     errorText: store.walletError
                     onOpenRequested: store.openWallet()
                     onFundRequested: store.fundWallet()

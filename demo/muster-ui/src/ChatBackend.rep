@@ -124,6 +124,16 @@ class ChatBackend
     // first read lands, which is not the same as zero.
     PROP(QString privateBalance READONLY)
     PROP(QString publicBalance READONLY)
+    // True when the private balance includes an account this wallet did not
+    // create — i.e. money has been received. A payment is credited to an
+    // address derived from an identifier the *sender* picked at random, so it
+    // never lands on the address the recipient published. This build sums
+    // whatever syncing turns up; the flag is what lets the wallet card say so
+    // where the number is, rather than leaving a surprising figure unexplained.
+    //
+    // WORKAROUND. Remove with the summing in readWalletState once a payment
+    // arrives at the address it was sent to. See demo/poc/.
+    PROP(bool receivedElsewhere READONLY)
     // This wallet's shielded receiving keys (lez_core.get_private_account_keys),
     // the payload shareAddress puts in a card. Empty until the wallet is ready.
     PROP(QString myReceiveKeys READONLY)
