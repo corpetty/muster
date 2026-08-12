@@ -22,6 +22,7 @@
 
 #include <algorithm>
 
+#include <QCoreApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -60,10 +61,47 @@ QString cardType(const QString& content)
     return o.value(QStringLiteral("type")).toString();
 }
 
+// "100 LEZ", off the card. The denom is the card's own, not this build's idea
+// of one: the trail is a record of what happened, and an asset we do not
+// recognise is still a thing that was proposed and should read as what its
+// proposer called it. A card with no denom is a v1 card, when there was one.
 QString amountOf(const QString& content)
 {
     const QJsonObject o = QJsonDocument::fromJson(content.toUtf8()).object();
-    return o.value(QStringLiteral("amount")).toString();
+    const QString amount = o.value(QStringLiteral("amount")).toString();
+    const QString denom = o.value(QStringLiteral("denom")).toString();
+    return QStringLiteral("%1 %2").arg(amount, denom.isEmpty() ? QStringLiteral("LEZ") : denom);
+}
+
+// What the sharer called the holding they shared. Their words, because they are
+// the ones who know what it is; "private" for a v1 card, which is what v1 meant.
+QString assetNameOf(const QString& content)
+{
+    const QJsonObject o = QJsonDocument::fromJson(content.toUtf8()).object();
+    const QString name = o.value(QStringLiteral("assetName")).toString();
+    return name.isEmpty() ? QCoreApplication::translate("ChatBackend", "private") : name;
+}
+
+// How the payment discloses itself, in the few words a trail line can hold, or
+// empty for a rail this build does not know. The journey is the honest summary
+// of the lifecycle, so the step that crossed the boundary should say which
+// crossing it was rather than implying the private one throughout.
+QString railNoteOf(const QString& content, const QString& fallback)
+{
+    const QJsonObject o = QJsonDocument::fromJson(content.toUtf8()).object();
+    const QJsonObject d = o.value(QStringLiteral("discloses")).toObject();
+    if (d.isEmpty())
+        return fallback;
+    const bool amount = d.value(QStringLiteral("amount")).toBool();
+    const bool payer = d.value(QStringLiteral("payer")).toBool();
+    const bool payee = d.value(QStringLiteral("payee")).toBool();
+    if (!amount && !payer && !payee)
+        return QCoreApplication::translate("ChatBackend", "nothing disclosed");
+    if (amount && payer && payee)
+        return QCoreApplication::translate("ChatBackend", "all of it on the public record");
+    if (payer)
+        return QCoreApplication::translate("ChatBackend", "you named, they were not");
+    return QCoreApplication::translate("ChatBackend", "they named, you were not");
 }
 
 } // namespace
@@ -94,13 +132,16 @@ void ChatBackend::noteJourneyMessage(const QString& content, bool fromSelf, qint
         what = fromSelf ? tr("You asked where to pay") : tr("They asked where to pay");
     } else if (type == QLatin1String("address-share")) {
         step = QStringLiteral("address");
-        what = fromSelf ? tr("You shared a private address")
-                        : tr("They shared a private address");
+        // Which address, because there is more than one kind now and "a private
+        // address" was only true while there was one.
+        const QString assetName = assetNameOf(content);
+        what = fromSelf ? tr("You shared a %1 address").arg(assetName)
+                        : tr("They shared a %1 address").arg(assetName);
     } else if (type == QLatin1String("intent-propose")) {
         step = QStringLiteral("authorization");
         const QString amount = amountOf(content);
-        what = fromSelf ? tr("You proposed paying %1 LEZ").arg(amount)
-                        : tr("They proposed paying %1 LEZ").arg(amount);
+        what = fromSelf ? tr("You proposed paying %1").arg(amount)
+                        : tr("They proposed paying %1").arg(amount);
     } else if (type == QLatin1String("intent-approve")) {
         step = QStringLiteral("authorization");
         what = fromSelf ? tr("You approved it") : tr("They approved it");
@@ -110,7 +151,9 @@ void ChatBackend::noteJourneyMessage(const QString& content, bool fromSelf, qint
     } else if (type == QLatin1String("send-receipt")) {
         step = QStringLiteral("payment");
         const QString amount = amountOf(content);
-        what = fromSelf ? tr("You sent %1 LEZ").arg(amount) : tr("They sent %1 LEZ").arg(amount);
+        const QString note = railNoteOf(content, tr("nothing disclosed"));
+        what = fromSelf ? tr("You sent %1 — %2").arg(amount, note)
+                        : tr("They sent %1 — %2").arg(amount, note);
     } else {
         // A card type this build does not know. It still proves a conversation.
         if (rankOf(journeyStep()) >= rankOf(step))

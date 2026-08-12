@@ -8,11 +8,11 @@ The short version: this is a one-week prototype built to back a campaign write-u
 
 ```
 muster-ui/     fork of logos-co/logos-chat-ui v0.2.2 (QML + QtRO C++ backend)
-  src/         ChatBackend (upstream) + ChatBackendWallet + ChatBackendJourney
-               + ChatBackendIntent (ours)
-  src/qml/     ChatUi module; ours are MusterCard, WalletCard, SendDialog,
-               ProposeDialog, PinnedIntent, VisibilityPanel, VisibilityClaims,
-               JobStrip
+  src/         ChatBackend (upstream) + ChatBackendWallet + ChatBackendAssets
+               + ChatBackendJourney + ChatBackendIntent (ours)
+  src/qml/     ChatUi module; ours are MusterCard, WalletCard, RailPicker,
+               ShareAddressDialog, SendDialog, ProposeDialog, PinnedIntent,
+               VisibilityPanel, VisibilityClaims, JobStrip
 .run/          per-peer state (gitignored) — one directory is one identity
 .tools/        local downloads (gitignored)
 ```
@@ -22,10 +22,13 @@ Upstream modules consumed as flake inputs, not vendored: `chat_module` (e2e chat
 
 ## Rules that are not obvious
 
+- **Assets and rails live in one table, and adding one means adding a claim.** `ChatBackendAssets.cpp` holds two catalogues — `Holding` (a balance: where it is, how to read it, what address a peer pays it at) and `Rail` (a way to pay: which holding it spends, what form of address it needs, and what the chain learns). Every surface downstream reads those rows; none of them branches on a particular asset. **If adding an entry made you edit a view, the entry is not carrying enough** — put the missing fact in `Assets.h` rather than a branch in the view. A `Rail` also names a `claimId` in `VisibilityClaims.qml`, and `sendableRailById` refuses one that names nothing, at the only place value moves. That is the honesty rule made structural: a rail with nowhere to say what it leaks cannot be paid with, whoever forgot.
+- **A card names the asset or rail it is about, and `MusterMessage::kVersion` is 2 because of it.** A v1 reader has no field to read that from and would assume v1's single rail — labelling a public account "shielded" and a public payment "not disclosed". Both are the exact lie this app exists not to tell, which is why it is a version bump and not an added field. Reading a v1 card is still safe: every default a missing field falls back to is what v1 meant.
 - **The build cannot see QML errors.** `nix build` passes while the app fails to load, and the failure surfaces as "Failed to load UI plugin" with the reason in no log. Run `qmllint` (invocation in `../docs/labbook/qml-errors-are-invisible-to-nix-build.md`) *and* launch the app before believing a QML change works. A green build proves nothing here.
 - **`lez_core` reports failure by returning an empty string or a non-zero int, not through `CallError`.** Check both on every call. See `../docs/labbook/lez-core-error-conventions.md`.
 - **Anything that proves must use the generated `*Async` variant.** The sync wrapper hardcodes a 20s timeout; a shielded transfer takes ~7 minutes, and an expired call discards a result the zone goes on to produce.
 - **`save()` after every mutating zone call.** The wallet-ffi is in-memory; without it the next `open()` has forgotten the transfer.
+- **A transfer the zone accepted is not yet a balance you can read.** The block carrying it may not exist yet, and `syncToTip` does nothing when the height has not moved — so a read taken right after a successful transfer returns the balances from *before* it, and leaves them on screen. That is not a cosmetic lag: an unchanged balance beside a posted receipt is indistinguishable from the payment having failed. Measured 2026-08-12: a 7-minute shield completed and the wallet still showed `150 public / 0 private` until a manual Refresh. Every value-moving path therefore ends in `settleAfterTransfer`, which polls sync-and-re-read until this wallet's own view actually moves. The faucet path already knew this (`waitForPublicFunds`); the lesson is that it is true of *every* rail, not just the faucet.
 - **A peer's wallet lives inside its chat instance directory.** Two peers sharing one directory would share one identity, which would make any recording a lie.
 - **Claims shown in the UI are data** (`VisibilityClaims.qml`), carrying evidence and, for a gap, the fix and its honest status. A claim without evidence must be visible as a hole. The honesty rules in `../docs/00-vision.md` bind this directory even though the invariants do not.
 - **Conversation state is a fold, never a second record.** The journey, the home surface and the proposals are all `reduce(messages)` over `get_messages`, so they cannot drift, survive a restart for nothing, and are correct for a conversation this instance did not start. Two passes where order matters — store-node catchup delivers an approval before its proposal often enough to matter.

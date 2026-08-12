@@ -4,6 +4,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QString>
+#include <QVariantMap>
 
 // The structured cards Muster sends *inside* a chat message.
 //
@@ -18,7 +19,18 @@
 // only for a change that an old peer could misread rather than merely ignore.
 namespace MusterMessage {
 
-inline constexpr int kVersion = 1;
+// 2 since assets: a card now names the asset or rail it is about, and a v1
+// reader has no field to read it from. That reader does not merely miss
+// something — it assumes the one rail v1 had, so it would label a public
+// account "shielded" and a public payment's receipt "not disclosed". Both are
+// lies of exactly the kind this demo exists not to tell, which is what makes
+// this a version bump rather than an added field.
+//
+// Nothing here refuses a v1 card: an older peer's shielded address and receipt
+// still read correctly, because the defaults a missing field falls back to are
+// v1's single rail. It is the other direction that cannot be made safe, and the
+// two peers in this demo are built from one tree.
+inline constexpr int kVersion = 2;
 // Marks a message as ours. Present on every card and on nothing else.
 inline const QString kTag = QStringLiteral("muster");
 
@@ -43,22 +55,37 @@ inline QString wrap(const QString& type, QJsonObject body = {})
     return QString::fromUtf8(QJsonDocument(body).toJson(QJsonDocument::Compact));
 }
 
-// "Send me an address to pay." Carries nothing else: the chain is implied by
-// the demo's single settlement path, and adding a field we don't branch on
-// would be a claim the code doesn't keep.
+// "Send me an address to pay." Still carries nothing: the ask does not need to
+// name an asset, because the answer does, and a request that pinned one down
+// would make the payer choose before they know what the payee has.
 inline QString addressRequest()
 {
     return wrap(QStringLiteral("address-request"));
 }
 
-// The reply: a *shielded* receiving key set, produced by
-// lez_core.get_private_account_keys. It names an account nobody but the sender
-// and receiver can associate with a payment — the reason this is worth a card
-// rather than a pasted string.
-inline QString addressShare(const QString& keysJson, const QString& label)
+// The reply: somewhere to be paid, and enough about it for the payer to know
+// which rails could pay it.
+//
+//   asset      the payee's holding id ("lez.private", "lez.public")
+//   keys       the address itself. Named `keys` because that is what it was
+//              when the only address was a shielded key set, and a v1 peer
+//              still reads that field; it now carries whatever form the asset
+//              uses, and `form` says which.
+//   form       Assets::AddressForm — 0 shielded key set, 1 public account id.
+//              This is the field a payer filters rails on, so it is what makes
+//              a new kind of address payable without the payer being taught
+//              about it.
+//   assetName  the payee's *own* words for the holding. A payer whose build has
+//              never heard of `asset` shows this, attributed — "they called it
+//              X" — rather than describing an address it cannot identify.
+inline QString addressShare(const QString& asset, const QString& address, int form,
+                            const QString& assetName, const QString& label)
 {
     return wrap(QStringLiteral("address-share"),
-                QJsonObject{{QStringLiteral("keys"), keysJson},
+                QJsonObject{{QStringLiteral("asset"), asset},
+                            {QStringLiteral("keys"), address},
+                            {QStringLiteral("form"), form},
+                            {QStringLiteral("assetName"), assetName},
                             {QStringLiteral("label"), label}});
 }
 
@@ -79,15 +106,23 @@ inline QString addressShare(const QString& keysJson, const QString& label)
 // `intentId` ties the family together. It is minted by the proposer and echoed
 // by every approval, drop and receipt, so state is a fold over the thread and
 // nothing has to be kept in step separately.
+// The rail is part of the terms, not a detail of how they get carried out. A
+// room agreeing to 100 λ has agreed to a payment that discloses a particular
+// set of things about them, and settling it on another rail would settle
+// something they did not approve — which is why submitIntent reads this back
+// off the thread rather than trusting the view, and pays on the rail named
+// here.
 inline QString intentPropose(const QString& intentId, const QString& amount,
-                             const QString& keysJson, const QString& label,
+                             const QString& denom, const QString& rail,
+                             const QString& address, const QString& label,
                              int threshold, int members)
 {
     return wrap(QStringLiteral("intent-propose"),
                 QJsonObject{{QStringLiteral("intentId"), intentId},
                             {QStringLiteral("amount"), amount},
-                            {QStringLiteral("denom"), QStringLiteral("LEZ")},
-                            {QStringLiteral("keys"), keysJson},
+                            {QStringLiteral("denom"), denom},
+                            {QStringLiteral("rail"), rail},
+                            {QStringLiteral("keys"), address},
                             {QStringLiteral("label"), label},
                             // Both are frozen at propose time so the card keeps
                             // reading "2 of 3" even after the roster changes.
@@ -116,16 +151,31 @@ inline QString intentDrop(const QString& intentId, const QString& reason)
 //
 // `intentId` is empty for a direct send and set when the payment closes a
 // proposal, which is what moves that intent to `final` in the fold.
-inline QString sendReceipt(const QString& amount, const QString& tx, bool privatePath,
+//
+// `discloses` is the rail's own account of what this payment put on the public
+// record — `{amount, payer, payee}` — and the receipt carries it rather than a
+// flag the reader interprets. The v1 card had a single `shielded` bool, which
+// could only describe two of the four rails and described the other two wrongly:
+// a shield discloses the payer but not the payee, and neither answer is "all" or
+// "none". The bool is still written, as `!payer && !payee`, so a v1 peer reads
+// the nearest true thing rather than nothing at all.
+inline QString sendReceipt(const QString& amount, const QString& denom, const QString& rail,
+                           const QVariantMap& discloses, const QString& tx,
                            const QString& intentId = QString())
 {
+    const bool nothingDisclosed = !discloses.value(QStringLiteral("payer")).toBool()
+        && !discloses.value(QStringLiteral("payee")).toBool()
+        && !discloses.value(QStringLiteral("amount")).toBool();
     // "shielded", not "private": the reader is QML, and `private` is a reserved
     // word there — a field named that is a trap for anyone extending this.
     return wrap(QStringLiteral("send-receipt"),
                 QJsonObject{{QStringLiteral("amount"), amount},
-                            {QStringLiteral("denom"), QStringLiteral("LEZ")},
+                            {QStringLiteral("denom"), denom},
+                            {QStringLiteral("rail"), rail},
+                            {QStringLiteral("discloses"),
+                             QJsonObject::fromVariantMap(discloses)},
                             {QStringLiteral("tx"), tx},
-                            {QStringLiteral("shielded"), privatePath},
+                            {QStringLiteral("shielded"), nothingDisclosed},
                             {QStringLiteral("intentId"), intentId}});
 }
 

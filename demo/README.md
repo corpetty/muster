@@ -35,11 +35,28 @@ What it *does* keep is the honesty rule from `docs/00-vision.md`, because that r
 | `chat_module` v0.2.2 | upstream `logos-co/logos-chat-module` | e2e-encrypted 1:1 conversations, identity, address-based discovery |
 | `delivery_module` v0.2.0 | re-exported by `chat_module`'s flake | transport |
 | `muster-ui` | **fork of `logos-co/logos-chat-ui` v0.2.2** | the app: conversation + address cards + send flow + visibility panel |
-| `muster-wallet` | ours | ETH (anvil) and λ (LEZ localnet) sends, keys, balances |
+| `muster-wallet` | ours | λ on the LEZ testnet: keys, balances, and all four transfer directions |
 
 Structured cards (address request, address share, send receipt) ride as JSON inside `chat_module`'s `send_message(convo_id, content)`, so they inherit its encryption. **We write no cryptography.**
 
-Neither chain needs a custom on-chain program: λ uses the builtin `authenticated_transfer`, ETH is a native value transfer. No risc0 guest builds, no Solidity.
+No custom on-chain program is needed: every rail is a builtin zone transfer. No risc0 guest builds, no Solidity.
+
+**Earlier drafts of this file claimed ETH sends against a local anvil.** There were none, and there is no EVM module in the runtime set — adding one would mean either a new module or writing our own secp256k1 signing, which would break the "we write no cryptography" claim above. The line is corrected rather than quietly dropped, because a README that overstates what a demo does is the same failure the app is built to avoid.
+
+### The four rails
+
+The zone supports every combination of shielded and public at each end, and the app offers all four. They are the same payment differing in exactly one thing — what the chain learns — which is the demo's whole argument, made operable rather than asserted:
+
+| Rail | Amount | Payer | Payee | Speed |
+|---|---|---|---|---|
+| private → private | hidden | hidden | hidden | ~7 min (proves) |
+| public → private | public | public | hidden | proves |
+| private → public | public | hidden | public | proves |
+| public → public | public | public | public | seconds |
+
+Nothing hides *that* a transfer happened, or when. That is the floor on every rail, and the app says so on every receipt.
+
+Adding an asset or a rail is one entry in `muster-ui/src/ChatBackendAssets.cpp` plus its visibility claim; a rail with no claim is refused by the backend rather than shipped unexplained.
 
 ## Attribution
 

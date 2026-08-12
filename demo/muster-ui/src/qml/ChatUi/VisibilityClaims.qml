@@ -227,16 +227,67 @@ QtObject {
         },
 
         // ── payment ──────────────────────────────────────────────────────
+        //
+        // One claim per rail, and the `id` is what ties it to the catalogue
+        // entry in ChatBackendAssets.cpp. A rail whose `claimId` names nothing
+        // here is shown as a hole by `railsWithoutClaims` and refused outright
+        // by the backend — which is the honesty rule made structural rather
+        // than remembered. **Adding a rail means adding a claim.**
         {
+            id: "payment",
             step: root.stepPayment,
             kind: "protects",
             title: qsTr("Private on both ends"),
-            body: qsTr("This was a shielded-to-shielded transfer. The amount is not on the public "
+            body: qsTr("A shielded-to-shielded transfer. The amount is not on the public "
                      + "record, and neither account appears on it. Funding deliberately shields "
                      + "into the private account first, so the balance a payment draws on is "
                      + "already private — the transfer is hidden at both ends rather than only "
                      + "on arrival."),
             evidence: qsTr("lez_core.transfer_private")
+        },
+        {
+            id: "payment-shield",
+            step: root.stepPayment,
+            kind: "gap",
+            title: qsTr("Paying out of the open names you"),
+            body: qsTr("A public-to-shielded transfer spends an account that is on the public "
+                     + "record, so the amount and your account are visible; only the recipient "
+                     + "is hidden. This is what a payment looks like when the money has not "
+                     + "been shielded first, and it is the honest way to see what shielding "
+                     + "actually buys — the difference between this receipt and the private "
+                     + "one is the whole of it."),
+            fix: qsTr("Shield first. Funding does this automatically; this rail exists so the "
+                    + "difference can be seen rather than asserted."),
+            status: "shipped",
+            evidence: qsTr("lez_core.transfer_shielded")
+        },
+        {
+            id: "payment-deshield",
+            step: root.stepPayment,
+            kind: "gap",
+            title: qsTr("Paying into the open names them"),
+            body: qsTr("A shielded-to-public transfer hides you but not the recipient: the "
+                     + "amount and their account land on the public record, permanently and for "
+                     + "anyone to index. Choosing this rail is choosing that for somebody else, "
+                     + "which is why the address card says what kind of account it is before "
+                     + "you pick."),
+            fix: qsTr("Ask them for a shielded address instead — the card they answer with says "
+                    + "which they shared."),
+            status: "shipped",
+            evidence: qsTr("lez_core.transfer_deshielded")
+        },
+        {
+            id: "payment-public",
+            step: root.stepPayment,
+            kind: "others-leak",
+            title: qsTr("The public rail is the control, and it leaks everything"),
+            body: qsTr("Public-to-public is what a payment on an ordinary chain looks like: the "
+                     + "amount, your account, their account and the time, on a permanent record "
+                     + "that indexers join to everything either account has ever done. It is "
+                     + "offered here on purpose. A demo that only ever shipped the private path "
+                     + "would be asking to be taken on trust, and this one returns in seconds "
+                     + "rather than minutes — which is the other half of the trade."),
+            evidence: qsTr("lez_core.transfer_public")
         },
         {
             step: root.stepPayment,
@@ -354,6 +405,28 @@ QtObject {
     function forStep(step) {
         return root.claims.filter(function (c) {
             return c.step === step;
+        });
+    }
+
+    // The claim a rail's `claimId` names, or null.
+    function claimById(id) {
+        for (let i = 0; i < root.claims.length; ++i)
+            if (root.claims[i].id === id)
+                return root.claims[i];
+        return null;
+    }
+
+    // Rails the backend is willing to run that this panel cannot account for.
+    //
+    // Should always be empty: the backend refuses a rail whose `claimId` is
+    // blank, so the only way to land here is a rail naming a claim that was
+    // never written — a live rail with nothing on screen explaining what it
+    // leaks. The panel draws that as a hole rather than saying nothing, because
+    // silence would read as "nothing to disclose", which is the exact lie the
+    // honesty rule exists to prevent.
+    function railsWithoutClaims(rails) {
+        return (rails || []).filter(function (r) {
+            return !root.claimById(String(r.claimId));
         });
     }
 

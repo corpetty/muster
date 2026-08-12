@@ -37,9 +37,11 @@ Source material for the week-one *Discovery* article. Every row follows the rule
 
 ## 3. Agreeing where to pay
 
-**What happens:** Bob asks for an address; Alice's client answers with a *shielded receiving key set* from `lez_core.get_private_account_keys`.
+**What happens:** Bob asks for an address; Alice chooses which of her holdings to answer with — a *shielded receiving key set* from `lez_core.get_private_account_keys`, or a public account id. The card names the form it carries, and Bob's rail choices are filtered to the ones that can pay that form.
 
-**Protected.** The destination is shielded — it names an account that outside observers cannot associate with a payment — and it is exchanged inside the encrypted conversation. No third party is asked to resolve a name. **[from source — the contract exposes these as private-account keys and `transfer_private` consumes them; the privacy property is the zone's claim, which we consume rather than verify.]**
+**Protected, if she shares the shielded one.** That destination names an account outside observers cannot associate with a payment, and it is exchanged inside the encrypted conversation. No third party is asked to resolve a name. **[from source — the contract exposes these as private-account keys and `transfer_private` consumes them; the privacy property is the zone's claim, which we consume rather than verify.]**
+
+**The choice is deliberately the payee's, and it comes first.** Sharing a public account invites a payment anyone can read, and that consequence lands on the person being paid — so they make it, and the dialog says what it costs where they make it. A payer cannot upgrade a public destination to a private one: the address form is what a rail can reach, not a preference. **[from source — `Assets::AddressForm`, and `ChatBackend::sendableRailById` is the only path value moves through.]**
 
 **The contrast worth drawing.** `lez_core` also ships an on-chain **label** system (`add_label` / `resolve_label`): a public, human-readable directory. It is genuinely more convenient and it is a different privacy trade — resolving a label is a public act, and the mapping is permanent. Same stack, two discovery models, honest costs on both. This is the cleanest teaching moment in the whole demo. **[from source — present in the generated contract; not exercised in this build.]**
 
@@ -70,9 +72,13 @@ Source material for the week-one *Discovery* article. Every row follows the rule
 
 ## 4. Paying
 
-**What happens:** `transfer_private` from Bob's shielded account to Alice's shielded keys.
+**What happens:** whichever of the zone's four transfer directions the payer chose. `transfer_private` from Bob's shielded account to Alice's shielded keys is the one the demo leads with; `transfer_shielded`, `transfer_deshielded` and `transfer_public` are offered beside it.
 
-**Protected.** Private → private: the amount and both accounts stay off the public record. Funding deliberately shields the faucet prize into the private account *before* any payment, so the balance a payment draws on is already private and the transfer is shielded at both ends rather than only on arrival. **[from source + design — the sequence is ours and deliberate; the privacy guarantee is the zone's.]**
+**Protected, on the private rail.** Private → private: the amount and both accounts stay off the public record. Funding deliberately shields the faucet prize into the private account *before* any payment, so the balance that rail draws on is already private and the transfer is shielded at both ends rather than only on arrival. **[from source + design — the sequence is ours and deliberate; the privacy guarantee is the zone's.]**
+
+**The other three are offered on purpose, and each has its own claim.** A demo that only ever shipped the private path would be asking to be taken on trust. Shielding out of a public account names the payer; paying into a public account names the payee; public → public names everyone and returns in seconds instead of minutes. The receipt for each states what that rail actually disclosed, read from the rail itself rather than from a flag the reader interprets — so "what left the room" is the payment's own account of itself and cannot drift from the promise made before it. **[from source — `Assets::Disclosure` is written by the rail into the receipt card and read back by both the card and the visibility panel.]**
+
+**A rail with no claim cannot be paid with.** `sendableRailById` refuses one whose `claimId` names nothing in `VisibilityClaims.qml`, at the single place value moves. This is the one place in the demo where the honesty rule is enforced by the code rather than by remembering it. **[verified — `payForIntent` and `proposePayment` both route through it; there is no other caller of a rail's `send`.]**
 
 **What it costs, measured.** One shielded transfer took **6 minutes 41 seconds** at ~1300% CPU (13 cores saturated) on a desktop machine — 2026-08-11, LEZ testnet, `transfer_shielded_owned` of a single note. **[verified — timed from the zone's own log, start of proving to the wallet's next write.]** That is the honest price of the privacy claimed above, and it is worth publishing rather than eliding: a private payment here is not an interaction you wait on, it is a job you start. It also bounds what the demo can show live — a screen recording cannot sit through it, and two peers each proving compounds it.
 
@@ -139,6 +145,9 @@ Not gaps in Logos — gaps in *this demo*, which the real client covers. Listed 
 - **No replay binding of our own.** We do not construct signing payloads, so there is nothing committing to environment, account, slot and expiry (F-5).
 - **No membership epochs we verify.** Group re-keying is `chat_module`'s business; we neither check it nor claim it.
 - **Two live remote dependencies** — the public `logos.test` delivery network and the LEZ testnet sequencer. There is no offline or local mode, so "local-first" is a property of the real client, not of this demo.
+- **One asset: native λ.** The catalogue takes more, and the four rails are all four directions the zone offers for λ — but λ is the only thing in it. What that would take, established 2026-08-12 rather than guessed:
+  - **Zone tokens: days, not a dead end, and public-path only.** `lez_core` exposes `token_elf` / `ata_elf` and `send_generic_public_transaction`, and the token program is pre-registered in genesis, so nothing needs deploying. What a client must build itself is RISC0-serde instruction encoding (`instruction: any` is a `Vec<u32>`, not CBOR), the program ids (image ids of the ELFs — not in the LIDL), and ATA derivation (plain SHA-256 over a domain-separated prefix; `wallet_ffi_account_id_for_public_pda` exists in the FFI but is not exposed). There is **no worked client example in any language but Rust** — persona does not touch it, and the module's own tests do not either. Two hard limits: the private path is **not expressible** through LIDL v0.4.0 (`send_generic_private_transaction` resolves *every* account as private, and ATA needs a private owner with a public definition), and there is **no enumeration API** — token balances live in Borsh-encoded account `data`, and a client must track definition ids itself. So a token holding here would be public-only and manually configured, which is worth having as a contrast rail and worth saying plainly about.
+  - **Another chain (ETH and the like): not without a new module.** There is no EVM module in the runtime set. Reaching one means either upstream shipping a module or this demo writing its own secp256k1 signing — and that would end the "we write no cryptography" claim, which is load-bearing for everything else here. Out of scope for the prototype rather than merely unbuilt.
 
 ---
 

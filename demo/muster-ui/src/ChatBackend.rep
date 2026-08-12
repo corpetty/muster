@@ -79,10 +79,17 @@ class ChatBackend
 
     // ── intents ──────────────────────────────────────────────────────────
     // Every proposal in the open conversation, oldest first. One map each:
-    // `intentId`, `amount`, `denom`, `keys`, `label`, `threshold`, `members`,
-    // `proposer` (address), `proposedByMe`, `approvals` (count),
-    // `approvedByMe`, `approvers` (list of {label, initials, ramp, isMe}),
-    // `state`, `reason`, `tx`, `atMs`.
+    // `intentId`, `amount`, `denom`, `rail`, `railName`, `discloses`, `keys`
+    // (the destination address, whatever form the rail takes), `label`,
+    // `threshold`, `members`, `proposer` (address), `proposedByMe`, `approvals`
+    // (count), `approvedByMe`, `approvers` (list of {label, initials, ramp,
+    // isMe}), `state`, `reason`, `tx`, `atMs`.
+    //
+    // `rail` comes off the proposal card, so the terms the room approved are
+    // the terms it is read back with. `railName` and `discloses` are this
+    // build's words for that rail, or empty for one it does not know — a peer
+    // may propose on a rail we have never heard of, and the card says so rather
+    // than describing it wrongly.
     //
     // `state` is one of "proposed" | "collecting" | "ready" | "final" |
     // "dropped" — the prototype's rail, minus the submitted step, because a
@@ -120,10 +127,31 @@ class ChatBackend
     // waiting on, and the interface should say which.
     PROP(QString walletJob READONLY)
     PROP(QString walletError READONLY)
-    // Balances as decimal strings, the shape the zone returns. Empty until the
-    // first read lands, which is not the same as zero.
-    PROP(QString privateBalance READONLY)
-    PROP(QString publicBalance READONLY)
+
+    // ── what this wallet holds, and how it can pay ───────────────────────
+    // Both come from the catalogue in ChatBackendAssets.cpp, which is the one
+    // place either is added to. Nothing downstream branches on a particular
+    // asset: a view that needs to know something about one reads it off the
+    // row, so a new entry appears everywhere without a view being touched.
+    //
+    // One map per balance this wallet can hold, in the order the catalogue
+    // declares them: `id`, `name`, `denom`, `sourceNote` (where the money
+    // actually is), `balance` (decimal string, the shape the zone returns, and
+    // empty until the first read lands — which is not the same as zero),
+    // `address` (what a peer would pay it at, empty when it cannot receive),
+    // `addressForm`, `canReceive`, `canClaim`, `claimVerb`, `empty`.
+    PROP(QVariantList assets READONLY)
+    // One map per way this wallet can pay, most private first: `id`, `name`,
+    // `promise` (the sentence shown at the moment of payment), `denom`,
+    // `source` and `sourceName` and `balance` (the holding it spends), `payTo`
+    // (the form of address it can pay — 0 shielded keys, 1 public account id),
+    // `claimId`, and `discloses` — `{amount, payer, payee, nothing,
+    // everything}`, what the chain learns.
+    //
+    // `discloses` is the same struct the receipt and the visibility panel read,
+    // so what a rail promises before a payment and what it admits afterwards
+    // cannot disagree. A rail with no `claimId` never reaches this list.
+    PROP(QVariantList rails READONLY)
     // True when the private balance includes an account this wallet did not
     // create — i.e. money has been received. A payment is credited to an
     // address derived from an identifier the *sender* picked at random, so it
@@ -134,9 +162,6 @@ class ChatBackend
     // WORKAROUND. Remove with the summing in readWalletState once a payment
     // arrives at the address it was sent to. See demo/poc/.
     PROP(bool receivedElsewhere READONLY)
-    // This wallet's shielded receiving keys (lez_core.get_private_account_keys),
-    // the payload shareAddress puts in a card. Empty until the wallet is ready.
-    PROP(QString myReceiveKeys READONLY)
     // The recovery phrase, set once when this instance mints a new wallet and
     // never read back from storage. Shown once, then the view is expected to
     // stop displaying it.
@@ -151,17 +176,29 @@ class ChatBackend
     SLOT(void refreshBalances())
     // Ask the peer for somewhere to pay.
     SLOT(void requestAddress(QString conversationId))
-    // Answer that ask with this wallet's shielded receiving keys.
-    SLOT(void shareAddress(QString conversationId))
-    // Pay `amount` to the shielded keys from an address-share card, then post
-    // the receipt into the same conversation.
-    SLOT(void sendPrivate(QString conversationId, QString toKeysJson, QString amount))
+    // Answer that ask with the address for one of this wallet's holdings. The
+    // asset is named because there is more than one answer: a shielded key set
+    // and a public account id are paid by different rails, and the card has to
+    // say which it carries or the payer has to guess.
+    SLOT(void shareAddress(QString conversationId, QString assetId))
+    // Pay `amount` to the address from an address-share card on the named rail,
+    // then post the receipt into the same conversation. The rail decides what
+    // the chain learns, so it is chosen, never defaulted silently.
+    SLOT(void sendPayment(QString conversationId, QString railId, QString toAddress,
+                          QString amount))
+    // Move a holding that is owed into one that can be spent — the vault into
+    // the private account. Only for a holding whose row says canClaim.
+    SLOT(void claimHolding(QString assetId, QString amount))
 
     // Put a payment to the room before making it. `threshold` is how many
     // members must approve — the proposer's own approval is counted, so a
     // threshold of 1 is a proposal that is immediately ready, not a send.
-    SLOT(void proposePayment(QString conversationId, QString toKeysJson, QString label,
-                             QString amount, int threshold))
+    //
+    // The rail is part of the terms: the room is agreeing to a payment that
+    // discloses a particular set of things, and settling it on a different rail
+    // would be settling something else.
+    SLOT(void proposePayment(QString conversationId, QString railId, QString toAddress,
+                             QString label, QString amount, int threshold))
     // Add this member's approval. Approving twice is not two approvals: the
     // fold deduplicates by author.
     SLOT(void approveIntent(QString conversationId, QString intentId))

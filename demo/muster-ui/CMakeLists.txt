@@ -14,6 +14,9 @@ logos_module(
         src/ChatBackend.h
         src/ChatBackend.cpp
         src/MusterMessage.h
+        src/Zone.h
+        src/Assets.h
+        src/ChatBackendAssets.cpp
         src/ChatBackendWallet.cpp
         src/ChatBackendJourney.cpp
         src/ChatBackendIntent.cpp
