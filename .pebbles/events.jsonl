@@ -132,3 +132,11 @@
 {"type":"create","timestamp":"2026-08-12T22:59:23.739032994Z","issue_id":"exo-270","payload":{"description":"Tranche 5 of the diagram programme (docs/diagrams/README.md §5) — Family C mechanics, drawn with a specified-not-built status strip per §6 Q1.","priority":"3","title":"mech-plugin-blocks: typed blocks only, no canvas","type":"feature"}}
 {"type":"rename","timestamp":"2026-08-12T22:59:23.765194566Z","issue_id":"exo-270","payload":{"new_id":"exo-2d5.25"}}
 {"type":"dep_add","timestamp":"2026-08-12T22:59:23.765194566Z","issue_id":"exo-2d5.25","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.18","payload":{}}
+{"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.19","payload":{}}
+{"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.20","payload":{}}
+{"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.21","payload":{}}
+{"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.22","payload":{}}
+{"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.23","payload":{}}
+{"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.24","payload":{}}
+{"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.25","payload":{}}
