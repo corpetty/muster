@@ -179,8 +179,11 @@
     dominant-baseline: middle;
     transition: fill 0.3s ease, opacity 0.3s ease;
   }
-  .bc-node-sub { font-size: 9px; fill: var(--bc-muted); }
-  .bc-node-mono { font-family: var(--bc-mono); }
+  /* Written `.bc-node text.x`, not `.x`: a bare single-class selector is
+     specificity 0-1-0 and loses to `.bc-node text` at 0-1-1, so the modifier's
+     font-size would apply while its FILL silently did not. */
+  .bc-node text.bc-node-sub { font-size: 9px; fill: var(--bc-muted); }
+  .bc-node text.bc-node-mono { font-family: var(--bc-mono); }
 
   /* Ours, as opposed to the platform's. */
   .bc-node-ours rect { stroke: var(--bc-signal); fill: var(--bc-signal-soft); }
@@ -193,7 +196,9 @@
   /* Beyond the device: dark ground, light ink. */
   .bc-node-out rect { fill: #2E3436; stroke: var(--bc-outside-rule); }
   .bc-node-out text { fill: var(--bc-outside-ink); }
-  .bc-node-out .bc-node-sub { fill: #96A19B; }
+  /* .bc-svg-prefixed so it outranks `.bc-node text.bc-node-sub` above rather
+     than depending on source order — a dark-on-dark sub is unreadable. */
+  .bc-svg .bc-node-out text.bc-node-sub { fill: #96A19B; }
 
   /* ── Entry zones ── */
   .bc-entry .bc-entry-frame, .bc-entry .bc-entry-header { stroke: none; transition: fill 0.3s ease, opacity 0.3s ease; }
@@ -707,7 +712,10 @@
       : `M ${sx} ${sy} L ${sx} ${midY} L ${tx} ${midY} L ${tx} ${ty - 2}`;
 
     const g = document.createElementNS(SVG_NS, 'g');
-    const outward = ['store-nodes', 'sequencer', 'public-record'].includes(toId);
+    // Which nodes are "outside the device" is a property of the node, read off
+    // its own class, so nothing here has to keep a list of them in sync.
+    const target = svg.querySelector('[data-id="' + toId + '"]');
+    const outward = target && target.classList.contains('bc-node-out');
     g.setAttribute('class', 'bc-arrow bc-flow-arrow' + (outward ? ' bc-flow-out' : ''));
     const p = document.createElementNS(SVG_NS, 'path');
     p.setAttribute('d', d);

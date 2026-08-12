@@ -131,8 +131,11 @@
     dominant-baseline: middle;
     transition: fill 0.3s ease, opacity 0.3s ease;
   }
-  .bc-node-sub { font-size: 9px; fill: #656E66; }
-  .bc-node-mono { font-family: 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace; }
+  /* Written `.bc-node text.x`, not `.x`: a bare single-class selector is
+     specificity 0-1-0 and loses to `.bc-node text` at 0-1-1, so the modifier's
+     font-size would apply while its FILL silently did not. */
+  .bc-node text.bc-node-sub { font-size: 9px; fill: #656E66; }
+  .bc-node text.bc-node-mono { font-family: 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace; }
 
   /* Ours, as opposed to the platform's. */
   .bc-node-ours rect { stroke: #4B33C4; fill: #EAE6FA; }
@@ -145,7 +148,9 @@
   /* Beyond the device: dark ground, light ink. */
   .bc-node-out rect { fill: #2E3436; stroke: #3A4144; }
   .bc-node-out text { fill: #DCE2DE; }
-  .bc-node-out .bc-node-sub { fill: #96A19B; }
+  /* .bc-svg-prefixed so it outranks `.bc-node text.bc-node-sub` above rather
+     than depending on source order — a dark-on-dark sub is unreadable. */
+  .bc-svg .bc-node-out text.bc-node-sub { fill: #96A19B; }
 
   /* ── Entry zones ── */
   .bc-entry .bc-entry-frame, .bc-entry .bc-entry-header { stroke: none; transition: fill 0.3s ease, opacity 0.3s ease; }

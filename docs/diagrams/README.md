@@ -269,16 +269,30 @@ None of this produces a publishable figure. All of it makes every later tranche 
 
 ## 8. Built so far
 
-Tranche 0 is complete. What exists:
+Tranches 0 and 1 are complete.
+
+**Tranche 0 — foundations.**
 
 | | |
 |---|---|
-| `substrate-stack.html` | The forked engine, re-skinned, with six views. Mix and `muster-module` both shown as not shipped; a dark *beyond your device* band naming the observers |
-| `substrate-stack-*.svg` + `.png` | Six exported frames, generated — edit the substrate, never the frame |
-| `manifest.json` | Provenance for six entries, source hashes stamped |
+| `substrate-stack.html` | The forked engine, re-skinned, six views. Mix and `muster-module` both shown as not shipped; a dark *beyond your device* band naming the observers |
+| `manifest.json` | Provenance per figure, source hashes stamped |
 | `tools/check-manifest.py` | `--update` re-stamps hashes, `--stamp` writes provenance blocks into the SVGs. All four failure modes verified to fire |
-| `tools/export-frames.mjs` | Frames out of a substrate, no dependencies |
+| `tools/export-frames.mjs` | Frames out of a substrate, no dependencies, idempotent |
 | `tools/render-png.sh` | 2× PNGs, borrowing librsvg from nix when it is not local |
 | `.pre-commit-config.yaml` | The `diagram-manifest` hook |
 
 The five post-1 figures moved and were renamed; `01-discovery-supporting-material.md` §8 points at the new names.
+
+**Tranche 1 — the bridge.**
+
+| | |
+|---|---|
+| `arch-instance-topology.svg` | The **process** diagram, as distinct from the layer diagram: two processes, the QtRO seam with `ChatBackend` on the source side, per-instance state, and the two live remote dependencies. Establishes the box names |
+| `substrate-pipeline.html` | **The keystone.** Seven stages × (conventionally, and who runs it / what runs it here / who still sees). Six views, including per-use-case retellings and one that marks the two stages left unassessed |
+
+`arch-three-hosts` from the catalogue is **already covered** by `substrate-stack.html`'s basecamp / standalone / headless views and does not need a separate figure.
+
+Twelve exported frames across the two substrates, each with a 2× PNG. Frames are generated: edit the substrate, never the frame.
+
+**Two bugs fixed in the inherited engine**, both silent-failure shaped and worth knowing about: marker fills are unreachable by descendant selectors, so every arrowhead rendered grey; and a bare single-class text modifier (`.bc-flag`) loses on specificity to `.bc-node text`, so gap flags rendered bold-and-black instead of bold-and-red — the colour was the only thing marking a gap. Both are recorded in `tools/CLAUDE.md`.

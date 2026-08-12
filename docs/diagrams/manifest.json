@@ -57,6 +57,103 @@
       "recheck": "Every phase. P0 landing makes muster-module real and it stops being dashed; ADR-010's resolution may remove the chat_module box entirely; any movement on LOGOS-MIXNET changes the network layer."
     },
     {
+      "file": "substrate-pipeline.html",
+      "serves": "BOTH",
+      "shows": "The keystone: seven pipeline stages against what runs each conventionally and who operates that, what runs it here, and who still sees what. Six views, including per-use-case retellings and the two stages left unassessed.",
+      "sources": [
+        {
+          "path": "docs/posts/01-discovery-supporting-material.md",
+          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "note": "§1 the seven stages and their leak descriptions; §2 the scoring and the cell-by-cell justification"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "the row-by-row basis for every 'what runs it here' and 'who still sees' cell"
+        },
+        {
+          "path": "docs/00-vision.md",
+          "sha256": "a9cb276d78acf0f75195f9489df54dde45d602b6cb4f0d56d13b61ac7f0afa44",
+          "note": "the honesty rules this figure is built to satisfy, including FS-9's content/metadata line"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "F-4/FS-6 as specified-and-unbuilt, behind the contracting row's gap"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "Stage names and leak descriptions, verbatim from the published PriFi competitor matrix cross-check via §1"
+        },
+        {
+          "grade": "measured",
+          "note": "The discovery and negotiation rows' 'what runs it here' — observed on this machine, 2026-08-11/12"
+        },
+        {
+          "grade": "from-source",
+          "note": "Contracting and settlement rows read off the build and the consumed contracts. Ordering and enforcement are marked NOT ASSESSED in the figure itself, not merely omitted, because a diagram is where an unscored cell gets quietly filled in"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The whole 'conventionally' column characterises the status quo. It is not a measurement of any named service, and no cell in it should be read as one"
+        }
+      ],
+      "generates": [
+        "substrate-pipeline-overview.svg",
+        "substrate-pipeline-argument.svg",
+        "substrate-pipeline-neglected-middle.svg",
+        "substrate-pipeline-pay-a-friend.svg",
+        "substrate-pipeline-dex-trade.svg",
+        "substrate-pipeline-unassessed.svg"
+      ],
+      "recheck": "Every phase, and before any post using it publishes. The two unassessed cells become assessable only when the zone answers on mempool visibility and the production sequencer model; the contracting row changes when F-4/FS-6 land."
+    },
+    {
+      "file": "arch-instance-topology.svg",
+      "serves": "BOTH",
+      "shows": "One running instance: the isolated ui-host process holding the QML view and a QtRO replica, the app process holding Logos Core and every module, per-instance state on disk, and the two live remote dependencies that leave the machine.",
+      "sources": [
+        {
+          "path": "demo/muster-ui/README.md",
+          "sha256": "b4e0c2b1fd814b5222031774bdd7fe743d98443f93fc5d3aeefeca9eb1df0268",
+          "note": "the standalone app's startup sequence, the isolated ui-host process, and what two instances need to coexist"
+        },
+        {
+          "path": "demo/muster-ui/metadata.json",
+          "sha256": "e4953f1434822141605d47711bcde4351f5df915e2ecac42f66068ccc2425a87",
+          "note": "the module set and the codegen keys behind the QtRO seam"
+        },
+        {
+          "path": "demo/muster-ui/src/ChatBackend.h",
+          "sha256": "8132b351c95fad7a9adeff1904131d315aab7fe9575d76712facb2c829fa57bd",
+          "note": "ChatBackend derives ChatBackendSimpleSource — it is the QtRO source, not the replica"
+        },
+        {
+          "path": "demo/muster-ui/src/ChatBackendWallet.cpp",
+          "sha256": "3857e18584ed75b807ecbfa46e094f2bd06e1969d755b85342853b52d77dffe3",
+          "note": "walletDir() derives from the chat module's assigned instance directory and refuses rather than sharing a fallback"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "§5 — two live remote dependencies, and no offline or local mode"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "The process split, the module set, which side of the QtRO seam ChatBackend sits on, and the wallet-path derivation — all read off the code and the module README rather than reconstructed"
+        },
+        {
+          "grade": "from-source",
+          "note": "What each remote dependency observes, carried from GAPS.md; the store-node subscription-shape leak is the documented shape of one-topic-per-conversation delivery, not separately measured"
+        }
+      ],
+      "recheck": "P3 and P4. ADR-010 may change which module mints identity, and the specified client replaces the muster_ui plugin box with muster-module.lgx plus muster-ui.lgx across the same seam."
+    },
+    {
       "file": "pipeline-seven-stages.svg",
       "serves": "POST",
       "shows": "All seven stages with their leak descriptions, the four that precede a transaction, the three the chain is in, and the one the argument concentrates on.",

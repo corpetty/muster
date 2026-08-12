@@ -93,7 +93,11 @@ def stamp(manifest: dict) -> int:
     written = 0
     for fig in manifest.get("figures", []):
         path = DIAGRAMS / fig["file"]
-        if not path.exists():
+        # Only SVGs, matching what check() validates. An interactive substrate is
+        # an HTML page that happens to contain a <desc>; stamping it would write
+        # a block nothing ever checks, duplicating the header comment that
+        # already explains the file.
+        if not path.exists() or path.suffix != ".svg":
             continue
         text = path.read_text(encoding="utf-8")
         block = render_provenance(fig)

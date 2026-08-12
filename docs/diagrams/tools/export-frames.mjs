@@ -36,7 +36,12 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIAGRAMS = resolve(HERE, "..");
 
-const OUTWARD = new Set(["store-nodes", "sequencer", "public-record"]);
+/**
+ * An arrow that crosses out of the device gets the outside accent. Which nodes
+ * those are is read from the substrate — any node carrying `bc-node-out` — not
+ * from a list here, so a second substrate does not have to be known about.
+ */
+const OUTWARD_CLASS = "bc-node-out";
 
 const die = (msg) => {
   console.error(`export-frames: ${msg}`);
@@ -93,8 +98,8 @@ function flatten(css, vars) {
  */
 function geometry(svg) {
   const boxes = {};
-  for (const m of svg.matchAll(/data-id="([^"]+)"\s*>([\s\S]*?)<\/g>/g)) {
-    const [, id, inner] = m;
+  for (const m of svg.matchAll(/<g class="([^"]*)" data-id="([^"]+)"\s*>([\s\S]*?)<\/g>/g)) {
+    const [, cls, id, inner] = m;
     const rect = inner.match(/<rect\b[^>]*>/);
     if (!rect) continue;
     const attr = (name) => {
@@ -103,7 +108,12 @@ function geometry(svg) {
     };
     const x = attr("x"), y = attr("y"), w = attr("width"), h = attr("height");
     if ([x, y, w, h].some((v) => v === null)) continue;
-    boxes[id] = { cx: x + w / 2, top: y, bottom: y + h };
+    boxes[id] = {
+      cx: x + w / 2,
+      top: y,
+      bottom: y + h,
+      outward: cls.split(/\s+/).includes(OUTWARD_CLASS),
+    };
   }
   return boxes;
 }
@@ -131,7 +141,7 @@ function flowArrows(view, boxes) {
     for (let i = 0; i < path.length - 1; i++) {
       const s = boxes[path[i]], t = boxes[path[i + 1]];
       if (!s || !t) die(`view "${view.id}": no geometry for ${!s ? path[i] : path[i + 1]}`);
-      const outward = OUTWARD.has(path[i + 1]);
+      const outward = t.outward;
       const cls = "bc-arrow bc-flow-arrow" + (outward ? " bc-flow-out" : "");
       const marker = outward ? "bc-flow-marker-out" : "bc-flow-marker";
       out.push(
