@@ -76,6 +76,9 @@ QtObject {
         }
     }
     readonly property string walletError: backend ? backend.walletError : ""
+    // WORKAROUND flag — see ChatBackend.rep. True once the balance includes an
+    // account this wallet did not create, which is how received money arrives.
+    readonly property bool receivedElsewhere: backend ? backend.receivedElsewhere : false
     readonly property string privateBalance: backend ? backend.privateBalance : ""
     readonly property string publicBalance: backend ? backend.publicBalance : ""
     readonly property string myReceiveKeys: backend ? backend.myReceiveKeys : ""

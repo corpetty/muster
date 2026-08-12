@@ -22,6 +22,8 @@ Rectangle {
     required property string statusLabel
     required property string privateBalance
     required property string publicBalance
+    // True when the balance sums in accounts the user never created.
+    property bool receivedElsewhere: false
     property string errorText: ""
 
     signal openRequested
@@ -91,6 +93,22 @@ Rectangle {
                 font.family: Theme.typography.mono
                 font.pixelSize: Theme.typography.secondaryText
             }
+        }
+
+        // Said where the number is, not in a panel someone has to open. A
+        // received payment lands at an account the recipient never created, so
+        // this figure is a sum over accounts found by scanning — and a single
+        // send can only draw on one of them. Both facts are surprising enough
+        // that the balance should not be shown without them.
+        LogosText {
+            objectName: "balanceWorkaroundNote"
+            Layout.fillWidth: true
+            visible: root.ready && root.receivedElsewhere
+            wrapMode: Text.WordWrap
+            text: qsTr("Includes accounts you did not create — payments arrive at a derived "
+                     + "address, not the one you shared. One send draws on one of them.")
+            color: Theme.palette.textTertiary
+            font.pixelSize: Theme.typography.badgeText
         }
 
         LogosText {

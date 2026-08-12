@@ -205,6 +205,15 @@ private:
     // registered at all.
     bool m_privateAccountNeedsRegistration = false;
     QString m_privateAccount;
+    // WORKAROUND (see readWalletState and demo/poc/): every private account
+    // this wallet knows that holds a balance, largest first. Incoming payments
+    // land at accounts derived from an identifier the sender chose at random,
+    // so the account we created and published is usually not the one holding
+    // the money — and not the one a payment can be spent from.
+    QStringList m_fundedPrivateAccounts;
+    // The account to spend from: the largest funded one, or the account we
+    // created when nothing has been received yet.
+    QString spendFromAccount() const;
     QString m_publicAccount;
 
     // ── journey (ChatBackendJourney.cpp) ─────────────────────────────────
