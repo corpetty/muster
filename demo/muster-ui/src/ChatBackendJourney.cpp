@@ -34,6 +34,11 @@ namespace {
 int rankOf(const QString& step)
 {
     if (step == QLatin1String("payment"))
+        return 4;
+    // Agreeing *who must agree* sits between having somewhere to pay and
+    // paying. A room that never proposes anything skips it, which is why the
+    // rank is a floor and not a sequence to walk.
+    if (step == QLatin1String("authorization"))
         return 3;
     if (step == QLatin1String("address"))
         return 2;
@@ -91,6 +96,17 @@ void ChatBackend::noteJourneyMessage(const QString& content, bool fromSelf, qint
         step = QStringLiteral("address");
         what = fromSelf ? tr("You shared a private address")
                         : tr("They shared a private address");
+    } else if (type == QLatin1String("intent-propose")) {
+        step = QStringLiteral("authorization");
+        const QString amount = amountOf(content);
+        what = fromSelf ? tr("You proposed paying %1 LEZ").arg(amount)
+                        : tr("They proposed paying %1 LEZ").arg(amount);
+    } else if (type == QLatin1String("intent-approve")) {
+        step = QStringLiteral("authorization");
+        what = fromSelf ? tr("You approved it") : tr("They approved it");
+    } else if (type == QLatin1String("intent-drop")) {
+        step = QStringLiteral("authorization");
+        what = fromSelf ? tr("You dropped the proposal") : tr("They dropped the proposal");
     } else if (type == QLatin1String("send-receipt")) {
         step = QStringLiteral("payment");
         const QString amount = amountOf(content);
@@ -149,6 +165,42 @@ QVariantMap ChatBackend::actionForMessages(const QVariantList& messages) const
             paid = true;
             paidBySelf = fromSelf;
         }
+    }
+
+    // A live proposal outranks the address dance: once a room is deciding
+    // something, that is what the room is about, and the ask that led to it is
+    // answered by definition.
+    const QVariantMap live = liveIntentForMessages(messages);
+    if (!live.isEmpty()) {
+        const QString intentState = live.value(QStringLiteral("state")).toString();
+        const int approvals = live.value(QStringLiteral("approvals")).toInt();
+        const int threshold = live.value(QStringLiteral("threshold")).toInt();
+        const bool mine = live.value(QStringLiteral("proposedByMe")).toBool();
+        const bool approved = live.value(QStringLiteral("approvedByMe")).toBool();
+        const QString count = tr("%1 of %2 approved").arg(approvals).arg(threshold);
+
+        QString s, a, d;
+        if (intentState == QLatin1String("ready") && mine) {
+            s = QStringLiteral("needs-you");
+            a = tr("Ready to pay");
+            d = count;
+        } else if (intentState == QLatin1String("ready")) {
+            s = QStringLiteral("waiting");
+            a = tr("Waiting to be paid");
+            d = count;
+        } else if (!approved) {
+            // The only row that is genuinely an ask of this person.
+            s = QStringLiteral("needs-you");
+            a = tr("Needs your approval");
+            d = count;
+        } else {
+            s = QStringLiteral("waiting");
+            a = tr("Waiting on approvals");
+            d = count;
+        }
+        return QVariantMap{{QStringLiteral("state"), s},
+                           {QStringLiteral("action"), a},
+                           {QStringLiteral("detail"), d}};
     }
 
     // Ordered by what the user should do about it. A thing waiting on *you* is

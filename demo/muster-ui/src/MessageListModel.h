@@ -50,6 +50,12 @@ public:
     void setMessages(QVector<MessageItem> items);
     void clear();
 
+    // Row of the proposal card that minted `intentId`, or -1. Lives here rather
+    // than in QML because finding it means reading a role off every row, and
+    // the role enum is not registered with the engine — the view would have to
+    // know a number. The pinned banner uses it to scroll to the card.
+    Q_INVOKABLE int rowOfIntent(const QString& intentId) const;
+
 private:
     // "Today" / "Yesterday" / short date for a day-separator heading.
     QString dayLabel(const QDateTime& timestamp) const;

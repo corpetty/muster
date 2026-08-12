@@ -34,6 +34,24 @@ Each peer keeps its chat identity *and* its wallet under `.run/<name>/`. They ar
 8. **Wait.** The zone is proving; the wallet reads `sending` for as long as it takes. This is real zero-knowledge work, not a spinner.
 9. **Receipt.** A receipt card lands in the conversation for both. Refresh balances to see them move.
 
+## The other journey: agreeing before paying
+
+The same steps, but the payment is put to the room first. Needs a third peer, because a threshold over two people is barely a threshold:
+
+```bash
+make run PEER=carol      # terminal 3
+```
+
+1. **Make a group.** From **Start something**, open a room and add the other two by address. Wait for both to commit — a pending member cannot read anything yet, and the scope line says so.
+2. **Someone shares an address.** The same card as before: whoever is being paid taps **Share my address**.
+3. **Propose instead of paying.** That card now offers two things. **Send LEZ** pays it outright; **Propose it to the room** puts it to everyone. Take the second.
+4. **Pick the threshold.** The dialog asks for an amount, then how many must agree — one button per member, defaulting to everyone. *Proposing counts as approving*, so 1 means "ready the moment it is made".
+5. **Watch the slots fill.** The card carries a rail — proposed, collecting, ready, paid — and a row of slots that fill as approvals arrive. A banner above the thread names what the room is waiting on, and **Show it** scrolls to the card. On the home surface that room sorts to the top reading *Needs your approval*.
+6. **Approve** on the other peers. Approving twice is not two approvals.
+7. **Pay it.** Once ready, only the peer who proposed it sees **Pay it** — the money leaves their account. The receipt lands in the thread and closes the proposal.
+
+**Say the honest thing while recording this.** The approvals are real and unforgeable — the chat module binds each one to its author — and there is no coordination server anywhere in it, so nobody outside the room learns what was proposed or who agreed. But **the zone does not enforce the threshold**. The paying account is single-key, so the proposer could have paid without waiting, and this conversation is the only record that they did not. Closing that needs an account whose policy the chain checks; `lez-multisig` does exactly this on a local sequencer, but its accounts are public — so today it is a chain-enforced threshold *or* a shielded amount, not both. That trade is the most interesting thing in this journey. Lead with it, rather than letting a row of filled slots imply more than it delivers.
+
 ## When it goes wrong
 
 - **Stuck at `Initialising`** — `logos.test` is unreachable. The demo needs the public delivery network; there is no local mode.

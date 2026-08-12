@@ -30,10 +30,12 @@ QtObject {
     readonly property string stepDiscovery: "discovery"
     readonly property string stepConversation: "conversation"
     readonly property string stepAddress: "address"
+    readonly property string stepAuthorization: "authorization"
     readonly property string stepPayment: "payment"
 
     readonly property var stepOrder: [root.stepDiscovery, root.stepConversation,
-                                      root.stepAddress, root.stepPayment]
+                                      root.stepAddress, root.stepAuthorization,
+                                      root.stepPayment]
 
     function rankOf(step) {
         const i = root.stepOrder.indexOf(step);
@@ -46,6 +48,8 @@ QtObject {
             return qsTr("Talking");
         case root.stepAddress:
             return qsTr("Agreeing where to pay");
+        case root.stepAuthorization:
+            return qsTr("Agreeing to pay");
         case root.stepPayment:
             return qsTr("Paying");
         default:
@@ -169,6 +173,59 @@ QtObject {
             evidence: qsTr("ADR-010 open · the two identities are minted independently")
         },
 
+        // ── authorization ────────────────────────────────────────────────
+        {
+            step: root.stepAuthorization,
+            kind: "protects",
+            title: qsTr("Every approval is bound to who gave it"),
+            body: qsTr("An approval is an ordinary message, so the chat module authenticates it "
+                     + "the way it authenticates anything else: it carries its author, and nobody "
+                     + "in the room can forge one, replay someone else's, or approve twice. The "
+                     + "count on the card is a real count of real members — and it was collected "
+                     + "without a coordination server that would have learned who was deciding "
+                     + "what, and when."),
+            evidence: qsTr("chat_module message sender · one approval per author, deduplicated")
+        },
+        {
+            step: root.stepAuthorization,
+            kind: "others-leak",
+            title: qsTr("Elsewhere, collecting approvals is a hosted service"),
+            body: qsTr("The usual multisig flow pools proposals and signatures in a transaction "
+                     + "service. Its operator — and often anyone with the URL — sees the proposal, "
+                     + "who has signed, who has not, and the timing of each, before anything "
+                     + "reaches a chain. The negotiation leaks before the transaction does."),
+            evidence: qsTr("any hosted multisig coordination service")
+        },
+        {
+            step: root.stepAuthorization,
+            kind: "gap",
+            title: qsTr("The zone does not enforce the threshold"),
+            body: qsTr("This is the honest limit of what you just saw. The approvals are real and "
+                     + "the count is real, but no chain checks them: the account that pays is "
+                     + "single-key, so whoever proposed it could have paid without waiting, and "
+                     + "the only record that they did wait is this conversation. \"2 of 3\" is "
+                     + "enforced by the room, not by the zone."),
+            fix: qsTr("An account whose policy the zone itself enforces, so the threshold is "
+                    + "checked where the money moves rather than where it was agreed."),
+            status: "partial",
+            evidence: qsTr("lez-multisig implements M-of-N on a local sequencer; not deployed to "
+                         + "this testnet, and its accounts are public — today it is a threshold "
+                         + "or a shielded amount, not both")
+        },
+        {
+            step: root.stepAuthorization,
+            kind: "gap",
+            title: qsTr("An approval is not bound to what it approves"),
+            body: qsTr("Approvals name a proposal by an id this app minted. Nothing in one commits "
+                     + "to an execution environment, an account, a slot or an expiry, so their "
+                     + "scope is this conversation by convention rather than by construction."),
+            fix: qsTr("Signing payloads that commit to environment, account, slot and expiry, so "
+                    + "a contribution is worthless anywhere else."),
+            status: "none",
+            evidence: qsTr("F-5 in the real client's requirements · this demo builds no signing "
+                         + "payloads of its own")
+        },
+
         // ── payment ──────────────────────────────────────────────────────
         {
             step: root.stepPayment,
@@ -245,6 +302,20 @@ QtObject {
                 { label: qsTr("the address shared"), value: qsTr("not disclosed") },
                 { label: qsTr("that something was shared"), value: qsTr("visible") },
                 { label: qsTr("any name resolved"), value: qsTr("none — nothing was looked up") }
+            ]
+        },
+        "authorization": {
+            caption: qsTr("What a relay sees"),
+            rows: [
+                { label: qsTr("what was proposed"), value: qsTr("not disclosed") },
+                { label: qsTr("who approved"), value: qsTr("not disclosed") },
+                { label: qsTr("how many approved"), value: qsTr("not disclosed") },
+                { label: qsTr("that the room is deciding"), value: qsTr("visible as timing") },
+                // The one row here that is about the chain rather than the
+                // relay, and it belongs on this step: the deciding never
+                // reaches the chain at all, which is the good half of the same
+                // fact whose bad half is that the chain cannot enforce it.
+                { label: qsTr("any of it, on-chain"), value: qsTr("none — nothing was published") }
             ]
         },
         "payment": {

@@ -8,9 +8,11 @@ The short version: this is a one-week prototype built to back a campaign write-u
 
 ```
 muster-ui/     fork of logos-co/logos-chat-ui v0.2.2 (QML + QtRO C++ backend)
-  src/         ChatBackend (upstream) + ChatBackendWallet + ChatBackendJourney (ours)
+  src/         ChatBackend (upstream) + ChatBackendWallet + ChatBackendJourney
+               + ChatBackendIntent (ours)
   src/qml/     ChatUi module; ours are MusterCard, WalletCard, SendDialog,
-               VisibilityPanel, VisibilityClaims, JobStrip
+               ProposeDialog, PinnedIntent, VisibilityPanel, VisibilityClaims,
+               JobStrip
 .run/          per-peer state (gitignored) — one directory is one identity
 .tools/        local downloads (gitignored)
 ```
@@ -26,6 +28,8 @@ Upstream modules consumed as flake inputs, not vendored: `chat_module` (e2e chat
 - **`save()` after every mutating zone call.** The wallet-ffi is in-memory; without it the next `open()` has forgotten the transfer.
 - **A peer's wallet lives inside its chat instance directory.** Two peers sharing one directory would share one identity, which would make any recording a lie.
 - **Claims shown in the UI are data** (`VisibilityClaims.qml`), carrying evidence and, for a gap, the fix and its honest status. A claim without evidence must be visible as a hole. The honesty rules in `../docs/00-vision.md` bind this directory even though the invariants do not.
+- **Conversation state is a fold, never a second record.** The journey, the home surface and the proposals are all `reduce(messages)` over `get_messages`, so they cannot drift, survive a restart for nothing, and are correct for a conversation this instance did not start. Two passes where order matters — store-node catchup delivers an approval before its proposal often enough to matter.
+- **An approval is authenticated, not authorizing.** `chat_module` binds every message to its author, so the count on a proposal card is real and unforgeable *in the room*. The zone checks none of it: the paying account is single-key. Any wording added near a threshold has to stay inside the `authorization` claim in `VisibilityClaims.qml`, which says exactly this. Filled slots beside a shielded payment imply chain enforcement if left to speak for themselves.
 
 ## Testing posture
 

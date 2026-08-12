@@ -46,6 +46,10 @@ Item {
     // falls through to the plain bubble below, which is what lets the card
     // vocabulary grow without breaking anyone.
     property bool walletReady: false
+    // Every proposal in this conversation, as the backend folded them. The
+    // thread hands the whole list down rather than a per-message lookup so a
+    // card's live state comes from the same read every other card used.
+    property var intents: []
     readonly property var musterCard: {
         const text = root.content;
         if (!text || text.charAt(0) !== "{")
@@ -54,9 +58,10 @@ Item {
             const parsed = JSON.parse(text);
             if (!parsed || !parsed.muster || !parsed.type)
                 return null;
-            // Only the three we render; anything else is a plain bubble.
-            if (parsed.type !== "address-request" && parsed.type !== "address-share"
-                && parsed.type !== "send-receipt")
+            // Only the ones we render; anything else is a plain bubble.
+            const known = ["address-request", "address-share", "send-receipt",
+                           "intent-propose", "intent-approve", "intent-drop"];
+            if (known.indexOf(parsed.type) === -1)
                 return null;
             return parsed;
         } catch (e) {
@@ -64,8 +69,27 @@ Item {
         }
     }
 
+    // The folded proposal this card is about, matched by the id the proposer
+    // minted. Null until the fold catches up, which is why the card renders its
+    // terms from its own JSON and only its progress from here.
+    readonly property var musterIntent: {
+        if (!root.musterCard || root.musterCard.type !== "intent-propose")
+            return null;
+        const id = String(root.musterCard.intentId || "");
+        const list = root.intents || [];
+        for (let i = 0; i < list.length; ++i) {
+            if (String(list[i].intentId) === id)
+                return list[i];
+        }
+        return null;
+    }
+
     signal shareAddressRequested
     signal payRequested(string keysJson, string label)
+    signal proposeRequested(string keysJson, string label)
+    signal approveRequested(string intentId)
+    signal dropRequested(string intentId)
+    signal submitRequested(string intentId)
 
     implicitWidth: 200
     implicitHeight: bubble.y + bubble.height
@@ -166,11 +190,24 @@ Item {
                 sourceComponent: MusterCard {
                     width: cardLoader.width
                     card: root.musterCard
+                    intent: root.musterIntent
                     isMe: root.isMe
                     walletReady: root.walletReady
                     onShareAddressRequested: root.shareAddressRequested()
                     onPayRequested: function (keysJson, label) {
                         root.payRequested(keysJson, label);
+                    }
+                    onProposeRequested: function (keysJson, label) {
+                        root.proposeRequested(keysJson, label);
+                    }
+                    onApproveRequested: function (intentId) {
+                        root.approveRequested(intentId);
+                    }
+                    onDropRequested: function (intentId) {
+                        root.dropRequested(intentId);
+                    }
+                    onSubmitRequested: function (intentId) {
+                        root.submitRequested(intentId);
                     }
                 }
             }

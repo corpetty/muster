@@ -54,13 +54,28 @@ When it lands, a receipt card appears in the thread on both sides: *100 LEZ, pri
 
 ## 6. Where it is broken
 
-> **⚠️ Known bug, unfixed as of this draft.** The sender is debited and the receipt renders on both sides — but **the recipient's balance never moves.** Alice went from 150 to 50; Bob stayed at 0.
+> **⚠️ Known bug, cause found, reported upstream, not yet worked around here.** The sender is debited and the receipt renders on both sides, but **the recipient's balance never moves.**
 >
-> Ruled out with evidence: it is not sync timing (Bob had synced *past* Alice's block height and re-read his balance afterwards), and it is not the wrong account (the keys he shared and the balance being read resolve to the same account, confirmed by matching the stored identifier against his wallet's own account list).
+> Measured properly, with both peers freshly minted and both private accounts registered on-chain — confirmed by transaction hash, not by the absence of an error. The sender paid 10 of her 150. The zone proved for 7.4 minutes and returned success with a transaction id. She went 150 → 140. He went 0 → 0, re-read five times with a full sync each, over several minutes.
 >
-> The leading hypothesis is that a private account must be registered on-chain before it can be credited — the public account is registered before the faucet will pay it, and the private one never was. That call has been added and is **not yet confirmed as the fix**.
+> The leading hypothesis — that a private account must be registered before it can be credited — **was wrong**. The real cause is worth stating precisely, because it is a good illustration of a privacy property and a usable interface pulling against each other.
 >
-> **This section comes out, or becomes a fix note, before publication.** Until a recipient has actually been credited, the honest claim is that everything up to and including *initiating* a private payment works, and the receiving side is unproven.
+> A private account id is derived from the recipient's viewing key **and an identifier**. The keys a recipient can hand out carry no identifier, so the zone's client picks one *at random* for every payment. The note lands at an account derived from a number the recipient has never seen. Enumerate their wallet afterwards and it is right there — the account they advertised holding nothing, and a brand-new account holding exactly what was sent:
+>
+> ```
+> private 021fbfac…4634 balance=0    <-- advertised, registered, polled
+> private b719ff50…259a balance=10   <-- the payment
+> ```
+>
+> Nothing was lost. It arrived somewhere they had no reason to look. Reported upstream with a single-file reproducer that links the wallet library directly — no chat, no second peer, no app — in `poc/BUG-private-transfer-recipient-identifier.md`.
+>
+> Getting to that answer meant clearing three things that were hiding it, each worth knowing on its own. `register_private_account` *proves*, so through the generated sync client it hit a hardcoded 20-second timeout and had never once succeeded. It also demands an uninitialized account, so it works at creation or never — a peer minted by an older build cannot be repaired, only replaced. And `lez_core` turns out to have a third failure convention: seventeen of its methods return a JSON envelope carrying `success: false` rather than the empty string the others use, so the ordinary check reads a hard failure as success. That last one meant a failed shielding step reported nothing at all — and could have let a *payment* post a receipt for a transfer the zone had rejected, which is the one thing this app must never do.
+>
+> One trap for anyone repeating this: the balance read immediately after a transfer is stale. The sender showed 150 → 150 right after the proof and 150 → 140 on the next refresh. The first number is not evidence of anything.
+>
+> **This section becomes a fix note before publication, not a deletion.** The honest claim today is that everything up to and including *initiating* a private payment works, and that the recipient's client cannot see the money — which, for a user watching their balance, is indistinguishable from not being paid.
+>
+> There is a workaround open to us: enumerate accounts after syncing and treat new private accounts as received notes, rather than polling the one id we published. It would complete the journey. It should ship labelled as a workaround with the upstream issue beside it, because "your balance is the sum of accounts you did not create" is exactly the sort of thing this document exists to disclose rather than smooth over.
 
 ## What this was built on
 

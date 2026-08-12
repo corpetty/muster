@@ -48,6 +48,15 @@ public slots:
     void shareAddress(QString conversationId) override;
     void sendPrivate(QString conversationId, QString toKeysJson, QString amount) override;
 
+    // The intent spine. Implemented in ChatBackendIntent.cpp — these are pure
+    // conversation moves; only submitIntent reaches the wallet, and it does so
+    // through the same sendPrivate path a direct payment takes.
+    void proposePayment(QString conversationId, QString toKeysJson, QString label,
+                        QString amount, int threshold) override;
+    void approveIntent(QString conversationId, QString intentId) override;
+    void dropIntent(QString conversationId, QString intentId, QString reason) override;
+    void submitIntent(QString conversationId, QString intentId) override;
+
     void createConversation(QString peerAddress) override;
     void startActivity(QString verb, QString peerAddress) override;
     void createGroupConversation(QString name, QString description) override;
@@ -184,7 +193,17 @@ private:
     // module reports it created. Cleared as soon as it is used.
     QString m_pendingVerb;
 
+    // Sync to the tip, publish the balances, and declare the wallet Ready.
+    // Split out of openWallet because registering a new private account is an
+    // async step that has to complete first, so there are two paths into it.
+    void finishWalletOpen();
+
     bool m_walletOpen = false;
+    // Set when ensureWalletOpen has just minted the private account, meaning
+    // registration is owed and openWallet must perform it before Ready. Only
+    // ever true for an account created in this run — an older one cannot be
+    // registered at all.
+    bool m_privateAccountNeedsRegistration = false;
     QString m_privateAccount;
     QString m_publicAccount;
 
@@ -207,6 +226,24 @@ private:
     void refreshActions();
 
     QVariantList m_journeyTrail;
+
+    // ── intents (ChatBackendIntent.cpp) ──────────────────────────────────
+    // Fold a thread into its intents, newest proposal last. Every field the UI
+    // shows comes from here: there is no intent state kept anywhere else, so a
+    // peer that was offline for the whole exchange reads the same result as one
+    // that watched it happen. Approvals are attributed by each message's own
+    // author and deduplicated per address, so approving twice is not two.
+    QVariantList intentsForMessages(const QVariantList& messages) const;
+    // The one intent a room is currently about — the last that is neither
+    // final nor dropped — or an empty map. Drives the pinned banner (U-3).
+    QVariantMap liveIntentForMessages(const QVariantList& messages) const;
+    // Re-read the current thread and publish both. Synchronous module reads:
+    // defer it out of event callbacks like refreshActions.
+    void refreshIntents();
+    // Post the receipt that closes `intentId`, and pay it. Shares every step
+    // with a direct send; the id is what ties the receipt back to the proposal.
+    void payForIntent(const QString& conversationId, const QString& toKeysJson,
+                      quint64 amount, const QString& intentId);
 };
 
 #endif

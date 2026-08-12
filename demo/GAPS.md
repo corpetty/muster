@@ -49,6 +49,25 @@ Source material for the week-one *Discovery* article. Every row follows the rule
 
 ---
 
+## 3b. Agreeing to pay
+
+**What happens:** instead of paying an address outright, a member proposes the payment to the room, picks how many people must agree, and the card collects approvals until it is ready. Whoever proposed it then pays.
+
+**Protected.** An approval is an ordinary message, so it inherits the conversation's authentication exactly as text does: it carries its author, and nobody in the room can forge one, replay someone else's, or approve twice — the fold deduplicates by author. The count on the card is a real count of real members. It is also collected **without a coordination service**: there is no server that learns what was proposed, who has agreed, who has not, and when. **[verified — approvals go through the same `send_message` path; attribution is the message's own `sender`, matched against `list_group_members`. See `ChatBackendIntent.cpp`.]**
+
+**The contrast worth drawing.** This is the cleanest comparison in the demo after the label system. The usual multisig flow pools proposals and signatures in a hosted transaction service, where the operator — and frequently anyone with the URL — sees the proposal, the signer set, who has signed and the timing, all *before* anything reaches a chain. The negotiation leaks before the transaction does. Here that entire stage is inside the encrypted room. **[from source — the documented shape of hosted multisig coordination; not separately measured.]**
+
+**Leaks.**
+- **The zone does not enforce the threshold.** This is the honest limit and it must not be soft-pedalled: the account that pays is single-key. Whoever proposed the payment could have paid it without waiting for anyone, and the only record that they *did* wait is the conversation. "2 of 3" is enforced by the room, not by the chain, and an outside observer sees an ordinary shielded transfer with no policy attached to it. **[verified as absent — nothing in our code or `lez_core` reaches a threshold check; the transfer call is the same one a direct send makes.]**
+- **An approval is not bound to what it approves.** Approvals name a proposal by an id this app minted. Nothing commits to an execution environment, an account, a serialization slot or an expiry, so their scope is this conversation by convention rather than by construction. **[verified as absent — we build no signing payloads.]**
+
+**What would close the first:** an account whose policy the zone itself enforces, so the threshold is checked where the money moves rather than where it was agreed.
+**Status: `partial`.** `logos-co/lez-multisig` implements exactly this flow — Squads-style on-chain proposals, M-of-N, `ChainedCall` into a target program — and `lez_core` exposes `send_generic_public_transaction` to drive it. But it runs against a **local sequencer**; there is no documented deployment to the public testnet this demo uses, its proposal state and calls are **public accounts**, and its members must be fresh nonce-0 keypairs claimed at creation. So today the choice is **a chain-enforced threshold or a shielded amount, not both** — which is itself the most useful thing this section can teach, and worth stating as a live trade rather than a missing feature. *(Read off the repo 2026-08-11; re-check before publishing.)*
+
+**What would close the second:** replay binding — signing payloads that commit to environment, account, slot and expiry. **Status: `none`** here; it is F-5 in the real client.
+
+---
+
 ## 4. Paying
 
 **What happens:** `transfer_private` from Bob's shielded account to Alice's shielded keys.
@@ -67,9 +86,41 @@ Whether that figure is expected, hardware-bound, or a symptom of something misco
 
 ## 4b. The open bug, stated plainly
 
-On the first two-peer payment (2026-08-11), the sender's private balance fell from 150 to 50, the receipt card rendered on both sides — and **the recipient's balance never moved**. Ruled out: sync timing (the recipient had synced *past* the sender's height and re-read afterwards) and account identity (the shared keys and the balance read resolve to the same account, verified by converting the stored hex to base58 and matching it against the wallet's own account list). The leading hypothesis is that a private account must be registered on-chain before it can be credited; a `register_private_account` call has been added but is **not yet confirmed as the fix**.
+**Cause found (2026-08-11).** A shielded payment debits the sender and the recipient's balance never moves — but the money is not lost. It is credited to a **different account id than the one the recipient advertised**, and a client polling the id it published sees zero forever.
 
-It is in this document because the article should not describe a payment pipeline as working end to end until a recipient has actually been credited. Everything up to and including *initiating* a shielded payment is real; the receiving side is unproven. **[verified as a symptom; cause unconfirmed.]**
+`wallet_ffi` derives a private account id from *(viewing key, identifier)*. The recipient's keys carry no identifier, so `lez_core.transfer_private` picks one **at random** — its own comment says so — and the note lands at an account neither party can predict. Enumerating the recipient's wallet after syncing finds it: the advertised account at 0, and a brand-new account holding exactly the amount paid.
+
+Written up for the zone's developers, with a single-file reproducer that links `wallet-ffi` directly, in [`poc/BUG-private-transfer-recipient-identifier.md`](poc/BUG-private-transfer-recipient-identifier.md).
+
+What follows is the measurement that got there, kept because the sequence of wrong turns is the useful part.
+
+**The measurement (2026-08-11, two freshly minted peers, LEZ testnet).** Both peers' private accounts were created *and registered on-chain* — confirmed by transaction hash, not by absence of error. The sender held 150 private and paid 10. The zone proved for **7.4 minutes** and returned success with a transaction id. Afterwards:
+
+| | before | after |
+|---|---|---|
+| sender, private | 150 | **140** |
+| recipient, private | 0 | **0** |
+
+The recipient's balance was re-read five times, each with a full sync to tip, over several minutes. It never moved. Reproduced by `muster-ui/doctests/credit/run-credit.mjs`, which drives both instances and prints the two numbers that matter.
+
+**Registration was not the fix** — both accounts were registered and the advertised balance still did not move. The second suspect was right: `get_private_account_keys` does not return the thing `transfer_private` credits. Enumerating the recipient's wallet afterwards showed the payment sitting in a new account:
+
+```
+private 021fbfac…4634 balance=0    <-- advertised, registered, polled
+private b719ff50…259a balance=10   <-- the payment
+```
+
+**Three findings that had to be cleared out of the way first**, each of which had been quietly hiding the real behaviour:
+
+- **`register_private_account` proves, so it must be async.** Called through the generated sync client it hit the hardcoded 20-second timeout every time. The call had been in the code for a day and had *never once succeeded*.
+- **It also requires an uninitialized account.** A second attempt is rejected with `Guest panicked: Account must be uninitialized`, so registration is only possible at creation and a peer minted by an older build cannot be repaired — it has to be re-minted.
+- **`lez_core` has a third failure convention.** Seventeen of its methods return a JSON envelope (`{"success": false, …}`) rather than a bare transaction id, so the usual empty-string check reads a hard failure as success. That is why a shielding step that had failed reported nothing and left the prize in the public account — and why a *payment* could have posted a receipt for a transfer the zone rejected. Every call site now parses the envelope.
+
+**A trap for anyone measuring this:** the balance read immediately after a transfer is stale. The sender showed 150 → 150 right after the proof and 150 → 140 on the next refresh. Do not conclude anything from the first read — which is very likely how the original report came to say the sender was debited by a different amount than it was.
+
+It is in this document because the article must not describe the payment pipeline as working end to end. Everything up to and including *initiating* a shielded payment is real and measured; **the recipient's client shows nothing**, and until either the zone addresses the account it advertised or this app enumerates accounts after syncing, a user watching their balance has no way to know they were paid. **[verified: symptom reproduced twice, cause identified, reported upstream.]**
+
+**There is a workaround available to us**, not yet implemented: after syncing, call `list_accounts` and treat newly appearing private accounts as received notes, rather than polling the one id we published. Worth doing — it would make the journey complete end to end — but it should be written as a workaround with the upstream issue named beside it, not quietly, because "your balance is the sum of accounts you did not create" is exactly the kind of thing this document exists to disclose.
 
 ## 5. What this build does not do at all
 
