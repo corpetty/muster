@@ -113,25 +113,43 @@ Rectangle {
                 WalletCard {
                     objectName: "walletCard"
                     Layout.fillWidth: true
+                    // Same reason as the strip below: a list of holdings is
+                    // taller than the two numbers this replaced, and a squeezed
+                    // wallet clips the row that says why a holding is unusable.
+                    Layout.minimumHeight: implicitHeight
                     ready: store.walletReady
                     busy: store.walletBusy
                     stage: store.walletStage
                     statusLabel: store.walletLabel
-                    privateBalance: store.privateBalance
-                    publicBalance: store.publicBalance
+                    assets: store.assets
                     receivedElsewhere: store.receivedElsewhere
                     errorText: store.walletError
                     onOpenRequested: store.openWallet()
                     onFundRequested: store.fundWallet()
                     onRefreshRequested: store.refreshBalances()
+                    // Empty amount means all of it, which is what the card's
+                    // one-tap claim asks for.
+                    onClaimRequested: function (assetId) {
+                        store.claimHolding(assetId, "");
+                    }
                 }
 
                 // Under the wallet, so the running job sits with the thing it
                 // is doing — and stays visible while the user carries on with
                 // the conversation, which is the point of it being a job.
+                //
+                // The minimum height is load-bearing, not tidying. The wallet
+                // card above grew from two numbers to a list of holdings with
+                // notes, and in a sidebar this tall that is enough to squeeze
+                // the strip to nothing — silently, and worst at exactly the
+                // moment it matters, because the strip only has content while
+                // a job is running. A seven-minute proof with no strip is
+                // indistinguishable from a hang. ActionsPane fills the slack,
+                // so it is the one that should give the space up.
                 JobStrip {
                     objectName: "jobStrip"
                     Layout.fillWidth: true
+                    Layout.minimumHeight: implicitHeight
                     job: store.walletJob
                     stage: store.walletStage
                 }
@@ -166,19 +184,32 @@ Rectangle {
                 }
                 onDetailsRequested: root.detailsShown = !root.detailsShown
                 onAddressRequested: store.requestAddress()
-                onShareAddressRequested: store.shareAddress()
-                onPayRequested: function (keysJson, label) {
-                    sendDialog.keysJson = keysJson;
+                // More than one answer to "where do I pay you", and the choice
+                // is the payee's — sharing a public account invites a payment
+                // anyone can read. One receivable holding still asks, because
+                // the dialog is where that trade-off is stated.
+                onShareAddressRequested: shareAddressDialog.open()
+                onPayRequested: function (toAddress, addressForm, assetName, label) {
+                    sendDialog.toAddress = toAddress;
+                    sendDialog.addressForm = addressForm;
+                    sendDialog.assetName = assetName;
+                    sendDialog.assetKnown = store.railsPaying(addressForm).length > 0;
                     sendDialog.peerLabel = label;
-                    sendDialog.availableBalance = store.privateBalance;
+                    // Only the rails that can pay this form of address. The
+                    // dialog is handed the answer rather than the catalogue, so
+                    // it never has to know what a rail is.
+                    sendDialog.rails = store.railsPaying(addressForm);
                     sendDialog.open();
                 }
                 intents: store.intents
                 liveIntent: store.liveIntent
-                onProposeRequested: function (keysJson, label) {
-                    proposeDialog.keysJson = keysJson;
+                onProposeRequested: function (toAddress, addressForm, assetName, label) {
+                    proposeDialog.toAddress = toAddress;
+                    proposeDialog.addressForm = addressForm;
+                    proposeDialog.assetName = assetName;
+                    proposeDialog.assetKnown = store.railsPaying(addressForm).length > 0;
                     proposeDialog.peerLabel = label;
-                    proposeDialog.availableBalance = store.privateBalance;
+                    proposeDialog.rails = store.railsPaying(addressForm);
                     proposeDialog.memberCount = store.memberCount;
                     proposeDialog.open();
                 }
@@ -270,7 +301,7 @@ Rectangle {
     NewActivityDialog {
         id: newActivityDialog
         walletReady: store.walletReady
-        privateBalance: store.privateBalance
+        assets: store.assets
         onActivityChosen: function (verb, peerAddress) {
             store.startActivity(verb, peerAddress);
         }
@@ -290,21 +321,33 @@ Rectangle {
         }
     }
 
-    // Opened by a "Send LEZ" action on an address-share card; the recipient is
-    // carried from that card, so this only ever asks for an amount.
+    // Answering "where do I pay you". The payee chooses which of their holdings
+    // to advertise, because that choice decides what a payment to them can
+    // hide — see ShareAddressDialog.
+    ShareAddressDialog {
+        id: shareAddressDialog
+        assets: store.receivableAssets
+        onConfirmed: function (assetId) {
+            store.shareAddress(assetId);
+        }
+    }
+
+    // Opened by the "Send" action on an address-share card; the recipient is
+    // carried from that card, so this only asks for an amount and a rail.
     SendDialog {
         id: sendDialog
-        onConfirmed: function (amount) {
-            store.sendPrivate(sendDialog.keysJson, amount);
+        onConfirmed: function (railId, amount) {
+            store.sendPayment(railId, sendDialog.toAddress, amount);
         }
     }
 
     // The same card's other action: put the payment to the room first. Asks
-    // for an amount and how many people must agree before it can be paid.
+    // for an amount, a rail, and how many people must agree before it can be
+    // paid.
     ProposeDialog {
         id: proposeDialog
-        onConfirmed: function (amount, threshold) {
-            store.proposePayment(proposeDialog.keysJson, proposeDialog.peerLabel,
+        onConfirmed: function (railId, amount, threshold) {
+            store.proposePayment(railId, proposeDialog.toAddress, proposeDialog.peerLabel,
                                  amount, threshold);
         }
     }

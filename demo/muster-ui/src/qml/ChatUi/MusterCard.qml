@@ -28,8 +28,8 @@ ColumnLayout {
     property var intent: null
 
     signal shareAddressRequested
-    signal payRequested(string keysJson, string label)
-    signal proposeRequested(string keysJson, string label)
+    signal payRequested(string toAddress, int addressForm, string assetName, string label)
+    signal proposeRequested(string toAddress, int addressForm, string assetName, string label)
     signal approveRequested(string intentId)
     signal dropRequested(string intentId)
     signal submitRequested(string intentId)
@@ -39,12 +39,22 @@ ColumnLayout {
     readonly property string cardType: root.card ? String(root.card.type) : ""
     readonly property string intentState: root.intent ? String(root.intent.state) : "proposed"
 
+    // What the sharer said they shared. A v1 card has no `assetName` and no
+    // `form`, and v1 had exactly one of each — so those are the only defaults a
+    // missing field can honestly carry.
+    readonly property string sharedAssetName: root.card && root.card.assetName
+        ? String(root.card.assetName) : qsTr("private account")
+    readonly property int sharedForm: root.card && root.card.form !== undefined
+        ? Number(root.card.form) : 0
+    readonly property string sharedAddress: root.card && root.card.keys
+        ? String(root.card.keys) : ""
+
     // A one-line heading naming the step, in mono — the same "this is data, not
     // chatter" voice the timestamps and addresses use.
     LogosText {
         Layout.fillWidth: true
         text: root.cardType === "address-request" ? qsTr("Asked for an address")
-            : root.cardType === "address-share" ? qsTr("Shared a private address")
+            : root.cardType === "address-share" ? qsTr("Shared an address")
             : root.cardType === "intent-propose" ? qsTr("Proposed a payment")
             : root.cardType === "intent-approve" ? qsTr("Approved")
             : root.cardType === "intent-drop" ? qsTr("Dropped the proposal")
@@ -76,25 +86,46 @@ ColumnLayout {
         LogosText {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: root.card && root.card.label ? String(root.card.label) : qsTr("A private account")
+            text: root.card && root.card.label
+                ? qsTr("%1 · %2").arg(String(root.card.label)).arg(root.sharedAssetName)
+                : root.sharedAssetName
             color: root.isMe ? ChatTheme.bubbleOwnText : ChatTheme.bubblePeerText
             font.pixelSize: Theme.typography.primaryText
         }
 
-        // The keys themselves are long and no one reads them; what matters is
-        // that this is a shielded destination, so say that instead of pasting
-        // sixty characters nobody checks.
+        // The address itself is long and no one reads it; what matters is what
+        // *kind* of destination it is, so say that instead of pasting sixty
+        // characters nobody checks. Which kind comes off the card's `form`,
+        // because getting this wrong is exactly the lie the version bump exists
+        // to prevent: a public account labelled "shielded" is an invitation to
+        // a payment the payer thinks is private.
         LogosText {
             Layout.fillWidth: true
             wrapMode: Text.WrapAnywhere
             maximumLineCount: 2
             elide: Text.ElideRight
-            text: qsTr("shielded · %1").arg(root.card && root.card.keys
-                ? String(root.card.keys).replace(/\s+/g, "").slice(0, 48) + "…" : "")
+            text: qsTr("%1 · %2")
+                .arg(root.sharedForm === 0 ? qsTr("shielded") : qsTr("public account"))
+                .arg(root.sharedAddress.replace(/\s+/g, "").slice(0, 48)
+                     + (root.sharedAddress.length > 48 ? "…" : ""))
             color: root.isMe ? Theme.colors.getColor(ChatTheme.bubbleOwnText, 0.6)
                              : Theme.palette.textTertiary
             font.family: Theme.typography.mono
             font.pixelSize: Theme.typography.secondaryText
+        }
+
+        // A public account on a card is worth a word of its own: the peer has
+        // chosen to be paid somewhere anyone can read, and the payer should
+        // know that before choosing how to pay rather than discovering it in
+        // the rail picker.
+        LogosText {
+            Layout.fillWidth: true
+            visible: root.sharedForm === 1
+            wrapMode: Text.WordWrap
+            text: qsTr("Anyone reading the zone can see what lands here.")
+            color: root.isMe ? Theme.colors.getColor(ChatTheme.bubbleOwnText, 0.6)
+                             : Theme.palette.textTertiary
+            font.pixelSize: Theme.typography.badgeText
         }
     }
 
@@ -137,11 +168,28 @@ ColumnLayout {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             text: root.card && root.card.label
-                ? qsTr("to %1's private account").arg(String(root.card.label))
-                : qsTr("to a private account")
+                ? qsTr("to %1").arg(String(root.card.label))
+                : qsTr("to the address they shared")
             color: root.isMe ? Theme.colors.getColor(ChatTheme.bubbleOwnText, 0.7)
                              : Theme.palette.textSecondary
             font.pixelSize: Theme.typography.secondaryText
+        }
+
+        // Which rail the room is being asked to agree to, in this build's
+        // words. A rail we do not know is named as unknown rather than
+        // described: the card would otherwise be making a privacy claim on
+        // behalf of code that is not here.
+        LogosText {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: root.intent && root.intent.railKnown
+                ? String(root.intent.railName)
+                : qsTr("on a rail this build does not know (%1)")
+                    .arg(root.intent ? String(root.intent.rail) : "")
+            color: root.isMe ? Theme.colors.getColor(ChatTheme.bubbleOwnText, 0.7)
+                             : Theme.palette.textSecondary
+            font.family: Theme.typography.mono
+            font.pixelSize: Theme.typography.badgeText
         }
 
         // The rail. Four states, not the prototype's five: a shielded transfer
@@ -320,17 +368,39 @@ ColumnLayout {
                     font.weight: Theme.typography.weightMedium
                 }
 
+                // Read off the receipt's own `discloses`, which the rail that
+                // ran the payment wrote. This used to be two hand-written
+                // lists chosen by a single `shielded` bool — which could only
+                // describe the two rails at the ends of the square, and
+                // described the two in the middle wrongly. A shield names the
+                // payer and hides the payee; neither list said that.
+                //
+                // The last two rows are on every rail there is: nothing hides
+                // that a transfer happened, or when. That is the floor, and
+                // saying it on every receipt is the honest thing rather than
+                // the repetitive one.
                 Repeater {
-                    model: root.card && root.card.shielded
-                        ? [{ k: qsTr("amount"), v: qsTr("not disclosed"), w: true },
-                           { k: qsTr("who paid"), v: qsTr("not disclosed"), w: true },
-                           { k: qsTr("who was paid"), v: qsTr("not disclosed"), w: true },
-                           { k: qsTr("that it happened"), v: qsTr("on the record"), w: false },
-                           { k: qsTr("when"), v: qsTr("block timestamp"), w: false }]
-                        : [{ k: qsTr("amount"), v: root.card ? String(root.card.amount) : "", w: false },
-                           { k: qsTr("who paid"), v: qsTr("on the record"), w: false },
-                           { k: qsTr("who was paid"), v: qsTr("on the record"), w: false },
-                           { k: qsTr("when"), v: qsTr("block timestamp"), w: false }]
+                    model: {
+                        const d = root.card && root.card.discloses
+                            ? root.card.discloses
+                            // A v1 receipt: one bool, and it meant this.
+                            : { amount: !root.card || !root.card.shielded,
+                                payer: !root.card || !root.card.shielded,
+                                payee: !root.card || !root.card.shielded };
+                        return [
+                            { k: qsTr("amount"),
+                              v: d.amount ? (root.card ? String(root.card.amount) : "")
+                                          : qsTr("not disclosed"),
+                              w: !d.amount },
+                            { k: qsTr("who paid"),
+                              v: d.payer ? qsTr("on the record") : qsTr("not disclosed"),
+                              w: !d.payer },
+                            { k: qsTr("who was paid"),
+                              v: d.payee ? qsTr("on the record") : qsTr("not disclosed"),
+                              w: !d.payee },
+                            { k: qsTr("that it happened"), v: qsTr("on the record"), w: false },
+                            { k: qsTr("when"), v: qsTr("block timestamp"), w: false }];
+                    }
 
                     delegate: RowLayout {
                         required property var modelData
@@ -392,9 +462,9 @@ ColumnLayout {
         objectName: "cardPay"
         visible: root.cardType === "address-share" && !root.isMe
         Layout.fillWidth: true
-        text: root.walletReady ? qsTr("Send LEZ") : qsTr("Open wallet first")
+        text: root.walletReady ? qsTr("Send") : qsTr("Open wallet first")
         enabled: root.walletReady
-        onClicked: root.payRequested(root.card && root.card.keys ? String(root.card.keys) : "",
+        onClicked: root.payRequested(root.sharedAddress, root.sharedForm, root.sharedAssetName,
                                      root.card && root.card.label ? String(root.card.label) : "")
     }
 
@@ -407,7 +477,8 @@ ColumnLayout {
         Layout.fillWidth: true
         text: root.walletReady ? qsTr("Propose it to the room") : qsTr("Open wallet first")
         enabled: root.walletReady
-        onClicked: root.proposeRequested(root.card && root.card.keys ? String(root.card.keys) : "",
+        onClicked: root.proposeRequested(root.sharedAddress, root.sharedForm,
+                                         root.sharedAssetName,
                                          root.card && root.card.label ? String(root.card.label) : "")
     }
 
@@ -424,13 +495,19 @@ ColumnLayout {
         onClicked: root.approveRequested(root.intent ? String(root.intent.intentId) : "")
     }
 
+    // A proposal agreed on a rail this build cannot run is not payable here,
+    // and the button says which of the two things is wrong rather than sitting
+    // there disabled. Paying it on a rail we *do* have would settle terms the
+    // room never approved, so the offer is refused rather than substituted.
     LogosButton {
         objectName: "cardSubmitIntent"
         visible: root.cardType === "intent-propose" && !!root.intent
             && root.intentState === "ready" && root.intent.proposedByMe
         Layout.fillWidth: true
-        text: root.walletReady ? qsTr("Pay it") : qsTr("Open wallet first")
-        enabled: root.walletReady
+        text: !root.walletReady ? qsTr("Open wallet first")
+            : !root.intent.railKnown ? qsTr("This build cannot pay that rail")
+            : qsTr("Pay it")
+        enabled: root.walletReady && !!root.intent && root.intent.railKnown
         onClicked: root.submitRequested(root.intent ? String(root.intent.intentId) : "")
     }
 

@@ -43,6 +43,11 @@ struct Intent {
     QString intentId;
     QString amount;
     QString denom;
+    // The rail the room agreed to, off the card. Not resolved to this build's
+    // catalogue here: a proposal may name a rail we have never heard of, and
+    // the honest reading of that is "they proposed something we cannot describe",
+    // not silently substituting one we do know.
+    QString rail;
     QString keys;
     QString label;
     int threshold = 1;
@@ -94,6 +99,11 @@ QVariantList ChatBackend::intentsForMessages(const QVariantList& messages) const
         in.intentId = id;
         in.amount = card.value(QStringLiteral("amount")).toString();
         in.denom = card.value(QStringLiteral("denom")).toString();
+        // A v1 card has no rail, and v1 had exactly one — so that is the only
+        // thing a missing field can honestly mean.
+        in.rail = card.value(QStringLiteral("rail")).toString();
+        if (in.rail.isEmpty())
+            in.rail = QStringLiteral("lez.private");
         in.keys = card.value(QStringLiteral("keys")).toString();
         in.label = card.value(QStringLiteral("label")).toString();
         in.threshold = qMax(1, card.value(QStringLiteral("threshold")).toInt(1));
@@ -170,10 +180,22 @@ QVariantList ChatBackend::intentsForMessages(const QVariantList& messages) const
                 {QStringLiteral("isMe"), isMe}});
         }
 
+        // This build's words for the rail, or nothing. A card whose rail we do
+        // not know still renders — amount, destination, approvals, all of it —
+        // it just does not get a privacy claim attached, because we have no
+        // grounds to make one. The view says so rather than leaving the gap to
+        // be read as "nothing disclosed".
+        const Assets::Rail* rail = railById(in.rail);
+
         rows.append(QVariantMap{
             {QStringLiteral("intentId"), in.intentId},
             {QStringLiteral("amount"), in.amount},
             {QStringLiteral("denom"), in.denom.isEmpty() ? QStringLiteral("LEZ") : in.denom},
+            {QStringLiteral("rail"), in.rail},
+            {QStringLiteral("railName"), rail ? rail->name : QString()},
+            {QStringLiteral("railPromise"), rail ? rail->promise : QString()},
+            {QStringLiteral("discloses"), rail ? disclosureRow(rail->discloses) : QVariantMap{}},
+            {QStringLiteral("railKnown"), rail != nullptr},
             {QStringLiteral("keys"), in.keys},
             {QStringLiteral("label"), in.label},
             {QStringLiteral("threshold"), in.threshold},
@@ -223,13 +245,22 @@ void ChatBackend::refreshIntents()
     setLiveIntent(liveIntentForMessages(msgs));
 }
 
-void ChatBackend::proposePayment(QString conversationId, QString toKeysJson, QString label,
-                                 QString amount, int threshold)
+void ChatBackend::proposePayment(QString conversationId, QString railId, QString toAddress,
+                                 QString label, QString amount, int threshold)
 {
     if (conversationId.isEmpty())
         return;
-    if (toKeysJson.isEmpty()) {
+    if (toAddress.isEmpty()) {
         report(QStringLiteral("No address to propose paying — share one first."));
+        return;
+    }
+    buildAssets();
+    // Refused at propose time, not at pay time. A room should not spend a round
+    // of approvals on terms the proposer's own build cannot settle.
+    const Assets::Rail* rail = sendableRailById(railId);
+    if (!rail) {
+        report(tr("This build cannot pay on that rail%1, so it will not propose it.")
+                   .arg(railId.isEmpty() ? QString() : QStringLiteral(" (%1)").arg(railId)));
         return;
     }
     bool ok = false;
@@ -251,8 +282,8 @@ void ChatBackend::proposePayment(QString conversationId, QString toKeysJson, QSt
 
     const QString intentId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     sendMessage(conversationId,
-                MusterMessage::intentPropose(intentId, QString::number(value), toKeysJson,
-                                             label, wanted, members));
+                MusterMessage::intentPropose(intentId, QString::number(value), rail->denom,
+                                             rail->id, toAddress, label, wanted, members));
 }
 
 void ChatBackend::approveIntent(QString conversationId, QString intentId)
@@ -304,7 +335,12 @@ void ChatBackend::submitIntent(QString conversationId, QString intentId)
             return;
         }
 
-        payForIntent(conversationId, in.value(QStringLiteral("keys")).toString(),
+        // The rail off the thread, like every other term. Paying an agreed
+        // proposal on a rail the room did not agree to would disclose things
+        // nobody approved disclosing, so it comes from the fold and not from
+        // whatever the view or the wallet would otherwise prefer.
+        payForIntent(conversationId, in.value(QStringLiteral("rail")).toString(),
+                     in.value(QStringLiteral("keys")).toString(),
                      in.value(QStringLiteral("amount")).toString().toULongLong(), intentId);
         return;
     }

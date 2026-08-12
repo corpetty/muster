@@ -20,10 +20,12 @@ import Logos.Controls
 LogosDialog {
     id: root
 
-    // What the wallet can offer. A private account is the only thing this build
-    // can pay from, and saying so beats offering a choice that is not real.
+    // What the wallet can offer: every holding it has, from the backend's
+    // catalogue. Which one a payment draws on is decided later, at the address,
+    // because that is where the destination — and so the set of rails that can
+    // reach it — is actually known.
     property bool walletReady: false
-    property string privateBalance: ""
+    property var assets: []
 
     // verb: "pay" | "request" | "talk"
     signal activityChosen(string verb, string peerAddress)
@@ -200,7 +202,7 @@ LogosDialog {
                 spacing: 1
 
                 LogosText {
-                    text: qsTr("Your private account")
+                    text: qsTr("Your accounts")
                     color: Theme.palette.text
                     font.pixelSize: Theme.typography.primaryText
                     font.weight: Theme.typography.weightMedium
@@ -208,9 +210,12 @@ LogosDialog {
                 LogosText {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
+                    // Every holding, named and counted, rather than the one
+                    // this build used to be able to pay from. Which of them a
+                    // payment draws on is chosen at the address, with the rail.
                     text: root.accountReady
-                        ? qsTr("%1 private · shielded both ends, and the only account this build pays from")
-                            .arg(root.privateBalance === "" ? "—" : root.privateBalance)
+                        ? root.assets.map(a => qsTr("%1 %2")
+                            .arg(a.balance === "" ? "—" : a.balance).arg(a.name)).join(" · ")
                         : qsTr("No wallet open yet. Open one from the sidebar and this becomes available.")
                     color: Theme.palette.textTertiary
                     font.family: Theme.typography.mono

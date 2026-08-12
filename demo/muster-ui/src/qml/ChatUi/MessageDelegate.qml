@@ -85,8 +85,8 @@ Item {
     }
 
     signal shareAddressRequested
-    signal payRequested(string keysJson, string label)
-    signal proposeRequested(string keysJson, string label)
+    signal payRequested(string toAddress, int addressForm, string assetName, string label)
+    signal proposeRequested(string toAddress, int addressForm, string assetName, string label)
     signal approveRequested(string intentId)
     signal dropRequested(string intentId)
     signal submitRequested(string intentId)
@@ -194,11 +194,11 @@ Item {
                     isMe: root.isMe
                     walletReady: root.walletReady
                     onShareAddressRequested: root.shareAddressRequested()
-                    onPayRequested: function (keysJson, label) {
-                        root.payRequested(keysJson, label);
+                    onPayRequested: function (toAddress, addressForm, assetName, label) {
+                        root.payRequested(toAddress, addressForm, assetName, label);
                     }
-                    onProposeRequested: function (keysJson, label) {
-                        root.proposeRequested(keysJson, label);
+                    onProposeRequested: function (toAddress, addressForm, assetName, label) {
+                        root.proposeRequested(toAddress, addressForm, assetName, label);
                     }
                     onApproveRequested: function (intentId) {
                         root.approveRequested(intentId);

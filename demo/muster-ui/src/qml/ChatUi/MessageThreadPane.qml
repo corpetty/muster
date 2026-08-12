@@ -52,7 +52,7 @@ Rectangle {
     // Raised by a card in the thread — answering a request for an address, or
     // paying one that arrived.
     signal shareAddressRequested
-    signal payRequested(string keysJson, string label)
+    signal payRequested(string toAddress, int addressForm, string assetName, string label)
     // The proposals in this conversation, folded by the backend. Handed to
     // every card so one read serves the whole thread.
     property var intents: []
@@ -71,7 +71,7 @@ Rectangle {
     }
     // Raised by a proposal card: put a payment to the room, weigh in on one,
     // abandon one, or pay one that has reached its threshold.
-    signal proposeRequested(string keysJson, string label)
+    signal proposeRequested(string toAddress, int addressForm, string assetName, string label)
     signal approveRequested(string intentId)
     signal dropRequested(string intentId)
     signal submitRequested(string intentId)
@@ -224,11 +224,11 @@ Rectangle {
                         messageMenu.popup();
                     }
                     onShareAddressRequested: root.shareAddressRequested()
-                    onPayRequested: function (keysJson, label) {
-                        root.payRequested(keysJson, label);
+                    onPayRequested: function (toAddress, addressForm, assetName, label) {
+                        root.payRequested(toAddress, addressForm, assetName, label);
                     }
-                    onProposeRequested: function (keysJson, label) {
-                        root.proposeRequested(keysJson, label);
+                    onProposeRequested: function (toAddress, addressForm, assetName, label) {
+                        root.proposeRequested(toAddress, addressForm, assetName, label);
                     }
                     onApproveRequested: function (intentId) {
                         root.approveRequested(intentId);

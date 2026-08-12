@@ -79,10 +79,50 @@ QtObject {
     // WORKAROUND flag — see ChatBackend.rep. True once the balance includes an
     // account this wallet did not create, which is how received money arrives.
     readonly property bool receivedElsewhere: backend ? backend.receivedElsewhere : false
-    readonly property string privateBalance: backend ? backend.privateBalance : ""
-    readonly property string publicBalance: backend ? backend.publicBalance : ""
-    readonly property string myReceiveKeys: backend ? backend.myReceiveKeys : ""
     readonly property string newWalletMnemonic: backend ? backend.newWalletMnemonic : ""
+
+    // ── what this wallet holds, and how it can pay ───────────────────────
+    // Both are catalogues published by the backend (see ChatBackend.rep). No
+    // view branches on a particular asset: it reads what it needs off the row,
+    // so a new entry in ChatBackendAssets.cpp appears here for free.
+    readonly property var assets: backend ? backend.assets : []
+    readonly property var rails: backend ? backend.rails : []
+
+    // The holding a payment on `railId` draws on, or null. The dialogs ask this
+    // rather than reaching for a private balance, which is what they used to do
+    // when there was only one.
+    function assetById(id) {
+        for (let i = 0; i < assets.length; ++i)
+            if (assets[i].id === id)
+                return assets[i];
+        return null;
+    }
+    function railById(id) {
+        for (let i = 0; i < rails.length; ++i)
+            if (rails[i].id === id)
+                return rails[i];
+        return null;
+    }
+    // Every rail that can pay an address of this form, most private first —
+    // the order the catalogue declares them in. This is the whole of what a
+    // picker needs to know, so a rail added there is offered here untouched.
+    function railsPaying(form) {
+        return rails.filter(r => Number(r.payTo) === Number(form));
+    }
+    // What a picker opens on: the most private rail that can pay this address.
+    function defaultRailFor(form) {
+        const candidates = railsPaying(form);
+        return candidates.length > 0 ? candidates[0].id : "";
+    }
+    // The holdings worth being paid at. Drives the share-an-address choice.
+    //
+    // A holding that *has* an address but is blocked stays in the list, shown
+    // and refused with its reason: dropping it would turn "your private account
+    // is registering, about seven minutes" into an address that silently is not
+    // there, which is the same wait with none of the explanation. A holding with
+    // no address at all is genuinely not a choice, and is left out.
+    readonly property var receivableAssets:
+        assets.filter(a => a.canReceive || (a.blocked && a.address !== ""))
 
     // What the wallet is doing, for the account card. The stage is the
     // backend's own word for it, so a long pause can name itself.
@@ -121,13 +161,17 @@ QtObject {
         if (backend && currentConversationId !== "")
             backend.requestAddress(currentConversationId);
     }
-    function shareAddress() {
+    function shareAddress(assetId) {
         if (backend && currentConversationId !== "")
-            backend.shareAddress(currentConversationId);
+            backend.shareAddress(currentConversationId, assetId);
     }
-    function sendPrivate(keysJson, amount) {
+    function sendPayment(railId, toAddress, amount) {
         if (backend && currentConversationId !== "")
-            backend.sendPrivate(currentConversationId, keysJson, amount);
+            backend.sendPayment(currentConversationId, railId, toAddress, amount);
+    }
+    function claimHolding(assetId, amount) {
+        if (backend)
+            backend.claimHolding(assetId, amount);
     }
 
     // ── proposals ────────────────────────────────────────────────────────
@@ -137,9 +181,10 @@ QtObject {
     readonly property var intents: backend ? backend.intents : []
     readonly property var liveIntent: backend ? backend.liveIntent : ({})
 
-    function proposePayment(keysJson, label, amount, threshold) {
+    function proposePayment(railId, toAddress, label, amount, threshold) {
         if (backend && currentConversationId !== "")
-            backend.proposePayment(currentConversationId, keysJson, label, amount, threshold);
+            backend.proposePayment(currentConversationId, railId, toAddress, label, amount,
+                                   threshold);
     }
     function approveIntent(intentId) {
         if (backend && currentConversationId !== "")

@@ -1,15 +1,24 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 
 import Logos.Theme
 import Logos.Controls
 
-// The wallet, under the account card in the sidebar: what this instance can
-// spend, and the two actions that get it there.
+// The wallet, under the account card in the sidebar: everywhere this instance's
+// money can be, and the actions that move it.
 //
 // Kept beside the identity rather than on a screen of its own, because the
 // point of the demo is that paying someone is part of talking to them, not a
 // trip to another application.
+//
+// A list, not two numbers. Every row comes from the backend's `assets`
+// catalogue, so a holding added in ChatBackendAssets.cpp appears here without
+// this file being touched — and, more to the point, so does the fact that money
+// can sit in more than one place. The first build showed one balance and called
+// it "the wallet", which made the shielding step look like an implementation
+// detail rather than the thing it is.
 Rectangle {
     id: root
 
@@ -20,15 +29,16 @@ Rectangle {
     // named stage is the difference between waiting and wondering.
     required property string stage
     required property string statusLabel
-    required property string privateBalance
-    required property string publicBalance
-    // True when the balance sums in accounts the user never created.
+    // One map per balance this wallet can hold. See ChatBackend.rep.
+    required property var assets
+    // True when the private balance sums in accounts the user never created.
     property bool receivedElsewhere: false
     property string errorText: ""
 
     signal openRequested
     signal fundRequested
     signal refreshRequested
+    signal claimRequested(string assetId)
 
     implicitHeight: layout.implicitHeight + 2 * Theme.spacing.medium
     color: Theme.palette.surface
@@ -67,32 +77,106 @@ Rectangle {
             }
         }
 
-        // Private balance is the headline: it is what a private payment can be
-        // drawn from. The public one is shown only because the faucet pays into
-        // it, and watching it move to private is half the lesson.
-        RowLayout {
+        // Every holding, in the catalogue's order — most private first. An empty
+        // one is drawn dimmed rather than hidden: where money *could* be is as
+        // much the point as where it is, and a row that appears only once it has
+        // a balance teaches nothing about the shape of the wallet.
+        Repeater {
+            model: root.ready ? root.assets : []
+
+            delegate: ColumnLayout {
+                id: holding
+                required property var modelData
+
+                Layout.fillWidth: true
+                spacing: 1
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+
+                    LogosText {
+                        objectName: "assetBalance_" + holding.modelData.id
+                        text: qsTr("%1 %2")
+                            .arg(holding.modelData.balance === ""
+                                 ? "—" : holding.modelData.balance)
+                            .arg(holding.modelData.denom)
+                        color: holding.modelData.empty
+                            ? Theme.palette.textTertiary : Theme.palette.text
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.primaryText
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    LogosText {
+                        text: holding.modelData.name
+                        color: Theme.palette.textSecondary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.secondaryText
+                        elide: Text.ElideRight
+                        Layout.maximumWidth: 120
+                    }
+                }
+
+                // Where the money actually is. A number with no location is
+                // what made the first build's single balance confusing once
+                // there was more than one place it could have been.
+                LogosText {
+                    Layout.fillWidth: true
+                    text: holding.modelData.sourceNote
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: Theme.typography.badgeText
+                    elide: Text.ElideRight
+                }
+
+                // Why this one is not usable yet, on the row it applies to.
+                // The private account's on-chain registration runs for about
+                // seven minutes after a peer is first minted; the wallet is
+                // Ready throughout, and this is the only part that is waiting.
+                // Saying so here is what stops that wait reading as the whole
+                // app being hung, which is what it did when the wallet gated
+                // Ready on it.
+                LogosText {
+                    objectName: "assetBlocked_" + holding.modelData.id
+                    Layout.fillWidth: true
+                    visible: holding.modelData.blocked
+                    wrapMode: Text.WordWrap
+                    text: holding.modelData.blockedNote
+                    color: ChatTheme.alarm
+                    font.pixelSize: Theme.typography.badgeText
+                }
+
+                // Only for a holding that says it can be claimed — a balance
+                // that is owed rather than held. The catalogue supplies the
+                // verb, so a new claimable holding needs nothing here.
+                LogosButton {
+                    objectName: "assetClaim_" + holding.modelData.id
+                    visible: holding.modelData.canClaim
+                    Layout.fillWidth: true
+                    Layout.topMargin: Theme.spacing.tiny
+                    text: holding.modelData.claimVerb
+                    enabled: !root.busy
+                    onClicked: root.claimRequested(String(holding.modelData.id))
+                }
+            }
+        }
+
+        // A wallet that has never been funded shows nothing but zeros, which is
+        // indistinguishable from a wallet that is broken or a Fund that did
+        // nothing — and on this build the first thing anyone sees is exactly
+        // that. So it says which, and what to press. Only while everything is
+        // empty: the moment any holding has a balance this is noise.
+        LogosText {
+            objectName: "walletEmptyHint"
             Layout.fillWidth: true
-            visible: root.ready
-            spacing: Theme.spacing.small
-
-            LogosText {
-                objectName: "privateBalance"
-                text: qsTr("%1 private").arg(root.privateBalance === "" ? "—" : root.privateBalance)
-                color: Theme.palette.text
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.primaryText
-            }
-
-            Item { Layout.fillWidth: true }
-
-            LogosText {
-                objectName: "publicBalance"
-                visible: root.publicBalance !== "" && root.publicBalance !== "0"
-                text: qsTr("%1 public").arg(root.publicBalance)
-                color: Theme.palette.textTertiary
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.secondaryText
-            }
+            visible: root.ready && root.assets.length > 0
+                     && root.assets.every(a => a.empty)
+            wrapMode: Text.WordWrap
+            text: qsTr("Nothing in it yet — that is empty, not broken. Fund claims from the "
+                     + "zone's test faucet and shields the prize into your private account.")
+            color: Theme.palette.textTertiary
+            font.pixelSize: Theme.typography.badgeText
         }
 
         // Said where the number is, not in a panel someone has to open. A
@@ -105,8 +189,9 @@ Rectangle {
             Layout.fillWidth: true
             visible: root.ready && root.receivedElsewhere
             wrapMode: Text.WordWrap
-            text: qsTr("Includes accounts you did not create — payments arrive at a derived "
-                     + "address, not the one you shared. One send draws on one of them.")
+            text: qsTr("The private figure includes accounts you did not create — payments "
+                     + "arrive at a derived address, not the one you shared. One send draws "
+                     + "on one of them.")
             color: Theme.palette.textTertiary
             font.pixelSize: Theme.typography.badgeText
         }

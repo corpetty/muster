@@ -122,6 +122,15 @@ ChatBackend::ChatBackend(QObject* parent)
     setLogDir(QString());
     syncCurrentConversationMeta();
 
+    // Built here, before any zone call and before the first fold, because the
+    // catalogue is what names a rail. A proposal read off a thread with no
+    // catalogue would report every rail as one this build has never heard of —
+    // including its own. Nothing in it reaches the zone until something asks it
+    // to, so building it this early costs a handful of strings.
+    buildAssets();
+    setAssets(holdingRows());
+    setRails(railRows());
+
     // As early as this plugin can reach: the QML engine has not loaded the view
     // yet, so its warnings are caught too. The lines are held in memory until
     // openRunLogs finds somewhere to put them.

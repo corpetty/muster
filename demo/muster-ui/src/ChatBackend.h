@@ -6,7 +6,9 @@
 #include <QString>
 #include <QTimer>
 #include <QVariantList>
+#include <QVector>
 #include <functional>
+#include "Assets.h"
 #include "rep_ChatBackend_source.h"
 #include "logos_ui_plugin_context.h"
 #include "ConversationListModel.h"
@@ -45,13 +47,17 @@ public slots:
     void fundWallet() override;
     void refreshBalances() override;
     void requestAddress(QString conversationId) override;
-    void shareAddress(QString conversationId) override;
-    void sendPrivate(QString conversationId, QString toKeysJson, QString amount) override;
+    void shareAddress(QString conversationId, QString assetId) override;
+    void sendPayment(QString conversationId, QString railId, QString toAddress,
+                     QString amount) override;
+    // Move a holding that is owed into one that can be spent. Only offered for
+    // a holding whose entry declares how (Assets::Holding::claim).
+    void claimHolding(QString assetId, QString amount) override;
 
     // The intent spine. Implemented in ChatBackendIntent.cpp — these are pure
     // conversation moves; only submitIntent reaches the wallet, and it does so
-    // through the same sendPrivate path a direct payment takes.
-    void proposePayment(QString conversationId, QString toKeysJson, QString label,
+    // through the same sendPayment path a direct payment takes.
+    void proposePayment(QString conversationId, QString railId, QString toAddress, QString label,
                         QString amount, int threshold) override;
     void approveIntent(QString conversationId, QString intentId) override;
     void dropIntent(QString conversationId, QString intentId, QString reason) override;
@@ -176,6 +182,12 @@ private:
     // a balance is not the same as this wallet being able to spend it, and
     // spending too early fails as InsufficientFunds.
     quint64 waitForPublicFunds(const QString& account, quint64 atLeast, int timeoutMs);
+    // Wait until this wallet can actually see the effect of a transfer it just
+    // made, re-reading balances as it goes. Every path that moves value ends
+    // here: the zone accepting a transfer and this wallet being able to see it
+    // are different moments, and reading once between them shows the balances
+    // from before — which looks exactly like the transfer having failed.
+    void settleAfterTransfer(int timeoutMs);
     // Every mutating zone call must be followed by this: the wallet-ffi holds
     // state in memory and without save() nothing reaches disk, so the next
     // open() gets a wallet that has forgotten the transfer it just made.
@@ -194,9 +206,11 @@ private:
     QString m_pendingVerb;
 
     // Sync to the tip, publish the balances, and declare the wallet Ready.
-    // Split out of openWallet because registering a new private account is an
-    // async step that has to complete first, so there are two paths into it.
     void finishWalletOpen();
+    // Register a freshly minted private account on-chain, in the background.
+    // Proves, so it runs for minutes — the wallet is Ready long before it
+    // finishes, and only the private holding is held back meanwhile.
+    void startPrivateRegistration();
 
     bool m_walletOpen = false;
     // Set when ensureWalletOpen has just minted the private account, meaning
@@ -251,8 +265,48 @@ private:
     void refreshIntents();
     // Post the receipt that closes `intentId`, and pay it. Shares every step
     // with a direct send; the id is what ties the receipt back to the proposal.
-    void payForIntent(const QString& conversationId, const QString& toKeysJson,
-                      quint64 amount, const QString& intentId);
+    // The rail is named rather than assumed — a proposal is agreed on one, and
+    // paying it on another would settle terms the room did not approve.
+    void payForIntent(const QString& conversationId, const QString& railId,
+                      const QString& toAddress, quint64 amount, const QString& intentId);
+
+    // ── assets (ChatBackendAssets.cpp) ───────────────────────────────────
+    // Builds the catalogue of holdings and rails, once. See that file: it is
+    // the single place an asset or a way to pay is added.
+    void buildAssets();
+    const Assets::Holding* holdingById(const QString& id) const;
+    const Assets::Rail* railById(const QString& id) const;
+    // The rail, or null if it cannot be paid with — unknown, unsendable, or
+    // carrying no visibility claim. Every payment path goes through this rather
+    // than railById, so a rail that cannot account for what it leaks cannot be
+    // used by any of them.
+    const Assets::Rail* sendableRailById(const QString& id) const;
+    // The rail a picker should open on for a destination of this form: the
+    // most private one that can pay it.
+    QString defaultRailFor(Assets::AddressForm form) const;
+    // What the view binds: one row per holding, one per sendable rail.
+    QVariantList holdingRows() const;
+    QVariantList railRows() const;
+    static QVariantMap disclosureRow(const Assets::Disclosure& d);
+
+    // The catalogue, and the last answers the zone gave for it. Balances and
+    // addresses are cached rather than read on demand: some are a sequencer
+    // round trip, and a property read must not block a frame.
+    QVector<Assets::Holding> m_holdings;
+    QVector<Assets::Rail> m_rails;
+    QHash<QString, QString> m_balances;
+    QHash<QString, QString> m_addresses;
+    // Why a holding cannot be used yet, keyed by holding id; absent when it can.
+    // A blocked holding is still listed and still shows its balance — it is the
+    // *reason* that is the information, and hiding the row would turn a
+    // seven-minute wait into an unexplained absence.
+    QHash<QString, QString> m_blockers;
+
+    // The two reads with enough going on to be worth their own functions —
+    // the private one carries the summing workaround, the public one is the
+    // only balance that comes from the sequencer instead of the wallet.
+    QString readPrivateBalance();
+    QString readPublicBalance();
 };
 
 #endif

@@ -63,6 +63,19 @@ Known false positives to filter: `Member "mono" not found on type "Typography"` 
 
 **Caveat learned the hard way: a clean qmllint does not mean the component loads.** A panel that qmllint passed with zero errors still failed at runtime with no message anywhere. qmllint catches typos and missing properties — it does not catch whatever this class of failure is. Bisecting by removing the component from its parent view is still the reliable method.
 
+## What does *not* substitute for looking at the window (2026-08-12)
+
+Four plausible ways to confirm a view rendered without a human looking at it. All four fail on this machine, and three fail in a way that reads as success:
+
+- **`grim`** — `compositor doesn't support the screen capture protocol`. X11 `import -window root` captures nothing here either.
+- **`QT_QPA_PLATFORM=offscreen`, and `QT_QUICK_BACKEND=software`** — the host starts, the plugin loads, the backend connects to every module and health-probes on schedule, and **the QML view is never instantiated at all**. The run's `chat_ui_*.log` holds transport lines and nothing else: zero occurrences of "qml", zero non-`DEBUG` lines. Verified identical on an unmodified `HEAD` checkout, so this is the environment rather than a regression. The real display separately throws `libEGL: failed to create dri2 screen`.
+- **A `console.info` probe in `ChatView.qml`'s `Component.onCompleted`** — does not reach the run's `chat_ui` log, though `ProcessLog` handles `QtInfoMsg`. Do not build a check on it.
+- **"No QML errors in the log"** — the trap this document is about, and every configuration above produces exactly that.
+
+**So: ask the operator for a screenshot.** Twice on 2026-08-12 that was the only real evidence — first that the *baseline* rendered at all, which is what proved the log-based checks worthless rather than the change under test; then that the multi-asset wallet card rendered correctly. A screenshot also catches what no automated check would: the second one showed the per-holding blocker note landing on the right row, and prompted noticing that `Fund` could still shield into an unregistered private account.
+
+State plainly which paths remain unverified rather than letting a green build imply they were covered.
+
 ## Prevention
 
 `CMakeLists.txt` carries a `CHAT_UI_QML_DEVTOOLS` option that registers the QML as a real Qt module so `qmllint` and `.qmltypes` cover it. New files are now listed there. Turn it on before touching QML:

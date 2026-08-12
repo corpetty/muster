@@ -17,6 +17,8 @@ MessageComposer 1.0 MessageComposer.qml
 StatusBar 1.0 StatusBar.qml
 MessageDelegate 1.0 MessageDelegate.qml
 MusterCard 1.0 MusterCard.qml
+RailPicker 1.0 RailPicker.qml
+ShareAddressDialog 1.0 ShareAddressDialog.qml
 SendDialog 1.0 SendDialog.qml
 ProposeDialog 1.0 ProposeDialog.qml
 PinnedIntent 1.0 PinnedIntent.qml
