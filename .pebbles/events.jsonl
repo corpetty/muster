@@ -61,3 +61,5 @@
 {"type":"create","timestamp":"2026-08-12T22:03:28.777815303Z","issue_id":"exo-e3e","payload":{"description":"Interactive substrate. Seven pipeline stages against three columns: what runs the stage conventionally and who operates it / what runs it here / who still sees and what. Views retell the pipeline per use case. Ordering and Enforcement stay unassessed. docs/diagrams/README.md tranche 1.","priority":"1","title":"pipeline-stack-correlation: the keystone substrate","type":"feature"}}
 {"type":"rename","timestamp":"2026-08-12T22:03:28.80148325Z","issue_id":"exo-e3e","payload":{"new_id":"exo-2d5.6"}}
 {"type":"dep_add","timestamp":"2026-08-12T22:03:28.80148325Z","issue_id":"exo-2d5.6","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"close","timestamp":"2026-08-12T22:16:13.901548128Z","issue_id":"exo-2d5.5","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:16:13.901548128Z","issue_id":"exo-2d5.6","payload":{}}
