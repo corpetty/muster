@@ -60,7 +60,7 @@
     {
       "file": "substrate-pipeline.html",
       "serves": "BOTH",
-      "shows": "The keystone: seven pipeline stages against what runs each conventionally and who operates that, what runs it here, and who still sees what. Six views, including per-use-case retellings and the two stages left unassessed.",
+      "shows": "The keystone: seven pipeline stages against what runs each conventionally and who operates that, what runs it here, and who still sees what. Nine views — per-use-case retellings, three that select by observer rather than by stage, and one that marks the two stages left unassessed.",
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
@@ -107,6 +107,9 @@
         "substrate-pipeline-neglected-middle.svg",
         "substrate-pipeline-pay-a-friend.svg",
         "substrate-pipeline-dex-trade.svg",
+        "substrate-pipeline-obs-store-node.svg",
+        "substrate-pipeline-obs-zone.svg",
+        "substrate-pipeline-obs-nobody.svg",
         "substrate-pipeline-unassessed.svg"
       ],
       "recheck": "Every phase, and before any post using it publishes. The two unassessed cells become assessable only when the zone answers on mempool visibility and the production sequencer model; the contracting row changes when F-4/FS-6 land."
@@ -228,6 +231,136 @@
         }
       ],
       "recheck": "Whenever flake.nix changes. This figure is a snapshot of a version graph and is the one most likely to go stale silently — the manifest's changed-source warning on flake.nix is the intended signal."
+    },
+    {
+      "file": "pipeline-three-leaks.svg",
+      "serves": "POST",
+      "shows": "The three leak classes — chosen by you, chosen for you by the stack, chosen by nobody and inherited — each with a worked example from this build, the fix, and the obligation on whoever describes it.",
+      "sources": [
+        {
+          "path": "docs/posts/01-discovery-supporting-material.md",
+          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "note": "T5 and §11 — the framing, named there as the most reusable idea in the post and until now prose only"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "§1 the subscription-shape leak, §3 the address-form choice, §4b the account-identifier bug and its workaround"
+        },
+        {
+          "path": "docs/00-vision.md",
+          "sha256": "a9cb276d78acf0f75195f9489df54dde45d602b6cb4f0d56d13b61ac7f0afa44",
+          "note": "the closed status vocabulary, and the rule that a gap names its fix"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "measured",
+          "note": "The class-01 example — the payee chooses the address form, and a payer cannot upgrade a public destination — observed in the running build"
+        },
+        {
+          "grade": "from-source",
+          "note": "Class 02's one-topic-per-conversation shape, and LOGOS-MIXNET at status raw, send-only, off the near-term roadmap. Dated 2026-08"
+        },
+        {
+          "grade": "measured",
+          "note": "Class 03's account-identifier finding — reproduced twice, cause identified, reported upstream with a single-file reproducer"
+        }
+      ],
+      "recheck": "If LOGOS-MIXNET moves, or the upstream account-identifier bug is fixed. Either would move an example out of its class, which is the interesting kind of staleness."
+    },
+    {
+      "file": "pipeline-four-rails.svg",
+      "serves": "BOTH",
+      "shows": "The four transfer directions against what each discloses — amount, payer, payee — and what each costs in time, over a floor that holds on all of them.",
+      "sources": [
+        {
+          "path": "demo/README.md",
+          "sha256": "f4ae820bab6371a4ba1581c83a6d272f9b2f232f62a0d71d96a472b88fd41e08",
+          "note": "the four-rails table and the floor statement"
+        },
+        {
+          "path": "demo/CLAUDE.md",
+          "sha256": "964a941cd9c39a5bf05c9d44b5eae0ad9d7f0f23d4748781fba9c8b7815eb372",
+          "note": "the Holding/Rail catalogue rule, and sendableRailById refusing a rail whose claimId names nothing"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "§4 — what the private rail protects, and what it measured"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "What each rail discloses is written by the rail into the receipt and read back by the card and the panel — this figure restates the same table"
+        },
+        {
+          "grade": "measured",
+          "note": "~7 minutes at ~1300% CPU for a shielded transfer, on a 13-core desktop against the LEZ testnet, 2026-08-11. Whether that is typical is NOT established"
+        }
+      ],
+      "recheck": "When a rail or an asset is added — the catalogue takes more than one, and a new rail arrives with its own claim or is refused."
+    },
+    {
+      "file": "pipeline-negotiation-comparison.svg",
+      "serves": "BOTH",
+      "shows": "A hosted transaction service against the encrypted room: what an operator sees before anything reaches a chain, and what a store node sees instead — with the room-not-chain threshold limit in the same frame.",
+      "sources": [
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "§3b — the comparison, both gaps, and the lez-multisig status"
+        },
+        {
+          "path": "demo/CLAUDE.md",
+          "sha256": "964a941cd9c39a5bf05c9d44b5eae0ad9d7f0f23d4748781fba9c8b7815eb372",
+          "note": "an approval is authenticated, not authorizing; the fold deduplicates by author"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "measured",
+          "note": "Approvals travel the same send_message path as text and are attributed by the message's own sender, matched against the group roster"
+        },
+        {
+          "grade": "from-source",
+          "note": "The hosted-multisig side is the documented shape of that class of service, not a measurement of a named one"
+        },
+        {
+          "grade": "from-source",
+          "note": "lez-multisig read off the repo 2026-08-11: local sequencer, no documented testnet deployment, proposal state and calls in public accounts. Status partial"
+        }
+      ],
+      "recheck": "If lez-multisig gains a public-testnet deployment. That would end the chain-enforced-threshold-or-shielded-amount trade this figure closes on, which is its whole point."
+    },
+    {
+      "file": "tools/make-locator.py",
+      "serves": "POST",
+      "shows": "The generator for the per-post 'you are here' strips: the seven stages with one lit, one file per stage.",
+      "sources": [
+        {
+          "path": "docs/posts/01-discovery-supporting-material.md",
+          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "note": "§1 — the stage names and their order, which is what the strip indicates position in"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "Stage names and order verbatim from the published seven-stage taxonomy"
+        }
+      ],
+      "generates": [
+        "series-locator-discovery.svg",
+        "series-locator-diligence.svg",
+        "series-locator-negotiation.svg",
+        "series-locator-contracting.svg",
+        "series-locator-ordering.svg",
+        "series-locator-settlement.svg",
+        "series-locator-enforcement.svg"
+      ],
+      "recheck": "Only if the taxonomy changes. A strip is a position indicator, so the order matters more than the wording."
     },
     {
       "file": "pipeline-seven-stages.svg",

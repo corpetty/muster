@@ -48,6 +48,78 @@ def sha256(path: Path) -> str:
 
 PROVENANCE_RE = re.compile(r"[ \t]*<!-- provenance\b.*?-->\n?", re.DOTALL)
 
+# Rough advance width as a fraction of font-size. These figures use one sans and
+# one mono and never justify, so a single factor per family gets close enough to
+# catch a line that is 20% too long — which is the failure that actually happens.
+# It cannot catch a line that is 2% too long, and does not try.
+_SANS, _MONO, _BOLD = 0.52, 0.60, 1.06
+_OVERFLOW_SLACK = 1.02  # only complain past 2% over, to keep this quiet
+
+
+def _text_width(node, size: float, mono: bool, bold: bool) -> float:
+    """Estimated advance width of a <text>, including its tspans."""
+    chars = 0
+    for n in node.childNodes:
+        if n.nodeType == n.TEXT_NODE:
+            chars += len(n.data)
+        elif n.nodeType == n.ELEMENT_NODE and n.tagName == "tspan":
+            chars += sum(
+                len(c.data) for c in n.childNodes if c.nodeType == c.TEXT_NODE
+            )
+    factor = _MONO if mono else _SANS
+    if bold:
+        factor *= _BOLD
+    return chars * size * factor
+
+
+def check_text_fit(path: Path) -> list[str]:
+    """Flag <text> that probably runs off the canvas.
+
+    A clipped label still renders and still looks fine in the source — it is only
+    visible in the raster, which is exactly the kind of thing that ships.
+    """
+    import xml.dom.minidom as minidom
+
+    try:
+        doc = minidom.parse(str(path))
+    except Exception as exc:  # a malformed SVG is a louder problem than layout
+        return [f"{path.name}: does not parse as XML — {exc}"]
+
+    root = doc.documentElement
+    vb = (root.getAttribute("viewBox") or "").split()
+    if len(vb) != 4:
+        return []
+    canvas = float(vb[2])
+
+    out = []
+    for node in doc.getElementsByTagName("text"):
+        try:
+            x = float(node.getAttribute("x") or 0)
+        except ValueError:
+            continue
+        size_attr = node.getAttribute("font-size")
+        try:
+            size = float(size_attr) if size_attr else 12.0
+        except ValueError:
+            size = 12.0
+
+        family = node.getAttribute("font-family") or ""
+        mono = "Mono" in family or "mono" in family
+        bold = (node.getAttribute("font-weight") or "") in ("600", "700", "bold")
+
+        w = _text_width(node, size, mono, bold)
+        anchor = node.getAttribute("text-anchor") or "start"
+        right = x + w if anchor == "start" else (x + w / 2 if anchor == "middle" else x)
+
+        if right > canvas * _OVERFLOW_SLACK:
+            snippet = (node.firstChild.data if node.firstChild and
+                       node.firstChild.nodeType == node.TEXT_NODE else "")[:40]
+            out.append(
+                f"{path.name}: text at x={x:g} likely overflows the {canvas:g}px "
+                f"canvas (~{right:.0f}px) — {snippet!r}"
+            )
+    return out
+
 
 def render_provenance(fig: dict) -> str:
     """The manifest entry, as the comment block that lives inside the SVG.
@@ -186,6 +258,15 @@ def check(manifest: dict) -> tuple[list[str], list[str]]:
             failures.append(
                 f"{svg.name}: present in docs/diagrams/ but absent from the manifest"
             )
+        # Layout, not provenance — but it is the same failure shape: renders
+        # fine, looks fine in the source, wrong only in the raster.
+        #
+        # Hand-authored figures only. An exported frame gets its font-size and
+        # text-anchor from the substrate's stylesheet, which this estimator
+        # cannot read, so every centred label there reads as an overflow. The
+        # substrate is checked by looking at it; these are checked by counting.
+        if svg.name not in generated:
+            warnings.extend(check_text_fit(svg))
 
     return failures, warnings
 

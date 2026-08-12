@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 590" width="880" height="590" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>Three kinds of leak, and why collapsing them is the mistake</title>
+  <desc>A leak you chose, a leak the stack chose for you, and a leak nobody chose and everyone inherited. Each has a different fix, a different owner, and a different obligation on whoever describes it.</desc>
+<!-- provenance
+     serves:   POST
+     shows:    The three leak classes — chosen by you, chosen for you by the stack,
+               chosen by nobody and inherited — each with a worked example from this
+               build, the fix, and the obligation on whoever describes it.
+     sources:  docs/posts/01-discovery-supporting-material.md
+               demo/GAPS.md
+               docs/00-vision.md
+     evidence: [measured] The class-01 example — the payee chooses the address form, and
+                   a payer cannot upgrade a public destination — observed in the running
+                   build
+               [from-source] Class 02's one-topic-per-conversation shape, and LOGOS-
+                   MIXNET at status raw, send-only, off the near-term roadmap. Dated 2026-08
+               [measured] Class 03's account-identifier finding — reproduced twice, cause
+                   identified, reported upstream with a single-file reproducer
+     recheck:  If LOGOS-MIXNET moves, or the upstream account-identifier bug is fixed.
+               Either would move an example out of its class, which is the interesting
+               kind of staleness.
+-->
+
+  <rect width="880" height="590" fill="#E4E6E0"/>
+
+  <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">Three kinds of leak</text>
+  <text x="40" y="64" font-size="13.5" fill="#656E66">Most privacy writing collapses these into one. They have different fixes, different owners, and different obligations.</text>
+
+  <!-- ══════════ 1. YOU CHOSE ══════════ -->
+  <rect x="40" y="88" width="800" height="126" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="40" y="88" width="5" height="126" rx="2.5" fill="#1E6B52"/>
+
+  <text x="64" y="118" font-size="26" font-weight="600" fill="#DFEDE6">01</text>
+  <text x="64" y="142" font-size="13" font-weight="600" fill="#1E6B52">A leak</text>
+  <text x="64" y="158" font-size="13" font-weight="600" fill="#1E6B52">you chose</text>
+  <text x="64" y="180" font-size="9" fill="#656E66">You are the one who</text>
+  <text x="64" y="192" font-size="9" fill="#656E66">can change it.</text>
+
+  <text x="256" y="114" font-size="10.5" fill="#1A1F1C" font-weight="600">In this build: <tspan font-weight="400" fill="#3F4742">you answer an address request with a public account id rather than a shielded receiving key.</tspan></text>
+  <text x="256" y="128" font-size="10" fill="#3F4742">Anyone reading the chain sees the payment. The choice is deliberately the payee's, and it comes first.</text>
+
+  <text x="256" y="152" font-size="10.5" fill="#1A1F1C" font-weight="600">What would change it: <tspan font-weight="400" fill="#3F4742">nothing but a different choice. A payer cannot upgrade a public destination to a private</tspan></text>
+  <text x="256" y="166" font-size="10" fill="#3F4742">one — the address form is what a rail can reach, not a preference.</text>
+
+  <text x="256" y="190" font-size="10.5" fill="#1A1F1C" font-weight="600">The obligation: <tspan font-weight="400" fill="#3F4742">say what it costs at the moment of choosing, not in a panel someone has to go and open.</tspan></text>
+
+  <!-- ══════════ 2. THE STACK CHOSE ══════════ -->
+  <rect x="40" y="226" width="800" height="140" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="40" y="226" width="5" height="140" rx="2.5" fill="#4B33C4"/>
+
+  <text x="64" y="256" font-size="26" font-weight="600" fill="#EAE6FA">02</text>
+  <text x="64" y="280" font-size="13" font-weight="600" fill="#4B33C4">A leak the stack</text>
+  <text x="64" y="296" font-size="13" font-weight="600" fill="#4B33C4">chose for you</text>
+  <text x="64" y="318" font-size="9" fill="#656E66">Not yours to fix, and</text>
+  <text x="64" y="330" font-size="9" fill="#656E66">not the app's either.</text>
+
+  <text x="256" y="252" font-size="10.5" fill="#1A1F1C" font-weight="600">In this build: <tspan font-weight="400" fill="#3F4742">one content topic per conversation. A store node sees which topics this client subscribes to</tspan></text>
+  <text x="256" y="266" font-size="10" fill="#3F4742">and when it publishes or fetches — the contact graph, pseudonymously. End-to-end encryption does not touch it.</text>
+
+  <text x="256" y="290" font-size="10.5" fill="#1A1F1C" font-weight="600">What would change it: <tspan font-weight="400" fill="#3F4742">a mixnet at the transport layer. Not an application change, and not Tor — Tor hides</tspan></text>
+  <text x="256" y="304" font-size="10" fill="#3F4742"><tspan font-style="italic">who by IP</tspan>, not <tspan font-style="italic">what links to what</tspan>. Running your own store node is not a fix either: it protects the operator's own</text>
+  <text x="256" y="318" font-size="10" fill="#3F4742">metadata, not their peers', and it lets an operator learn when a target fetches.</text>
+
+  <text x="256" y="342" font-size="10.5" fill="#1A1F1C" font-weight="600">The obligation: <tspan font-weight="400" fill="#3F4742">name the fix and its real status.</tspan><tspan font-weight="400" fill="#A32D1E">&#160;LOGOS-MIXNET is a LIP at status `raw`, implemented</tspan></text>
+  <text x="256" y="356" font-size="10" fill="#A32D1E">send-only, and absent from the near-term roadmap. "Coming soon" is not a status.</text>
+
+  <!-- ══════════ 3. NOBODY CHOSE ══════════ -->
+  <rect x="40" y="378" width="800" height="140" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="40" y="378" width="5" height="140" rx="2.5" fill="#A32D1E"/>
+
+  <text x="64" y="408" font-size="26" font-weight="600" fill="#F6E3DF">03</text>
+  <text x="64" y="432" font-size="13" font-weight="600" fill="#A32D1E">A leak nobody</text>
+  <text x="64" y="448" font-size="13" font-weight="600" fill="#A32D1E">chose</text>
+  <text x="64" y="470" font-size="9" fill="#656E66">Inherited. Everyone</text>
+  <text x="64" y="482" font-size="9" fill="#656E66">on the network has it.</text>
+
+  <text x="256" y="404" font-size="10.5" fill="#1A1F1C" font-weight="600">In this build: <tspan font-weight="400" fill="#3F4742">the anonymity set is small because the network is young — a demo with two users is the</tspan></text>
+  <text x="256" y="418" font-size="10" fill="#3F4742">smallest one there is. And a private account id derives from (viewing key, identifier); the keys a recipient publishes</text>
+  <text x="256" y="432" font-size="10" fill="#3F4742">carry no identifier, so the sender's client picks one at random and the money lands where nobody is looking.</text>
+
+  <text x="256" y="456" font-size="10.5" fill="#1A1F1C" font-weight="600">What would change it: <tspan font-weight="400" fill="#3F4742">time and adoption for the first. For the second, an upstream fix — reported, with a</tspan></text>
+  <text x="256" y="470" font-size="10" fill="#3F4742">single-file reproducer. The app works around it today by summing the accounts it can find by scanning.</text>
+
+  <text x="256" y="494" font-size="10.5" fill="#1A1F1C" font-weight="600">The obligation: <tspan font-weight="400" fill="#3F4742">do not present an inherited limit as a design — and do not present a workaround as one either.</tspan></text>
+
+  <!-- ══════════ THE POINT ══════════ -->
+  <text x="40" y="552" font-size="12.5" font-weight="600" fill="#1A1F1C">Three different fixes, three different owners, three different things a reader can do about it.</text>
+  <text x="40" y="572" font-size="11.5" fill="#656E66">A write-up that calls all three "privacy trade-offs" has told you nothing about which one you can act on.</text>
+</svg>

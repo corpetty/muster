@@ -269,7 +269,7 @@ None of this produces a publishable figure. All of it makes every later tranche 
 
 ## 8. Built so far
 
-Tranches 0, 1 and 2 are complete. **Next: tranche 3**, post 2/3 material.
+Tranches 0 through 3 are complete. **Next: tranche 4**, the settlement post.
 
 **Tranche 0 — foundations.**
 
@@ -303,6 +303,20 @@ The five post-1 figures moved and were renamed; `01-discovery-supporting-materia
 
 `arch-instance-state` is **struck** — `--user-dir`, `module_data/<module>/` and the wallet derivation are already in `arch-instance-topology`'s ON DISK column. The one fact it would have added and that appears nowhere: `chat_ui` and `chat_module` share the chat module's log directory, because the platform assigns a view module none of its own.
 
-Thirteen exported frames across the two substrates, each with a 2× PNG. Frames are generated: edit the substrate, never the frame.
+**Tranche 3 — post 2/3 material.**
+
+| | |
+|---|---|
+| `pipeline-three-leaks.svg` | Chosen by you / chosen for you by the stack / chosen by nobody, each with a worked example from this build, its fix, and the obligation it puts on whoever describes it |
+| `pipeline-four-rails.svg` | What each of the four transfer directions discloses and costs, over the floor that holds on all of them — plus the one place the honesty rule is enforced by code rather than by remembering it |
+| `pipeline-negotiation-comparison.svg` | A hosted transaction service against the room, with the room-not-chain threshold limit in the same frame and the live trade it forces |
+| `tools/make-locator.py` → 7 strips | The per-post "you are here" bar. Generated, because seven near-identical files that must agree is exactly what a script is for |
+| `substrate-pipeline.html` → 3 views | `pipeline-observer-panel`, folded in. Selecting by *observer* rather than by stage — store node / the zone / nobody |
+
+`pipeline-observer-panel` is **struck as a separate figure**: its axis is already the keystone's right-hand column, and three views get the per-observer reading for the cost of three objects in an array. The `obs-nobody` view carries the distinction worth keeping — negotiation is blank because it is closed, diligence is blank because the stage does not happen, and those are not the same thing.
+
+Nineteen exported frames across the two substrates plus seven locator strips, each with a 2× PNG. Everything generated: edit the substrate or the generator, never the output.
+
+**A third silent-failure class, now automated.** Text overflowing the canvas happened in three figures running — it renders, it looks fine in the source, and it is only wrong in the raster. `check-manifest.py` now estimates text width and warns. It is a heuristic (one advance-width factor per family) that catches a line 20% too long and will not catch one 2% too long, and it skips exported frames, whose font-size and anchor come from a stylesheet it cannot read.
 
 **Two bugs fixed in the inherited engine**, both silent-failure shaped and worth knowing about: marker fills are unreachable by descendant selectors, so every arrowhead rendered grey; and a bare single-class text modifier (`.bc-flag`) loses on specificity to `.bc-node text`, so gap flags rendered bold-and-black instead of bold-and-red — the colour was the only thing marking a gap. Both are recorded in `tools/CLAUDE.md`.

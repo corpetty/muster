@@ -539,6 +539,33 @@
     ]
   },
   {
+    "id": "obs-store-node",
+    "label": "Seen by: a store node",
+    "title": "What the relay carrying your conversations learns",
+    "body": "It never sees content — the room is end-to-end encrypted and the structured cards ride inside the same encrypted body as the text. What it does see is <strong>shape</strong>: which content topics this client subscribes to, and when it publishes or fetches. That is the contact graph, pseudonymously, and encryption does not touch it. Running your own node does not fix this — it protects the operator's own metadata, not their peers', and it lets an operator serving content learn when a target fetches.",
+    "entry": null,
+    "paths": [],
+    "extras": ["stage-discovery", "obs-discovery", "stage-negotiation", "obs-negotiation"]
+  },
+  {
+    "id": "obs-zone",
+    "label": "Seen by: the zone",
+    "title": "What the execution zone learns",
+    "body": "That a transfer happened, and when. On the private rail it does not learn the amount or either account — but the floor holds on every rail, and on a testnet with two users the anonymity set is as small as an anonymity set gets. There is no network-origin protection, because there is no mixnet. What the zone's mempool exposes before confirmation is <strong>not established</strong>, which is why ordering stays unscored.",
+    "entry": null,
+    "paths": [],
+    "extras": ["stage-ordering", "obs-ordering", "stage-settlement", "obs-settlement"]
+  },
+  {
+    "id": "obs-nobody",
+    "label": "Seen by: nobody",
+    "title": "The two stages no outside party observes",
+    "body": "Worth separating, because they are blank for opposite reasons. <strong>Negotiation</strong> is blank because it is closed by architecture — the terms are agreed inside the encrypted room with no coordination service in it. <strong>Diligence</strong> is blank because the stage does not happen: there is no diligence surface in this build. An absent feature and a closed leak look identical from outside, and treating them the same is the overclaim this whole figure exists to avoid.",
+    "entry": null,
+    "paths": [],
+    "extras": ["stage-diligence", "obs-diligence", "stage-negotiation", "obs-negotiation"]
+  },
+  {
     "id": "unassessed",
     "label": "The two we refuse to score",
     "title": "Ordering and enforcement stay blank",

@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 626" width="880" height="626" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>Agreeing to pay: a hosted service, or the room</title>
+  <desc>A hosted transaction service exposes the proposal, the signer set, who has signed and the timing before anything reaches a chain. Inside the encrypted room none of that leaves — but the threshold is enforced by the room and never by the zone.</desc>
+<!-- provenance
+     serves:   BOTH
+     shows:    A hosted transaction service against the encrypted room: what an operator
+               sees before anything reaches a chain, and what a store node sees instead —
+               with the room-not-chain threshold limit in the same frame.
+     sources:  demo/GAPS.md
+               demo/CLAUDE.md
+     evidence: [measured] Approvals travel the same send_message path as text and are
+                   attributed by the message's own sender, matched against the group roster
+               [from-source] The hosted-multisig side is the documented shape of that
+                   class of service, not a measurement of a named one
+               [from-source] lez-multisig read off the repo 2026-08-11: local sequencer,
+                   no documented testnet deployment, proposal state and calls in public
+                   accounts. Status partial
+     recheck:  If lez-multisig gains a public-testnet deployment. That would end the
+               chain-enforced-threshold-or-shielded-amount trade this figure closes on,
+               which is its whole point.
+-->
+
+  <rect width="880" height="626" fill="#E4E6E0"/>
+
+  <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">Agreeing to pay, two ways</text>
+  <text x="40" y="64" font-size="13.5" fill="#656E66">The strongest comparison in the build — and the one that has to carry its counterweight in the same frame.</text>
+
+  <!-- ══════════ LEFT: the hosted service ══════════ -->
+  <rect x="40" y="88" width="390" height="252" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="40" y="88" width="5" height="252" rx="2.5" fill="#A32D1E"/>
+
+  <text x="62" y="112" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#A32D1E">THE USUAL SHAPE — A HOSTED SERVICE</text>
+
+  <text x="62" y="136" font-size="11" font-weight="600" fill="#1A1F1C">The proposal and the signatures pool in a service.</text>
+  <text x="62" y="152" font-size="10" fill="#3F4742">Everyone involved fetches from it and posts back to it.</text>
+
+  <text x="62" y="178" font-size="10" fill="#3F4742">The operator sees what was proposed, the full signer set,</text>
+  <text x="62" y="192" font-size="10" fill="#3F4742">who has signed and who has not, and the timing — and</text>
+  <text x="62" y="206" font-size="10" fill="#3F4742">frequently, so does anyone who has the URL.</text>
+
+  <text x="62" y="232" font-size="10.5" font-weight="600" fill="#1A1F1C">All of it before anything reaches a chain.</text>
+
+  <rect x="56" y="252" width="358" height="72" rx="4" fill="#23282A"/>
+  <text x="70" y="272" font-size="8.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#96A19B">WHAT AN OUTSIDER LEARNS</text>
+  <text x="70" y="292" font-size="11" font-weight="600" fill="#DCE2DE">The negotiation leaks before the</text>
+  <text x="70" y="307" font-size="11" font-weight="600" fill="#DCE2DE">transaction does.</text>
+
+  <!-- ══════════ RIGHT: the room ══════════ -->
+  <rect x="450" y="88" width="390" height="252" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="450" y="88" width="5" height="252" rx="2.5" fill="#1E6B52"/>
+
+  <text x="472" y="112" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#1E6B52">HERE — INSIDE THE ENCRYPTED ROOM</text>
+
+  <text x="472" y="136" font-size="11" font-weight="600" fill="#1A1F1C">An approval is an ordinary message.</text>
+  <text x="472" y="152" font-size="10" fill="#3F4742">It inherits the conversation's authentication exactly as</text>
+  <text x="472" y="166" font-size="10" fill="#3F4742">text does — it carries its author, and the fold that builds</text>
+  <text x="472" y="180" font-size="10" fill="#3F4742">the card deduplicates by author.</text>
+
+  <text x="472" y="206" font-size="10" fill="#3F4742">So nobody in the room can forge an approval, replay</text>
+  <text x="472" y="220" font-size="10" fill="#3F4742">someone else's, or approve twice. The count is a real</text>
+  <text x="472" y="234" font-size="10" fill="#3F4742">count of real members — <tspan font-weight="600" fill="#1A1F1C">and no service is in the loop.</tspan></text>
+
+  <rect x="466" y="252" width="358" height="72" rx="4" fill="#23282A"/>
+  <text x="480" y="270" font-size="8.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#96A19B">WHAT AN OUTSIDER LEARNS</text>
+  <text x="480" y="287" font-size="10.5" fill="#DCE2DE">That a conversation is active, and when.</text>
+  <text x="480" y="301" font-size="10.5" fill="#96A19B">Not what was proposed, not who agreed,</text>
+  <text x="480" y="315" font-size="10.5" fill="#96A19B">not how many.</text>
+
+  <!-- ══════════ THE COUNTERWEIGHT ══════════ -->
+  <rect x="40" y="360" width="800" height="238" rx="6" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.4"/>
+  <text x="58" y="384" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#A32D1E">AND THE PART THAT TRAVELS WITH IT, ALWAYS, IN THE SAME FRAME</text>
+
+  <text x="58" y="408" font-size="11.5" font-weight="600" fill="#1A1F1C">The zone does not enforce the threshold.</text>
+  <text x="58" y="424" font-size="10.5" fill="#3F4742">The account that pays is single-key. Whoever proposed the payment could have paid it without waiting for anyone, and the only</text>
+  <text x="58" y="438" font-size="10.5" fill="#3F4742">record that they waited is the conversation. "2 of 3" is enforced by the room, never by the chain — an outside observer sees an</text>
+  <text x="58" y="452" font-size="10.5" fill="#3F4742">ordinary transfer with no policy attached to it.</text>
+
+  <text x="58" y="478" font-size="11.5" font-weight="600" fill="#1A1F1C">An approval is not bound to what it approves.</text>
+  <text x="58" y="494" font-size="10.5" fill="#3F4742">Approvals name a proposal by an id this app minted. Nothing commits to an environment, an account, a serialization slot or an</text>
+  <text x="58" y="508" font-size="10.5" fill="#3F4742">expiry, so their scope is this conversation by convention rather than by construction.</text>
+
+  <text x="58" y="534" font-size="11.5" font-weight="600" fill="#1A1F1C">What would close the first, and where it actually stands.</text>
+  <text x="58" y="550" font-size="10.5" fill="#3F4742">An account whose policy the zone itself enforces. <tspan font-family="'DM Mono',ui-monospace,Menlo,monospace">lez-multisig</tspan> implements exactly this flow — but against a local sequencer,</text>
+  <text x="58" y="564" font-size="10.5" fill="#3F4742">with no documented deployment to this testnet, and its proposal state and calls are <tspan font-weight="600">public accounts</tspan>. Status: <tspan font-weight="600">partial</tspan>.</text>
+
+  <rect x="58" y="572" width="764" height="0.8" fill="#A32D1E" opacity="0.3"/>
+  <text x="58" y="586" font-size="11.5" font-weight="600" fill="#A32D1E">So today the choice is a chain-enforced threshold or a shielded amount — not both. That is a live trade, not a missing feature.</text>
+</svg>

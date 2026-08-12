@@ -73,3 +73,21 @@
 {"type":"rename","timestamp":"2026-08-12T22:19:40.674268354Z","issue_id":"exo-70b","payload":{"new_id":"exo-2d5.9"}}
 {"type":"dep_add","timestamp":"2026-08-12T22:19:40.674268354Z","issue_id":"exo-2d5.9","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
 {"type":"comment","timestamp":"2026-08-12T22:19:40.695949346Z","issue_id":"exo-2d5","payload":{"body":"arch-instance-state struck from the catalogue: --user-dir, module_data/\u003cmodule\u003e/ and the muster-wallet derivation are already carried by arch-instance-topology's ON DISK column. The one fact it would have added and does not appear anywhere — chat_ui and chat_module share the chat module's log directory because the platform assigns a view module none of its own — is noted here rather than given a figure."}}
+{"type":"close","timestamp":"2026-08-12T22:25:24.768540496Z","issue_id":"exo-2d5.7","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:25:24.768540496Z","issue_id":"exo-2d5.8","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:25:24.768540496Z","issue_id":"exo-2d5.9","payload":{}}
+{"type":"create","timestamp":"2026-08-12T22:37:01.811412139Z","issue_id":"exo-0d6","payload":{"description":"Tranche 3 of the diagram programme (docs/diagrams/README.md §5) — post 2/3 material.","priority":"2","title":"pipeline-three-leaks: chosen by you / by the stack / by nobody","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:37:01.849585434Z","issue_id":"exo-0d6","payload":{"new_id":"exo-2d5.10"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:37:01.849585434Z","issue_id":"exo-2d5.10","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:37:01.870481783Z","issue_id":"exo-7b5","payload":{"description":"Tranche 3 of the diagram programme (docs/diagrams/README.md §5) — post 2/3 material.","priority":"2","title":"pipeline-four-rails: what each rail discloses, and the floor","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:37:01.894221747Z","issue_id":"exo-7b5","payload":{"new_id":"exo-2d5.11"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:37:01.894221747Z","issue_id":"exo-2d5.11","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:37:01.91395305Z","issue_id":"exo-fa0","payload":{"description":"Tranche 3 of the diagram programme (docs/diagrams/README.md §5) — post 2/3 material.","priority":"2","title":"pipeline-negotiation-comparison: hosted multisig vs the room","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:37:01.938333856Z","issue_id":"exo-fa0","payload":{"new_id":"exo-2d5.12"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:37:01.938333856Z","issue_id":"exo-2d5.12","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:37:01.959262846Z","issue_id":"exo-a4a","payload":{"description":"Tranche 3 of the diagram programme (docs/diagrams/README.md §5) — post 2/3 material.","priority":"2","title":"series-locator: a seven-stage 'you are here' strip per post","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:37:01.984592453Z","issue_id":"exo-a4a","payload":{"new_id":"exo-2d5.13"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:37:01.984592453Z","issue_id":"exo-2d5.13","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:37:02.005410504Z","issue_id":"exo-9f4","payload":{"description":"Tranche 3 of the diagram programme (docs/diagrams/README.md §5) — post 2/3 material.","priority":"2","title":"Observer views on the pipeline substrate","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:37:02.031475962Z","issue_id":"exo-9f4","payload":{"new_id":"exo-2d5.14"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:37:02.031475962Z","issue_id":"exo-2d5.14","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
