@@ -14,35 +14,90 @@ Rule inherited from `docs/00-vision.md`: never publish an `inferred` row as fact
 
 ---
 
-## 1. The thesis, as separable claims
+## 1. The pipeline — use the seven-stage version
 
-Stated so each can be attacked on its own.
+**This supersedes the four-stage framing (discovery / diligence / negotiation / settlement) in the earlier draft.** The seven-stage version is already published in the PriFi competitor matrix cross-check, so the post should be consistent with it rather than inventing a second taxonomy.
+
+Stage names and leak descriptions, verbatim from that document:
+
+| Stage | Leak being rated |
+|---|---|
+| **Discovery** | counterparties, intent: is there private counterparty/liquidity discovery, or Telegram/public frontends? |
+| **Diligence** | address history, identity graph: can surveillance firms graph the chain? |
+| **Negotiation** | size, terms, reservation price: pre-trade leakage to RPCs, quote infra, operators |
+| **Contracting** | frontend and signing context: verifiable/local-first frontends, signing leaks |
+| **Ordering** | pending order flow: mempool visibility, MEV, network-origin (IP) protection |
+| **Settlement** | balances, approvals, positions: on-chain privacy, default vs opt-in |
+| **Enforcement** | identifiable operators: can block producers be identified and coerced? |
+
+Definitions worth restating in the post, because three of these are unfamiliar:
+
+- **Contracting** — whether signing and execution context stays local and verifiable, or a web frontend introduces ambient leakage.
+- **Ordering** — whether mempool contents, timing and MEV surface to validators, miners or network observers *before* confirmation.
+- **Enforcement** — whether block producers are anonymous (censorship-resistant) or identifiable (coercible). Anonymous randomised selection is the standard; a permissioned sequencer set is not.
+
+**Source:** <https://logos-co.github.io/assembly/resources/prifi-deck-competitor-matrix-crosscheck>
+
+### What the extra stages do to the thesis
+
+The four-stage version said *"the blockchain touches stage four, that's it."* Under seven stages that is wrong, and the corrected version is **stronger**:
+
+- The chain is involved in **three** stages — Ordering, Settlement, Enforcement.
+- Privacy discourse concentrates on **one** of them: Settlement. Shielded amounts, mixers, stealth addresses.
+- **Ordering** gets partial attention (MEV, private mempools) and is mostly framed as an economic problem rather than a privacy one.
+- **Enforcement** gets almost none, despite deciding whether anyone *can* be compelled.
+- **Discovery, Diligence, Negotiation and Contracting** — four of seven, everything before a transaction exists — leak intent and are barely examined at all.
+
+So: not "one of four" but **"privacy argument covers roughly one stage in seven, and it isn't the one that leaks the most about you."**
+
+### Claims, so each can be attacked separately
 
 | # | Claim | Support |
 |---|---|---|
-| T1 | Every inter-personal transaction moves through discovery → diligence → negotiation → settlement | Framing. Not empirical — §10 Q1 invites it being broken |
-| T2 | The blockchain touches only stage four | Definitional, and the reason the framing earns its place |
-| T3 | Stages 1–3 leak *intent*, to more parties than stage 4 leaks *value* | Argument, illustrated by the discovery case below |
-| T4 | Those three stages run on infrastructure that keeps records, largely unexamined | Argument |
+| T1 | An inter-personal transaction moves through these seven stages | Framing, published. §10 Q1 invites it being broken |
+| T2 | The chain is present in only three of them, and privacy discourse in about one | Definitional plus observation |
+| T3 | Stages 1–4 leak *intent*, to more parties than stage 6 leaks *value* | Argument, illustrated by the discovery case below |
+| T4 | The operators in the middle — RPCs, quote infra, frontends, sequencers — are the least examined and often the most sighted | The matrix's own central finding |
 | T5 | Leaks divide into: chosen by you, chosen by the stack for you, inherited by everyone | Framing, and the most reusable idea in the post |
 
-The sharpest form of T3: from settlement an observer learns *an amount moved between two addresses at a time*. From the other three they learn **who you considered dealing with, what you checked, what you asked for, what you settled on, what you rejected, and when you hesitated.**
-
----
-
-## 2. The pipeline, per stage
-
-| Stage | The question | Conventional infrastructure | What it retains |
-|---|---|---|---|
-| 1. Discovery | How do you find them? | Marketplace, directory, order book, platform handle | The search, the edge in a social graph |
-| 2. Diligence | Are they who they claim, with what they claim? | Profile, reputation score, KYC provider, explorer lookup | That you checked, and whom |
-| 3. Negotiation | What are the terms? | Chat, email, comments, forms | The whole thread, indefinitely, and compellably |
-| 4. Settlement | How does value move, and when is it final? | The chain | Amount, addresses, timestamp — permanently, publicly |
+The sharpest form of T3: from settlement an observer learns *an amount moved between two addresses at a time*. From the earlier stages they learn **who you considered dealing with, what you checked, what you asked for, what you settled on, what you rejected, and when you hesitated.**
 
 **Two caveats to state early, both true and both easy to omit:**
 
 - The pipeline **loops**. Diligence sends you back to discovery; negotiation surfaces a fact needing checking.
 - The pipeline is **not universal in shape**. Discovery for "send a friend £20" is a different problem from discovery on a DEX, an NFT purchase, or a hire. This is why the series retells it per use case.
+
+---
+
+## 2. The scoring scheme, and Muster scored by it
+
+The matrix rates each stage on three levels. Reusing it here rather than inventing a scale keeps the post consistent with the published work — and, more usefully, lets Muster be held to the standard its author is applying to everyone else.
+
+| Mark | Meaning |
+|---|---|
+| ● **Closed** | leak closed by default architecture |
+| ◑ **Partial** | partially mitigated or opt-in |
+| ○ **Leaks** | essentially unaddressed |
+
+The criterion the matrix applies, and the reason it is worth applying to ourselves: **default vs opt-in, and shipped vs roadmap, strictly — "because an adversarial investor will."**
+
+### Muster as it stands today — draft self-assessment
+
+**This is the most exposed thing in the post and needs your judgement before it goes anywhere.** It is scored strictly against the *demo as it runs*, not against the specification. Two cells are deliberately left unscored rather than guessed.
+
+| Stage | Mark | Why, strictly |
+|---|---|---|
+| Discovery | ◑ | No directory, no lookup, no server that learns the edge — that part is closed by architecture. But the introduction is unauthenticated, and a relay still sees subscription shape. **[measured]** |
+| Diligence | ○ | Not addressed at all. There is no diligence surface in the build; the next post is about what one could look like. Scoring this ● because "we don't do lookups" would be exactly the overclaim the matrix criticises |
+| Negotiation | ● | The strongest cell. Terms are agreed inside an end-to-end encrypted room with **no coordination service anywhere in it** — no RPC, no quote infra, no operator sees the proposal, the approvals or the timing. Closed by default, not opt-in **[measured]** |
+| Contracting | ◑ | Local-first by construction: a native client, no web frontend, no ambient leakage. But **the signing context is not verifiable** — the client does not re-derive what it signs (F-4/FS-6 are specified and unbuilt), so a user reviews an amount rather than a payload |
+| Ordering | *not assessed* | Needs the zone's own answer on mempool visibility and sequencer behaviour. What is known: no network-origin protection (no mixnet), and the zone learns that a transfer happened and when. Do not score this without checking |
+| Settlement | ◑ | Shielded on both ends by default, which is the ● case — but the **recipient is not credited at the address they published**, and the build carries a workaround. A stage that needs a workaround to complete is not closed |
+| Enforcement | *not assessed* | The testnet runs against a single named sequencer, which by the matrix's own standard ("anonymous randomised selection is the standard, not permissioned sequencer sets") points at ○ — but confirm the production model before printing it |
+
+**Why publish this.** The matrix's stated failure mode is "the same standard applied to one project and not its neighbour". A post that scores everyone else and exempts its own prototype would be the thing it is complaining about. Two ○/unscored cells and a ◑ on settlement is a more credible document than a row of ●.
+
+**The honest headline:** on its own matrix, this build closes **one** stage of seven by default. That is a defensible result for a two-week prototype whose thesis is that the middle of the pipeline is neglected — it closes the neglected middle and leaves the well-trodden end open.
 
 ---
 
@@ -157,7 +212,8 @@ Built and in `docs/posts/figures/`. Each is SVG, in the prototype's palette, siz
 
 | File | Shows | Best used for |
 |---|---|---|
-| `fig1-pipeline.svg` | The four stages, what each leaks, and the chain touching only the fourth | The thesis. Probably the post's opening figure |
+| `fig1-pipeline.svg` | All seven stages with their leak descriptions, the four that precede a transaction, the three the chain is in, and the one the argument concentrates on | The thesis. The post's opening figure |
+| `fig5-muster-self-assessment.svg` | Muster scored ●/◑/○ on its own seven-stage matrix, two cells left unassessed | The credibility move — see §2. Pair it with fig1 |
 | `fig2-discovery-comparison.svg` | Introduction with a directory vs without — who learns the edge | The discovery argument, side by side |
 | `fig3-what-a-relay-sees.svg` | Content vs metadata across the journey: what is hidden, what is not | The FS-9 honesty point made concrete |
 | `fig4-cost-of-privacy.svg` | Proving time against human-interaction thresholds | "Not an interaction, a job" — for the settlement post, optional teaser here |
@@ -239,3 +295,4 @@ Lifted verbatim so they are not lost in the rewrite. Use, cut or rework freely.
 | Messaging contract | `logos-co/logos-chat-module` `rust-lib/chat_module.lidl` |
 | Wallet contract, incl. the label system | `logos-blockchain/logos-execution-zone-module` `src/lez_core_module.h` |
 | Platform gaps with upstream issue numbers | `logos-co/eth-lez-atomic-swaps` `delivery-dogfooding.md` |
+| **The seven-stage pipeline, its leak descriptions and the ●/◑/○ scale** | [PriFi deck competitor matrix cross-check](https://logos-co.github.io/assembly/resources/prifi-deck-competitor-matrix-crosscheck) — already published, so the post should match it rather than introduce a second taxonomy |
