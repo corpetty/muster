@@ -1,3 +1,12 @@
+> **Superseded — kept for its prose, not as the working document.**
+> The facts, measurements, statuses, shot list and open questions from this draft now live in
+> [`01-discovery-supporting-material.md`](01-discovery-supporting-material.md), rewritten as reference
+> material to write against, and brought up to date with everything found since (the settlement bug and
+> its cause, the authorization stage, the workaround). The phrasings worth keeping are collected in its §11.
+>
+> Nothing here is wrong, but parts are now out of date — most importantly §"Next", which describes the
+> recipient-credit issue as an open mystery. It is understood, reported and worked around.
+
 # The blockchain is one stage of four, and it's the one we talk about least usefully
 
 *First in a series. I'm building a thing called Muster and writing up what I find. This post lays out the transaction pipeline as a whole, then digs into the first stage — discovery — with a working prototype on the Logos stack. It's a research post: I want argument, not applause.*
