@@ -1,6 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 524" width="880" height="524" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>The transaction pipeline: seven stages, and where privacy argument actually lands</title>
   <desc>Discovery, diligence, negotiation and contracting leak intent before a transaction exists. Ordering, settlement and enforcement involve the chain. Privacy discourse concentrates almost entirely on settlement.</desc>
+<!-- provenance
+     serves:   POST
+     shows:    All seven stages with their leak descriptions, the four that precede a
+               transaction, the three the chain is in, and the one the argument
+               concentrates on.
+     sources:  docs/posts/01-discovery-supporting-material.md
+     evidence: [from-source] Stage names and leak descriptions, verbatim from the
+                   published PriFi matrix
+               [illustrative] The conventional-stack examples under each stage ('to a
+                   directory', 'to an explorer', 'to a chat host') characterise the status
+                   quo; they are not measurements
+     recheck:  If the published seven-stage taxonomy changes upstream. It is the post's
+               opening figure and the series' spine.
+-->
 
   <rect width="880" height="524" fill="#E4E6E0"/>
 

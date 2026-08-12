@@ -102,6 +102,24 @@ repos:
         language: system
         stages: [commit-msg]
 
+  # diagram-manifest: every figure in docs/diagrams/ declares the files it
+  # derives its facts from, and which of its content is measured / from source
+  # / illustrative (docs/diagrams/README.md §2). A diagram's failure mode is not
+  # being wrong -- it is continuing to render, and continuing to look
+  # authoritative, while describing a topology that changed two phases ago.
+  # Nothing breaks when that happens, which is why it needs a machine watching.
+  # Same split ADR-012 uses for walkthrough claims: a deleted source FAILS (the
+  # figure describes something that is gone), a changed source WARNS (most edits
+  # do not invalidate a figure -- look, then re-stamp with --update).
+  - repo: local
+    hooks:
+      - id: diagram-manifest
+        name: "Figures declare their sources and evidence grades"
+        entry: docs/diagrams/tools/check-manifest.py
+        language: system
+        pass_filenames: false
+        files: '^docs/diagrams/'
+
   # === Base hooks ===
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0

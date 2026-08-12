@@ -1,6 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 432" width="880" height="432" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>What a shielded payment costs in time</title>
   <desc>A shielded transfer takes between six and eight minutes of saturated CPU, which is three orders of magnitude beyond the threshold at which an interaction still feels like one.</desc>
+<!-- provenance
+     serves:   POST
+     shows:    Shielded-transfer proving time against human-interaction thresholds.
+     sources:  docs/posts/01-discovery-supporting-material.md
+               demo/GAPS.md
+     evidence: [measured] The bars — 6m41s, 7.4min and 447s, on a 13-core desktop against
+                   the LEZ testnet, 2026-08-11/12. Whether that is typical is NOT established
+               [illustrative] The band marked 'a person will wait this long' is a rule of
+                   thumb about attention, not something measured here
+     recheck:  Before the settlement post publishes, and any time the zone changes
+               proving. The 'do not state as typical' caveat in §5 travels with this
+               figure.
+-->
 
   <rect width="880" height="432" fill="#E4E6E0"/>
 

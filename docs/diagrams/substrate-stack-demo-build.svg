@@ -1,0 +1,468 @@
+<svg class="bc-svg" width="960" height="716" viewBox="0 0 960 716" data-view="demo-build" xmlns="http://www.w3.org/2000/svg"
+           role="img" aria-labelledby="bc-svg-title bc-svg-desc">
+  <style><![CDATA[
+  /* Tokens are declared on .bc-svg as well as .bc so that an <svg> lifted out of
+     this page for static export carries them without any CSS rewriting. */
+  .bc, .bc-svg {
+    --bc-paper:   #E4E6E0;
+    --bc-surface: #F7F8F5;
+    --bc-ink:     #1A1F1C;
+    --bc-muted:   #656E66;
+    --bc-rule:    #C6CBC3;
+
+    --bc-signal:      #4B33C4;
+    --bc-signal-soft: #EAE6FA;
+    --bc-settled:      #1E6B52;
+    --bc-settled-soft: #DFEDE6;
+    --bc-alarm:      #A32D1E;
+    --bc-alarm-soft: #F6E3DF;
+
+    --bc-outside:        #23282A;
+    --bc-outside-ink:    #DCE2DE;
+    --bc-outside-rule:   #3A4144;
+    --bc-outside-accent: #8FA3F5;
+
+    --bc-mono: 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --bc-sans: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --bc-dim: 0.22;
+  }
+  .bc { margin: 2em 0; color: #1A1F1C; }
+
+  .bc-panel {
+    background: #F7F8F5;
+    border: 1px solid #C6CBC3;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .bc-panel-header {
+    padding: 0.7em 1.1em;
+    background: #E4E6E0;
+    border-bottom: 1px solid #C6CBC3;
+    font-family: 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 0.7em;
+    font-weight: 600;
+    color: #656E66;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+  }
+  .bc-panel-header .bc-spacer { margin-left: auto; }
+
+  .bc-playpause {
+    font-family: 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 0.95em;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.3em 0.7em;
+    border: 1px solid #C6CBC3;
+    background: #F7F8F5;
+    color: #656E66;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .bc-playpause:hover { border-color: #1A1F1C; color: #1A1F1C; }
+  .bc-playpause:focus-visible { outline: 2px solid #4B33C4; outline-offset: 2px; }
+
+  /* ── Tabs ── */
+  .bc-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35em;
+    padding: 0.85em 1em;
+    background: #E4E6E0;
+    border-bottom: 1px solid #C6CBC3;
+  }
+  .bc-tab {
+    font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 0.82em;
+    font-weight: 500;
+    padding: 0.42em 0.9em;
+    border: 1px solid #C6CBC3;
+    background: #F7F8F5;
+    color: #656E66;
+    border-radius: 999px;
+    cursor: pointer;
+    line-height: 1.25;
+  }
+  .bc-tab:hover { border-color: #1A1F1C; color: #1A1F1C; }
+  .bc-tab:focus-visible { outline: 2px solid #4B33C4; outline-offset: 2px; }
+  .bc-tab[aria-selected="true"] {
+    background: #1A1F1C;
+    border-color: #1A1F1C;
+    color: #F7F8F5;
+  }
+
+  .bc-stage { padding: 1.3em 1em 0.9em; background: #F7F8F5; }
+  .bc-svg { display: block; width: 100%; height: auto; max-width: 100%; }
+
+  /* ── Layer bands ── */
+  .bc-layer-bg { stroke: none; transition: opacity 0.3s ease; }
+  .bc-layer-entry   { fill: #EDEEEA; }
+  .bc-layer-apps    { fill: #F2F3EF; }
+  .bc-layer-modules { fill: #E8EAE4; }
+  .bc-layer-network { fill: #DDE0D8; }
+  .bc-layer-runtime { fill: #D2D6CC; }
+  .bc-layer-beyond  { fill: #23282A; }
+
+  .bc-layer-label {
+    font-family: 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    fill: #656E66;
+    transition: opacity 0.3s ease;
+  }
+  .bc-layer-label-out { fill: #96A19B; }
+
+  /* ── Nodes ── */
+  .bc-node rect {
+    fill: #F7F8F5;
+    stroke: #C6CBC3;
+    stroke-width: 1;
+    transition: fill 0.3s ease, stroke 0.3s ease, opacity 0.3s ease;
+  }
+  .bc-node text {
+    font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    fill: #1A1F1C;
+    font-size: 11px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    transition: fill 0.3s ease, opacity 0.3s ease;
+  }
+  .bc-node-sub { font-size: 9px; fill: #656E66; }
+  .bc-node-mono { font-family: 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace; }
+
+  /* Ours, as opposed to the platform's. */
+  .bc-node-ours rect { stroke: #4B33C4; fill: #EAE6FA; }
+
+  /* Specified but not built. Dashed, and it says so in words as well —
+     the dash is a reminder, the label is the claim. */
+  .bc-node-unbuilt rect { stroke-dasharray: 4 3; fill: #E4E6E0; }
+  .bc-node-unbuilt text { font-style: italic; fill: #656E66; }
+
+  /* Beyond the device: dark ground, light ink. */
+  .bc-node-out rect { fill: #2E3436; stroke: #3A4144; }
+  .bc-node-out text { fill: #DCE2DE; }
+  .bc-node-out .bc-node-sub { fill: #96A19B; }
+
+  /* ── Entry zones ── */
+  .bc-entry .bc-entry-frame, .bc-entry .bc-entry-header { stroke: none; transition: fill 0.3s ease, opacity 0.3s ease; }
+  .bc-entry .bc-entry-frame  { fill: #E4E6E0; }
+  .bc-entry .bc-entry-header { fill: #3A4144; }
+  .bc-entry text.bc-entry-title {
+    font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12.5px; font-weight: 600;
+    fill: #F7F8F5; text-anchor: middle; dominant-baseline: middle;
+  }
+  .bc-entry text.bc-entry-sub {
+    font-family: 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace; font-size: 9px; fill: #656E66;
+    text-anchor: middle; dominant-baseline: middle;
+  }
+
+  /* ── Arrows ── */
+  .bc-arrow path { fill: none; stroke: #8A928C; stroke-width: 1.2; }
+  .bc-arrow-head { fill: #8A928C; }
+  .bc-flow-arrow path {
+    fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 5 4;
+    animation: bc-flow-dash 0.9s linear infinite;
+  }
+  @keyframes bc-flow-dash { to { stroke-dashoffset: -18; } }
+
+  /* ── Dimming ── */
+  .bc-svg[data-view]:not([data-view="overview"]) .bc-node:not(.bc-hl) rect,
+  .bc-svg[data-view]:not([data-view="overview"]) .bc-node:not(.bc-hl) text {
+    opacity: 0.22;
+  }
+  .bc-svg[data-view]:not([data-view="overview"]) .bc-entry:not(.bc-hl) .bc-entry-frame,
+  .bc-svg[data-view]:not([data-view="overview"]) .bc-entry:not(.bc-hl) .bc-entry-header {
+    opacity: 0.38;
+  }
+  .bc-svg[data-view]:not([data-view="overview"]) .bc-entry:not(.bc-hl) text.bc-entry-title { opacity: 0.6; }
+  .bc-svg[data-view]:not([data-view="overview"]) .bc-entry:not(.bc-hl) text.bc-entry-sub { opacity: 0.38; }
+  .bc-svg[data-view]:not([data-view="overview"]) .bc-arrow-static:not(.bc-hl) path,
+  .bc-svg[data-view]:not([data-view="overview"]) .bc-arrow-static:not(.bc-hl) .bc-arrow-head { opacity: 0.18; }
+  .bc-svg[data-view]:not([data-view="overview"]) .bc-layer-bg,
+  .bc-svg[data-view]:not([data-view="overview"]) .bc-layer-label { opacity: 0.75; }
+
+  /* ── Highlight ── */
+  .bc-svg .bc-hl.bc-node rect { fill: #EAE6FA; stroke: #4B33C4; stroke-width: 1.8; }
+  .bc-svg .bc-hl.bc-node text { fill: #4B33C4; font-weight: 600; }
+  .bc-svg .bc-hl.bc-node .bc-node-sub { font-weight: 400; }
+  .bc-svg .bc-hl.bc-entry .bc-entry-frame { fill: #EAE6FA; }
+  .bc-svg .bc-hl.bc-entry .bc-entry-header { fill: #4B33C4; }
+
+  /* Beyond the boundary keeps its dark ground when lit — crossing out of the
+     device is the one thing a highlight must never make look safe. */
+  .bc-svg .bc-hl.bc-node-out rect { fill: #2E3436; stroke: #8FA3F5; stroke-width: 1.8; }
+  .bc-svg .bc-hl.bc-node-out text { fill: #8FA3F5; }
+
+  .bc-svg .bc-hl.bc-node-unbuilt rect { fill: #E4E6E0; stroke: #4B33C4; }
+  .bc-svg .bc-hl.bc-node-unbuilt text { fill: #4B33C4; font-style: italic; }
+
+  .bc-flow-arrow path { stroke: #4B33C4; }
+  .bc-flow-arrow .bc-arrow-head { fill: #4B33C4; }
+  .bc-flow-arrow.bc-flow-out path { stroke: #8FA3F5; }
+  .bc-flow-arrow.bc-flow-out .bc-arrow-head { fill: #8FA3F5; }
+
+  /* ── Caption ── */
+  .bc-caption { padding: 1em 1.3em 1.15em; border-top: 1px solid #C6CBC3; background: #E4E6E0; }
+  .bc-caption h3 { font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 0.98em; font-weight: 600; margin: 0 0 0.3em; }
+  .bc-caption p { margin: 0; font-size: 0.92em; color: #3F4742; line-height: 1.6; }
+  .bc-caption .bc-tag {
+    display: inline-block; font-family: 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.72em;
+    padding: 0.12em 0.5em; border-radius: 3px; background: #F7F8F5;
+    border: 1px solid #C6CBC3; color: #656E66;
+    text-transform: uppercase; letter-spacing: 0.05em; margin-right: 0.5em; vertical-align: 2px;
+  }
+
+  .bc-legend {
+    display: flex; flex-wrap: wrap; gap: 1.4em;
+    padding: 0.8em 1.3em; border-top: 1px solid #C6CBC3;
+    background: #F7F8F5; font-size: 0.8em; color: #656E66;
+  }
+  .bc-legend span { display: inline-flex; align-items: center; gap: 0.5em; }
+  .bc-legend i { width: 20px; height: 12px; border-radius: 2px; display: inline-block; }
+  .bc-key-ours    { background: #EAE6FA; border: 1px solid #4B33C4; }
+  .bc-key-unbuilt { background: #E4E6E0; border: 1px dashed #656E66; }
+  .bc-key-out     { background: #2E3436; border: 1px solid #3A4144; }
+
+  .bc-sr {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  /* U-10: motion is decoration here, never the only carrier of meaning. */
+  @media (prefers-reduced-motion: reduce) {
+    .bc-flow-arrow path { animation: none; stroke-dasharray: none; }
+    .bc-node rect, .bc-node text, .bc-layer-bg, .bc-layer-label,
+    .bc-entry .bc-entry-frame, .bc-entry .bc-entry-header { transition: none; }
+  }
+
+  /* ── added by export-frames.mjs ── */
+  .bc-dim rect, .bc-dim text { opacity: 0.22; }
+  .bc-dim .bc-entry-frame, .bc-dim .bc-entry-header { opacity: 0.38; }
+  .bc-dim text.bc-entry-title { opacity: 0.6; }
+  .bc-dim path { opacity: 0.18; }
+  .bc-flow-arrow path { animation: none; }
+]]></style>
+  <rect width="960" height="716" fill="#F7F8F5"/>
+        <title id="bc-svg-title">The demo build — note what is missing</title>
+        <desc id="bc-svg-desc">There is no Muster module. demo/ is a fork of the chat UI whose C++ backend calls chat_module and lez_core directly, so the app-backend layer is empty and everything the module was going to guarantee — the signed log, the effect/materialization split, replay binding — is absent by construction. It deliberately violates the root invariants; that is its purpose, and it is why it ships this week.</desc>
+
+        <defs>
+          <marker id="bc-arrow-marker" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="bc-arrow-head"/>
+          </marker>
+          <!-- Marker fills are literal, and there is one marker per accent.
+               A marker's content is not a DOM descendant of the element that
+               references it, so `.bc-flow-arrow .bc-arrow-head { fill: … }`
+               never reaches it and every arrowhead stays the base grey. -->
+          <marker id="bc-flow-marker" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#4B33C4"/>
+          </marker>
+          <marker id="bc-flow-marker-out" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#8FA3F5"/>
+          </marker>
+        </defs>
+
+        <!-- ═══ LAYER BANDS ═══
+             entry    20–190     apps   206–272    modules 292–450
+             network 470–524     runtime 544–598   beyond  618–706 -->
+        <rect class="bc-layer-bg bc-layer-entry"   x="20" y="20"  width="920" height="170" rx="6"/>
+        <rect class="bc-layer-bg bc-layer-apps"    x="20" y="206" width="920" height="66"  rx="6"/>
+        <rect class="bc-layer-bg bc-layer-modules" x="20" y="292" width="920" height="158" rx="6"/>
+        <rect class="bc-layer-bg bc-layer-network" x="20" y="470" width="920" height="54"  rx="6"/>
+        <rect class="bc-layer-bg bc-layer-runtime" x="20" y="544" width="920" height="54"  rx="6"/>
+        <rect class="bc-layer-bg bc-layer-beyond"  x="20" y="618" width="920" height="88"  rx="6"/>
+
+        <text class="bc-layer-label" x="34" y="34">HOW YOU RUN IT</text>
+        <text class="bc-layer-label" x="34" y="218">APP BACKENDS</text>
+        <text class="bc-layer-label" x="34" y="304">MODULES</text>
+        <text class="bc-layer-label" x="34" y="482">NETWORK</text>
+        <text class="bc-layer-label" x="34" y="556">RUNTIME</text>
+        <!-- Kept short deliberately: flow arrows drop into the dark band at the
+             three box centres (x=185, 490, 795), and a longer label would be
+             crossed by the first of them. -->
+        <text class="bc-layer-label bc-layer-label-out" x="34" y="632">BEYOND YOUR DEVICE</text>
+
+        <!-- The dark band is not a lower layer — it is off-device. Without this
+             rule the stack reads as though store nodes sit beneath the runtime. -->
+        <path d="M 20 608 L 940 608" stroke="#8A928C" stroke-width="1" stroke-dasharray="3 3" fill="none"/>
+        <text x="938" y="604" text-anchor="end" font-family="'DM Mono',ui-monospace,Menlo,monospace"
+              font-size="8.5" fill="#8A928C">the device ends here</text>
+
+        <!-- ═══ ENTRY POINTS ═══ -->
+        <g class="bc-entry bc-hl" data-id="basecamp">
+          <rect class="bc-entry-frame" x="32" y="46" width="430" height="132" rx="7"/>
+          <path class="bc-entry-header" d="M 39 46 L 455 46 A 7 7 0 0 1 462 53 L 462 74 L 32 74 L 32 53 A 7 7 0 0 1 39 46 Z"/>
+          <text class="bc-entry-title" x="247" y="60">Logos Basecamp</text>
+          <text class="bc-entry-sub"   x="247" y="86">default launcher · loads UI plugins</text>
+        </g>
+        <g class="bc-node bc-node-ours bc-hl" data-id="ui-muster">
+          <rect x="40" y="98" width="94" height="72" rx="3"/>
+          <text x="87" y="126">Muster UI</text>
+          <text x="87" y="142" class="bc-node-sub">muster-ui.lgx</text>
+        </g>
+        <g class="bc-node bc-dim" data-id="ui-messaging">
+          <rect x="142" y="98" width="80" height="72" rx="3"/>
+          <text x="182" y="134">Messaging</text>
+        </g>
+        <g class="bc-node bc-dim" data-id="ui-wallet">
+          <rect x="230" y="98" width="80" height="72" rx="3"/>
+          <text x="270" y="128">LEZ</text>
+          <text x="270" y="142">Wallet</text>
+        </g>
+        <g class="bc-node bc-dim" data-id="ui-pkgmgr">
+          <rect x="318" y="98" width="88" height="72" rx="3"/>
+          <text x="362" y="128">Package</text>
+          <text x="362" y="142">manager</text>
+        </g>
+        <g class="bc-node bc-dim" data-id="ui-more">
+          <rect x="414" y="98" width="40" height="72" rx="3"/>
+          <text x="434" y="134">…</text>
+        </g>
+
+        <g class="bc-entry bc-dim" data-id="standalone">
+          <rect class="bc-entry-frame" x="482" y="46" width="220" height="132" rx="7"/>
+          <path class="bc-entry-header" d="M 489 46 L 695 46 A 7 7 0 0 1 702 53 L 702 74 L 482 74 L 482 53 A 7 7 0 0 1 489 46 Z"/>
+          <text class="bc-entry-title" x="592" y="60">Standalone app</text>
+          <text class="bc-entry-sub"   x="592" y="86">one binary · no launcher</text>
+        </g>
+        <g class="bc-node bc-dim" data-id="standalone-app">
+          <rect x="492" y="98" width="200" height="72" rx="3"/>
+          <text x="592" y="124">Muster, bundled</text>
+          <text x="592" y="140" class="bc-node-sub">its own UI + just the modules it needs</text>
+        </g>
+
+        <g class="bc-entry bc-dim" data-id="headless">
+          <rect class="bc-entry-frame" x="722" y="46" width="206" height="132" rx="7"/>
+          <path class="bc-entry-header" d="M 729 46 L 921 46 A 7 7 0 0 1 928 53 L 928 74 L 722 74 L 722 53 A 7 7 0 0 1 729 46 Z"/>
+          <text class="bc-entry-title" x="825" y="60">Headless</text>
+          <text class="bc-entry-sub"   x="825" y="86">CI and P0–P3 · no UI</text>
+        </g>
+        <g class="bc-node bc-dim" data-id="headless-cli">
+          <rect x="732" y="98" width="186" height="72" rx="3"/>
+          <text x="825" y="124" class="bc-node-mono">$ logoscore</text>
+          <text x="825" y="142" class="bc-node-sub">drives the module directly</text>
+        </g>
+
+        <!-- ═══ APP BACKENDS (content y=230–266) ═══ -->
+        <g class="bc-node bc-node-ours bc-node-unbuilt bc-dim" data-id="muster-module">
+          <rect x="270" y="230" width="386" height="36" rx="3"/>
+          <text x="463" y="242">muster-module.lgx — Nim core behind muster.lidl</text>
+          <text x="463" y="256" class="bc-node-sub">specified, not built (P0)</text>
+        </g>
+        <g class="bc-node bc-dim" data-id="app-dex">
+          <rect x="666" y="230" width="80" height="36" rx="3"/>
+          <text x="706" y="248">Dex</text>
+        </g>
+        <g class="bc-node bc-dim" data-id="app-more">
+          <rect x="756" y="230" width="40" height="36" rx="3"/>
+          <text x="776" y="248">…</text>
+        </g>
+
+        <!-- ═══ MODULES — upper row composes the lower row (y=316–348) ═══ -->
+        <g class="bc-node bc-hl" data-id="lez">
+          <rect x="270" y="316" width="220" height="32" rx="3"/>
+          <text x="380" y="326">lez_core</text>
+          <text x="380" y="340" class="bc-node-sub">zone wallet · token ops · labels</text>
+        </g>
+        <g class="bc-node bc-dim" data-id="files">
+          <rect x="500" y="316" width="90" height="32" rx="3"/>
+          <text x="545" y="333">Files</text>
+        </g>
+        <g class="bc-node bc-hl" data-id="chat">
+          <rect x="600" y="316" width="132" height="32" rx="3"/>
+          <text x="666" y="326">chat_module</text>
+          <text x="666" y="340" class="bc-node-sub">e2e · MLS groups</text>
+        </g>
+        <g class="bc-node bc-dim" data-id="swaps">
+          <rect x="742" y="316" width="90" height="32" rx="3"/>
+          <text x="787" y="333">Swaps</text>
+        </g>
+        <g class="bc-node bc-dim" data-id="modules-upper-more">
+          <rect x="842" y="316" width="40" height="32" rx="3"/>
+          <text x="862" y="333">…</text>
+        </g>
+
+        <g class="bc-arrow bc-arrow-static bc-dim" data-id="arrow-chat-delivery">
+          <path d="M 666 348 L 666 400" marker-end="url(#bc-arrow-marker)"/>
+        </g>
+        <g class="bc-arrow bc-arrow-static bc-dim" data-id="arrow-files-storage">
+          <path d="M 545 348 L 545 400" marker-end="url(#bc-arrow-marker)"/>
+        </g>
+
+        <!-- ═══ MODULES — lower row (y=402–444) ═══ -->
+        <g class="bc-node bc-hl" data-id="capability">
+          <rect x="40" y="402" width="100" height="42" rx="3"/>
+          <text x="90" y="423">Capability</text>
+        </g>
+        <g class="bc-node bc-dim" data-id="package-manager">
+          <rect x="150" y="402" width="110" height="42" rx="3"/>
+          <text x="205" y="416">Package</text>
+          <text x="205" y="430">Manager</text>
+        </g>
+        <g class="bc-node bc-hl" data-id="blockchain">
+          <rect x="270" y="402" width="220" height="42" rx="3"/>
+          <text x="380" y="423">Blockchain</text>
+        </g>
+        <g class="bc-node bc-dim" data-id="storage">
+          <rect x="500" y="402" width="90" height="42" rx="3"/>
+          <text x="545" y="423">Storage</text>
+        </g>
+        <g class="bc-node bc-hl" data-id="delivery">
+          <rect x="600" y="402" width="132" height="42" rx="3"/>
+          <text x="666" y="416">delivery_module</text>
+          <text x="666" y="430" class="bc-node-sub">embeds a Waku node</text>
+        </g>
+        <g class="bc-node bc-dim" data-id="modules-lower-more">
+          <rect x="742" y="402" width="40" height="42" rx="3"/>
+          <text x="762" y="423">…</text>
+        </g>
+
+        <!-- ═══ NETWORK (y=494–516) ═══ -->
+        <g class="bc-node bc-hl" data-id="p2p">
+          <rect x="40" y="494" width="660" height="22" rx="3"/>
+          <text x="370" y="506">P2P · discovery · peering</text>
+        </g>
+        <g class="bc-node bc-node-unbuilt bc-dim" data-id="mix">
+          <rect x="712" y="482" width="228" height="36" rx="3"/>
+          <text x="826" y="494">mix routing — not shipped</text>
+          <text x="826" y="508" class="bc-node-sub">LIP status raw · send-only PoC</text>
+        </g>
+
+        <!-- ═══ RUNTIME (y=568–590) ═══ -->
+        <g class="bc-node bc-hl" data-id="runtime">
+          <rect x="40" y="568" width="900" height="22" rx="3"/>
+          <text x="490" y="580">logos runtime — subprocess isolation, capability-scoped calls</text>
+        </g>
+
+        <!-- ═══ BEYOND YOUR DEVICE (y=644–692) ═══ -->
+        <g class="bc-node bc-node-out bc-dim" data-id="store-nodes">
+          <rect x="40" y="644" width="290" height="48" rx="3"/>
+          <text x="185" y="662">Store nodes — logos.test fleet</text>
+          <text x="185" y="678" class="bc-node-sub">sees subscription shape and timing</text>
+        </g>
+        <g class="bc-node bc-node-out bc-dim" data-id="sequencer">
+          <rect x="345" y="644" width="290" height="48" rx="3"/>
+          <text x="490" y="662">LEZ sequencer</text>
+          <text x="490" y="678" class="bc-node-sub">sees that a transfer happened, and when</text>
+        </g>
+        <g class="bc-node bc-node-out bc-dim" data-id="public-record">
+          <rect x="650" y="644" width="290" height="48" rx="3"/>
+          <text x="795" y="662">The public record</text>
+          <text x="795" y="678" class="bc-node-sub">whatever the chosen rail disclosed, forever</text>
+        </g>
+
+        <g class="bc-flow-arrows">
+    <g class="bc-arrow bc-flow-arrow"><path d="M 87 170 L 87 286 L 666 286 L 666 314" marker-end="url(#bc-flow-marker)"/></g>
+    <g class="bc-arrow bc-flow-arrow"><path d="M 666 348 L 666 400" marker-end="url(#bc-flow-marker)"/></g>
+    <g class="bc-arrow bc-flow-arrow"><path d="M 666 444 L 666 464 L 370 464 L 370 492" marker-end="url(#bc-flow-marker)"/></g>
+    <g class="bc-arrow bc-flow-arrow"><path d="M 370 516 L 370 538 L 490 538 L 490 566" marker-end="url(#bc-flow-marker)"/></g>
+    <g class="bc-arrow bc-flow-arrow"><path d="M 87 170 L 87 286 L 380 286 L 380 314" marker-end="url(#bc-flow-marker)"/></g>
+    <g class="bc-arrow bc-flow-arrow"><path d="M 380 348 L 380 400" marker-end="url(#bc-flow-marker)"/></g>
+    <g class="bc-arrow bc-flow-arrow"><path d="M 380 444 L 380 464 L 370 464 L 370 492" marker-end="url(#bc-flow-marker)"/></g>
+  </g>
+      </svg>

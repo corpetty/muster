@@ -1,6 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 434" width="880" height="434" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>Discovery with a directory, and without one</title>
   <desc>With a directory, adding a contact is a request to a server that learns the edge and keeps it. Without one, the address travels out of band and no third party is involved in the introduction.</desc>
+<!-- provenance
+     serves:   POST
+     shows:    Introduction with a directory against without — who learns the edge.
+     sources:  demo/GAPS.md
+               docs/posts/01-discovery-supporting-material.md
+     evidence: [measured] The Muster side — the app mints an address with no account,
+                   signup or server call
+               [illustrative] The directory side characterises how conventional contact-
+                   add works; it is not a measurement of a named service
+     recheck:  P3, if ADR-010 changes which module mints identity.
+-->
 
   <rect width="880" height="434" fill="#E4E6E0"/>
 

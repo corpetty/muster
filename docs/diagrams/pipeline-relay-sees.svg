@@ -1,6 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 474" width="880" height="474" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>Content is hidden. Metadata is not.</title>
   <desc>Across every step of the journey, message and payment content stays inside the conversation, while the fact that something passed, its size and its timing remain visible to a relay.</desc>
+<!-- provenance
+     serves:   POST
+     shows:    Content against metadata across the journey: what end-to-end encryption
+               covers, and what it does not.
+     sources:  docs/00-vision.md
+               demo/GAPS.md
+     evidence: [from-source] One content topic per conversation is the documented shape
+                   of delivery; the subscription-shape leak follows from it and was not
+                   separately measured
+     recheck:  If LOGOS-MIXNET moves off status raw, or receive-over-mix lands. Both
+               would change what this figure's metadata column says.
+-->
 
   <rect width="880" height="474" fill="#E4E6E0"/>
 

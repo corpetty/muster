@@ -208,22 +208,20 @@ Reported upstream with a single-file reproducer linking `wallet-ffi` directly: `
 
 ## 8. Figures available
 
-Built and in `docs/posts/figures/`. Each is SVG, in the prototype's palette, sized for a forum post's content width.
+Built and in **`docs/diagrams/`**. Each is SVG, in the prototype's palette, sized for a forum post's content width. *(Moved there from `docs/posts/figures/` and renamed to stable slugs on 2026-08-12 — the `figN-` numbering was relative to this post and would have collided with post 2's own fig1. The catalogue of what else is planned, and the conventions these follow, is `docs/diagrams/README.md`.)*
 
 | File | Shows | Best used for |
 |---|---|---|
-| `fig1-pipeline.svg` | All seven stages with their leak descriptions, the four that precede a transaction, the three the chain is in, and the one the argument concentrates on | The thesis. The post's opening figure |
-| `fig5-muster-self-assessment.svg` | Muster scored ●/◑/○ on its own seven-stage matrix, two cells left unassessed | The credibility move — see §2. Pair it with fig1 |
-| `fig2-discovery-comparison.svg` | Introduction with a directory vs without — who learns the edge | The discovery argument, side by side |
-| `fig3-what-a-relay-sees.svg` | Content vs metadata across the journey: what is hidden, what is not | The FS-9 honesty point made concrete |
-| `fig4-cost-of-privacy.svg` | Proving time against human-interaction thresholds | "Not an interaction, a job" — for the settlement post, optional teaser here |
+| `pipeline-seven-stages.svg` | All seven stages with their leak descriptions, the four that precede a transaction, the three the chain is in, and the one the argument concentrates on | The thesis. The post's opening figure |
+| `pipeline-self-assessment.svg` | Muster scored ●/◑/○ on its own seven-stage matrix, two cells left unassessed | The credibility move — see §2. Pair it with the seven-stages figure |
+| `pipeline-discovery-comparison.svg` | Introduction with a directory vs without — who learns the edge | The discovery argument, side by side |
+| `pipeline-relay-sees.svg` | Content vs metadata across the journey: what is hidden, what is not | The FS-9 honesty point made concrete |
+| `pipeline-cost-of-privacy.svg` | Proving time against human-interaction thresholds | "Not an interaction, a job" — for the settlement post, optional teaser here |
 
 SVG is the source; a 2× PNG sits beside each one, because most forum software handles PNG more reliably than SVG. Re-render after any edit:
 
 ```bash
-cd docs/posts/figures
-nix shell nixpkgs#librsvg --command bash -c \
-  'for f in *.svg; do rsvg-convert -z 2 -o "${f%.svg}.png" "$f"; done'
+docs/diagrams/tools/render-png.sh
 ```
 
 Palette matches `ui/prototype/coordination-prototype-v2.html`, so figures and app screenshots sit together without looking like they came from different projects. Text is plain `<text>` — no font embedding — so anything that renders them substitutes a local sans; that is deliberate, and why nothing depends on a particular face.

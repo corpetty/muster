@@ -1,0 +1,191 @@
+{
+  "$comment": "Provenance for every figure in docs/diagrams/. Checked by tools/check-manifest.py; see README.md §2 for why. `sources` are the files a figure derives its facts from — a deleted one fails, a changed one warns. `evidence` declares which of a figure's content is measured, read from source, or illustrative, because a reader cannot tell those apart by looking. `generates` lists frames exported from a substrate, which inherit provenance rather than carrying their own.",
+  "figures": [
+    {
+      "file": "substrate-stack.html",
+      "serves": "BOTH",
+      "shows": "Muster on the Logos stack: three entry points over app backends, modules, network and runtime, with a dark band for the infrastructure the user does not run. Six selectable views.",
+      "sources": [
+        {
+          "path": "demo/muster-ui/metadata.json",
+          "sha256": "e4953f1434822141605d47711bcde4351f5df915e2ecac42f66068ccc2425a87",
+          "note": "the module set and its declared dependencies"
+        },
+        {
+          "path": "demo/muster-ui/flake.nix",
+          "sha256": "9142be0dee11018eeadd8abd3078f37994d3f0a22f0908519ebf4db017866196",
+          "note": "which inputs are pinned and which follow chat_module's own"
+        },
+        {
+          "path": "demo/README.md",
+          "sha256": "f4ae820bab6371a4ba1581c83a6d272f9b2f232f62a0d71d96a472b88fd41e08",
+          "note": "what the demo composes, and the invariant-by-invariant table behind the demo-build view"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "the specified build, the three hosts, ADR-008"
+        },
+        {
+          "path": "docs/00-vision.md",
+          "sha256": "a9cb276d78acf0f75195f9489df54dde45d602b6cb4f0d56d13b61ac7f0afa44",
+          "note": "the mixnet status this diagram refuses to overstate"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "The module set and every dependency edge, read off metadata.json and flake.nix rather than drawn from memory"
+        },
+        {
+          "grade": "from-source",
+          "note": "LOGOS-MIXNET at status raw, send-only proof of concept, absent from the near-term roadmap — dated 2026-08 and shown as not shipped. muster-module.lgx is dashed for the same reason: P0 has not run"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The neighbouring platform pieces (Files, Swaps, Dex, Storage) place Muster in context; they are not an enumeration of the platform's modules"
+        }
+      ],
+      "generates": [
+        "substrate-stack-overview.svg",
+        "substrate-stack-basecamp.svg",
+        "substrate-stack-standalone.svg",
+        "substrate-stack-headless.svg",
+        "substrate-stack-demo-build.svg",
+        "substrate-stack-beyond.svg"
+      ],
+      "recheck": "Every phase. P0 landing makes muster-module real and it stops being dashed; ADR-010's resolution may remove the chat_module box entirely; any movement on LOGOS-MIXNET changes the network layer."
+    },
+    {
+      "file": "pipeline-seven-stages.svg",
+      "serves": "POST",
+      "shows": "All seven stages with their leak descriptions, the four that precede a transaction, the three the chain is in, and the one the argument concentrates on.",
+      "sources": [
+        {
+          "path": "docs/posts/01-discovery-supporting-material.md",
+          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "note": "§1 carries the stage names and leak descriptions verbatim from the PriFi competitor matrix cross-check"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "Stage names and leak descriptions, verbatim from the published PriFi matrix"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The conventional-stack examples under each stage ('to a directory', 'to an explorer', 'to a chat host') characterise the status quo; they are not measurements"
+        }
+      ],
+      "recheck": "If the published seven-stage taxonomy changes upstream. It is the post's opening figure and the series' spine."
+    },
+    {
+      "file": "pipeline-self-assessment.svg",
+      "serves": "POST",
+      "shows": "Muster scored closed/partial/leaks on its own seven-stage matrix, with Ordering and Enforcement deliberately left unassessed.",
+      "sources": [
+        {
+          "path": "docs/posts/01-discovery-supporting-material.md",
+          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "note": "§2 holds the scoring scheme and the cell-by-cell justification"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "the row-by-row basis for each score"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "measured",
+          "note": "Discovery and Negotiation cells — observed on this machine, 2026-08-11/12"
+        },
+        {
+          "grade": "from-source",
+          "note": "Contracting and Settlement cells — read off the build and the consumed contracts, not separately exercised"
+        }
+      ],
+      "recheck": "Every phase. This figure scores the demo as it runs; it goes stale the moment the build gains or loses a protection. The two unassessed cells must stay unassessed until the zone's mempool and sequencer models are confirmed."
+    },
+    {
+      "file": "pipeline-discovery-comparison.svg",
+      "serves": "POST",
+      "shows": "Introduction with a directory against without — who learns the edge.",
+      "sources": [
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "§1, finding each other"
+        },
+        {
+          "path": "docs/posts/01-discovery-supporting-material.md",
+          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "note": "§3, discovery in Muster"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "measured",
+          "note": "The Muster side — the app mints an address with no account, signup or server call"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The directory side characterises how conventional contact-add works; it is not a measurement of a named service"
+        }
+      ],
+      "recheck": "P3, if ADR-010 changes which module mints identity."
+    },
+    {
+      "file": "pipeline-relay-sees.svg",
+      "serves": "POST",
+      "shows": "Content against metadata across the journey: what end-to-end encryption covers, and what it does not.",
+      "sources": [
+        {
+          "path": "docs/00-vision.md",
+          "sha256": "a9cb276d78acf0f75195f9489df54dde45d602b6cb4f0d56d13b61ac7f0afa44",
+          "note": "FS-9 and the worked conversation-graph example"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "§1 and §2, the store-node observation"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "One content topic per conversation is the documented shape of delivery; the subscription-shape leak follows from it and was not separately measured"
+        }
+      ],
+      "recheck": "If LOGOS-MIXNET moves off status raw, or receive-over-mix lands. Both would change what this figure's metadata column says."
+    },
+    {
+      "file": "pipeline-cost-of-privacy.svg",
+      "serves": "POST",
+      "shows": "Shielded-transfer proving time against human-interaction thresholds.",
+      "sources": [
+        {
+          "path": "docs/posts/01-discovery-supporting-material.md",
+          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "note": "§5, numbers with provenance"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "§4, what it costs, measured"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "measured",
+          "note": "The bars — 6m41s, 7.4min and 447s, on a 13-core desktop against the LEZ testnet, 2026-08-11/12. Whether that is typical is NOT established"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The band marked 'a person will wait this long' is a rule of thumb about attention, not something measured here"
+        }
+      ],
+      "recheck": "Before the settlement post publishes, and any time the zone changes proving. The 'do not state as typical' caveat in §5 travels with this figure."
+    }
+  ]
+}
