@@ -91,3 +91,17 @@
 {"type":"create","timestamp":"2026-08-12T22:37:02.005410504Z","issue_id":"exo-9f4","payload":{"description":"Tranche 3 of the diagram programme (docs/diagrams/README.md §5) — post 2/3 material.","priority":"2","title":"Observer views on the pipeline substrate","type":"feature"}}
 {"type":"rename","timestamp":"2026-08-12T22:37:02.031475962Z","issue_id":"exo-9f4","payload":{"new_id":"exo-2d5.14"}}
 {"type":"dep_add","timestamp":"2026-08-12T22:37:02.031475962Z","issue_id":"exo-2d5.14","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"close","timestamp":"2026-08-12T22:45:41.610445998Z","issue_id":"exo-2d5.10","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:45:41.610445998Z","issue_id":"exo-2d5.11","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:45:41.610445998Z","issue_id":"exo-2d5.12","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:45:41.610445998Z","issue_id":"exo-2d5.13","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:45:41.610445998Z","issue_id":"exo-2d5.14","payload":{}}
+{"type":"create","timestamp":"2026-08-12T22:47:41.023008413Z","issue_id":"exo-6ef","payload":{"description":"Tranche 4 of the diagram programme (docs/diagrams/README.md §5) — settlement post material.","priority":"2","title":"pipeline-journey-timeline: not an interaction, a job","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:47:41.059442923Z","issue_id":"exo-6ef","payload":{"new_id":"exo-2d5.15"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:47:41.059442923Z","issue_id":"exo-2d5.15","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:47:41.077895875Z","issue_id":"exo-b93","payload":{"description":"Tranche 4 of the diagram programme (docs/diagrams/README.md §5) — settlement post material.","priority":"2","title":"pipeline-settlement-bug: the account-id derivation drawn","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:47:41.100744936Z","issue_id":"exo-b93","payload":{"new_id":"exo-2d5.16"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:47:41.100744936Z","issue_id":"exo-2d5.16","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:47:41.118546906Z","issue_id":"exo-fd6","payload":{"description":"Tranche 4 of the diagram programme (docs/diagrams/README.md §5) — settlement post material.","priority":"2","title":"pipeline-findable-unlinkable: the fork the stack offers","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:47:41.142801944Z","issue_id":"exo-fd6","payload":{"new_id":"exo-2d5.17"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:47:41.142801944Z","issue_id":"exo-2d5.17","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}

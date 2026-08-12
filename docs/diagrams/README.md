@@ -269,7 +269,7 @@ None of this produces a publishable figure. All of it makes every later tranche 
 
 ## 8. Built so far
 
-Tranches 0 through 3 are complete. **Next: tranche 4**, the settlement post.
+Tranches 0 through 4 are complete. **Next: tranche 5** — the Family C mechanics figures, most of which §6 Q1 defers to their phase.
 
 **Tranche 0 — foundations.**
 
@@ -315,7 +315,15 @@ The five post-1 figures moved and were renamed; `01-discovery-supporting-materia
 
 `pipeline-observer-panel` is **struck as a separate figure**: its axis is already the keystone's right-hand column, and three views get the per-observer reading for the cost of three objects in an array. The `obs-nobody` view carries the distinction worth keeping — negotiation is blank because it is closed, diligence is blank because the stage does not happen, and those are not the same thing.
 
-Nineteen exported frames across the two substrates plus seven locator strips, each with a 2× PNG. Everything generated: edit the substrate or the generator, never the output.
+Sixteen exported frames across the two substrates plus seven locator strips, each with a 2× PNG. Everything generated: edit the substrate or the generator, never the output.
+
+**Tranche 4 — the settlement post.**
+
+| | |
+|---|---|
+| `pipeline-journey-timeline.svg` | Every step of one payment on a log axis, against the thresholds where an interaction stops being one — with the 20-second sync-client timeout drawn through the middle, which is why a call that had sat in the tree for a day had never once succeeded |
+| `pipeline-settlement-bug.svg` | The account-id derivation drawn: the identifier the recipient never publishes, the random one the sender's client substitutes, and the two accounts that result. Plus the workaround and its two disclosed costs |
+| `pipeline-findable-unlinkable.svg` | The fork the stack offers, with **which side is actually wired in marked on the column itself** — the earlier prose draft implied a UI that does not exist |
 
 **A third silent-failure class, now automated.** Text overflowing the canvas happened in three figures running — it renders, it looks fine in the source, and it is only wrong in the raster. `check-manifest.py` now estimates text width and warns. It is a heuristic (one advance-width factor per family) that catches a line 20% too long and will not catch one 2% too long, and it skips exported frames, whose font-size and anchor come from a stylesheet it cannot read.
 
