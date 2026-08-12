@@ -269,7 +269,7 @@ None of this produces a publishable figure. All of it makes every later tranche 
 
 ## 8. Built so far
 
-Tranches 0 and 1 are complete.
+Tranches 0, 1 and 2 are complete. **Next: tranche 3**, post 2/3 material.
 
 **Tranche 0 — foundations.**
 
@@ -293,6 +293,16 @@ The five post-1 figures moved and were renamed; `01-discovery-supporting-materia
 
 `arch-three-hosts` from the catalogue is **already covered** by `substrate-stack.html`'s basecamp / standalone / headless views and does not need a separate figure.
 
-Twelve exported frames across the two substrates, each with a 2× PNG. Frames are generated: edit the substrate, never the frame.
+**Tranche 2 — the packaging set.**
+
+| | |
+|---|---|
+| `arch-contract-seam.svg` | The two codegen paths and the small hand-written region each ends in, with the two rules `lidl_c.h` states outright and ADR-008's fallback. The Nim backend is drawn as not existing, because it does not |
+| `arch-module-graph.svg` | What `metadata.json` declares against what `flake.nix` actually pins. Two of four inputs are not decisions — they follow the anchor; one names no release at all |
+| `substrate-stack.html` → `spec-build` view | `arch-demo-vs-spec`, as a toggle rather than a side-by-side. Nothing moves between the two views except the app-backend layer, which is the point |
+
+`arch-instance-state` is **struck** — `--user-dir`, `module_data/<module>/` and the wallet derivation are already in `arch-instance-topology`'s ON DISK column. The one fact it would have added and that appears nowhere: `chat_ui` and `chat_module` share the chat module's log directory, because the platform assigns a view module none of its own.
+
+Thirteen exported frames across the two substrates, each with a 2× PNG. Frames are generated: edit the substrate, never the frame.
 
 **Two bugs fixed in the inherited engine**, both silent-failure shaped and worth knowing about: marker fills are unreachable by descendant selectors, so every arrowhead rendered grey; and a bare single-class text modifier (`.bc-flag`) loses on specificity to `.bc-node text`, so gap flags rendered bold-and-black instead of bold-and-red — the colour was the only thing marking a gap. Both are recorded in `tools/CLAUDE.md`.

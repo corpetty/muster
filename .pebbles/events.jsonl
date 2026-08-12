@@ -63,3 +63,13 @@
 {"type":"dep_add","timestamp":"2026-08-12T22:03:28.80148325Z","issue_id":"exo-2d5.6","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
 {"type":"close","timestamp":"2026-08-12T22:16:13.901548128Z","issue_id":"exo-2d5.5","payload":{}}
 {"type":"close","timestamp":"2026-08-12T22:16:13.901548128Z","issue_id":"exo-2d5.6","payload":{}}
+{"type":"create","timestamp":"2026-08-12T22:19:40.558639315Z","issue_id":"exo-280","payload":{"description":"Tranche 2 of the diagram programme (docs/diagrams/README.md §5) — the packaging set.","priority":"2","title":"arch-demo-vs-spec: add a spec-build view to the stack substrate","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:19:40.584446381Z","issue_id":"exo-280","payload":{"new_id":"exo-2d5.7"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:19:40.584446381Z","issue_id":"exo-2d5.7","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:19:40.604996571Z","issue_id":"exo-360","payload":{"description":"Tranche 2 of the diagram programme (docs/diagrams/README.md §5) — the packaging set.","priority":"2","title":"arch-contract-seam: what is generated, what is written","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:19:40.628811829Z","issue_id":"exo-360","payload":{"new_id":"exo-2d5.8"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:19:40.628811829Z","issue_id":"exo-2d5.8","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:19:40.648580652Z","issue_id":"exo-70b","payload":{"description":"Tranche 2 of the diagram programme (docs/diagrams/README.md §5) — the packaging set.","priority":"2","title":"arch-module-graph: the .lgx dependency and pin graph","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:19:40.674268354Z","issue_id":"exo-70b","payload":{"new_id":"exo-2d5.9"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:19:40.674268354Z","issue_id":"exo-2d5.9","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"comment","timestamp":"2026-08-12T22:19:40.695949346Z","issue_id":"exo-2d5","payload":{"body":"arch-instance-state struck from the catalogue: --user-dir, module_data/\u003cmodule\u003e/ and the muster-wallet derivation are already carried by arch-instance-topology's ON DISK column. The one fact it would have added and does not appear anywhere — chat_ui and chat_module share the chat module's log directory because the platform assigns a view module none of its own — is noted here rather than given a figure."}}

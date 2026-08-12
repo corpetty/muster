@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 580" width="880" height="580" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>What the module declares, and what the flake pins</title>
+  <desc>Three declared runtime dependencies — chat_module, delivery_module and lez_core — against the flake inputs that resolve them. chat_module is pinned to a release tag and two other inputs follow it; lez_core is pinned to no release at all.</desc>
+<!-- provenance
+     serves:   BUILD
+     shows:    The declared runtime module set against the flake inputs that resolve it:
+               chat_module pinned to a release tag with two inputs following it, and
+               lez_core pinned to no release at all.
+     sources:  demo/muster-ui/metadata.json
+               demo/muster-ui/flake.nix
+               demo/muster-ui/src/ChatBackendWallet.cpp
+     evidence: [from-source] Every edge and every pin read directly off metadata.json and
+                   flake.nix
+               [from-source] The stale-comment finding is checkable: flake.nix describes
+                   dynamic invocation by name, ChatBackendWallet.cpp uses the generated
+                   client throughout
+     recheck:  Whenever flake.nix changes. This figure is a snapshot of a version graph
+               and is the one most likely to go stale silently — the manifest's changed-
+               source warning on flake.nix is the intended signal.
+-->
+
+  <defs>
+    <marker id="s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8A928C"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="580" fill="#E4E6E0"/>
+
+  <text x="40" y="40" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">What it declares, and what actually pins it</text>
+  <text x="40" y="62" font-size="13.5" fill="#656E66">Three dependencies on the left. On the right, the four inputs that decide their versions — only one is a real choice.</text>
+
+  <text x="40" y="88" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">metadata.json — THE RUNTIME MODULE SET</text>
+  <text x="460" y="88" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">flake.nix — WHERE THE VERSIONS COME FROM</text>
+
+  <!-- ══════════ LEFT: declared dependencies ══════════ -->
+  <rect x="40" y="98" width="380" height="284" rx="8" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+
+  <rect x="140" y="112" width="180" height="40" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.4"/>
+  <text x="230" y="130" font-size="11.5" font-weight="600" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">muster_ui</text>
+  <text x="230" y="144" font-size="9" text-anchor="middle" fill="#656E66">type: ui_qml · interface: universal</text>
+
+  <path d="M 230 152 L 230 176 L 108 176 L 108 198" stroke="#8A928C" stroke-width="1.2" fill="none" marker-end="url(#s)"/>
+  <path d="M 230 152 L 230 198" stroke="#8A928C" stroke-width="1.2" fill="none" marker-end="url(#s)"/>
+  <path d="M 230 152 L 230 176 L 352 176 L 352 198" stroke="#8A928C" stroke-width="1.2" fill="none" marker-end="url(#s)"/>
+
+  <rect x="52" y="200" width="112" height="46" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="108" y="220" font-size="10" font-weight="600" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">chat_module</text>
+  <text x="108" y="235" font-size="8.5" text-anchor="middle" fill="#656E66">e2e conversations</text>
+
+  <rect x="176" y="200" width="112" height="46" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="232" y="217" font-size="10" font-weight="600" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">delivery_module</text>
+  <text x="232" y="231" font-size="8.5" text-anchor="middle" fill="#656E66">transport</text>
+  <text x="232" y="242" font-size="8.5" text-anchor="middle" fill="#4B33C4">contract via chat_module ↓</text>
+
+  <rect x="300" y="200" width="108" height="46" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="354" y="220" font-size="10" font-weight="600" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">lez_core</text>
+  <text x="354" y="235" font-size="8.5" text-anchor="middle" fill="#656E66">zone wallet</text>
+
+  <rect x="52" y="262" width="356" height="52" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1"/>
+  <text x="64" y="280" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" fill="#4B33C4">dependency_overrides</text>
+  <text x="64" y="295" font-size="9.5" fill="#1A1F1C">Delivery's contract is read out of <tspan font-family="'DM Mono',ui-monospace,Menlo,monospace">chat_module</tspan>'s own tree,</text>
+  <text x="64" y="308" font-size="9.5" fill="#1A1F1C">not the delivery repo — so it is the LIDL that release shipped with.</text>
+
+  <text x="52" y="336" font-size="9.5" fill="#656E66">All three are resolved by the host at load time. Nothing here is linked,</text>
+  <text x="52" y="349" font-size="9.5" fill="#656E66">and nothing shares source: a module is reached through its contract</text>
+  <text x="52" y="362" font-size="9.5" fill="#656E66">or not at all.</text>
+
+  <!-- ══════════ RIGHT: the pins ══════════ -->
+  <rect x="460" y="98" width="380" height="284" rx="8" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+
+  <rect x="472" y="110" width="356" height="56" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.6"/>
+  <text x="484" y="128" font-size="10" font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">chat_module</text>
+  <text x="484" y="143" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">github:logos-co/logos-chat-module/v0.2.2</text>
+  <text x="484" y="158" font-size="9.5" font-weight="600" fill="#4B33C4">The anchor — the one input pinned to a release tag.</text>
+
+  <rect x="472" y="176" width="356" height="44" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="484" y="194" font-size="10" font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">logos-module-builder</text>
+  <text x="484" y="210" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">follows chat_module/logos-module-builder</text>
+
+  <rect x="472" y="230" width="356" height="44" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="484" y="248" font-size="10" font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">logos-delivery-module</text>
+  <text x="484" y="264" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">follows chat_module/logos-delivery-module</text>
+
+  <path d="M 466 198 L 452 198 L 452 138 L 466 138" stroke="#4B33C4" stroke-width="1.2" fill="none" marker-end="url(#s)"/>
+  <path d="M 466 252 L 444 252 L 444 138 L 466 138" stroke="#4B33C4" stroke-width="1.2" fill="none" marker-end="url(#s)"/>
+
+  <rect x="472" y="284" width="356" height="56" rx="4" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.4"/>
+  <text x="484" y="302" font-size="10" font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">lez_core</text>
+  <text x="484" y="317" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">github:logos-blockchain/logos-execution-zone-module</text>
+  <text x="484" y="332" font-size="9.5" font-weight="600" fill="#A32D1E">No ref. Resolves to the default branch, whatever it was at lock time.</text>
+
+  <text x="472" y="362" font-size="9.5" fill="#656E66">Two of the four edges are not decisions at all — they follow the anchor.</text>
+
+  <!-- ══════════ THE READING ══════════ -->
+  <rect x="40" y="400" width="800" height="146" rx="8" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="56" y="422" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">WHAT THIS GRAPH IS ACTUALLY TELLING YOU</text>
+
+  <text x="56" y="446" font-size="10.5" fill="#1A1F1C" font-weight="600">One pin decides three edges. <tspan font-weight="400" fill="#656E66">The view and the module it renders are released in lockstep, so the module built here is the</tspan></text>
+  <text x="56" y="460" font-size="10" fill="#656E66">release the package manager resolves. Bumping <tspan font-family="'DM Mono',ui-monospace,Menlo,monospace">chat_module</tspan> moves the builder and delivery with it, whether or not you meant that.</text>
+
+  <text x="56" y="484" font-size="10.5" fill="#1A1F1C" font-weight="600">One edge can move under you. <tspan font-weight="400" fill="#656E66">Only the lockfile stops <tspan font-family="'DM Mono',ui-monospace,Menlo,monospace">lez_core</tspan> drifting — the input names no release. That is a build fact,</tspan></text>
+  <text x="56" y="498" font-size="10" fill="#656E66">not an architectural one, and it is the first thing to check when the zone behaves differently than it did last week.</text>
+
+  <text x="56" y="522" font-size="10.5" fill="#A32D1E" font-weight="600">The comment on that input is stale. <tspan font-weight="400" fill="#656E66">It says Muster calls <tspan font-family="'DM Mono',ui-monospace,Menlo,monospace">lez_core</tspan> dynamically by name rather than binding a generated</tspan></text>
+  <text x="56" y="536" font-size="10" fill="#656E66">client. <tspan font-family="'DM Mono',ui-monospace,Menlo,monospace">ChatBackendWallet.cpp</tspan> uses the generated client throughout — <tspan font-family="'DM Mono',ui-monospace,Menlo,monospace">modules().lez_core.*</tspan>. The comment predates the code.</text>
+</svg>

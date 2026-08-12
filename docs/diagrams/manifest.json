@@ -4,7 +4,7 @@
     {
       "file": "substrate-stack.html",
       "serves": "BOTH",
-      "shows": "Muster on the Logos stack: three entry points over app backends, modules, network and runtime, with a dark band for the infrastructure the user does not run. Six selectable views.",
+      "shows": "Muster on the Logos stack: three entry points over app backends, modules, network and runtime, with a dark band for the infrastructure the user does not run. Seven selectable views, including the demo build and the specified build as an A/B.",
       "sources": [
         {
           "path": "demo/muster-ui/metadata.json",
@@ -52,6 +52,7 @@
         "substrate-stack-standalone.svg",
         "substrate-stack-headless.svg",
         "substrate-stack-demo-build.svg",
+        "substrate-stack-spec-build.svg",
         "substrate-stack-beyond.svg"
       ],
       "recheck": "Every phase. P0 landing makes muster-module real and it stops being dashed; ADR-010's resolution may remove the chat_module box entirely; any movement on LOGOS-MIXNET changes the network layer."
@@ -152,6 +153,81 @@
         }
       ],
       "recheck": "P3 and P4. ADR-010 may change which module mints identity, and the specified client replaces the muster_ui plugin box with muster-module.lgx plus muster-ui.lgx across the same seam."
+    },
+    {
+      "file": "arch-contract-seam.svg",
+      "serves": "BOTH",
+      "shows": "The two codegen paths and the hand-written region each ends in: muster.lidl through the lidl_c.h JSON bridge to a generated Nim surface, and metadata.json plus a .rep through logos-module-builder to the plugin entry point and QtRO glue.",
+      "sources": [
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "ADR-008, the LIDL contract layer, the Nim gap and the four bridge functions"
+        },
+        {
+          "path": "CLAUDE.md",
+          "sha256": "1da49335bc50d7ee437de37428324cda85e7bd905ca612ac9709a01d93993e1c",
+          "note": "the two rules the C header states, and the never-hand-write-what-the-contract-generates rule"
+        },
+        {
+          "path": "demo/muster-ui/metadata.json",
+          "sha256": "e4953f1434822141605d47711bcde4351f5df915e2ecac42f66068ccc2425a87",
+          "note": "the codegen keys — rep, backend_class, backend_header"
+        },
+        {
+          "path": "demo/muster-ui/CMakeLists.txt",
+          "sha256": "10638f212df274b1ab59c450460fac1b24c240cc1a7d284a42610a8f874613a0",
+          "note": "logos_module() with REP_FILE, the macro that emits the plugin and QtRO glue"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "The four lidl_c.h functions, the two rules the header states outright, and the codegen keys — read off the header and metadata.json"
+        },
+        {
+          "grade": "from-source",
+          "note": "The Nim codegen backend is marked as not existing, because it does not: it is the P0 spike, and ADR-008's fallback is printed beside it"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The ~106-line figure for the Rust FFI binding is the plan's characterisation of logos-rust-sdk/lidl-gen, not a line count taken here"
+        }
+      ],
+      "recheck": "At P0. The moment the Nim backend exists the dashed box stops being dashed, and if the fallback is taken instead the left column loses a step."
+    },
+    {
+      "file": "arch-module-graph.svg",
+      "serves": "BUILD",
+      "shows": "The declared runtime module set against the flake inputs that resolve it: chat_module pinned to a release tag with two inputs following it, and lez_core pinned to no release at all.",
+      "sources": [
+        {
+          "path": "demo/muster-ui/metadata.json",
+          "sha256": "e4953f1434822141605d47711bcde4351f5df915e2ecac42f66068ccc2425a87",
+          "note": "the declared dependencies and the dependency_overrides indirection"
+        },
+        {
+          "path": "demo/muster-ui/flake.nix",
+          "sha256": "9142be0dee11018eeadd8abd3078f37994d3f0a22f0908519ebf4db017866196",
+          "note": "the four inputs, which follow chat_module and which does not — and the stale lez_core comment this figure corrects"
+        },
+        {
+          "path": "demo/muster-ui/src/ChatBackendWallet.cpp",
+          "sha256": "3857e18584ed75b807ecbfa46e094f2bd06e1969d755b85342853b52d77dffe3",
+          "note": "modules().lez_core.* — the generated client the flake comment says is not used"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "Every edge and every pin read directly off metadata.json and flake.nix"
+        },
+        {
+          "grade": "from-source",
+          "note": "The stale-comment finding is checkable: flake.nix describes dynamic invocation by name, ChatBackendWallet.cpp uses the generated client throughout"
+        }
+      ],
+      "recheck": "Whenever flake.nix changes. This figure is a snapshot of a version graph and is the one most likely to go stale silently — the manifest's changed-source warning on flake.nix is the intended signal."
     },
     {
       "file": "pipeline-seven-stages.svg",
