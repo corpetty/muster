@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 82" width="880" height="82" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>Pipeline locator — Discovery</title>
+  <desc>The seven-stage transaction pipeline with stage 1, Discovery, highlighted.</desc>
+  <rect width="880" height="82" fill="#E4E6E0"/>
+  <text x="40" y="18" font-size="8.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.12em" fill="#656E66">WHERE THIS POST SITS IN THE PIPELINE</text>
+  <rect x="40" y="30" width="109" height="40" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.4"/>
+  <text x="94.5" y="45" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" text-anchor="middle" fill="#4B33C4">01</text>
+  <text x="94.5" y="60" font-size="10.5" text-anchor="middle" font-weight="600" fill="#4B33C4">Discovery</text>
+  <rect x="155" y="30" width="109" height="40" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="209.5" y="45" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" text-anchor="middle" fill="#656E66">02</text>
+  <text x="209.5" y="60" font-size="10.5" text-anchor="middle" font-weight="400" fill="#656E66">Diligence</text>
+  <rect x="270" y="30" width="109" height="40" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="324.5" y="45" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" text-anchor="middle" fill="#656E66">03</text>
+  <text x="324.5" y="60" font-size="10.5" text-anchor="middle" font-weight="400" fill="#656E66">Negotiation</text>
+  <rect x="385" y="30" width="109" height="40" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="439.5" y="45" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" text-anchor="middle" fill="#656E66">04</text>
+  <text x="439.5" y="60" font-size="10.5" text-anchor="middle" font-weight="400" fill="#656E66">Contracting</text>
+  <rect x="500" y="30" width="109" height="40" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="554.5" y="45" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" text-anchor="middle" fill="#656E66">05</text>
+  <text x="554.5" y="60" font-size="10.5" text-anchor="middle" font-weight="400" fill="#656E66">Ordering</text>
+  <rect x="615" y="30" width="109" height="40" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="669.5" y="45" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" text-anchor="middle" fill="#656E66">06</text>
+  <text x="669.5" y="60" font-size="10.5" text-anchor="middle" font-weight="400" fill="#656E66">Settlement</text>
+  <rect x="730" y="30" width="109" height="40" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="784.5" y="45" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" text-anchor="middle" fill="#656E66">07</text>
+  <text x="784.5" y="60" font-size="10.5" text-anchor="middle" font-weight="400" fill="#656E66">Enforcement</text>
+</svg>

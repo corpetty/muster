@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The pipeline, against the infrastructure that runs it — interactive</title>
+
+<!--
+  The keystone (../README.md §3.4). Seven stages against three columns: what runs
+  the stage conventionally and who operates it, what runs it here, and who still
+  sees what. Views retell the pipeline per use case, because the supporting
+  material is explicit that it has to be: "discovery for 'send a friend £20' is a
+  different problem from discovery on a DEX", and the shape changes with it.
+
+  Engine copied from substrate-stack.html. The CSS and the script below are
+  deliberately identical between substrates so a diff between the two files shows
+  only content -- see tools/CLAUDE.md. The exporter is the genuinely shared part.
+
+  Honesty constraints this file is under, all inherited from docs/00-vision.md:
+
+    · Ordering and Enforcement stay NOT ASSESSED. GAPS.md refuses to score them
+      without the zone's own answer on mempool visibility and the production
+      sequencer model, and a figure is exactly where an unscored cell gets
+      quietly filled in.
+    · Diligence is "nothing", not "closed". Scoring it closed because we perform
+      no lookups would be the overclaim the matrix criticises.
+    · The conventional column characterises the status quo. It is illustrative,
+      not a measurement of any named service, and the manifest says so.
+-->
+
+<style>
+  body {
+    font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 2em 1.5em 4em;
+    background: #E4E6E0;
+    color: #1A1F1C;
+    line-height: 1.7;
+  }
+  h1 { font-size: 1.7em; line-height: 1.2; margin-bottom: 0.2em; letter-spacing: -0.3px; }
+  h2.subtitle { font-size: 1em; font-weight: 400; color: #656E66; margin-top: 0; margin-bottom: 2em; line-height: 1.5; }
+  p { margin-bottom: 1.3em; }
+  a { color: #4B33C4; }
+</style>
+
+<style>
+  /* Tokens are declared on .bc-svg as well as .bc so that an <svg> lifted out of
+     this page for static export carries them without any CSS rewriting. */
+  .bc, .bc-svg {
+    --bc-paper:   #E4E6E0;
+    --bc-surface: #F7F8F5;
+    --bc-ink:     #1A1F1C;
+    --bc-muted:   #656E66;
+    --bc-rule:    #C6CBC3;
+
+    --bc-signal:      #4B33C4;
+    --bc-signal-soft: #EAE6FA;
+    --bc-settled:      #1E6B52;
+    --bc-settled-soft: #DFEDE6;
+    --bc-alarm:      #A32D1E;
+    --bc-alarm-soft: #F6E3DF;
+
+    --bc-outside:        #23282A;
+    --bc-outside-ink:    #DCE2DE;
+    --bc-outside-rule:   #3A4144;
+    --bc-outside-accent: #8FA3F5;
+
+    --bc-mono: 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --bc-sans: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --bc-dim: 0.22;
+  }
+  .bc { margin: 2em 0; color: var(--bc-ink); }
+
+  .bc-panel {
+    background: var(--bc-surface);
+    border: 1px solid var(--bc-rule);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .bc-panel-header {
+    padding: 0.7em 1.1em;
+    background: var(--bc-paper);
+    border-bottom: 1px solid var(--bc-rule);
+    font-family: var(--bc-mono);
+    font-size: 0.7em;
+    font-weight: 600;
+    color: var(--bc-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+  }
+  .bc-panel-header .bc-spacer { margin-left: auto; }
+
+  .bc-playpause {
+    font-family: var(--bc-mono);
+    font-size: 0.95em;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.3em 0.7em;
+    border: 1px solid var(--bc-rule);
+    background: var(--bc-surface);
+    color: var(--bc-muted);
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .bc-playpause:hover { border-color: var(--bc-ink); color: var(--bc-ink); }
+  .bc-playpause:focus-visible { outline: 2px solid var(--bc-signal); outline-offset: 2px; }
+
+  /* ── Tabs ── */
+  .bc-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35em;
+    padding: 0.85em 1em;
+    background: var(--bc-paper);
+    border-bottom: 1px solid var(--bc-rule);
+  }
+  .bc-tab {
+    font-family: var(--bc-sans);
+    font-size: 0.82em;
+    font-weight: 500;
+    padding: 0.42em 0.9em;
+    border: 1px solid var(--bc-rule);
+    background: var(--bc-surface);
+    color: var(--bc-muted);
+    border-radius: 999px;
+    cursor: pointer;
+    line-height: 1.25;
+  }
+  .bc-tab:hover { border-color: var(--bc-ink); color: var(--bc-ink); }
+  .bc-tab:focus-visible { outline: 2px solid var(--bc-signal); outline-offset: 2px; }
+  .bc-tab[aria-selected="true"] {
+    background: var(--bc-ink);
+    border-color: var(--bc-ink);
+    color: var(--bc-surface);
+  }
+
+  .bc-stage { padding: 1.3em 1em 0.9em; background: var(--bc-surface); }
+  .bc-svg { display: block; width: 100%; height: auto; max-width: 100%; }
+
+  /* ── Column furniture ── */
+  .bc-col-head {
+    font-family: var(--bc-mono);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    fill: var(--bc-muted);
+  }
+  .bc-col-head-out { fill: #96A19B; }
+  .bc-col-bg { fill: var(--bc-outside); stroke: none; }
+
+  /* ── Nodes ── */
+  .bc-node rect {
+    fill: var(--bc-surface);
+    stroke: var(--bc-rule);
+    stroke-width: 1;
+    transition: fill 0.3s ease, stroke 0.3s ease, opacity 0.3s ease;
+  }
+  .bc-node text {
+    font-family: var(--bc-sans);
+    fill: var(--bc-ink);
+    font-size: 9.5px;
+    transition: fill 0.3s ease, opacity 0.3s ease;
+  }
+  /* These are written `.bc-node text.x`, not `.x`. A bare single-class selector
+     is specificity 0-1-0 and loses to `.bc-node text` at 0-1-1, so the modifier's
+     font-weight would apply while its FILL silently did not — a gap flag would
+     come out bold and black instead of bold and red, which is the one colour in
+     this figure that carries meaning on its own. */
+  .bc-node text.bc-stage-num  { font-family: var(--bc-mono); font-size: 9px; fill: var(--bc-muted); }
+  .bc-node text.bc-stage-name { font-size: 12.5px; font-weight: 600; }
+  .bc-node text.bc-stage-leak { font-size: 9px; fill: var(--bc-muted); font-style: italic; }
+  .bc-node text.bc-lead { font-weight: 600; }
+  .bc-node text.bc-flag { fill: var(--bc-alarm); font-weight: 600; }
+
+  /* Beyond the device: dark ground, light ink. */
+  .bc-node-out rect { fill: #2E3436; stroke: var(--bc-outside-rule); }
+  .bc-node-out text { fill: var(--bc-outside-ink); }
+  .bc-node-out text.bc-flag { fill: #E8A79B; }
+
+  /* ── Dimming ── */
+  .bc-svg[data-view]:not([data-view="overview"]) .bc-node:not(.bc-hl) rect,
+  .bc-svg[data-view]:not([data-view="overview"]) .bc-node:not(.bc-hl) text {
+    opacity: var(--bc-dim);
+  }
+  .bc-svg[data-view]:not([data-view="overview"]) .bc-col-bg { opacity: 0.75; }
+
+  /* ── Highlight ── */
+  .bc-svg .bc-hl.bc-node rect { fill: var(--bc-signal-soft); stroke: var(--bc-signal); stroke-width: 1.6; }
+  .bc-svg .bc-hl.bc-node .bc-stage-name { fill: var(--bc-signal); }
+
+  /* A lit observer cell keeps its dark ground. Crossing out of the room is the
+     one thing a highlight must never make look safe. */
+  .bc-svg .bc-hl.bc-node-out rect { fill: #2E3436; stroke: var(--bc-outside-accent); stroke-width: 1.6; }
+  .bc-svg .bc-hl.bc-node-out text { fill: var(--bc-outside-ink); }
+  /* Out-specificities again: a lit observer cell must not wash its gap flags
+     back to plain ink. */
+  .bc-svg .bc-hl.bc-node-out text.bc-flag { fill: #E8A79B; }
+
+  /* ── Caption ── */
+  .bc-caption { padding: 1em 1.3em 1.15em; border-top: 1px solid var(--bc-rule); background: var(--bc-paper); }
+  .bc-caption h3 { font-family: var(--bc-sans); font-size: 0.98em; font-weight: 600; margin: 0 0 0.3em; }
+  .bc-caption p { margin: 0; font-size: 0.92em; color: #3F4742; line-height: 1.6; }
+  .bc-caption .bc-tag {
+    display: inline-block; font-family: var(--bc-mono); font-size: 0.72em;
+    padding: 0.12em 0.5em; border-radius: 3px; background: var(--bc-surface);
+    border: 1px solid var(--bc-rule); color: var(--bc-muted);
+    text-transform: uppercase; letter-spacing: 0.05em; margin-right: 0.5em; vertical-align: 2px;
+  }
+
+  .bc-legend {
+    display: flex; flex-wrap: wrap; gap: 1.4em;
+    padding: 0.8em 1.3em; border-top: 1px solid var(--bc-rule);
+    background: var(--bc-surface); font-size: 0.8em; color: var(--bc-muted);
+  }
+  .bc-legend span { display: inline-flex; align-items: center; gap: 0.5em; }
+  .bc-legend i { width: 20px; height: 12px; border-radius: 2px; display: inline-block; }
+  .bc-key-here { background: #F7F8F5; border: 1px solid #C6CBC3; }
+  .bc-key-out  { background: #2E3436; border: 1px solid #3A4144; }
+  .bc-key-flag { background: #F6E3DF; border: 1px solid #A32D1E; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bc-node rect, .bc-node text, .bc-col-bg { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<h1>The pipeline, against the infrastructure that runs it</h1>
+<h2 class="subtitle">Seven stages. For each: what runs it on a conventional stack and who operates that, what runs it here, and who still sees something. Pick a use case — the pipeline is not one shape.</h2>
+
+<div class="bc">
+  <div class="bc-panel">
+    <div class="bc-panel-header">
+      <span>Pipeline · infrastructure · observers</span>
+      <span class="bc-spacer"></span>
+      <button class="bc-playpause" id="bc-playpause" aria-label="Pause automatic cycling">Pause</button>
+    </div>
+
+    <div class="bc-tabs" role="tablist" aria-label="Ways of reading the pipeline" id="bc-tabs"></div>
+
+    <div class="bc-stage">
+      <svg class="bc-svg" viewBox="0 0 960 700" data-view="overview" xmlns="http://www.w3.org/2000/svg"
+           role="img" aria-labelledby="bc-svg-title bc-svg-desc">
+        <title id="bc-svg-title">The transaction pipeline against the infrastructure that runs each stage</title>
+        <desc id="bc-svg-desc">Seven stages — discovery, diligence, negotiation, contracting, ordering, settlement, enforcement — each against what runs it conventionally, what runs it in Muster, and who still observes something. Ordering and enforcement are left unassessed.</desc>
+
+        <!-- The observer column sits on the dark ground the rest of the figure set
+             uses for "outside": it is not a third opinion, it is the other side. -->
+        <rect class="bc-col-bg" x="700" y="20" width="240" height="660" rx="8"/>
+
+        <text class="bc-col-head" x="20"  y="40">STAGE, AND WHAT LEAKS</text>
+        <!-- Header text is unwrapped, so it has to fit its column: at 9.5px mono
+             with this letter-spacing, ~41 characters in 282px. -->
+        <text class="bc-col-head" x="174" y="40">CONVENTIONALLY, AND WHO RUNS IT</text>
+        <text class="bc-col-head" x="462" y="40">WHAT RUNS IT HERE</text>
+        <text class="bc-col-head bc-col-head-out" x="714" y="40">WHO STILL SEES, AND WHAT</text>
+
+        <!-- ═══ 01 DISCOVERY (y=56) ═══ -->
+        <g class="bc-node" data-id="stage-discovery">
+          <rect x="20" y="56" width="148" height="84" rx="4"/>
+          <rect x="174" y="56" width="282" height="84" rx="4"/>
+          <rect x="462" y="56" width="230" height="84" rx="4"/>
+          <text class="bc-stage-num"  x="32" y="74">01</text>
+          <text class="bc-stage-name" x="32" y="92">Discovery</text>
+          <text class="bc-stage-leak" x="32" y="108">counterparties,</text>
+          <text class="bc-stage-leak" x="32" y="120">intent</text>
+          <text x="186" y="76">A platform directory, an order book, a group chat.</text>
+          <text x="186" y="90">"Add contact" is a request to a server whose whole</text>
+          <text x="186" y="104">business is knowing the edges of that graph — and</text>
+          <text x="186" y="118">which can be compelled to produce them.</text>
+          <text x="474" y="76" class="bc-lead">No directory, so no lookup.</text>
+          <text x="474" y="92">The address is minted locally and</text>
+          <text x="474" y="106">handed over out of band. Nothing</text>
+          <text x="474" y="120">is resolved, so nobody is asked.</text>
+        </g>
+        <g class="bc-node bc-node-out" data-id="obs-discovery">
+          <rect x="708" y="56" width="224" height="84" rx="4"/>
+          <text x="720" y="76">The store node: which topics this</text>
+          <text x="720" y="90">client subscribes to, and when.</text>
+          <text x="720" y="104">The contact graph, pseudonymously.</text>
+          <text x="720" y="122" class="bc-flag">The bootstrap is unauthenticated.</text>
+        </g>
+
+        <!-- ═══ 02 DILIGENCE (y=144) ═══ -->
+        <g class="bc-node" data-id="stage-diligence">
+          <rect x="20" y="144" width="148" height="84" rx="4"/>
+          <rect x="174" y="144" width="282" height="84" rx="4"/>
+          <rect x="462" y="144" width="230" height="84" rx="4"/>
+          <text class="bc-stage-num"  x="32" y="162">02</text>
+          <text class="bc-stage-name" x="32" y="180">Diligence</text>
+          <text class="bc-stage-leak" x="32" y="196">address history,</text>
+          <text class="bc-stage-leak" x="32" y="208">identity graph</text>
+          <text x="186" y="164">Block explorers, and the surveillance firms that</text>
+          <text x="186" y="178">graph the chain for a living. The lookup is itself</text>
+          <text x="186" y="192">a record — of what you checked, and when, logged</text>
+          <text x="186" y="206">against your address at the edge.</text>
+          <text x="474" y="164" class="bc-flag">Nothing.</text>
+          <text x="474" y="180">There is no diligence surface in</text>
+          <text x="474" y="194">this build. Calling that "closed"</text>
+          <text x="474" y="208">because we do no lookups would</text>
+          <text x="474" y="220">be the overclaim.</text>
+        </g>
+        <g class="bc-node bc-node-out" data-id="obs-diligence">
+          <rect x="708" y="144" width="224" height="84" rx="4"/>
+          <text x="720" y="164">Nobody — because the stage does</text>
+          <text x="720" y="178">not happen, not because it is</text>
+          <text x="720" y="192">protected. An absent feature and</text>
+          <text x="720" y="206">a closed leak look identical from</text>
+          <text x="720" y="220">outside, and are not the same.</text>
+        </g>
+
+        <!-- ═══ 03 NEGOTIATION (y=232) ═══ -->
+        <g class="bc-node" data-id="stage-negotiation">
+          <rect x="20" y="232" width="148" height="84" rx="4"/>
+          <rect x="174" y="232" width="282" height="84" rx="4"/>
+          <rect x="462" y="232" width="230" height="84" rx="4"/>
+          <text class="bc-stage-num"  x="32" y="250">03</text>
+          <text class="bc-stage-name" x="32" y="268">Negotiation</text>
+          <text class="bc-stage-leak" x="32" y="284">size, terms,</text>
+          <text class="bc-stage-leak" x="32" y="296">reservation price</text>
+          <text x="186" y="252">RPCs, quote infrastructure, hosted chat. For a</text>
+          <text x="186" y="266">multisig, a transaction service where the operator</text>
+          <text x="186" y="280">— and often anyone with the URL — sees the</text>
+          <text x="186" y="294">proposal, the signer set and the timing, all</text>
+          <text x="186" y="308">before anything reaches a chain.</text>
+          <text x="474" y="252" class="bc-lead">Inside the encrypted room.</text>
+          <text x="474" y="268">No coordination service anywhere</text>
+          <text x="474" y="282">in it. Approvals are ordinary</text>
+          <text x="474" y="296">messages, authenticated by the</text>
+          <text x="474" y="310">room — but not by the chain.</text>
+        </g>
+        <g class="bc-node bc-node-out" data-id="obs-negotiation">
+          <rect x="708" y="232" width="224" height="84" rx="4"/>
+          <text x="720" y="252">That a conversation is active,</text>
+          <text x="720" y="266">and when. Not what was proposed,</text>
+          <text x="720" y="280">who agreed, or how many.</text>
+          <text x="720" y="298" class="bc-flag">The threshold is enforced by the</text>
+          <text x="720" y="310" class="bc-flag">room, never by the zone.</text>
+        </g>
+
+        <!-- ═══ 04 CONTRACTING (y=320) ═══ -->
+        <g class="bc-node" data-id="stage-contracting">
+          <rect x="20" y="320" width="148" height="84" rx="4"/>
+          <rect x="174" y="320" width="282" height="84" rx="4"/>
+          <rect x="462" y="320" width="230" height="84" rx="4"/>
+          <text class="bc-stage-num"  x="32" y="338">04</text>
+          <text class="bc-stage-name" x="32" y="356">Contracting</text>
+          <text class="bc-stage-leak" x="32" y="372">frontend and</text>
+          <text class="bc-stage-leak" x="32" y="384">signing context</text>
+          <text x="186" y="340">A web frontend served fresh on every visit, and</text>
+          <text x="186" y="354">blind signing: the signer approves opaque calldata,</text>
+          <text x="186" y="368">or a hash they have no way to reconstruct</text>
+          <text x="186" y="382">independently. This is the norm, not the failure.</text>
+          <text x="474" y="340" class="bc-lead">A native, local-first client.</text>
+          <text x="474" y="354">No web frontend, no ambient</text>
+          <text x="474" y="368">leakage. But the signing context</text>
+          <text x="474" y="386" class="bc-flag">is not verifiable — the client</text>
+          <text x="474" y="398" class="bc-flag">does not re-derive what it signs.</text>
+        </g>
+        <g class="bc-node bc-node-out" data-id="obs-contracting">
+          <rect x="708" y="320" width="224" height="84" rx="4"/>
+          <text x="720" y="340">Nothing new leaves the room here.</text>
+          <text x="720" y="358">The gap points inward: you cannot</text>
+          <text x="720" y="372">check what you are agreeing to.</text>
+          <text x="720" y="390">F-4 and FS-6 specify the check;</text>
+          <text x="720" y="404">it is not built.</text>
+        </g>
+
+        <!-- ═══ 05 ORDERING (y=408) ═══ -->
+        <g class="bc-node" data-id="stage-ordering">
+          <rect x="20" y="408" width="148" height="84" rx="4"/>
+          <rect x="174" y="408" width="282" height="84" rx="4"/>
+          <rect x="462" y="408" width="230" height="84" rx="4"/>
+          <text class="bc-stage-num"  x="32" y="426">05</text>
+          <text class="bc-stage-name" x="32" y="444">Ordering</text>
+          <text class="bc-stage-leak" x="32" y="460">pending order</text>
+          <text class="bc-stage-leak" x="32" y="472">flow</text>
+          <text x="186" y="428">A public mempool. Everything pending is visible to</text>
+          <text x="186" y="442">anyone who watches, which is what MEV is built on</text>
+          <text x="186" y="456">— and the node you submit through learns your</text>
+          <text x="186" y="470">network origin at the same moment.</text>
+          <text x="474" y="428" class="bc-flag">Not assessed.</text>
+          <text x="474" y="444">Needs the zone's own answer on</text>
+          <text x="474" y="458">mempool visibility and sequencer</text>
+          <text x="474" y="472">behaviour. Guessing it here would</text>
+          <text x="474" y="486">be the failure this figure avoids.</text>
+        </g>
+        <g class="bc-node bc-node-out" data-id="obs-ordering">
+          <rect x="708" y="408" width="224" height="84" rx="4"/>
+          <text x="720" y="428">Known: no network-origin</text>
+          <text x="720" y="442">protection, because there is no</text>
+          <text x="720" y="456">mixnet. The zone learns that a</text>
+          <text x="720" y="470">transfer happened, and when.</text>
+          <text x="720" y="488" class="bc-flag">The rest is not established.</text>
+        </g>
+
+        <!-- ═══ 06 SETTLEMENT (y=496) ═══ -->
+        <g class="bc-node" data-id="stage-settlement">
+          <rect x="20" y="496" width="148" height="84" rx="4"/>
+          <rect x="174" y="496" width="282" height="84" rx="4"/>
+          <rect x="462" y="496" width="230" height="84" rx="4"/>
+          <text class="bc-stage-num"  x="32" y="514">06</text>
+          <text class="bc-stage-name" x="32" y="532">Settlement</text>
+          <text class="bc-stage-leak" x="32" y="548">balances,</text>
+          <text class="bc-stage-leak" x="32" y="560">approvals</text>
+          <text x="186" y="516">The public ledger and every indexer reading it,</text>
+          <text x="186" y="530">permanently and in the open. This is the stage</text>
+          <text x="186" y="544">privacy work concentrates on — shielded amounts,</text>
+          <text x="186" y="558">mixers, stealth addresses.</text>
+          <text x="474" y="516" class="bc-lead">Shielded at both ends, by default</text>
+          <text x="474" y="530" class="bc-lead">on the private rail.</text>
+          <text x="474" y="546">Four rails are offered; each states</text>
+          <text x="474" y="560">on its receipt what it disclosed.</text>
+          <text x="474" y="574">The private one takes ~7 minutes.</text>
+        </g>
+        <g class="bc-node bc-node-out" data-id="obs-settlement">
+          <rect x="708" y="496" width="224" height="84" rx="4"/>
+          <text x="720" y="516">That a transfer happened, and</text>
+          <text x="720" y="530">when. That is the floor on every</text>
+          <text x="720" y="544">rail, including the private one.</text>
+          <text x="720" y="562" class="bc-flag">On a testnet with two users the</text>
+          <text x="720" y="574" class="bc-flag">anonymity set is as small as it gets.</text>
+        </g>
+
+        <!-- ═══ 07 ENFORCEMENT (y=584) ═══ -->
+        <g class="bc-node" data-id="stage-enforcement">
+          <rect x="20" y="584" width="148" height="84" rx="4"/>
+          <rect x="174" y="584" width="282" height="84" rx="4"/>
+          <rect x="462" y="584" width="230" height="84" rx="4"/>
+          <text class="bc-stage-num"  x="32" y="602">07</text>
+          <text class="bc-stage-name" x="32" y="620">Enforcement</text>
+          <text class="bc-stage-leak" x="32" y="636">identifiable</text>
+          <text class="bc-stage-leak" x="32" y="648">operators</text>
+          <text x="186" y="604">Whether a block producer can be named, and</text>
+          <text x="186" y="618">therefore leaned on. Anonymous randomised</text>
+          <text x="186" y="632">selection is the standard; a permissioned</text>
+          <text x="186" y="646">sequencer set is not. Almost nobody argues</text>
+          <text x="186" y="660">about this stage at all.</text>
+          <text x="474" y="604" class="bc-flag">Not assessed.</text>
+          <text x="474" y="620">The testnet runs against a single</text>
+          <text x="474" y="634">named sequencer, which by that</text>
+          <text x="474" y="648">standard points one way — but the</text>
+          <text x="474" y="662">production model is unconfirmed.</text>
+        </g>
+        <g class="bc-node bc-node-out" data-id="obs-enforcement">
+          <rect x="708" y="584" width="224" height="84" rx="4"/>
+          <text x="720" y="604">Whoever can compel the operator,</text>
+          <text x="720" y="618">if the operator is identifiable.</text>
+          <text x="720" y="636" class="bc-flag">Unconfirmed for production, and</text>
+          <text x="720" y="650" class="bc-flag">so left blank rather than filled</text>
+          <text x="720" y="662" class="bc-flag">in with something plausible.</text>
+        </g>
+
+        <g class="bc-flow-arrows"></g>
+      </svg>
+    </div>
+
+    <div class="bc-legend">
+      <span><i class="bc-key-here"></i> inside the room, on your device</span>
+      <span><i class="bc-key-out"></i> what an outside party learns</span>
+      <span><i class="bc-key-flag"></i> a gap, or a refusal to score</span>
+    </div>
+
+    <div class="bc-caption" aria-live="polite">
+      <h3 id="bc-view-title">All seven, side by side</h3>
+      <p id="bc-view-body"></p>
+    </div>
+  </div>
+</div>
+
+<p>
+  The column on the right is the one that makes this an architecture diagram rather than a table of
+  opinions. Every stage has somebody positioned to learn something from it, and naming who — per stage,
+  on both stacks — is the only way to compare them honestly. Two cells in the middle column say
+  <em>not assessed</em>, and they will keep saying it until the zone answers.
+</p>
+
+<script type="application/json" id="bc-views">
+[
+  {
+    "id": "overview",
+    "label": "All seven",
+    "title": "All seven, side by side",
+    "body": "Four stages happen <em>before a transaction exists</em> and leak intent: who you considered dealing with, what you checked, what you asked for, what you settled on, what you rejected. Three involve the chain. Read the right-hand column first — it is the one that decides whether a comparison is honest.",
+    "entry": null, "paths": [], "extras": []
+  },
+  {
+    "id": "argument",
+    "label": "Where the argument is",
+    "title": "The privacy argument covers about one stage in seven",
+    "body": "Shielded amounts, mixers, stealth addresses — nearly all of it lands on <strong>settlement</strong>. Ordering gets partial attention, mostly framed as an economic problem rather than a privacy one. Enforcement gets almost none, despite deciding whether anyone <em>can</em> be compelled. And the four stages that leak intent are barely examined at all.",
+    "entry": null,
+    "paths": [],
+    "extras": ["stage-settlement", "obs-settlement"]
+  },
+  {
+    "id": "neglected-middle",
+    "label": "What this build closes",
+    "title": "One stage of seven, closed by default — and it is the neglected one",
+    "body": "Terms are agreed inside an end-to-end encrypted room with <strong>no coordination service anywhere in it</strong>: no RPC, no quote infrastructure, no operator who sees the proposal, the approvals or the timing. Closed by architecture, not opt-in. That is a defensible result for a two-week prototype whose thesis is that the middle of the pipeline is neglected — it closes the neglected middle and leaves the well-trodden end open.",
+    "entry": null,
+    "paths": [],
+    "extras": ["stage-negotiation", "obs-negotiation"]
+  },
+  {
+    "id": "pay-a-friend",
+    "label": "Send a friend £20",
+    "title": "The simplest instance of the pipeline",
+    "body": "Discovery is one address handed over out of band. Diligence is a glance at a name you already trust — no third party is asked, because there is nothing to ask about. Negotiation is two messages. Then contracting, ordering and settlement carry the whole risk. <strong>If we cannot be honest about this one, the complicated ones are hopeless.</strong>",
+    "entry": null,
+    "paths": [],
+    "extras": [
+      "stage-discovery", "obs-discovery",
+      "stage-negotiation", "obs-negotiation",
+      "stage-contracting", "obs-contracting",
+      "stage-ordering", "obs-ordering",
+      "stage-settlement", "obs-settlement"
+    ]
+  },
+  {
+    "id": "dex-trade",
+    "label": "Trade on a DEX",
+    "title": "Same seven stages, a completely different shape",
+    "body": "Discovery is an order book, published on purpose. Diligence is chain analysis — of the pool, the token, the counterparty's history. Negotiation is a quote from infrastructure that now knows your size and your reservation price before you commit. Ordering becomes the dominant leak rather than a footnote, because the mempool is where the value is extracted. <strong>The pipeline is not universal in shape, which is why it has to be retold per use case.</strong>",
+    "entry": null,
+    "paths": [],
+    "extras": [
+      "stage-discovery", "obs-discovery",
+      "stage-diligence", "obs-diligence",
+      "stage-negotiation", "obs-negotiation",
+      "stage-contracting", "obs-contracting",
+      "stage-ordering", "obs-ordering",
+      "stage-settlement", "obs-settlement",
+      "stage-enforcement", "obs-enforcement"
+    ]
+  },
+  {
+    "id": "obs-store-node",
+    "label": "Seen by: a store node",
+    "title": "What the relay carrying your conversations learns",
+    "body": "It never sees content — the room is end-to-end encrypted and the structured cards ride inside the same encrypted body as the text. What it does see is <strong>shape</strong>: which content topics this client subscribes to, and when it publishes or fetches. That is the contact graph, pseudonymously, and encryption does not touch it. Running your own node does not fix this — it protects the operator's own metadata, not their peers', and it lets an operator serving content learn when a target fetches.",
+    "entry": null,
+    "paths": [],
+    "extras": ["stage-discovery", "obs-discovery", "stage-negotiation", "obs-negotiation"]
+  },
+  {
+    "id": "obs-zone",
+    "label": "Seen by: the zone",
+    "title": "What the execution zone learns",
+    "body": "That a transfer happened, and when. On the private rail it does not learn the amount or either account — but the floor holds on every rail, and on a testnet with two users the anonymity set is as small as an anonymity set gets. There is no network-origin protection, because there is no mixnet. What the zone's mempool exposes before confirmation is <strong>not established</strong>, which is why ordering stays unscored.",
+    "entry": null,
+    "paths": [],
+    "extras": ["stage-ordering", "obs-ordering", "stage-settlement", "obs-settlement"]
+  },
+  {
+    "id": "obs-nobody",
+    "label": "Seen by: nobody",
+    "title": "The two stages no outside party observes",
+    "body": "Worth separating, because they are blank for opposite reasons. <strong>Negotiation</strong> is blank because it is closed by architecture — the terms are agreed inside the encrypted room with no coordination service in it. <strong>Diligence</strong> is blank because the stage does not happen: there is no diligence surface in this build. An absent feature and a closed leak look identical from outside, and treating them the same is the overclaim this whole figure exists to avoid.",
+    "entry": null,
+    "paths": [],
+    "extras": ["stage-diligence", "obs-diligence", "stage-negotiation", "obs-negotiation"]
+  },
+  {
+    "id": "unassessed",
+    "label": "The two we refuse to score",
+    "title": "Ordering and enforcement stay blank",
+    "body": "Both need answers we do not have: whether the zone's mempool is visible and how its sequencer behaves, and whether the production model is a permissioned set or anonymous randomised selection. What <em>is</em> known is printed — no network-origin protection, a single named sequencer on testnet — and the rest is left blank. A figure is exactly where an unscored cell gets quietly filled in with something plausible, so these two are marked in the diagram itself rather than in a footnote nobody reads.",
+    "entry": null,
+    "paths": [],
+    "extras": ["stage-ordering", "obs-ordering", "stage-enforcement", "obs-enforcement"]
+  }
+]
+</script>
+
+<script>
+(function () {
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const svg = document.querySelector('.bc-svg');
+  const tabs = document.getElementById('bc-tabs');
+  const titleEl = document.getElementById('bc-view-title');
+  const bodyEl = document.getElementById('bc-view-body');
+  const playPause = document.getElementById('bc-playpause');
+  const flowContainer = svg.querySelector('.bc-flow-arrows');
+  const VIEWS = JSON.parse(document.getElementById('bc-views').textContent);
+
+  if (tabs.dataset.initialized) return;   // Quartz re-renders the DOM client-side.
+  tabs.dataset.initialized = 'true';
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const buttons = VIEWS.map((v, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'bc-tab';
+    btn.textContent = v.label;
+    btn.setAttribute('role', 'tab');
+    btn.setAttribute('aria-selected', i === 0 ? 'true' : 'false');
+    btn.tabIndex = i === 0 ? 0 : -1;
+    btn.dataset.view = v.id;
+    btn.addEventListener('click', () => { stopAutoplay(); setView(v.id); });
+    tabs.appendChild(btn);
+    return btn;
+  });
+
+  tabs.addEventListener('keydown', (e) => {
+    const i = buttons.findIndex(b => b === document.activeElement);
+    if (i < 0) return;
+    let next = null;
+    if (e.key === 'ArrowRight') next = (i + 1) % buttons.length;
+    else if (e.key === 'ArrowLeft') next = (i - 1 + buttons.length) % buttons.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = buttons.length - 1;
+    if (next === null) return;
+    e.preventDefault();
+    stopAutoplay();
+    buttons[next].focus();
+    setView(VIEWS[next].id);
+  });
+
+  const INTERVAL = 6500;
+  let timer = null;
+  let playing = !reduceMotion;
+
+  function tick() {
+    const idx = VIEWS.findIndex(v => v.id === svg.getAttribute('data-view'));
+    setView(VIEWS[(idx + 1) % VIEWS.length].id);
+    timer = setTimeout(tick, INTERVAL);
+  }
+  function startAutoplay() {
+    playing = true;
+    playPause.textContent = 'Pause';
+    playPause.setAttribute('aria-label', 'Pause automatic cycling');
+    timer = setTimeout(tick, INTERVAL);
+  }
+  function stopAutoplay() {
+    playing = false;
+    playPause.textContent = 'Play';
+    playPause.setAttribute('aria-label', 'Cycle through the views automatically');
+    if (timer) { clearTimeout(timer); timer = null; }
+  }
+  playPause.addEventListener('click', () => (playing ? stopAutoplay() : startAutoplay()));
+
+  function box(id) {
+    const g = svg.querySelector('[data-id="' + id + '"]');
+    const rect = g && g.querySelector('rect');
+    if (!rect) return null;
+    const x = parseFloat(rect.getAttribute('x'));
+    const y = parseFloat(rect.getAttribute('y'));
+    const w = parseFloat(rect.getAttribute('width'));
+    const h = parseFloat(rect.getAttribute('height'));
+    return { cx: x + w / 2, top: y, bottom: y + h };
+  }
+
+  function arrow(fromId, toId) {
+    const s = box(fromId), t = box(toId);
+    if (!s || !t) return null;
+    const sx = s.cx, sy = s.bottom, tx = t.cx, ty = t.top;
+    const midY = Math.max(sy + 6, Math.min(ty - 30, ty - 6));
+    const d = Math.abs(sx - tx) < 2
+      ? `M ${sx} ${sy} L ${tx} ${ty - 2}`
+      : `M ${sx} ${sy} L ${sx} ${midY} L ${tx} ${midY} L ${tx} ${ty - 2}`;
+
+    const g = document.createElementNS(SVG_NS, 'g');
+    const target = svg.querySelector('[data-id="' + toId + '"]');
+    const outward = target && target.classList.contains('bc-node-out');
+    g.setAttribute('class', 'bc-arrow bc-flow-arrow' + (outward ? ' bc-flow-out' : ''));
+    const p = document.createElementNS(SVG_NS, 'path');
+    p.setAttribute('d', d);
+    p.setAttribute('marker-end', outward ? 'url(#bc-flow-marker-out)' : 'url(#bc-flow-marker)');
+    g.appendChild(p);
+    return g;
+  }
+
+  function setView(viewId) {
+    const view = VIEWS.find(v => v.id === viewId) || VIEWS[0];
+
+    buttons.forEach(b => {
+      const on = b.dataset.view === view.id;
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+      b.tabIndex = on ? 0 : -1;
+    });
+
+    svg.querySelectorAll('.bc-hl').forEach(el => el.classList.remove('bc-hl'));
+    while (flowContainer.firstChild) flowContainer.removeChild(flowContainer.firstChild);
+    svg.setAttribute('data-view', view.id);
+
+    const light = id => {
+      const el = svg.querySelector('[data-id="' + id + '"]');
+      if (el) el.classList.add('bc-hl');
+      else console.warn('substrate: no node with data-id=' + id);
+    };
+
+    if (view.entry) light(view.entry);
+    (view.paths || []).forEach(path => {
+      path.forEach(light);
+      for (let i = 0; i < path.length - 1; i++) {
+        const a = arrow(path[i], path[i + 1]);
+        if (a) flowContainer.appendChild(a);
+      }
+    });
+    (view.extras || []).forEach(light);
+
+    titleEl.textContent = view.title;
+    bodyEl.innerHTML = '<span class="bc-tag">' + view.label + '</span>' + view.body;
+    if (history.replaceState) history.replaceState(null, '', '#view=' + view.id);
+  }
+
+  const fromHash = (location.hash.match(/view=([\w-]+)/) || [])[1];
+  const pinned = VIEWS.some(v => v.id === fromHash);
+  setView(pinned ? fromHash : VIEWS[0].id);
+
+  if (playing && !pinned) startAutoplay(); else stopAutoplay();
+})();
+</script>
+
+</body>
+</html>

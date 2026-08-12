@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 566" width="880" height="566" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>What each step of the journey actually costs in time</title>
+  <desc>On a logarithmic time axis: syncing takes under two seconds, reaching the network takes tens of seconds, and a shielded transfer takes between six and eight minutes — three orders of magnitude past the point where an interaction stops feeling like one.</desc>
+<!-- provenance
+     serves:   BOTH
+     shows:    Every step of one payment on a logarithmic time axis, against the
+               thresholds where an interaction stops feeling like one — and the 20-second
+               sync-client timeout that sits in the middle of it.
+     sources:  docs/posts/01-discovery-supporting-material.md
+               demo/CLAUDE.md
+               demo/GAPS.md
+     evidence: [measured] Sync-to-tip 0.2–1.3 s, and the three shielded-transfer figures
+                   6m41s / 7m24s / 7m27s — one 13-core desktop against the LEZ testnet,
+                   2026-08-11/12. Whether any of it is typical is NOT established
+               [from-source] The 5–20 s to Online, and the 20 s hardcoded timeout in the
+                   generated sync client
+               [illustrative] The 'instant' / 'still a conversation' / 'attention is
+                   gone' bands are rules of thumb about human attention, not anything
+                   measured here. Registration is drawn as a range because the exact figure
+                   was never isolated
+     recheck:  Any time the zone changes proving, and before the settlement post
+               publishes. The §5 caveat travels with this figure.
+-->
+
+  <rect width="880" height="566" fill="#E4E6E0"/>
+
+  <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">Not an interaction. A job you start.</text>
+  <text x="40" y="64" font-size="13.5" fill="#656E66">Every step of one payment, on a log scale. Measured on a 13-core desktop against the LEZ testnet, August 2026.</text>
+
+  <!-- ══ threshold bands ══ -->
+  <rect x="265" y="92" width="175" height="296" fill="#DFEDE6" opacity="0.45"/>
+  <rect x="440" y="92" width="350" height="296" fill="#F6E3DF" opacity="0.35"/>
+
+  <text x="177" y="106" font-size="9" text-anchor="middle" fill="#1E6B52" font-weight="600">instant</text>
+  <text x="352" y="106" font-size="9" text-anchor="middle" fill="#1E6B52" font-weight="600">still a conversation</text>
+  <text x="615" y="106" font-size="9" text-anchor="middle" fill="#A32D1E" font-weight="600">attention is gone — this is a background job</text>
+
+  <!-- ══ the 20s timeout ══ -->
+  <path d="M 493 92 L 493 402" stroke="#A32D1E" stroke-width="1.4" stroke-dasharray="4 3" fill="none"/>
+  <text x="499" y="126" font-size="9.5" font-weight="600" fill="#A32D1E">20 s — the generated sync client's</text>
+  <text x="499" y="138" font-size="9.5" font-weight="600" fill="#A32D1E">hardcoded timeout</text>
+
+  <!-- ══ rows ══ -->
+  <text x="40" y="168" font-size="10.5" font-weight="600" fill="#1A1F1C">Sync to tip</text>
+  <text x="40" y="181" font-size="9" fill="#656E66">50-block range</text>
+  <rect x="143" y="156" width="142" height="20" rx="4" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1.2"/>
+  <text x="295" y="170" font-size="9.5" fill="#1E6B52" font-weight="600">0.2 – 1.3 s</text>
+
+  <text x="40" y="222" font-size="10.5" font-weight="600" fill="#1A1F1C">Reach “Online”</text>
+  <text x="40" y="235" font-size="9" fill="#656E66">join the fleet, publish a key package</text>
+  <rect x="387" y="210" width="106" height="20" rx="4" fill="#F7F8F5" stroke="#656E66" stroke-width="1.2"/>
+  <text x="503" y="224" font-size="9.5" fill="#656E66" font-weight="600">5 – 20 s</text>
+
+  <text x="40" y="276" font-size="10.5" font-weight="600" fill="#1A1F1C">Register a private account</text>
+  <text x="40" y="289" font-size="9" fill="#656E66">it proves, so it is not a call you wait on</text>
+  <path d="M 500 274 L 700 274" stroke="#A32D1E" stroke-width="10" stroke-linecap="round" opacity="0.28"/>
+  <text x="500" y="264" font-size="9.5" fill="#A32D1E" font-weight="600">minutes — exact figure not isolated</text>
+
+  <text x="40" y="330" font-size="10.5" font-weight="600" fill="#1A1F1C">A shielded transfer</text>
+  <text x="40" y="343" font-size="9" fill="#656E66">one note, ~1300% CPU throughout</text>
+  <rect x="716" y="318" width="18" height="20" rx="4" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.4"/>
+  <text x="708" y="326" font-size="9.5" text-anchor="end" fill="#A32D1E" font-weight="600">6 m 41 s · 7 m 24 s · 7 m 27 s</text>
+  <text x="708" y="338" font-size="8.5" text-anchor="end" fill="#656E66">three measurements, two machines</text>
+
+  <text x="40" y="384" font-size="10.5" font-weight="600" fill="#1A1F1C">Settle</text>
+  <text x="40" y="397" font-size="9" fill="#656E66">poll until this wallet's own view moves</text>
+  <path d="M 143 378 L 780 378" stroke="#656E66" stroke-width="1.4" stroke-dasharray="3 4" fill="none"/>
+  <text x="150" y="374" font-size="9" fill="#656E66">no fixed number — the block carrying it may not exist yet</text>
+
+  <!-- ══ axis ══ -->
+  <path d="M 90 402 L 800 402" stroke="#1A1F1C" stroke-width="1.2" fill="none"/>
+  <path d="M 90 402 L 90 408 M 265 402 L 265 408 M 440 402 L 440 408 M 576 402 L 576 408 M 751 402 L 751 408" stroke="#1A1F1C" stroke-width="1.2"/>
+  <text x="90"  y="420" font-size="9" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">100 ms</text>
+  <text x="265" y="420" font-size="9" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">1 s</text>
+  <text x="440" y="420" font-size="9" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">10 s</text>
+  <text x="576" y="420" font-size="9" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">1 min</text>
+  <text x="751" y="420" font-size="9" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">10 min</text>
+
+  <!-- ══ what it means ══ -->
+  <rect x="40" y="444" width="800" height="104" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+
+  <text x="56" y="466" font-size="11" font-weight="600" fill="#1A1F1C">A private payment is not an interaction you wait on. It is a job you start —<tspan font-weight="400" fill="#3F4742">&#160;and that is a product fact, not a tuning constant.</tspan></text>
+  <text x="56" y="482" font-size="10.5" fill="#3F4742">It changes what the feature <tspan font-style="italic">is</tspan>, and it bounds what a demo can show: you cannot screen-record it in real time.</text>
+
+  <text x="56" y="506" font-size="10.5" font-weight="600" fill="#A32D1E">The dashed line is why a call that had been in the tree for a day had never once succeeded.</text>
+  <text x="56" y="520" font-size="10.5" fill="#3F4742">Anything that proves has to use the async variant; through the sync wrapper it hit 20 s and threw away a result the zone went on</text>
+  <text x="56" y="534" font-size="10.5" fill="#3F4742">to produce. And the balance read straight after a transfer is <tspan font-weight="600">stale</tspan> — 150 → 150, then 150 → 140 on the next refresh.</text>
+</svg>

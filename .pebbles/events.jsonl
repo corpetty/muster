@@ -36,3 +36,107 @@
 {"type":"comment","timestamp":"2026-08-08T21:47:44.789726Z","issue_id":"exo-d7c","payload":{"body":"spec: contracts/specs/derived-exo-d7c.spec.json"}}
 {"type":"comment","timestamp":"2026-08-08T21:47:44.795384Z","issue_id":"exo-8dc","payload":{"body":"spec: contracts/specs/derived-exo-8dc.spec.json"}}
 {"type":"comment","timestamp":"2026-08-08T21:47:44.800405Z","issue_id":"exo-f60","payload":{"body":"spec: contracts/specs/derived-exo-f60.spec.json"}}
+{"type":"create","timestamp":"2026-08-12T21:29:33.336936121Z","issue_id":"exo-2d5","payload":{"description":"Catalogue at docs/diagrams/README.md — 30 diagrams in four families (arch / pipeline / mech / series) serving two audiences: the basecamp+standalone packaging work, and the forum post series. Includes conventions carried from the post-1 figures, a provenance/manifest drift mechanism modelled on ADR-012, and a five-tranche build order. Open questions in §5 need a decision before tranche 1.","priority":"2","title":"Diagram programme: architecture + pipeline figures","type":"epic"}}
+{"type":"comment","timestamp":"2026-08-12T21:32:49.078039217Z","issue_id":"exo-2d5","payload":{"body":"Plan updated with the assembly interactive substrate (logos-co/assembly basecamp-stack-preview). Decisions taken: (1) consolidate to docs/diagrams/ with slug names, retire figN-; (2) provenance block + manifest.json with two CI checks; (3) reuse the substrate engine — static figures become exported frames rather than separately authored artefacts. Blocking correctness issue found in the upstream diagram: the network layer advertises 'mix' as shipped and the messaging view is titled 'Encrypted chat over the mixnet', but LOGOS-MIXNET is status raw, send-only PoC, not on the near-term roadmap. Must be fixed before forking; worth raising upstream. Sequencing now starts with a tranche 0 of foundations."}}
+{"type":"create","timestamp":"2026-08-12T21:36:29.052337154Z","issue_id":"exo-f96","payload":{"description":"Tranche 0 of the diagram programme (docs/diagrams/README.md §5).","priority":"2","title":"Consolidate figures into docs/diagrams with slug names","type":"task"}}
+{"type":"rename","timestamp":"2026-08-12T21:36:29.108060717Z","issue_id":"exo-f96","payload":{"new_id":"exo-2d5.1"}}
+{"type":"dep_add","timestamp":"2026-08-12T21:36:29.108060717Z","issue_id":"exo-2d5.1","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T21:36:29.126663509Z","issue_id":"exo-1ee","payload":{"description":"Tranche 0 of the diagram programme (docs/diagrams/README.md §5).","priority":"2","title":"Diagram provenance manifest + pre-commit checks","type":"task"}}
+{"type":"rename","timestamp":"2026-08-12T21:36:29.149524992Z","issue_id":"exo-1ee","payload":{"new_id":"exo-2d5.2"}}
+{"type":"dep_add","timestamp":"2026-08-12T21:36:29.149524992Z","issue_id":"exo-2d5.2","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T21:36:29.168115711Z","issue_id":"exo-658","payload":{"description":"Tranche 0 of the diagram programme (docs/diagrams/README.md §5).","priority":"2","title":"Fork the interactive stack substrate, re-skinned and corrected","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T21:36:29.191792533Z","issue_id":"exo-658","payload":{"new_id":"exo-2d5.3"}}
+{"type":"dep_add","timestamp":"2026-08-12T21:36:29.191792533Z","issue_id":"exo-2d5.3","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T21:36:29.213693136Z","issue_id":"exo-1b9","payload":{"description":"Tranche 0 of the diagram programme (docs/diagrams/README.md §5).","priority":"2","title":"Frame export: static figures generated from the substrate","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T21:36:29.237009722Z","issue_id":"exo-1b9","payload":{"new_id":"exo-2d5.4"}}
+{"type":"dep_add","timestamp":"2026-08-12T21:36:29.237009722Z","issue_id":"exo-2d5.4","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"close","timestamp":"2026-08-12T21:53:54.493973035Z","issue_id":"exo-2d5.1","payload":{}}
+{"type":"close","timestamp":"2026-08-12T21:53:54.493973035Z","issue_id":"exo-2d5.2","payload":{}}
+{"type":"close","timestamp":"2026-08-12T21:53:54.493973035Z","issue_id":"exo-2d5.3","payload":{}}
+{"type":"close","timestamp":"2026-08-12T21:53:54.493973035Z","issue_id":"exo-2d5.4","payload":{}}
+{"type":"comment","timestamp":"2026-08-12T21:53:54.528798535Z","issue_id":"exo-2d5","payload":{"body":"Tranche 0 complete. Five post-1 figures moved to docs/diagrams/ with slug names (supporting-material §8 updated). manifest.json + tools/check-manifest.py with a diagram-manifest pre-commit hook; all four failure modes verified to fire (missing source FAILs, changed source WARNs non-fatally, bad vocabulary FAILs, unlisted figure FAILs). Provenance blocks are GENERATED from the manifest via --stamp, and the check rejects a block that drifts from its entry, so provenance cannot be maintained in two places. Substrate forked to docs/diagrams/substrate-stack.html: re-skinned to prototype tokens, six views, mix and muster-module both shown as not shipped, plus a dark 'beyond your device' band naming the observers. tools/export-frames.mjs generates six static frames, verified as XML and rendered through librsvg; exporter is idempotent. Two real bugs found and fixed in the process: marker fills can't be reached by descendant selectors (every arrowhead was grey, upstream has this too), and a \u003csvg\u003e inside a CSS comment breaks XML parsing of an exported frame (now CDATA-wrapped unconditionally)."}}
+{"type":"create","timestamp":"2026-08-12T22:03:28.703108179Z","issue_id":"exo-8d6","payload":{"description":"Static SVG. One running standalone instance: core process, capability_module, chat_module (embeds libchat), delivery_module (embeds a Waku node), lez_core (embeds wallet-ffi), the isolated ui-host process, the QtRO seam, per-instance state dirs, and the two live remote dependencies crossing the boundary. Establishes the box names the keystone draws from. docs/diagrams/README.md tranche 1.","priority":"2","title":"arch-instance-topology: the process diagram","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:03:28.758455097Z","issue_id":"exo-8d6","payload":{"new_id":"exo-2d5.5"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:03:28.758455097Z","issue_id":"exo-2d5.5","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:03:28.777815303Z","issue_id":"exo-e3e","payload":{"description":"Interactive substrate. Seven pipeline stages against three columns: what runs the stage conventionally and who operates it / what runs it here / who still sees and what. Views retell the pipeline per use case. Ordering and Enforcement stay unassessed. docs/diagrams/README.md tranche 1.","priority":"1","title":"pipeline-stack-correlation: the keystone substrate","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:03:28.80148325Z","issue_id":"exo-e3e","payload":{"new_id":"exo-2d5.6"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:03:28.80148325Z","issue_id":"exo-2d5.6","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"close","timestamp":"2026-08-12T22:16:13.901548128Z","issue_id":"exo-2d5.5","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:16:13.901548128Z","issue_id":"exo-2d5.6","payload":{}}
+{"type":"create","timestamp":"2026-08-12T22:19:40.558639315Z","issue_id":"exo-280","payload":{"description":"Tranche 2 of the diagram programme (docs/diagrams/README.md §5) — the packaging set.","priority":"2","title":"arch-demo-vs-spec: add a spec-build view to the stack substrate","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:19:40.584446381Z","issue_id":"exo-280","payload":{"new_id":"exo-2d5.7"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:19:40.584446381Z","issue_id":"exo-2d5.7","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:19:40.604996571Z","issue_id":"exo-360","payload":{"description":"Tranche 2 of the diagram programme (docs/diagrams/README.md §5) — the packaging set.","priority":"2","title":"arch-contract-seam: what is generated, what is written","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:19:40.628811829Z","issue_id":"exo-360","payload":{"new_id":"exo-2d5.8"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:19:40.628811829Z","issue_id":"exo-2d5.8","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:19:40.648580652Z","issue_id":"exo-70b","payload":{"description":"Tranche 2 of the diagram programme (docs/diagrams/README.md §5) — the packaging set.","priority":"2","title":"arch-module-graph: the .lgx dependency and pin graph","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:19:40.674268354Z","issue_id":"exo-70b","payload":{"new_id":"exo-2d5.9"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:19:40.674268354Z","issue_id":"exo-2d5.9","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"comment","timestamp":"2026-08-12T22:19:40.695949346Z","issue_id":"exo-2d5","payload":{"body":"arch-instance-state struck from the catalogue: --user-dir, module_data/\u003cmodule\u003e/ and the muster-wallet derivation are already carried by arch-instance-topology's ON DISK column. The one fact it would have added and does not appear anywhere — chat_ui and chat_module share the chat module's log directory because the platform assigns a view module none of its own — is noted here rather than given a figure."}}
+{"type":"close","timestamp":"2026-08-12T22:25:24.768540496Z","issue_id":"exo-2d5.7","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:25:24.768540496Z","issue_id":"exo-2d5.8","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:25:24.768540496Z","issue_id":"exo-2d5.9","payload":{}}
+{"type":"create","timestamp":"2026-08-12T22:37:01.811412139Z","issue_id":"exo-0d6","payload":{"description":"Tranche 3 of the diagram programme (docs/diagrams/README.md §5) — post 2/3 material.","priority":"2","title":"pipeline-three-leaks: chosen by you / by the stack / by nobody","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:37:01.849585434Z","issue_id":"exo-0d6","payload":{"new_id":"exo-2d5.10"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:37:01.849585434Z","issue_id":"exo-2d5.10","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:37:01.870481783Z","issue_id":"exo-7b5","payload":{"description":"Tranche 3 of the diagram programme (docs/diagrams/README.md §5) — post 2/3 material.","priority":"2","title":"pipeline-four-rails: what each rail discloses, and the floor","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:37:01.894221747Z","issue_id":"exo-7b5","payload":{"new_id":"exo-2d5.11"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:37:01.894221747Z","issue_id":"exo-2d5.11","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:37:01.91395305Z","issue_id":"exo-fa0","payload":{"description":"Tranche 3 of the diagram programme (docs/diagrams/README.md §5) — post 2/3 material.","priority":"2","title":"pipeline-negotiation-comparison: hosted multisig vs the room","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:37:01.938333856Z","issue_id":"exo-fa0","payload":{"new_id":"exo-2d5.12"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:37:01.938333856Z","issue_id":"exo-2d5.12","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:37:01.959262846Z","issue_id":"exo-a4a","payload":{"description":"Tranche 3 of the diagram programme (docs/diagrams/README.md §5) — post 2/3 material.","priority":"2","title":"series-locator: a seven-stage 'you are here' strip per post","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:37:01.984592453Z","issue_id":"exo-a4a","payload":{"new_id":"exo-2d5.13"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:37:01.984592453Z","issue_id":"exo-2d5.13","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:37:02.005410504Z","issue_id":"exo-9f4","payload":{"description":"Tranche 3 of the diagram programme (docs/diagrams/README.md §5) — post 2/3 material.","priority":"2","title":"Observer views on the pipeline substrate","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:37:02.031475962Z","issue_id":"exo-9f4","payload":{"new_id":"exo-2d5.14"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:37:02.031475962Z","issue_id":"exo-2d5.14","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"close","timestamp":"2026-08-12T22:45:41.610445998Z","issue_id":"exo-2d5.10","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:45:41.610445998Z","issue_id":"exo-2d5.11","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:45:41.610445998Z","issue_id":"exo-2d5.12","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:45:41.610445998Z","issue_id":"exo-2d5.13","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:45:41.610445998Z","issue_id":"exo-2d5.14","payload":{}}
+{"type":"create","timestamp":"2026-08-12T22:47:41.023008413Z","issue_id":"exo-6ef","payload":{"description":"Tranche 4 of the diagram programme (docs/diagrams/README.md §5) — settlement post material.","priority":"2","title":"pipeline-journey-timeline: not an interaction, a job","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:47:41.059442923Z","issue_id":"exo-6ef","payload":{"new_id":"exo-2d5.15"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:47:41.059442923Z","issue_id":"exo-2d5.15","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:47:41.077895875Z","issue_id":"exo-b93","payload":{"description":"Tranche 4 of the diagram programme (docs/diagrams/README.md §5) — settlement post material.","priority":"2","title":"pipeline-settlement-bug: the account-id derivation drawn","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:47:41.100744936Z","issue_id":"exo-b93","payload":{"new_id":"exo-2d5.16"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:47:41.100744936Z","issue_id":"exo-2d5.16","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:47:41.118546906Z","issue_id":"exo-fd6","payload":{"description":"Tranche 4 of the diagram programme (docs/diagrams/README.md §5) — settlement post material.","priority":"2","title":"pipeline-findable-unlinkable: the fork the stack offers","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:47:41.142801944Z","issue_id":"exo-fd6","payload":{"new_id":"exo-2d5.17"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:47:41.142801944Z","issue_id":"exo-2d5.17","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"close","timestamp":"2026-08-12T22:53:09.96559465Z","issue_id":"exo-2d5.15","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:53:09.96559465Z","issue_id":"exo-2d5.16","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:53:09.96559465Z","issue_id":"exo-2d5.17","payload":{}}
+{"type":"create","timestamp":"2026-08-12T22:59:23.389114307Z","issue_id":"exo-27b","payload":{"description":"Tranche 5 of the diagram programme (docs/diagrams/README.md §5) — Family C mechanics, drawn with a specified-not-built status strip per §6 Q1.","priority":"3","title":"mech-intent-lifecycle: the seven states and what exists","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:59:23.429810606Z","issue_id":"exo-27b","payload":{"new_id":"exo-2d5.18"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:59:23.429810606Z","issue_id":"exo-2d5.18","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:59:23.449827119Z","issue_id":"exo-a66","payload":{"description":"Tranche 5 of the diagram programme (docs/diagrams/README.md §5) — Family C mechanics, drawn with a specified-not-built status strip per §6 Q1.","priority":"3","title":"mech-effect-materialization: the check that cannot be disabled","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:59:23.474204373Z","issue_id":"exo-a66","payload":{"new_id":"exo-2d5.19"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:59:23.474204373Z","issue_id":"exo-2d5.19","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:59:23.495141333Z","issue_id":"exo-a37","payload":{"description":"Tranche 5 of the diagram programme (docs/diagrams/README.md §5) — Family C mechanics, drawn with a specified-not-built status strip per §6 Q1.","priority":"3","title":"mech-signing-payload: what a signature commits to","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:59:23.519284517Z","issue_id":"exo-a37","payload":{"new_id":"exo-2d5.20"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:59:23.519284517Z","issue_id":"exo-2d5.20","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:59:23.539257047Z","issue_id":"exo-1f4","payload":{"description":"Tranche 5 of the diagram programme (docs/diagrams/README.md §5) — Family C mechanics, drawn with a specified-not-built status strip per §6 Q1.","priority":"3","title":"mech-reduce-log: state is a fold over a signed log","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:59:23.566079278Z","issue_id":"exo-1f4","payload":{"new_id":"exo-2d5.21"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:59:23.566079278Z","issue_id":"exo-2d5.21","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:59:23.589496762Z","issue_id":"exo-34e","payload":{"description":"Tranche 5 of the diagram programme (docs/diagrams/README.md §5) — Family C mechanics, drawn with a specified-not-built status strip per §6 Q1.","priority":"3","title":"mech-membership-epochs: re-keying forward","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:59:23.619112563Z","issue_id":"exo-34e","payload":{"new_id":"exo-2d5.22"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:59:23.619112563Z","issue_id":"exo-2d5.22","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:59:23.643595075Z","issue_id":"exo-852","payload":{"description":"Tranche 5 of the diagram programme (docs/diagrams/README.md §5) — Family C mechanics, drawn with a specified-not-built status strip per §6 Q1.","priority":"3","title":"mech-driver-seam: the core never reads contribution bytes","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:59:23.668843854Z","issue_id":"exo-852","payload":{"new_id":"exo-2d5.23"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:59:23.668843854Z","issue_id":"exo-2d5.23","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:59:23.690585553Z","issue_id":"exo-c99","payload":{"description":"Tranche 5 of the diagram programme (docs/diagrams/README.md §5) — Family C mechanics, drawn with a specified-not-built status strip per §6 Q1.","priority":"3","title":"mech-two-identities: ADR-010's blocking issue","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:59:23.716906734Z","issue_id":"exo-c99","payload":{"new_id":"exo-2d5.24"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:59:23.716906734Z","issue_id":"exo-2d5.24","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:59:23.739032994Z","issue_id":"exo-270","payload":{"description":"Tranche 5 of the diagram programme (docs/diagrams/README.md §5) — Family C mechanics, drawn with a specified-not-built status strip per §6 Q1.","priority":"3","title":"mech-plugin-blocks: typed blocks only, no canvas","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:59:23.765194566Z","issue_id":"exo-270","payload":{"new_id":"exo-2d5.25"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:59:23.765194566Z","issue_id":"exo-2d5.25","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.18","payload":{}}
+{"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.19","payload":{}}
+{"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.20","payload":{}}
+{"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.21","payload":{}}
+{"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.22","payload":{}}
+{"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.23","payload":{}}
+{"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.24","payload":{}}
+{"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.25","payload":{}}

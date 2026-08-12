@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 552" width="880" height="552" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>Two identities on two curves, and the binding that does not exist</title>
+  <desc>The platform's chat layer is Ed25519 and X25519; the transaction signer is secp256k1. F-9 derives a member's role by intersecting chat membership with account membership, and that intersection needs an authenticated binding between the two keys which nothing currently provides. Contested in the requirements; unresolved at ADR-010.</desc>
+<!-- provenance
+     serves:   BOTH
+     shows:    An Ed25519/X25519 chat identity and a secp256k1 transaction identity with
+               no authenticated binding between them, and what F-9 needs that binding
+               for.
+     sources:  docs/01-furps.md
+               docs/02-implementation-plan.md
+               demo/GAPS.md
+     evidence: [from-source] F-14 is marked Contested in the requirement document itself;
+                   the curve details are read off libchat's account and crypto layers at HEAD
+                   2026-08-04 via ADR-010
+               [from-source] F-9 derives role by intersecting chat and account
+                   membership, which is what makes the missing binding load-bearing
+               [measured] In the demo the two identities are minted independently by
+                   different modules and nothing in the code relates them — verified as
+                   absent
+     recheck:  At ADR-010's resolution, which changes this figure from a problem
+               statement into a decision record. Re-check the libchat curve facts before
+               publishing.
+-->
+
+  <defs>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#A32D1E"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="552" fill="#E4E6E0"/>
+
+  <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">The same principle, held on two different curves</text>
+  <text x="40" y="64" font-size="13.5" fill="#656E66">This figure draws a problem, not a solution. It is the most useful thing in this set precisely because it is unresolved.</text>
+
+  <rect x="40" y="80" width="800" height="30" rx="5" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.2"/>
+  <rect x="52" y="88" width="150" height="15" rx="7.5" fill="#A32D1E"/>
+  <text x="127" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#F6E3DF">CONTESTED · UNRESOLVED</text>
+  <text x="214" y="99" font-size="10" fill="#3F4742">F-14, F-9 · ADR-010, to resolve before P3 · the requirement document marks F-14 contested itself</text>
+
+  <!-- ══ two identities ══ -->
+  <rect x="40" y="130" width="380" height="120" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="56" y="152" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">THE CHAT IDENTITY</text>
+  <text x="56" y="176" font-size="13" font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">Ed25519 / X25519</text>
+  <text x="56" y="196" font-size="10.5" fill="#3F4742">An account address is a hex-encoded verifying key.</text>
+  <text x="56" y="210" font-size="10.5" fill="#3F4742">X25519 for Diffie–Hellman, XEdDSA and Ed25519</text>
+  <text x="56" y="224" font-size="10.5" fill="#3F4742">for signatures. It endorses a set of device keys.</text>
+  <text x="56" y="242" font-size="9.5" fill="#656E66">Who can read the room.</text>
+
+  <rect x="460" y="130" width="380" height="120" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="476" y="152" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">THE TRANSACTION IDENTITY</text>
+  <text x="476" y="176" font-size="13" font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">secp256k1</text>
+  <text x="476" y="196" font-size="10.5" fill="#3F4742">The key that signs what moves value, and the one</text>
+  <text x="476" y="210" font-size="10.5" fill="#3F4742">F-14 wants serving both roles — with epoch keys</text>
+  <text x="476" y="224" font-size="10.5" fill="#3F4742">wrapped over the same curve.</text>
+  <text x="476" y="242" font-size="9.5" fill="#656E66">Who can move the money.</text>
+
+  <!-- ══ the missing binding ══ -->
+  <path d="M 424 190 L 456 190" stroke="#A32D1E" stroke-width="1.6" stroke-dasharray="4 4" fill="none"/>
+  <path d="M 434 180 L 446 200 M 446 180 L 434 200" stroke="#A32D1E" stroke-width="2"/>
+
+  <text x="440" y="272" font-size="11" text-anchor="middle" font-weight="600" fill="#A32D1E">no authenticated binding</text>
+
+  <!-- ══ what needs it ══ -->
+  <rect x="40" y="290" width="800" height="104" rx="6" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.4"/>
+  <text x="56" y="312" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#A32D1E">WHAT DEPENDS ON A BINDING THAT IS NOT THERE</text>
+
+  <text x="56" y="336" font-size="11.5" font-weight="600" fill="#1A1F1C">F-9 derives every member's role by intersecting chat membership with account membership.</text>
+  <text x="56" y="352" font-size="10.5" fill="#3F4742">Signer or reader, displayed on every roster row. That intersection is only meaningful if "the party holding this chat identity" and</text>
+  <text x="56" y="366" font-size="10.5" fill="#3F4742">"the party controlling this account" can be shown to be the same party. Two independently minted keys on two curves cannot show it.</text>
+  <text x="56" y="386" font-size="10.5" fill="#A32D1E" font-weight="600">The demo is a live demonstration of the gap: its two identities are minted by different modules, and nothing relates them.</text>
+
+  <!-- ══ the three ways out ══ -->
+  <text x="40" y="422" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">THREE WAYS OUT, AND THE DECISION IS NOT MADE</text>
+
+  <rect x="40" y="432" width="256" height="86" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="56" y="452" font-size="10.5" font-weight="600" fill="#1A1F1C">F-14 changes</text>
+  <text x="56" y="470" font-size="10" fill="#3F4742">Accept two curves, and rewrite</text>
+  <text x="56" y="483" font-size="10" fill="#3F4742">the requirement that one key</text>
+  <text x="56" y="496" font-size="10" fill="#3F4742">serves both roles.</text>
+
+  <rect x="312" y="432" width="256" height="86" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="328" y="452" font-size="10.5" font-weight="600" fill="#1A1F1C">The binding gets designed</text>
+  <text x="328" y="470" font-size="10" fill="#3F4742">A statement signed by both keys,</text>
+  <text x="328" y="483" font-size="10" fill="#3F4742">and tested — so the intersection</text>
+  <text x="328" y="496" font-size="10" fill="#3F4742">means something again.</text>
+
+  <rect x="584" y="432" width="256" height="86" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="600" y="452" font-size="10.5" font-weight="600" fill="#1A1F1C">We build epochs ourselves</text>
+  <text x="600" y="470" font-size="10" fill="#3F4742">Consume delivery only, keep one</text>
+  <text x="600" y="483" font-size="10" fill="#3F4742">curve, and say so in the ADR —</text>
+  <text x="600" y="496" font-size="10" fill="#3F4742">at the cost of building F-16.</text>
+
+  <text x="40" y="540" font-size="10.5" font-weight="600" fill="#A32D1E">Resolve it before P3 writes code, not during. A binding retrofitted after epochs exist is a migration, not a decision.</text>
+</svg>

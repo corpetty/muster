@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 432" width="880" height="432" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>What a shielded payment costs in time</title>
+  <desc>A shielded transfer takes between six and eight minutes of saturated CPU, which is three orders of magnitude beyond the threshold at which an interaction still feels like one.</desc>
+<!-- provenance
+     serves:   POST
+     shows:    Shielded-transfer proving time against human-interaction thresholds.
+     sources:  docs/posts/01-discovery-supporting-material.md
+               demo/GAPS.md
+     evidence: [measured] The bars — 6m41s, 7.4min and 447s, on a 13-core desktop against
+                   the LEZ testnet, 2026-08-11/12. Whether that is typical is NOT established
+               [illustrative] The band marked 'a person will wait this long' is a rule of
+                   thumb about attention, not something measured here
+     recheck:  Before the settlement post publishes, and any time the zone changes
+               proving. The 'do not state as typical' caveat in §5 travels with this
+               figure.
+-->
+
+  <rect width="880" height="432" fill="#E4E6E0"/>
+
+  <text x="40" y="46" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">A private payment is not an interaction. It is a job.</text>
+  <text x="40" y="70" font-size="13.5" fill="#656E66">Measured on a 13-core desktop against the LEZ testnet, August 2026. Log scale — linear would be unreadable.</text>
+
+  <!-- axis -->
+  <line x1="200" y1="322" x2="828" y2="322" stroke="#1A1F1C" stroke-width="1.2"/>
+
+  <!-- ticks: log scale, 0.1s .. 1000s over 628px -->
+  <g font-size="10.5" font-family="ui-monospace,'SF Mono',Menlo,monospace" fill="#656E66" text-anchor="middle">
+    <line x1="200" y1="322" x2="200" y2="328" stroke="#C6CBC3"/><text x="200" y="344">0.1s</text>
+    <line x1="357" y1="322" x2="357" y2="328" stroke="#C6CBC3"/><text x="357" y="344">1s</text>
+    <line x1="514" y1="322" x2="514" y2="328" stroke="#C6CBC3"/><text x="514" y="344">10s</text>
+    <line x1="671" y1="322" x2="671" y2="328" stroke="#C6CBC3"/><text x="671" y="344">100s</text>
+    <line x1="828" y1="322" x2="828" y2="328" stroke="#C6CBC3"/><text x="828" y="344">1000s</text>
+  </g>
+
+  <!-- reference band: interaction budget -->
+  <rect x="200" y="96" width="314" height="210" fill="#DFEDE6" opacity="0.55"/>
+  <text x="357" y="116" font-size="11" fill="#1E6B52" text-anchor="middle">a person will wait this long</text>
+  <line x1="514" y1="96" x2="514" y2="322" stroke="#1E6B52" stroke-width="1" stroke-dasharray="4 3"/>
+
+  <!-- bars -->
+  <g font-size="12.5">
+    <!-- UI budget 0.1s -->
+    <text x="188" y="150" fill="#1A1F1C" text-anchor="end">UI response budget</text>
+    <text x="188" y="166" font-size="10.5" fill="#656E66" text-anchor="end">P-4, the real client's spec</text>
+    <rect x="200" y="136" width="3" height="26" rx="1.5" fill="#656E66"/>
+    <text x="212" y="155" font-size="11.5" fill="#656E66">0.1s</text>
+
+    <!-- sync -->
+    <text x="188" y="204" fill="#1A1F1C" text-anchor="end">Sync to chain tip</text>
+    <text x="188" y="220" font-size="10.5" fill="#656E66" text-anchor="end">50 blocks</text>
+    <rect x="200" y="190" width="175" height="26" rx="3" fill="#1E6B52"/>
+    <text x="385" y="209" font-size="11.5" fill="#1E6B52">1.3s</text>
+
+    <!-- sync client timeout -->
+    <text x="188" y="258" fill="#1A1F1C" text-anchor="end">Generated client's timeout</text>
+    <text x="188" y="274" font-size="10.5" fill="#656E66" text-anchor="end">hardcoded, not configurable</text>
+    <rect x="200" y="244" width="361" height="26" rx="3" fill="#C6CBC3"/>
+    <text x="571" y="263" font-size="11.5" fill="#656E66">20s</text>
+
+    <!-- the transfer -->
+    <text x="188" y="298" font-weight="600" fill="#1A1F1C" text-anchor="end">Shielded transfer</text>
+    <text x="188" y="314" font-size="10.5" fill="#656E66" text-anchor="end">~1300% CPU throughout</text>
+    <rect x="200" y="284" width="573" height="26" rx="3" fill="#23282A"/>
+    <text x="783" y="303" font-size="11.5" font-weight="600" fill="#1A1F1C">401–447s</text>
+  </g>
+
+  <!-- the gap callout -->
+  <path d="M561 244 L561 232 L773 232 L773 284" fill="none" stroke="#A32D1E" stroke-width="1" stroke-dasharray="3 3"/>
+  <text x="667" y="226" font-size="11.5" fill="#A32D1E" text-anchor="middle">the proof outlives the client that called it — by ~20×</text>
+
+  <line x1="40" y1="368" x2="840" y2="368" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="40" y="390" font-size="12.5" fill="#1A1F1C">Three measurements of the same operation: 6m41s, 7m27s, 7.4m.</text>
+  <text x="40" y="410" font-size="12" fill="#656E66">Whether that is expected, hardware-bound or misconfigured is <tspan font-style="italic">not yet established</tspan> — it is what happened, repeatedly, on this machine.</text>
+</svg>

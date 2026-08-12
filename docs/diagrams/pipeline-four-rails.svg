@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 540" width="880" height="540" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>Four rails, one payment, and exactly one difference</title>
+  <desc>The same transfer offered four ways — private to private, public to private, private to public, public to public — differing only in what the chain learns. Nothing hides that a transfer happened or when, on any of them.</desc>
+<!-- provenance
+     serves:   BOTH
+     shows:    The four transfer directions against what each discloses — amount, payer,
+               payee — and what each costs in time, over a floor that holds on all of
+               them.
+     sources:  demo/README.md
+               demo/CLAUDE.md
+               demo/GAPS.md
+     evidence: [from-source] What each rail discloses is written by the rail into the
+                   receipt and read back by the card and the panel — this figure restates the
+                   same table
+               [measured] ~7 minutes at ~1300% CPU for a shielded transfer, on a 13-core
+                   desktop against the LEZ testnet, 2026-08-11. Whether that is typical is
+                   NOT established
+     recheck:  When a rail or an asset is added — the catalogue takes more than one, and
+               a new rail arrives with its own claim or is refused.
+-->
+
+  <rect width="880" height="540" fill="#E4E6E0"/>
+
+  <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">Four rails, one payment, one difference</text>
+  <text x="40" y="64" font-size="13.5" fill="#656E66">The same transfer, offered four ways. What changes is only what the chain learns.</text>
+
+  <!-- column headers -->
+  <text x="52"  y="100" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">RAIL</text>
+  <text x="324" y="100" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66" text-anchor="middle">AMOUNT</text>
+  <text x="464" y="100" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66" text-anchor="middle">PAYER</text>
+  <text x="604" y="100" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66" text-anchor="middle">PAYEE</text>
+  <text x="759" y="100" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66" text-anchor="middle">TIME TO COMPLETE</text>
+
+  <!-- ── row 1: private → private ── -->
+  <rect x="40" y="110" width="800" height="52" rx="5" fill="#F7F8F5" stroke="#1E6B52" stroke-width="1.4"/>
+  <text x="56" y="132" font-size="12" font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">private → private</text>
+  <text x="56" y="148" font-size="9" fill="#1E6B52">the rail the demo leads with — shielded at both ends</text>
+  <rect x="292" y="124" width="64" height="22" rx="11" fill="#DFEDE6"/><text x="324" y="139" font-size="10" font-weight="600" text-anchor="middle" fill="#1E6B52">hidden</text>
+  <rect x="432" y="124" width="64" height="22" rx="11" fill="#DFEDE6"/><text x="464" y="139" font-size="10" font-weight="600" text-anchor="middle" fill="#1E6B52">hidden</text>
+  <rect x="572" y="124" width="64" height="22" rx="11" fill="#DFEDE6"/><text x="604" y="139" font-size="10" font-weight="600" text-anchor="middle" fill="#1E6B52">hidden</text>
+  <text x="759" y="132" font-size="11" font-weight="600" text-anchor="middle" fill="#1A1F1C">~7 minutes</text>
+  <text x="759" y="147" font-size="9" text-anchor="middle" fill="#656E66">proving, at ~1300% CPU</text>
+
+  <!-- ── row 2: public → private ── -->
+  <rect x="40" y="170" width="800" height="52" rx="5" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="56" y="192" font-size="12" font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">public → private</text>
+  <text x="56" y="208" font-size="9" fill="#656E66">shielding in: the payer is named on the way</text>
+  <rect x="292" y="184" width="64" height="22" rx="11" fill="#F6E3DF"/><text x="324" y="199" font-size="10" font-weight="600" text-anchor="middle" fill="#A32D1E">public</text>
+  <rect x="432" y="184" width="64" height="22" rx="11" fill="#F6E3DF"/><text x="464" y="199" font-size="10" font-weight="600" text-anchor="middle" fill="#A32D1E">public</text>
+  <rect x="572" y="184" width="64" height="22" rx="11" fill="#DFEDE6"/><text x="604" y="199" font-size="10" font-weight="600" text-anchor="middle" fill="#1E6B52">hidden</text>
+  <text x="759" y="197" font-size="11" text-anchor="middle" fill="#1A1F1C">proves</text>
+
+  <!-- ── row 3: private → public ── -->
+  <rect x="40" y="230" width="800" height="52" rx="5" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="56" y="252" font-size="12" font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">private → public</text>
+  <text x="56" y="268" font-size="9" fill="#656E66">unshielding out: the payee is named on arrival</text>
+  <rect x="292" y="244" width="64" height="22" rx="11" fill="#F6E3DF"/><text x="324" y="259" font-size="10" font-weight="600" text-anchor="middle" fill="#A32D1E">public</text>
+  <rect x="432" y="244" width="64" height="22" rx="11" fill="#DFEDE6"/><text x="464" y="259" font-size="10" font-weight="600" text-anchor="middle" fill="#1E6B52">hidden</text>
+  <rect x="572" y="244" width="64" height="22" rx="11" fill="#F6E3DF"/><text x="604" y="259" font-size="10" font-weight="600" text-anchor="middle" fill="#A32D1E">public</text>
+  <text x="759" y="257" font-size="11" text-anchor="middle" fill="#1A1F1C">proves</text>
+
+  <!-- ── row 4: public → public ── -->
+  <rect x="40" y="290" width="800" height="52" rx="5" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="56" y="312" font-size="12" font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">public → public</text>
+  <text x="56" y="328" font-size="9" fill="#656E66">everyone named — and back in seconds, not minutes</text>
+  <rect x="292" y="304" width="64" height="22" rx="11" fill="#F6E3DF"/><text x="324" y="319" font-size="10" font-weight="600" text-anchor="middle" fill="#A32D1E">public</text>
+  <rect x="432" y="304" width="64" height="22" rx="11" fill="#F6E3DF"/><text x="464" y="319" font-size="10" font-weight="600" text-anchor="middle" fill="#A32D1E">public</text>
+  <rect x="572" y="304" width="64" height="22" rx="11" fill="#F6E3DF"/><text x="604" y="319" font-size="10" font-weight="600" text-anchor="middle" fill="#A32D1E">public</text>
+  <text x="759" y="319" font-size="11" font-weight="600" text-anchor="middle" fill="#1A1F1C">seconds</text>
+
+  <!-- ── the floor ── -->
+  <rect x="40" y="358" width="800" height="62" rx="6" fill="#23282A"/>
+  <text x="56" y="380" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#96A19B">THE FLOOR, ON ALL FOUR</text>
+  <text x="56" y="400" font-size="12.5" font-weight="600" fill="#DCE2DE">Nothing hides that a transfer happened, or when.</text>
+  <text x="425" y="400" font-size="11" fill="#96A19B">Not even the private rail. Every receipt says so, in the rail's own words.</text>
+
+  <!-- ── the enforcement ── -->
+  <rect x="40" y="436" width="800" height="76" rx="6" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1"/>
+  <text x="56" y="458" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">AND THE PART THAT IS NOT A PROMISE</text>
+  <text x="56" y="478" font-size="11.5" font-weight="600" fill="#1A1F1C">A rail with nowhere to say what it leaks cannot be paid with.</text>
+  <text x="56" y="494" font-size="10.5" fill="#3F4742">Each rail names a visibility claim, and the one function value moves through refuses a rail whose claim names nothing —</text>
+  <text x="56" y="507" font-size="10.5" fill="#3F4742">at the single place it could matter. It is the one spot where the honesty rule is enforced by the code rather than by remembering it.</text>
+</svg>

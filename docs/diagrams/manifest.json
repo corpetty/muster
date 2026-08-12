@@ -1,0 +1,884 @@
+{
+  "$comment": "Provenance for every figure in docs/diagrams/. Checked by tools/check-manifest.py; see README.md §2 for why. `sources` are the files a figure derives its facts from — a deleted one fails, a changed one warns. `evidence` declares which of a figure's content is measured, read from source, or illustrative, because a reader cannot tell those apart by looking. `generates` lists frames exported from a substrate, which inherit provenance rather than carrying their own.",
+  "figures": [
+    {
+      "file": "substrate-stack.html",
+      "serves": "BOTH",
+      "shows": "Muster on the Logos stack: three entry points over app backends, modules, network and runtime, with a dark band for the infrastructure the user does not run. Seven selectable views, including the demo build and the specified build as an A/B.",
+      "sources": [
+        {
+          "path": "demo/muster-ui/metadata.json",
+          "sha256": "e4953f1434822141605d47711bcde4351f5df915e2ecac42f66068ccc2425a87",
+          "note": "the module set and its declared dependencies"
+        },
+        {
+          "path": "demo/muster-ui/flake.nix",
+          "sha256": "9142be0dee11018eeadd8abd3078f37994d3f0a22f0908519ebf4db017866196",
+          "note": "which inputs are pinned and which follow chat_module's own"
+        },
+        {
+          "path": "demo/README.md",
+          "sha256": "f4ae820bab6371a4ba1581c83a6d272f9b2f232f62a0d71d96a472b88fd41e08",
+          "note": "what the demo composes, and the invariant-by-invariant table behind the demo-build view"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "the specified build, the three hosts, ADR-008"
+        },
+        {
+          "path": "docs/00-vision.md",
+          "sha256": "a9cb276d78acf0f75195f9489df54dde45d602b6cb4f0d56d13b61ac7f0afa44",
+          "note": "the mixnet status this diagram refuses to overstate"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "The module set and every dependency edge, read off metadata.json and flake.nix rather than drawn from memory"
+        },
+        {
+          "grade": "from-source",
+          "note": "LOGOS-MIXNET at status raw, send-only proof of concept, absent from the near-term roadmap — dated 2026-08 and shown as not shipped. muster-module.lgx is dashed for the same reason: P0 has not run"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The neighbouring platform pieces (Files, Swaps, Dex, Storage) place Muster in context; they are not an enumeration of the platform's modules"
+        }
+      ],
+      "generates": [
+        "substrate-stack-overview.svg",
+        "substrate-stack-basecamp.svg",
+        "substrate-stack-standalone.svg",
+        "substrate-stack-headless.svg",
+        "substrate-stack-demo-build.svg",
+        "substrate-stack-spec-build.svg",
+        "substrate-stack-beyond.svg"
+      ],
+      "recheck": "Every phase. P0 landing makes muster-module real and it stops being dashed; ADR-010's resolution may remove the chat_module box entirely; any movement on LOGOS-MIXNET changes the network layer."
+    },
+    {
+      "file": "substrate-pipeline.html",
+      "serves": "BOTH",
+      "shows": "The keystone: seven pipeline stages against what runs each conventionally and who operates that, what runs it here, and who still sees what. Nine views — per-use-case retellings, three that select by observer rather than by stage, and one that marks the two stages left unassessed.",
+      "sources": [
+        {
+          "path": "docs/posts/01-discovery-supporting-material.md",
+          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "note": "§1 the seven stages and their leak descriptions; §2 the scoring and the cell-by-cell justification"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "the row-by-row basis for every 'what runs it here' and 'who still sees' cell"
+        },
+        {
+          "path": "docs/00-vision.md",
+          "sha256": "a9cb276d78acf0f75195f9489df54dde45d602b6cb4f0d56d13b61ac7f0afa44",
+          "note": "the honesty rules this figure is built to satisfy, including FS-9's content/metadata line"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "F-4/FS-6 as specified-and-unbuilt, behind the contracting row's gap"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "Stage names and leak descriptions, verbatim from the published PriFi competitor matrix cross-check via §1"
+        },
+        {
+          "grade": "measured",
+          "note": "The discovery and negotiation rows' 'what runs it here' — observed on this machine, 2026-08-11/12"
+        },
+        {
+          "grade": "from-source",
+          "note": "Contracting and settlement rows read off the build and the consumed contracts. Ordering and enforcement are marked NOT ASSESSED in the figure itself, not merely omitted, because a diagram is where an unscored cell gets quietly filled in"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The whole 'conventionally' column characterises the status quo. It is not a measurement of any named service, and no cell in it should be read as one"
+        }
+      ],
+      "generates": [
+        "substrate-pipeline-overview.svg",
+        "substrate-pipeline-argument.svg",
+        "substrate-pipeline-neglected-middle.svg",
+        "substrate-pipeline-pay-a-friend.svg",
+        "substrate-pipeline-dex-trade.svg",
+        "substrate-pipeline-obs-store-node.svg",
+        "substrate-pipeline-obs-zone.svg",
+        "substrate-pipeline-obs-nobody.svg",
+        "substrate-pipeline-unassessed.svg"
+      ],
+      "recheck": "Every phase, and before any post using it publishes. The two unassessed cells become assessable only when the zone answers on mempool visibility and the production sequencer model; the contracting row changes when F-4/FS-6 land."
+    },
+    {
+      "file": "arch-instance-topology.svg",
+      "serves": "BOTH",
+      "shows": "One running instance: the isolated ui-host process holding the QML view and a QtRO replica, the app process holding Logos Core and every module, per-instance state on disk, and the two live remote dependencies that leave the machine.",
+      "sources": [
+        {
+          "path": "demo/muster-ui/README.md",
+          "sha256": "b4e0c2b1fd814b5222031774bdd7fe743d98443f93fc5d3aeefeca9eb1df0268",
+          "note": "the standalone app's startup sequence, the isolated ui-host process, and what two instances need to coexist"
+        },
+        {
+          "path": "demo/muster-ui/metadata.json",
+          "sha256": "e4953f1434822141605d47711bcde4351f5df915e2ecac42f66068ccc2425a87",
+          "note": "the module set and the codegen keys behind the QtRO seam"
+        },
+        {
+          "path": "demo/muster-ui/src/ChatBackend.h",
+          "sha256": "8132b351c95fad7a9adeff1904131d315aab7fe9575d76712facb2c829fa57bd",
+          "note": "ChatBackend derives ChatBackendSimpleSource — it is the QtRO source, not the replica"
+        },
+        {
+          "path": "demo/muster-ui/src/ChatBackendWallet.cpp",
+          "sha256": "3857e18584ed75b807ecbfa46e094f2bd06e1969d755b85342853b52d77dffe3",
+          "note": "walletDir() derives from the chat module's assigned instance directory and refuses rather than sharing a fallback"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "§5 — two live remote dependencies, and no offline or local mode"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "The process split, the module set, which side of the QtRO seam ChatBackend sits on, and the wallet-path derivation — all read off the code and the module README rather than reconstructed"
+        },
+        {
+          "grade": "from-source",
+          "note": "What each remote dependency observes, carried from GAPS.md; the store-node subscription-shape leak is the documented shape of one-topic-per-conversation delivery, not separately measured"
+        }
+      ],
+      "recheck": "P3 and P4. ADR-010 may change which module mints identity, and the specified client replaces the muster_ui plugin box with muster-module.lgx plus muster-ui.lgx across the same seam."
+    },
+    {
+      "file": "arch-contract-seam.svg",
+      "serves": "BOTH",
+      "shows": "The two codegen paths and the hand-written region each ends in: muster.lidl through the lidl_c.h JSON bridge to a generated Nim surface, and metadata.json plus a .rep through logos-module-builder to the plugin entry point and QtRO glue.",
+      "sources": [
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "ADR-008, the LIDL contract layer, the Nim gap and the four bridge functions"
+        },
+        {
+          "path": "CLAUDE.md",
+          "sha256": "1da49335bc50d7ee437de37428324cda85e7bd905ca612ac9709a01d93993e1c",
+          "note": "the two rules the C header states, and the never-hand-write-what-the-contract-generates rule"
+        },
+        {
+          "path": "demo/muster-ui/metadata.json",
+          "sha256": "e4953f1434822141605d47711bcde4351f5df915e2ecac42f66068ccc2425a87",
+          "note": "the codegen keys — rep, backend_class, backend_header"
+        },
+        {
+          "path": "demo/muster-ui/CMakeLists.txt",
+          "sha256": "10638f212df274b1ab59c450460fac1b24c240cc1a7d284a42610a8f874613a0",
+          "note": "logos_module() with REP_FILE, the macro that emits the plugin and QtRO glue"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "The four lidl_c.h functions, the two rules the header states outright, and the codegen keys — read off the header and metadata.json"
+        },
+        {
+          "grade": "from-source",
+          "note": "The Nim codegen backend is marked as not existing, because it does not: it is the P0 spike, and ADR-008's fallback is printed beside it"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The ~106-line figure for the Rust FFI binding is the plan's characterisation of logos-rust-sdk/lidl-gen, not a line count taken here"
+        }
+      ],
+      "recheck": "At P0. The moment the Nim backend exists the dashed box stops being dashed, and if the fallback is taken instead the left column loses a step."
+    },
+    {
+      "file": "arch-module-graph.svg",
+      "serves": "BUILD",
+      "shows": "The declared runtime module set against the flake inputs that resolve it: chat_module pinned to a release tag with two inputs following it, and lez_core pinned to no release at all.",
+      "sources": [
+        {
+          "path": "demo/muster-ui/metadata.json",
+          "sha256": "e4953f1434822141605d47711bcde4351f5df915e2ecac42f66068ccc2425a87",
+          "note": "the declared dependencies and the dependency_overrides indirection"
+        },
+        {
+          "path": "demo/muster-ui/flake.nix",
+          "sha256": "9142be0dee11018eeadd8abd3078f37994d3f0a22f0908519ebf4db017866196",
+          "note": "the four inputs, which follow chat_module and which does not — and the stale lez_core comment this figure corrects"
+        },
+        {
+          "path": "demo/muster-ui/src/ChatBackendWallet.cpp",
+          "sha256": "3857e18584ed75b807ecbfa46e094f2bd06e1969d755b85342853b52d77dffe3",
+          "note": "modules().lez_core.* — the generated client the flake comment says is not used"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "Every edge and every pin read directly off metadata.json and flake.nix"
+        },
+        {
+          "grade": "from-source",
+          "note": "The stale-comment finding is checkable: flake.nix describes dynamic invocation by name, ChatBackendWallet.cpp uses the generated client throughout"
+        }
+      ],
+      "recheck": "Whenever flake.nix changes. This figure is a snapshot of a version graph and is the one most likely to go stale silently — the manifest's changed-source warning on flake.nix is the intended signal."
+    },
+    {
+      "file": "mech-intent-lifecycle.svg",
+      "serves": "BOTH",
+      "shows": "The seven lifecycle states with the four teaching questions each of them answers, and which states the demo actually reaches.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "note": "the normative requirement text and its ids"
+        },
+        {
+          "path": "docs/00-vision.md",
+          "sha256": "a9cb276d78acf0f75195f9489df54dde45d602b6cb4f0d56d13b61ac7f0afa44",
+          "note": "the four walkthrough questions and the closed status vocabulary"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "which phase builds it, and the accept criteria"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "what the demo does instead, stated row by row"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "The seven states, their order, and dropped/expired being reachable from any pre-submitted state — verbatim from F-3"
+        },
+        {
+          "grade": "from-source",
+          "note": "The four questions verbatim from the vision's lifecycle-as-curriculum section"
+        },
+        {
+          "grade": "measured",
+          "note": "Which states the demo reaches — propose, collect approvals, pay — observed in the running build"
+        }
+      ],
+      "recheck": "P1, when the lifecycle reducer lands and the purple marks change meaning."
+    },
+    {
+      "file": "mech-effect-materialization.svg",
+      "serves": "BOTH",
+      "shows": "What a participant reviews against what actually gets signed, the client's independent re-derivation between them, and the requirement that the check cannot be turned off.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "note": "the normative requirement text and its ids"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "which phase builds it, and the accept criteria"
+        },
+        {
+          "path": "CLAUDE.md",
+          "sha256": "1da49335bc50d7ee437de37428324cda85e7bd905ca612ac9709a01d93993e1c",
+          "note": "the invariant this figure draws, in its shortest form"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "what the demo does instead, stated row by row"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "F-4 and FS-6 verbatim: the client MUST independently re-derive and refuse on mismatch, and the check cannot be disabled by configuration, plugin or preference"
+        },
+        {
+          "grade": "from-source",
+          "note": "The demo has no effect/materialization split at all — GAPS.md §5 states it as an absence"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The example effect and the example hash are made up to show the shape of each side. Neither is a capture"
+        }
+      ],
+      "recheck": "P4. Until then the status strip is the most important thing on the figure."
+    },
+    {
+      "file": "mech-signing-payload.svg",
+      "serves": "POST",
+      "shows": "The fields a signing payload commits to and the specific reuse each one defeats, with the two versioned fields marked apart from the invariant property.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "note": "the normative requirement text and its ids"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "which phase builds it, and the accept criteria"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "The four F-5 fields verbatim; schema identity and effect value root from the plan's P1 note and the FURPS encoding constraint"
+        },
+        {
+          "grade": "from-source",
+          "note": "FS-3's requirement that a test demonstrate cross-context failure"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The what-it-defeats column is the author's reading of why each field is there, not text quoted from the requirement"
+        }
+      ],
+      "recheck": "P1, and if ADR-009's schema-identity derivation changes — though the property it protects is not allowed to."
+    },
+    {
+      "file": "mech-reduce-log.svg",
+      "serves": "BUILD",
+      "shows": "Events reduced to state, with idempotence, order-independence and cold-start re-derivation as the three properties that follow — and what the demo folds instead.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "note": "the normative requirement text and its ids"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "which phase builds it, and the accept criteria"
+        },
+        {
+          "path": "CLAUDE.md",
+          "sha256": "1da49335bc50d7ee437de37428324cda85e7bd905ca612ac9709a01d93993e1c",
+          "note": "the invariant this figure draws, in its shortest form"
+        },
+        {
+          "path": "demo/CLAUDE.md",
+          "sha256": "964a941cd9c39a5bf05c9d44b5eae0ad9d7f0f23d4748781fba9c8b7815eb372",
+          "note": "the demo's own account of what it folds and what it does not have"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "F-1, F-2, R-2 and R-3, and the P0 accept criterion that adversarial orders converge byte-identically as a generated-input property test"
+        },
+        {
+          "grade": "measured",
+          "note": "The demo folds get_messages and holds no second record — its own CLAUDE.md states this as a rule, and the build follows it"
+        }
+      ],
+      "recheck": "P0. The event names shown are F-2's v0 list and change with it."
+    },
+    {
+      "file": "mech-membership-epochs.svg",
+      "serves": "BOTH",
+      "shows": "Three epochs across a join and a removal: what a joining member cannot read, what a departing member keeps, and why the seam drawn in the thread is a cryptographic claim.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "note": "the normative requirement text and its ids"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "which phase builds it, and the accept criteria"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "what the demo does instead, stated row by row"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "F-16 — adding re-keys forward, removal rotates immediately — and U-6's seam"
+        },
+        {
+          "grade": "from-source",
+          "note": "The demo neither verifies nor claims the chat module's re-keying, stated as such in GAPS.md §5"
+        },
+        {
+          "grade": "illustrative",
+          "note": "Alice, Bob and Carol are an example. The forward-only limit on removal is a property of any such scheme, not a measurement"
+        }
+      ],
+      "recheck": "P3, and at ADR-010 — whose resolution decides whether these epochs are ours at all."
+    },
+    {
+      "file": "mech-driver-seam.svg",
+      "serves": "BUILD",
+      "shows": "The seven driver methods, the four divergence axes describe returns, three drivers behind one interface, and the conformance suite that gates them.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "note": "the normative requirement text and its ids"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "which phase builds it, and the accept criteria"
+        },
+        {
+          "path": "CLAUDE.md",
+          "sha256": "1da49335bc50d7ee437de37428324cda85e7bd905ca612ac9709a01d93993e1c",
+          "note": "the invariant this figure draws, in its shortest form"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "The seven method names and what describe returns, verbatim from F-6; the r=1/r=2 characterisation from F-7; S-1's no-merge-on-red rule"
+        },
+        {
+          "grade": "from-source",
+          "note": "The demo has no drivers and no seam — a send is a send"
+        }
+      ],
+      "recheck": "P1 and P2. The threshold column is P6 and the least settled of the three."
+    },
+    {
+      "file": "mech-two-identities.svg",
+      "serves": "BOTH",
+      "shows": "An Ed25519/X25519 chat identity and a secp256k1 transaction identity with no authenticated binding between them, and what F-9 needs that binding for.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "note": "the normative requirement text and its ids"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "which phase builds it, and the accept criteria"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "what the demo does instead, stated row by row"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "F-14 is marked Contested in the requirement document itself; the curve details are read off libchat's account and crypto layers at HEAD 2026-08-04 via ADR-010"
+        },
+        {
+          "grade": "from-source",
+          "note": "F-9 derives role by intersecting chat and account membership, which is what makes the missing binding load-bearing"
+        },
+        {
+          "grade": "measured",
+          "note": "In the demo the two identities are minted independently by different modules and nothing in the code relates them — verified as absent"
+        }
+      ],
+      "recheck": "At ADR-010's resolution, which changes this figure from a problem statement into a decision record. Re-check the libchat curve facts before publishing."
+    },
+    {
+      "file": "mech-plugin-blocks.svg",
+      "serves": "BUILD",
+      "shows": "A plugin as a pure function to typed blocks, the closed render vocabulary, what it may never do, how it is distributed, and the lying-plugin test that proves the boundary.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "note": "the normative requirement text and its ids"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "which phase builds it, and the accept criteria"
+        },
+        {
+          "path": "CLAUDE.md",
+          "sha256": "1da49335bc50d7ee437de37428324cda85e7bd905ca612ac9709a01d93993e1c",
+          "note": "the invariant this figure draws, in its shortest form"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "F-12's signature and prohibitions, F-13's six-item closed vocabulary, FS-4 and FS-5 — all verbatim"
+        },
+        {
+          "grade": "from-source",
+          "note": "The P5 accept criterion: a plugin whose materialization diverges from its displayed effect is blocked by core, demonstrated in CI"
+        }
+      ],
+      "recheck": "P5. Third-party isolation via capability-restricted modules is ADR-007 and post-v1, which the strip says."
+    },
+    {
+      "file": "pipeline-three-leaks.svg",
+      "serves": "POST",
+      "shows": "The three leak classes — chosen by you, chosen for you by the stack, chosen by nobody and inherited — each with a worked example from this build, the fix, and the obligation on whoever describes it.",
+      "sources": [
+        {
+          "path": "docs/posts/01-discovery-supporting-material.md",
+          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "note": "T5 and §11 — the framing, named there as the most reusable idea in the post and until now prose only"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "§1 the subscription-shape leak, §3 the address-form choice, §4b the account-identifier bug and its workaround"
+        },
+        {
+          "path": "docs/00-vision.md",
+          "sha256": "a9cb276d78acf0f75195f9489df54dde45d602b6cb4f0d56d13b61ac7f0afa44",
+          "note": "the closed status vocabulary, and the rule that a gap names its fix"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "measured",
+          "note": "The class-01 example — the payee chooses the address form, and a payer cannot upgrade a public destination — observed in the running build"
+        },
+        {
+          "grade": "from-source",
+          "note": "Class 02's one-topic-per-conversation shape, and LOGOS-MIXNET at status raw, send-only, off the near-term roadmap. Dated 2026-08"
+        },
+        {
+          "grade": "measured",
+          "note": "Class 03's account-identifier finding — reproduced twice, cause identified, reported upstream with a single-file reproducer"
+        }
+      ],
+      "recheck": "If LOGOS-MIXNET moves, or the upstream account-identifier bug is fixed. Either would move an example out of its class, which is the interesting kind of staleness."
+    },
+    {
+      "file": "pipeline-four-rails.svg",
+      "serves": "BOTH",
+      "shows": "The four transfer directions against what each discloses — amount, payer, payee — and what each costs in time, over a floor that holds on all of them.",
+      "sources": [
+        {
+          "path": "demo/README.md",
+          "sha256": "f4ae820bab6371a4ba1581c83a6d272f9b2f232f62a0d71d96a472b88fd41e08",
+          "note": "the four-rails table and the floor statement"
+        },
+        {
+          "path": "demo/CLAUDE.md",
+          "sha256": "964a941cd9c39a5bf05c9d44b5eae0ad9d7f0f23d4748781fba9c8b7815eb372",
+          "note": "the Holding/Rail catalogue rule, and sendableRailById refusing a rail whose claimId names nothing"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "§4 — what the private rail protects, and what it measured"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "What each rail discloses is written by the rail into the receipt and read back by the card and the panel — this figure restates the same table"
+        },
+        {
+          "grade": "measured",
+          "note": "~7 minutes at ~1300% CPU for a shielded transfer, on a 13-core desktop against the LEZ testnet, 2026-08-11. Whether that is typical is NOT established"
+        }
+      ],
+      "recheck": "When a rail or an asset is added — the catalogue takes more than one, and a new rail arrives with its own claim or is refused."
+    },
+    {
+      "file": "pipeline-negotiation-comparison.svg",
+      "serves": "BOTH",
+      "shows": "A hosted transaction service against the encrypted room: what an operator sees before anything reaches a chain, and what a store node sees instead — with the room-not-chain threshold limit in the same frame.",
+      "sources": [
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "§3b — the comparison, both gaps, and the lez-multisig status"
+        },
+        {
+          "path": "demo/CLAUDE.md",
+          "sha256": "964a941cd9c39a5bf05c9d44b5eae0ad9d7f0f23d4748781fba9c8b7815eb372",
+          "note": "an approval is authenticated, not authorizing; the fold deduplicates by author"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "measured",
+          "note": "Approvals travel the same send_message path as text and are attributed by the message's own sender, matched against the group roster"
+        },
+        {
+          "grade": "from-source",
+          "note": "The hosted-multisig side is the documented shape of that class of service, not a measurement of a named one"
+        },
+        {
+          "grade": "from-source",
+          "note": "lez-multisig read off the repo 2026-08-11: local sequencer, no documented testnet deployment, proposal state and calls in public accounts. Status partial"
+        }
+      ],
+      "recheck": "If lez-multisig gains a public-testnet deployment. That would end the chain-enforced-threshold-or-shielded-amount trade this figure closes on, which is its whole point."
+    },
+    {
+      "file": "tools/make-locator.py",
+      "serves": "POST",
+      "shows": "The generator for the per-post 'you are here' strips: the seven stages with one lit, one file per stage.",
+      "sources": [
+        {
+          "path": "docs/posts/01-discovery-supporting-material.md",
+          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "note": "§1 — the stage names and their order, which is what the strip indicates position in"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "Stage names and order verbatim from the published seven-stage taxonomy"
+        }
+      ],
+      "generates": [
+        "series-locator-discovery.svg",
+        "series-locator-diligence.svg",
+        "series-locator-negotiation.svg",
+        "series-locator-contracting.svg",
+        "series-locator-ordering.svg",
+        "series-locator-settlement.svg",
+        "series-locator-enforcement.svg"
+      ],
+      "recheck": "Only if the taxonomy changes. A strip is a position indicator, so the order matters more than the wording."
+    },
+    {
+      "file": "pipeline-journey-timeline.svg",
+      "serves": "BOTH",
+      "shows": "Every step of one payment on a logarithmic time axis, against the thresholds where an interaction stops feeling like one — and the 20-second sync-client timeout that sits in the middle of it.",
+      "sources": [
+        {
+          "path": "docs/posts/01-discovery-supporting-material.md",
+          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "note": "§5 — every number, with its provenance and the do-not-state-as-typical caveat"
+        },
+        {
+          "path": "demo/CLAUDE.md",
+          "sha256": "964a941cd9c39a5bf05c9d44b5eae0ad9d7f0f23d4748781fba9c8b7815eb372",
+          "note": "the async-variant rule, the 20s sync-wrapper timeout, and settleAfterTransfer polling until this wallet's own view moves"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "§4 — the proving measurement and what it means for the feature"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "measured",
+          "note": "Sync-to-tip 0.2–1.3 s, and the three shielded-transfer figures 6m41s / 7m24s / 7m27s — one 13-core desktop against the LEZ testnet, 2026-08-11/12. Whether any of it is typical is NOT established"
+        },
+        {
+          "grade": "from-source",
+          "note": "The 5–20 s to Online, and the 20 s hardcoded timeout in the generated sync client"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The 'instant' / 'still a conversation' / 'attention is gone' bands are rules of thumb about human attention, not anything measured here. Registration is drawn as a range because the exact figure was never isolated"
+        }
+      ],
+      "recheck": "Any time the zone changes proving, and before the settlement post publishes. The §5 caveat travels with this figure."
+    },
+    {
+      "file": "pipeline-settlement-bug.svg",
+      "serves": "POST",
+      "shows": "The account-id derivation drawn: id is a function of a viewing key and an identifier, the published keys carry no identifier, so the sender's client picks one at random and the note lands where nobody is looking. Plus the workaround and its two disclosed costs.",
+      "sources": [
+        {
+          "path": "demo/poc/BUG-private-transfer-recipient-identifier.md",
+          "sha256": "10e15a87711ee675e32fb299b9c4bf2d5352c52664dff8615c27c377090794d7",
+          "note": "the upstream report and its single-file reproducer"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "§4b — cause, the two account ids, the measurement, and the workaround's costs"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "measured",
+          "note": "Reproduced twice — two peers over the testnet and a single-process standalone reproducer. The two account ids and their balances are the observed values"
+        },
+        {
+          "grade": "from-source",
+          "note": "The derivation from (viewing key, identifier) and the random choice are read off wallet_ffi and lez_core, whose own comment states the random pick"
+        }
+      ],
+      "recheck": "When the upstream issue is fixed. At that point the workaround comes out of the build and this figure becomes history rather than a caveat — which is worth drawing the difference between."
+    },
+    {
+      "file": "pipeline-findable-unlinkable.svg",
+      "serves": "POST",
+      "shows": "Two discovery models the same stack ships: shielded receiving keys handed over in band, against an on-chain label anyone can resolve — with which one is actually wired into the build marked on its face.",
+      "sources": [
+        {
+          "path": "docs/posts/01-discovery-supporting-material.md",
+          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "note": "§4 — the fork, its four comparison rows, and the honesty point that the label system is not wired in"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "§3 — the contrast worth drawing, and the address-form choice being the payee's"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "measured",
+          "note": "The shielded-keys column describes what the build does: an address handed over in band, nothing resolved, no third party involved"
+        },
+        {
+          "grade": "from-source",
+          "note": "add_label and resolve_label are present in the generated contract and NOT exercised in this build. The figure marks that on the column itself rather than in a footnote, because the earlier prose draft implied a UI that does not exist"
+        }
+      ],
+      "recheck": "If the label system is ever wired in. Until then the right-hand column stays dashed and the caption stays honest about it."
+    },
+    {
+      "file": "pipeline-seven-stages.svg",
+      "serves": "POST",
+      "shows": "All seven stages with their leak descriptions, the four that precede a transaction, the three the chain is in, and the one the argument concentrates on.",
+      "sources": [
+        {
+          "path": "docs/posts/01-discovery-supporting-material.md",
+          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "note": "§1 carries the stage names and leak descriptions verbatim from the PriFi competitor matrix cross-check"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "Stage names and leak descriptions, verbatim from the published PriFi matrix"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The conventional-stack examples under each stage ('to a directory', 'to an explorer', 'to a chat host') characterise the status quo; they are not measurements"
+        }
+      ],
+      "recheck": "If the published seven-stage taxonomy changes upstream. It is the post's opening figure and the series' spine."
+    },
+    {
+      "file": "pipeline-self-assessment.svg",
+      "serves": "POST",
+      "shows": "Muster scored closed/partial/leaks on its own seven-stage matrix, with Ordering and Enforcement deliberately left unassessed.",
+      "sources": [
+        {
+          "path": "docs/posts/01-discovery-supporting-material.md",
+          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "note": "§2 holds the scoring scheme and the cell-by-cell justification"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "the row-by-row basis for each score"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "measured",
+          "note": "Discovery and Negotiation cells — observed on this machine, 2026-08-11/12"
+        },
+        {
+          "grade": "from-source",
+          "note": "Contracting and Settlement cells — read off the build and the consumed contracts, not separately exercised"
+        }
+      ],
+      "recheck": "Every phase. This figure scores the demo as it runs; it goes stale the moment the build gains or loses a protection. The two unassessed cells must stay unassessed until the zone's mempool and sequencer models are confirmed."
+    },
+    {
+      "file": "pipeline-discovery-comparison.svg",
+      "serves": "POST",
+      "shows": "Introduction with a directory against without — who learns the edge.",
+      "sources": [
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "§1, finding each other"
+        },
+        {
+          "path": "docs/posts/01-discovery-supporting-material.md",
+          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "note": "§3, discovery in Muster"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "measured",
+          "note": "The Muster side — the app mints an address with no account, signup or server call"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The directory side characterises how conventional contact-add works; it is not a measurement of a named service"
+        }
+      ],
+      "recheck": "P3, if ADR-010 changes which module mints identity."
+    },
+    {
+      "file": "pipeline-relay-sees.svg",
+      "serves": "POST",
+      "shows": "Content against metadata across the journey: what end-to-end encryption covers, and what it does not.",
+      "sources": [
+        {
+          "path": "docs/00-vision.md",
+          "sha256": "a9cb276d78acf0f75195f9489df54dde45d602b6cb4f0d56d13b61ac7f0afa44",
+          "note": "FS-9 and the worked conversation-graph example"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "§1 and §2, the store-node observation"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "One content topic per conversation is the documented shape of delivery; the subscription-shape leak follows from it and was not separately measured"
+        }
+      ],
+      "recheck": "If LOGOS-MIXNET moves off status raw, or receive-over-mix lands. Both would change what this figure's metadata column says."
+    },
+    {
+      "file": "pipeline-cost-of-privacy.svg",
+      "serves": "POST",
+      "shows": "Shielded-transfer proving time against human-interaction thresholds.",
+      "sources": [
+        {
+          "path": "docs/posts/01-discovery-supporting-material.md",
+          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "note": "§5, numbers with provenance"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "§4, what it costs, measured"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "measured",
+          "note": "The bars — 6m41s, 7.4min and 447s, on a 13-core desktop against the LEZ testnet, 2026-08-11/12. Whether that is typical is NOT established"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The band marked 'a person will wait this long' is a rule of thumb about attention, not something measured here"
+        }
+      ],
+      "recheck": "Before the settlement post publishes, and any time the zone changes proving. The 'do not state as typical' caveat in §5 travels with this figure."
+    }
+  ]
+}
