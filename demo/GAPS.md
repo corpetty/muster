@@ -86,7 +86,13 @@ Whether that figure is expected, hardware-bound, or a symptom of something misco
 
 ## 4b. The open bug, stated plainly
 
-A shielded payment debits the sender and **never credits the recipient**. This has now been reproduced under controlled conditions, and the leading hypothesis for it has been **refuted**.
+**Cause found (2026-08-11).** A shielded payment debits the sender and the recipient's balance never moves — but the money is not lost. It is credited to a **different account id than the one the recipient advertised**, and a client polling the id it published sees zero forever.
+
+`wallet_ffi` derives a private account id from *(viewing key, identifier)*. The recipient's keys carry no identifier, so `lez_core.transfer_private` picks one **at random** — its own comment says so — and the note lands at an account neither party can predict. Enumerating the recipient's wallet after syncing finds it: the advertised account at 0, and a brand-new account holding exactly the amount paid.
+
+Written up for the zone's developers, with a single-file reproducer that links `wallet-ffi` directly, in [`poc/BUG-private-transfer-recipient-identifier.md`](poc/BUG-private-transfer-recipient-identifier.md).
+
+What follows is the measurement that got there, kept because the sequence of wrong turns is the useful part.
 
 **The measurement (2026-08-11, two freshly minted peers, LEZ testnet).** Both peers' private accounts were created *and registered on-chain* — confirmed by transaction hash, not by absence of error. The sender held 150 private and paid 10. The zone proved for **7.4 minutes** and returned success with a transaction id. Afterwards:
 
@@ -97,7 +103,12 @@ A shielded payment debits the sender and **never credits the recipient**. This h
 
 The recipient's balance was re-read five times, each with a full sync to tip, over several minutes. It never moved. Reproduced by `muster-ui/doctests/credit/run-credit.mjs`, which drives both instances and prints the two numbers that matter.
 
-**So registration is not the fix.** The hypothesis was that a private account must be registered on-chain before it can be credited. Both accounts were registered this time and the recipient was still not credited, so the cause lies elsewhere. The remaining suspects, in order: note detection needing a scan the wallet does not perform on the receiving side, or `get_private_account_keys` not returning the thing `transfer_private` actually credits.
+**Registration was not the fix** — both accounts were registered and the advertised balance still did not move. The second suspect was right: `get_private_account_keys` does not return the thing `transfer_private` credits. Enumerating the recipient's wallet afterwards showed the payment sitting in a new account:
+
+```
+private 021fbfac…4634 balance=0    <-- advertised, registered, polled
+private b719ff50…259a balance=10   <-- the payment
+```
 
 **Three findings that had to be cleared out of the way first**, each of which had been quietly hiding the real behaviour:
 
@@ -107,7 +118,9 @@ The recipient's balance was re-read five times, each with a full sync to tip, ov
 
 **A trap for anyone measuring this:** the balance read immediately after a transfer is stale. The sender showed 150 → 150 right after the proof and 150 → 140 on the next refresh. Do not conclude anything from the first read — which is very likely how the original report came to say the sender was debited by a different amount than it was.
 
-It is in this document because the article must not describe the payment pipeline as working end to end. Everything up to and including *initiating* a shielded payment is real and measured; **the receiving side does not work**, and we do not yet know why. **[verified: symptom reproduced, hypothesis refuted, cause unknown.]**
+It is in this document because the article must not describe the payment pipeline as working end to end. Everything up to and including *initiating* a shielded payment is real and measured; **the recipient's client shows nothing**, and until either the zone addresses the account it advertised or this app enumerates accounts after syncing, a user watching their balance has no way to know they were paid. **[verified: symptom reproduced twice, cause identified, reported upstream.]**
+
+**There is a workaround available to us**, not yet implemented: after syncing, call `list_accounts` and treat newly appearing private accounts as received notes, rather than polling the one id we published. Worth doing — it would make the journey complete end to end — but it should be written as a workaround with the upstream issue named beside it, not quietly, because "your balance is the sum of accounts you did not create" is exactly the kind of thing this document exists to disclose.
 
 ## 5. What this build does not do at all
 

@@ -147,9 +147,35 @@ The result the three findings above were in the way of. With two freshly minted 
 
 The zone proved for 7.4 minutes and returned success with a transaction id. The recipient's balance was re-read five times, each after a full sync to tip, over several minutes. It never moved.
 
-**The registration hypothesis is refuted.** Remaining suspects, in order: note detection needing a receiving-side scan the wallet does not perform, or `get_private_account_keys` not returning the thing `transfer_private` actually credits. Worth asking whoever owns the zone before spending more time on it — three of the four things that looked like the bug turned out to be reporting artefacts in this module's error conventions, and the fourth may be too.
+**The registration hypothesis is refuted** — and the real cause turned out to be the second suspect.
 
-Reproducer: `demo/muster-ui/doctests/credit/run-credit.mjs`, which drives two instances over the inspector protocol and prints the two numbers that decide it.
+## 8. The cause: a private note is addressed to a *random* account id (2026-08-11)
+
+`wallet_ffi_account_id_for_private_pda` derives a private account id from **(viewing key, identifier)**. `FfiPrivateAccountKeys` — everything a recipient can hand out — carries no identifier, so `lez_core.transfer_private` invents one:
+
+```cpp
+// src/lez_core_module.cpp
+// See transfer_shielded above: to_keys_json never carries an identifier, so always pick
+// a random one for the recipient's wallet to recover via sync-private.
+FfiU128 toIdentifier{};
+if (!jsonExtractIdentifier(to_keys_json, &toIdentifier))
+    toIdentifier = randomFfiU128();
+```
+
+The note therefore lands at an account derived from a number the recipient has never seen. Enumerating the recipient's wallet after syncing finds it immediately:
+
+```
+private 021fbfac…4634 balance=0    <-- advertised, registered, polled by the app
+private b719ff50…259a balance=10   <-- the payment
+```
+
+Confirmed a second way with a single-process, single-wallet reproducer: sender 140 → 130, advertised recipient 0, and a new account holding 10. Also observed: accounts are created with identifier `000…0`, so the creation and transfer derivations can never coincide.
+
+**Nothing is lost, and "recover via sync-private" does work** — the scan finds the note and the account appears in `list_accounts`. What does not work is the obvious client behaviour of polling `get_balance` on the id you published. Our workaround, if upstream keeps the random identifier: after syncing, enumerate accounts and treat new private ones as received notes.
+
+**A second bug found alongside it:** passing the recipient's *own* identifier (from `wallet_ffi_resolve_private_account`) panics the library and aborts the process — `lez/wallet/src/account_manager.rs:385`, `update variant must have nsk`.
+
+Reproducers: `demo/poc/lez-private-transfer-poc.c` (one file, links `wallet-ffi` directly, no logos-core or chat — the one to hand to the zone's developers) and `demo/muster-ui/doctests/credit/run-credit.mjs` (the two-peer app-level version). Write-up: `demo/poc/BUG-private-transfer-recipient-identifier.md`.
 
 ## Related
 
