@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 566" width="880" height="566" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>Effect and materialization: the check that cannot be disabled</title>
+  <desc>Participants review a semantic effect; drivers produce the bytes that get signed. The client independently re-derives those bytes from the displayed effect and refuses to sign on mismatch. Specified as F-4 and FS-6; not built.</desc>
+<!-- provenance
+     serves:   BOTH
+     shows:    What a participant reviews against what actually gets signed, the client's
+               independent re-derivation between them, and the requirement that the check
+               cannot be turned off.
+     sources:  docs/01-furps.md
+               docs/02-implementation-plan.md
+               CLAUDE.md
+               demo/GAPS.md
+     evidence: [from-source] F-4 and FS-6 verbatim: the client MUST independently re-
+                   derive and refuse on mismatch, and the check cannot be disabled by
+                   configuration, plugin or preference
+               [from-source] The demo has no effect/materialization split at all —
+                   GAPS.md §5 states it as an absence
+               [illustrative] The example effect and the example hash are made up to show
+                   the shape of each side. Neither is a capture
+     recheck:  P4. Until then the status strip is the most important thing on the figure.
+-->
+
+  <defs>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8A928C"/>
+    </marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#A32D1E"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="566" fill="#E4E6E0"/>
+
+  <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">You review the effect. You sign the materialization.</text>
+  <text x="40" y="64" font-size="13.5" fill="#656E66">Those are different things, and the gap between them is where blind signing lives.</text>
+
+  <rect x="40" y="80" width="800" height="30" rx="5" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.2"/>
+  <rect x="52" y="88" width="150" height="15" rx="7.5" fill="#A32D1E"/>
+  <text x="127" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#F6E3DF">SPECIFIED · NOT BUILT</text>
+  <text x="214" y="99" font-size="10" fill="#3F4742">F-4, FS-6 · built at P4 · today the demo shows an amount and a destination, and nothing re-derives anything</text>
+
+  <!-- ── what you see ── -->
+  <rect x="40" y="130" width="330" height="106" rx="6" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.4"/>
+  <text x="56" y="152" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">THE EFFECT — WHAT A PARTICIPANT REVIEWS</text>
+  <text x="56" y="176" font-size="12" font-weight="600" fill="#1A1F1C">Semantic, typed, human-reviewable.</text>
+  <text x="56" y="196" font-size="10.5" fill="#3F4742">“Send 100 to Alice's shielded account,</text>
+  <text x="56" y="210" font-size="10.5" fill="#3F4742">from the treasury, before Friday.”</text>
+  <text x="56" y="228" font-size="9.5" fill="#656E66">A sentence a person can actually check.</text>
+
+  <!-- ── what gets signed ── -->
+  <rect x="510" y="130" width="330" height="106" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="526" y="152" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">THE MATERIALIZATION — WHAT GETS SIGNED</text>
+  <text x="526" y="176" font-size="12" font-weight="600" fill="#1A1F1C">Bytes, produced by a driver.</text>
+  <text x="526" y="198" font-size="10.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#3F4742">0x7f3a9c…  (an EIP-712 safeTxHash,</text>
+  <text x="526" y="212" font-size="10.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#3F4742">a zone call, a partial signature…)</text>
+  <text x="526" y="230" font-size="9.5" fill="#656E66">Nothing a person can check by reading.</text>
+
+  <path d="M 374 168 L 460 168" stroke="#8A928C" stroke-width="1.4" fill="none" marker-end="url(#g)"/>
+  <text x="417" y="148" font-size="9" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">driver</text>
+  <text x="417" y="160" font-size="9" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">canonicalize</text>
+
+  <!-- ── the check ── -->
+  <rect x="40" y="256" width="800" height="126" rx="6" fill="#F7F8F5" stroke="#4B33C4" stroke-width="1.6"/>
+  <text x="56" y="278" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">THE CHECK — CORE BEHAVIOUR, NOT PLUGIN BEHAVIOUR</text>
+
+  <text x="56" y="302" font-size="12" font-weight="600" fill="#1A1F1C">The client re-derives the materialization from the effect it displayed — itself, independently —</text>
+  <text x="56" y="318" font-size="12" font-weight="600" fill="#1A1F1C">and compares it to the one it was handed.</text>
+
+  <path d="M 200 330 L 200 348" stroke="#1E6B52" stroke-width="1.4" fill="none" marker-end="url(#g)"/>
+  <rect x="90" y="350" width="220" height="24" rx="12" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1.2"/>
+  <text x="200" y="366" font-size="10.5" font-weight="600" text-anchor="middle" fill="#1E6B52">Match → the signature is offered</text>
+
+  <path d="M 560 330 L 560 348" stroke="#A32D1E" stroke-width="1.4" fill="none" marker-end="url(#r)"/>
+  <rect x="420" y="350" width="280" height="24" rx="12" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.2"/>
+  <text x="560" y="366" font-size="10.5" font-weight="600" text-anchor="middle" fill="#A32D1E">Mismatch → the client refuses, and says why</text>
+
+  <!-- ── FS-6 ── -->
+  <rect x="40" y="398" width="800" height="52" rx="6" fill="#23282A"/>
+  <text x="56" y="420" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#96A19B">FS-6</text>
+  <text x="56" y="438" font-size="12" font-weight="600" fill="#DCE2DE">This check cannot be disabled by configuration, by a plugin, or by user preference.</text>
+  <text x="560" y="438" font-size="10.5" fill="#96A19B">There is no setting. That is the requirement.</text>
+
+  <!-- ── why it matters ── -->
+  <text x="40" y="478" font-size="11.5" font-weight="600" fill="#1A1F1C">Without it, "review" means looking at a sentence somebody else wrote next to bytes you cannot verify.</text>
+  <text x="40" y="496" font-size="10.5" fill="#3F4742">That is blind signing, and it is the norm rather than the failure case: signers routinely approve opaque calldata, or a hash they have</text>
+  <text x="40" y="510" font-size="10.5" fill="#3F4742">no independent way to reconstruct. The gap does not need an attacker to be a problem — a driver bug reaches the same place.</text>
+
+  <text x="40" y="536" font-size="10.5" font-weight="600" fill="#A32D1E">In the prototype this strip was theatre. In Muster it is the check —<tspan font-weight="400" fill="#3F4742">&#160;which is precisely the difference this figure is about, and</tspan></text>
+  <text x="40" y="550" font-size="10.5" fill="#3F4742">precisely why the status above says it is not built yet. Scoring Contracting as closed today would be the overclaim.</text>
+</svg>

@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 546" width="880" height="546" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>What a signing payload commits to, and what each field defeats</title>
+  <desc>Every signing payload binds an execution environment, an account or membership commitment, a serialization slot, an expiry, and the schema identity of the effect — so a contribution collected in one context fails verification in every other. Specified as F-5 and FS-3; not built.</desc>
+<!-- provenance
+     serves:   POST
+     shows:    The fields a signing payload commits to and the specific reuse each one
+               defeats, with the two versioned fields marked apart from the invariant
+               property.
+     sources:  docs/01-furps.md
+               docs/02-implementation-plan.md
+     evidence: [from-source] The four F-5 fields verbatim; schema identity and effect
+                   value root from the plan's P1 note and the FURPS encoding constraint
+               [from-source] FS-3's requirement that a test demonstrate cross-context
+                   failure
+               [illustrative] The what-it-defeats column is the author's reading of why
+                   each field is there, not text quoted from the requirement
+     recheck:  P1, and if ADR-009's schema-identity derivation changes — though the
+               property it protects is not allowed to.
+-->
+
+  <rect width="880" height="546" fill="#E4E6E0"/>
+
+  <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">A signature that is worthless anywhere else</text>
+  <text x="40" y="64" font-size="13.5" fill="#656E66">Every field exists to make one specific reuse impossible. None of them is decoration.</text>
+
+  <rect x="40" y="80" width="800" height="30" rx="5" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.2"/>
+  <rect x="52" y="88" width="150" height="15" rx="7.5" fill="#A32D1E"/>
+  <text x="127" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#F6E3DF">SPECIFIED · NOT BUILT</text>
+  <text x="214" y="99" font-size="10" fill="#3F4742">F-5, FS-3 · built at P1 · the demo constructs no signing payloads at all, so it has nothing to bind</text>
+
+  <!-- ══ the record ══ -->
+  <rect x="40" y="130" width="800" height="252" rx="6" fill="#F7F8F5" stroke="#4B33C4" stroke-width="1.4"/>
+  <text x="56" y="152" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">THE SIGNING PAYLOAD COMMITS TO…</text>
+  <text x="470" y="152" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">…WHICH DEFEATS</text>
+
+  <rect x="56" y="164" width="390" height="30" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1"/>
+  <text x="68" y="183" font-size="11" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">execution environment id</text>
+  <text x="470" y="183" font-size="10.5" fill="#3F4742">Replaying the signature on a different chain or zone.</text>
+
+  <rect x="56" y="200" width="390" height="30" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1"/>
+  <text x="68" y="219" font-size="11" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">account | membership commitment</text>
+  <text x="470" y="213" font-size="10.5" fill="#3F4742">Aiming an approval at a different account — or, for an</text>
+  <text x="470" y="226" font-size="10.5" fill="#3F4742">anonymous driver, a different member set.</text>
+
+  <rect x="56" y="236" width="390" height="30" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1"/>
+  <text x="68" y="255" font-size="11" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">serialization slot (nonce | nullifier)</text>
+  <text x="470" y="249" font-size="10.5" fill="#3F4742">Spending the same approval twice, or against a queue</text>
+  <text x="470" y="262" font-size="10.5" fill="#3F4742">position it was never given.</text>
+
+  <rect x="56" y="272" width="390" height="30" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1"/>
+  <text x="68" y="291" font-size="11" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">expiry</text>
+  <text x="470" y="291" font-size="10.5" fill="#3F4742">Holding an approval until the terms around it change.</text>
+
+  <rect x="56" y="308" width="390" height="30" rx="4" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1"/>
+  <text x="68" y="327" font-size="11" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">profile + schema-id</text>
+  <text x="470" y="321" font-size="10.5" fill="#3F4742">Reinterpreting the same bytes under a different effect</text>
+  <text x="470" y="334" font-size="10.5" fill="#3F4742">schema, so they mean something else entirely.</text>
+
+  <rect x="56" y="344" width="390" height="30" rx="4" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1"/>
+  <text x="68" y="363" font-size="11" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">effect value root</text>
+  <text x="470" y="363" font-size="10.5" fill="#3F4742">Changing the effect after it was approved.</text>
+
+  <!-- ══ the versioning point ══ -->
+  <rect x="40" y="398" width="800" height="66" rx="6" fill="#F7F8F5" stroke="#1E6B52" stroke-width="1.2"/>
+  <text x="56" y="420" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#1E6B52">THE GREEN TWO ARE VERSIONED. THE PROPERTY IS NOT.</text>
+  <text x="56" y="440" font-size="10.5" fill="#3F4742">v0 assigns schema ids by hand (<tspan font-family="'DM Mono',ui-monospace,Menlo,monospace">muster.event.*.v1</tspan>). Canonical schema roots replace them in the same field once those</text>
+  <text x="56" y="454" font-size="10.5" fill="#3F4742">specs ratify, with no format migration. <tspan font-weight="600">The derivation may change; the property F-5 states may not.</tspan></text>
+
+  <!-- ══ the test ══ -->
+  <rect x="40" y="480" width="800" height="46" rx="6" fill="#23282A"/>
+  <text x="56" y="500" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#96A19B">FS-3 — WHAT MAKES THIS MORE THAN A CLAIM</text>
+  <text x="56" y="517" font-size="11.5" font-weight="600" fill="#DCE2DE">A test must demonstrate that a contribution collected in one context fails verification in every other.</text>
+</svg>

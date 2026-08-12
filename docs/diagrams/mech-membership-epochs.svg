@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 522" width="880" height="522" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>Membership epochs: joining does not grant the past</title>
+  <desc>Adding a member re-keys the conversation forward, so prior epochs stay unreadable to them; removing one rotates the epoch immediately. The seam drawn in the thread depends on this being true rather than merely displayed. Specified as F-16; not built, and entangled with ADR-010.</desc>
+<!-- provenance
+     serves:   BOTH
+     shows:    Three epochs across a join and a removal: what a joining member cannot
+               read, what a departing member keeps, and why the seam drawn in the thread
+               is a cryptographic claim.
+     sources:  docs/01-furps.md
+               docs/02-implementation-plan.md
+               demo/GAPS.md
+     evidence: [from-source] F-16 — adding re-keys forward, removal rotates immediately —
+                   and U-6's seam
+               [from-source] The demo neither verifies nor claims the chat module's re-
+                   keying, stated as such in GAPS.md §5
+               [illustrative] Alice, Bob and Carol are an example. The forward-only limit
+                   on removal is a property of any such scheme, not a measurement
+     recheck:  P3, and at ADR-010 — whose resolution decides whether these epochs are
+               ours at all.
+-->
+
+  <rect width="880" height="522" fill="#E4E6E0"/>
+
+  <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">Joining a room does not grant its past</text>
+  <text x="40" y="64" font-size="13.5" fill="#656E66">The seam drawn in the thread is a claim about cryptography, not a rendering choice — which is why it has to be true.</text>
+
+  <rect x="40" y="80" width="800" height="30" rx="5" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.2"/>
+  <rect x="52" y="88" width="150" height="15" rx="7.5" fill="#A32D1E"/>
+  <text x="127" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#F6E3DF">SPECIFIED · NOT BUILT</text>
+  <text x="214" y="99" font-size="10" fill="#3F4742">F-16, U-6 · built at P3, and entangled with ADR-010 · the demo neither verifies nor claims the chat module's re-keying</text>
+
+  <!-- ══ epochs ══ -->
+  <rect x="40" y="140" width="250" height="88" rx="6" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.2"/>
+  <text x="56" y="162" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">EPOCH 1</text>
+  <text x="56" y="184" font-size="11" fill="#1A1F1C">Alice, Bob</text>
+  <text x="56" y="204" font-size="9.5" fill="#656E66">Everything said here is encrypted</text>
+  <text x="56" y="217" font-size="9.5" fill="#656E66">to this key, and only this one.</text>
+
+  <rect x="314" y="140" width="250" height="88" rx="6" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.2"/>
+  <text x="330" y="162" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">EPOCH 2</text>
+  <text x="330" y="184" font-size="11" fill="#1A1F1C">Alice, Bob, Carol</text>
+  <text x="330" y="204" font-size="9.5" fill="#656E66">Carol holds this key. It does not</text>
+  <text x="330" y="217" font-size="9.5" fill="#656E66">open epoch 1, and never will.</text>
+
+  <rect x="588" y="140" width="252" height="88" rx="6" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.2"/>
+  <text x="604" y="162" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">EPOCH 3</text>
+  <text x="604" y="184" font-size="11" fill="#1A1F1C">Alice, Carol</text>
+  <text x="604" y="204" font-size="9.5" fill="#656E66">Bob left. The key rotated at that</text>
+  <text x="604" y="217" font-size="9.5" fill="#656E66">moment, not at the next message.</text>
+
+  <!-- ══ the seams ══ -->
+  <path d="M 302 130 L 302 238" stroke="#A32D1E" stroke-width="1.6" stroke-dasharray="5 4" fill="none"/>
+  <text x="302" y="252" font-size="9.5" text-anchor="middle" font-weight="600" fill="#A32D1E">Carol joins</text>
+  <text x="302" y="264" font-size="9" text-anchor="middle" fill="#656E66">re-key forward</text>
+
+  <path d="M 576 130 L 576 238" stroke="#A32D1E" stroke-width="1.6" stroke-dasharray="5 4" fill="none"/>
+  <text x="576" y="252" font-size="9.5" text-anchor="middle" font-weight="600" fill="#A32D1E">Bob is removed</text>
+  <text x="576" y="264" font-size="9" text-anchor="middle" fill="#656E66">rotate immediately</text>
+
+  <!-- ══ what carol can read ══ -->
+  <rect x="40" y="288" width="390" height="86" rx="6" fill="#F7F8F5" stroke="#1E6B52" stroke-width="1.2"/>
+  <text x="56" y="310" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#1E6B52">WHAT CAROL CAN READ</text>
+  <text x="56" y="332" font-size="11" fill="#1A1F1C">Epoch 2 onward. Nothing before her seam.</text>
+  <text x="56" y="352" font-size="10" fill="#3F4742">Not "the UI hides it" — she does not hold a key that</text>
+  <text x="56" y="366" font-size="10" fill="#3F4742">opens those bytes, wherever she gets them from.</text>
+
+  <rect x="450" y="288" width="390" height="86" rx="6" fill="#F7F8F5" stroke="#A32D1E" stroke-width="1.2"/>
+  <text x="466" y="310" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#A32D1E">WHAT BOB KEEPS</text>
+  <text x="466" y="332" font-size="11" fill="#1A1F1C">Epochs 1 and 2 — he was there, and he has them.</text>
+  <text x="466" y="352" font-size="10" fill="#3F4742">Removal is forward-only. No scheme takes back what</text>
+  <text x="466" y="366" font-size="10" fill="#3F4742">someone already decrypted, and none should imply it.</text>
+
+  <!-- ══ the comparison ══ -->
+  <rect x="40" y="394" width="800" height="46" rx="6" fill="#23282A"/>
+  <text x="56" y="414" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#96A19B">THE COMPARISON</text>
+  <text x="56" y="431" font-size="11" fill="#DCE2DE">Chat membership and signing membership are usually conflated or unmanaged, and a departed member keeps the whole history.</text>
+
+  <!-- ══ the dependency ══ -->
+  <text x="40" y="466" font-size="11" font-weight="600" fill="#1A1F1C">U-6 renders a membership change as a seam in the thread at the join point.</text>
+  <text x="40" y="484" font-size="10.5" fill="#3F4742">That seam is the UI making a cryptographic claim. If the epochs are not real, the drawing is a lie with a nice border — which is why the</text>
+  <text x="40" y="498" font-size="10.5" fill="#3F4742">P3 accept test exists, and why <tspan font-weight="600">it must pass whether the epochs turn out to be ours or the chat module's</tspan>.</text>
+</svg>

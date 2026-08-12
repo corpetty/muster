@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 574" width="880" height="574" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>The driver seam: the core never interprets contribution bytes</title>
+  <desc>The core routes opaque blobs and asks a driver what they mean. Rounds, serialization domain, membership model and finality are described by the driver, never hardcoded, and a shared conformance suite is the contract every driver passes. Specified as F-6, F-7 and S-1; not built.</desc>
+<!-- provenance
+     serves:   BUILD
+     shows:    The seven driver methods, the four divergence axes describe returns, three
+               drivers behind one interface, and the conformance suite that gates them.
+     sources:  docs/01-furps.md
+               docs/02-implementation-plan.md
+               CLAUDE.md
+     evidence: [from-source] The seven method names and what describe returns, verbatim
+                   from F-6; the r=1/r=2 characterisation from F-7; S-1's no-merge-on-red
+                   rule
+               [from-source] The demo has no drivers and no seam — a send is a send
+     recheck:  P1 and P2. The threshold column is P6 and the least settled of the three.
+-->
+
+  <rect width="880" height="574" fill="#E4E6E0"/>
+
+  <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">The core routes bytes it cannot read</text>
+  <text x="40" y="64" font-size="13.5" fill="#656E66">Every difference between one settlement system and another lives behind this seam, described rather than hardcoded.</text>
+
+  <rect x="40" y="80" width="800" height="30" rx="5" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.2"/>
+  <rect x="52" y="88" width="150" height="15" rx="7.5" fill="#A32D1E"/>
+  <text x="127" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#F6E3DF">SPECIFIED · NOT BUILT</text>
+  <text x="214" y="99" font-size="10" fill="#3F4742">F-6, F-7, F-8, S-1 · built at P1–P2 · the demo has no drivers and no seam; a send is a send</text>
+
+  <!-- ══ core ══ -->
+  <rect x="40" y="130" width="800" height="52" rx="6" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.4"/>
+  <text x="56" y="152" font-size="12" font-weight="600" fill="#1A1F1C">The core<tspan font-size="10.5" font-weight="400" fill="#3F4742">&#160;— lifecycle, log, encoding, the re-derivation check</tspan></text>
+  <text x="56" y="170" font-size="10.5" font-weight="600" fill="#A32D1E">It never interprets contribution bytes. It routes opaque blobs and asks the driver what they mean.</text>
+
+  <!-- ══ the interface ══ -->
+  <text x="40" y="206" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">THE INTERFACE — SEVEN METHODS</text>
+
+  <rect x="40" y="214" width="106" height="26" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="93" y="231" font-size="10" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">describe</text>
+  <rect x="154" y="214" width="106" height="26" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="207" y="231" font-size="10" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">canonicalize</text>
+  <rect x="268" y="214" width="106" height="26" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="321" y="231" font-size="10" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">verify</text>
+  <rect x="382" y="214" width="106" height="26" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="435" y="231" font-size="10" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">progress</text>
+  <rect x="496" y="214" width="106" height="26" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="549" y="231" font-size="10" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">assemble</text>
+  <rect x="610" y="214" width="106" height="26" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="663" y="231" font-size="10" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">submit</text>
+  <rect x="724" y="214" width="116" height="26" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="782" y="231" font-size="10" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">watch</text>
+
+  <!-- ══ what describe returns ══ -->
+  <rect x="40" y="256" width="800" height="94" rx="6" fill="#F7F8F5" stroke="#4B33C4" stroke-width="1.2"/>
+  <text x="56" y="278" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">WHAT describe RETURNS — THE FOUR DIVERGENCE AXES, PLUS POLICY SHAPE</text>
+
+  <text x="56" y="302" font-size="10.5" fill="#3F4742"><tspan font-weight="600" fill="#1A1F1C">round count r</tspan> — Safe is the degenerate r=1. FROST at r=2 is the round model's real test: nonce commitments, then partial signatures.</text>
+  <text x="56" y="320" font-size="10.5" fill="#3F4742"><tspan font-weight="600" fill="#1A1F1C">serialization domain</tspan> — sequential domains queue concurrent intents visibly; parallel ones do not.</text>
+  <text x="56" y="338" font-size="10.5" fill="#3F4742"><tspan font-weight="600" fill="#1A1F1C">membership model</tspan> — a roster <tspan font-style="italic">or</tspan> a predicate. <tspan font-weight="600" fill="#1A1F1C">finality descriptor</tspan> — which is how a reorg becomes a state transition rather than a silent rewrite.</text>
+
+  <!-- ══ drivers ══ -->
+  <text x="40" y="378" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">THREE DRIVERS, ONE INTERFACE, ONE SUITE</text>
+
+  <rect x="40" y="388" width="256" height="76" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="56" y="408" font-size="11" font-weight="600" fill="#1A1F1C">Stub</text>
+  <text x="56" y="426" font-size="10" fill="#3F4742">In-memory 2-of-3, r=1, sequential.</text>
+  <text x="56" y="440" font-size="10" fill="#3F4742">Integration tests use this rather</text>
+  <text x="56" y="454" font-size="10" fill="#3F4742">than mocking the interface.</text>
+
+  <rect x="312" y="388" width="256" height="76" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="328" y="408" font-size="11" font-weight="600" fill="#1A1F1C">Safe</text>
+  <text x="328" y="426" font-size="10" fill="#3F4742">r=1. EIP-712 computed locally,</text>
+  <text x="328" y="440" font-size="10" fill="#3F4742">with no transaction service in</text>
+  <text x="328" y="454" font-size="10" fill="#3F4742">the loop at all.</text>
+
+  <rect x="584" y="388" width="256" height="76" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="600" y="408" font-size="11" font-weight="600" fill="#1A1F1C">Threshold</text>
+  <text x="600" y="426" font-size="10" fill="#3F4742">FROST at r=2, and anonymous:</text>
+  <text x="600" y="440" font-size="10" fill="#3F4742">slots render as a count, never</text>
+  <text x="600" y="454" font-size="10" fill="#3F4742">as names.</text>
+
+  <!-- ══ the gate ══ -->
+  <rect x="40" y="480" width="800" height="52" rx="6" fill="#23282A"/>
+  <text x="56" y="502" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#96A19B">S-1 — THE SUITE IS THE CONTRACT</text>
+  <text x="56" y="520" font-size="11.5" font-weight="600" fill="#DCE2DE">Shared fixtures across rounds, domains, membership models and finality. No driver feature merges with conformance red.</text>
+
+  <text x="40" y="558" font-size="10.5" font-weight="600" fill="#A32D1E">The four axes are load-bearing and must not be collapsed for convenience —<tspan font-weight="400" fill="#3F4742">&#160;collapsing one is how a client quietly becomes single-chain.</tspan></text>
+</svg>

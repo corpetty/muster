@@ -105,3 +105,30 @@
 {"type":"create","timestamp":"2026-08-12T22:47:41.118546906Z","issue_id":"exo-fd6","payload":{"description":"Tranche 4 of the diagram programme (docs/diagrams/README.md §5) — settlement post material.","priority":"2","title":"pipeline-findable-unlinkable: the fork the stack offers","type":"feature"}}
 {"type":"rename","timestamp":"2026-08-12T22:47:41.142801944Z","issue_id":"exo-fd6","payload":{"new_id":"exo-2d5.17"}}
 {"type":"dep_add","timestamp":"2026-08-12T22:47:41.142801944Z","issue_id":"exo-2d5.17","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"close","timestamp":"2026-08-12T22:53:09.96559465Z","issue_id":"exo-2d5.15","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:53:09.96559465Z","issue_id":"exo-2d5.16","payload":{}}
+{"type":"close","timestamp":"2026-08-12T22:53:09.96559465Z","issue_id":"exo-2d5.17","payload":{}}
+{"type":"create","timestamp":"2026-08-12T22:59:23.389114307Z","issue_id":"exo-27b","payload":{"description":"Tranche 5 of the diagram programme (docs/diagrams/README.md §5) — Family C mechanics, drawn with a specified-not-built status strip per §6 Q1.","priority":"3","title":"mech-intent-lifecycle: the seven states and what exists","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:59:23.429810606Z","issue_id":"exo-27b","payload":{"new_id":"exo-2d5.18"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:59:23.429810606Z","issue_id":"exo-2d5.18","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:59:23.449827119Z","issue_id":"exo-a66","payload":{"description":"Tranche 5 of the diagram programme (docs/diagrams/README.md §5) — Family C mechanics, drawn with a specified-not-built status strip per §6 Q1.","priority":"3","title":"mech-effect-materialization: the check that cannot be disabled","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:59:23.474204373Z","issue_id":"exo-a66","payload":{"new_id":"exo-2d5.19"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:59:23.474204373Z","issue_id":"exo-2d5.19","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:59:23.495141333Z","issue_id":"exo-a37","payload":{"description":"Tranche 5 of the diagram programme (docs/diagrams/README.md §5) — Family C mechanics, drawn with a specified-not-built status strip per §6 Q1.","priority":"3","title":"mech-signing-payload: what a signature commits to","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:59:23.519284517Z","issue_id":"exo-a37","payload":{"new_id":"exo-2d5.20"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:59:23.519284517Z","issue_id":"exo-2d5.20","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:59:23.539257047Z","issue_id":"exo-1f4","payload":{"description":"Tranche 5 of the diagram programme (docs/diagrams/README.md §5) — Family C mechanics, drawn with a specified-not-built status strip per §6 Q1.","priority":"3","title":"mech-reduce-log: state is a fold over a signed log","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:59:23.566079278Z","issue_id":"exo-1f4","payload":{"new_id":"exo-2d5.21"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:59:23.566079278Z","issue_id":"exo-2d5.21","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:59:23.589496762Z","issue_id":"exo-34e","payload":{"description":"Tranche 5 of the diagram programme (docs/diagrams/README.md §5) — Family C mechanics, drawn with a specified-not-built status strip per §6 Q1.","priority":"3","title":"mech-membership-epochs: re-keying forward","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:59:23.619112563Z","issue_id":"exo-34e","payload":{"new_id":"exo-2d5.22"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:59:23.619112563Z","issue_id":"exo-2d5.22","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:59:23.643595075Z","issue_id":"exo-852","payload":{"description":"Tranche 5 of the diagram programme (docs/diagrams/README.md §5) — Family C mechanics, drawn with a specified-not-built status strip per §6 Q1.","priority":"3","title":"mech-driver-seam: the core never reads contribution bytes","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:59:23.668843854Z","issue_id":"exo-852","payload":{"new_id":"exo-2d5.23"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:59:23.668843854Z","issue_id":"exo-2d5.23","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:59:23.690585553Z","issue_id":"exo-c99","payload":{"description":"Tranche 5 of the diagram programme (docs/diagrams/README.md §5) — Family C mechanics, drawn with a specified-not-built status strip per §6 Q1.","priority":"3","title":"mech-two-identities: ADR-010's blocking issue","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:59:23.716906734Z","issue_id":"exo-c99","payload":{"new_id":"exo-2d5.24"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:59:23.716906734Z","issue_id":"exo-2d5.24","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
+{"type":"create","timestamp":"2026-08-12T22:59:23.739032994Z","issue_id":"exo-270","payload":{"description":"Tranche 5 of the diagram programme (docs/diagrams/README.md §5) — Family C mechanics, drawn with a specified-not-built status strip per §6 Q1.","priority":"3","title":"mech-plugin-blocks: typed blocks only, no canvas","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-12T22:59:23.765194566Z","issue_id":"exo-270","payload":{"new_id":"exo-2d5.25"}}
+{"type":"dep_add","timestamp":"2026-08-12T22:59:23.765194566Z","issue_id":"exo-2d5.25","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}

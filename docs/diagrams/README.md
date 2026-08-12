@@ -251,7 +251,7 @@ None of this produces a publishable figure. All of it makes every later tranche 
 
 ## 6. Open questions
 
-1. **How much of Family C should be drawn before its phase ships?** A diagram of a specified-but-unbuilt guarantee is exactly the kind of thing that gets screenshotted without its caption. A "specified / not built" band across the figure itself is one answer; deferring is the other. The substrate makes a third available: ship the built state as the default view and the specified state as a *selectable* one, so the difference is something the reader operates rather than reads.
+1. ~~How much of Family C should be drawn before its phase ships?~~ **Decided (§8, tranche 5):** draw the full set, with a status strip carrying the closed vocabulary, the requirement ids, the phase, and what exists today — placed above everything it describes so a screenshot cannot lose it.
 2. **Does `pipeline-stack-correlation` subsume fig1**, or sit beside it? It is a superset of fig1's content plus the infrastructure column. Beside, probably — fig1 is the thesis and this is the evidence — but they should not both open a post.
 3. **Should demo figures and spec figures be distinguishable at a glance** — a different ground, a corner mark — given the two builds coexist and one deliberately violates the other's invariants? `substrate-stack.html` answers it one way: a dashed "specified, not built" treatment applied *per node* rather than per figure, so one diagram carries both builds. Whether that generalises past this substrate is untested.
 4. **Where do the interactive versions get hosted?** They need a page that permits `<script>`. GitHub Pages on this repo is the obvious answer and matches how the assembly preview is served; the post then embeds the exported frame and links out.
@@ -265,11 +265,12 @@ None of this produces a publishable figure. All of it makes every later tranche 
 | 2026-08-12 | Consolidate to `docs/diagrams/` with slug names; `figN-` retired | §1.2 |
 | 2026-08-12 | Provenance block per figure + `manifest.json`, two pre-commit checks (fail on missing source, warn on changed source) | §2 |
 | 2026-08-12 | Reuse the assembly substrate engine; static figures become exported frames rather than separately authored | §3 |
+| 2026-08-12 | **Draw specified-but-unbuilt guarantees, with the status above the content.** A strip carrying the closed vocabulary, the requirement ids, the phase and what exists today. Resolves §6 Q1 | §8 |
 | 2026-08-12 | **Fork rather than upstream.** Muster is an app leveraging the stack, not the stack itself, so its substrate is its own artefact and diverges freely. The mix and a11y corrections live in the fork; passing them upstream is a courtesy, not a dependency | §3.3 |
 
 ## 8. Built so far
 
-Tranches 0 through 4 are complete. **Next: tranche 5** — the Family C mechanics figures, most of which §6 Q1 defers to their phase.
+**The catalogue is built.** All five tranches are complete.
 
 **Tranche 0 — foundations.**
 
@@ -324,6 +325,23 @@ Sixteen exported frames across the two substrates plus seven locator strips, eac
 | `pipeline-journey-timeline.svg` | Every step of one payment on a log axis, against the thresholds where an interaction stops being one — with the 20-second sync-client timeout drawn through the middle, which is why a call that had sat in the tree for a day had never once succeeded |
 | `pipeline-settlement-bug.svg` | The account-id derivation drawn: the identifier the recipient never publishes, the random one the sender's client substitutes, and the two accounts that result. Plus the workaround and its two disclosed costs |
 | `pipeline-findable-unlinkable.svg` | The fork the stack offers, with **which side is actually wired in marked on the column itself** — the earlier prose draft implied a UI that does not exist |
+
+**Tranche 5 — the mechanics, with a status treatment.**
+
+Open question 1 is **decided**: draw the full set now, and put the status where a screenshot cannot lose it. Every Family C figure carries a strip immediately under its subtitle — a pill from the closed vocabulary, the requirement ids, the phase that builds it, and *what exists today instead*. It is the third line of the figure, above everything it describes.
+
+| | Status |
+|---|---|
+| `mech-intent-lifecycle.svg` | **specified · part built** — F-3 · P1. The four states the demo reaches are marked on the states themselves |
+| `mech-effect-materialization.svg` | **specified · not built** — F-4, FS-6 · P4 |
+| `mech-signing-payload.svg` | **specified · not built** — F-5, FS-3 · P1 |
+| `mech-reduce-log.svg` | **specified · not built** — F-1, F-2, R-2, R-3 · P0 |
+| `mech-membership-epochs.svg` | **specified · not built** — F-16, U-6 · P3, entangled with ADR-010 |
+| `mech-driver-seam.svg` | **specified · not built** — F-6, F-7, F-8, S-1 · P1–P2 |
+| `mech-two-identities.svg` | **contested · unresolved** — F-14, F-9 · ADR-010, before P3 |
+| `mech-plugin-blocks.svg` | **specified · not built** — F-12, F-13, FS-5 · P5 |
+
+Written against `01-furps.md` directly rather than from the summaries, so every id and every quoted property is the normative text. `mech-two-identities` is the one to keep: F-14 is marked *Contested* in the requirements themselves, so the figure draws an acknowledged open decision and lists the three ways out without picking one.
 
 **A third silent-failure class, now automated.** Text overflowing the canvas happened in three figures running — it renders, it looks fine in the source, and it is only wrong in the raster. `check-manifest.py` now estimates text width and warns. It is a heuristic (one advance-width factor per family) that catches a line 20% too long and will not catch one 2% too long, and it skips exported frames, whose font-size and anchor come from a stylesheet it cannot read.
 

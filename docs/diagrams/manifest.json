@@ -233,6 +233,300 @@
       "recheck": "Whenever flake.nix changes. This figure is a snapshot of a version graph and is the one most likely to go stale silently — the manifest's changed-source warning on flake.nix is the intended signal."
     },
     {
+      "file": "mech-intent-lifecycle.svg",
+      "serves": "BOTH",
+      "shows": "The seven lifecycle states with the four teaching questions each of them answers, and which states the demo actually reaches.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "note": "the normative requirement text and its ids"
+        },
+        {
+          "path": "docs/00-vision.md",
+          "sha256": "a9cb276d78acf0f75195f9489df54dde45d602b6cb4f0d56d13b61ac7f0afa44",
+          "note": "the four walkthrough questions and the closed status vocabulary"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "which phase builds it, and the accept criteria"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "what the demo does instead, stated row by row"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "The seven states, their order, and dropped/expired being reachable from any pre-submitted state — verbatim from F-3"
+        },
+        {
+          "grade": "from-source",
+          "note": "The four questions verbatim from the vision's lifecycle-as-curriculum section"
+        },
+        {
+          "grade": "measured",
+          "note": "Which states the demo reaches — propose, collect approvals, pay — observed in the running build"
+        }
+      ],
+      "recheck": "P1, when the lifecycle reducer lands and the purple marks change meaning."
+    },
+    {
+      "file": "mech-effect-materialization.svg",
+      "serves": "BOTH",
+      "shows": "What a participant reviews against what actually gets signed, the client's independent re-derivation between them, and the requirement that the check cannot be turned off.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "note": "the normative requirement text and its ids"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "which phase builds it, and the accept criteria"
+        },
+        {
+          "path": "CLAUDE.md",
+          "sha256": "1da49335bc50d7ee437de37428324cda85e7bd905ca612ac9709a01d93993e1c",
+          "note": "the invariant this figure draws, in its shortest form"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "what the demo does instead, stated row by row"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "F-4 and FS-6 verbatim: the client MUST independently re-derive and refuse on mismatch, and the check cannot be disabled by configuration, plugin or preference"
+        },
+        {
+          "grade": "from-source",
+          "note": "The demo has no effect/materialization split at all — GAPS.md §5 states it as an absence"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The example effect and the example hash are made up to show the shape of each side. Neither is a capture"
+        }
+      ],
+      "recheck": "P4. Until then the status strip is the most important thing on the figure."
+    },
+    {
+      "file": "mech-signing-payload.svg",
+      "serves": "POST",
+      "shows": "The fields a signing payload commits to and the specific reuse each one defeats, with the two versioned fields marked apart from the invariant property.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "note": "the normative requirement text and its ids"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "which phase builds it, and the accept criteria"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "The four F-5 fields verbatim; schema identity and effect value root from the plan's P1 note and the FURPS encoding constraint"
+        },
+        {
+          "grade": "from-source",
+          "note": "FS-3's requirement that a test demonstrate cross-context failure"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The what-it-defeats column is the author's reading of why each field is there, not text quoted from the requirement"
+        }
+      ],
+      "recheck": "P1, and if ADR-009's schema-identity derivation changes — though the property it protects is not allowed to."
+    },
+    {
+      "file": "mech-reduce-log.svg",
+      "serves": "BUILD",
+      "shows": "Events reduced to state, with idempotence, order-independence and cold-start re-derivation as the three properties that follow — and what the demo folds instead.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "note": "the normative requirement text and its ids"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "which phase builds it, and the accept criteria"
+        },
+        {
+          "path": "CLAUDE.md",
+          "sha256": "1da49335bc50d7ee437de37428324cda85e7bd905ca612ac9709a01d93993e1c",
+          "note": "the invariant this figure draws, in its shortest form"
+        },
+        {
+          "path": "demo/CLAUDE.md",
+          "sha256": "964a941cd9c39a5bf05c9d44b5eae0ad9d7f0f23d4748781fba9c8b7815eb372",
+          "note": "the demo's own account of what it folds and what it does not have"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "F-1, F-2, R-2 and R-3, and the P0 accept criterion that adversarial orders converge byte-identically as a generated-input property test"
+        },
+        {
+          "grade": "measured",
+          "note": "The demo folds get_messages and holds no second record — its own CLAUDE.md states this as a rule, and the build follows it"
+        }
+      ],
+      "recheck": "P0. The event names shown are F-2's v0 list and change with it."
+    },
+    {
+      "file": "mech-membership-epochs.svg",
+      "serves": "BOTH",
+      "shows": "Three epochs across a join and a removal: what a joining member cannot read, what a departing member keeps, and why the seam drawn in the thread is a cryptographic claim.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "note": "the normative requirement text and its ids"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "which phase builds it, and the accept criteria"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "what the demo does instead, stated row by row"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "F-16 — adding re-keys forward, removal rotates immediately — and U-6's seam"
+        },
+        {
+          "grade": "from-source",
+          "note": "The demo neither verifies nor claims the chat module's re-keying, stated as such in GAPS.md §5"
+        },
+        {
+          "grade": "illustrative",
+          "note": "Alice, Bob and Carol are an example. The forward-only limit on removal is a property of any such scheme, not a measurement"
+        }
+      ],
+      "recheck": "P3, and at ADR-010 — whose resolution decides whether these epochs are ours at all."
+    },
+    {
+      "file": "mech-driver-seam.svg",
+      "serves": "BUILD",
+      "shows": "The seven driver methods, the four divergence axes describe returns, three drivers behind one interface, and the conformance suite that gates them.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "note": "the normative requirement text and its ids"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "which phase builds it, and the accept criteria"
+        },
+        {
+          "path": "CLAUDE.md",
+          "sha256": "1da49335bc50d7ee437de37428324cda85e7bd905ca612ac9709a01d93993e1c",
+          "note": "the invariant this figure draws, in its shortest form"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "The seven method names and what describe returns, verbatim from F-6; the r=1/r=2 characterisation from F-7; S-1's no-merge-on-red rule"
+        },
+        {
+          "grade": "from-source",
+          "note": "The demo has no drivers and no seam — a send is a send"
+        }
+      ],
+      "recheck": "P1 and P2. The threshold column is P6 and the least settled of the three."
+    },
+    {
+      "file": "mech-two-identities.svg",
+      "serves": "BOTH",
+      "shows": "An Ed25519/X25519 chat identity and a secp256k1 transaction identity with no authenticated binding between them, and what F-9 needs that binding for.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "note": "the normative requirement text and its ids"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "which phase builds it, and the accept criteria"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "note": "what the demo does instead, stated row by row"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "F-14 is marked Contested in the requirement document itself; the curve details are read off libchat's account and crypto layers at HEAD 2026-08-04 via ADR-010"
+        },
+        {
+          "grade": "from-source",
+          "note": "F-9 derives role by intersecting chat and account membership, which is what makes the missing binding load-bearing"
+        },
+        {
+          "grade": "measured",
+          "note": "In the demo the two identities are minted independently by different modules and nothing in the code relates them — verified as absent"
+        }
+      ],
+      "recheck": "At ADR-010's resolution, which changes this figure from a problem statement into a decision record. Re-check the libchat curve facts before publishing."
+    },
+    {
+      "file": "mech-plugin-blocks.svg",
+      "serves": "BUILD",
+      "shows": "A plugin as a pure function to typed blocks, the closed render vocabulary, what it may never do, how it is distributed, and the lying-plugin test that proves the boundary.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "note": "the normative requirement text and its ids"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "note": "which phase builds it, and the accept criteria"
+        },
+        {
+          "path": "CLAUDE.md",
+          "sha256": "1da49335bc50d7ee437de37428324cda85e7bd905ca612ac9709a01d93993e1c",
+          "note": "the invariant this figure draws, in its shortest form"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "F-12's signature and prohibitions, F-13's six-item closed vocabulary, FS-4 and FS-5 — all verbatim"
+        },
+        {
+          "grade": "from-source",
+          "note": "The P5 accept criterion: a plugin whose materialization diverges from its displayed effect is blocked by core, demonstrated in CI"
+        }
+      ],
+      "recheck": "P5. Third-party isolation via capability-restricted modules is ADR-007 and post-v1, which the strip says."
+    },
+    {
       "file": "pipeline-three-leaks.svg",
       "serves": "POST",
       "shows": "The three leak classes — chosen by you, chosen for you by the stack, chosen by nobody and inherited — each with a worked example from this build, the fix, and the obligation on whoever describes it.",

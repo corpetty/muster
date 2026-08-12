@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 540" width="880" height="540" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>State is a fold over a signed, hash-linked log</title>
+  <desc>Every event is signed and carries a causal reference. State is derived by reducing the log, never stored alongside it, so duplicated and reordered events converge to identical state and a cold start rebuilds from log plus keys. Specified as F-1, R-2 and R-3; not built.</desc>
+<!-- provenance
+     serves:   BUILD
+     shows:    Events reduced to state, with idempotence, order-independence and cold-
+               start re-derivation as the three properties that follow — and what the
+               demo folds instead.
+     sources:  docs/01-furps.md
+               docs/02-implementation-plan.md
+               CLAUDE.md
+               demo/CLAUDE.md
+     evidence: [from-source] F-1, F-2, R-2 and R-3, and the P0 accept criterion that
+                   adversarial orders converge byte-identically as a generated-input property
+                   test
+               [measured] The demo folds get_messages and holds no second record — its
+                   own CLAUDE.md states this as a rule, and the build follows it
+     recheck:  P0. The event names shown are F-2's v0 list and change with it.
+-->
+
+  <defs>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8A928C"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="540" fill="#E4E6E0"/>
+
+  <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">Nothing exists that cannot be rebuilt</text>
+  <text x="40" y="64" font-size="13.5" fill="#656E66">State is not stored. It is derived, every time, from the log and the keys — which is what makes the log the whole truth.</text>
+
+  <rect x="40" y="80" width="800" height="30" rx="5" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.2"/>
+  <rect x="52" y="88" width="150" height="15" rx="7.5" fill="#A32D1E"/>
+  <text x="127" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#F6E3DF">SPECIFIED · NOT BUILT</text>
+  <text x="214" y="99" font-size="10" fill="#3F4742">F-1, F-2, R-2, R-3 · built at P0 · the demo folds the chat module's messages — the same shape, with no log of its own</text>
+
+  <!-- ══ the log ══ -->
+  <text x="40" y="140" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">THE LOG — APPEND-ONLY, HASH-LINKED, EVERY EVENT SIGNED</text>
+
+  <rect x="40" y="150" width="112" height="46" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="96" y="170" font-size="10" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">intent-propose</text>
+  <text x="96" y="185" font-size="8.5" text-anchor="middle" fill="#656E66">signed · causal ref</text>
+
+  <rect x="164" y="150" width="112" height="46" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="220" y="170" font-size="10" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">contribute</text>
+  <text x="220" y="185" font-size="8.5" text-anchor="middle" fill="#656E66">signed · causal ref</text>
+
+  <rect x="288" y="150" width="112" height="46" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="344" y="170" font-size="10" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">membership</text>
+  <text x="344" y="185" font-size="8.5" text-anchor="middle" fill="#656E66">signed · causal ref</text>
+
+  <rect x="412" y="150" width="112" height="46" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="468" y="170" font-size="10" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">contribute</text>
+  <text x="468" y="185" font-size="8.5" text-anchor="middle" fill="#656E66">a duplicate</text>
+
+  <rect x="536" y="150" width="112" height="46" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="592" y="170" font-size="10" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">intent-submit</text>
+  <text x="592" y="185" font-size="8.5" text-anchor="middle" fill="#656E66">signed · causal ref</text>
+
+  <text x="664" y="178" font-size="16" fill="#656E66">…</text>
+
+  <path d="M 152 173 L 162 173 M 276 173 L 286 173 M 400 173 L 410 173 M 524 173 L 534 173" stroke="#8A928C" stroke-width="1.2"/>
+
+  <!-- ══ reduce ══ -->
+  <path d="M 440 200 L 440 224" stroke="#8A928C" stroke-width="1.4" fill="none" marker-end="url(#g)"/>
+  <rect x="320" y="226" width="240" height="34" rx="17" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.6"/>
+  <text x="440" y="248" font-size="13" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" fill="#4B33C4">state = reduce(log)</text>
+  <path d="M 440 262 L 440 286" stroke="#8A928C" stroke-width="1.4" fill="none" marker-end="url(#g)"/>
+
+  <rect x="320" y="288" width="240" height="34" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="440" y="309" font-size="11" text-anchor="middle" fill="#1A1F1C">Everything on screen</text>
+
+  <!-- ══ the three properties ══ -->
+  <rect x="40" y="344" width="256" height="98" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="56" y="366" font-size="10.5" font-weight="600" fill="#1A1F1C">Reducers are idempotent</text>
+  <text x="56" y="384" font-size="10" fill="#3F4742">Delivery is at-least-once, so the</text>
+  <text x="56" y="397" font-size="10" fill="#3F4742">duplicate above has to land twice</text>
+  <text x="56" y="410" font-size="10" fill="#3F4742">and change nothing the second time.</text>
+  <text x="56" y="430" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">R-2</text>
+
+  <rect x="312" y="344" width="256" height="98" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="328" y="366" font-size="10.5" font-weight="600" fill="#1A1F1C">Order does not decide state</text>
+  <text x="328" y="384" font-size="10" fill="#3F4742">Causal order with a deterministic</text>
+  <text x="328" y="397" font-size="10" fill="#3F4742">tiebreak. Shuffled and duplicated</text>
+  <text x="328" y="410" font-size="10" fill="#3F4742">logs converge byte-identically.</text>
+  <text x="328" y="430" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">R-2 · a property test, not an example</text>
+
+  <rect x="584" y="344" width="256" height="98" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="600" y="366" font-size="10.5" font-weight="600" fill="#1A1F1C">Cold start re-derives</text>
+  <text x="600" y="384" font-size="10" fill="#3F4742">There is no second record to fall</text>
+  <text x="600" y="397" font-size="10" fill="#3F4742">out of sync. A log file replays to</text>
+  <text x="600" y="410" font-size="10" fill="#3F4742">identical state, so it is the bug report.</text>
+  <text x="600" y="430" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">R-3 · S-2</text>
+
+  <!-- ══ what the demo has instead ══ -->
+  <rect x="40" y="458" width="800" height="62" rx="6" fill="#23282A"/>
+  <text x="56" y="480" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#96A19B">WHAT THE DEMO HAS INSTEAD — THE SAME SHAPE, WITHOUT THE SUBSTRATE</text>
+  <text x="56" y="500" font-size="11" fill="#DCE2DE">It folds the chat module's messages, so its state also cannot drift from what it is derived from. But there is <tspan font-weight="600">no log of its own</tspan>:</text>
+  <text x="56" y="514" font-size="11" fill="#96A19B">no signed, hash-linked artifact you could replay to prove what was agreed, and nothing to verify at ingest.</text>
+</svg>
