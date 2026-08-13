@@ -23,6 +23,7 @@
 #include <algorithm>
 
 #include <QCoreApplication>
+#include <QHash>
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -168,6 +169,78 @@ void ChatBackend::noteJourneyMessage(const QString& content, bool fromSelf, qint
 
     if (rankOf(step) > rankOf(journeyStep()))
         setJourneyStep(step);
+}
+
+// ── what of this wallet is in play in one conversation ──────────────────
+//
+// A muster is a slice of the wallet, not the whole of it, and which slice is
+// not a setting anyone picks — it is what this thread has already done. So it
+// is read off the thread, like the journey and the home row: correct for a
+// conversation this instance did not start, and unable to drift from the
+// messages that are the record of it.
+//
+// Only what *we* put in. A peer's shared address is their holding; listing it
+// among ours would describe their wallet in our wallet's words, which is the
+// kind of quiet lie this build exists not to tell.
+//
+// A v1 card names no rail, so a payment made by an older peer's build cannot
+// be attributed to one of our holdings and is left out rather than guessed at.
+// The two peers in this demo are built from one tree, so that case is a
+// statement about the fold's honesty rather than one anybody will hit.
+QVariantList ChatBackend::conversationAssetsForMessages(const QVariantList& messages) const
+{
+    // Holding id → why it is here. A holding can be both shared and paid from;
+    // the strongest reason wins, so the row says the most this thread did with
+    // it rather than the most recent.
+    QHash<QString, int> rank;
+    QHash<QString, QString> why;
+
+    const auto note = [&rank, &why](const QString& holdingId, int r, const QString& text) {
+        if (holdingId.isEmpty() || rank.value(holdingId, 0) >= r)
+            return;
+        rank.insert(holdingId, r);
+        why.insert(holdingId, text);
+    };
+
+    for (const QVariant& v : messages) {
+        const QVariantMap obj = v.toMap();
+        if (!obj.value(QStringLiteral("from_self")).toBool())
+            continue;
+        const QJsonObject card =
+            MusterMessage::cardOf(obj.value(QStringLiteral("content")).toString());
+        if (card.isEmpty())
+            continue;
+        const QString type = card.value(QStringLiteral("type")).toString();
+
+        if (type == QLatin1String("address-share")) {
+            note(card.value(QStringLiteral("asset")).toString(), 1,
+                 tr("You shared this address here"));
+            continue;
+        }
+        if (type != QLatin1String("intent-propose") && type != QLatin1String("send-receipt"))
+            continue;
+
+        // The rail names the holding it spends, which is how a payment says
+        // which part of the wallet this room reached into.
+        const Assets::Rail* rail = railById(card.value(QStringLiteral("rail")).toString());
+        if (!rail)
+            continue;
+        if (type == QLatin1String("send-receipt"))
+            note(rail->source, 3, tr("You paid from this here"));
+        else
+            note(rail->source, 2, tr("You proposed paying from this"));
+    }
+
+    // The catalogue's order, so the slice reads as a subset of the wallet
+    // rather than as its own differently-sorted list.
+    QVariantList rows;
+    for (const Assets::Holding& h : m_holdings) {
+        if (!why.contains(h.id))
+            continue;
+        rows.append(QVariantMap{{QStringLiteral("id"), h.id},
+                                {QStringLiteral("why"), why.value(h.id)}});
+    }
+    return rows;
 }
 
 // ── what each conversation is asking of you ─────────────────────────────

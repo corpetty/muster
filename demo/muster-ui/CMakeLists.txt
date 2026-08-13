@@ -89,6 +89,10 @@ if(CHAT_UI_QML_DEVTOOLS)
             src/qml/ChatUi/ProposeDialog.qml
             src/qml/ChatUi/PinnedIntent.qml
             src/qml/ChatUi/WalletCard.qml
+            src/qml/ChatUi/WalletPane.qml
+            src/qml/ChatUi/MusterWalletStrip.qml
+            src/qml/ChatUi/DisclosureChips.qml
+            src/qml/ChatUi/BackBar.qml
             src/qml/ChatUi/JobStrip.qml
             src/qml/ChatUi/ScopeLine.qml
             src/qml/ChatUi/ActionsPane.qml

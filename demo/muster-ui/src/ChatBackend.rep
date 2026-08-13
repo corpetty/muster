@@ -100,6 +100,17 @@ class ChatBackend
     // shape as an `intents` row. Pinned above the thread (U-3).
     PROP(QVariantMap liveIntent READONLY)
 
+    // ── this conversation's slice of the wallet ──────────────────────────
+    // A muster is a part of the wallet, not the whole of it: the holdings this
+    // thread has actually put in play. One map per holding, in the catalogue's
+    // order: `id`, and `why` — the sentence saying what this conversation did
+    // with it.
+    //
+    // Ids only, not balances. The view joins them to `assets`, so a number
+    // shown inside a muster is the same number the wallet shows rather than a
+    // copy of it taken at fold time.
+    PROP(QVariantList conversationAssets READONLY)
+
     // ── wallet (lez_core) ────────────────────────────────────────────────
     // The execution-zone wallet this instance owns. Separate from chatStatus:
     // the conversation works whether or not the wallet ever opens, and saying

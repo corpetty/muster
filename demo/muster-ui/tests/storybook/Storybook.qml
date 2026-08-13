@@ -10,9 +10,50 @@ import ChatUi
 // Load it with the design system on the import path, e.g.
 //   qml -I src/qml -I <app>/lib tests/storybook/Storybook.qml
 Rectangle {
-    width: 1000
-    height: 700
+    id: story
+
+    width: 1400
+    height: 800
     color: Theme.palette.backgroundInset
+
+    // The two catalogues, in the shape ChatBackend publishes them. Enough rows
+    // to cover what the wallet views branch on: an empty holding, a blocked
+    // one, a claimable one, and a holding with no way out of it.
+    readonly property var assetsMock: [
+        {id: "lez.private", name: "Private λ", denom: "LEZ", sourceNote: "shielded, in the zone",
+         blocked: false, blockedNote: "", balance: "15",
+         address: "{\"nullifier_public_key\":\"bdceb96673e2e5311fe4dd1c7fd18260df3339\"}",
+         canReceive: true, canClaim: false, claimVerb: "", addressForm: 0, empty: false},
+        {id: "lez.public", name: "Public λ", denom: "LEZ", sourceNote: "on the zone's public record",
+         blocked: true, blockedNote: "Registering on-chain — about seven minutes.", balance: "0",
+         address: "9fbbd82d31d8b1043061c3053728f14539aa3a89e55a764b671e8762e48a9bac",
+         canReceive: false, canClaim: false, claimVerb: "", addressForm: 1, empty: true},
+        {id: "lez.vault", name: "Vault λ", denom: "LEZ", sourceNote: "held for you, not yet yours to spend",
+         blocked: false, blockedNote: "", balance: "40", address: "",
+         canReceive: false, canClaim: true, claimVerb: "Claim into private", addressForm: 0,
+         empty: false}
+    ]
+    readonly property var railsMock: [
+        {id: "lez.private→private", name: "Private → private",
+         promise: "The amount and both accounts stay off the public record.",
+         denom: "LEZ", source: "lez.private", sourceName: "Private λ", balance: "15", payTo: 0,
+         claimId: "payment.private",
+         discloses: {amount: false, payer: false, payee: false, nothing: true, everything: false}},
+        {id: "lez.private→public", name: "Private → public",
+         promise: "Who you paid is named and the amount is public. That you were the payer is not.",
+         denom: "LEZ", source: "lez.private", sourceName: "Private λ", balance: "15", payTo: 1,
+         claimId: "payment.deshield",
+         discloses: {amount: true, payer: false, payee: true, nothing: false, everything: false}},
+        {id: "lez.public→public", name: "Public → public",
+         promise: "Everything is on the public record: the amount, your account and theirs.",
+         denom: "LEZ", source: "lez.public", sourceName: "Public λ", balance: "0", payTo: 1,
+         claimId: "payment.public",
+         discloses: {amount: true, payer: true, payee: true, nothing: false, everything: true}}
+    ]
+    // The slice a muster shows: a holding's own row plus why this room has it.
+    readonly property var musterAssetsMock: [
+        Object.assign({}, story.assetsMock[0], {why: "You paid from this here"})
+    ]
 
     ListModel {
         id: conversationsMock
@@ -114,6 +155,12 @@ Rectangle {
             Layout.fillHeight: true
             spacing: Theme.spacing.medium
 
+            BackBar {
+                Layout.fillWidth: true
+                label: "Home"
+                title: "Design Team"
+                waitingCount: 2
+            }
             ConversationsPane {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -168,6 +215,23 @@ Rectangle {
                 online: true
                 ready: true
             }
+            MusterWalletStrip {
+                Layout.fillWidth: true
+                assets: story.musterAssetsMock
+                ready: true
+            }
+        }
+        WalletPane {
+            Layout.fillWidth: false
+            Layout.preferredWidth: 380
+            Layout.fillHeight: true
+            ready: true
+            busy: false
+            stage: ""
+            statusLabel: "Ready"
+            assets: story.assetsMock
+            rails: story.railsMock
+            receivedElsewhere: true
         }
     }
 }

@@ -39,6 +39,10 @@ Rectangle {
     signal fundRequested
     signal refreshRequested
     signal claimRequested(string assetId)
+    // The whole wallet, opened out. This card is the summary — what you have —
+    // and that is all a conversation needs; where each holding can go and what
+    // going there discloses is a page, not a sidebar.
+    signal detailsRequested
 
     implicitHeight: layout.implicitHeight + 2 * Theme.spacing.medium
     color: Theme.palette.surface
@@ -74,6 +78,27 @@ Rectangle {
                 font.pixelSize: Theme.typography.secondaryText
                 elide: Text.ElideRight
                 Layout.maximumWidth: 140
+            }
+
+            // On the heading rather than among the buttons below: those three
+            // move money, and the way to a page that only reads should not sit
+            // in the same row as them.
+            ChatIconButton {
+                id: detailsButton
+                objectName: "walletDetailsButton"
+                size: 24
+                iconSize: 12
+                iconSource: Qt.resolvedUrl("icons/info.png")
+                Accessible.role: Accessible.Button
+                Accessible.name: qsTr("Open the whole wallet")
+                onClicked: root.detailsRequested()
+                Layout.alignment: Qt.AlignVCenter
+
+                LogosToolTip {
+                    text: qsTr("Open the whole wallet")
+                    placement: LogosToolTip.Top
+                    visible: detailsButton.hovered
+                }
             }
         }
 

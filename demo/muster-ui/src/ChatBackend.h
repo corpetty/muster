@@ -237,6 +237,11 @@ private:
     // What one conversation is asking of the user, read from its messages:
     // {state, action, detail}. State is needs-you | waiting | settled | idle.
     QVariantMap actionForMessages(const QVariantList& messages) const;
+    // Which of this wallet's holdings a thread has put in play, and why:
+    // [{id, why}], in the catalogue's order. Call buildAssets() first — the
+    // fold reads the rail table to learn which holding a payment was drawn
+    // from.
+    QVariantList conversationAssetsForMessages(const QVariantList& messages) const;
     // Rebuild the whole home list, one entry per conversation, needs-you first.
     // Makes synchronous module reads for every conversation, so never call it
     // straight from an event callback — defer it.
