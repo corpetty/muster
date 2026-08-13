@@ -233,6 +233,7 @@ void ChatBackend::refreshIntents()
     if (!m_moduleInitialised || convoId.isEmpty()) {
         setIntents({});
         setLiveIntent({});
+        setConversationAssets({});
         return;
     }
 
@@ -243,6 +244,10 @@ void ChatBackend::refreshIntents()
 
     setIntents(intentsForMessages(msgs));
     setLiveIntent(liveIntentForMessages(msgs));
+    // Folded from the same read: a payment made here changes both what the room
+    // is deciding and which holding the room has reached into.
+    buildAssets();
+    setConversationAssets(conversationAssetsForMessages(msgs));
 }
 
 void ChatBackend::proposePayment(QString conversationId, QString railId, QString toAddress,

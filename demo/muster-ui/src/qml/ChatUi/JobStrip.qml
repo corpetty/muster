@@ -21,6 +21,18 @@ Rectangle {
     required property string job
     // Which part of the job is happening now — "syncing", "mining", "sending".
     required property string stage
+    // The muster the job was started in, or empty for one started outside any —
+    // funding the wallet belongs to nobody in particular.
+    //
+    // Needed because the strip outlives the screen. Once the app shows one
+    // context at a time, a seven-minute proof can be running for a conversation
+    // the user has since left, and a job with no owner named would be a timer
+    // counting for reasons the user has to remember.
+    property string context: ""
+
+    // Take me back to it. The strip is the only thing on screen that still
+    // knows where the job belongs, so it is the way back to it.
+    signal contextRequested
 
     visible: root.job !== ""
     implicitHeight: visible ? layout.implicitHeight + 2 * Theme.spacing.small : 0
@@ -75,13 +87,41 @@ Rectangle {
             Layout.fillWidth: true
             spacing: 0
 
-            LogosText {
+            RowLayout {
                 Layout.fillWidth: true
-                text: root.job
-                color: Theme.palette.text
-                elide: Text.ElideRight
-                font.pixelSize: Theme.typography.secondaryText
-                font.weight: Theme.typography.weightMedium
+                spacing: Theme.spacing.tiny
+
+                LogosText {
+                    objectName: "jobName"
+                    text: root.job
+                    color: Theme.palette.text
+                    elide: Text.ElideRight
+                    font.pixelSize: Theme.typography.secondaryText
+                    font.weight: Theme.typography.weightMedium
+                    Layout.maximumWidth: implicitWidth
+                }
+
+                LogosText {
+                    objectName: "jobContext"
+                    visible: root.context !== ""
+                    text: qsTr("in %1").arg(root.context)
+                    textFormat: Text.PlainText
+                    color: ChatTheme.signal
+                    elide: Text.ElideRight
+                    font.pixelSize: Theme.typography.secondaryText
+                    Layout.fillWidth: true
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.contextRequested()
+                    }
+                }
+
+                Item {
+                    visible: root.context === ""
+                    Layout.fillWidth: true
+                }
             }
 
             LogosText {

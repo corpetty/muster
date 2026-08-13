@@ -409,6 +409,10 @@ bool ChatBackend::showConversationMessages(const QString& convoId)
     // currently deciding, not just what it has said.
     setIntents(intentsForMessages(msgs));
     setLiveIntent(liveIntentForMessages(msgs));
+    // And which part of the wallet it has put in play, which is what a muster
+    // shows of the wallet instead of all of it.
+    buildAssets();
+    setConversationAssets(conversationAssetsForMessages(msgs));
     return true;
 }
 

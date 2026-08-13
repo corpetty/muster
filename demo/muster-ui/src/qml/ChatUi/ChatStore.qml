@@ -44,6 +44,18 @@ QtObject {
     // from you. This is what the app opens on.
     readonly property var actions: backend ? backend.actions : []
 
+    // How many conversations are waiting on the user, not counting the one
+    // named. What the way out of a muster carries: navigation hid the home
+    // list, so leaving has to say what leaving is for.
+    function needsYouExcept(conversationId) {
+        let n = 0;
+        for (let i = 0; i < actions.length; ++i)
+            if (actions[i].state === "needs-you"
+                && actions[i].conversationId !== conversationId)
+                n += 1;
+        return n;
+    }
+
     // ── wallet ───────────────────────────────────────────────────────────
     // The execution-zone wallet this instance owns. Deliberately separate from
     // `online`: the conversation works whether or not the wallet ever opens.
@@ -114,6 +126,29 @@ QtObject {
         const candidates = railsPaying(form);
         return candidates.length > 0 ? candidates[0].id : "";
     }
+    // ── this muster's slice of the wallet ────────────────────────────────
+    // Which holdings the open conversation has put in play, folded off its
+    // thread by the backend: [{id, why}].
+    readonly property var conversationAssets: backend ? backend.conversationAssets : []
+    // The same slice, joined to the live rows. The fold carries ids, not
+    // numbers, so a balance shown inside a muster is the wallet's own figure
+    // rather than a copy taken when the thread was last read — the two cannot
+    // disagree, which they would if the backend published both.
+    readonly property var musterAssets: {
+        const out = [];
+        for (let i = 0; i < conversationAssets.length; ++i) {
+            const use = conversationAssets[i];
+            const row = assetById(use.id);
+            // A holding the fold named and the catalogue no longer has. Dropped
+            // rather than drawn as a blank row: an id with no balance, address
+            // or note is not a thing to show someone.
+            if (!row)
+                continue;
+            out.push(Object.assign({}, row, {why: use.why}));
+        }
+        return out;
+    }
+
     // The holdings worth being paid at. Drives the share-an-address choice.
     //
     // A holding that *has* an address but is blocked stays in the list, shown

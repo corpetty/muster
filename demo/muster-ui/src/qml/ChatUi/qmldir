@@ -23,6 +23,10 @@ SendDialog 1.0 SendDialog.qml
 ProposeDialog 1.0 ProposeDialog.qml
 PinnedIntent 1.0 PinnedIntent.qml
 WalletCard 1.0 WalletCard.qml
+WalletPane 1.0 WalletPane.qml
+MusterWalletStrip 1.0 MusterWalletStrip.qml
+DisclosureChips 1.0 DisclosureChips.qml
+BackBar 1.0 BackBar.qml
 JobStrip 1.0 JobStrip.qml
 ScopeLine 1.0 ScopeLine.qml
 ActionsPane 1.0 ActionsPane.qml
