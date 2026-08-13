@@ -291,22 +291,31 @@ QtObject {
         },
         {
             step: root.stepPayment,
+            kind: "protects",
+            title: qsTr("You have no address that can be reused against you"),
+            body: qsTr("What you shared is not an address — it is a key pair. Every payment made "
+                     + "to it mints a brand-new account, at a number the sender picks, and only "
+                     + "your viewing key can find it. So there is no single string that appears "
+                     + "twice, and nothing on the public record that ties one payment you received "
+                     + "to the next. That is why your balance goes up without the thing you handed "
+                     + "out ever changing, and why this app finds your money by scanning rather "
+                     + "than by asking about an account."),
+            evidence: qsTr("lez_core.get_private_account_keys publishes the key pair; "
+                         + "ChatBackendWallet.cpp readPrivateBalance is the scan")
+        },
+        {
+            step: root.stepPayment,
             kind: "gap",
-            title: qsTr("Your balance is a sum of accounts you never created"),
-            body: qsTr("A private account's address is derived from your viewing key and an "
-                     + "identifier. The address you shared carries no identifier, so the sender's "
-                     + "client picks one at random — and the money arrives at an account neither "
-                     + "of you can predict, while the account you published stays at zero. This "
-                     + "build works around that by adding up every private account it can find "
-                     + "after syncing, which is why a payment can appear without the address you "
-                     + "gave out ever changing. A single payment can still only be spent from one "
-                     + "of those accounts, so a balance may be larger than anything you can send "
-                     + "at once."),
-            fix: qsTr("The recipient's identifier travelling with the address they publish, so a "
-                    + "payment lands where it was sent."),
+            title: qsTr("A balance you may not be able to send in one payment"),
+            body: qsTr("Because each payment you receive arrives in its own account, your balance "
+                     + "is a sum over all of them — but a single transfer can only draw on one. "
+                     + "Paid three times, you can show the total and still not be able to send it "
+                     + "in one go. The wallet card says where the money is rather than only what "
+                     + "it adds up to, so the number is never the whole story on its own."),
+            fix: qsTr("Consolidating your notes into one, or a transfer that spends several at "
+                    + "once. Neither is exposed by the zone's client today."),
             status: "none",
-            evidence: qsTr("reported upstream with a standalone reproducer — demo/poc/. "
-                         + "Workaround lives in ChatBackendWallet.cpp readWalletState")
+            evidence: qsTr("ChatBackendWallet.cpp spendFromAccount picks the largest single note")
         },
         {
             step: root.stepPayment,

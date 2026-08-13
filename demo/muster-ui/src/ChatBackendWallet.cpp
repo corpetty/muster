@@ -296,7 +296,6 @@ bool ChatBackend::ensureWalletOpen()
     m_privateAccount = meta.value(QStringLiteral("privateAccount")).toString();
     m_publicAccount = meta.value(QStringLiteral("publicAccount")).toString();
 
-    bool freshAccount = false;
     if (m_privateAccount.isEmpty()) {
         m_privateAccount = modules().lez_core.create_account_private(&err);
         if (!err.ok() || m_privateAccount.isEmpty()) {
@@ -309,57 +308,34 @@ bool ChatBackend::ensureWalletOpen()
         walletSave();
         meta.insert(QStringLiteral("privateAccount"), m_privateAccount);
         writeJsonFile(metaPath, meta);
-        freshAccount = true;
     }
 
-    // Register it on-chain, the same way a public account is registered before
-    // the faucet will pay it.
+    // DO NOT register it. A private account is nothing like a public one here,
+    // and this cost us a week of wrong conclusions.
     //
-    // HYPOTHESIS, not yet confirmed: an unregistered private account can be
-    // *sent* to — the sender's transfer succeeds and their balance drops — but
-    // the note is never credited to the recipient, which is exactly the symptom
-    // the first two-peer payment hit (2026-08-11: Alice 150 -> 50, Bob stayed
-    // at 0, with Bob synced past the transfer and the account ids verified to
-    // match). If this turns out not to be the cause, the next suspects are note
-    // detection needing a scan this code does not perform, or the shielded keys
-    // from get_private_account_keys not being what transfer_private credits.
+    // A public account has to exist on-chain before the faucet will pay it, so
+    // `ensurePublicAccount` registers. The instinct to do the same for the
+    // private one is not merely unnecessary — it is destructive.
+    // `register_private_account` *initializes* the account, and the zone's
+    // initialization nullifier is a hash of the account id alone. Any given
+    // account id can therefore be foreign-initialized exactly once, ever. An
+    // account we registered ourselves is permanently uncreditable by anyone
+    // else: their transfer would be rejected on chain, forever, for that id.
     //
-    // Registration is only ever possible here, at creation, and there is no
-    // repair path for an account that missed it. `wallet_ffi` rejects a second
-    // attempt with `Guest panicked: Account must be uninitialized` — measured
-    // 2026-08-11 on both demo peers, whose accounts were minted before this
-    // call existed. So a peer created by an older build cannot be fixed in
-    // place; it has to be re-minted, which costs its identity.
+    // Nothing needs registering to receive. A sender's transfer is what creates
+    // the account, at an identifier the sender picks. What we publish is the
+    // *key node* — the (nullifier, viewing) public key pair that
+    // get_private_account_keys returns — and every payment made to it mints a
+    // fresh account underneath it, which we find by scanning with our viewing
+    // key. That is `readPrivateBalance`, and it is the design rather than a
+    // patch over one.
     //
-    // Attempting it on every open is worse than useless: the call runs a
-    // *prover* before it fails, which blocks the wallet long enough for every
-    // other lez_core call to hit the generated client's 20s timeout. An
-    // earlier draft of this did exactly that and wedged the other peer.
-    //
-    // And because it proves, it cannot be called here at all: this function is
-    // synchronous, and the generated sync client hardcodes 20s. That is why
-    // the first attempt never worked even on a fresh account — it timed out
-    // before the zone had finished, every time, and the empty `error` field
-    // that came back said nothing about why. Registration is therefore a step
-    // openWallet performs asynchronously; this only records that it is owed.
-    // `freshAccount` only, never "not yet flagged": an account minted in an
-    // earlier run is already initialized, so a retry is a guaranteed prover
-    // run followed by a guaranteed panic. If registration failed the first
-    // time, the peer is unfixable and has to be re-minted — which is worth
-    // knowing loudly rather than retrying quietly.
-    m_privateAccountNeedsRegistration = freshAccount;
-    if (!freshAccount && !meta.value(QStringLiteral("privateAccountRegistered")).toBool()) {
-        // On the holding, not just in the error strip. This is a permanent
-        // property of this peer — it cannot be repaired, only re-minted — so it
-        // belongs where the balance is, every time it is looked at, rather than
-        // in a one-off line that scrolls away.
-        m_blockers.insert(QStringLiteral("lez.private"),
-                          tr("never registered on-chain, and cannot be now — payments here may "
-                             "not be credited. Re-mint the peer (make clean-peer) to fix it."));
-        report(tr("This peer's private account was never registered on-chain, and cannot be "
-                  "now — payments to it may not be credited. Re-mint the peer "
-                  "(make clean-peer) to fix it."));
-    }
+    // Confirmed by the zone's team, 2026-08-13, in response to our report in
+    // demo/poc/. This code called register_private_account for two days on the
+    // belief that an unregistered account could not be credited; that belief
+    // was wrong, and acting on it was what actually killed the advertised
+    // account id. It is the clearest case in this build of a fix aimed at a
+    // misdiagnosis doing the damage it was meant to prevent.
     return true;
 }
 
@@ -396,12 +372,13 @@ QString ChatBackend::ensurePublicAccount()
 
 QString ChatBackend::spendFromAccount() const
 {
-    // Part of the same workaround as readWalletState: spend from an account
-    // that actually holds a note. A single transfer cannot draw on several
-    // accounts, so this picks the largest rather than the sum — which means a
-    // balance can be displayed that no single payment can spend. That is a
-    // real limitation of working around this rather than fixing it, and it is
-    // why the wallet card says where the money is.
+    // The other half of readPrivateBalance: spend from an account that actually
+    // holds a note. Money paid to us lands at an account the *sender* named, so
+    // the one we created is usually not the one holding anything. A single
+    // transfer cannot draw on several notes, so this picks the largest rather
+    // than the sum — which means a balance can be displayed that no single
+    // payment can spend. That is inherent to a note-based shielded pool rather
+    // than a defect, and it is why the wallet card says where the money is.
     return m_fundedPrivateAccounts.isEmpty() ? m_privateAccount : m_fundedPrivateAccounts.first();
 }
 
@@ -409,26 +386,33 @@ QString ChatBackend::readPrivateBalance()
 {
     logos::CallError err;
 
-    // ── WORKAROUND (upstream bug, see demo/poc/) ─────────────────────────
+    // ── THE MODEL, not a workaround ──────────────────────────────────────
     //
     // The private balance is the sum over *every* private account this wallet
-    // knows, not the balance of the one account we created and published.
+    // knows, not the balance of the one account we created and published. That
+    // is what a shielded balance is, and this loop is a scan, not a patch.
     //
-    // Why: a private account id is derived from (viewing key, identifier), the
-    // keys a recipient hands out carry no identifier, and so the zone's client
-    // picks one at random for each payment. Money paid to us therefore lands
-    // at an account derived from a number we have never seen — our advertised
-    // account stays at zero while a brand-new account holds the funds. Syncing
-    // does discover it (it is our viewing key), so it appears in
-    // list_accounts; nothing else points at it.
+    // A private account id is sha256(prefix || npk || vpk || identifier). What
+    // a recipient publishes is the *key node* — the (npk, vpk) pair, which is
+    // exactly what get_private_account_keys returns. The sender picks the
+    // identifier, so every payment made to us mints a fresh account under our
+    // key node, and we find our money by scanning with our viewing key. A
+    // shielded wallet has no single address whose balance is the answer; it
+    // has a key node and a set of notes that only it can see.
     //
-    // This is a workaround, not a fix, and it is disclosed as one: the
-    // `authorization`/`payment` claims in VisibilityClaims.qml say that a
-    // balance here is a sum over accounts the user never created. Delete this
-    // and go back to reading m_privateAccount once the zone addresses the
-    // account whose keys were actually shared.
+    // This code stood here for two days labelled a workaround for an upstream
+    // bug, with a comment saying to delete it once the zone "addressed the
+    // account whose keys were shared". That was wrong twice over: the zone is
+    // behaving as designed, and a fixed published identifier could never work —
+    // the initialization nullifier is a hash of the account id alone, so any
+    // one id can be foreign-initialized exactly once and would be dead after a
+    // single payment. Confirmed by the zone's team, 2026-08-13.
     //
-    // Full write-up and a standalone reproducer: demo/poc/.
+    // The one real cost survives and is still disclosed: a single transfer can
+    // only draw on one note, so the sum shown can exceed what one send can
+    // spend. See the `payment` claim in VisibilityClaims.qml and spendFromAccount.
+    //
+    // Full history, and where the misreading came from: demo/poc/.
     QStringList spendable;
     quint64 total = 0;
     bool sawAny = false;
@@ -557,82 +541,24 @@ void ChatBackend::openWallet()
             return;
         }
 
-        // Ready as soon as the wallet is open — then register in the background.
+        // Ready as soon as the wallet is open, with nothing owed afterwards.
         //
-        // This used to block: a newly minted private account must be registered
-        // on-chain before anything can be credited to it, registering *proves*,
-        // and the whole wallet waited on it. That is **seven minutes during
-        // which the app can do nothing at all**, on first launch, which is the
-        // worst possible moment to be inert — and it blocked things the
-        // registration has no bearing on, like reading a public balance or being
-        // paid at a public account.
+        // Two earlier shapes lived here, and both were paying for a diagnosis
+        // that turned out to be wrong. The first blocked the whole wallet for
+        // the seven minutes a private registration proves for — on first launch,
+        // inert, including for public balances the registration had no bearing
+        // on. The second narrowed the gate to the private holding alone, which
+        // was the right instinct applied to a fiction: it marked the holding
+        // unshareable "until registration lands", because an address shared
+        // before then was believed to invite a payment that would vanish.
         //
-        // What the old gate was actually protecting is narrower than the wallet:
-        // an address shared before its registration lands is an invitation to a
-        // payment that may vanish. So that is what is gated now — the *private
-        // holding* is marked unusable with a reason, `shareAddress` refuses it,
-        // and everything else works immediately. The card says which holding is
-        // waiting and why, rather than the whole app looking hung.
+        // Neither is needed, because the registration is not needed. See
+        // ensureWalletOpen: a private account is created by the sender who pays
+        // it, and the key node we publish is credit-worthy the moment it exists.
+        // The private address is shareable immediately, and first launch has no
+        // seven-minute hole in it.
         finishWalletOpen();
-        if (m_privateAccountNeedsRegistration) {
-            m_privateAccountNeedsRegistration = false;
-            startPrivateRegistration();
-        }
     });
-}
-
-void ChatBackend::startPrivateRegistration()
-{
-    const QString privateId = QStringLiteral("lez.private");
-    // Blocked, with the reason, until the zone says otherwise. This is what the
-    // wallet card shows beside the holding and what shareAddress refuses on.
-    m_blockers.insert(privateId,
-                      tr("registering on-chain — about 7 minutes. Until it lands, a payment "
-                         "here may not be credited, so it cannot be shared yet."));
-    setAssets(holdingRows());
-    // A job, not a stage: it runs for minutes and the user should carry on. The
-    // strip times it from here.
-    setWalletJob(tr("Registering your private account"));
-
-    modules().lez_core.register_private_accountAsync(
-        m_privateAccount,
-        [this, privateId](QString raw) {
-            const Zone::Result res = Zone::parse(raw);
-            if (!res.ok) {
-                // Permanent, and it stays on the holding: registration is only
-                // possible at creation, so a failure here cannot be retried and
-                // the account is unfixable rather than pending.
-                m_blockers.insert(privateId,
-                                  tr("never registered on-chain, and cannot be now — payments "
-                                     "here may not be credited. Re-mint the peer to fix it."));
-                report(tr("Could not register the private account on-chain%1 — "
-                          "payments to it may not be credited. The zone logs the "
-                          "real reason to the app's stdout as [wallet-ffi].")
-                           .arg(res.error.isEmpty()
-                                    ? QString()
-                                    : QStringLiteral(": %1").arg(res.error)));
-            } else {
-                m_blockers.remove(privateId);
-                const QString metaPath = walletDir() + QStringLiteral("/meta.json");
-                QJsonObject meta = readJsonFile(metaPath);
-                meta.insert(QStringLiteral("privateAccountRegistered"), true);
-                writeJsonFile(metaPath, meta);
-                // Positive signal, in the log rather than the error
-                // strip: an absent failure is not evidence this ran.
-                qInfo() << "[muster] registered private account" << m_privateAccount
-                        << "tx" << res.tx;
-            }
-            walletSave();
-            // Never make module calls straight out of a callback: that
-            // re-enters the transport while its notifier is disabled.
-            deferToEventLoop([this] {
-                setWalletJob(QString());
-                QString e;
-                syncToTip(&e);
-                readWalletState();
-            });
-        },
-        Timeout(Zone::kProveMs));
 }
 
 void ChatBackend::finishWalletOpen()
@@ -780,17 +706,14 @@ void ChatBackend::fundWallet()
             return;
         }
 
-        // Stop before shielding if the private account is not registered yet.
+        // Do not shield into a holding that says it cannot be paid into. No
+        // blocker is set on the private holding any more — the registration
+        // that used to set one is gone — so this cannot currently fire; it
+        // stays because the invariant is the point: value never moves into a
+        // holding whose own row says it is not ready to receive.
         //
-        // Shielding into an unregistered account is the same hazard as sharing
-        // its address — the transfer succeeds, the balance drops, and the note
-        // may never be credited. The old code could not hit this because the
-        // whole wallet was inert until registration finished; now that Fund is
-        // reachable during those seven minutes, the check has to be here too.
-        //
-        // The prize is safe in the public account either way, and the public
-        // holding is fully usable, so this is a pause rather than a loss: press
-        // Fund again once the private row stops saying it is registering.
+        // The prize is safe in the public account either way, so this is a
+        // pause rather than a loss: press Fund again once the row clears.
         const QString blocker = m_blockers.value(QStringLiteral("lez.private"));
         if (!blocker.isEmpty()) {
             report(tr("Claimed %1 into your public account, and stopped there: %2 Press Fund "
@@ -883,10 +806,11 @@ void ChatBackend::shareAddress(QString conversationId, QString assetId)
                    .arg(assetId.isEmpty() ? tr("that asset") : assetId));
         return;
     }
-    // The narrow thing the old whole-wallet gate was really protecting. An
-    // address shared before its account is registered invites a payment that
-    // may never be credited, so this refuses — and says which, and why, rather
-    // than the wallet refusing to be Ready at all for seven minutes.
+    // Never hand out an address for a holding that says it cannot be paid into:
+    // that is an invitation to a payment that goes nowhere. Nothing sets a
+    // blocker today — the private account's on-chain registration used to, and
+    // that turned out to be a step that should never have existed — but the
+    // refusal belongs here rather than at the moment a holding first needs one.
     const QString blocker = m_blockers.value(holding->id);
     if (!blocker.isEmpty()) {
         report(tr("%1 cannot be shared yet: %2").arg(holding->name, blocker));

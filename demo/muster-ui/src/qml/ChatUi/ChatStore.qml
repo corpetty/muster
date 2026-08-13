@@ -76,8 +76,8 @@ QtObject {
         }
     }
     readonly property string walletError: backend ? backend.walletError : ""
-    // WORKAROUND flag — see ChatBackend.rep. True once the balance includes an
-    // account this wallet did not create, which is how received money arrives.
+    // See ChatBackend.rep. True once the balance includes an account this wallet
+    // did not create, which is how received money always arrives here.
     readonly property bool receivedElsewhere: backend ? backend.receivedElsewhere : false
     readonly property string newWalletMnemonic: backend ? backend.newWalletMnemonic : ""
 
@@ -117,10 +117,10 @@ QtObject {
     // The holdings worth being paid at. Drives the share-an-address choice.
     //
     // A holding that *has* an address but is blocked stays in the list, shown
-    // and refused with its reason: dropping it would turn "your private account
-    // is registering, about seven minutes" into an address that silently is not
-    // there, which is the same wait with none of the explanation. A holding with
-    // no address at all is genuinely not a choice, and is left out.
+    // and refused with its reason: dropping it would turn a stated wait into an
+    // address that silently is not there, which is the same wait with none of
+    // the explanation. A holding with no address at all is genuinely not a
+    // choice, and is left out.
     readonly property var receivableAssets:
         assets.filter(a => a.canReceive || (a.blocked && a.address !== ""))
 

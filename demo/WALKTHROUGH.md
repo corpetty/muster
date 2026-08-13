@@ -54,30 +54,25 @@ When it lands, a receipt card appears in the thread on both sides: *100 LEZ, pri
 
 ## 6. Where it is broken
 
-> **⚠️ Known bug, cause found, reported upstream, not yet worked around here.** The sender is debited and the receipt renders on both sides, but **the recipient's balance never moves.**
+> **⚠️ We reported a bug in the execution zone. There wasn't one.** For two days this section described a settlement failure: the sender debited, the receipt rendered on both sides, and the recipient's balance never moving. The symptom was real and reproduced twice. The diagnosis was wrong, and the zone's team said so on 2026-08-13.
 >
-> Measured properly, with both peers freshly minted and both private accounts registered on-chain — confirmed by transaction hash, not by the absence of an error. The sender paid 10 of her 150. The zone proved for 7.4 minutes and returned success with a transaction id. She went 150 → 140. He went 0 → 0, re-read five times with a full sync each, over several minutes.
+> **What is actually true.** What a recipient publishes is not an address — it is a **key pair**, the nullifier and viewing public keys. A private account id is `sha256(prefix ‖ npk ‖ vpk ‖ identifier)`, and the *sender* picks the identifier. So every payment made to you mints a brand-new account under your key pair, and you find your money by scanning for it with your viewing key. There is no reusable string, which is most of what the privacy buys: nothing on the public record ties one payment you received to the next.
 >
-> The leading hypothesis — that a private account must be registered before it can be credited — **was wrong**. The real cause is worth stating precisely, because it is a good illustration of a privacy property and a usable interface pulling against each other.
+> "Poll the balance of the id you published" is therefore not a thing a correct client does. The recipient's balance never moved because we were watching the wrong number — an account that, by design, no one was ever going to pay twice.
 >
-> A private account id is derived from the recipient's viewing key **and an identifier**. The keys a recipient can hand out carry no identifier, so the zone's client picks one *at random* for every payment. The note lands at an account derived from a number the recipient has never seen. Enumerate their wallet afterwards and it is right there — the account they advertised holding nothing, and a brand-new account holding exactly what was sent:
+> **Why we believed otherwise, which is the part worth reading.** `wallet_ffi_resolve_private_account` returns `identifier: 0` for every account it owns, because that field is defaulted and never populated. We measured it, believed it, and concluded that accounts are created with one identifier while payments are addressed to another — so the two could never meet. That conclusion was the keystone of the whole report and it was an artifact of a broken field. The header's description of `to_identifier` ("Identifier for the recipient's private account") and a doc comment claiming a random identifier where the code uses zero both pointed the same wrong way.
 >
-> ```
-> private 021fbfac…4634 balance=0    <-- advertised, registered, polled
-> private b719ff50…259a balance=10   <-- the payment
-> ```
+> **Two independent measurements agreed and were both wrong** — a two-peer testnet run and a single-process reproducer — because both read the same defaulted field. Reproducing a result establishes that it happens. It establishes nothing about why. That is the most expensive thing this build has taught us.
 >
-> Nothing was lost. It arrived somewhere they had no reason to look. Reported upstream with a single-file reproducer that links the wallet library directly — no chat, no second peer, no app — in `poc/BUG-private-transfer-recipient-identifier.md`.
+> **And the fix we chose did real damage.** Believing an account had to be registered before it could be credited, we called `register_private_account` on every fresh private account. That call *initializes* the account, and the initialization nullifier is a hash of the account id alone — so any id can be foreign-initialized exactly once, ever. We made our own advertised account permanently uncreditable by anyone else. The call is gone. The published key pair was never harmed.
 >
-> Getting to that answer meant clearing three things that were hiding it, each worth knowing on its own. `register_private_account` *proves*, so through the generated sync client it hit a hardcoded 20-second timeout and had never once succeeded. It also demands an uninitialized account, so it works at creation or never — a peer minted by an older build cannot be repaired, only replaced. And `lez_core` turns out to have a third failure convention: seventeen of its methods return a JSON envelope carrying `success: false` rather than the empty string the others use, so the ordinary check reads a hard failure as success. That last one meant a failed shielding step reported nothing at all — and could have let a *payment* post a receipt for a transfer the zone had rejected, which is the one thing this app must never do.
+> The proposed fix we were about to send — publish a fixed identifier with the keys — would have worked for exactly one payment and then been dead forever.
 >
-> One trap for anyone repeating this: the balance read immediately after a transfer is stale. The sender showed 150 → 150 right after the proof and 150 → 140 on the next refresh. The first number is not evidence of anything.
+> **What stands.** A genuine panic in the wallet library, confirmed upstream with a regression test going in: a send to a destination identifier already in the sending wallet's key chain, with a cached state whose commitment is on chain, trips an `expect`. Plus three API defects that cost us the week and are being fixed. Full exchange in `poc/BUG-private-transfer-recipient-identifier.md` §6.
 >
-> **This section becomes a fix note before publication, not a deletion.** The honest claim today is that everything up to and including *initiating* a private payment works, and that the recipient's client cannot see the money — which, for a user watching their balance, is indistinguishable from not being paid.
+> Two other traps worth knowing, both real and both still true. `lez_core` has a third failure convention: seventeen of its methods return a JSON envelope carrying `success: false` rather than the empty string the others use, so the ordinary check reads a hard failure as success — that could have let a *payment* post a receipt for a transfer the zone had rejected, which is the one thing this app must never do. And the balance read immediately after a transfer is stale: the sender showed 150 → 150 right after the proof and 150 → 140 on the next refresh. The first number is not evidence of anything.
 >
-> The build now works around it: after syncing it adds up every private account it can find, and spends from the one holding the note. A peer whose payment had been stranded went from showing `0` to showing the 10 it had actually been paid. The journey completes.
->
-> That is a workaround and it says so on screen. The wallet card notes, beside the number, that the balance includes accounts you never created and that one send draws on one of them. The visibility panel carries it as an open gap with the fix named. It comes out when a payment arrives at the address it was sent to — and until then this is a thing to watch, not a thing to use.
+> **What the app does now, which is what it did before — only correctly labelled.** After syncing it sums every private account it can find, and spends from the one holding the note. Not a workaround: a scan is what a shielded wallet is. The wallet card still says, beside the number, that the balance includes accounts you never created and that one send draws on one of them. The first of those is now a *protection* in the visibility panel — you have no address that can be reused against you — and only the second remains a gap.
 
 ## What this was built on
 

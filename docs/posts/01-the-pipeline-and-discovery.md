@@ -1,11 +1,15 @@
 > **Superseded — kept for its prose, not as the working document.**
 > The facts, measurements, statuses, shot list and open questions from this draft now live in
 > [`01-discovery-supporting-material.md`](01-discovery-supporting-material.md), rewritten as reference
-> material to write against, and brought up to date with everything found since (the settlement bug and
-> its cause, the authorization stage, the workaround). The phrasings worth keeping are collected in its §11.
+> material to write against, and brought up to date with everything found since (the authorization stage,
+> and the settlement finding — which we reported as a bug in the zone and then retracted). The phrasings
+> worth keeping are collected in its §11.
 >
-> Nothing here is wrong, but parts are now out of date — most importantly §"Next", which describes the
-> recipient-credit issue as an open mystery. It is understood, reported and worked around.
+> Parts are out of date — most importantly §"Next", which describes the recipient-credit issue as an open
+> mystery. It is neither a mystery nor a bug: what a recipient publishes is a key pair, not an address, and
+> every payment mints a fresh account under it that only the recipient's viewing key can find. Our report
+> to the zone's team was withdrawn on 2026-08-13. See §7 of the supporting material for what replaced it —
+> a better story than the one it corrects.
 
 # The blockchain is one stage of four, and it's the one we talk about least usefully
 

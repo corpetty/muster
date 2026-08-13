@@ -696,30 +696,30 @@
     {
       "file": "pipeline-settlement-bug.svg",
       "serves": "POST",
-      "shows": "The account-id derivation drawn: id is a function of a viewing key and an identifier, the published keys carry no identifier, so the sender's client picks one at random and the note lands where nobody is looking. Plus the workaround and its two disclosed costs.",
+      "shows": "The account-id derivation drawn: id = sha256(prefix ‖ npk ‖ vpk ‖ identifier). The recipient publishes the key node; the sender picks the identifier; every payment therefore mints a fresh account found only by scanning. What that buys, what it costs, and the retraction of our own report of it as a bug.",
       "sources": [
         {
           "path": "demo/poc/BUG-private-transfer-recipient-identifier.md",
           "sha256": "10e15a87711ee675e32fb299b9c4bf2d5352c52664dff8615c27c377090794d7",
-          "note": "the upstream report and its single-file reproducer"
+          "note": "§6 — the upstream response that withdrew the report this figure used to draw"
         },
         {
           "path": "demo/GAPS.md",
           "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
-          "note": "§4b — cause, the two account ids, the measurement, and the workaround's costs"
+          "note": "§4b — the model, why we misread it, and what the misreading cost"
         }
       ],
       "evidence": [
         {
-          "grade": "measured",
-          "note": "Reproduced twice — two peers over the testnet and a single-process standalone reproducer. The two account ids and their balances are the observed values"
+          "grade": "from-source",
+          "note": "The derivation and the key-node model are as stated by the LEZ team on 2026-08-13 in response to our report, and are documented in their token-transfer tutorial"
         },
         {
-          "grade": "from-source",
-          "note": "The derivation from (viewing key, identifier) and the random choice are read off wallet_ffi and lez_core, whose own comment states the random pick"
+          "grade": "measured",
+          "note": "The account ids and balances are observed values from a two-peer testnet run and a single-process reproducer. What is NOT evidence is the conclusion originally drawn from them — see the retraction panel"
         }
       ],
-      "recheck": "When the upstream issue is fixed. At that point the workaround comes out of the build and this figure becomes history rather than a caveat — which is worth drawing the difference between."
+      "recheck": "If the zone ever exposes note consolidation or a multi-note spend, the cost half of the trade changes. The retraction panel is permanent. Redrawn 2026-08-13 — the slug is kept deliberately so the figure's own correction is visible rather than the wrong version simply disappearing."
     },
     {
       "file": "pipeline-findable-unlinkable.svg",

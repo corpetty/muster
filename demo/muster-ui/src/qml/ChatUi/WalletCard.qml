@@ -130,13 +130,12 @@ Rectangle {
                     elide: Text.ElideRight
                 }
 
-                // Why this one is not usable yet, on the row it applies to.
-                // The private account's on-chain registration runs for about
-                // seven minutes after a peer is first minted; the wallet is
-                // Ready throughout, and this is the only part that is waiting.
-                // Saying so here is what stops that wait reading as the whole
-                // app being hung, which is what it did when the wallet gated
-                // Ready on it.
+                // Why this one is not usable yet, on the row it applies to
+                // rather than as a wallet-wide state — one holding waiting is
+                // not the app being hung, which is exactly how it read when the
+                // wallet gated Ready on a private registration it turned out not
+                // to need. Nothing sets a blocker today; the row stays because
+                // the next holding that needs one should not have to reinvent it.
                 LogosText {
                     objectName: "assetBlocked_" + holding.modelData.id
                     Layout.fillWidth: true
@@ -179,13 +178,13 @@ Rectangle {
             font.pixelSize: Theme.typography.badgeText
         }
 
-        // Said where the number is, not in a panel someone has to open. A
+        // Said where the number is, not in a panel someone has to open. Every
         // received payment lands at an account the recipient never created, so
         // this figure is a sum over accounts found by scanning — and a single
         // send can only draw on one of them. Both facts are surprising enough
         // that the balance should not be shown without them.
         LogosText {
-            objectName: "balanceWorkaroundNote"
+            objectName: "balanceScanNote"
             Layout.fillWidth: true
             visible: root.ready && root.receivedElsewhere
             wrapMode: Text.WordWrap

@@ -247,9 +247,9 @@ QVariantList ChatBackend::holdingRows() const
     for (const Holding& h : m_holdings) {
         const QString balance = m_balances.value(h.id);
         // Why this holding cannot be paid into yet, or empty. Per holding rather
-        // than one wallet-wide state, so the private account's seven-minute
-        // on-chain registration does not make the rest of the wallet look
-        // broken — or, worse, make the app look hung on first launch.
+        // than one wallet-wide state: one holding waiting on something is not
+        // the wallet being broken, and it should never make the app look hung.
+        // Nothing sets one at present.
         const QString blocker = m_blockers.value(h.id);
         rows.append(QVariantMap{
             {QStringLiteral("id"), h.id},
@@ -263,9 +263,9 @@ QVariantList ChatBackend::holdingRows() const
             {QStringLiteral("balance"), balance},
             {QStringLiteral("address"), m_addresses.value(h.id)},
             // Can be *shared*, which a blocker withholds: an address handed out
-            // before its registration lands invites a payment that may vanish.
-            // Spending from it is not gated — that is the zone's call, and it
-            // will simply have no notes to spend.
+            // for a holding that cannot yet receive invites a payment that
+            // vanishes. Spending from it is not gated — that is the zone's call,
+            // and it will simply have no notes to spend.
             {QStringLiteral("canReceive"), h.canReceive() && blocker.isEmpty()},
             {QStringLiteral("canClaim"), h.canClaim() && balance.toULongLong() > 0},
             {QStringLiteral("claimVerb"), h.claimVerb},

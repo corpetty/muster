@@ -207,23 +207,17 @@ private:
 
     // Sync to the tip, publish the balances, and declare the wallet Ready.
     void finishWalletOpen();
-    // Register a freshly minted private account on-chain, in the background.
-    // Proves, so it runs for minutes — the wallet is Ready long before it
-    // finishes, and only the private holding is held back meanwhile.
-    void startPrivateRegistration();
 
     bool m_walletOpen = false;
-    // Set when ensureWalletOpen has just minted the private account, meaning
-    // registration is owed and openWallet must perform it before Ready. Only
-    // ever true for an account created in this run — an older one cannot be
-    // registered at all.
-    bool m_privateAccountNeedsRegistration = false;
+    // The account this wallet minted for itself. It names the key node we
+    // publish — not an address anyone pays. Nothing registers it: see
+    // ensureWalletOpen for why registering would break it.
     QString m_privateAccount;
-    // WORKAROUND (see readWalletState and demo/poc/): every private account
-    // this wallet knows that holds a balance, largest first. Incoming payments
-    // land at accounts derived from an identifier the sender chose at random,
-    // so the account we created and published is usually not the one holding
-    // the money — and not the one a payment can be spent from.
+    // Every private account this wallet can see that holds a balance, largest
+    // first, found by scanning with our viewing key. A payment to us mints a
+    // fresh account under our key node at an identifier the sender chose, so
+    // the account we minted is usually not the one holding the money — and not
+    // the one a payment can be spent from. See readPrivateBalance.
     QStringList m_fundedPrivateAccounts;
     // The account to spend from: the largest funded one, or the account we
     // created when nothing has been received yet.
@@ -298,13 +292,13 @@ private:
     QHash<QString, QString> m_addresses;
     // Why a holding cannot be used yet, keyed by holding id; absent when it can.
     // A blocked holding is still listed and still shows its balance — it is the
-    // *reason* that is the information, and hiding the row would turn a
-    // seven-minute wait into an unexplained absence.
+    // *reason* that is the information, and hiding the row would turn a wait
+    // into an unexplained absence. Nothing sets one at present.
     QHash<QString, QString> m_blockers;
 
     // The two reads with enough going on to be worth their own functions —
-    // the private one carries the summing workaround, the public one is the
-    // only balance that comes from the sequencer instead of the wallet.
+    // the private one scans and sums, the public one is the only balance that
+    // comes from the sequencer instead of the wallet.
     QString readPrivateBalance();
     QString readPublicBalance();
 };

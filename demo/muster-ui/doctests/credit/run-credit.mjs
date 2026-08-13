@@ -1,10 +1,18 @@
 // Does a shielded payment actually credit the recipient?
 //
 // The first two-peer payment (2026-08-11) debited the sender, rendered a
-// receipt on both sides, and never moved the recipient's balance. The leading
-// hypothesis is that a private account must be registered on-chain before it
-// can be credited; `register_private_account` was added, and this script is
-// what decides whether that was the cause.
+// receipt on both sides, and never moved the recipient's balance — because the
+// recipient was polling one account id, and a shielded payment mints a fresh
+// account under the recipient's key node at an identifier the *sender* picks.
+// The client's job is to scan with its viewing key and sum, which is what
+// `readPrivateBalance` does. This script is what holds that to account: it
+// asserts the number the recipient's UI shows, end to end, through the same
+// calls the buttons make.
+//
+// It is deliberately blind to *which* account the money landed in. Asserting
+// that would re-encode the mistake this script exists because of — there is no
+// account id either party can predict, and a payment arriving anywhere the
+// recipient can see and spend is the whole of what correct means here.
 //
 // It drives both instances through the logos-qt-mcp inspector protocol — the
 // same one doctests/exchange uses — because the question is about the wallet
@@ -126,8 +134,9 @@ async function main() {
   console.log("both Online");
   await sleep(3000);
 
-  // ── wallets. Opening is what runs register_private_account, including the
-  // repair path for an account minted before the fix existed.
+  // ── wallets. Opening mints one if there is none, and registers nothing:
+  // registering a private account would permanently brick it for foreign
+  // senders, which is the failure this script used to be chasing.
   await openWallet(alice, "alice");
   const bobBefore = await openWallet(bob, "bob");
 
@@ -241,12 +250,14 @@ async function main() {
   console.log(`\n${"=".repeat(60)}`);
   console.log(`BOB PRIVATE BALANCE: ${before} -> ${after}`);
   if (before !== null && after !== null && after > before) {
-    console.log(`RESULT: CREDITED (+${after - before}). register_private_account is confirmed as the fix.`);
+    console.log(`RESULT: CREDITED (+${after - before}). The scan found money sent to the key node.`);
   } else {
-    console.log("RESULT: NOT CREDITED. The registration hypothesis is wrong, or incomplete.");
-    console.log("Next suspects, per the note in ChatBackendWallet.cpp: note detection needing a");
-    console.log("scan this code does not perform, or get_private_account_keys not returning what");
-    console.log("transfer_private actually credits.");
+    console.log("RESULT: NOT CREDITED.");
+    console.log("Before suspecting the zone: this is what a broken scan looks like too. Check that");
+    console.log("readPrivateBalance is still summing over list_accounts rather than reading one");
+    console.log("account, and that bob synced past the transfer's block. Then check nothing has");
+    console.log("started calling register_private_account again — that permanently bricks the");
+    console.log("account id it is called on. See demo/poc/.");
   }
   console.log(`${"=".repeat(60)}`);
 
