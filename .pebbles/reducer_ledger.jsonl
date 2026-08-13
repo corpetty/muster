@@ -14,3 +14,4 @@
 {"type": "comment", "issue_id": "exo-d7c", "payload": {"body": "spec: contracts/specs/derived-exo-d7c.spec.json"}}
 {"type": "comment", "issue_id": "exo-8dc", "payload": {"body": "spec: contracts/specs/derived-exo-8dc.spec.json"}}
 {"type": "comment", "issue_id": "exo-f60", "payload": {"body": "spec: contracts/specs/derived-exo-f60.spec.json"}}
+{"type": "comment", "issue_id": "exo-3a1", "payload": {"body": "spec: contracts/specs/derived-exo-3a1.spec.json"}}

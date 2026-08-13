@@ -1,0 +1,198 @@
+{
+  "id": "derived-exo-3a1",
+  "original_statement": "Every time you sign something, save an audit trail of where that data came from.",
+  "restatement": "Every signature must carry, and structurally commit to, an account of where each input that reached the signed bytes came from, and must not be produced at all when any input cannot be accounted for: (s1) the encoded signing bytes change when the provenance of any input changes, holding the input values themselves byte-identical, so provenance is committed to rather than attached alongside; (s2) every input that reached the signed bytes has an entry in the provenance record naming its class (plugin block, driver-interpreted contribution, external read, peer message) and its log position, and every entry corresponds to an input that actually contributed; (s3) signing is refused whenever any input's origin cannot be accounted for, and completes when every input can be; (s4) the provenance record never contains signer identity for any input class, so an anonymous driver stays anonymous through the trail; (s5) the provenance record is rebuildable from log plus keys alone, with no side-car audit store that could disagree with the log.",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "The encoded signing bytes change when the provenance of any input changes, holding the input values themselves byte-identical."
+    },
+    {
+      "id": "s2",
+      "text": "Every input that reached the signed bytes has an entry in the provenance record naming its class and its log position, and every entry corresponds to an input that actually contributed."
+    },
+    {
+      "id": "s3",
+      "text": "Signing is refused whenever any input's origin cannot be accounted for, and completes when every input can be."
+    },
+    {
+      "id": "s4",
+      "text": "The provenance record never contains signer identity for any input class."
+    },
+    {
+      "id": "s5",
+      "text": "The provenance record is rebuildable from log plus keys alone, with no side-car audit store."
+    }
+  ],
+  "goal": "Every signature is accompanied by a provenance record, committed to by the signing payload, accounting for the origin of every input that reached the signed bytes \u2014 plugin block, driver-interpreted contribution, external read, peer message \u2014 recorded as class and log position rather than identity; and the client refuses to sign when any input's origin cannot be accounted for.",
+  "acceptance_criteria": [
+    "The encoded signing bytes change when the provenance of any input changes, holding the input values themselves byte-identical.",
+    "Every input that reached the signed bytes has an entry in the provenance record naming its class and its log position, and every entry corresponds to an input that actually contributed.",
+    "Signing is refused whenever any input's origin cannot be accounted for, and completes when every input can be.",
+    "The provenance record never contains signer identity for any input class.",
+    "The provenance record is rebuildable from log plus keys alone, with no side-car audit store."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The encoded signing bytes change when the provenance of any input changes, holding the input values themselves byte-identical."
+    },
+    {
+      "id": "c2",
+      "text": "Every input that reached the signed bytes has an entry in the provenance record naming its class and its log position, and every entry corresponds to an input that actually contributed."
+    },
+    {
+      "id": "c3",
+      "text": "Signing is refused whenever any input's origin cannot be accounted for, and completes when every input can be."
+    },
+    {
+      "id": "c4",
+      "text": "The provenance record never contains signer identity for any input class."
+    },
+    {
+      "id": "c5",
+      "text": "The provenance record is rebuildable from log plus keys alone, with no side-car audit store."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s1",
+      "clause_id": "c1",
+      "proves": "Provenance is structurally load-bearing in the signed bytes rather than metadata carried alongside them: changing where a single input came from, with every input value held byte-identical, always changes what gets signed. Catches an implementation that records provenance in a side field excluded from the signing payload, which would let two payloads with different origins produce the very same signature.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_provenance_binds.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "provenance_binds": {
+            "kind": "flag",
+            "field": "provenance_binds"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "provenance_binds"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "The encoded signing bytes change when the provenance of any input changes, holding the input values themselves byte-identical."
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s2",
+      "clause_id": "c2",
+      "proves": "The stepper enumerates effect shapes across the four input classes and their combinations, and at every reachable shape checks both directions at once: every input whose bytes reached the signed payload has an entry naming its actual class and a log position that resolves to it, and every entry corresponds to an input that actually contributed, verified by perturbing the input at that position and observing the signed bytes change. The two-way check is what makes silent omission and 'unknown' padding both counterexamples; a one-way check passes an implementation that emits a generic entry per input and never resolves it.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_provenance_coverage_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "shape": "empty",
+          "coverage_two_way": true
+        }
+      ],
+      "invariant": {
+        "field": "coverage_two_way",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 60,
+      "description": "Every input that reached the signed bytes has an entry in the provenance record naming its class and its log position, and every entry corresponds to an input that actually contributed."
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s3",
+      "clause_id": "c3",
+      "proves": "Across the enumerated space of which inputs carry accountable provenance \u2014 every subset of the input set marked unattributable, crossed with the four input classes \u2014 signing is refused whenever that subset is non-empty and completes when it is empty. Both directions are enumerated because an implementation that refuses every signature would satisfy the refusal direction alone while making the client useless, and a single-example test would miss a class-specific hole such as an external read being exempted from the check that plugin blocks undergo.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_provenance_refusal_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "unattributable_count": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 60,
+      "description": "Signing is refused whenever any input's origin cannot be accounted for, and completes when every input can be."
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s4",
+      "clause_id": "c4",
+      "proves": "Across the explored space of signer-to-input assignments over a fixed set of contributions, the provenance record is byte-identical at every reachable assignment. An identity that reached the record \u2014 including one a view merely declines to render \u2014 diverges under some permutation, so this pins 'absent' rather than 'unshown'. Enumerating assignments rather than comparing a single pair is what catches a record that embeds identity for one class only, such as naming the peer on a peer-message entry while driver entries stay anonymous.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_provenance_identity_permutation_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "assignment": "identity",
+          "record_matches_baseline": true
+        }
+      ],
+      "invariant": {
+        "field": "record_matches_baseline",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 60,
+      "description": "The provenance record never contains signer identity for any input class."
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s5",
+      "clause_id": "c5",
+      "proves": "A cold-start replay from log plus keys alone reproduces exactly the provenance records built incrementally, across randomized event sequences, so the trail is a reduction over the log rather than a store standing beside it. Catches an implementation that writes provenance to its own file at signing time, which would survive every other oracle here while producing a record the log cannot account for.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_provenance_cold_start_matches.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "matches": {
+            "kind": "flag",
+            "field": "matches"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "matches"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "The provenance record is rebuildable from log plus keys alone, with no side-car audit store."
+    }
+  ],
+  "criticality": "catastrophic"
+}
