@@ -178,9 +178,9 @@ content is measured, read from source, or illustrative.</p>
       <li class="card">
         <a class="thumb" href="pipeline-settlement-bug.svg"><img src="pipeline-settlement-bug.png" alt="" loading="lazy"></a>
         <div class="meta">
-          <h3><a href="pipeline-settlement-bug.svg">Why a shielded payment arrives somewhere the recipient is not looking</a></h3>
-          <p>The account-id derivation drawn: id is a function of a viewing key and an identifier, the published keys carry no identifier, so the sender&#x27;s client picks one at random and the note lands where nobody is looking. Plus the workaround and its two disclosed costs.</p>
-          <p class="tags"><span class="s s-post">POST</span><span class="g g-measured">measured</span><span class="g g-from-source">from source</span>
+          <h3><a href="pipeline-settlement-bug.svg">Privacy costs you the ability to ask about your own address</a></h3>
+          <p>The account-id derivation drawn: id = sha256(prefix ‖ npk ‖ vpk ‖ identifier). The recipient publishes the key node; the sender picks the identifier; every payment therefore mints a fresh account found only by scanning. What that buys, what it costs, and the retraction of our own report of it as a bug.</p>
+          <p class="tags"><span class="s s-post">POST</span><span class="g g-from-source">from source</span><span class="g g-measured">measured</span>
             <a class="src" href="https://github.com/corpetty/muster/blob/main/docs/diagrams/pipeline-settlement-bug.svg">source</a></p>
         </div>
       </li>

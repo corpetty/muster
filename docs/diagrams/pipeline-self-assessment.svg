@@ -80,7 +80,7 @@
 
     <text x="40" y="461" font-size="9.5" font-family="ui-monospace,'SF Mono',Menlo,monospace" fill="#656E66">06</text>
     <text x="70" y="461" font-weight="600" fill="#1A1F1C">Settlement</text>
-    <text x="158" y="461" fill="#656E66">shielded both ends by default — but the recipient needs a workaround to see it</text>
+    <text x="158" y="461" fill="#656E66">shielded both ends by default — but the anonymity set here is two people</text>
     <circle cx="800" cy="457" r="8.5" fill="none" stroke="#8A6D1F" stroke-width="1.6"/>
     <path d="M800 448.5 A8.5 8.5 0 0 1 800 465.5 Z" fill="#8A6D1F"/>
 

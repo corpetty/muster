@@ -1,6 +1,23 @@
 // Minimal reproducer: a private→private transfer credits nothing the
 // recipient can find, when the recipient identifier is not the account's own.
 //
+// !! READ THIS FIRST. The premise stated on the line above is wrong, and the
+// !! zone's team said so on 2026-08-13. See §6 of
+// !! BUG-private-transfer-recipient-identifier.md. In short: a payment landing
+// !! at an account the recipient did not create is the design, not a failure —
+// !! the recipient publishes a key node and scans for notes under it. Two
+// !! things this program does are actively harmful and are kept only because
+// !! this file is the artifact that was sent upstream:
+// !!
+// !!   - step 2 registers the account on-chain, which *initializes* it and
+// !!     makes that account id permanently uncreditable by any foreign sender.
+// !!   - step 3 prints B's "own identifier", which is always 0 — the field is
+// !!     defaulted and never populated. That reading is what sold the whole
+// !!     theory below.
+// !!
+// !! Step 5 remains a genuine reproducer for the panic (§2), which upstream
+// !! confirmed. Do not run this against a wallet you care about.
+//
 // This links wallet-ffi directly. There is no logos-core, no module host, no
 // chat, no networking of our own and no second wallet — one process, one
 // wallet, two private accounts in it. If the recipient account cannot be

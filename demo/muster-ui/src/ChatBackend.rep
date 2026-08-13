@@ -153,14 +153,12 @@ class ChatBackend
     // cannot disagree. A rail with no `claimId` never reaches this list.
     PROP(QVariantList rails READONLY)
     // True when the private balance includes an account this wallet did not
-    // create — i.e. money has been received. A payment is credited to an
-    // address derived from an identifier the *sender* picked at random, so it
-    // never lands on the address the recipient published. This build sums
-    // whatever syncing turns up; the flag is what lets the wallet card say so
-    // where the number is, rather than leaving a surprising figure unexplained.
-    //
-    // WORKAROUND. Remove with the summing in readWalletState once a payment
-    // arrives at the address it was sent to. See demo/poc/.
+    // create — i.e. money has been received. That is how a shielded payment
+    // always arrives: the sender picks the identifier, so the note lands at a
+    // fresh account under our key node and the balance is a scan rather than a
+    // lookup. The flag is what lets the wallet card say so where the number is,
+    // rather than leaving a surprising figure unexplained — and it is permanent,
+    // because the behaviour is the design and not a bug being waited out.
     PROP(bool receivedElsewhere READONLY)
     // The recovery phrase, set once when this instance mints a new wallet and
     // never read back from storage. Shown once, then the view is expected to

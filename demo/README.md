@@ -2,9 +2,11 @@
 
 > **Demonstrative only. Do not put value you care about through this.**
 >
-> This is something to watch and argue with, not something to use. It carries none of the guarantees the real client is specified to have — no signed log, no re-derivation of what you sign, no replay binding — and it is currently **working around an upstream bug by adding up private accounts it finds by scanning**, because a payment does not arrive at the address you published. That workaround is disclosed on screen and in `GAPS.md`. It is not a design, and it comes out when the zone fixes the underlying issue.
+> This is something to watch and argue with, not something to use. It carries none of the guarantees the real client is specified to have — no signed log, no re-derivation of what you sign, no replay binding.
 >
-> Honest status of the payment journey today: you can propose it, agree it and send it, and the money reaches the recipient's *wallet* — but not the account they advertised, and a balance shown here may be larger than any single payment can spend. Finding exactly this class of problem is what a prototype is for.
+> Honest status of the payment journey today: you can propose it, agree it and send it, and the money reaches the recipient. A shielded balance here is a **sum over accounts found by scanning**, because what you publish is a key pair rather than an address and every payment to you mints a new account under it. That is the design, not a workaround — and its one real cost, that a single send can only draw on one of those accounts, is disclosed on screen and in `GAPS.md`.
+>
+> For two days this notice said the opposite: that the money did not reach the account you advertised, and that the scan was a workaround for an upstream bug. That was our misreading of a defaulted field in the wallet API, corrected by the zone's team on 2026-08-13. The full story, including the harm the wrong fix did, is in `GAPS.md` §4b — kept at length rather than deleted, because it is the most instructive thing in this directory.
 
 **This directory deliberately violates the invariants in the repo root `CLAUDE.md`.** That is its purpose. Read this before reading anything else in here, and before citing any of it as how Muster works.
 

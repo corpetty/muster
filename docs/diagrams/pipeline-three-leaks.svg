@@ -75,13 +75,13 @@
   <text x="64" y="482" font-size="9" fill="#656E66">on the network has it.</text>
 
   <text x="256" y="404" font-size="10.5" fill="#1A1F1C" font-weight="600">In this build: <tspan font-weight="400" fill="#3F4742">the anonymity set is small because the network is young — a demo with two users is the</tspan></text>
-  <text x="256" y="418" font-size="10" fill="#3F4742">smallest one there is. And a private account id derives from (viewing key, identifier); the keys a recipient publishes</text>
-  <text x="256" y="432" font-size="10" fill="#3F4742">carry no identifier, so the sender's client picks one at random and the money lands where nobody is looking.</text>
+  <text x="256" y="418" font-size="10" fill="#3F4742">smallest one there is. Every shielded transfer is unlinkable to every other, and there are only two people it could</text>
+  <text x="256" y="432" font-size="10" fill="#3F4742">have been between. No amount of cryptography closes that; only other users do.</text>
 
-  <text x="256" y="456" font-size="10.5" fill="#1A1F1C" font-weight="600">What would change it: <tspan font-weight="400" fill="#3F4742">time and adoption for the first. For the second, an upstream fix — reported, with a</tspan></text>
-  <text x="256" y="470" font-size="10" fill="#3F4742">single-file reproducer. The app works around it today by summing the accounts it can find by scanning.</text>
+  <text x="256" y="456" font-size="10.5" fill="#1A1F1C" font-weight="600">What would change it: <tspan font-weight="400" fill="#3F4742">time and adoption. Nothing in this repository, and nothing upstream either —</tspan></text>
+  <text x="256" y="470" font-size="10" fill="#3F4742">which is what makes it the honest example of the class rather than a bug wearing the class as a costume.</text>
 
-  <text x="256" y="494" font-size="10.5" fill="#1A1F1C" font-weight="600">The obligation: <tspan font-weight="400" fill="#3F4742">do not present an inherited limit as a design — and do not present a workaround as one either.</tspan></text>
+  <text x="256" y="494" font-size="10.5" fill="#1A1F1C" font-weight="600">The obligation: <tspan font-weight="400" fill="#3F4742">do not present an inherited limit as a design — nor a misdiagnosis as an inherited limit.</tspan></text>
 
   <!-- ══════════ THE POINT ══════════ -->
   <text x="40" y="552" font-size="12.5" font-weight="600" fill="#1A1F1C">Three different fixes, three different owners, three different things a reader can do about it.</text>

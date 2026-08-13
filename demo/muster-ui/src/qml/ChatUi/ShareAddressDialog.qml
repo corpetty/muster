@@ -67,8 +67,8 @@ LogosDialog {
 
     // Opens on the first one that can actually be shared — the catalogue orders
     // them most private first, so this is the safest usable choice. Falls back
-    // to the first of any, so a wallet whose only address is still registering
-    // opens showing that rather than nothing selected.
+    // to the first of any, so a wallet whose only address is blocked opens
+    // showing that rather than nothing selected.
     onOpened: {
         let pick = "";
         for (let i = 0; i < root.assets.length; ++i) {

@@ -151,6 +151,8 @@ The zone proved for 7.4 minutes and returned success with a transaction id. The 
 
 ## 8. The cause: a private note is addressed to a *random* account id (2026-08-11)
 
+> **This section's conclusion is wrong. Read [§9](#9-8-was-wrong-and-the-instrument-is-why-2026-08-13) first.** It is kept unedited because how it went wrong is worth more than what it claimed.
+
 `wallet_ffi_account_id_for_private_pda` derives a private account id from **(viewing key, identifier)**. `FfiPrivateAccountKeys` — everything a recipient can hand out — carries no identifier, so `lez_core.transfer_private` invents one:
 
 ```cpp
@@ -176,6 +178,28 @@ Confirmed a second way with a single-process, single-wallet reproducer: sender 1
 **A second bug found alongside it:** passing the recipient's *own* identifier (from `wallet_ffi_resolve_private_account`) panics the library and aborts the process — `lez/wallet/src/account_manager.rs:385`, `update variant must have nsk`.
 
 Reproducers: `demo/poc/lez-private-transfer-poc.c` (one file, links `wallet-ffi` directly, no logos-core or chat — the one to hand to the zone's developers) and `demo/muster-ui/doctests/credit/run-credit.mjs` (the two-peer app-level version). Write-up: `demo/poc/BUG-private-transfer-recipient-identifier.md`.
+
+## 9. §8 was wrong, and the instrument is why (2026-08-13)
+
+The zone's team answered the report. **There is no settlement bug.** Everything in §8 above is a correct set of observations wrapped around a false conclusion, and it is left standing rather than edited because the shape of the error is the useful artifact.
+
+**The model.** An account id is `sha256(prefix ‖ npk ‖ vpk ‖ identifier)`. What a recipient publishes is the **key node** `(npk, vpk)` — which is exactly what `get_private_account_keys` returns — and the sender picks the identifier. Every payment mints a fresh account under the key node; the recipient scans with the viewing key. A random identifier per payment is not the client filling a hole in the API. It is the API.
+
+**The instrument.** The sentence that made §8 cohere — *"accounts are created with identifier `000…0`, so the creation and transfer derivations can never coincide"* — is false. `wallet_ffi_resolve_private_account` returns `identifier: 0` for **every** wallet-owned private account; the field is defaulted and never populated. We measured a bug in the measuring tool and reported it as a bug in the thing measured.
+
+Reproducing it two independent ways (two peers over the testnet, and a single-process reproducer) proved only that the same defaulted field reads the same both times. **Repeating a result is not verifying an instrument**, and no amount of the former substitutes for the latter. That is the transferable lesson, and it generalises well past this stack.
+
+Two other sources pointed the same way and are being fixed upstream: `wallet_ffi.h` describes `to_identifier` as *"Identifier for the recipient's private account"*, which reads as *the recipient has one, ask them for it*; and the doc comment on `wallet_ffi_create_account_private` claims a random identifier where the code uses 0.
+
+**The fix we chose caused the only real damage.** `register_private_account` *initializes* the account, and the initialization nullifier is a hash of the account id alone — so any given id can be foreign-initialized exactly once, ever. Registering our own private account made it permanently uncreditable by any foreign sender. Note that `wallet_ffi` had been saying so all along, in the error we filed under scheduling: `Guest panicked: Account must be uninitialized`. The call is removed from the demo, with the reason recorded at the call site.
+
+The fix we were about to *propose* — a fixed identifier published with the keys — would have worked for one payment and then been permanently dead, for the same reason.
+
+**What survives as a real bug:** the §8 panic, confirmed, regression test going in. The send path hardcodes the destination as foreign with no nullifier secret key while a separate step fills in a membership proof for any account the wallet recognises; the two disagree and an `expect` fires. Trigger is narrower than "the account's own identifier": the destination identifier must already be in the sending wallet's key chain with a cached state whose commitment is on chain — which the first foreign-path send after an auth-transfer init or an owned-path transfer already satisfies.
+
+**One to avoid rather than fix:** a wallet built by importing a private key chain (`wallet_ffi_import_private_account`) panics on sync when a payment arrives at an identifier not in the import, *before* the synced-block marker is written — so the block replays and every subsequent sync dies identically. Fresh wallets and mnemonic-restored wallets derive into the key tree and are fine. Mint peers with `create_new`.
+
+Full exchange: `demo/poc/BUG-private-transfer-recipient-identifier.md` §6.
 
 ## Related
 

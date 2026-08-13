@@ -179,30 +179,33 @@ The draft predates the last two days of work. Four things are now true that were
 
 ---
 
-## 7. The settlement finding (material for a later post, and for credibility here)
+## 7. The settlement finding — retracted, and better for it (material for a later post)
 
-Kept in this document because it is the strongest evidence that the project's honesty rules do real work.
+> **Rewritten 2026-08-13.** This section used to report a settlement bug in the execution zone, "measured twice". There is no such bug. The zone's team corrected us, and what is left is a stronger story than the one we lost. Full exchange: `demo/poc/BUG-private-transfer-recipient-identifier.md` §6.
 
-**What happened:** a shielded payment debits the sender and the recipient's balance never moves.
+**The usable finding, for the settlement post: privacy costs you the ability to ask about your own address.**
 
-**Why:** a private account id is derived from *(viewing key, identifier)*. The keys a recipient hands out carry **no identifier**, so the zone's client picks one **at random** for each payment. The money arrives at an account derived from a number the recipient has never seen, while the account they created, registered and published stays at zero. **[measured, twice — two peers over the testnet, and a single-process standalone reproducer]**
+A private account id is `sha256(prefix ‖ npk ‖ vpk ‖ identifier)`. What a recipient publishes is not an address — it is a **key node**, the `(npk, vpk)` pair. The *sender* picks the identifier. So every payment made to you mints a fresh account under your key node, and you find your money by scanning for it with your viewing key. **[confirmed by the zone's team; documented in their token-transfer tutorial]**
 
-```
-private 021fbfac…4634 balance=0    <-- advertised, registered, polled
-private b719ff50…259a balance=10   <-- the payment
-```
+That is the whole trade, in one mechanism. No string appears twice, so nothing on the public record links one payment you received to the next — and in exchange, there is no account whose balance is *the* answer to "how much do I have". A shielded wallet is a key and a search, not an address and a lookup. Every conventional stack gets the lookup for free and pays for it with a permanent, joinable identifier.
 
-**Not lost:** the note *is* discoverable by scanning with the recipient's viewing key, and the account appears in `list_accounts`. What fails is the obvious client behaviour of polling the address you published.
+**The retraction is the credibility, and it should be printed rather than quietly dropped.**
 
-**Three wrong turns on the way**, each of which is a good story about why measurement is hard:
+What we reported: money arriving at an account the recipient never created, while the account they published stayed at zero. Every observation in that sentence is accurate. The conclusion — that the payment had gone somewhere wrong — was not.
 
-1. `register_private_account` *proves*, so through the sync client it hit a hardcoded 20 s timeout and had **never once succeeded** — a call that had been in the tree for a day.
-2. It also requires an *uninitialized* account, so it works at creation or never.
-3. `lez_core` has a **third failure convention**: 17 methods return a JSON envelope carrying `success: false` rather than the empty string the rest use, so the ordinary check reads a hard failure as success.
+**Why we got it wrong, which is the transferable part.** `wallet_ffi_resolve_private_account` returns `identifier: 0` for every account a wallet owns; the field is defaulted and never populated. We read it, believed it, and concluded that accounts are created with one identifier while transfers are addressed to another, so the two could never meet. That sentence was the keystone of the report and it was an artifact of the measuring tool. Two supporting sources pointed the same way: the header describes `to_identifier` as *"Identifier for the recipient's private account"*, and a doc comment claims a random identifier where the code uses zero. Both are being fixed.
 
-Plus a measurement trap worth its own sentence: **the balance read immediately after a transfer is stale.** The sender showed 150 → 150 right after the proof, and 150 → 140 on the next refresh.
+**We measured it twice, independently, and were wrong twice** — a two-peer testnet run and a single-process reproducer, both reading the same defaulted field. *Reproducing a result establishes that it happens; it establishes nothing about why.* If the post keeps one sentence from this episode, that is the one. It is the failure mode that survives every process a careful team would put in place.
 
-Reported upstream with a single-file reproducer linking `wallet-ffi` directly: `demo/poc/`.
+**And the fix did the damage the bug didn't.** We added `register_private_account`, believing an account had to be registered before it could be credited. That call *initializes* the account, and the initialization nullifier is a hash of the account id alone — an id can be foreign-initialized exactly once, ever. We made our own published account permanently uncreditable by anyone else. The fix we were about to propose upstream would have had the same effect by a different route: a fixed published identifier works for one payment and is then dead forever.
+
+**Three real API findings survive**, and are worth a paragraph in the settlement post because they are the texture of building on a young stack:
+
+1. `lez_core` has a **third failure convention**: 17 methods return a JSON envelope carrying `success: false` rather than the empty string the rest use, so the ordinary check reads a hard failure as success. This could have let a payment post a receipt for a transfer the zone rejected.
+2. **The balance read immediately after a transfer is stale.** The sender showed 150 → 150 right after the proof, and 150 → 140 on the next refresh.
+3. A genuine panic in `wallet-ffi`, confirmed upstream with a regression test going in: a send whose destination identifier is already in the sending wallet's key chain, with a cached state whose commitment is on chain, trips an `expect` and aborts the host process.
+
+Original report and the full upstream response: `demo/poc/`.
 
 ---
 
@@ -287,7 +290,7 @@ Lifted verbatim so they are not lost in the rewrite. Use, cut or rework freely.
 | Requirement IDs — FS-9 (metadata honesty), F-14/ADR-010 (identity binding), F-4/FS-6 (re-derivation), F-5 (replay binding) | `docs/01-furps.md` |
 | What the demo protects and does not, row by row | `demo/GAPS.md` |
 | The journey as run, in order | `demo/WALKTHROUGH.md` |
-| The settlement bug: mechanism, measurements, reproducer | `demo/poc/BUG-private-transfer-recipient-identifier.md` |
+| The settlement report we withdrew: what we measured, why it was wrong, and the upstream response | `demo/poc/BUG-private-transfer-recipient-identifier.md` |
 | Zone call conventions and the traps | `docs/labbook/lez-core-error-conventions.md` |
 | Why a green build proves nothing about the UI | `docs/labbook/qml-errors-are-invisible-to-nix-build.md` |
 | Messaging contract | `logos-co/logos-chat-module` `rust-lib/chat_module.lidl` |
