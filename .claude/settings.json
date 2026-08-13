@@ -6,10 +6,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "exophial hook fix_worktree_index"
-          },
-          {
-            "type": "command",
             "command": "pb prime"
           }
         ]
@@ -32,20 +28,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "exophial hook block_worktree_leak"
-          },
-          {
-            "type": "command",
             "command": "exophial hook block_ssh"
           },
           {
             "type": "command",
             "command": "exophial hook doctrine_preflight"
-          },
-          {
-            "type": "command",
-            "command": "exophial hook fix_worktree_index",
-            "if": "Bash(git commit:*)"
           }
         ]
       },
