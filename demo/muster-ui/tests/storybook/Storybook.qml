@@ -24,8 +24,12 @@ Rectangle {
          blocked: false, blockedNote: "", balance: "15",
          address: "{\"nullifier_public_key\":\"bdceb96673e2e5311fe4dd1c7fd18260df3339\"}",
          canReceive: true, canClaim: false, claimVerb: "", addressForm: 0, empty: false},
+        // Blocked with a stand-in reason. Nothing sets a blocker today — the
+        // private registration that used to is retracted — but the row survives
+        // for the next holding that needs one, so the storybook keeps covering
+        // the branch rather than letting it rot untested.
         {id: "lez.public", name: "Public λ", denom: "LEZ", sourceNote: "on the zone's public record",
-         blocked: true, blockedNote: "Registering on-chain — about seven minutes.", balance: "0",
+         blocked: true, blockedNote: "Held while the zone catches up.", balance: "0",
          address: "9fbbd82d31d8b1043061c3053728f14539aa3a89e55a764b671e8762e48a9bac",
          canReceive: false, canClaim: false, claimVerb: "", addressForm: 1, empty: true},
         {id: "lez.vault", name: "Vault λ", denom: "LEZ", sourceNote: "held for you, not yet yours to spend",

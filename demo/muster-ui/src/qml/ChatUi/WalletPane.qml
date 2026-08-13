@@ -332,9 +332,12 @@ Rectangle {
                 }
 
                 // Said here as well as on the card, because this is where
-                // someone comes to reconcile a figure they did not expect.
+                // someone comes to reconcile a figure they did not expect. Not
+                // a workaround note: a shielded payment always lands at a fresh
+                // account the sender numbered, so scanning is how the balance is
+                // read and there is nothing here to wait out.
                 LogosText {
-                    objectName: "paneBalanceWorkaroundNote"
+                    objectName: "paneBalanceScanNote"
                     Layout.fillWidth: true
                     visible: root.ready && root.receivedElsewhere
                     wrapMode: Text.WordWrap
