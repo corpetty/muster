@@ -18,7 +18,7 @@
         },
         {
           "path": "demo/README.md",
-          "sha256": "0a272a489cb3a8f1badf9722d6f2e33ea38adbf54a0fe86841bbb0ea9bb4859e",
+          "sha256": "1c3512923ee892e0296488baa02e37ce0e72751757766654ee6faa14834734f4",
           "note": "what the demo composes, and the invariant-by-invariant table behind the demo-build view"
         },
         {
@@ -131,12 +131,12 @@
         },
         {
           "path": "demo/muster-ui/src/ChatBackend.h",
-          "sha256": "03b23aef1d006a43a85462e85e25965fc2b4c9c63241bfa3e52baa0fb4637477",
+          "sha256": "6bd523c5278e75a1986d652ad819b105632d79ebfe51503dd3f20381d353a803",
           "note": "ChatBackend derives ChatBackendSimpleSource — it is the QtRO source, not the replica"
         },
         {
           "path": "demo/muster-ui/src/ChatBackendWallet.cpp",
-          "sha256": "3f7a142db4241d4776248583264ef2133a38971411aaaeb852541d43719010cd",
+          "sha256": "8fc7f3955255bc037f6e939df4b3e7e32778f12d87e2155628fe3b08962edd99",
           "note": "walletDir() derives from the chat module's assigned instance directory and refuses rather than sharing a fallback"
         },
         {
@@ -216,7 +216,7 @@
         },
         {
           "path": "demo/muster-ui/src/ChatBackendWallet.cpp",
-          "sha256": "3f7a142db4241d4776248583264ef2133a38971411aaaeb852541d43719010cd",
+          "sha256": "8fc7f3955255bc037f6e939df4b3e7e32778f12d87e2155628fe3b08962edd99",
           "note": "modules().lez_core.* — the generated client the flake comment says is not used"
         }
       ],
@@ -615,7 +615,7 @@
       "sources": [
         {
           "path": "demo/README.md",
-          "sha256": "0a272a489cb3a8f1badf9722d6f2e33ea38adbf54a0fe86841bbb0ea9bb4859e",
+          "sha256": "1c3512923ee892e0296488baa02e37ce0e72751757766654ee6faa14834734f4",
           "note": "the four-rails table and the floor statement"
         },
         {
