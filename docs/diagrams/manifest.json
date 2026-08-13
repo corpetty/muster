@@ -131,7 +131,7 @@
         },
         {
           "path": "demo/muster-ui/src/ChatBackend.h",
-          "sha256": "78c4f057e76436c3361793246c99a5de510b7e4cb1d9e30102068e7488529a6c",
+          "sha256": "03b23aef1d006a43a85462e85e25965fc2b4c9c63241bfa3e52baa0fb4637477",
           "note": "ChatBackend derives ChatBackendSimpleSource — it is the QtRO source, not the replica"
         },
         {
@@ -169,7 +169,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "1da49335bc50d7ee437de37428324cda85e7bd905ca612ac9709a01d93993e1c",
+          "sha256": "4010f5e300240e23b269a4aac922bcd07837312fb3e6c36b216c60e01de6fe38",
           "note": "the two rules the C header states, and the never-hand-write-what-the-contract-generates rule"
         },
         {
@@ -179,7 +179,7 @@
         },
         {
           "path": "demo/muster-ui/CMakeLists.txt",
-          "sha256": "10638f212df274b1ab59c450460fac1b24c240cc1a7d284a42610a8f874613a0",
+          "sha256": "309fee74fedfe49dab5f1893ba824a73fefc33584d99320d8c3db71d31e73887",
           "note": "logos_module() with REP_FILE, the macro that emits the plugin and QtRO glue"
         }
       ],
@@ -239,7 +239,7 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
           "note": "the normative requirement text and its ids"
         },
         {
@@ -281,7 +281,7 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
           "note": "the normative requirement text and its ids"
         },
         {
@@ -291,7 +291,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "1da49335bc50d7ee437de37428324cda85e7bd905ca612ac9709a01d93993e1c",
+          "sha256": "4010f5e300240e23b269a4aac922bcd07837312fb3e6c36b216c60e01de6fe38",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -319,11 +319,11 @@
     {
       "file": "mech-signing-payload.svg",
       "serves": "POST",
-      "shows": "The fields a signing payload commits to and the specific reuse each one defeats, with the two versioned fields marked apart from the invariant property.",
+      "shows": "The fields a signing payload commits to and the specific reuse each one defeats, with the two versioned fields marked apart from the invariant property, and the provenance record F-20 adds to the same payload.",
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
           "note": "the normative requirement text and its ids"
         },
         {
@@ -342,11 +342,56 @@
           "note": "FS-3's requirement that a test demonstrate cross-context failure"
         },
         {
+          "grade": "from-source",
+          "note": "The provenance-record row from F-20, which commits the same payload to where each of its inputs came from"
+        },
+        {
           "grade": "illustrative",
           "note": "The what-it-defeats column is the author's reading of why each field is there, not text quoted from the requirement"
         }
       ],
       "recheck": "P1, and if ADR-009's schema-identity derivation changes — though the property it protects is not allowed to."
+    },
+    {
+      "file": "mech-provenance-trail.svg",
+      "serves": "BOTH",
+      "shows": "Why re-deriving a materialization does not answer where its inputs came from, what F-20's provenance record commits to for each input class, the refusal that gives it teeth, and the two different boundaries it does and does not defend.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
+          "note": "F-20 and FS-10, the normative requirement text and its ids"
+        },
+        {
+          "path": "CLAUDE.md",
+          "sha256": "4010f5e300240e23b269a4aac922bcd07837312fb3e6c36b216c60e01de6fe38",
+          "note": "invariant 10, and invariant 1 whose blind spot the figure draws"
+        },
+        {
+          "path": "contracts/specs/derived-exo-3a1.spec.json",
+          "sha256": "5ecf4a22842835178fd708f1a8a436cdf7e2b1879c2c8e15a92e1f695f548272",
+          "note": "the six spans and their oracles; the status banner's probe count comes from here"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "The four input classes and their requirement ids, the class-plus-log-position record shape, and the refusal, all verbatim from F-20"
+        },
+        {
+          "grade": "from-source",
+          "note": "The epoch scoping and the participant-versus-outsider distinction from FS-10; the driver-described identity branch from F-6's membership model via FS-7"
+        },
+        {
+          "grade": "from-source",
+          "note": "The status banner's claim that no probe exists and four oracles await an executor, read from derived-exo-3a1's acceptance_tests"
+        },
+        {
+          "grade": "illustrative",
+          "note": "The untrusted-RPC example under the blind-spot row is a worked instance chosen to make the gap concrete, not a case quoted from the requirement"
+        }
+      ],
+      "recheck": "P0/P1, when the signing path first exists — and immediately if the model_check executor lands, since the status banner counts what is undischarged."
     },
     {
       "file": "mech-reduce-log.svg",
@@ -355,7 +400,7 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
           "note": "the normative requirement text and its ids"
         },
         {
@@ -365,7 +410,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "1da49335bc50d7ee437de37428324cda85e7bd905ca612ac9709a01d93993e1c",
+          "sha256": "4010f5e300240e23b269a4aac922bcd07837312fb3e6c36b216c60e01de6fe38",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -393,7 +438,7 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
           "note": "the normative requirement text and its ids"
         },
         {
@@ -430,7 +475,7 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
           "note": "the normative requirement text and its ids"
         },
         {
@@ -440,7 +485,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "1da49335bc50d7ee437de37428324cda85e7bd905ca612ac9709a01d93993e1c",
+          "sha256": "4010f5e300240e23b269a4aac922bcd07837312fb3e6c36b216c60e01de6fe38",
           "note": "the invariant this figure draws, in its shortest form"
         }
       ],
@@ -463,7 +508,7 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
           "note": "the normative requirement text and its ids"
         },
         {
@@ -500,7 +545,7 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "cd34026943a750de10d44f0d5afae0adb54b632ca8a727d0de2b32685a6b0f4c",
+          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
           "note": "the normative requirement text and its ids"
         },
         {
@@ -510,7 +555,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "1da49335bc50d7ee437de37428324cda85e7bd905ca612ac9709a01d93993e1c",
+          "sha256": "4010f5e300240e23b269a4aac922bcd07837312fb3e6c36b216c60e01de6fe38",
           "note": "the invariant this figure draws, in its shortest form"
         }
       ],
