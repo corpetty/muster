@@ -35,7 +35,7 @@ Needs [Nix](https://nixos.org/download) with flakes, and an internet connection:
 cd demo && make app
 ```
 
-That is the slow step — everything after it is seconds. Then two terminals:
+Then two terminals:
 
 ```bash
 make alice
@@ -43,6 +43,12 @@ make alice
 
 ```bash
 make bob
+```
+
+**The first `make alice` on a cold store is the slow one — tens of minutes.** It builds the standalone runner, which pulls the RISC Zero proving stack from source, and nix defaults to one job at a time. `make app` is *supposed* to pre-build that and does not; it builds the packaged module instead and returns in seconds. Tracked as `exo-d6d`. Until it is fixed, get the parallelism back with:
+
+```bash
+NIX_CONFIG='max-jobs = 8' make alice
 ```
 
 Wait for both account cards to read **Online**, open and fund each wallet, then copy Alice's address into Bob's **New chat**. [`demo/RUNBOOK.md`](demo/RUNBOOK.md) walks the whole journey; [`demo/WALKTHROUGH.md`](demo/WALKTHROUGH.md) is the annotated version, and [`demo/GAPS.md`](demo/GAPS.md) is the honest scorecard of what it does and does not protect.

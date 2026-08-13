@@ -24,7 +24,7 @@ Needs [Nix](https://nixos.org/download) with flakes, and an internet connection 
 make app
 ```
 
-The slow step; everything after it is seconds. Then a terminal each:
+Then a terminal each:
 
 ```bash
 make alice
@@ -33,6 +33,8 @@ make alice
 ```bash
 make bob
 ```
+
+**Budget tens of minutes for the first `make alice` on a cold store**, and use `NIX_CONFIG='max-jobs = 8' make alice` to get the parallelism back — nix defaults to one job at a time, which measured 41 derivations/min against 110 with eight. The runner pulls the RISC Zero proving stack from source, and `make app` does not pre-build it despite saying so: it builds `packages.default` (the `.lgx`) while `make run` launches `apps.default`, a different derivation. Tracked as `exo-d6d`; the Makefile's own help text is the thing that is wrong, so do not trust it over this paragraph until that lands.
 
 Both account cards read **Online** a couple of seconds after launch, and nothing works before that — the app says so rather than failing on the first action. Open and fund each wallet, then copy Alice's address into Bob's **New chat** and the conversation opens on both sides. That step is the argument in miniature: no directory, no lookup, no server that learns they met.
 

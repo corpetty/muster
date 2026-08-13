@@ -290,6 +290,41 @@ QtObject {
             evidence: qsTr("lez_core.transfer_public")
         },
         {
+            id: "payment-payee-origin",
+            step: root.stepPayment,
+            kind: "protects",
+            title: qsTr("It will only pay an address this room named"),
+            body: qsTr("Before any value moves, this build reads the conversation back and finds "
+                     + "the message the payee's address arrived in. No message, no payment — an "
+                     + "address it cannot account for is refused rather than flagged. The check "
+                     + "runs at the one place value moves, not in the dialog you happened to use, "
+                     + "because the view that forgets is the view worth attacking. What makes the "
+                     + "answer worth anything is that chat_module binds every message to its "
+                     + "author, so 'a named peer put this here' is unforgeable inside the room."),
+            evidence: qsTr("ChatBackend::addressOriginForMessages, refused in payForIntent")
+        },
+        {
+            id: "payment-payee-uncommitted",
+            step: root.stepPayment,
+            kind: "gap",
+            title: qsTr("Nothing you signed commits to where the address came from"),
+            body: qsTr("The check above happens, and then leaves no trace. Nothing in what this "
+                     + "build sends commits to the answer, so a receipt cannot show afterwards "
+                     + "which message the address came from, and a second client reading the same "
+                     + "thread has to redo the work and trust its own result. The room can vouch "
+                     + "for the address while you are in it; the payment cannot carry that "
+                     + "vouching anywhere else. Nor is the payee the only input that reaches a "
+                     + "payment — the balance you decided on was read from a sequencer, and "
+                     + "nothing accounts for that at all."),
+            fix: qsTr("F-20: the signing payload commits to a provenance record naming each "
+                    + "input's class and log position, and signing is refused when any input is "
+                    + "unaccountable. Needs a signing payload and a log, neither of which this "
+                    + "build has."),
+            status: "specified",
+            evidence: qsTr("F-20, FS-10 · contracts/specs/derived-exo-3a1.spec.json · none of its "
+                         + "six probes are written")
+        },
+        {
             step: root.stepPayment,
             kind: "protects",
             title: qsTr("You have no address that can be reused against you"),

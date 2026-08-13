@@ -77,6 +77,47 @@ QString authorOf(const QVariantMap& msg, const QString& self)
 
 } // namespace
 
+// ── where a payee address came from ──────────────────────────────────────
+//
+// The room is the only thing here that can vouch for an address. `chat_module`
+// binds every message to its author, so an address that arrived in an
+// address-share card in this conversation is one a named peer put here — and
+// an address that did not is a string some view handed down, which is not a
+// provenance however plausible it looks.
+//
+// Our own shares are deliberately not an answer. Paying an address back to
+// ourselves because we once published it is not a payee the room named, and
+// counting it would let a view route a payment to us and still pass the check.
+//
+// First occurrence wins: the question is when the address entered the room, and
+// a peer re-sharing the same one later does not change that.
+QVariantMap ChatBackend::addressOriginForMessages(const QVariantList& messages,
+                                                  const QString& address) const
+{
+    if (address.isEmpty())
+        return {};
+
+    const QString self = myAddress();
+    for (const QVariant& v : messages) {
+        const QVariantMap msg = v.toMap();
+        const QJsonObject card =
+            MusterMessage::cardOf(msg.value(QStringLiteral("content")).toString());
+        if (card.value(QStringLiteral("type")).toString() != QLatin1String("address-share"))
+            continue;
+        if (msg.value(QStringLiteral("from_self")).toBool())
+            continue;
+        if (card.value(QStringLiteral("keys")).toString() != address)
+            continue;
+
+        return QVariantMap{
+            {QStringLiteral("sender"), authorOf(msg, self)},
+            {QStringLiteral("atMs"), msg.value(QStringLiteral("timestamp_ms")).toLongLong()},
+            {QStringLiteral("assetName"), card.value(QStringLiteral("assetName")).toString()},
+        };
+    }
+    return {};
+}
+
 QVariantList ChatBackend::intentsForMessages(const QVariantList& messages) const
 {
     const QString self = myAddress();

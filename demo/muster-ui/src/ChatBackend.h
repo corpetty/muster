@@ -256,6 +256,12 @@ private:
     // that watched it happen. Approvals are attributed by each message's own
     // author and deduplicated per address, so approving twice is not two.
     QVariantList intentsForMessages(const QVariantList& messages) const;
+    // Where a payee address came from, read off the thread: the address-share
+    // card a peer posted it in, as {sender, atMs, assetName}. Empty when this
+    // conversation never carried it from anyone but us — which is the answer
+    // payForIntent refuses on.
+    QVariantMap addressOriginForMessages(const QVariantList& messages,
+                                         const QString& address) const;
     // The one intent a room is currently about — the last that is neither
     // final nor dropped — or an empty map. Drives the pinned banner (U-3).
     QVariantMap liveIntentForMessages(const QVariantList& messages) const;

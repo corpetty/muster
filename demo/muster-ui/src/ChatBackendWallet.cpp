@@ -934,6 +934,32 @@ void ChatBackend::payForIntent(const QString& conversationId, const QString& rai
                    .arg(railId.isEmpty() ? QString() : QStringLiteral(" (%1)").arg(railId)));
         return;
     }
+    // The same rule as the rail above, turned on the payee. A rail with nothing
+    // to say about what it leaks cannot be paid with; an address this room
+    // never named cannot be paid *to*. Both are refused here, at the one place
+    // value moves, rather than in whichever dialog remembered to check — the
+    // view that forgot is exactly the view an attacker would reach for.
+    //
+    // What this does and does not establish. It establishes that a named peer
+    // put this address in this conversation, which `chat_module` makes
+    // unforgeable in the room. It does not establish that they meant it now,
+    // and nothing signed here commits to the answer: a receipt cannot prove
+    // afterwards which message the address came from. That is F-20's job and
+    // this build has no signing payload to do it with.
+    logos::CallError msgErr;
+    const QVariantList payeeMsgs = modules().chat_module.get_messages(conversationId, &msgErr);
+    if (!msgErr.ok()) {
+        reportFailure(tr("Could not read this conversation to check where that address came from"),
+                      QString::fromStdString(msgErr.message));
+        return;
+    }
+    const QVariantMap payeeOrigin = addressOriginForMessages(payeeMsgs, toAddress);
+    if (payeeOrigin.isEmpty()) {
+        report(tr("Nobody in this conversation shared that address, so this build will not pay "
+                  "it. An address it cannot account for is a refusal, not a warning."));
+        return;
+    }
+
     // Copied, not held: the catalogue outlives the call, but a pointer into a
     // QVector does not survive it being rebuilt.
     const QString railName = rail->name;
