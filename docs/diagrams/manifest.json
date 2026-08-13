@@ -18,7 +18,7 @@
         },
         {
           "path": "demo/README.md",
-          "sha256": "f4ae820bab6371a4ba1581c83a6d272f9b2f232f62a0d71d96a472b88fd41e08",
+          "sha256": "0f9006900502c3b8789497827eb2a99db57af6450666568a8a32e2ca820a0e1f",
           "note": "what the demo composes, and the invariant-by-invariant table behind the demo-build view"
         },
         {
@@ -64,12 +64,12 @@
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
           "note": "§1 the seven stages and their leak descriptions; §2 the scoring and the cell-by-cell justification"
         },
         {
           "path": "demo/GAPS.md",
-          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
           "note": "the row-by-row basis for every 'what runs it here' and 'who still sees' cell"
         },
         {
@@ -131,17 +131,17 @@
         },
         {
           "path": "demo/muster-ui/src/ChatBackend.h",
-          "sha256": "8132b351c95fad7a9adeff1904131d315aab7fe9575d76712facb2c829fa57bd",
+          "sha256": "78c4f057e76436c3361793246c99a5de510b7e4cb1d9e30102068e7488529a6c",
           "note": "ChatBackend derives ChatBackendSimpleSource — it is the QtRO source, not the replica"
         },
         {
           "path": "demo/muster-ui/src/ChatBackendWallet.cpp",
-          "sha256": "3857e18584ed75b807ecbfa46e094f2bd06e1969d755b85342853b52d77dffe3",
+          "sha256": "3f7a142db4241d4776248583264ef2133a38971411aaaeb852541d43719010cd",
           "note": "walletDir() derives from the chat module's assigned instance directory and refuses rather than sharing a fallback"
         },
         {
           "path": "demo/GAPS.md",
-          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
           "note": "§5 — two live remote dependencies, and no offline or local mode"
         }
       ],
@@ -216,7 +216,7 @@
         },
         {
           "path": "demo/muster-ui/src/ChatBackendWallet.cpp",
-          "sha256": "3857e18584ed75b807ecbfa46e094f2bd06e1969d755b85342853b52d77dffe3",
+          "sha256": "3f7a142db4241d4776248583264ef2133a38971411aaaeb852541d43719010cd",
           "note": "modules().lez_core.* — the generated client the flake comment says is not used"
         }
       ],
@@ -254,7 +254,7 @@
         },
         {
           "path": "demo/GAPS.md",
-          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
           "note": "what the demo does instead, stated row by row"
         }
       ],
@@ -296,7 +296,7 @@
         },
         {
           "path": "demo/GAPS.md",
-          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
           "note": "what the demo does instead, stated row by row"
         }
       ],
@@ -370,7 +370,7 @@
         },
         {
           "path": "demo/CLAUDE.md",
-          "sha256": "964a941cd9c39a5bf05c9d44b5eae0ad9d7f0f23d4748781fba9c8b7815eb372",
+          "sha256": "4228408bb10ebb95492144f8dd7b10b13cc64a4997f98f59a9e84f1c032b12aa",
           "note": "the demo's own account of what it folds and what it does not have"
         }
       ],
@@ -403,7 +403,7 @@
         },
         {
           "path": "demo/GAPS.md",
-          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
           "note": "what the demo does instead, stated row by row"
         }
       ],
@@ -473,7 +473,7 @@
         },
         {
           "path": "demo/GAPS.md",
-          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
           "note": "what the demo does instead, stated row by row"
         }
       ],
@@ -533,12 +533,12 @@
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
           "note": "T5 and §11 — the framing, named there as the most reusable idea in the post and until now prose only"
         },
         {
           "path": "demo/GAPS.md",
-          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
           "note": "§1 the subscription-shape leak, §3 the address-form choice, §4b the account-identifier bug and its workaround"
         },
         {
@@ -570,17 +570,17 @@
       "sources": [
         {
           "path": "demo/README.md",
-          "sha256": "f4ae820bab6371a4ba1581c83a6d272f9b2f232f62a0d71d96a472b88fd41e08",
+          "sha256": "0f9006900502c3b8789497827eb2a99db57af6450666568a8a32e2ca820a0e1f",
           "note": "the four-rails table and the floor statement"
         },
         {
           "path": "demo/CLAUDE.md",
-          "sha256": "964a941cd9c39a5bf05c9d44b5eae0ad9d7f0f23d4748781fba9c8b7815eb372",
+          "sha256": "4228408bb10ebb95492144f8dd7b10b13cc64a4997f98f59a9e84f1c032b12aa",
           "note": "the Holding/Rail catalogue rule, and sendableRailById refusing a rail whose claimId names nothing"
         },
         {
           "path": "demo/GAPS.md",
-          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
           "note": "§4 — what the private rail protects, and what it measured"
         }
       ],
@@ -603,12 +603,12 @@
       "sources": [
         {
           "path": "demo/GAPS.md",
-          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
           "note": "§3b — the comparison, both gaps, and the lez-multisig status"
         },
         {
           "path": "demo/CLAUDE.md",
-          "sha256": "964a941cd9c39a5bf05c9d44b5eae0ad9d7f0f23d4748781fba9c8b7815eb372",
+          "sha256": "4228408bb10ebb95492144f8dd7b10b13cc64a4997f98f59a9e84f1c032b12aa",
           "note": "an approval is authenticated, not authorizing; the fold deduplicates by author"
         }
       ],
@@ -635,7 +635,7 @@
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
           "note": "§1 — the stage names and their order, which is what the strip indicates position in"
         }
       ],
@@ -663,17 +663,17 @@
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
           "note": "§5 — every number, with its provenance and the do-not-state-as-typical caveat"
         },
         {
           "path": "demo/CLAUDE.md",
-          "sha256": "964a941cd9c39a5bf05c9d44b5eae0ad9d7f0f23d4748781fba9c8b7815eb372",
+          "sha256": "4228408bb10ebb95492144f8dd7b10b13cc64a4997f98f59a9e84f1c032b12aa",
           "note": "the async-variant rule, the 20s sync-wrapper timeout, and settleAfterTransfer polling until this wallet's own view moves"
         },
         {
           "path": "demo/GAPS.md",
-          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
           "note": "§4 — the proving measurement and what it means for the feature"
         }
       ],
@@ -700,12 +700,12 @@
       "sources": [
         {
           "path": "demo/poc/BUG-private-transfer-recipient-identifier.md",
-          "sha256": "10e15a87711ee675e32fb299b9c4bf2d5352c52664dff8615c27c377090794d7",
+          "sha256": "b839f9f5d13e1af05d9a271c445bae987782426ce0ab07d51c7c8821ffea6359",
           "note": "§6 — the upstream response that withdrew the report this figure used to draw"
         },
         {
           "path": "demo/GAPS.md",
-          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
           "note": "§4b — the model, why we misread it, and what the misreading cost"
         }
       ],
@@ -728,12 +728,12 @@
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
           "note": "§4 — the fork, its four comparison rows, and the honesty point that the label system is not wired in"
         },
         {
           "path": "demo/GAPS.md",
-          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
           "note": "§3 — the contrast worth drawing, and the address-form choice being the payee's"
         }
       ],
@@ -756,7 +756,7 @@
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
           "note": "§1 carries the stage names and leak descriptions verbatim from the PriFi competitor matrix cross-check"
         }
       ],
@@ -779,12 +779,12 @@
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
           "note": "§2 holds the scoring scheme and the cell-by-cell justification"
         },
         {
           "path": "demo/GAPS.md",
-          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
           "note": "the row-by-row basis for each score"
         }
       ],
@@ -807,12 +807,12 @@
       "sources": [
         {
           "path": "demo/GAPS.md",
-          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
           "note": "§1, finding each other"
         },
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
           "note": "§3, discovery in Muster"
         }
       ],
@@ -840,7 +840,7 @@
         },
         {
           "path": "demo/GAPS.md",
-          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
           "note": "§1 and §2, the store-node observation"
         }
       ],
@@ -859,12 +859,12 @@
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "d2350bdc96e321efa43b38e45f9fa8a22fef0aa86395c8470bb82b658f123f45",
+          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
           "note": "§5, numbers with provenance"
         },
         {
           "path": "demo/GAPS.md",
-          "sha256": "b38532f155c9c49b60a887ce6d5bff4c31488f6ee13fad47522b918991eaeb63",
+          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
           "note": "§4, what it costs, measured"
         }
       ],
