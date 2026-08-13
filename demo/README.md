@@ -16,6 +16,35 @@ A working prototype of the simplest complete transaction journey — *one person
 
 It is not Muster. Muster is the Nim/LIDL client specified in `docs/01-furps.md` and `docs/02-implementation-plan.md`, and it is being built spec-first with acceptance oracles. This is the fast, disposable cousin that ships this week.
 
+## Run it
+
+Needs [Nix](https://nixos.org/download) with flakes, and an internet connection — each peer joins the public `logos.test` delivery network and talks to the LEZ testnet sequencer. There is no Basecamp, no package manager and no chain to sync.
+
+```bash
+make app
+```
+
+The slow step; everything after it is seconds. Then a terminal each:
+
+```bash
+make alice
+```
+
+```bash
+make bob
+```
+
+Both account cards read **Online** a couple of seconds after launch, and nothing works before that — the app says so rather than failing on the first action. Open and fund each wallet, then copy Alice's address into Bob's **New chat** and the conversation opens on both sides. That step is the argument in miniature: no directory, no lookup, no server that learns they met.
+
+A peer is just a `--user-dir`. Its chat identity and its wallet share one directory under `.run/<name>/`, deliberately — two peers sharing a directory would share an identity, which would make any recording a lie. `make clean-peer PEER=alice` resets both together, and `make run PEER=carol` adds a third.
+
+| Read this | For |
+|---|---|
+| `RUNBOOK.md` | The journey step by step, and what each step is demonstrating |
+| `WALKTHROUGH.md` | The annotated version, with what to look at on screen |
+| `GAPS.md` | The honest scorecard: what is protected, what is not, and what would close each gap |
+| `make help` | Every target |
+
 ## How it differs from the real thing
 
 | Root invariant | What `demo/` does instead |
