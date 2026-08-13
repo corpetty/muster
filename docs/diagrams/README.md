@@ -254,7 +254,7 @@ None of this produces a publishable figure. All of it makes every later tranche 
 1. ~~How much of Family C should be drawn before its phase ships?~~ **Decided (§8, tranche 5):** draw the full set, with a status strip carrying the closed vocabulary, the requirement ids, the phase, and what exists today — placed above everything it describes so a screenshot cannot lose it.
 2. **Does `pipeline-stack-correlation` subsume fig1**, or sit beside it? It is a superset of fig1's content plus the infrastructure column. Beside, probably — fig1 is the thesis and this is the evidence — but they should not both open a post.
 3. **Should demo figures and spec figures be distinguishable at a glance** — a different ground, a corner mark — given the two builds coexist and one deliberately violates the other's invariants? `substrate-stack.html` answers it one way: a dashed "specified, not built" treatment applied *per node* rather than per figure, so one diagram carries both builds. Whether that generalises past this substrate is untested.
-4. **Where do the interactive versions get hosted?** They need a page that permits `<script>`. GitHub Pages on this repo is the obvious answer and matches how the assembly preview is served; the post then embeds the exported frame and links out.
+4. ~~Where do the interactive versions get hosted?~~ **Decided:** GitHub Pages on this repo, serving `docs/diagrams/` and nothing else. The substrates stay in-repo because they are Muster-specific and both the frame export and the manifest already operate on those files. A post embeds the exported frame and links out to the live view.
 
 ---
 
@@ -265,6 +265,7 @@ None of this produces a publishable figure. All of it makes every later tranche 
 | 2026-08-12 | Consolidate to `docs/diagrams/` with slug names; `figN-` retired | §1.2 |
 | 2026-08-12 | Provenance block per figure + `manifest.json`, two pre-commit checks (fail on missing source, warn on changed source) | §2 |
 | 2026-08-12 | Reuse the assembly substrate engine; static figures become exported frames rather than separately authored | §3 |
+| 2026-08-13 | **Serve `docs/diagrams/` on GitHub Pages**, generated index and all — but only that path. The specification documents are already public in the repo; rendering them as a website is a separate decision | §8 |
 | 2026-08-12 | **Draw specified-but-unbuilt guarantees, with the status above the content.** A strip carrying the closed vocabulary, the requirement ids, the phase and what exists today. Resolves §6 Q1 | §8 |
 | 2026-08-12 | **Fork rather than upstream.** Muster is an app leveraging the stack, not the stack itself, so its substrate is its own artefact and diverges freely. The mix and a11y corrections live in the fork; passing them upstream is a courtesy, not a dependency | §3.3 |
 
@@ -342,6 +343,10 @@ Open question 1 is **decided**: draw the full set now, and put the status where 
 | `mech-plugin-blocks.svg` | **specified · not built** — F-12, F-13, FS-5 · P5 |
 
 Written against `01-furps.md` directly rather than from the summaries, so every id and every quoted property is the normative text. `mech-two-identities` is the one to keep: F-14 is marked *Contested* in the requirements themselves, so the figure draws an acknowledged open decision and lists the three ways out without picking one.
+
+**Published.** `docs/diagrams/` is served at **<https://corpetty.github.io/muster/>** by `.github/workflows/pages.yml`, which uploads the directory as it stands — no build step, because the substrates are self-contained and the figures are plain SVG. `index.html` is generated from `manifest.json` by `tools/make-index.py`, so a figure with no manifest entry cannot reach the site, and the workflow fails if the committed index is stale.
+
+The artifact path is deliberately `docs/diagrams`, not `docs`. The specification documents are already public in the repository; rendering them as a website is a different decision, and a one-word widening of that path would make it without anyone choosing to.
 
 **A third silent-failure class, now automated.** Text overflowing the canvas happened in three figures running — it renders, it looks fine in the source, and it is only wrong in the raster. `check-manifest.py` now estimates text width and warns. It is a heuristic (one advance-width factor per family) that catches a line 20% too long and will not catch one 2% too long, and it skips exported frames, whose font-size and anchor come from a stylesheet it cannot read.
 

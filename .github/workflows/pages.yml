@@ -1,0 +1,60 @@
+# Publish docs/diagrams/ — and only that — as the Pages site.
+#
+# The interactive substrates need a page that permits <script>, which forum
+# software does not (docs/diagrams/README.md §3.2). Posts embed the exported
+# static frame and link out to the live version here.
+#
+# The artifact path is docs/diagrams, not docs: the specification documents are
+# already public in the repository, and rendering them as a website is a
+# separate decision from serving the diagrams. Widening this path publishes
+# them — do it deliberately or not at all.
+#
+# No build step. The substrates are self-contained single files and the figures
+# are plain SVG, so this uploads the directory as it stands. That is the same
+# property that makes a substrate openable straight from a checkout.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/diagrams/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a deploy in progress: a half-published site is worse than a
+# slightly stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The index is generated from manifest.json, so a figure that was added
+      # without a manifest entry cannot reach the site — the same gate the
+      # pre-commit hook applies locally, enforced again at publish time.
+      - name: Check the manifest, and rebuild the index from it
+        run: |
+          python3 docs/diagrams/tools/check-manifest.py
+          python3 docs/diagrams/tools/make-index.py
+          git diff --exit-code -- docs/diagrams/index.html \
+            || { echo "::error::index.html is stale — run tools/make-index.py and commit it"; exit 1; }
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/diagrams
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -140,3 +140,6 @@
 {"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.23","payload":{}}
 {"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.24","payload":{}}
 {"type":"close","timestamp":"2026-08-12T23:08:53.842602526Z","issue_id":"exo-2d5.25","payload":{}}
+{"type":"create","timestamp":"2026-08-13T11:56:46.417491552Z","issue_id":"exo-e21","payload":{"description":"Resolves docs/diagrams/README.md §6 Q4. Publish docs/diagrams/ (only) as the Pages site via an Actions workflow, with a generated index page. Substrates stay in-repo because they are Muster-specific and the frame export and manifest already operate on those files.","priority":"2","title":"Serve the interactive substrates on GitHub Pages","type":"feature"}}
+{"type":"rename","timestamp":"2026-08-13T11:56:46.441619485Z","issue_id":"exo-e21","payload":{"new_id":"exo-2d5.26"}}
+{"type":"dep_add","timestamp":"2026-08-13T11:56:46.441619485Z","issue_id":"exo-2d5.26","payload":{"dep_type":"parent-child","depends_on":"exo-2d5"}}
