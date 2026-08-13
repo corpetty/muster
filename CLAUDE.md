@@ -46,16 +46,46 @@ Re-validate the stack decisions table in `docs/02-implementation-plan.md` agains
 
 ## Layout
 
+**What exists today:**
+
+```
+demo/            the speed build — runnable, and deliberately not the specified client
+  muster-ui/     fork of logos-co/logos-chat-ui: QML + QtRO C++ backend, wallet journey
+docs/            00-vision · 01-furps · 02-implementation-plan
+  diagrams/      the figure programme, its manifest, and the rot checker
+  labbook/       traps found the expensive way
+  posts/         campaign write-ups
+contracts/specs/ typed specs with acceptance oracles, one per invariant
+ui/prototype/    coordination-prototype-v2.html — the standalone HTML reference build
+scripts/         git hooks
+```
+
+**What P0 onward adds** — planned, not present. Do not cite these paths as though they resolve:
+
 ```
 module/   Nim core behind a LIDL contract → wrapped as muster-module.lgx
   src/    api (muster.lidl + generated surface — the only outward seam) · schemas · dcbor · crypto · log · intents · drivers · transport · plugins
 ui/       QML frontend → muster-ui.lgx (Logos.Theme + prototype tokens, ADR-011; logos-qt-mcp tests)
-  prototype/  coordination-prototype-v2.html — the standalone HTML reference build
 infra/    anvil fixtures (Safe 1.4.1)
-docs/     vision · furps · plan · adr/
 ```
 
+ADRs are **not** in `docs/adr/`; they are a section of `docs/02-implementation-plan.md`.
+
 ## Commands
+
+**These run today.** There is no root `flake.nix`; every working target lives under `demo/`.
+
+```
+cd demo && make app              # build the standalone runner (the slow one)
+make alice                       # launch a peer; `make bob` for the second
+make run PEER=carol              # any further peer
+make clean-peer PEER=alice       # wipe one peer's chat identity and wallet
+make help                        # every target
+cd demo/muster-ui && nix build   # the muster_ui module itself
+python3 docs/diagrams/tools/check-manifest.py   # figure-provenance gate (--update, --stamp)
+```
+
+**These do not exist yet.** They arrive with `module/` at P0 and are listed as the target, not as something to run:
 
 ```
 nix develop                      # dev shell (Nim toolchain, Qt6, deps)

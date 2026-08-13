@@ -18,7 +18,7 @@
         },
         {
           "path": "demo/README.md",
-          "sha256": "0f9006900502c3b8789497827eb2a99db57af6450666568a8a32e2ca820a0e1f",
+          "sha256": "0a272a489cb3a8f1badf9722d6f2e33ea38adbf54a0fe86841bbb0ea9bb4859e",
           "note": "what the demo composes, and the invariant-by-invariant table behind the demo-build view"
         },
         {
@@ -169,7 +169,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "4010f5e300240e23b269a4aac922bcd07837312fb3e6c36b216c60e01de6fe38",
+          "sha256": "00f37aa0a19598e0640d71ce19310d8cf29402e2a529ec09a8aa0e650437db03",
           "note": "the two rules the C header states, and the never-hand-write-what-the-contract-generates rule"
         },
         {
@@ -291,7 +291,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "4010f5e300240e23b269a4aac922bcd07837312fb3e6c36b216c60e01de6fe38",
+          "sha256": "00f37aa0a19598e0640d71ce19310d8cf29402e2a529ec09a8aa0e650437db03",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -364,7 +364,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "4010f5e300240e23b269a4aac922bcd07837312fb3e6c36b216c60e01de6fe38",
+          "sha256": "00f37aa0a19598e0640d71ce19310d8cf29402e2a529ec09a8aa0e650437db03",
           "note": "invariant 10, and invariant 1 whose blind spot the figure draws"
         },
         {
@@ -410,7 +410,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "4010f5e300240e23b269a4aac922bcd07837312fb3e6c36b216c60e01de6fe38",
+          "sha256": "00f37aa0a19598e0640d71ce19310d8cf29402e2a529ec09a8aa0e650437db03",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -485,7 +485,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "4010f5e300240e23b269a4aac922bcd07837312fb3e6c36b216c60e01de6fe38",
+          "sha256": "00f37aa0a19598e0640d71ce19310d8cf29402e2a529ec09a8aa0e650437db03",
           "note": "the invariant this figure draws, in its shortest form"
         }
       ],
@@ -555,7 +555,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "4010f5e300240e23b269a4aac922bcd07837312fb3e6c36b216c60e01de6fe38",
+          "sha256": "00f37aa0a19598e0640d71ce19310d8cf29402e2a529ec09a8aa0e650437db03",
           "note": "the invariant this figure draws, in its shortest form"
         }
       ],
@@ -615,7 +615,7 @@
       "sources": [
         {
           "path": "demo/README.md",
-          "sha256": "0f9006900502c3b8789497827eb2a99db57af6450666568a8a32e2ca820a0e1f",
+          "sha256": "0a272a489cb3a8f1badf9722d6f2e33ea38adbf54a0fe86841bbb0ea9bb4859e",
           "note": "the four-rails table and the floor statement"
         },
         {
