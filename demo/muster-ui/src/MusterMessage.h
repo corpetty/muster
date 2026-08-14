@@ -55,6 +55,32 @@ inline QString wrap(const QString& type, QJsonObject body = {})
     return QString::fromUtf8(QJsonDocument(body).toJson(QJsonDocument::Compact));
 }
 
+// "I am in the room." Sent by the side that was *invited*, the moment its
+// conversation exists.
+//
+// It carries nothing, because its arrival is the entire content: it is the
+// only evidence the inviter can get that the conversation now has two ends.
+//
+// Why it has to exist. create_conversation sends a cryptographic invite and
+// returns; the peer joins some time later, and nothing tells the inviter when.
+// A direct conversation's roster reports both participants from the instant it
+// is created and never a pending one (chat_module.lidl), there is no
+// per-message delivery state, and members_changed does not fire on the inviter
+// when the peer joins -- measured 2026-08-14, no roster read on the inviter for
+// the two and a half hours after one did. So a card sent on the inviter's first
+// impulse goes to an MLS group of one and is encrypted to an epoch the peer
+// will never be in. Not delayed: unreadable, permanently.
+//
+// Hence a handshake at this layer rather than a guess at that one. The inviter
+// holds its first card until this arrives. A peer too old to send one is not
+// broken by it -- an unknown type renders as an ordinary bubble, and the
+// inviter's wait is bounded, falling back to the ask-by-hand button that has
+// always been there.
+inline QString conversationReady()
+{
+    return wrap(QStringLiteral("conversation-ready"));
+}
+
 // "Send me an address to pay." Still carries nothing: the ask does not need to
 // name an asset, because the answer does, and a request that pinned one down
 // would make the payer choose before they know what the payee has.

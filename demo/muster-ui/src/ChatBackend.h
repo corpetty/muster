@@ -205,6 +205,19 @@ private:
     // module reports it created. Cleared as soon as it is used.
     QString m_pendingVerb;
 
+    // ── the join handshake (see MusterMessage::conversationReady) ────────
+    // The conversation whose opening card is waiting for the peer to announce
+    // itself, or empty. At most one: it only ever applies to a conversation
+    // this instance just created, and creating a second replaces the first.
+    QString m_heldAsk;
+    // How long to wait before giving up and telling the user to ask by hand.
+    // Generous, because the peer may be starting up — a shielded wallet's own
+    // first launch is slower than this — and the cost of waiting is a line on
+    // screen, while the cost of giving up early is a silent non-ask.
+    static constexpr int kPeerJoinWaitMs = 120000;
+    void holdAskUntilPeerJoins(const QString& conversationId);
+    void onPeerJoined(const QString& conversationId);
+
     // Sync to the tip, publish the balances, and declare the wallet Ready.
     void finishWalletOpen();
 

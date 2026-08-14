@@ -53,7 +53,8 @@ ColumnLayout {
     // chatter" voice the timestamps and addresses use.
     LogosText {
         Layout.fillWidth: true
-        text: root.cardType === "address-request" ? qsTr("Asked for an address")
+        text: root.cardType === "conversation-ready" ? qsTr("Joined the conversation")
+            : root.cardType === "address-request" ? qsTr("Asked for an address")
             : root.cardType === "address-share" ? qsTr("Shared an address")
             : root.cardType === "intent-propose" ? qsTr("Proposed a payment")
             : root.cardType === "intent-approve" ? qsTr("Approved")
@@ -64,6 +65,21 @@ ColumnLayout {
         font.family: Theme.typography.mono
         font.pixelSize: Theme.typography.secondaryText
         font.weight: Theme.typography.weightMedium
+    }
+
+    // ── conversation-ready ───────────────────────────────────────────────
+    // Small, because its job is done by arriving: it is what tells the other
+    // side the room has two ends, so their first card can go out. Shown rather
+    // than hidden so the pause before that card is legible instead of looking
+    // like nothing happened. See MusterMessage::conversationReady.
+    LogosText {
+        visible: root.cardType === "conversation-ready"
+        Layout.fillWidth: true
+        wrapMode: Text.WordWrap
+        text: root.isMe ? qsTr("You joined, and they were told so.")
+                        : qsTr("They are here. Anything waiting to be sent can go now.")
+        color: root.isMe ? ChatTheme.bubbleOwnText : ChatTheme.bubblePeerText
+        font.pixelSize: Theme.typography.primaryText
     }
 
     // ── address-request ──────────────────────────────────────────────────

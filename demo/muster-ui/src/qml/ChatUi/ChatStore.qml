@@ -19,6 +19,9 @@ QtObject {
     readonly property bool online: backend ? backend.chatStatus === ChatBackend.Online : false
     readonly property bool hasError: backend ? backend.chatStatus === ChatBackend.Error : false
     readonly property string currentConversationId: backend ? backend.currentConversationId : ""
+    // The conversation whose opening card is held until the peer announces
+    // itself, or empty. See MusterMessage::conversationReady.
+    readonly property string awaitingJoinConversationId: backend ? backend.awaitingJoinConversationId : ""
     readonly property string loadedConversationId: backend ? backend.loadedConversationId : ""
     readonly property bool currentIsGroup: backend ? backend.currentIsGroup : false
     readonly property string currentDisplayName: backend ? backend.currentDisplayName : ""

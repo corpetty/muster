@@ -246,6 +246,8 @@ Rectangle {
                         detailsShown: root.detailsShown
                         hasConversation: root.selectedConversationId !== ""
                         hasConversations: store.actions.length > 0
+                        awaitingJoin: store.awaitingJoinConversationId !== ""
+                                      && store.awaitingJoinConversationId === root.selectedConversationId
                         online: store.online
                         ready: root.selectionLoaded
                         walletReady: store.walletReady

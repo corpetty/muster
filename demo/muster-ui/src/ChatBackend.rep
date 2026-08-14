@@ -176,6 +176,16 @@ class ChatBackend
     // stop displaying it.
     PROP(QString newWalletMnemonic READONLY)
 
+    // The conversation whose opening card is being held until the other side
+    // joins, or empty. Empty is the normal state; it is only ever set on a
+    // conversation this instance just created with an activity in mind.
+    //
+    // The view uses it to say why nothing has happened yet. That is the whole
+    // reason it is a property rather than private state: a wait nobody explains
+    // is indistinguishable from a hang, and this one can last as long as the
+    // peer takes to come online. See MusterMessage::conversationReady.
+    PROP(QString awaitingJoinConversationId READONLY)
+
     // Open the wallet for this instance, creating one if none exists. Safe to
     // call more than once.
     SLOT(void openWallet())

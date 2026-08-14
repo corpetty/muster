@@ -150,6 +150,13 @@ void ChatBackend::noteJourneyMessage(const QString& content, bool fromSelf, qint
         if (rankOf(journeyStep()) >= rankOf(step))
             return;
         what = tr("A private conversation opened");
+    } else if (type == QLatin1String("conversation-ready")) {
+        // Both ends exist, which is what "conversation" means here. Worth a
+        // line because it is the moment the room became usable, and because the
+        // card that follows it was waiting on this one.
+        if (rankOf(journeyStep()) >= rankOf(step))
+            return;
+        what = fromSelf ? tr("You joined") : tr("They joined");
     } else if (type == QLatin1String("address-request")) {
         what = fromSelf ? tr("You asked where to pay") : tr("They asked where to pay");
     } else if (type == QLatin1String("address-share")) {

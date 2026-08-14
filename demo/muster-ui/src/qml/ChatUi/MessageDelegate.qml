@@ -59,7 +59,8 @@ Item {
             if (!parsed || !parsed.muster || !parsed.type)
                 return null;
             // Only the ones we render; anything else is a plain bubble.
-            const known = ["address-request", "address-share", "send-receipt",
+            const known = ["conversation-ready",
+                           "address-request", "address-share", "send-receipt",
                            "intent-propose", "intent-approve", "intent-drop"];
             if (known.indexOf(parsed.type) === -1)
                 return null;

@@ -34,6 +34,8 @@ Rectangle {
     // Whether the details panel the header's toggle opens is showing.
     property bool detailsShown: false
     required property bool hasConversation
+    // True while this thread's opening card is held pending the peer's arrival.
+    property bool awaitingJoin: false
     // Whether any conversation exists at all. Optional so the pane stands alone;
     // drives the empty-thread guidance when nothing is selected.
     property bool hasConversations: true
@@ -255,6 +257,27 @@ Rectangle {
                 visible: threadList.count === 0 && (!root.hasConversation || (root.threadReady && !settleTimer.running))
                 text: root.hasConversation ? qsTr("No messages yet") : root.hasConversations ? qsTr("Select a conversation to start chatting") : qsTr("No conversations yet. Start something with someone from Home.")
             }
+        }
+
+        // Why nothing has been said yet in a conversation the user just opened
+        // with an activity in mind. The card is held until the other side
+        // announces itself, because one sent before they join reaches nobody
+        // and cannot be recovered — see MusterMessage::conversationReady.
+        //
+        // Said here rather than left as an empty thread: this is exactly the
+        // wait that is indistinguishable from a hang, and an unexplained one is
+        // what made the old behaviour look like it had worked.
+        LogosText {
+            objectName: "awaitingJoinNote"
+            Layout.fillWidth: true
+            Layout.leftMargin: Theme.spacing.xlarge
+            Layout.rightMargin: Theme.spacing.xlarge
+            visible: root.awaitingJoin
+            wrapMode: Text.WordWrap
+            text: qsTr("Waiting for them to join. They will be asked for an address the moment "
+                     + "they do — a message sent before then would reach nobody.")
+            color: Theme.palette.textTertiary
+            font.pixelSize: Theme.typography.badgeText
         }
 
         MessageComposer {

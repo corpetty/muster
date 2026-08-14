@@ -3,6 +3,7 @@
 #include "MessageListModel.h"
 #include "MemberListModel.h"
 #include "Identity.h"
+#include "MusterMessage.h"
 #include "ProcessLog.h"
 
 // Generated umbrella: LogosModules (behind modules()) from
@@ -443,6 +444,41 @@ void ChatBackend::createConversation(QString peerAddress)
     // appliers handle the UI side from there.
 }
 
+// Hold this conversation's opening card until the other side announces itself,
+// and say on screen that we are doing so.
+//
+// Bounded, because the peer may simply be offline and a wait with no end is the
+// hang this is meant to prevent. When it expires the held card is dropped
+// rather than sent: sending it then would be the original bug with a delay in
+// front of it. What is left is the ask-by-hand button in the composer, which
+// has always worked, and a line saying why it is needed.
+void ChatBackend::holdAskUntilPeerJoins(const QString& conversationId)
+{
+    m_heldAsk = conversationId;
+    setAwaitingJoinConversationId(conversationId);
+    QTimer::singleShot(kPeerJoinWaitMs, this, [this, conversationId] {
+        if (m_heldAsk != conversationId)
+            return; // they arrived; onPeerJoined already sent it
+        m_heldAsk.clear();
+        setAwaitingJoinConversationId(QString());
+        report(tr("They have not joined yet, so nothing has been asked. When they appear, "
+                  "use \"Ask for an address\" in the composer."));
+    });
+}
+
+// Any message at all from the other side proves the conversation carries, which
+// is all the held card was waiting for. A conversation-ready card is what they
+// will normally have sent, but this deliberately does not insist on one: a peer
+// from an older build that opens with plain text has proved the same thing.
+void ChatBackend::onPeerJoined(const QString& conversationId)
+{
+    if (m_heldAsk.isEmpty() || m_heldAsk != conversationId)
+        return;
+    m_heldAsk.clear();
+    setAwaitingJoinConversationId(QString());
+    requestAddress(conversationId);
+}
+
 // Start something with someone. The verb is remembered, not sent: the room has
 // to exist before anything can be said in it, so the activity acts on
 // conversation_created. That is also what makes choosing it up front worth
@@ -676,6 +712,10 @@ void ChatBackend::applyMessageReceived(const QVariantList& args)
     if (isIncomingReceipt(content))
         deferToEventLoop([this] { scanForIncomingPayment(); });
 
+    // Likewise before the on-screen check: their arrival releases a held card
+    // whether or not the user is looking at that thread.
+    deferToEventLoop([this, convoId] { onPeerJoined(convoId); });
+
     if (convoId == currentConversationId()) {
         m_messageModel->addMessage(shortSenderLabel(sender), content, when, false);
         // Advance the journey with it: an arriving card is how the other side
@@ -749,11 +789,30 @@ void ChatBackend::applyConversationCreated(const QVariantList& args)
     if (isOutgoing && !m_pendingVerb.isEmpty()) {
         const QString verb = m_pendingVerb;
         m_pendingVerb.clear();
-        if (verb == QLatin1String("request"))
-            deferToEventLoop([this, convoId] { requestAddress(convoId); });
-        else if (verb == QLatin1String("pay"))
-            // Paying needs somewhere to pay to, so the first move is the ask.
-            deferToEventLoop([this, convoId] { requestAddress(convoId); });
+        // Both verbs open with the same move -- paying needs somewhere to pay
+        // to, so the first thing either says is the ask.
+        //
+        // Held, not sent. This used to fire immediately and it was the wrong
+        // thing by about six hundred milliseconds: create_conversation had
+        // returned, so the room existed here, but the peer had not joined it
+        // yet. The card went to an MLS group of one, message_sent came back,
+        // the thread rendered "Asked for an address" -- and nobody had been
+        // asked. It is not recoverable later either, because the card is
+        // encrypted to an epoch the peer never belonged to.
+        //
+        // So wait for the peer to say it is there. See onPeerJoined.
+        if (verb == QLatin1String("request") || verb == QLatin1String("pay"))
+            holdAskUntilPeerJoins(convoId);
+    }
+
+    if (!isOutgoing) {
+        // We were invited, so our end exists and theirs has been waiting to
+        // know it. Announcing is the whole of our side of the handshake, and it
+        // is unconditional: the inviter may have nothing held, in which case
+        // this is one small card and no harm. Deferred like everything else
+        // that calls into a module from inside an event callback.
+        deferToEventLoop(
+            [this, convoId] { sendMessage(convoId, MusterMessage::conversationReady()); });
     }
 
     if (isOutgoing) {
