@@ -1,5 +1,7 @@
 # Chat identity and conversations do not survive a restart
 
+> **Answered 2026-08-14: confirmed, and it is a known regression.** Persistence is not implemented for λAccounts + λChat; all conversations and identities are ephemeral. It *was* implemented for pairwise conversations and regressed when the pivot to DeMLS happened, and is being held until group state is stable to cut down on forked groups and state desynchronisation. Tracking issue [`logos-messaging/libchat#28`](https://github.com/logos-messaging/libchat/issues/28); roadmap under [installation management](https://roadmap.logos.co/messaging/roadmap/milestones/2026-chat-beta#installation-management). See [§6](#6-upstream-response-2026-08-14) — none of our five hypotheses in §3 was the cause.
+
 **Components:** `logos-co/logos-chat-module` at `dfe8ccf3` (2026-08-04), consumed as a flake input; hosted by `logos-standalone-app` (`logos-co/logos-standalone-app` `e4eb3c00`) via `logos_host_qt`
 **Environment:** LEZ testnet build of the Muster demo, `delivery_preset: logos.test`, x86_64-linux
 **Date measured:** 2026-08-13 / 2026-08-14
@@ -133,6 +135,30 @@ In rough order of usefulness to us:
 3. If persistence is intended to work and does not, an issue number to track, and any workaround for keeping an identity stable across restarts in the meantime.
 
 Context on why we care: we are building a demo of a coordinated payment inside a conversation, and we want a presenter to start from a prepared state rather than rebuild it live. Our own wallet state persists fine — that is our code, four JSON files in the instance directory. The conversation is the part we cannot carry across a restart, and because the identity changes too, no amount of snapshotting on our side can fix it.
+
+---
+
+## 6. Upstream response (2026-08-14)
+
+Answered by the chat team, in full effect:
+
+> Persistence is not implemented for λAccounts + λChat; all conversations and identities are ephemeral.
+>
+> Reason: this was implemented for the pairwise conversations but regressed when the pivot to DeMLS occurred.
+>
+> Development priority: we've been putting this off until group state is stable to cut down on forked groups and state desynchronization bugs.
+
+Tracking: [`logos-messaging/libchat#28`](https://github.com/logos-messaging/libchat/issues/28). Roadmap: [installation management](https://roadmap.logos.co/messaging/roadmap/milestones/2026-chat-beta#installation-management).
+
+**§1 is confirmed. The cause is none of the five things §3 guessed at.** Not the `logos.test` preset, not the standalone host resolving directories differently, not a build feature, not a derived path we failed to find, and per-session identity is not intended — it is simply not implemented right now. It is a known regression with a tracking issue and a deliberate reason for its position in the queue.
+
+**What this explains about §2.** The SQL we found in the shipped binary — the `conversations` and `identity` tables, `SELECT name, secret_key FROM identity WHERE id = 1` — is residue of the pairwise implementation that regressed. The tables are still compiled in; nothing calls them under DeMLS. Our reading that identity was *meant* to be reloaded was correct. What we could not see from outside is that it had stopped being wired up.
+
+That is worth recording as a general caution about the method in §2: **reading capability out of a shipped binary tells you what the code once did, not what it currently does.** A dead code path and a live one look identical in a `strings` dump. It happened to point the right way here; it would not have to.
+
+### What we changed on our side
+
+Nothing to fix — this is upstream and deliberate. What it settles is a design question we were holding open: **a prepared demo state cannot include a conversation**, and no amount of snapshotting on our side can work around it, because the identity changes too and restored messages would name addresses that no longer exist. Our wallet state persists fine and is snapshot-restorable; the conversation is created live at demo time, every time, until `libchat#28` lands.
 
 ---
 
