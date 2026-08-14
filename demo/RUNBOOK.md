@@ -60,7 +60,7 @@ Each peer keeps its chat identity *and* its wallet under `.run/<name>/`. They ar
 6. **Share it.** On the receiving side the card has **Share my address**. One tap replies with a shielded receiving key set — not an account number, a destination nobody else can associate with a payment.
 7. **Pay.** That card offers **Send LEZ**. The dialog asks only for an amount, because the recipient came from the card. Confirm.
 8. **Wait.** The zone is proving; the wallet reads `sending` for as long as it takes. This is real zero-knowledge work, not a spinner.
-9. **Receipt.** A receipt card lands in the conversation for both. Refresh balances to see them move.
+9. **Receipt.** A receipt card lands in the conversation for both, and both balances then move on their own — the payer's because its own send waits for its view to catch up, the payee's because a receipt in the room sends it looking. Neither needs Refresh. Verified with two peers on 2026-08-14. If a figure does stay put, Refresh is still there and a stale read is the first suspect.
 
 ## The other journey: agreeing before paying
 
