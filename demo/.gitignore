@@ -4,6 +4,13 @@
 # Per-peer runtime state for the two-instance demo (alice/bob user dirs)
 .run/
 
+# Saved peer state used to start a demo from a known position. Never commit
+# these: muster-wallet/meta.json carries the wallet password in plaintext and
+# storage.json carries the spending keys. They are real keys on a real chain,
+# and a testnet token being worthless is not a reason to publish one. Regenerate
+# with `make demo-snapshot` rather than sharing the directory.
+.fixtures/
+
 # Nix build outputs
 result
 result-*
