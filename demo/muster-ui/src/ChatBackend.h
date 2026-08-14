@@ -208,6 +208,14 @@ private:
     // Sync to the tip, publish the balances, and declare the wallet Ready.
     void finishWalletOpen();
 
+    // True when this message is a payment receipt from somebody else. Used
+    // only to decide whether to go and look at our own wallet — never to
+    // decide what to show. See scanForIncomingPayment.
+    bool isIncomingReceipt(const QString& content) const;
+    // Look for money that has arrived, because a receipt in the room says some
+    // may have. Safe to call on any receipt, addressed to us or not.
+    void scanForIncomingPayment();
+
     bool m_walletOpen = false;
     // The account this wallet minted for itself. It names the key node we
     // publish — not an address anyone pays. Nothing registers it: see

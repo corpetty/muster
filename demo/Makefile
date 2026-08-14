@@ -44,9 +44,29 @@ build:
 	cd $(UI) && nix build 'path:.#lgx' --accept-flake-config
 
 # Build the runner before launching peers: the first launch otherwise spends
-# minutes in nix while the window is expected on screen.
+# a very long time in nix while the window is expected on screen.
+#
+# `.#runner`, not `.#default`. They are different derivations -- `.#default` is
+# the .lgx module, while `make run` launches `nix run .` which resolves
+# apps.default, the standalone runner. This target used to build `.#default`,
+# so it returned in seconds having warmed nothing, and the first launch then
+# built the LEZ proving stack from Rust source (measured 2026-08-14: 827 cargo
+# derivations and still going at 36 minutes). See exo-d6d and the note on
+# `runnerPkg` in muster-ui/flake.nix.
+#
+# The out-link lives in .tools/ rather than .run/, because `demo-restore`
+# wipes .run/ -- which would delete the gc root and let the hour of work be
+# collected.
+#
+# JOBS because nix defaults to max-jobs=1: these are hundreds of small crate
+# derivations, so serial builds leave a machine idle. Override for a smaller
+# box, e.g. `make app JOBS=2`.
+JOBS ?= auto
+
 app:
-	cd $(UI) && nix build 'path:.#default' --accept-flake-config --out-link $(CURDIR)/.run/app
+	@mkdir -p $(CURDIR)/.tools
+	cd $(UI) && nix build 'path:.#runner' --accept-flake-config \
+	  --max-jobs $(JOBS) --out-link $(CURDIR)/.tools/runner
 
 alice:
 	$(MAKE) run PEER=alice

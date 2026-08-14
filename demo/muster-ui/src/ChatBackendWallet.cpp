@@ -765,6 +765,42 @@ void ChatBackend::fundWallet()
     });
 }
 
+void ChatBackend::scanForIncomingPayment()
+{
+    // A shielded payee has no address to watch. Money paid to us mints a fresh
+    // account under our key node at an identifier the sender chose, so there is
+    // nothing to subscribe to and nothing that can notify us — the only way to
+    // learn we were paid is to scan with our viewing key. See
+    // readPrivateBalance for the model.
+    //
+    // Which left the payee pressing Refresh and hoping. Measured 2026-08-13:
+    // after a successful payment the recipient's app did nothing at all — its
+    // log is health probes and nothing else — until a human refreshed by hand.
+    // Someone who has just been told "I sent it" and sees an unchanged balance
+    // cannot tell that from the payment having failed, and that confusion is
+    // what produced a withdrawn bug report against the zone.
+    //
+    // The conversation is where the news arrives, so the conversation is what
+    // triggers the look. Note carefully what is and is not taken from it: the
+    // receipt is a *hint to go and look*, never a fact to display. Nothing the
+    // sender wrote is read beyond "somebody said a payment happened" (see
+    // isIncomingReceipt), and what the user sees afterwards is only what our
+    // own scan found. A receipt for a payment that was never made therefore
+    // moves no number here — it costs a sync and finds nothing.
+    //
+    // That is also why this does not check whether the payment was addressed to
+    // us. It cannot know, and it does not need to: the scan either turns up
+    // money or it does not.
+    if (!m_walletOpen || walletBusy())
+        return;
+    beginStage(QStringLiteral("checking for a payment"));
+    // The same poll the payer's own path uses. A receipt is sent once the zone
+    // accepts the transfer, which is before the block carrying it necessarily
+    // exists, so a single read here would be the stale-balance trap again.
+    settleAfterTransfer(45000);
+    endStage();
+}
+
 void ChatBackend::refreshBalances()
 {
     if (!m_walletOpen) {

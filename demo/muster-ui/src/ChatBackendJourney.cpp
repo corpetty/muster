@@ -4,8 +4,13 @@
 // conversation, so the conversation is the record of it. That means the
 // journey is not separate state to maintain — it is a reading of the messages
 // that are already there. Rebuilding it from the thread rather than tracking
-// it alongside means it cannot drift, survives a restart for free, and is
+// it alongside means it cannot drift, costs nothing to rebuild, and is
 // correct for a conversation this instance did not start.
+//
+// It does *not* survive a restart, though this comment used to say so:
+// chat_module holds conversations in memory only, so after a restart there is
+// no thread to read and the peer has a new address entirely. That is upstream
+// (logos-messaging/libchat#28) — see poc/BUG-chat-module-state-not-persisted.md.
 //
 // The steps are the transaction's stages, not the app's screens:
 //   discovery    — no conversation yet; how you reach anyone at all
@@ -106,6 +111,22 @@ QString railNoteOf(const QString& content, const QString& fallback)
 }
 
 } // namespace
+
+// A payment receipt from somebody else.
+//
+// Deliberately the whole of what we read off it. A receipt is authenticated in
+// the room — chat_module binds it to its author — but the zone checks none of
+// it, so its amount, its rail and its transaction id are all claims by the
+// sender. Believing any of them would let a peer make this wallet display a
+// payment nobody made, which is the one thing this app must never do.
+//
+// So the only question asked here is "did somebody say a payment happened",
+// and the only thing done with the answer is to go and look at our own wallet.
+// See ChatBackend::scanForIncomingPayment.
+bool ChatBackend::isIncomingReceipt(const QString& content) const
+{
+    return cardType(content) == QLatin1String("send-receipt");
+}
 
 void ChatBackend::resetJourney()
 {

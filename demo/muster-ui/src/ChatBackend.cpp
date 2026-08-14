@@ -669,6 +669,13 @@ void ChatBackend::applyMessageReceived(const QVariantList& args)
     }
     m_conversationModel->updatePreview(convoId, preview);
 
+    // Before anything about which conversation is on screen: a receipt says
+    // money may have arrived, and money is money whichever thread it was
+    // mentioned in. Deferred because it syncs and reads, and this runs inside
+    // a module event callback (see deferToEventLoop).
+    if (isIncomingReceipt(content))
+        deferToEventLoop([this] { scanForIncomingPayment(); });
+
     if (convoId == currentConversationId()) {
         m_messageModel->addMessage(shortSenderLabel(sender), content, when, false);
         // Advance the journey with it: an arriving card is how the other side
