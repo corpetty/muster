@@ -11,6 +11,34 @@ make app        # builds the standalone runner. The slow one; everything else is
 
 Nothing else to install. There is no Basecamp, no package manager and no chain to sync: `chat_module` joins the public `logos.test` delivery network and `lez_core` is a client of the LEZ testnet sequencer.
 
+> **`make app` does not currently pre-build what `make alice` launches** — it builds `packages.default` (the `.lgx` module) while the peers run `apps.default` (the standalone runner). On a cold store the first `make alice` therefore builds the LEZ proving stack from Rust source, which took roughly an hour here. Tracked as `exo-d6d`. Two things help meanwhile: nix defaults to `max-jobs = 1`, so `NIX_CONFIG='max-jobs = 8' make alice` is several times faster; and it only happens once.
+
+## Showing it without the wait
+
+A cold run spends a faucet proof-of-work and a ~7-minute shielded transfer before there is anything private to pay with. For a demo, do that once and keep it:
+
+```bash
+make stop                          # let the peers save; never pkill them
+make demo-snapshot NAME=funded     # save both wallets as a fixture
+```
+
+Then, before any showing:
+
+```bash
+make demo NAME=funded              # restores the wallets, ready to launch
+```
+
+Open each peer's wallet after launch — nothing opens it automatically, so a restored peer looks empty until you do.
+
+Two things to know, both of which are the point rather than oversights:
+
+- **The conversation is never restored, only the wallets.** `chat_module` holds identity and conversations in memory, so every launch has a new address and no history (`logos-messaging/libchat#28`, and `poc/BUG-chat-module-state-not-persisted.md`). Creating the conversation and sharing an address is part of every run. It takes under a minute and is not the expensive part.
+- **A fixture holds real notes and spending them spends them.** Restoring does not top anything up. A fixture with 125 λ survives about a dozen 10 λ demos before it needs re-minting — re-run the faucet and shield, then `make demo-snapshot` again.
+
+`.fixtures/` is gitignored and must stay so: the wallet password is in `meta.json` in plaintext and the spending keys are in `storage.json`. Regenerate a fixture rather than sending one to anybody.
+
+The payment itself still takes about seven minutes. That is worth leaving in — "not an interaction, a job" is one of the things this demo exists to show.
+
 ## Every run
 
 Two terminals:
