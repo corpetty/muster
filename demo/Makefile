@@ -30,6 +30,13 @@ help:
 	@echo "make bob            launch the bob peer"
 	@echo "make run PEER=carol launch an arbitrarily named peer"
 	@echo "make stop           stop every running peer, letting it save first"
+	@echo ""
+	@echo "make demo                    restore funded peers, ready to show"
+	@echo "make demo-snapshot NAME=x    save the current peers as a fixture"
+	@echo "make demo-restore  NAME=x    put a fixture back into .run/"
+	@echo "make demo-fixtures           list saved fixtures"
+	@echo "  (wallets only -- conversations cannot be saved, see the Makefile note)"
+	@echo ""
 	@echo "make clean-peer PEER=alice   wipe one peer's chat identity and wallet"
 
 # The packaged module, for installing into Basecamp. Not needed for the demo.
@@ -64,18 +71,110 @@ run:
 # exactly that, on 2026-08-13, threw away a conversation holding a real payment
 # receipt -- the state a demo most wants. `pkill -f logos` is not a safe way to
 # stop these.
+#
+# The `bi[n]` is not a typo. `pgrep -f` matches against whole command lines,
+# including the shell running this recipe, whose command line contains this
+# very pattern -- so a literal spelling makes the target kill itself and the
+# make invoking it. The bracket makes the regex match "bin" in the app's
+# command line while not matching the literal "bi[n]" in our own.
 stop:
-	@for p in $$(pgrep -f 'logos-standalone-app-bin.*--user-dir $(RUN_DIR)' 2>/dev/null); do \
+	@for p in $$(pgrep -f 'logos-standalone-app-bi[n].*--user-dir $(RUN_DIR)' 2>/dev/null); do \
 	  echo "stopping app pid $$p"; kill -TERM $$p 2>/dev/null || true; \
 	done
 	@for _ in $$(seq 1 30); do \
-	  pgrep -f 'logos-standalone-app-bin.*--user-dir $(RUN_DIR)' >/dev/null 2>&1 || break; \
+	  pgrep -f 'logos-standalone-app-bi[n].*--user-dir $(RUN_DIR)' >/dev/null 2>&1 || break; \
 	  sleep 1; \
 	done
-	@if pgrep -f 'logos-standalone-app-bin.*--user-dir $(RUN_DIR)' >/dev/null 2>&1; then \
+	@if pgrep -f 'logos-standalone-app-bi[n].*--user-dir $(RUN_DIR)' >/dev/null 2>&1; then \
 	  echo "still running after 30s -- left alone rather than escalating to KILL," >&2; \
 	  echo "which is what loses state. Close the window instead." >&2; exit 1; \
 	else echo "all peers stopped"; fi
+
+# ── demo fixtures ───────────────────────────────────────────────────────
+#
+# Start a demo from peers that are already funded and shielded, instead of
+# spending ~15 minutes on a faucet proof-of-work and a shielded transfer while
+# an audience watches.
+#
+# WHAT THIS CAN AND CANNOT CARRY. The wallet, yes: muster-wallet/*.json is our
+# own code's state and its notes are real notes on the real chain. The
+# conversation, never -- chat_module holds identity and conversations in memory
+# only, so every launch has a new address and no history. That is upstream and
+# deliberate for now (logos-messaging/libchat#28; see
+# poc/BUG-chat-module-state-not-persisted.md). So a demo restores wallets and
+# then creates the conversation by hand, every time. Do not go looking for the
+# missing half of this feature; it is not implementable from here.
+#
+# WHY RESTORING INTO A DIFFERENT-LOOKING DIRECTORY WORKS. The host reuses
+# whichever instance directory already exists under module_data/<module>/ and
+# mints a random name only when none does -- verified 2026-08-14 by renaming a
+# peer's instance directory to a fabricated name and watching the host adopt it.
+# So the hash-looking directory name in a fixture is arbitrary and need not
+# match anything. It does mean a restore must start from an empty .run/<peer>:
+# leave two instance directories there and which one the host picks is a
+# coin toss.
+#
+# THESE ARE REAL KEYS. .fixtures/ is gitignored and must stay that way --
+# meta.json holds the wallet password in plaintext and storage.json the
+# spending keys. A testnet token being worthless is not a reason to publish a
+# key. Regenerate rather than share.
+#
+# NOT IDEMPOTENT. Spending from a restored fixture spends real notes. Show the
+# demo twice from one fixture and the second run starts where the first ended,
+# which is why `demo` restores first rather than assuming .run/ is clean. Once
+# a fixture's notes are gone it needs re-minting.
+FIXTURES := $(CURDIR)/.fixtures
+NAME     ?= baseline
+
+.PHONY: demo demo-snapshot demo-restore demo-fixtures
+
+# Refuse to touch .run/ while anything is running: the wallet is saved by the
+# app, and copying it mid-write yields a fixture that looks fine and is not.
+define require_stopped
+	@if pgrep -f 'logos-standalone-app-bi[n].*--user-dir $(RUN_DIR)' >/dev/null 2>&1; then \
+	  echo "peers are running -- 'make stop' first, or the copy races the wallet save" >&2; \
+	  exit 1; fi
+endef
+
+demo-snapshot:
+	$(require_stopped)
+	@if [ ! -d "$(RUN_DIR)" ]; then echo "nothing in .run/ to snapshot" >&2; exit 1; fi
+	@rm -rf "$(FIXTURES)/$(NAME)"
+	@mkdir -p "$(FIXTURES)/$(NAME)"
+	@for p in $$(ls "$(RUN_DIR)" 2>/dev/null); do \
+	  [ -d "$(RUN_DIR)/$$p/module_data" ] || continue; \
+	  cp -a "$(RUN_DIR)/$$p" "$(FIXTURES)/$(NAME)/"; \
+	  echo "snapshotted $$p"; \
+	done
+	@find "$(FIXTURES)/$(NAME)" -name '*.log' -delete
+	@echo "saved to .fixtures/$(NAME) -- $$(find "$(FIXTURES)/$(NAME)" -type f | wc -l) files"
+
+demo-restore:
+	$(require_stopped)
+	@if [ ! -d "$(FIXTURES)/$(NAME)" ]; then \
+	  echo "no fixture named '$(NAME)' -- 'make demo-fixtures' to list" >&2; exit 1; fi
+	@rm -rf "$(RUN_DIR)"
+	@mkdir -p "$(RUN_DIR)"
+	@for p in $$(ls "$(FIXTURES)/$(NAME)"); do \
+	  cp -a "$(FIXTURES)/$(NAME)/$$p" "$(RUN_DIR)/"; echo "restored $$p"; \
+	done
+	@echo "restored from .fixtures/$(NAME). Open each peer's wallet to see the balance:"
+	@echo "nothing opens it automatically, so a freshly launched peer looks empty until you do."
+
+# Restore, then hand over. The peers are launched by hand because each is a
+# foreground GUI process and wants its own terminal.
+demo: demo-restore
+	@echo ""
+	@echo "ready. In two terminals:  make alice   |   make bob"
+	@echo "Then, in the app: open each wallet, share an address, propose, approve, pay."
+	@echo "The conversation has to be made fresh every run -- see the note above demo-snapshot."
+
+demo-fixtures:
+	@if [ ! -d "$(FIXTURES)" ] || [ -z "$$(ls "$(FIXTURES)" 2>/dev/null)" ]; then \
+	  echo "no fixtures yet -- 'make demo-snapshot NAME=...' after funding a peer"; exit 0; fi
+	@for f in $$(ls "$(FIXTURES)"); do \
+	  printf '%-20s %s\n' "$$f" "$$(ls "$(FIXTURES)/$$f" | tr '\n' ' ')"; \
+	done
 
 clean-peer:
 	rm -rf $(RUN_DIR)/$(PEER)
