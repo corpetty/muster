@@ -13,7 +13,7 @@
         },
         {
           "path": "demo/muster-ui/flake.nix",
-          "sha256": "9142be0dee11018eeadd8abd3078f37994d3f0a22f0908519ebf4db017866196",
+          "sha256": "e0e0f7c9801ffa82f75053d5e8699a46a3dc365f9e9aab6cc6275e8f4c5ded29",
           "note": "which inputs are pinned and which follow chat_module's own"
         },
         {
@@ -23,7 +23,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
           "note": "the specified build, the three hosts, ADR-008"
         },
         {
@@ -79,7 +79,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
           "note": "F-4/FS-6 as specified-and-unbuilt, behind the contracting row's gap"
         }
       ],
@@ -115,13 +115,65 @@
       "recheck": "Every phase, and before any post using it publishes. The two unassessed cells become assessable only when the zone answers on mempool visibility and the production sequencer model; the contracting row changes when F-4/FS-6 land."
     },
     {
+      "file": "pipeline-private-transfer-flow.svg",
+      "serves": "BOTH",
+      "shows": "A private-to-private transfer traced step by step through the real stack components — chat_module and delivery_module for the conversation and the address exchange, lez_core for the shielded value — with, at each hop, what leaves the device and which outside party (the store node, the zone) learns it. The flow companion to the substrate-pipeline keystone: where that correlates stages to infrastructure as a table, this walks one payment down the stack and marks the leak at every step.",
+      "sources": [
+        {
+          "path": "demo/muster-ui/src/ChatBackendWallet.cpp",
+          "note": "the step sequence and its method names — requestAddress, shareAddress, payForIntent, send, settleAfterTransfer, scanForIncomingPayment — read off the code path",
+          "sha256": "4bd285d75b5de01c02418fa6df9943cf5bd0a800a0d54c803a25aae793f4c80e"
+        },
+        {
+          "path": "demo/CLAUDE.md",
+          "note": "the rules the flow obeys: no private-account registration (the transfer creates the account), a shielded balance is a scan not a lookup, an approval is authenticated by the room but not authorizing at the zone, settleAfterTransfer polls until the wallet's own view moves, ~7-minute async prove",
+          "sha256": "dbdb1541afd3c82728a4ab2cf8d5c28bd1702677c51c8b0b5f48d1e887b545d0"
+        },
+        {
+          "path": "demo/GAPS.md",
+          "note": "the who-sees cells — store-node subscription shape, the zone learning only that a transfer happened and when, the two-user anonymity set, ordering/mempool left not assessed",
+          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff"
+        },
+        {
+          "path": "docs/posts/01-discovery-supporting-material.md",
+          "note": "the pipeline framing the steps map onto, and the 'send a friend' instance the figure draws",
+          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e"
+        },
+        {
+          "path": "docs/00-vision.md",
+          "note": "the honesty floor (nothing hides that a transfer happened, or when) and the no-offline-mode / not-assessed discipline the figure prints rather than papers over",
+          "sha256": "a9cb276d78acf0f75195f9489df54dde45d602b6cb4f0d56d13b61ac7f0afa44"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "note": "F-4/FS-6 and F-20 as specified-and-unbuilt, behind the step-04 approval flag and the footer",
+          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "measured",
+          "note": "The step ordering, the ~7-minute shielded prove and the settle-poll were observed on this machine running the demo build, 2026-08-11/12; the same runs the substrate-pipeline keystone draws from"
+        },
+        {
+          "grade": "from-source",
+          "note": "Every module name and method name is read off ChatBackendWallet.cpp and demo/CLAUDE.md, and the component vocabulary matches arch-instance-topology so the figure invents no box; the who-sees cells are carried from GAPS.md"
+        },
+        {
+          "grade": "from-source",
+          "note": "The step-04 flag (room authenticates, zone does not authorize; single-key account) and the footer (signs no log, re-derives nothing it signs) are F-4/FS-6 and F-20 as specified-and-unbuilt, not observed properties. Ordering/mempool is marked NOT ASSESSED in the figure itself, not omitted"
+        }
+      ],
+      "recheck": "P3 and P4, and before any post using it publishes. F-4/FS-6 and F-20 landing removes the step-04 flag and the footer's 're-derives nothing it signs'; ADR-010 may change which module mints identity; the mempool cell becomes assessable only when the zone answers; libchat#28 (chat_module state not persisted) changes what steps 01 and 06 survive across a restart."
+    },
+    {
       "file": "arch-instance-topology.svg",
       "serves": "BOTH",
       "shows": "One running instance: the isolated ui-host process holding the QML view and a QtRO replica, the app process holding Logos Core and every module, per-instance state on disk, and the two live remote dependencies that leave the machine.",
       "sources": [
         {
           "path": "demo/muster-ui/README.md",
-          "sha256": "b4e0c2b1fd814b5222031774bdd7fe743d98443f93fc5d3aeefeca9eb1df0268",
+          "sha256": "e078edb9c030566502f36aae5b550f4aa572c07cb11d104555efdddf7f49553d",
           "note": "the standalone app's startup sequence, the isolated ui-host process, and what two instances need to coexist"
         },
         {
@@ -131,12 +183,12 @@
         },
         {
           "path": "demo/muster-ui/src/ChatBackend.h",
-          "sha256": "6bd523c5278e75a1986d652ad819b105632d79ebfe51503dd3f20381d353a803",
+          "sha256": "71a9dbbf13aa1cb04e0d9eec295a79e0db6607bff87203b7a19a50a9b1ab0fe7",
           "note": "ChatBackend derives ChatBackendSimpleSource — it is the QtRO source, not the replica"
         },
         {
           "path": "demo/muster-ui/src/ChatBackendWallet.cpp",
-          "sha256": "8fc7f3955255bc037f6e939df4b3e7e32778f12d87e2155628fe3b08962edd99",
+          "sha256": "4bd285d75b5de01c02418fa6df9943cf5bd0a800a0d54c803a25aae793f4c80e",
           "note": "walletDir() derives from the chat module's assigned instance directory and refuses rather than sharing a fallback"
         },
         {
@@ -164,7 +216,7 @@
       "sources": [
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
           "note": "ADR-008, the LIDL contract layer, the Nim gap and the four bridge functions"
         },
         {
@@ -211,12 +263,12 @@
         },
         {
           "path": "demo/muster-ui/flake.nix",
-          "sha256": "9142be0dee11018eeadd8abd3078f37994d3f0a22f0908519ebf4db017866196",
+          "sha256": "e0e0f7c9801ffa82f75053d5e8699a46a3dc365f9e9aab6cc6275e8f4c5ded29",
           "note": "the four inputs, which follow chat_module and which does not — and the stale lez_core comment this figure corrects"
         },
         {
           "path": "demo/muster-ui/src/ChatBackendWallet.cpp",
-          "sha256": "8fc7f3955255bc037f6e939df4b3e7e32778f12d87e2155628fe3b08962edd99",
+          "sha256": "4bd285d75b5de01c02418fa6df9943cf5bd0a800a0d54c803a25aae793f4c80e",
           "note": "modules().lez_core.* — the generated client the flake comment says is not used"
         }
       ],
@@ -249,7 +301,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -286,7 +338,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -328,7 +380,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
           "note": "which phase builds it, and the accept criteria"
         }
       ],
@@ -405,7 +457,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -415,7 +467,7 @@
         },
         {
           "path": "demo/CLAUDE.md",
-          "sha256": "4228408bb10ebb95492144f8dd7b10b13cc64a4997f98f59a9e84f1c032b12aa",
+          "sha256": "dbdb1541afd3c82728a4ab2cf8d5c28bd1702677c51c8b0b5f48d1e887b545d0",
           "note": "the demo's own account of what it folds and what it does not have"
         }
       ],
@@ -443,7 +495,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -480,7 +532,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -513,7 +565,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -550,7 +602,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "115dfd3492ee1ee3cadad6ad60d121e8a0c259ffec732279b880a4294d72fb7c",
+          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -620,7 +672,7 @@
         },
         {
           "path": "demo/CLAUDE.md",
-          "sha256": "4228408bb10ebb95492144f8dd7b10b13cc64a4997f98f59a9e84f1c032b12aa",
+          "sha256": "dbdb1541afd3c82728a4ab2cf8d5c28bd1702677c51c8b0b5f48d1e887b545d0",
           "note": "the Holding/Rail catalogue rule, and sendableRailById refusing a rail whose claimId names nothing"
         },
         {
@@ -653,7 +705,7 @@
         },
         {
           "path": "demo/CLAUDE.md",
-          "sha256": "4228408bb10ebb95492144f8dd7b10b13cc64a4997f98f59a9e84f1c032b12aa",
+          "sha256": "dbdb1541afd3c82728a4ab2cf8d5c28bd1702677c51c8b0b5f48d1e887b545d0",
           "note": "an approval is authenticated, not authorizing; the fold deduplicates by author"
         }
       ],
@@ -713,7 +765,7 @@
         },
         {
           "path": "demo/CLAUDE.md",
-          "sha256": "4228408bb10ebb95492144f8dd7b10b13cc64a4997f98f59a9e84f1c032b12aa",
+          "sha256": "dbdb1541afd3c82728a4ab2cf8d5c28bd1702677c51c8b0b5f48d1e887b545d0",
           "note": "the async-variant rule, the 20s sync-wrapper timeout, and settleAfterTransfer polling until this wallet's own view moves"
         },
         {

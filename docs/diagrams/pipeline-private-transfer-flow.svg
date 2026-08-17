@@ -1,0 +1,214 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 918" width="880" height="918" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>A private-to-private transfer, traced through the Logos stack</title>
+  <desc>One payment from the encrypted room it is agreed in to the execution zone it settles on, step by step through the real stack components — chat_module and delivery_module for the conversation, lez_core for the value — and, at each hop, what leaves the device and which outside party learns it. The store node learns the shape of the conversation but never its content; the zone learns that a transfer happened and when, but not the amount or the accounts on the private rail. That floor is never hidden on any step.</desc>
+<!-- provenance
+     serves:   BOTH
+     shows:    A private-to-private transfer traced step by step through the real stack
+               components — chat_module and delivery_module for the conversation and the
+               address exchange, lez_core for the shielded value — with, at each hop,
+               what leaves the device and which outside party (the store node, the zone)
+               learns it. The flow companion to the substrate-pipeline keystone: where
+               that correlates stages to infrastructure as a table, this walks one
+               payment down the stack and marks the leak at every step.
+     sources:  demo/muster-ui/src/ChatBackendWallet.cpp
+               demo/CLAUDE.md
+               demo/GAPS.md
+               docs/posts/01-discovery-supporting-material.md
+               docs/00-vision.md
+               docs/02-implementation-plan.md
+     evidence: [measured] The step ordering, the ~7-minute shielded prove and the settle-
+                   poll were observed on this machine running the demo build, 2026-08-11/12;
+                   the same runs the substrate-pipeline keystone draws from
+               [from-source] Every module name and method name is read off
+                   ChatBackendWallet.cpp and demo/CLAUDE.md, and the component vocabulary
+                   matches arch-instance-topology so the figure invents no box; the who-sees
+                   cells are carried from GAPS.md
+               [from-source] The step-04 flag (room authenticates, zone does not
+                   authorize; single-key account) and the footer (signs no log, re-derives
+                   nothing it signs) are F-4/FS-6 and F-20 as specified-and-unbuilt, not
+                   observed properties. Ordering/mempool is marked NOT ASSESSED in the figure
+                   itself, not omitted
+     recheck:  P3 and P4, and before any post using it publishes. F-4/FS-6 and F-20
+               landing removes the step-04 flag and the footer's 're-derives nothing it
+               signs'; ADR-010 may change which module mints identity; the mempool cell
+               becomes assessable only when the zone answers; libchat#28 (chat_module
+               state not persisted) changes what steps 01 and 06 survive across a
+               restart.
+-->
+
+  <defs>
+    <marker id="ptf-down" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="#C6CBC3"/>
+    </marker>
+    <marker id="ptf-cross" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="#8FA3F5"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="918" fill="#E4E6E0"/>
+
+  <text x="40" y="46" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">A private&#8594;private transfer, through the stack</text>
+  <text x="40" y="70" font-size="13.5" fill="#656E66">One payment — from the room it is agreed in to the zone it settles on — and what leaves your device at each hop.</text>
+
+  <!-- ══ THE OUTSIDE: one dark column down the whole figure ══ -->
+  <rect x="576" y="90" width="268" height="720" rx="8" fill="#23282A"/>
+  <text x="588" y="112" font-size="8.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#96A19B">TWO PARTIES SIT OUTSIDE THE ROOM</text>
+  <text x="588" y="136" font-size="10" font-weight="600" fill="#DCE2DE">the store node</text>
+  <text x="588" y="150" font-size="9" fill="#96A19B">logos.test messaging fleet — carries the room</text>
+  <text x="588" y="172" font-size="10" font-weight="600" fill="#DCE2DE">the zone</text>
+  <text x="588" y="186" font-size="9" fill="#96A19B">LEZ testnet sequencer — settles the value</text>
+
+  <!-- ══ ON YOUR DEVICE: the component vocabulary, established once ══ -->
+  <rect x="40" y="90" width="516" height="98" rx="8" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="52" y="110" font-size="8.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">ON YOUR DEVICE, INSIDE THE ROOM</text>
+
+  <rect x="52" y="122" width="150" height="28" rx="3" fill="#F7F8F5" stroke="#4B33C4" stroke-width="1"/>
+  <text x="127" y="140" font-size="9" text-anchor="middle" fill="#1A1F1C">QML view · ChatBackend</text>
+  <text x="207" y="140" font-size="11" text-anchor="middle" fill="#656E66">&#8594;</text>
+  <rect x="212" y="122" width="152" height="28" rx="3" fill="#F7F8F5" stroke="#4B33C4" stroke-width="1"/>
+  <text x="288" y="140" font-size="8.5" text-anchor="middle" fill="#1A1F1C">chat_module · libchat E2EE</text>
+  <text x="369" y="140" font-size="11" text-anchor="middle" fill="#656E66">&#8594;</text>
+  <rect x="374" y="122" width="170" height="28" rx="3" fill="#F7F8F5" stroke="#4B33C4" stroke-width="1"/>
+  <text x="459" y="140" font-size="8.5" text-anchor="middle" fill="#1A1F1C">delivery_module · Logos Messaging</text>
+
+  <rect x="52" y="154" width="150" height="28" rx="3" fill="#F7F8F5" stroke="#4B33C4" stroke-width="1"/>
+  <text x="127" y="172" font-size="9" text-anchor="middle" fill="#1A1F1C">lez_core · wallet-ffi</text>
+  <text x="214" y="166" font-size="9" fill="#656E66">the value rail — it syncs, transfers, then</text>
+  <text x="214" y="178" font-size="9" fill="#656E66">re-reads until this wallet's own view moves</text>
+
+  <!-- ══ column headers ══ -->
+  <text x="48" y="206" font-size="8.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" fill="#656E66">STEP · MODULE</text>
+  <text x="200" y="206" font-size="8.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" fill="#656E66">WHAT HAPPENS, ON YOUR DEVICE</text>
+
+  <!-- ══ the lifecycle runs downward ══ -->
+  <line x1="30" y1="220" x2="30" y2="800" stroke="#C6CBC3" stroke-width="1" marker-end="url(#ptf-down)"/>
+  <text transform="rotate(90 24 508)" x="24" y="508" font-size="8" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" letter-spacing="0.25em" fill="#96A19B">TIME</text>
+
+  <!-- ═══ 01 OPEN THE ROOM (y=218) ═══ -->
+  <path d="M556 263 L584 263" stroke="#8FA3F5" stroke-width="1.4" stroke-dasharray="4 3" fill="none" marker-end="url(#ptf-cross)"/>
+  <rect x="40" y="218" width="150" height="90" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="200" y="218" width="356" height="90" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="584" y="218" width="252" height="90" rx="4" fill="#2E3436" stroke="#3A4144" stroke-width="1"/>
+  <text x="52" y="240" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">01</text>
+  <text x="52" y="260" font-size="12.5" font-weight="600" fill="#1A1F1C">Open the room</text>
+  <text x="52" y="286" font-size="8.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#4B33C4">chat_module</text>
+  <text x="52" y="298" font-size="8.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#4B33C4">&#8594; delivery_module</text>
+  <text x="212" y="240" font-size="9.5" fill="#1A1F1C">The conversation is a libchat room, end-to-end</text>
+  <text x="212" y="255" font-size="9.5" fill="#1A1F1C">encrypted, riding delivery_module's Logos Messaging node.</text>
+  <text x="212" y="270" font-size="9.5" fill="#1A1F1C">Text and structured cards share one cipher body —</text>
+  <text x="212" y="285" font-size="9.5" fill="#1A1F1C">a card is as private as the message it rides in.</text>
+  <text x="592" y="238" font-size="9" fill="#DCE2DE">The store node sees which content</text>
+  <text x="592" y="251" font-size="9" fill="#DCE2DE">topics this client subscribes to, and</text>
+  <text x="592" y="264" font-size="9" fill="#DCE2DE">when — the contact graph, pseudonymously.</text>
+  <text x="592" y="282" font-size="9" fill="#DCE2DE">Never the content: the room is encrypted.</text>
+
+  <!-- ═══ 02 ASK FOR AN ADDRESS (y=316) ═══ -->
+  <path d="M556 361 L584 361" stroke="#8FA3F5" stroke-width="1.4" stroke-dasharray="4 3" fill="none" marker-end="url(#ptf-cross)"/>
+  <rect x="40" y="316" width="150" height="90" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="200" y="316" width="356" height="90" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="584" y="316" width="252" height="90" rx="4" fill="#2E3436" stroke="#3A4144" stroke-width="1"/>
+  <text x="52" y="338" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">02</text>
+  <text x="52" y="358" font-size="12.5" font-weight="600" fill="#1A1F1C">Ask for an</text>
+  <text x="52" y="373" font-size="12.5" font-weight="600" fill="#1A1F1C">address</text>
+  <text x="52" y="396" font-size="8.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#4B33C4">chat_module</text>
+  <text x="212" y="345" font-size="9.5" fill="#1A1F1C">requestAddress posts an addressRequest card — an</text>
+  <text x="212" y="360" font-size="9.5" fill="#1A1F1C">ordinary message on the same encrypted path the</text>
+  <text x="212" y="375" font-size="9.5" fill="#1A1F1C">text takes, so it inherits that encryption. It is</text>
+  <text x="212" y="390" font-size="9.5" fill="#1A1F1C">a request; nothing new is exposed to answer it.</text>
+  <text x="592" y="348" font-size="9" fill="#DCE2DE">The store node: that a conversation</text>
+  <text x="592" y="361" font-size="9" fill="#DCE2DE">is active, and when. Not who asked,</text>
+  <text x="592" y="374" font-size="9" fill="#DCE2DE">or what for.</text>
+
+  <!-- ═══ 03 SHARE THE RECEIVING KEY (y=414) ═══ -->
+  <path d="M556 459 L584 459" stroke="#8FA3F5" stroke-width="1.4" stroke-dasharray="4 3" fill="none" marker-end="url(#ptf-cross)"/>
+  <rect x="40" y="414" width="150" height="90" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="200" y="414" width="356" height="90" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="584" y="414" width="252" height="90" rx="4" fill="#2E3436" stroke="#3A4144" stroke-width="1"/>
+  <text x="52" y="436" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">03</text>
+  <text x="52" y="456" font-size="12.5" font-weight="600" fill="#1A1F1C">Share the</text>
+  <text x="52" y="471" font-size="12.5" font-weight="600" fill="#1A1F1C">receiving key</text>
+  <text x="52" y="494" font-size="8.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#4B33C4">chat_module</text>
+  <text x="212" y="436" font-size="9.5" fill="#1A1F1C">shareAddress posts the receiving key node</text>
+  <text x="212" y="450" font-size="9.5" fill="#1A1F1C">(npk, vpk). There is no on-chain registration:</text>
+  <text x="212" y="464" font-size="9.5" fill="#1A1F1C">the sender's transfer creates the account and</text>
+  <text x="212" y="478" font-size="9.5" fill="#1A1F1C">picks the identifier — so every payment mints</text>
+  <text x="212" y="492" font-size="9.5" fill="#1A1F1C">a fresh account, found only by scanning.</text>
+  <text x="592" y="438" font-size="9" fill="#DCE2DE">The store node: more room activity,</text>
+  <text x="592" y="451" font-size="9" fill="#DCE2DE">the same shape as before.</text>
+  <text x="592" y="469" font-size="9" fill="#DCE2DE">The zone sees nothing here — the key</text>
+  <text x="592" y="482" font-size="9" fill="#DCE2DE">node never touches the chain.</text>
+
+  <!-- ═══ 04 AGREE TO PAY (y=512) ═══ -->
+  <path d="M556 557 L584 557" stroke="#8FA3F5" stroke-width="1.4" stroke-dasharray="4 3" fill="none" marker-end="url(#ptf-cross)"/>
+  <rect x="40" y="512" width="150" height="90" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="200" y="512" width="356" height="90" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="584" y="512" width="252" height="90" rx="4" fill="#2E3436" stroke="#3A4144" stroke-width="1"/>
+  <text x="52" y="534" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">04</text>
+  <text x="52" y="554" font-size="12.5" font-weight="600" fill="#1A1F1C">Agree to pay</text>
+  <text x="52" y="580" font-size="8.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#4B33C4">reduce(messages)</text>
+  <text x="52" y="592" font-size="8.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#4B33C4">the fold</text>
+  <text x="212" y="536" font-size="9.5" fill="#1A1F1C">A direct send, or a proposal folded from the</text>
+  <text x="212" y="550" font-size="9.5" fill="#1A1F1C">messages: the home surface, proposals and the</text>
+  <text x="212" y="564" font-size="9.5" fill="#1A1F1C">journey are all reduce(messages), never a second</text>
+  <text x="212" y="578" font-size="9.5" fill="#1A1F1C">record. Approvals are ordinary authored messages,</text>
+  <text x="212" y="592" font-size="9.5" fill="#1A1F1C">authenticated by the room.</text>
+  <text x="592" y="536" font-size="9" fill="#DCE2DE">That the room is active. Not the</text>
+  <text x="592" y="549" font-size="9" fill="#DCE2DE">amount, the terms, or who agreed.</text>
+  <text x="592" y="567" font-size="9" fill="#E8A79B">The room authenticates the approval;</text>
+  <text x="592" y="580" font-size="9" fill="#E8A79B">the zone does not authorize it — the</text>
+  <text x="592" y="593" font-size="9" fill="#E8A79B">paying account is single-key.</text>
+
+  <!-- ═══ 05 PAY (y=610) ═══ -->
+  <path d="M556 655 L584 655" stroke="#8FA3F5" stroke-width="1.4" stroke-dasharray="4 3" fill="none" marker-end="url(#ptf-cross)"/>
+  <rect x="40" y="610" width="150" height="90" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="200" y="610" width="356" height="90" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="584" y="610" width="252" height="90" rx="4" fill="#2E3436" stroke="#3A4144" stroke-width="1"/>
+  <text x="52" y="632" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">05</text>
+  <text x="52" y="652" font-size="12.5" font-weight="600" fill="#1A1F1C">Pay (shielded)</text>
+  <text x="52" y="678" font-size="8.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#4B33C4">lez_core</text>
+  <text x="52" y="690" font-size="8.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#4B33C4">&#8594; LEZ sequencer</text>
+  <text x="212" y="634" font-size="9.5" fill="#1A1F1C">payForIntent refuses an address this room never</text>
+  <text x="212" y="648" font-size="9.5" fill="#1A1F1C">named, then lez_core syncs and the rail transfers.</text>
+  <text x="212" y="662" font-size="9.5" fill="#1A1F1C">The private rail is shielded at both ends and</text>
+  <text x="212" y="676" font-size="9.5" fill="#1A1F1C">proves for ~7 minutes; on success it posts a</text>
+  <text x="212" y="690" font-size="9.5" fill="#1A1F1C">receipt card back into the room.</text>
+  <text x="592" y="632" font-size="9" fill="#DCE2DE">The zone (LEZ sequencer): that a transfer</text>
+  <text x="592" y="645" font-size="9" fill="#DCE2DE">happened, and when — not the amount, nor</text>
+  <text x="592" y="658" font-size="9" fill="#DCE2DE">either account, on the private rail.</text>
+  <text x="592" y="672" font-size="9" fill="#E8A79B">Floor: that it happened, and when, is</text>
+  <text x="592" y="685" font-size="9" fill="#E8A79B">never hidden. No mixnet; anon set of two;</text>
+  <text x="592" y="698" font-size="9" fill="#E8A79B">mempool visibility not assessed.</text>
+
+  <!-- ═══ 06 RECEIVE & SETTLE (y=708) ═══ -->
+  <path d="M556 753 L584 753" stroke="#8FA3F5" stroke-width="1.4" stroke-dasharray="4 3" fill="none" marker-end="url(#ptf-cross)"/>
+  <rect x="40" y="708" width="150" height="90" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="200" y="708" width="356" height="90" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="584" y="708" width="252" height="90" rx="4" fill="#2E3436" stroke="#3A4144" stroke-width="1"/>
+  <text x="52" y="730" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">06</text>
+  <text x="52" y="750" font-size="12.5" font-weight="600" fill="#1A1F1C">Receive &amp;</text>
+  <text x="52" y="765" font-size="12.5" font-weight="600" fill="#1A1F1C">settle</text>
+  <text x="52" y="788" font-size="8.5" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#4B33C4">settleAfterTransfer</text>
+  <text x="212" y="730" font-size="9.5" fill="#1A1F1C">The payee scans for the incoming note — a</text>
+  <text x="212" y="744" font-size="9.5" fill="#1A1F1C">shielded balance is a scan over accounts, not a</text>
+  <text x="212" y="758" font-size="9.5" fill="#1A1F1C">lookup. Both ends then poll sync-and-re-read</text>
+  <text x="212" y="772" font-size="9.5" fill="#1A1F1C">until the wallet's own view moves, so a receipt</text>
+  <text x="212" y="786" font-size="9.5" fill="#1A1F1C">never sits beside a stale balance.</text>
+  <text x="592" y="734" font-size="9" fill="#DCE2DE">The receipt lands back in the room</text>
+  <text x="592" y="747" font-size="9" fill="#DCE2DE">both sides agreed it in.</text>
+  <text x="592" y="765" font-size="9" fill="#DCE2DE">The zone: the transfer, and when —</text>
+  <text x="592" y="778" font-size="9" fill="#DCE2DE">the floor, once more.</text>
+
+  <!-- ══ FOOTER ══ -->
+  <text x="40" y="834" font-size="11" font-weight="600" fill="#1A1F1C">The floor, on every step: nothing hides that a transfer happened, or when.</text>
+  <text x="40" y="854" font-size="10" fill="#656E66">This is the demo speed build — composed upstream modules, measured Aug 2026, not the specified Muster client. It signs</text>
+  <text x="40" y="868" font-size="10" fill="#656E66">no log and re-derives nothing it signs (F-4/FS-6 and F-20 are specified, not built), and there is no offline mode:</text>
+  <text x="40" y="882" font-size="10" fill="#656E66">the logos.test messaging fleet and the LEZ testnet sequencer are both live, remote, and outside the room.</text>
+
+  <!-- ══ LEGEND ══ -->
+  <rect x="40" y="898" width="14" height="10" rx="2" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="60" y="907" font-size="9.5" fill="#656E66">on your device, in the room</text>
+  <rect x="250" y="898" width="14" height="10" rx="2" fill="#2E3436" stroke="#3A4144" stroke-width="1"/>
+  <text x="270" y="907" font-size="9.5" fill="#656E66">outside the room</text>
+  <rect x="410" y="898" width="14" height="10" rx="2" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1"/>
+  <text x="430" y="907" font-size="9.5" fill="#656E66">a floor you cannot remove, or a gap not yet built</text>
+</svg>

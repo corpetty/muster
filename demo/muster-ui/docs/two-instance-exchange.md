@@ -34,7 +34,7 @@ nix run . -- --user-dir ~/.local/share/chat_a
 nix run . -- --user-dir ~/.local/share/chat_b
 ```
 
-Both nodes join the `logos.test` Waku fleet (and publish their key packages to
+Both nodes join the `logos.test` messaging fleet (and publish their key packages to
 the key-package registry during `init`), so this needs internet and ~5-20s to
 reach **Online**. Then, in window A copy the address off the account card; in window B
 pick **New chat > Direct message** and paste A's address — the conversation opens on B's

@@ -80,7 +80,7 @@ state apart; it defaults to the platform application data location.
 | `LOGOS_USER_DIR` | The standalone app's session directory, for when setting it by environment is easier than by flag. `--user-dir` wins over it. |
 | `QML_INSPECTOR_PORT` | Only needed when attaching the [logos-qt-mcp](https://github.com/logos-co/logos-qt-mcp) inspector to drive an instance programmatically (default 3768); give each a distinct one then. Interactive use does not need it. |
 
-Each node joins the `logos.test` Waku fleet and publishes its key package during
+Each node joins the `logos.test` messaging fleet and publishes its key package during
 init, so this needs internet and ~5-20s per window to reach **Online**. Then
 copy one window's address from its account card and paste it into another
 (**New chat > Direct message** for a 1:1, or **New chat > Group** then the members
@@ -218,14 +218,14 @@ tab is there and says so.
 | Qt6 Core, RemoteObjects, Declarative | UI framework + IPC |
 | [`logos-module-builder`](https://github.com/logos-co/logos-module-builder) | Build system (mkLogosQmlModule) |
 | [`logos-chat-module`](https://github.com/logos-co/logos-chat-module) | Chat backend module |
-| [`logos-delivery-module`](https://github.com/logos-co/logos-delivery-module) | Transport (Waku) — runtime dependency, pinned at v0.1.3 |
+| [`logos-delivery-module`](https://github.com/logos-co/logos-delivery-module) | Transport (Logos Messaging) — runtime dependency, pinned at v0.1.3 |
 
 ## Related Repositories
 
 | Repository | Role |
 |---|---|
 | [`logos-chat-module`](https://github.com/logos-co/logos-chat-module) | Chat backend — this UI's required dependency |
-| [`logos-delivery-module`](https://github.com/logos-co/logos-delivery-module) | Transport (Waku) — runtime dependency, pinned at v0.1.3 |
+| [`logos-delivery-module`](https://github.com/logos-co/logos-delivery-module) | Transport (Logos Messaging) — runtime dependency, pinned at v0.1.3 |
 | [`libchat`](https://github.com/logos-messaging/libchat) | Chat engine embedded by `chat_module` (E2EE, sessions) |
 | [`logos-module-builder`](https://github.com/logos-co/logos-module-builder) | Module build system |
 | [`logos-liblogos`](https://github.com/logos-co/logos-liblogos) | Logos Core platform |

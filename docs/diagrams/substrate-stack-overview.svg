@@ -420,7 +420,7 @@
         <g class="bc-node" data-id="delivery">
           <rect x="600" y="402" width="132" height="42" rx="3"/>
           <text x="666" y="416">delivery_module</text>
-          <text x="666" y="430" class="bc-node-sub">embeds a Waku node</text>
+          <text x="666" y="430" class="bc-node-sub">embeds a Logos Messaging node</text>
         </g>
         <g class="bc-node" data-id="modules-lower-more">
           <rect x="742" y="402" width="40" height="42" rx="3"/>
