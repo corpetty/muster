@@ -98,3 +98,7 @@ Adding an asset or a rail is one entry in `muster-ui/src/ChatBackendAssets.cpp` 
 ## Refactor path
 
 When the campaign article is out, this becomes input to the spec-hardening work rather than a codebase to maintain: the journey it proves gets re-authored as typed specs via `discuss-issue`, and the real client implements them. Findings that belong in the record — platform gaps, upstream issues, things the prototype taught us — go to `docs/labbook/`.
+
+## Disclaimer
+
+This is an independent community project intended to demonstrate some of the capabilities and potential uses of the Logos technology stack. It has been developed independently by its contributor(s) and is not built for, on behalf of, or as part of the work of Logos Collective Association (“Logos”) or IFT Studio Pte. Ltd. (“IFT”). It has not been reviewed, audited, approved, or endorsed by Logos or IFT. The project, including its code, documentation, views, and functionality, is the sole responsibility of its contributor(s) and should not be attributed to Logos or IFT.
