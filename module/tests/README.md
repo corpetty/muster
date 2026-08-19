@@ -1,0 +1,19 @@
+# module/tests
+
+Most probes/tests run with bare `nim r -d:release tests/<name>.nim` (pure Nim,
+no external deps) — this is how the exophial spec oracles under `tests/probes/`
+are graded.
+
+**Exception — the P2 Safe crypto tests need libsecp256k1 linked:**
+`secp256k1_test.nim`, `safe_test.nim`, `safe_collect_test.nim` (and anything
+importing `src/crypto/secp256k1.nim` or `src/drivers/safe.nim`). Build the lib
+and pass it:
+
+```bash
+nix build nixpkgs#secp256k1 --out-link /tmp/secp
+nim r -d:release --passC:-I/tmp/secp/include \
+  --passL:/tmp/secp/lib/libsecp256k1.so tests/safe_collect_test.nim
+```
+
+The module build supplies secp256k1 via `nix.packages` once the Safe driver is
+wired into the module surface.
