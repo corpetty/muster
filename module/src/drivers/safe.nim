@@ -16,10 +16,10 @@ import ../hashing/keccak256
 import ../dcbor/dcbor
 import ../drivers/driver
 import ../intents/materialization
+import ../crypto/secp256k1   # Address, Signature65, recoversToOwner
+export secp256k1.Address, secp256k1.Signature65   # part of the Safe API surface
 
 type
-  Address* = array[20, byte]
-
   SafeTx* = object
     to*: Address
     value*: uint64
@@ -75,18 +75,24 @@ type SafeDriver* = ref object of Driver
   chainId*: uint64
   safe*: Address
   threshold*: int
+  owners*: seq[Address]              ## the Safe's owner set
+  pendingHash*: array[32, byte]      ## the safeTxHash currently being collected on
 
 method describe*(d: SafeDriver): DriverDescriptor =
   DriverDescriptor(rounds: 1, serializationDomain: "eip712.safe.v1.4.1",
                    membership: mmNamed, finality: finExternal, threshold: d.threshold)
 
 method verifyContribution*(d: SafeDriver, c: Contribution, round: int): bool =
-  # ECDSA-vs-owner verification lands here with nim-secp256k1; the contribution
-  # bytes stay opaque to the core (invariant 6).
-  c.bytes.len > 0
+  ## A contribution is a 65-byte owner ECDSA signature over the pending safeTxHash.
+  ## The core never reads these bytes (invariant 6); only the driver does, here.
+  if c.bytes.len != 65: return false
+  var sig: Signature65
+  for i in 0 ..< 65: sig[i] = c.bytes[i]
+  recoversToOwner(d.pendingHash, sig, d.owners)
 
-proc newSafeDriver*(chainId: uint64, safe: Address, threshold = 2): SafeDriver =
-  SafeDriver(chainId: chainId, safe: safe, threshold: threshold)
+proc newSafeDriver*(chainId: uint64, safe: Address, owners: seq[Address] = @[],
+                    threshold = 2): SafeDriver =
+  SafeDriver(chainId: chainId, safe: safe, owners: owners, threshold: threshold)
 
 proc hexNibble(c: char): byte =
   case c
@@ -113,5 +119,8 @@ proc toSafeTx*(e: Effect): SafeTx =
     else: discard
 
 proc canonicalizeSafe*(d: SafeDriver, e: Effect): Materialization =
-  ## The Safe materialization is the safeTxHash the owners sign.
-  Materialization(bytes: safeTxHash(toSafeTx(e), d.chainId, d.safe))
+  ## The Safe materialization is the safeTxHash the owners sign. Recording it as
+  ## the pending hash lets verifyContribution check owner signatures against it.
+  let h = safeTxHash(toSafeTx(e), d.chainId, d.safe)
+  for i in 0 ..< 32: d.pendingHash[i] = h[i]
+  Materialization(bytes: h)
