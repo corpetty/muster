@@ -1,9 +1,9 @@
-coordination_repo: ""
-poll_interval: 5
-inspect_interval: 5
+coordination_repo: "/home/petty/Github/corpetty/muster"
+poll_interval: 30
+inspect_interval: 30
 
 dispatcher:
-  max_workers: 10
+  max_workers: 1
   task_timeout: 3600
 
 # Commit-boundary acceptance gate the integrator re-runs in-worktree for pebbles
@@ -30,7 +30,7 @@ worker_model:
     default: "sonnet"
     frontier: "opus"
   routing:
-    default: default
+    default: frontier
 
 # The ONE LLM transport this deployment reaches a model through (exo-698c / ADR
 # docs/decisions/2026-07-16-llm-transport-seam.md). Config-selected, fail-loud: a
