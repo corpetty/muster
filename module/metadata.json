@@ -1,0 +1,35 @@
+{
+  "name": "muster_module",
+  "display_name": "Muster Module",
+  "version": "0.0.0",
+  "description": "Muster — local-first client for coordinating multi-party transactions inside conversations. P0 loading-spike surface.",
+  "author": "Muster",
+  "type": "core",
+  "interface": "cdylib",
+  "category": "general",
+  "main": "muster_module_plugin",
+  "dependencies": [],
+  "include": [],
+  "capabilities": [],
+
+  "codegen": {
+    "lidl": "src/api/muster.lidl",
+    "nim": {
+      "crate": "nim-lib",
+      "main": "muster_module.nim",
+      "staticlib": "muster_module"
+    }
+  },
+
+  "nix": {
+    "external_libraries": [],
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "cmake": {
+      "find_packages": [],
+      "extra_include_dirs": []
+    }
+  }
+}
