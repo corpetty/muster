@@ -1,12 +1,14 @@
 module muster_module {
   version "0.1.0"
-  description "Muster — local-first client for coordinating multi-party transactions inside conversations. The coordination surface: propose an intent from an effect, approve it with contributions until the driver's threshold is met, and read its lifecycle state. The Nim core behind this contract drives the intent lifecycle engine (draft → proposed → collecting → executable → ...) over the driver interface; this .lidl stays the single normative surface, and the Nim module surface is generated from it (tools/lidl_gen.nim)."
+  description "Muster — local-first client for coordinating multi-party transactions inside conversations. The coordination surface: propose an intent from an effect, read the exact bytes to sign (the driver-canonicalized materialization), approve it with owner signatures until the driver's threshold is met, and read its lifecycle state. The Nim core behind this contract drives the intent lifecycle engine over a real driver (Safe: EIP-712 safeTxHash + secp256k1 owner recovery). This .lidl stays the single normative surface; the Nim module surface is generated from it (tools/lidl_gen.nim)."
 
   method health() -> tstr description "Liveness probe. Returns \"ok\" when the module is loaded and dispatching."
 
-  method propose(effect_json: tstr) -> tstr description "Propose an intent from an effect (a JSON object of typed fields, e.g. {\"amount\":100}). Returns the new intent's id."
+  method propose(effect_json: tstr) -> tstr description "Propose an intent from an effect (a JSON object, e.g. {\"to\":\"0x..\",\"value\":1000,\"nonce\":0}). Returns the new intent's id."
 
-  method approve(intent_id: tstr, contribution_hex: tstr) -> tstr description "Add a contribution (a hex-encoded signature/attestation) to an intent, advancing its collection. Returns the intent's new lifecycle state."
+  method txhash(intent_id: tstr) -> tstr description "Return the hex materialization the driver canonicalized for this intent — the exact bytes owners sign (for Safe, the EIP-712 safeTxHash)."
+
+  method approve(intent_id: tstr, signature_hex: tstr) -> tstr description "Add an owner signature (65-byte hex) to an intent; the driver verifies it recovers to an owner before it counts. Returns the intent's new lifecycle state."
 
   method status(intent_id: tstr) -> tstr description "Return an intent's current lifecycle state (draft, proposed, collecting, executable, ...)."
 }
