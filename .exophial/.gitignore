@@ -1,0 +1,6 @@
+# exophial runtime artifacts — machine-local, not repo state
+*.lock
+*.pid
+logs/
+locks/
+graded/
