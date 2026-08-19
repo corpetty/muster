@@ -1,0 +1,8 @@
+module muster_module {
+  version "0.0.0"
+  description "Muster — local-first client for coordinating multi-party transactions inside conversations. P0 loading-spike surface: the two methods below exist only to prove a Nim-backed module generated over the lidl_c.h bridge loads, dispatches, and answers a call in logoscore. The real coordination surface (propose/approve/status + lifecycle events) grows here from P1; muster.lidl stays the single normative contract — never hand-write what it should generate."
+
+  method health() -> tstr description "Liveness probe. Returns \"ok\" when the module is loaded and dispatching. Proves the module answers a no-argument call."
+
+  method echo(msg: tstr) -> tstr description "Returns msg verbatim. Proves a value round-trips caller -> Nim backend -> caller across the LIDL surface, exercising request decode and response encode over the JSON bridge."
+}
