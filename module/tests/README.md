@@ -4,6 +4,14 @@ Most probes/tests run with bare `nim r -d:release tests/<name>.nim` (pure Nim,
 no external deps) — this is how the exophial spec oracles under `tests/probes/`
 are graded.
 
+**Known-answer vectors — `dcbor_golden_test.nim`:** the `probe_cde_*` oracles
+check dCBOR *properties* (shortest-length, re-derived ordering, re-encode
+stability); this pins the encoder to EXACT bytes for a hand-computed vector set
+(width boundaries, string/array/map shapes, the CDE-vs-length-first ordering
+discriminator, order-independence, the hash-input framing, and s4/dup-key
+rejections). Different bytes are a different signature, so this guards invariant 5
+against byte-order/major-type regressions a property check can miss. `nim r`, no deps.
+
 **Exception — the P2 Safe crypto tests need libsecp256k1 linked:**
 `secp256k1_test.nim`, `safe_test.nim`, `safe_collect_test.nim` (and anything
 importing `src/crypto/secp256k1.nim` or `src/drivers/safe.nim`). Build the lib
