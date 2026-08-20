@@ -60,4 +60,14 @@ doAssert readU64(calldata, 4 + 2*32) == 320'u64, "data offset = head length"
 doAssert readU64(calldata, 4 + 9*32) == 352'u64, "signatures offset = 320 + 32 (empty data)"
 doAssert readU64(calldata, 4 + 352) == 130'u64, "signatures length word = 130"
 
-echo "safe_exec: selector 0x6a761202, ascending-signer packing, calldata layout OK"
+# ── 4. MiniSafe fixture encoder (4-arg execTransaction) — layout ──
+let mini = encodeMiniSafeExec(a0, 1000'u64, @[], packed)
+let msel = miniSafeExecSelector()
+for i in 0 ..< 4: doAssert mini[i] == msel[i], "minisafe calldata starts with its selector"
+doAssert mini.len == 4 + 128 + 32 + 32 + 160,
+  "minisafe calldata: 4 head words + empty-data tail + 130-byte sigs padded to 160"
+doAssert readU64(mini, 4 + 2*32) == 128'u64, "minisafe data offset (4 head words)"
+doAssert readU64(mini, 4 + 3*32) == 160'u64, "minisafe signatures offset = 128 + 32 (empty data)"
+doAssert readU64(mini, 4 + 160) == 130'u64, "minisafe signatures length word = 130"
+
+echo "safe_exec: real-Safe 0x6a761202 + MiniSafe encoders, ascending-signer packing, layouts OK"

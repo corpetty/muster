@@ -4,9 +4,10 @@
 ## execTransaction is itself the cross-validation that muster's local safeTxHash
 ## matches the contract's on-chain getTxHash (else checkSignatures reverts).
 ## Usage: safe_anvil_e2e <safeAddr> [rpcUrl]
-import std/[os, algorithm, strutils]
+import std/[os, strutils]
 import ../src/drivers/safe
 import ../src/drivers/safe_rpc
+import ../src/drivers/safe_exec
 import ../src/crypto/secp256k1
 import ../src/dcbor/dcbor
 import ../src/intents/materialization
@@ -21,11 +22,6 @@ proc toAddr(s: string): Address =
   let b = hexToBytes(s); (for i in 0 ..< 20: result[i] = b[i])
 proc toKey(s: string): array[32, byte] =
   let b = hexToBytes(s); (for i in 0 ..< 32: result[i] = b[i])
-
-proc cmpAddr(a, b: Address): int =
-  for i in 0 ..< 20:
-    if a[i] != b[i]: return (if a[i] < b[i]: -1 else: 1)
-  0
 
 let rpc = (if paramCount() >= 2: paramStr(2) else: "http://127.0.0.1:8545")
 let safeAddr = toAddr(paramStr(1))
@@ -45,16 +41,11 @@ let mat = canonicalizeSafe(drv, effect)           # muster's local safeTxHash
 var hash: array[32, byte]
 for i in 0 ..< 32: hash[i] = mat.bytes[i]
 
-# Collect the two owner signatures, sorted by signer address ascending (Safe dedup).
-var signed: seq[(Address, Signature65)]
-signed.add (addressOf(k0), signRecoverable(hash, k0))
-signed.add (addressOf(k1), signRecoverable(hash, k1))
-signed.sort(proc(a, b: (Address, Signature65)): int = cmpAddr(a[0], b[0]))
-var sigs: seq[byte]
-for (_, s) in signed: sigs.add @s
+# packSignatures orders the owner sigs by recovered signer ascending (Safe dedup).
+let sigs = packSignatures(hash, @[signRecoverable(hash, k0), signRecoverable(hash, k1)])
 
 echo "recipient balance before: ", getBalance(rpc, recipient)
-let calldata = assembleExecTransaction(recipient, value, @[], sigs)
+let calldata = encodeMiniSafeExec(recipient, value, @[], sigs)
 let txHash = submitExecTransaction(rpc, relayer, safeAddr, calldata)
 echo "submitted execTransaction: ", txHash
 

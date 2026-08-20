@@ -5,10 +5,17 @@
 ## checkSignatures walks recovered owners strictly increasing to reject
 ## duplicates). Dependency-free and testable without a chain.
 ##
+## Two encoders live here: `encodeExecTransaction` for the REAL Safe 1.4.1 10-arg
+## call (selector 0x6a761202), and `encodeMiniSafeExec` for the 4-arg
+## `execTransaction(address,uint256,bytes,bytes)` of the infra/anvil MiniSafe
+## fixture. They share the ABI helpers and `packSignatures`; pick the one that
+## matches the deployed contract. `safe_rpc.nim` is the JSON-RPC transport that
+## broadcasts whichever calldata these produce.
+##
 ## The remaining half — broadcasting this calldata to the Safe over JSON-RPC and
-## watching for the receipt — needs nim-web3 + a live node (anvil), and is
-## deliberately NOT here: determinism and correctness hinge on the ASSEMBLY, which
-## stays pure and golden-tested; the transport is I/O we bolt on at the infra edge.
+## watching for the receipt — lives in `safe_rpc.nim` (std/httpclient, no web3
+## dep). Determinism and correctness hinge on the ASSEMBLY here, which stays pure
+## and golden-tested; the transport is I/O bolted on at the infra edge.
 
 import std/algorithm
 import ../hashing/keccak256
@@ -84,4 +91,26 @@ proc encodeExecTransaction*(tx: SafeTx, packedSigs: seq[byte]): seq[byte] =
   result.add head
 
   result.add word(uint64(tx.data.len)); result.add dataPadded
+  result.add word(uint64(packedSigs.len)); result.add pad32(packedSigs)
+
+# ── MiniSafe fixture (infra/anvil/MiniSafe.sol): a 4-arg execTransaction ─────────
+# execTransaction(address to, uint256 value, bytes data, bytes signatures). This
+# matches the test fixture, NOT a production Safe — use encodeExecTransaction for a
+# real Safe 1.4.1 deployment.
+const MINISAFE_EXEC_SIG = "execTransaction(address,uint256,bytes,bytes)"
+
+proc miniSafeExecSelector*(): array[4, byte] =
+  let h = keccak256(sbytes(MINISAFE_EXEC_SIG))
+  for i in 0 ..< 4: result[i] = h[i]
+
+proc encodeMiniSafeExec*(to: Address, value: uint64, data: seq[byte],
+                         packedSigs: seq[byte]): seq[byte] =
+  let sel = miniSafeExecSelector()
+  for b in sel: result.add b
+  let dataPadded = pad32(data)
+  result.add wordAddr(to)
+  result.add word(value)
+  result.add word(128'u64)                             # offset to data (4 head words)
+  result.add word(uint64(128 + 32 + dataPadded.len))   # offset to signatures
+  result.add word(uint64(data.len)); result.add dataPadded
   result.add word(uint64(packedSigs.len)); result.add pad32(packedSigs)
