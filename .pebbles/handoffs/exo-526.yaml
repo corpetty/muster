@@ -1,0 +1,58 @@
+status: completed
+pebble_id: exo-526
+summary: >
+  Turned the muster_module return surface's readability from assumed into
+  asserted. Traced the reported `logoscore --call ...health()` -> `Result: false`
+  through the real host stack (logos-liblogos proxy_api.cpp `--call` ->
+  LogosAPIClient::invokeRemoteMethod -> module_proxy.cpp -> the generated
+  <Module>CdylibProvider::callMethod in logos-qt-sdk
+  qt-generator/lidl_gen_cdylib_glue.cpp -> logos-cpp-sdk
+  logos_json_convert.cpp nlohmannToQVariant) and confirmed the Nim core returns
+  the JSON string "ok" and the codegen path marshals a JSON string to a typed
+  QString correctly — the observed bool `false` was a host-side artifact
+  (ad-hoc `-m` capability-token handshake / stale module), not a codegen drop.
+  Authored the spec's acceptance oracle
+  tests/probes/probe_return_marshalling_host.nim: it builds the module as a Nim
+  staticlib (the exact shape codegen.nim.staticlib produces) and links it into a
+  C++ host harness (tests/probes/host_return_harness.cpp) that reproduces the
+  shipped dispatch -> nlohmann::json::parse -> nlohmannToQVariant -> CLI
+  toString() marshalling and reads the value a CLIENT observes — going strictly
+  beyond logos_module_dispatch, exercising the real Nim->C++ boundary with no
+  module internals mocked. It emits one {"client_return_typed": ...} observation
+  per call over health() plus propose()/status() across a valid/edge effect-JSON
+  family; the spec's always(client_return_typed) requires every one to be a typed
+  non-empty string (health()=="ok", propose()->non-empty id, status()->a known
+  lifecycle token), never a bool/empty/default. Verified GREEN at the committed
+  SHA (15 observations, all typed, exit 0) and verified DISCRIMINATING: mutating
+  health's dispatch to return %false reproduces exactly the reported symptom
+  (client_type "bool", client_value "false", client_return_typed false) and the
+  probe fails loudly (AssertionDefect, non-zero exit); reverted before commit.
+  Also documented the probe's g++/secp256k1 toolchain need in module/tests/README.md.
+cost: "~118k tokens"
+commits:
+  - "38e3a3b1887c0ad74cfb930a285bf31f7f04ce52"
+verify_transcript:
+  probe_green_at_head: |
+    $ MUSTER_SECP256K1_LIB="-L<secp>/lib -lsecp256k1 -Wl,-rpath,<secp>/lib" \
+      nim r -d:release tests/probes/probe_return_marshalling_host.nim
+    {"call": "health", "expect": "ok", "client_type": "string", "client_value": "ok", "client_return_typed": true}
+    {"call": "propose", "expect": "nonempty_id", "client_type": "string", "client_value": "intent-1", "client_return_typed": true}
+    {"call": "status", "expect": "state_token", "client_type": "string", "client_value": "proposed", "client_return_typed": true}
+    ... (propose intent-2..intent-7 + status each, all client_return_typed: true) ...
+    EXIT=0   (15 observations, all typed, zero false)
+  probe_red_under_mutation: |
+    # mutated nim-lib/muster_gen.nim health dispatch: %musterHealth() -> %false
+    {"call": "health", "expect": "ok", "client_type": "bool", "client_value": "false", "client_return_typed": false}
+    Error: unhandled exception: probe_return_marshalling_host.nim(105, 1) `allTyped`
+      a host client observed a non-typed (bool/empty/default) return — the
+      Nim->C++->host marshalling dropped a declared QString value [AssertionDefect]
+    (non-zero exit; mutation reverted, `git diff muster_gen.nim` clean)
+  existing_probe_unaffected: |
+    $ nim r -d:release tests/probes/probe_reducer_idempotent.nim
+    {"idempotent": true} ... (exit 0)
+e2e_gate:
+  spec: module/tests/probes/probe_return_marshalling_host.nim
+  command: nim r -d:release tests/probes/probe_return_marshalling_host.nim
+  result: passed
+  ran_at_sha: "38e3a3b1887c0ad74cfb930a285bf31f7f04ce52"
+  mocks_in_path: false
