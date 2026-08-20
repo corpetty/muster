@@ -218,6 +218,59 @@ whoever lands the Nim authoring path), in coordination with **`logos-basecamp`**
    `logos-qt-mcp` harness already exists in basecamp `tests/ui-tests.mjs`) — this
    skew would have been caught by such a test.
 
+## Interim workaround — unblocked while upstream aligns
+
+We do **not** need to wait for the upstream fix to keep building P4. The
+module-builder ships its own host — `logos-standalone-app` (the `run-logos-standalone-ui`
+launcher `mkLogosQmlModule` emits) — and it is **ABI-matched to the plugin by
+construction**: it bundles its *own* `ui-host` and `capability_module` built from
+the *same* `nim-cdylib-authoring` builder as `muster_ui`, so both boundaries that
+skew against shipping basecamp (`logos-view-module-runtime`, `logos-cpp-sdk`) are
+self-consistent. The full seam completes there — the forced-logging run shows the
+whole chain:
+
+```
+ViewModuleHost: spawning ".../ui-host" for "muster_ui"
+ui-host: loaded plugin "muster_ui"
+LogosAPIConsumer: informModuleToken completed with result: true   ← capability handshake completes
+[muster_ui] muster_module.health() -> "ok"                        ← the seam resolves
+ViewModuleHost: process ready for "muster_ui"
+[QmlInspector] Inspector server listening on port 3768
+```
+
+So the interim arrangement is:
+
+- **Dev host:** `run-logos-standalone-ui` with QML hot-reload (`DEV_QML_PATH`) —
+  build out the P4 views (six-step legend, ADR-011 `Logos.Theme`) against the real
+  logos-API seam now.
+- **Acceptance gate:** `ui/tests/run-health.sh` + `ui/tests/health.mjs` drive that
+  host over the QML inspector protocol and assert `muster_module.health() -> ok`
+  surfaces in the view. It runs **headless** (offscreen + software render) and is
+  green in CI, because it asserts on the QML object tree (`root.health`), not
+  pixels. This is the standalone-host analogue of basecamp's `logos-qt-mcp`
+  `app.click` / `app.expectTexts` flow.
+
+**Two corrections to earlier, headless-only diagnosis** (tracked in `exo-c6a`),
+so this trail is not misread later:
+
+- The standalone host is **not** blocked by a `capability_module` QtRO signal
+  skew. The `QObject::connect: No such signal …eventResponse(QString,QVariantList)`
+  warnings are **cosmetic** — the token handshake completes (`informModuleToken …
+  true`) with them present.
+- The standalone host does **not** "render nothing headless." The view module
+  instantiates and `health()` resolves under `QT_QPA_PLATFORM=offscreen`; the
+  earlier "blank / no view" reading was a capture artifact — the `ui-host` /
+  `health()` lines require `QT_FORCE_STDERR_LOGGING=1` to reach stderr, and the
+  offscreen framebuffer is blank by construction. The only thing headless does not
+  give you is rendered **pixels** (screenshots), which the acceptance gate does not
+  need.
+
+**Revert path (fixed-to-appropriate).** When the upstream codegen + pins advance
+to basecamp's SDK set (the ask above), re-point `run-health.sh` at basecamp's
+`logos-qt-mcp` flow — `health.mjs`'s assertions are unchanged. The muster side
+needs no code change; only the launcher swaps hosts. The standalone host stays on
+as a fast local dev/CI host regardless.
+
 ## Appendix
 
 - Muster tracking: pebble `exo-c6a` (this session's full debugging log, with the
