@@ -52,6 +52,20 @@ proc secpTokens(): seq[string] =
     for tok in pc.split():
       if tok.len > 0: result.add tok
     return result
+  # Hermetic fallback (exo-a5d): the exophial oracle regate scrubs PATH/env, so
+  # `nix`/`pkg-config` and an ambient LIBRARY_PATH are all unavailable to point at
+  # the nix-store secp256k1. Locate it by a filesystem-only glob over the
+  # world-readable store — no binary needed — preferring a non-`-dev` output that
+  # actually holds the library.
+  for kind, path in walkDir("/nix/store"):
+    if kind != pcDir: continue
+    let name = path.extractFilename
+    if "secp256k1-" notin name or name.endsWith("-dev"): continue
+    let libDir = path / "lib"
+    if fileExists(libDir / "libsecp256k1.so") or fileExists(libDir / "libsecp256k1.a"):
+      # -rpath embeds the store libdir so the harness also finds libsecp256k1.so.N
+      # at RUN time (LD_LIBRARY_PATH is scrubbed too), not just at link time.
+      return @["-L" & libDir, "-Wl,-rpath," & libDir, "-lsecp256k1"]
   @["-lsecp256k1"]
 
 let tmp = getTempDir() / "muster_exo526_host"
