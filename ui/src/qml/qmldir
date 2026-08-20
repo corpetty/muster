@@ -1,0 +1,6 @@
+module com.logos.module.muster_ui
+singleton Theme 1.0 Theme.qml
+Eyebrow 1.0 Eyebrow.qml
+Card 1.0 Card.qml
+StateChip 1.0 StateChip.qml
+ListRow 1.0 ListRow.qml

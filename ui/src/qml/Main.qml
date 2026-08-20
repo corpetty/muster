@@ -3,15 +3,12 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 // P4 loading spike: prove the QML -> C++ backend -> muster_module (logos API)
-// seam. Themed via the interim Muster tokens (ADR-011, Theme.qml) seeded from the
-// prototype v2 legend; migrates to `import Logos.Theme` when the design system is
-// on the host's QML path (see Theme.qml).
+// seam, composed from the interim Muster component set (Eyebrow / StateChip /
+// Card / ListRow) over the Theme singleton (ADR-011). Migrates to
+// `import Logos.Theme` + platform controls when the design system is on the
+// host's QML path (see Theme.qml / exo-e9f).
 Item {
     id: root
-
-    // Interim design tokens (ADR-011). Swap for `import Logos.Theme` later; the
-    // `theme.palette.*` / `theme.spacing.*` call sites are shaped to match.
-    Theme { id: theme }
 
     // Typed replica of the backend: auto-synced PROPs + callable SLOTs.
     readonly property var backend: logos.module("muster_ui")
@@ -31,44 +28,54 @@ Item {
         root.ready = root.backend !== null && logos.isViewModuleReady("muster_ui");
     }
 
-    // Paper background — the prototype's --paper, so the light palette reads.
     Rectangle {
         anchors.fill: parent
-        color: theme.palette.background
+        color: Theme.palette.background
     }
 
     ColumnLayout {
         anchors.centerIn: parent
-        spacing: theme.spacing.large
-        width: Math.min(parent.width - 2 * theme.spacing.xlarge, 420)
+        spacing: Theme.spacing.large
+        width: Math.min(parent.width - 2 * Theme.spacing.xlarge, 420)
 
-        Text {
-            text: "Muster — module health"
-            font.pixelSize: theme.typography.titleSize
-            color: theme.palette.text
+        Eyebrow {
+            text: "Module health"
             Layout.alignment: Qt.AlignHCenter
         }
 
         Text {
-            text: root.ready ? "Connected to backend" : "Connecting to backend…"
-            font.pixelSize: theme.typography.bodySize
-            color: root.ready ? theme.palette.settled : theme.palette.textMuted
+            text: "Muster"
+            font.family: Theme.typography.sans
+            font.pixelSize: Theme.typography.titleSize
+            font.weight: Theme.typography.weightSemiBold
+            color: Theme.palette.text
             Layout.alignment: Qt.AlignHCenter
         }
 
-        Rectangle {
+        StateChip {
+            Layout.alignment: Qt.AlignHCenter
+            text: root.ready ? "connected" : "connecting…"
+            variant: root.ready ? "settled" : "wait"
+        }
+
+        Card {
             Layout.fillWidth: true
             implicitHeight: 64
-            radius: theme.radius.medium
-            color: theme.palette.surface
-            border.color: theme.palette.border
             Text {
                 anchors.centerIn: parent
                 text: "muster_module.health() → " + root.health
-                font.pixelSize: theme.typography.monoSize
-                font.family: theme.typography.mono
-                color: root.health === "ok" ? theme.palette.settled : theme.palette.text
+                font.pixelSize: Theme.typography.monoSize
+                font.family: Theme.typography.mono
+                color: root.health === "ok" ? Theme.palette.settled : Theme.palette.text
             }
+        }
+
+        ListRow {
+            Layout.fillWidth: true
+            heading: "muster_module"
+            subtitle: "core · logos API"
+            trailing: root.health === "ok" ? "ok" : root.health
+            live: root.ready
         }
 
         Button {
@@ -79,14 +86,15 @@ Item {
 
             contentItem: Text {
                 text: parent.text
-                font.pixelSize: theme.typography.bodySize
-                color: parent.enabled ? theme.palette.accentText : theme.palette.textMuted
+                font.family: Theme.typography.sans
+                font.pixelSize: Theme.typography.bodySize
+                color: parent.enabled ? Theme.palette.accentText : Theme.palette.textMuted
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
             background: Rectangle {
-                radius: theme.radius.small
-                color: parent.enabled ? theme.palette.accent : theme.palette.accentSoft
+                radius: Theme.radius.small
+                color: parent.enabled ? Theme.palette.accent : Theme.palette.accentSoft
                 implicitHeight: 40
                 implicitWidth: 160
             }
