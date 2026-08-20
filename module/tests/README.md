@@ -19,6 +19,13 @@ bytes without aborting; descriptor-driven, byte-independent core routing). Worki
 agreement: never merge with it red. The stub matrix runs pure-Nim; the Safe
 variant is in the secp256k1 group below.
 
+**Integration — `integration_test.nim`:** two peers exchange coordination events
+over an unreliable local transport (reorder + duplication) and converge to one
+state (invariant 4), plus a stub-driver collection closing at threshold — the real
+log/reduce and the real stub driver, nothing mocked. Pure Nim. The logoscore-hosted
+two-instance e2e (`nix run .#integration`, two isolated `--user-dir` hosts) is the
+deployment version and needs the platform host — not wired here yet.
+
 **Exception — the P2 Safe crypto tests need libsecp256k1 linked:**
 `secp256k1_test.nim`, `safe_test.nim`, `safe_collect_test.nim` (and anything
 importing `src/crypto/secp256k1.nim` or `src/drivers/safe.nim`). Build the lib
