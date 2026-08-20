@@ -1,0 +1,7 @@
+// The view contract (QtRO). SLOTs are callable from QML; PROPs auto-sync to
+// every QML replica, so the health result reaches the view with no polling.
+class MusterUi
+{
+    SLOT(void checkHealth())
+    PROP(QString health="unknown" READONLY)
+}

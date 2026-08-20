@@ -1,0 +1,27 @@
+{
+  "name": "muster_ui",
+  "display_name": "Muster",
+  "version": "0.1.0",
+  "type": "ui_qml",
+  "interface": "universal",
+  "category": "general",
+  "description": "Muster coordination UI (P4 loading spike): reads muster_module.health() through the generated logos-API client and shows it in QML.",
+  "main": "muster_ui_plugin",
+  "view": "qml/Main.qml",
+  "dependencies": ["muster_module"],
+  "codegen": { "rep": "src/muster_ui.rep" },
+
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": []
+    }
+  }
+}
