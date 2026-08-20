@@ -7,3 +7,11 @@
 # worktree (see CLAUDE.md § Commands).
 result
 result-*
+
+# Machine-local flake locks: module/ and ui/ pin logos-module-builder to a
+# LOCAL path input (the Nim-codegen checkout), so their flake.lock is per-machine
+# and must not enter shared history. Committing one breaks the build on any box
+# without that exact checkout. Re-pin to a github ref (and commit the lock) once
+# the Nim path lands upstream.
+module/flake.lock
+ui/flake.lock
