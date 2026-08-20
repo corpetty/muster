@@ -1,0 +1,47 @@
+{
+  "id": "derived-exo-526",
+  "problem": "In the P4 loading-spike run, a host reading muster_module.health() via logoscore's generic --call received bool false, not the string 'ok' the Nim core computes and JSON-returns. It is therefore unproven that any host client observes the module's typed string returns, so the propose/txhash/approve/status coordination surface may be silently unreadable and P4 UI work would build on an unverified foundation.",
+  "goal": "An automated host-level test proves a client observes muster_module's method returns as their real typed string values (health() -> 'ok'), exercising the full Nim->C++->QtRO path - turning the surface's readability from assumed into asserted and catching any regression that drops a typed return to a default.",
+  "acceptance_criteria": [
+    "A real host client invoking methods on the built muster_module .lgx observes each return as its declared typed string value - health() is exactly 'ok'; propose(valid effect JSON) is a non-empty intent id; status(that id) is a valid lifecycle-state token - never a bool and never empty. Asserted by an automated test that loads the module in a host (logoscore --call or a typed LogosAPI client) and reads the client-observed return, exercising the full Nim->C++->QtRO marshalling path; a probe that only checks logos_module_dispatch does not satisfy it."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "A real host client invoking methods on the built muster_module .lgx observes each return as its declared typed string value - health() is exactly 'ok'; propose(valid effect JSON) is a non-empty intent id; status(that id) is a valid lifecycle-state token - never a bool and never empty. Asserted by an automated test that loads the module in a host (logoscore --call or a typed LogosAPI client) and reads the client-observed return, exercising the full Nim->C++->QtRO marshalling path; a probe that only checks logos_module_dispatch does not satisfy it."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "property_test",
+      "proves": "Over a regenerated family of calls invoked through a REAL HOST CLIENT against the built muster_module .lgx - health(); propose() across valid/edge effect JSONs; status() of each resulting id - the client-observed return equals the method's declared typed string value (health()=='ok', propose()->non-empty id, status()->a known lifecycle-state token) and is never a bool/empty/default. The probe loads the module in a host, so it exercises the full Nim->C++->QtRO path; a probe checking only logos_module_dispatch would NOT satisfy it. Catches the observed 'false'-drop at whatever layer it lives.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_return_marshalling_host.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "client_return_typed": {
+            "kind": "flag",
+            "field": "client_return_typed"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "client_return_typed"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "A real host client invoking methods on the built muster_module .lgx observes each return as its declared typed string value - health() is exactly 'ok'; propose(valid effect JSON) is a non-empty intent id; status(that id) is a valid lifecycle-state token - never a bool and never empty. Asserted by an automated test that loads the module in a host (logoscore --call or a typed LogosAPI client) and reads the client-observed return, exercising the full Nim->C++->QtRO marshalling path; a probe that only checks logos_module_dispatch does not satisfy it.",
+      "clause_id": "c1"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check"
+}
