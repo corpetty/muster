@@ -1,7 +1,26 @@
 // The view contract (QtRO). SLOTs are callable from QML; PROPs auto-sync to
-// every QML replica, so the health result reaches the view with no polling.
+// every QML replica, so results reach the view with no polling. The backend is
+// the only writer of PROPs; QML only reads them.
 class MusterUi
 {
     SLOT(void checkHealth())
+    SLOT(void loadAccount())
+    SLOT(void propose(const QString &effectJson))
+
     PROP(QString health="unknown" READONLY)
+
+    // The Safe account this walkthrough coordinates against — read from the
+    // module's describe(), never assumed by the view. JSON: {chainId, safe,
+    // threshold, owners, environment}.
+    PROP(QString accountJson="" READONLY)
+
+    // The current intent. One at a time, single instance. All from the module:
+    // intentEffect is the JSON that was proposed (what the strip shows), and
+    // intentTxhash is the EIP-712 safeTxHash the module re-derived from it (the
+    // exact bytes each owner will sign — what the strip re-derives).
+    PROP(QString intentId="" READONLY)
+    PROP(QString intentEffect="" READONLY)
+    PROP(QString intentTxhash="" READONLY)
+    PROP(QString intentState="" READONLY)
+    PROP(QString lastError="" READONLY)
 }

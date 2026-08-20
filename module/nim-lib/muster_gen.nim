@@ -23,6 +23,7 @@ proc toCString(s: string): cstring =
   cast[cstring](buf)
 
 proc musterHealth(): string
+proc musterDescribe(): string
 proc musterPropose(effect_json: string): string
 proc musterTxhash(intent_id: string): string
 proc musterApprove(intent_id: string, signature_hex: string): string
@@ -32,6 +33,8 @@ proc dispatch(meth: string, args: JsonNode): JsonNode =
   case meth
   of "health":
     %musterHealth()
+  of "describe":
+    %musterDescribe()
   of "propose":
     if args.kind != JArray or args.len < 1: return newJNull()
     %musterPropose(args[0].getStr())
@@ -48,7 +51,7 @@ proc dispatch(meth: string, args: JsonNode): JsonNode =
     nil
 
 proc logos_module_get_methods(): cstring {.exportc, cdecl.} =
-  toCString(parseJson("""[{"isInvokable":true,"name":"health","parameters":[],"returnType":"QString","signature":"health()"},{"isInvokable":true,"name":"propose","parameters":[{"name":"effect_json","type":"QString"}],"returnType":"QString","signature":"propose(QString)"},{"isInvokable":true,"name":"txhash","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"txhash(QString)"},{"isInvokable":true,"name":"approve","parameters":[{"name":"intent_id","type":"QString"},{"name":"signature_hex","type":"QString"}],"returnType":"QString","signature":"approve(QString,QString)"},{"isInvokable":true,"name":"status","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"status(QString)"}]""").`$`)
+  toCString(parseJson("""[{"isInvokable":true,"name":"health","parameters":[],"returnType":"QString","signature":"health()"},{"isInvokable":true,"name":"describe","parameters":[],"returnType":"QString","signature":"describe()"},{"isInvokable":true,"name":"propose","parameters":[{"name":"effect_json","type":"QString"}],"returnType":"QString","signature":"propose(QString)"},{"isInvokable":true,"name":"txhash","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"txhash(QString)"},{"isInvokable":true,"name":"approve","parameters":[{"name":"intent_id","type":"QString"},{"name":"signature_hex","type":"QString"}],"returnType":"QString","signature":"approve(QString,QString)"},{"isInvokable":true,"name":"status","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"status(QString)"}]""").`$`)
 
 proc logos_module_dispatch(meth: cstring, argsJson: cstring): cstring {.exportc, cdecl.} =
   if meth == nil: return nil

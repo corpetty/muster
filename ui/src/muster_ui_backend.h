@@ -12,14 +12,21 @@
  *
  * Derives:
  *   - `MusterUiSimpleSource` — generated from muster_ui.rep; implement its
- *     SLOTs and feed its PROPs (`setHealth(...)`), which auto-sync to QML.
+ *     SLOTs and feed its PROPs (`setHealth(...)`, `setIntentTxhash(...)`, …),
+ *     which auto-sync to QML.
  *   - `LogosUiPluginContext` — supplies `onContextReady()` + `modules()`, the
  *     Qt-typed callers for the declared `dependencies` (here: muster_module).
+ *
+ * The backend holds no keys and no state of its own: every value it feeds a PROP
+ * comes back from a muster_module call through the logos API. The intent lives in
+ * the module; this class is a thin conduit.
  */
 class MusterUiBackend : public MusterUiSimpleSource,
                         public LogosUiPluginContext
 {
 public:
     void checkHealth() override;
+    void loadAccount() override;
+    void propose(const QString &effectJson) override;
     void onContextReady() override;
 };

@@ -51,6 +51,21 @@ var gNow: uint64 = 0
 
 proc musterHealth(): string = "ok"
 
+proc musterDescribe(): string =
+  ## The Safe account this module coordinates against, read straight from the
+  ## driver so the UI displays domain facts it was told, not ones it hardcoded.
+  ## The safeTxHash every intent produces commits to chainId+safe (EIP-712
+  ## domain), so this is exactly the account those bytes are worthless outside of.
+  var owners = newJArray()
+  for o in gDriver.owners: owners.add %toHex(o)
+  $(%*{
+    "chainId": gDriver.chainId.int,
+    "safe": SAFE_ADDR,
+    "threshold": gDriver.threshold,
+    "owners": owners,
+    "environment": "anvil-31337"
+  })
+
 proc musterPropose(effectJson: string): string =
   ## Build a transfer effect from JSON {to, value, nonce}, canonicalize to the
   ## EIP-712 safeTxHash, and advance to proposed.
