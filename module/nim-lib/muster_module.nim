@@ -30,7 +30,9 @@ proc toAddr(s: string): Address =
   let b = hexToBytes(s)
   for i in 0 ..< min(20, b.len): result[i] = b[i]
 
-proc toHex(b: openArray[byte]): string =
+proc toHex0x(b: openArray[byte]): string =
+  ## 0x-prefixed hex (Ethereum convention). Named distinctly so it is not shadowed
+  ## by dcbor.toHex (which is un-prefixed) in overload resolution.
   const d = "0123456789abcdef"
   result = "0x"
   for x in b: (result.add d[int(x shr 4)]; result.add d[int(x and 0x0F)])
@@ -79,7 +81,7 @@ proc musterPropose(effectJson: string): string =
 proc musterTxhash(intentId: string): string =
   ## The exact bytes owners sign (the safeTxHash), as hex.
   if intentId notin gIntents: return "unknown-intent"
-  toHex(gIntents[intentId].materialization.bytes)
+  toHex0x(gIntents[intentId].materialization.bytes)
 
 proc musterApprove(intentId: string, signatureHex: string): string =
   ## Verify a 65-byte owner signature over this intent's safeTxHash and, if it

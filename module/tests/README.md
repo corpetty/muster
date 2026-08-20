@@ -12,6 +12,13 @@ discriminator, order-independence, the hash-input framing, and s4/dup-key
 rejections). Different bytes are a different signature, so this guards invariant 5
 against byte-order/major-type regressions a property check can miss. `nim r`, no deps.
 
+**Driver conformance gate — `conformance_test.nim` (+ `safe_conformance_test.nim`):**
+every Driver must pass `src/drivers/conformance.nim` (invariant 6: a stable,
+well-formed `describe()`; a TOTAL `verifyContribution` that survives malformed
+bytes without aborting; descriptor-driven, byte-independent core routing). Working
+agreement: never merge with it red. The stub matrix runs pure-Nim; the Safe
+variant is in the secp256k1 group below.
+
 **Exception — the P2 Safe crypto tests need libsecp256k1 linked:**
 `secp256k1_test.nim`, `safe_test.nim`, `safe_collect_test.nim` (and anything
 importing `src/crypto/secp256k1.nim` or `src/drivers/safe.nim`). Build the lib
