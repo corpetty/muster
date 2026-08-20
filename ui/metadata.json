@@ -7,6 +7,7 @@
   "category": "general",
   "description": "Muster coordination UI (P4 loading spike): reads muster_module.health() through the generated logos-API client and shows it in QML.",
   "main": "muster_ui_plugin",
+  "icon": "src/icons/icon.png",
   "view": "qml/Main.qml",
   "dependencies": ["muster_module"],
   "codegen": { "rep": "src/muster_ui.rep" },

@@ -1,5 +1,7 @@
 #include "muster_ui_backend.h"
 
+#include <QDebug>
+
 // Generated umbrella: LogosModules (behind modules()) built from
 // metadata.json#dependencies — the typed muster_module client the UI calls
 // through the logos API (no hand-written invokeRemoteMethod, no keys, no net).
@@ -11,7 +13,9 @@
 // .rep PROP, which QtRO pushes to the QML replica.
 void MusterUiBackend::checkHealth()
 {
-    setHealth(modules().muster_module.health());
+    const QString h = modules().muster_module.health();
+    qInfo() << "[muster_ui] muster_module.health() ->" << h;
+    setHealth(h);
 }
 
 void MusterUiBackend::onContextReady()
