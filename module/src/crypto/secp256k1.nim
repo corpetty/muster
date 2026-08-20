@@ -61,6 +61,11 @@ proc ecrecover*(msgHash: array[32, byte], sig: Signature65): Address =
   ## Recover the Ethereum address that signed msgHash. `v` may be 27/28 or 0/1.
   var recid = cint(sig[64])
   if recid >= 27: recid -= 27
+  # A recovery id outside 0..3 trips libsecp256k1's illegal-argument callback,
+  # which aborts the PROCESS (uncatchable) — so a malformed 65-byte contribution
+  # would crash the module. Reject it here, before parse_compact ever sees it.
+  if recid < 0 or recid > 3:
+    raise newException(Secp256k1Error, "recovery id out of range")
   var input64: array[64, byte]
   for i in 0 ..< 64: input64[i] = sig[i]
   var rsig: secp256k1_ecdsa_recoverable_signature
@@ -96,7 +101,13 @@ proc signRecoverable*(msgHash: array[32, byte], seckey: array[32, byte]): Signat
 proc recoversToOwner*(msgHash: array[32, byte], sig: Signature65, owners: openArray[Address]): bool =
   ## True iff the signature over msgHash recovers to one of the owners (Safe's
   ## checkSignatures, minus ordering/threshold which the collection core handles).
-  let a = ecrecover(msgHash, sig)
+  ## A malformed signature (bad recovery id, unparseable r/s, or a failed
+  ## recovery) is simply not an owner — it is rejected, never a crash.
+  var a: Address
+  try:
+    a = ecrecover(msgHash, sig)
+  except Secp256k1Error:
+    return false
   for o in owners:
     if o == a: return true
   false
