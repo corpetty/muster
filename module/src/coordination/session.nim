@@ -72,5 +72,12 @@ proc catchUp*(s: CoordinationSession) =
   for m in s.transport.storeQuery(s.topic):
     s.ingestEnvelope(m)
 
+proc poll*(s: CoordinationSession) =
+  ## Drive inbound delivery. For a foreign-thread transport (delivery) this
+  ## dispatches queued messages on this thread (GC-safe); for a synchronous one
+  ## (LocalTransport) it is a no-op — messages already arrived via publish. The
+  ## host calls this in its loop.
+  s.transport.poll()
+
 proc state*(s: CoordinationSession): State = s.log.state()
 proc digest*(s: CoordinationSession): string = s.log.state().stateDigest

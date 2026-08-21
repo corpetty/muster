@@ -52,6 +52,13 @@ method storeQuery*(t: Transport, contentTopic: string): seq[IncomingMessage]
   ## F-15's catchup half; FS-9 names the metadata a store thereby observes.
   raise newException(CatchableError, "Transport.storeQuery is abstract")
 
+method poll*(t: Transport) {.base, gcsafe.} =
+  ## Deliver any messages received since the last poll. Synchronous transports
+  ## (LocalTransport) deliver inside `publish`, so this is a no-op for them; the
+  ## delivery-backed transport queues inbound messages on a foreign thread and
+  ## dispatches them here, on the caller's (the module's own) thread.
+  discard
+
 # ── content address ───────────────────────────────────────────────────────────
 
 proc messageHashOf*(contentTopic: string, payload: seq[byte]): string =

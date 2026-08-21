@@ -17,12 +17,14 @@
 import std/[json, tables]
 import ./transport
 import ./lp_ffi
+import ./inbound_queue
 
 type
   DeliveryTransport* = ref object of Transport
     client: ptr LpClient
     sub: ptr LpSubscription                       ## the single messageReceived subscription
     handlers: Table[string, seq[MessageHandler]]  ## contentTopic -> handlers (we route)
+    queue: InboundQueue                           ## foreign-thread callbacks land here; poll() drains
     timeoutMs: cint
 
 proc invoke(t: DeliveryTransport, meth, argsJson: string): JsonNode =
@@ -45,23 +47,15 @@ proc invoke(t: DeliveryTransport, meth, argsJson: string): JsonNode =
 # (deterministic over topic+payload), so ingest dedups identically to
 # LocalTransport regardless of delivery's own hash.
 proc onMessageReceived(eventName, dataJson: cstring, userData: pointer) {.cdecl, gcsafe.} =
+  ## Runs on the delivery module's thread. Do the minimum the GC can't own — copy
+  ## the raw event JSON into the queue (malloc + copy, no Nim GC) and return.
+  ## poll() parses and dispatches it later, on the module's own thread.
   if userData == nil or dataJson == nil: return
-  let t = cast[DeliveryTransport](userData)
-  var arr: JsonNode
-  try: arr = parseJson($dataJson)
-  except CatchableError: return
-  # messageReceived(messageHash, contentTopic, payload, timestamp)
-  if arr.kind != JArray or arr.len < 4: return
-  let topic = arr[1].getStr()
-  var payload: seq[byte]
-  if arr[2].kind == JObject and arr[2].hasKey("_bytes"):
-    payload = b64urlDecode(arr[2]["_bytes"].getStr())
-  let msg = IncomingMessage(contentTopic: topic, payload: payload,
-                            messageHash: messageHashOf(topic, payload),
-                            timestamp: arr[3].getBiggestInt().int64)
-  if t.handlers.hasKey(topic):
-    for h in t.handlers[topic]:
-      if h != nil: h(msg)
+  cast[DeliveryTransport](userData).queue.enqueue(dataJson)
+
+proc bytesToStr(b: seq[byte]): string =
+  result = newString(b.len)
+  if b.len > 0: copyMem(addr result[0], unsafeAddr b[0], b.len)
 
 proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000): DeliveryTransport =
   ## Bind a client to delivery_module, boot its node, and open the single
@@ -69,6 +63,7 @@ proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000): DeliveryTra
   ## (the user-configurable endpoint set — invariant 8 lives in this string).
   result = DeliveryTransport(handlers: initTable[string, seq[MessageHandler]](),
                              timeoutMs: cint(timeoutMs))
+  initInboundQueue(result.queue)             # ready before any callback can fire
   result.client = lp_client_create("delivery_module", "muster_module", nil, nil)
   if result.client == nil:
     raise newException(CatchableError, "delivery_module: lp_client_create returned null")
@@ -115,8 +110,31 @@ method storeQuery*(t: DeliveryTransport, contentTopic: string): seq[IncomingMess
                                messageHash: messageHashOf(topic, payload),
                                timestamp: m[3].getBiggestInt().int64)
 
+method poll*(t: DeliveryTransport) =
+  ## Drain the foreign-thread queue and dispatch each `messageReceived` event to
+  ## the topic's handlers — parsing, base64-decode, and handler work all run here,
+  ## on the module's own thread, so they are GC-safe. The module calls this from
+  ## its loop. Our content address is recomputed so ingest dedups identically to
+  ## LocalTransport (R-2/R-4), independent of delivery's own hash.
+  for raw in t.queue.drain():
+    var arr: JsonNode
+    try: arr = parseJson(bytesToStr(raw))
+    except CatchableError: continue
+    if arr.kind != JArray or arr.len < 4: continue
+    let topic = arr[1].getStr()
+    var payload: seq[byte]
+    if arr[2].kind == JObject and arr[2].hasKey("_bytes"):
+      payload = b64urlDecode(arr[2]["_bytes"].getStr())
+    let msg = IncomingMessage(contentTopic: topic, payload: payload,
+                              messageHash: messageHashOf(topic, payload),
+                              timestamp: arr[3].getBiggestInt().int64)
+    if t.handlers.hasKey(topic):
+      for h in t.handlers[topic]:
+        if h != nil: h(msg)
+
 proc close*(t: DeliveryTransport) =
   ## Release the subscription + client and drop the GC anchor.
   if t.sub != nil: (lp_unsubscribe(t.sub); t.sub = nil)
   if t.client != nil: (lp_client_destroy(t.client); t.client = nil)
+  t.queue.close()
   GC_unref(t)
