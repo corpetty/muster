@@ -9,11 +9,18 @@ and asserts the real lifecycle surfaces:
 3. **propose** — the module re-derives the EIP-712 `safeTxHash` and the
    re-materialization strip shows it (F-4 / invariant 1 — the real check, not the
    prototype's simulated hashes).
+4. **lifecycle** — collecting owner signatures advances the intent
+   `proposed → collecting → executable`. Each signature is verified by the module
+   (recovers to a configured owner) before it counts toward the threshold. The
+   test pastes two pre-signed anvil-owner signatures over the intent's
+   `safeTxHash`; regenerate them (see the `OWNER_SIGS` comment in the test) if the
+   effect or Safe config changes.
 
 It writes a screenshot to `$MUSTER_SHOT` (default `./muster-ui.png`).
 
-Status: **3/3 green** as of 2026-08-21 (ADR-013). See `docs/02-implementation-plan.md`
-ADR-013 and pebble `exo-193` for the full story.
+Status: **4/4 green** as of 2026-08-21 (ADR-013 + `exo-4a5`). See
+`docs/02-implementation-plan.md` ADR-013 and pebbles `exo-193` / `exo-4a5` for the
+full story.
 
 ## Why basecamp (not the standalone runner)
 

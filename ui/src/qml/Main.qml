@@ -51,6 +51,12 @@ Item {
 
     readonly property bool hasIntent: root.intentId.length > 0
 
+    // Still collecting signatures: show the approve affordance until the driver
+    // reports the threshold met (executable) or the intent has moved on-chain.
+    readonly property bool collectable: root.hasIntent
+        && root.intentState !== "executable" && root.intentState !== "submitted"
+        && root.intentState !== "settling" && root.intentState !== "final"
+
     // Parsed views of the JSON the module handed us. A parse failure yields null
     // rather than a guess, so a broken value renders as absent, not as fiction.
     readonly property var account: {
@@ -398,17 +404,62 @@ Item {
                     }
                 }
 
-                // ── what happens next, honestly ──────────────────────────────
-                LogosText {
+                // ── collect owner signatures ─────────────────────────────────
+                // The client holds no keys: each owner signs the exact bytes above
+                // on their own device and hands back the signature. Paste one here
+                // to collect it; the module verifies it recovers to a configured
+                // owner before it counts toward the threshold (F-5). When the
+                // threshold is met the driver reports the intent executable.
+                ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.topMargin: 2
+                    Layout.topMargin: Theme.spacing.tiny
+                    visible: root.collectable
+                    spacing: Theme.spacing.small
+
+                    LogosTextField {
+                        id: sigField
+                        objectName: "approveSig"
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("paste an owner signature (65-byte hex)")
+                        font.family: Theme.typography.mono
+                    }
+
+                    LogosButton {
+                        objectName: "approveButton"
+                        Layout.fillWidth: true
+                        variant: LogosButton.Variant.Primary
+                        text: qsTr("Add signature")
+                        enabled: root.ready && sigField.text.length > 0
+                        onClicked: {
+                            if (root.backend)
+                                root.backend.approve(sigField.text);
+                            sigField.text = "";
+                        }
+                    }
+
+                    LogosText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: qsTr("Each owner signs on their own device — the client never holds their keys. "
+                                 + "%1 of %2 owners must sign; a signature counts only if it recovers to an owner.")
+                            .arg(root.account ? Number(root.account.threshold) : 2)
+                            .arg(root.account && root.account.owners ? root.account.owners.length : 3)
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                }
+
+                // ── threshold met ────────────────────────────────────────────
+                LogosText {
+                    objectName: "executableNotice"
+                    Layout.fillWidth: true
+                    Layout.topMargin: Theme.spacing.tiny
+                    visible: root.hasIntent && !root.collectable
                     wrapMode: Text.WordWrap
-                    text: qsTr("Each owner signs these exact bytes on their own device — the client never holds their keys. "
-                             + "Collecting %1 signatures across owners is the next step (multi-instance, P3); "
-                             + "this build stops where the bytes are known and checked.")
-                        .arg(root.account ? Number(root.account.threshold) : 2)
-                    color: Theme.palette.textTertiary
+                    text: qsTr("✓ threshold met — this intent is executable. Submitting it on-chain is the next step.")
+                    color: Theme.palette.success
                     font.pixelSize: Theme.typography.badgeText
+                    font.weight: Theme.typography.weightMedium
                 }
             }
         }

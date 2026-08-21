@@ -57,6 +57,39 @@ void MusterUiBackend::propose(const QString &effectJson)
     qInfo() << "[muster_ui] proposed" << id << "state" << state;
 }
 
+void MusterUiBackend::approve(const QString &signatureHex)
+{
+    // The owner signed this intent's safeTxHash on their own device; the 65-byte
+    // hex is handed in here. The module verifies it recovers to a configured
+    // owner before it counts, then returns the new lifecycle state (collecting
+    // until the threshold is met, then executable). The client never holds keys.
+    setLastError(QString());
+
+    const QString id = intentId();
+    if (id.isEmpty()) {
+        setLastError(QStringLiteral("no intent to approve"));
+        return;
+    }
+
+    const QString prev = intentState();
+    const QString newState = modules().muster_module.approve(id, signatureHex);
+    if (newState.isEmpty() || newState.startsWith(QStringLiteral("unknown"))
+        || newState.startsWith(QStringLiteral("error"))) {
+        qWarning() << "[muster_ui] approve failed ->" << newState;
+        setLastError(QStringLiteral("approve failed: %1").arg(newState));
+        return;
+    }
+
+    setIntentState(newState);
+    if (newState == prev) {
+        // The module accepted the call but the state did not advance — the
+        // signature did not recover to an owner (or was already counted). Say so
+        // honestly rather than implying progress.
+        setLastError(QStringLiteral("signature not counted — it did not recover to an owner"));
+    }
+    qInfo() << "[muster_ui] approve" << id << ":" << prev << "->" << newState;
+}
+
 void MusterUiBackend::onContextReady()
 {
     // Fires once ui-host hands the plugin its wired modules(); read liveness and

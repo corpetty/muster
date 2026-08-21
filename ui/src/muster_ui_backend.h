@@ -28,5 +28,6 @@ public:
     void checkHealth() override;
     void loadAccount() override;
     void propose(const QString &effectJson) override;
+    void approve(const QString &signatureHex) override;
     void onContextReady() override;
 };

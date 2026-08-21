@@ -7,6 +7,12 @@ class MusterUi
     SLOT(void loadAccount())
     SLOT(void propose(const QString &effectJson))
 
+    // Add one owner signature (65-byte hex) over the current intent's safeTxHash.
+    // The client holds no keys — the owner signs on their own device and the hex
+    // is handed in here. The module verifies it recovers to an owner before it
+    // counts toward the threshold, and returns the new lifecycle state.
+    SLOT(void approve(const QString &signatureHex))
+
     PROP(QString health="unknown" READONLY)
 
     // The Safe account this walkthrough coordinates against — read from the

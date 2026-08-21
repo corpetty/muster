@@ -34,9 +34,34 @@ async function openMuster(app) {
 async function setField(app, objectName, value) {
   const r = await app.inspector.send("findByProperty", { property: "objectName", value: objectName });
   const id = r.matches?.[0]?.id;
-  if (!id) throw new Error(`propose field "${objectName}" not found`);
+  if (!id) throw new Error(`field "${objectName}" not found`);
   await app.inspector.send("setProperty", { objectId: id, property: "text", value: String(value) });
 }
+
+async function clickButton(app, objectName) {
+  const r = await app.inspector.send("findByProperty", { property: "objectName", value: objectName });
+  const id = r.matches?.[0]?.id;
+  if (!id) throw new Error(`button "${objectName}" not found`);
+  await app.inspector.send("callMethod", { objectId: id, method: "clicked" });
+}
+
+async function propertyOf(app, objectName, expr) {
+  const r = await app.inspector.send("findByProperty", { property: "objectName", value: objectName });
+  const id = r.matches?.[0]?.id;
+  if (!id) throw new Error(`element "${objectName}" not found`);
+  return (await app.inspector.send("evaluate", { objectId: id, expression: expr })).result;
+}
+
+// Pre-signed anvil-owner signatures over the safeTxHash the module re-derives for
+// the effect {to: 0x1111…1111, value: 1000, nonce: 0} against the baked Safe
+// config (chain 31337; owners = anvil accounts 0/1/2; threshold 2). Each is a raw
+// ECDSA signature over the 32-byte safeTxHash (what a Safe owner signs). Regenerate
+// if the effect or Safe config changes:
+//   cast wallet sign --no-hash --private-key <anvil key N> 0x<intent txhash>
+const OWNER_SIGS = [
+  "0x00278ad6c27d00993883a10909200661d6559d4eea8ca3c9ee3367e8761ba7056fe11cb9a6e87ede5aef673a0f075b220a3c6d37842743c91d9868d834edffcd1b", // anvil owner 0 (0xf39F…2266)
+  "0x7089eabcc8f8d1ff49a4b420d59f9b51f78ce7b498a5d4d17f1e07c0915231ca6443249c38693bbe3f1c12fc87e3a909c7c1e6ad8401d3d03c0b1fb751aa9d241b", // anvil owner 1 (0x7099…79C8)
+];
 
 // 1) RENDER — the decisive ADR-013 check: the coherent-built view instantiates.
 test("muster_ui: the view instantiates and renders", async (app) => {
@@ -70,17 +95,52 @@ test("muster_ui: propose drives the real re-materialization strip", async (app) 
   await setField(app, "proposeTo", "0x1111111111111111111111111111111111111111");
   await setField(app, "proposeValue", "1000");
   await setField(app, "proposeNonce", "0");
-  const btn = await app.inspector.send("findByProperty", { property: "objectName", value: "proposeButton" });
-  const btnId = btn.matches?.[0]?.id;
-  if (!btnId) throw new Error("proposeButton not found");
-  await app.inspector.send("callMethod", { objectId: btnId, method: "clicked" });
+  await clickButton(app, "proposeButton");
   await app.waitFor(
     async () => { await app.expectTexts(["re-derived", "proposed"]); },
     { timeout: 15000, interval: 500, description: "re-materialization strip" }
   );
   console.log("[muster] PROPOSE OK — module re-derived the safeTxHash; strip + status rail rendered");
 
-  // Best-effort visual artifact.
+});
+
+// 4) LIFECYCLE — collect owner signatures until the driver reports the threshold
+//    met. Each signature is verified by the module (recovers to a configured
+//    owner) before it counts; the status rail advances proposed → collecting →
+//    executable. This exercises the real approve/status surface end to end.
+test("muster_ui: collecting owner signatures advances to executable", async (app) => {
+  await openMuster(app);
+  await app.waitFor(
+    async () => { await app.expectTexts(["Propose a transfer"]); },
+    { timeout: 15000, interval: 500, description: "composer ready" }
+  );
+  await setField(app, "proposeTo", "0x1111111111111111111111111111111111111111");
+  await setField(app, "proposeValue", "1000");
+  await setField(app, "proposeNonce", "0");
+  await clickButton(app, "proposeButton");
+  await app.waitFor(
+    async () => { await app.expectTexts(["re-derived"]); },
+    { timeout: 15000, interval: 500, description: "intent proposed" }
+  );
+
+  // Collect each owner signature. The last one crosses the threshold, at which
+  // point the "executable" notice becomes visible (the approve affordance hides).
+  for (const sig of OWNER_SIGS) {
+    await setField(app, "approveSig", sig);
+    await clickButton(app, "approveButton");
+  }
+  await app.waitFor(
+    async () => {
+      if ((await propertyOf(app, "executableNotice", "visible")) !== true)
+        throw new Error("intent not yet executable");
+    },
+    { timeout: 15000, interval: 500, description: "threshold met → executable" }
+  );
+  console.log("[muster] LIFECYCLE OK — 2 owner signatures collected → executable");
+
+  // Best-effort visual artifact (the executable state). Let the render thread
+  // catch up to the logic state before grabbing the frame.
+  await new Promise((r) => setTimeout(r, 1500));
   try {
     const shot = await app.screenshot();
     const b64 = shot?.data || shot?.image || shot?.png || (typeof shot === "string" ? shot : null);
