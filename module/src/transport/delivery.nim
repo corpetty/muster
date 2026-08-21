@@ -57,6 +57,12 @@ proc bytesToStr(b: seq[byte]): string =
   result = newString(b.len)
   if b.len > 0: copyMem(addr result[0], unsafeAddr b[0], b.len)
 
+proc onSendResult(ok: cint, json: cstring, userData: pointer) {.cdecl, gcsafe.} =
+  ## Fire-and-forget send result. Runs on delivery's thread — a no-op, so it never
+  ## touches the GC. A failed send is not surfaced (a "sent" confirmation is future
+  ## work), matching the chat module's own delivery bridge.
+  discard
+
 proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000): DeliveryTransport =
   ## Bind a client to delivery_module, boot its node, and open the single
   ## messageReceived subscription. `nodeConfigJson` is delivery's createNode config
@@ -79,7 +85,12 @@ method publish*(t: DeliveryTransport, contentTopic: string, payload: seq[byte]):
   var args = newJArray()
   args.add %contentTopic
   args.add parseJson(bytesTag(payload))     # {"_bytes":"<b64url>"}
-  discard t.invoke("send", $args)
+  # Fire-and-forget: a synchronous send would block the module's dispatch thread on
+  # delivery's accept handshake, so hand off async. `argsStr` is held until the
+  # call returns; lp_invoke_async copies the args before it does.
+  let argsStr = $args
+  discard lp_invoke_async(t.client, "send".cstring, argsStr.cstring, t.timeoutMs,
+                          onSendResult, nil)
   messageHashOf(contentTopic, payload)      # our content address (ingest dedup key)
 
 method subscribe*(t: DeliveryTransport, contentTopic: string, handler: MessageHandler) =
