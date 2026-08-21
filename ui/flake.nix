@@ -2,11 +2,16 @@
   description = "muster-ui — QML view + C++ backend calling muster_module through the logos API (P4 loading spike)";
 
   inputs = {
-    # The muster core module; its own flake pins the Nim-codegen builder. The UI
-    # follows THAT same builder so the QML build and the module build share one
-    # logos-protocol/qt-sdk chain (mirrors demo/muster-ui following chat_module).
+    # The muster core module — kept as an input ONLY so its published `.lidl`
+    # output (packages.<sys>.lidl, a copy of the committed muster.lidl) is read
+    # to generate the typed modules().muster_module client. Its own plugin is
+    # built by its own flake (the Nim-cdylib builder) and is NOT rebuilt here.
     muster_module.url = "path:/home/petty/Github/corpetty/muster/module";
-    logos-module-builder.follows = "muster_module/logos-module-builder";
+    # ADR-013: build the UI on a basecamp-COHERENT builder instead of following
+    # muster_module's Nim-cdylib builder, so the generated client + QtRO view-glue
+    # compile against basecamp's own cpp-sdk/qt-sdk/protocol and ABI-match its
+    # ui-host (exo-c6a). Pinned to basecamp's current top-level builder rev.
+    logos-module-builder.url = "github:logos-co/logos-module-builder/4717b9af35d88a20a960067ee55bc5417af5a1f0";
   };
 
   outputs = inputs@{ logos-module-builder, ... }:
