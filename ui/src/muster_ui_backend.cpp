@@ -90,6 +90,37 @@ void MusterUiBackend::approve(const QString &signatureHex)
     qInfo() << "[muster_ui] approve" << id << ":" << prev << "->" << newState;
 }
 
+void MusterUiBackend::submit()
+{
+    // Submit the executable intent on-chain. The module assembles the Safe
+    // execTransaction from the collected owner signatures, sends it through the
+    // user's RPC, and reads finality from the receipt — no indexer, no service.
+    // The client never holds keys; the sender only relays gas.
+    setLastError(QString());
+
+    const QString id = intentId();
+    if (id.isEmpty()) {
+        setLastError(QStringLiteral("no intent to submit"));
+        return;
+    }
+
+    const QString newState = modules().muster_module.submit(id);
+    if (newState.isEmpty() || newState.startsWith(QStringLiteral("unknown"))
+        || newState.startsWith(QStringLiteral("error"))) {
+        qWarning() << "[muster_ui] submit failed ->" << newState;
+        setLastError(QStringLiteral("submit failed: %1").arg(newState));
+        return;
+    }
+
+    setIntentState(newState);
+    if (newState != QStringLiteral("final") && newState != QStringLiteral("submitted")) {
+        // The module accepted the call but the intent did not move on-chain — most
+        // often the RPC endpoint is unreachable. Say so rather than implying it landed.
+        setLastError(QStringLiteral("submit did not land on-chain (state %1) — is the RPC reachable?").arg(newState));
+    }
+    qInfo() << "[muster_ui] submit" << id << "->" << newState;
+}
+
 void MusterUiBackend::onContextReady()
 {
     // Fires once ui-host hands the plugin its wired modules(); read liveness and

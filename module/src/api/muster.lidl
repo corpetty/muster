@@ -13,4 +13,6 @@ module muster_module {
   method approve(intent_id: tstr, signature_hex: tstr) -> tstr description "Add an owner signature (65-byte hex) to an intent; the driver verifies it recovers to an owner before it counts. Returns the intent's new lifecycle state."
 
   method status(intent_id: tstr) -> tstr description "Return an intent's current lifecycle state (draft, proposed, collecting, executable, ...)."
+
+  method submit(intent_id: tstr) -> tstr description "Submit an executable intent on-chain: assemble the Safe execTransaction from the collected owner signatures, send it through the user's RPC, and watch the receipt. Finality is observed from the chain, never asserted by a service. Returns the intent's new lifecycle state (submitted, then final on a confirmed receipt)."
 }

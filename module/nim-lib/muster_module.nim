@@ -10,10 +10,11 @@
 
 include muster_gen
 
-import std/[json, tables, strutils]
+import std/[json, tables, strutils, os, algorithm]
 import ../src/dcbor/dcbor
 import ../src/drivers/driver
 import ../src/drivers/safe
+import ../src/drivers/safe_rpc
 import ../src/crypto/secp256k1
 import ../src/intents/materialization
 import ../src/intents/signing_payload
@@ -46,8 +47,22 @@ var gDriver = newSafeDriver(chainId = 31337, safe = toAddr(SAFE_ADDR),
                             threshold = 2)
 var gIntents = initTable[string, Intent]()
 var gHashes = initTable[string, array[32, byte]]()
+var gEffects = initTable[string, Effect]()             ## the effect per intent (for execTransaction)
+var gSigs = initTable[string, seq[Signature65]]()      ## collected owner sigs, for assembly
 var gCounter = 0
 var gNow: uint64 = 0
+
+# The user-configurable RPC endpoint (untrusted infra, invariant 8). The anvil
+# fixture default; a real deployment points this at the user's own node.
+const RPC_URL = "http://127.0.0.1:8545"
+
+proc toSig65(b: seq[byte]): Signature65 =
+  for i in 0 ..< min(65, b.len): result[i] = b[i]
+
+proc cmpSigner(a, b: (Address, Signature65)): int =
+  for i in 0 ..< 20:
+    if a[0][i] != b[0][i]: return (if a[0][i] < b[0][i]: -1 else: 1)
+  0
 
 proc musterHealth(): string = "ok"
 
@@ -87,6 +102,7 @@ proc musterPropose(effectJson: string): string =
   var h: array[32, byte]
   for i in 0 ..< 32: h[i] = it.materialization.bytes[i]
   gHashes[id] = h
+  gEffects[id] = effect
   it.apply(gDriver, IntentEvent(kind: iePropose, now: gNow))
   gIntents[id] = it
   id
@@ -107,8 +123,58 @@ proc musterApprove(intentId: string, signatureHex: string): string =
   it.apply(gDriver, IntentEvent(kind: ieContribute, now: gNow,
                                 contribution: Contribution(bytes: sig)))
   gIntents[intentId] = it
+  # Keep the signature for later on-chain assembly if it recovered to an owner and
+  # is not already collected from that owner (Safe dedups by signer).
+  let sig65 = toSig65(sig)
+  if recoversToOwner(gHashes[intentId], sig65, gDriver.owners):
+    let signer = ecrecover(gHashes[intentId], sig65)
+    var have = gSigs.getOrDefault(intentId)
+    var dup = false
+    for existing in have:
+      if ecrecover(gHashes[intentId], existing) == signer: dup = true
+    if not dup:
+      have.add sig65
+      gSigs[intentId] = have
   $it.state
 
 proc musterStatus(intentId: string): string =
   if intentId notin gIntents: return "unknown-intent"
   $gIntents[intentId].state
+
+proc musterSubmit(intentId: string): string =
+  ## Assemble the Safe execTransaction from the collected owner signatures, submit
+  ## it through the user's RPC, and observe finality from the receipt. No indexer,
+  ## no Safe service; finality is read from the chain (R-8), never asserted.
+  if intentId notin gIntents: return "unknown-intent"
+  var it = gIntents[intentId]
+  if it.state != lsExecutable: return $it.state       # only executable intents submit
+
+  # Collected sigs, sorted by signer address ascending (Safe checkSignatures dedup).
+  let hash = gHashes[intentId]
+  var signed: seq[(Address, Signature65)]
+  for s in gSigs.getOrDefault(intentId):
+    signed.add (ecrecover(hash, s), s)
+  signed.sort(cmpSigner)
+  var sigbytes: seq[byte]
+  for (_, s) in signed: sigbytes.add @s
+
+  # Assemble + submit through the user's RPC. anvil unlocks the relayer, so no key
+  # is held here; the Safe verifies the owners on-chain regardless of the sender.
+  let tx = toSafeTx(gEffects[intentId])
+  let calldata = assembleExecTransaction(tx.to, tx.value, @[], sigbytes)
+  let txHash = submitExecTransaction(RPC_URL, toAddr(OWNER0), gDriver.safe, calldata)
+  inc gNow
+  it.apply(gDriver, IntentEvent(kind: ieSubmit, now: gNow))    # executable -> submitted
+  gIntents[intentId] = it
+
+  # Observe finality from the chain.
+  var status = -1
+  for _ in 0 .. 50:
+    status = watchReceiptStatus(RPC_URL, txHash)
+    if status >= 0: break
+    sleep(200)
+  if status == 1:
+    inc gNow
+    it.apply(gDriver, IntentEvent(kind: ieFinal, now: gNow))   # submitted -> final
+    gIntents[intentId] = it
+  $it.state

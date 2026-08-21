@@ -28,6 +28,7 @@ proc musterPropose(effect_json: string): string
 proc musterTxhash(intent_id: string): string
 proc musterApprove(intent_id: string, signature_hex: string): string
 proc musterStatus(intent_id: string): string
+proc musterSubmit(intent_id: string): string
 
 proc dispatch(meth: string, args: JsonNode): JsonNode =
   case meth
@@ -47,11 +48,14 @@ proc dispatch(meth: string, args: JsonNode): JsonNode =
   of "status":
     if args.kind != JArray or args.len < 1: return newJNull()
     %musterStatus(args[0].getStr())
+  of "submit":
+    if args.kind != JArray or args.len < 1: return newJNull()
+    %musterSubmit(args[0].getStr())
   else:
     nil
 
 proc logos_module_get_methods(): cstring {.exportc, cdecl.} =
-  toCString(parseJson("""[{"isInvokable":true,"name":"health","parameters":[],"returnType":"QString","signature":"health()"},{"isInvokable":true,"name":"describe","parameters":[],"returnType":"QString","signature":"describe()"},{"isInvokable":true,"name":"propose","parameters":[{"name":"effect_json","type":"QString"}],"returnType":"QString","signature":"propose(QString)"},{"isInvokable":true,"name":"txhash","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"txhash(QString)"},{"isInvokable":true,"name":"approve","parameters":[{"name":"intent_id","type":"QString"},{"name":"signature_hex","type":"QString"}],"returnType":"QString","signature":"approve(QString,QString)"},{"isInvokable":true,"name":"status","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"status(QString)"}]""").`$`)
+  toCString(parseJson("""[{"isInvokable":true,"name":"health","parameters":[],"returnType":"QString","signature":"health()"},{"isInvokable":true,"name":"describe","parameters":[],"returnType":"QString","signature":"describe()"},{"isInvokable":true,"name":"propose","parameters":[{"name":"effect_json","type":"QString"}],"returnType":"QString","signature":"propose(QString)"},{"isInvokable":true,"name":"txhash","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"txhash(QString)"},{"isInvokable":true,"name":"approve","parameters":[{"name":"intent_id","type":"QString"},{"name":"signature_hex","type":"QString"}],"returnType":"QString","signature":"approve(QString,QString)"},{"isInvokable":true,"name":"status","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"status(QString)"},{"isInvokable":true,"name":"submit","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"submit(QString)"}]""").`$`)
 
 proc logos_module_dispatch(meth: cstring, argsJson: cstring): cstring {.exportc, cdecl.} =
   if meth == nil: return nil

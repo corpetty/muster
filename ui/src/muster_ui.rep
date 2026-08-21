@@ -13,6 +13,11 @@ class MusterUi
     // counts toward the threshold, and returns the new lifecycle state.
     SLOT(void approve(const QString &signatureHex))
 
+    // Submit the executable intent on-chain: the module assembles the Safe
+    // execTransaction from the collected signatures, sends it through the user's
+    // RPC, and watches the receipt. Advances submitted → final.
+    SLOT(void submit())
+
     PROP(QString health="unknown" READONLY)
 
     // The Safe account this walkthrough coordinates against — read from the

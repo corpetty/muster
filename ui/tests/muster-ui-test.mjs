@@ -137,19 +137,65 @@ test("muster_ui: collecting owner signatures advances to executable", async (app
     { timeout: 15000, interval: 500, description: "threshold met → executable" }
   );
   console.log("[muster] LIFECYCLE OK — 2 owner signatures collected → executable");
+  await grab(app, "executable");
+});
 
-  // Best-effort visual artifact (the executable state). Let the render thread
-  // catch up to the logic state before grabbing the frame.
-  await new Promise((r) => setTimeout(r, 1500));
+async function grab(app, suffix) {
+  await new Promise((r) => setTimeout(r, 1500)); // let the render thread catch up
   try {
     const shot = await app.screenshot();
     const b64 = shot?.data || shot?.image || shot?.png || (typeof shot === "string" ? shot : null);
     if (b64) {
-      const out = process.env.MUSTER_SHOT || resolve(process.cwd(), "muster-ui.png");
+      const base = process.env.MUSTER_SHOT || resolve(process.cwd(), "muster-ui.png");
+      const out = suffix ? base.replace(/\.png$/, `-${suffix}.png`) : base;
       writeFileSync(out, Buffer.from(String(b64).replace(/^data:image\/png;base64,/, ""), "base64"));
       console.log(`[muster] screenshot → ${out}`);
     }
   } catch (e) { console.log(`[muster] screenshot skipped: ${e.message}`); }
+}
+
+// 5) SUBMIT — an executable intent is sent on-chain: the module assembles the Safe
+//    execTransaction from the collected signatures, submits it through the user's
+//    RPC, and reads finality from the receipt (R-8). REQUIRES anvil running with the
+//    MiniSafe deployed at the module's configured address (0x5FbDB…) and funded —
+//    see README.md. The effect's nonce (0) must match the Safe's on-chain nonce, so
+//    run this against a fresh Safe (this is the only test that moves it on-chain).
+test("muster_ui: submit executes the intent on-chain and reaches final", async (app) => {
+  await openMuster(app);
+  await app.waitFor(
+    async () => { await app.expectTexts(["Propose a transfer"]); },
+    { timeout: 15000, interval: 500, description: "composer ready" }
+  );
+  await setField(app, "proposeTo", "0x1111111111111111111111111111111111111111");
+  await setField(app, "proposeValue", "1000");
+  await setField(app, "proposeNonce", "0");
+  await clickButton(app, "proposeButton");
+  await app.waitFor(
+    async () => { await app.expectTexts(["re-derived"]); },
+    { timeout: 15000, interval: 500, description: "intent proposed" }
+  );
+  for (const sig of OWNER_SIGS) {
+    await setField(app, "approveSig", sig);
+    await clickButton(app, "approveButton");
+  }
+  await app.waitFor(
+    async () => {
+      if ((await propertyOf(app, "executableNotice", "visible")) !== true)
+        throw new Error("intent not yet executable");
+    },
+    { timeout: 15000, interval: 500, description: "executable" }
+  );
+
+  await clickButton(app, "submitButton");
+  await app.waitFor(
+    async () => {
+      if ((await propertyOf(app, "finalNotice", "visible")) !== true)
+        throw new Error("intent not yet final (is anvil up with the Safe deployed?)");
+    },
+    { timeout: 30000, interval: 1000, description: "on-chain execution → final" }
+  );
+  console.log("[muster] SUBMIT OK — execTransaction landed on-chain; intent reached final");
+  await grab(app, "final");
 });
 
 run();

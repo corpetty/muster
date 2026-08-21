@@ -15,12 +15,38 @@ and asserts the real lifecycle surfaces:
    test pastes two pre-signed anvil-owner signatures over the intent's
    `safeTxHash`; regenerate them (see the `OWNER_SIGS` comment in the test) if the
    effect or Safe config changes.
+5. **submit** — an executable intent is sent on-chain: the module assembles the
+   Safe `execTransaction` from the collected signatures, submits it through the
+   user's RPC, and reads finality from the receipt (`submitted → final`). No
+   indexer, no Safe service. **Requires anvil** (see below); it is the only test
+   that moves the Safe on-chain, so its effect nonce (0) must match a fresh Safe.
 
-It writes a screenshot to `$MUSTER_SHOT` (default `./muster-ui.png`).
+It writes screenshots to `$MUSTER_SHOT` (default `./muster-ui.png`), with
+`-executable` / `-final` suffixes for the lifecycle stages.
 
-Status: **4/4 green** as of 2026-08-21 (ADR-013 + `exo-4a5`). See
-`docs/02-implementation-plan.md` ADR-013 and pebbles `exo-193` / `exo-4a5` for the
-full story.
+Status: **5/5 green** as of 2026-08-21 (ADR-013 + `exo-4a5` + `exo-…submit`). See
+`docs/02-implementation-plan.md` ADR-013 and pebble `exo-193` for the full story.
+
+## anvil (for the submit test)
+
+The module submits through `http://127.0.0.1:8545` against a Safe at its configured
+address. Bring that up before running the full harness:
+
+```bash
+anvil --silent &                                   # fresh chain (Safe nonce 0)
+cd infra/anvil
+K0=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+# MiniSafe must land at 0x5FbDB…aa3 — deploy it as anvil account 0's FIRST tx:
+forge create --rpc-url http://127.0.0.1:8545 --private-key $K0 --broadcast \
+  src/MiniSafe.sol:MiniSafe \
+  --constructor-args "[0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,0x70997970C51812dc3A010C7d01b50e0d17dc79C8,0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC]" 2
+cast send --rpc-url http://127.0.0.1:8545 --private-key $K0 --value 5ether \
+  0x5FbDB2315678afecb367f032d93F642f64180aa3
+```
+
+Without anvil the first four tests still pass; the submit test fails with the
+backend's "is the RPC reachable?" message. Run only the off-chain tests with a
+filter, e.g. `node ui/tests/muster-ui-test.mjs --ci <app> health`.
 
 ## Why basecamp (not the standalone runner)
 

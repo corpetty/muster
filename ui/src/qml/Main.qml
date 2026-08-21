@@ -57,6 +57,12 @@ Item {
         && root.intentState !== "executable" && root.intentState !== "submitted"
         && root.intentState !== "settling" && root.intentState !== "final"
 
+    // The post-collection legs: executable (ready to submit), submitting (on-chain,
+    // awaiting the receipt), and final (executed, finality read from the chain).
+    readonly property bool isExecutable: root.intentState === "executable"
+    readonly property bool isSubmitting: root.intentState === "submitted" || root.intentState === "settling"
+    readonly property bool isFinal: root.intentState === "final"
+
     // Parsed views of the JSON the module handed us. A parse failure yields null
     // rather than a guess, so a broken value renders as absent, not as fiction.
     readonly property var account: {
@@ -449,17 +455,59 @@ Item {
                     }
                 }
 
-                // ── threshold met ────────────────────────────────────────────
-                LogosText {
-                    objectName: "executableNotice"
+                // ── executable → submit → final ──────────────────────────────
+                // The signatures are collected; the module can now assemble the
+                // Safe execTransaction and send it through the user's RPC. Finality
+                // is read from the receipt (R-8), never asserted by a service.
+                ColumnLayout {
                     Layout.fillWidth: true
                     Layout.topMargin: Theme.spacing.tiny
                     visible: root.hasIntent && !root.collectable
-                    wrapMode: Text.WordWrap
-                    text: qsTr("✓ threshold met — this intent is executable. Submitting it on-chain is the next step.")
-                    color: Theme.palette.success
-                    font.pixelSize: Theme.typography.badgeText
-                    font.weight: Theme.typography.weightMedium
+                    spacing: Theme.spacing.small
+
+                    LogosText {
+                        objectName: "executableNotice"
+                        Layout.fillWidth: true
+                        visible: root.isExecutable
+                        wrapMode: Text.WordWrap
+                        text: qsTr("✓ threshold met — the owner signatures are collected. Submit assembles the Safe execTransaction and sends it through your RPC.")
+                        color: Theme.palette.success
+                        font.pixelSize: Theme.typography.badgeText
+                        font.weight: Theme.typography.weightMedium
+                    }
+
+                    LogosButton {
+                        objectName: "submitButton"
+                        Layout.fillWidth: true
+                        visible: root.isExecutable
+                        variant: LogosButton.Variant.Primary
+                        text: qsTr("Submit on-chain")
+                        enabled: root.ready
+                        onClicked: {
+                            if (root.backend)
+                                root.backend.submit();
+                        }
+                    }
+
+                    LogosText {
+                        Layout.fillWidth: true
+                        visible: root.isSubmitting
+                        wrapMode: Text.WordWrap
+                        text: qsTr("submitting… waiting for the receipt")
+                        color: Theme.palette.textSecondary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+
+                    LogosText {
+                        objectName: "finalNotice"
+                        Layout.fillWidth: true
+                        visible: root.isFinal
+                        wrapMode: Text.WordWrap
+                        text: qsTr("✓ executed on-chain — final. The transfer settled through the Safe; finality was read from the chain, not asserted by a service.")
+                        color: Theme.palette.success
+                        font.pixelSize: Theme.typography.badgeText
+                        font.weight: Theme.typography.weightMedium
+                    }
                 }
             }
         }
