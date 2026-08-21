@@ -18,6 +18,16 @@ nim r -d:release --passC:-I/tmp/secp/include \
 The module build supplies secp256k1 via `nix.packages` once the Safe driver is
 wired into the module surface.
 
+**Exception — `ecdh_test.nim` needs libsecp256k1; `epoch_crypto_test.nim` (F-16)
+needs libsecp256k1 + libsodium:**
+
+```bash
+nix build nixpkgs#secp256k1 --out-link /tmp/secp
+SODIUM=$(nix build nixpkgs#libsodium --no-link --print-out-paths)
+nim r -d:release --passC:-I/tmp/secp/include --passL:/tmp/secp/lib/libsecp256k1.so \
+  --passL:"$SODIUM/lib/libsodium.so" tests/epoch_crypto_test.nim
+```
+
 **Exception — the host-return probe needs g++ + secp256k1:**
 `probes/probe_return_marshalling_host.nim` builds the module as a Nim staticlib
 (the shape the real cdylib build produces) and links it into the C++ host harness

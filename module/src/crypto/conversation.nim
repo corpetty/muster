@@ -25,32 +25,32 @@ type
     ## The seam. Concrete impls (EpochCrypto stopgap now; a chat-module-backed one
     ## later) override every method.
 
-method seal*(cc: ConversationCrypto, plaintext: seq[byte]): seq[byte] {.base, gcsafe.} =
+method seal*(cc: ConversationCrypto, plaintext: seq[byte]): seq[byte] {.base.} =
   ## Encrypt a payload to the room's current member set at the current epoch. The
   ## result is what the Transport publishes.
   raise newException(CatchableError, "ConversationCrypto.seal is abstract")
 
-method open*(cc: ConversationCrypto, envelope: seq[byte]): seq[byte] {.base, gcsafe.} =
+method open*(cc: ConversationCrypto, envelope: seq[byte]): seq[byte] {.base.} =
   ## Decrypt an inbound envelope. Returns the plaintext if we hold a key for the
   ## envelope's epoch; raises if we do not (a member who joined later cannot open
   ## an earlier epoch — F-16). The caller treats a raise as "not for me / not yet".
   raise newException(CatchableError, "ConversationCrypto.open is abstract")
 
-method addMember*(cc: ConversationCrypto, member: Member) {.base, gcsafe.} =
+method addMember*(cc: ConversationCrypto, member: Member) {.base.} =
   ## Re-key forward: open a new epoch the added member receives. They get only the
   ## new epoch key, never the prior ones — so they cannot decrypt earlier messages
   ## (F-16 forward secrecy for joiners; the property the F-16 test asserts).
   raise newException(CatchableError, "ConversationCrypto.addMember is abstract")
 
-method removeMember*(cc: ConversationCrypto, member: Member) {.base, gcsafe.} =
+method removeMember*(cc: ConversationCrypto, member: Member) {.base.} =
   ## Rotate: open a new epoch wrapped to the remaining members only, so the removed
   ## member cannot read anything sent after their removal (F-16 removal).
   raise newException(CatchableError, "ConversationCrypto.removeMember is abstract")
 
-method members*(cc: ConversationCrypto): seq[Member] {.base, gcsafe.} =
+method members*(cc: ConversationCrypto): seq[Member] {.base.} =
   ## The current member set (the current epoch's recipients).
   raise newException(CatchableError, "ConversationCrypto.members is abstract")
 
-method epoch*(cc: ConversationCrypto): int {.base, gcsafe.} =
+method epoch*(cc: ConversationCrypto): int {.base.} =
   ## The current epoch index — monotonic, incremented on every membership change.
   raise newException(CatchableError, "ConversationCrypto.epoch is abstract")
