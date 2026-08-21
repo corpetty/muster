@@ -71,8 +71,13 @@ void MusterUiBackend::approve(const QString &signatureHex)
         return;
     }
 
-    const QString prev = intentState();
     const QString newState = modules().muster_module.approve(id, signatureHex);
+    if (newState == QStringLiteral("rejected")) {
+        // The module refused the signature: it did not recover to a configured
+        // owner (or was already counted). Say so honestly; the intent is unchanged.
+        setLastError(QStringLiteral("signature not counted — it did not recover to a configured owner (or was already collected)"));
+        return;
+    }
     if (newState.isEmpty() || newState.startsWith(QStringLiteral("unknown"))
         || newState.startsWith(QStringLiteral("error"))) {
         qWarning() << "[muster_ui] approve failed ->" << newState;
@@ -81,13 +86,7 @@ void MusterUiBackend::approve(const QString &signatureHex)
     }
 
     setIntentState(newState);
-    if (newState == prev) {
-        // The module accepted the call but the state did not advance — the
-        // signature did not recover to an owner (or was already counted). Say so
-        // honestly rather than implying progress.
-        setLastError(QStringLiteral("signature not counted — it did not recover to an owner"));
-    }
-    qInfo() << "[muster_ui] approve" << id << ":" << prev << "->" << newState;
+    qInfo() << "[muster_ui] approve" << id << "->" << newState;
 }
 
 void MusterUiBackend::submit()
@@ -119,6 +118,19 @@ void MusterUiBackend::submit()
         setLastError(QStringLiteral("submit did not land on-chain (state %1) — is the RPC reachable?").arg(newState));
     }
     qInfo() << "[muster_ui] submit" << id << "->" << newState;
+}
+
+void MusterUiBackend::reset()
+{
+    // UI-only: clear the current intent so the composer is fresh. The module keeps
+    // its own log of every intent; this just stops the view pointing at one. The
+    // account and health stay — they are module facts, not intent state.
+    setIntentId(QString());
+    setIntentEffect(QString());
+    setIntentTxhash(QString());
+    setIntentState(QString());
+    setLastError(QString());
+    qInfo() << "[muster_ui] reset — view cleared for a new proposal";
 }
 
 void MusterUiBackend::onContextReady()

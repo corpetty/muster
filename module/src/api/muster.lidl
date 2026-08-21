@@ -10,7 +10,7 @@ module muster_module {
 
   method txhash(intent_id: tstr) -> tstr description "Return the hex materialization the driver canonicalized for this intent — the exact bytes owners sign (for Safe, the EIP-712 safeTxHash)."
 
-  method approve(intent_id: tstr, signature_hex: tstr) -> tstr description "Add an owner signature (65-byte hex) to an intent; the driver verifies it recovers to an owner before it counts. Returns the intent's new lifecycle state."
+  method approve(intent_id: tstr, signature_hex: tstr) -> tstr description "Add an owner signature (65-byte hex) to an intent; the driver verifies it recovers to a configured owner before it counts. Returns the intent's new lifecycle state, or \"rejected\" if the signature does not recover to an owner (or was already counted) — a rejected signature never advances the intent."
 
   method status(intent_id: tstr) -> tstr description "Return an intent's current lifecycle state (draft, proposed, collecting, executable, ...)."
 

@@ -30,5 +30,6 @@ public:
     void propose(const QString &effectJson) override;
     void approve(const QString &signatureHex) override;
     void submit() override;
+    void reset() override;
     void onContextReady() override;
 };

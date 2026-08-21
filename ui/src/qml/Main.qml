@@ -240,20 +240,12 @@ Item {
                         root.backend.propose(effectJson);
                     }
                 }
-
-                LogosText {
-                    visible: root.lastError.length > 0
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: root.lastError
-                    color: Theme.palette.error
-                    font.pixelSize: Theme.typography.badgeText
-                }
             }
         }
 
         // ── the intent, once proposed ─────────────────────────────────────────
         Rectangle {
+            objectName: "intentCard"
             Layout.fillWidth: true
             visible: root.hasIntent
             implicitHeight: intentCol.implicitHeight + 2 * Theme.spacing.medium
@@ -508,6 +500,54 @@ Item {
                         font.pixelSize: Theme.typography.badgeText
                         font.weight: Theme.typography.weightMedium
                     }
+
+                    LogosButton {
+                        objectName: "newProposalButton"
+                        Layout.fillWidth: true
+                        visible: root.isFinal
+                        text: qsTr("Start a new proposal")
+                        onClicked: { if (root.backend) root.backend.reset(); }
+                    }
+                }
+            }
+        }
+
+        // ── error banner ──────────────────────────────────────────────────────
+        // One place for every failure — a rejected signature, an unreachable RPC,
+        // a failed proposal. It clears when the next action runs (each backend call
+        // resets it), or on New proposal. Honest by construction: the text is the
+        // module's own reason, never a guess.
+        Rectangle {
+            objectName: "errorBanner"
+            Layout.fillWidth: true
+            visible: root.lastError.length > 0
+            implicitHeight: errRow.implicitHeight + 2 * Theme.spacing.medium
+            radius: Theme.spacing.radiusSmall
+            color: Theme.palette.surface
+            border.width: 1
+            border.color: Theme.palette.error
+
+            RowLayout {
+                id: errRow
+                anchors.fill: parent
+                anchors.margins: Theme.spacing.medium
+                spacing: Theme.spacing.small
+
+                LogosText {
+                    objectName: "errorText"
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: root.lastError
+                    color: Theme.palette.error
+                    font.pixelSize: Theme.typography.badgeText
+                }
+
+                // Recovery from any error — including a submit that never landed.
+                LogosButton {
+                    objectName: "errorResetButton"
+                    visible: root.hasIntent
+                    text: qsTr("New proposal")
+                    onClicked: { if (root.backend) root.backend.reset(); }
                 }
             }
         }

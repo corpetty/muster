@@ -15,7 +15,11 @@ and asserts the real lifecycle surfaces:
    test pastes two pre-signed anvil-owner signatures over the intent's
    `safeTxHash`; regenerate them (see the `OWNER_SIGS` comment in the test) if the
    effect or Safe config changes.
-5. **submit** — an executable intent is sent on-chain: the module assembles the
+5. **reject + reset** — a signature that does not recover to a configured owner is
+   refused (the module returns `"rejected"`, the intent does not advance), the error
+   banner shows the reason, and reset clears the intent for a fresh walkthrough.
+   Off-chain; no anvil needed.
+6. **submit** — an executable intent is sent on-chain: the module assembles the
    Safe `execTransaction` from the collected signatures, submits it through the
    user's RPC, and reads finality from the receipt (`submitted → final`). No
    indexer, no Safe service. **Requires anvil** (see below); it is the only test
@@ -24,8 +28,8 @@ and asserts the real lifecycle surfaces:
 It writes screenshots to `$MUSTER_SHOT` (default `./muster-ui.png`), with
 `-executable` / `-final` suffixes for the lifecycle stages.
 
-Status: **5/5 green** as of 2026-08-21 (ADR-013 + `exo-4a5` + `exo-…submit`). See
-`docs/02-implementation-plan.md` ADR-013 and pebble `exo-193` for the full story.
+Status: **6/6 green** as of 2026-08-21 (ADR-013 + `exo-4a5` + `exo-27b0` + `exo-308`).
+See `docs/02-implementation-plan.md` ADR-013 and pebble `exo-193` for the full story.
 
 ## anvil (for the submit test)
 

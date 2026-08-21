@@ -113,28 +113,30 @@ proc musterTxhash(intentId: string): string =
   toHex(gIntents[intentId].materialization.bytes)
 
 proc musterApprove(intentId: string, signatureHex: string): string =
-  ## Verify a 65-byte owner signature over this intent's safeTxHash and, if it
-  ## recovers to an owner, count it toward the threshold.
+  ## Verify a 65-byte owner signature over this intent's safeTxHash. A signature
+  ## that does not recover to a configured owner is not a valid contribution and is
+  ## refused ("rejected") without touching the intent; a valid one is counted toward
+  ## the threshold. Returns the new lifecycle state, or "rejected".
   if intentId notin gIntents: return "unknown-intent"
   gDriver.pendingHash = gHashes[intentId]                 # verify against THIS intent's hash
-  let sig = hexToBytes(signatureHex)
+  let sig65 = toSig65(hexToBytes(signatureHex))
+  if not recoversToOwner(gHashes[intentId], sig65, gDriver.owners):
+    return "rejected"                                     # not an owner — do not advance
+
+  # Dedup by signer (Safe dedups too); a re-submission of an already-counted owner
+  # signature is refused rather than double-applied.
+  let signer = ecrecover(gHashes[intentId], sig65)
+  var have = gSigs.getOrDefault(intentId)
+  for existing in have:
+    if ecrecover(gHashes[intentId], existing) == signer: return "rejected"
+  have.add sig65
+  gSigs[intentId] = have
+
   var it = gIntents[intentId]
   inc gNow
   it.apply(gDriver, IntentEvent(kind: ieContribute, now: gNow,
-                                contribution: Contribution(bytes: sig)))
+                                contribution: Contribution(bytes: @sig65)))
   gIntents[intentId] = it
-  # Keep the signature for later on-chain assembly if it recovered to an owner and
-  # is not already collected from that owner (Safe dedups by signer).
-  let sig65 = toSig65(sig)
-  if recoversToOwner(gHashes[intentId], sig65, gDriver.owners):
-    let signer = ecrecover(gHashes[intentId], sig65)
-    var have = gSigs.getOrDefault(intentId)
-    var dup = false
-    for existing in have:
-      if ecrecover(gHashes[intentId], existing) == signer: dup = true
-    if not dup:
-      have.add sig65
-      gSigs[intentId] = have
   $it.state
 
 proc musterStatus(intentId: string): string =

@@ -62,6 +62,10 @@ const OWNER_SIGS = [
   "0x00278ad6c27d00993883a10909200661d6559d4eea8ca3c9ee3367e8761ba7056fe11cb9a6e87ede5aef673a0f075b220a3c6d37842743c91d9868d834edffcd1b", // anvil owner 0 (0xf39F…2266)
   "0x7089eabcc8f8d1ff49a4b420d59f9b51f78ce7b498a5d4d17f1e07c0915231ca6443249c38693bbe3f1c12fc87e3a909c7c1e6ad8401d3d03c0b1fb751aa9d241b", // anvil owner 1 (0x7099…79C8)
 ];
+// A signature over the same safeTxHash from anvil account 3 (0x90F7…b906), which
+// is NOT in the owner set — the module must refuse to count it.
+const NON_OWNER_SIG =
+  "0x434ffc353ac48d485e94d1a03d03fdd8279204e9de49e73e0ab3023b392ae2297c3de7242a294bfdc689544d2dd256b7b447659bda23624cb8ef8b247875773f1c";
 
 // 1) RENDER — the decisive ADR-013 check: the coherent-built view instantiates.
 test("muster_ui: the view instantiates and renders", async (app) => {
@@ -138,6 +142,48 @@ test("muster_ui: collecting owner signatures advances to executable", async (app
   );
   console.log("[muster] LIFECYCLE OK — 2 owner signatures collected → executable");
   await grab(app, "executable");
+});
+
+// 4b) REJECT + RESET — a non-owner signature must not count (the error banner
+//     shows the module's own reason and the intent does not advance), and reset
+//     clears the intent for a fresh walkthrough. Off-chain; no anvil needed.
+test("muster_ui: a non-owner signature is rejected, then reset clears the intent", async (app) => {
+  await openMuster(app);
+  await app.waitFor(
+    async () => { await app.expectTexts(["Propose a transfer"]); },
+    { timeout: 15000, interval: 500, description: "composer ready" }
+  );
+  await setField(app, "proposeTo", "0x1111111111111111111111111111111111111111");
+  await setField(app, "proposeValue", "1000");
+  await setField(app, "proposeNonce", "0");
+  await clickButton(app, "proposeButton");
+  await app.waitFor(
+    async () => { await app.expectTexts(["re-derived"]); },
+    { timeout: 15000, interval: 500, description: "intent proposed" }
+  );
+
+  await setField(app, "approveSig", NON_OWNER_SIG);
+  await clickButton(app, "approveButton");
+  await app.waitFor(
+    async () => {
+      if ((await propertyOf(app, "errorBanner", "visible")) !== true)
+        throw new Error("no error shown for the non-owner signature");
+    },
+    { timeout: 15000, interval: 500, description: "error banner" }
+  );
+  if ((await propertyOf(app, "executableNotice", "visible")) === true)
+    throw new Error("a non-owner signature wrongly advanced the intent to executable");
+  console.log("[muster] REJECT OK — non-owner signature not counted; error shown, intent held");
+
+  await clickButton(app, "errorResetButton");
+  await app.waitFor(
+    async () => {
+      if ((await propertyOf(app, "intentCard", "visible")) !== false)
+        throw new Error("reset did not clear the intent");
+    },
+    { timeout: 10000, interval: 500, description: "reset → fresh composer" }
+  );
+  console.log("[muster] RESET OK — intent cleared for a new proposal");
 });
 
 async function grab(app, suffix) {

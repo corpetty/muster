@@ -18,6 +18,10 @@ class MusterUi
     // RPC, and watches the receipt. Advances submitted → final.
     SLOT(void submit())
 
+    // Clear the current intent from the view so the walkthrough can start fresh.
+    // A UI-only reset of the intent PROPs; the module keeps its own log.
+    SLOT(void reset())
+
     PROP(QString health="unknown" READONLY)
 
     // The Safe account this walkthrough coordinates against — read from the
