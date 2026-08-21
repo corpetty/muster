@@ -114,7 +114,11 @@ muster/
 
 ## Phases
 
+> **Status (2026-08-21):** P0 ✅ · P1 ✅ · P2 ✅ · P4 🚧 (UI spike; blocked on an SDK-rev skew, `exo-c6a`) · P3 deferred past the P4 spike · P5–P6 not started. The 11 invariant pebbles are all closed and the 42-probe suite is green; the `module/`+`ui/` build landed across 2026-08-19/20. Per-phase status lines below.
+
 ### P0 — Module scaffold and the log
+
+**Status: ✅ done (2026-08-19).** Loading spike passed (Nim-native module loads + dispatches in `logoscore`, Route B — a `codegen.nim` path added to `logos-module-builder`, PR #202 open upstream). dCBOR CDE encoder, domain-separated hash-input records, and the signed hash-linked log all landed with probes green (`exo-d7c`/`449`/`548`). No CDDL parser / cdCDDLe, per ADR-009.
 
 **Step zero is a loading spike, before any Muster code.** Write a two-method `muster.lidl`, generate its Nim surface over the `lidl_c.h` JSON bridge, and get the resulting module loading and answering one call in `logoscore`. Everything downstream rests on this working; the storage-nim and rust-sdk precedents say it does, but we confirm it in days rather than discovering it at P4. The spike deliberately exercises the part with no precedent — the Nim backend — not the part with two. If the backend stalls, hand-write the generated surface for this one contract and keep going (ADR-008 fallback); either way `muster.lidl` stays normative and we know which world we are in before P0 proper.
 
@@ -124,17 +128,23 @@ Then: Nimble project with poc2's pinned dependency set. The §4.5 deterministic 
 
 ### P1 — Intent engine, driver interface, stub driver
 
+**Status: ✅ done (2026-08-19).** Intent lifecycle engine (F-3), driver interface + opaque core (inv 6), re-derive-or-refuse materialization (inv 1), replay-bound signing payload (inv 2), plus anonymity (inv 9), epochs (inv 7), provenance (inv 10), plugin sandbox (inv 3), no-server (inv 8). B4 (`tools/lidl_gen.nim`) generates the surface from `muster.lidl`. `propose`/`approve`/`status` run through the hosted `logoscore` module over the stub driver.
+
 Effect types (transfer v0), authorization-requirement list (F-19), lifecycle reducer (F-3), expiry. Driver interface exactly per F-6, including round index (F-7), serialization domain, membership model, finality descriptor. Stub driver: in-memory 2-of-3, r=1, sequential domain. Conformance suite v0 written against the stub (S-1). Signing payloads strengthen F-5: they commit to the effect's **schema identity** and effect value root alongside environment, account, slot, and expiry — a collected signature cannot be reinterpreted under a different effect schema. Per ADR-009 the identity is a hand-assigned stable id in v0; the field is shaped so a cdCDDLe schema root replaces it without a format migration. `muster.lidl` grows `propose` / `approve` / `status` methods and the lifecycle-change event, so `logoscore` is the CLI harness as-is and the UI's typed client at P4 is generated, not hand-written.
 
 **Accept:** full lifecycle to `executable` across two `logoscore` instances with isolated persistence paths; conformance suite green; replay-binding unit tests prove a contribution fails verification outside its (conversation, account, slot, schema) context (FS-3). Changing only the `schema-id` on an otherwise identical payload invalidates the signature.
 
 ### P2 — Safe driver (the wedge)
 
+**Status: ✅ done (2026-08-19).** EIP-712 `safeTxHash` (validated against published Safe 1.4.1 constants), secp256k1 ECDSA owner verification, collect-2-of-3, `assemble`/`submit`/`watch` via JSON-RPC (no web3 dep), and on-chain `execTransaction` against an anvil `MiniSafe` fixture (`infra/anvil/src/MiniSafe.sol`, a faithful Safe-1.4.1 subset) — **no indexer in the loop**. Wired into the hosted module (`txhash` exposed; `approve` verifies each owner sig before it counts). Fixture-swap to the real Safe 1.4.1 singleton remains. *Nuance vs. the accept criterion:* the two-`logoscore`-instance run was exercised through the hosted single-module surface + direct Nim e2e, not yet two isolated hosts over transport (that lands with P3).
+
 Anvil fixture deploying Safe 1.4.1 as 2-of-3. `canonicalize` computes the EIP-712 safeTxHash locally (implementation validated against published vectors); `verify` checks ECDSA contributions against owners; `assemble` builds `execTransaction`; `submit` via user RPC through nim-web3; `watch` maps confirmations to a finality descriptor (R-8). Sequential-domain queueing with visible queue and `intent-drop` freeing the slot (F-8).
 
 **Accept:** two `logoscore` instances collect 2-of-3 and execute against anvil **with no Safe indexer or service in the loop**; conformance green for the Safe driver; wrong-chainid / wrong-safe / wrong-nonce contributions all rejected.
 
 ### P3 — Real transport and encryption
+
+**Status: ⏸ deferred past the P4 UI spike, not started.** The hosted flow still runs on the stub/local transport. ADR-010 (chat-module build-vs-consume) is still open and must be resolved at the start of this phase — the curve conflict noted below (chat-module identity is Ed25519, Muster signs secp256k1) is the blocking question.
 
 ADR-006 is resolved: consume `logos-delivery-module` as a module dependency under the capability policy, behind our Transport interface. It wraps `liblogosdelivery`, and its API covers what F-15 needs — content topics, publish with delivery/propagation events, subscribe, store queries, and channels. The Transport interface stays, so embedding nwaku remains reachable if the module's guarantees turn out thinner than advertised.
 
@@ -148,6 +158,8 @@ MLS is explicitly out of scope for v0; the epoch scheme is the ADR-002 default, 
 
 ### P4 — QML surfaces in basecamp
 
+**Status: 🚧 in progress, blocked (`exo-c6a`).** ADR-011 resolved: the UI is restyled onto `Logos.Theme`/`Logos.Controls`. `muster-ui` builds, calls `muster_module` through the logos API, and the re-materialization strip is wired to the real driver `canonicalize` (F-4) — no longer prototype theater. **Blocked short of acceptance** by an SDK-rev skew between `logos-module-builder`'s Nim-cdylib codegen and `logos-basecamp`'s ui-host (`logos-view-module-runtime` 1fde7d43 vs 3c3735c2; `logos-cpp-sdk` 4b66dac0 vs e3744fb8): pinning view-runtime fixes a `std::bad_alloc`, but aligning cpp-sdk regresses to it because the codegen's view-glue targets the older rev. **Fix is upstream** — update the module-builder's Nim-cdylib codegen to cpp-sdk 4b66dac0 (keep view-runtime 1fde7d43), then run the logos-qt-mcp acceptance flow (enable `muster_ui` in basecamp's Package Manager, click its icon, assert `health() -> ok`). `logos-standalone-app` renders no `ui_qml` view on this box (its own template blanks); `logos-basecamp` is the working host. The full room/composer/home surfaces and the six-step legend are still ahead — this increment proves the module↔ui↔host chain, not the whole UI.
+
 Resolve **ADR-011** first: build on `Logos.Theme` / `Logos.Controls` from logos-design-system, mapping the prototype v2 tokens onto its palette/spacing/typography singletons, and reach for a bespoke component only where the room surfaces genuinely have no design-system equivalent (the enclosure, the seam, the slot row). Muster looking like the rest of the platform is worth more than pixel-fidelity to the prototype, and U-10's contrast and reduced-motion obligations are easier to inherit than to re-prove.
 
 `muster-ui.lgx`: components (room enclosure, nameplate, pinned bar, intent card, fact card, choice, seams, sheets); home (F-18 as a live query), composer (verb → people → account), room. UI talks to the module only through the logos API. Wire the re-materialization strip to the real driver `canonicalize` (F-4) — in the prototype it was theater; here it is the check. Standalone-mode launch (via logos-standalone-app) and basecamp-hosted mode both work, per platform convention.
@@ -158,11 +170,15 @@ The walkthrough's four questions (`00-vision.md`) become real surfaces here, inc
 
 ### P5 — Plugin runtime v0
 
+**Status: not started.** Only the plugin sandbox *type* exists (`src/plugins/plugin.nim`, inv 3 — emits typed blocks only, no signing/keys/network); the manifest, content-hash load verification, and first-party plugins are P5 work.
+
 Manifest with declared capabilities and data dependencies (F-12); content-hash verification at load (FS-5); typed block emission only (F-13). First-party plugins in-process behind the manifest: transfer, signed-balance, decision (binds per F-11). The fact proof channel: if LOGOS-MODULE-HASH-PROFILE has ratified by this phase, use **verified views** (§7.6/§8) — the signed-balance plugin discloses the balance field under a committed value root with proof material, the client runs the spec's verification procedure. If it is still draft, F-10's `verified-locally` grade is earned the narrower way: the client performs the read itself against a user-configured RPC endpoint and checks the result, and any fact it could not check itself renders as `attested`. Either way the grade means exactly what it says on the card — the honesty rule in `00-vision.md` does not bend to a missing spec, it just shrinks what we are allowed to claim. Third-party isolation is ADR-007: capability-restricted `.lgx` modules whose access policy denies everything except the Muster module's block API — the platform's subprocess + token model **is** the sandbox. Documented now, built post-v1. The plugin API freezes only when the third first-party plugin needs no core change.
 
 **Accept:** the lying-plugin test — a plugin whose proposed materialization diverges from its displayed effect is blocked by core (FS-6), demonstrated in CI, not by review. A first-party plugin attempting network or key access dies with a capability error.
 
 ### P6 — Hardening and reach
+
+**Status: not started.**
 
 Keycard signer backend over PC/SC (F-14). Logos Storage module as the artifact backend behind the storage interface (F-17). Threshold driver: FROST at r=2 is the round model's real test (F-7) — no Nim implementation exists, so this is implement-from-spec against the conformance suite, with a C library binding as the fallback if the from-spec path stalls. A describe-only LEZ driver spike to pressure-test membership-as-predicate against the platform's private execution direction. Log snapshotting to hit P-2/P-5. Performance pass against every P-x number.
 

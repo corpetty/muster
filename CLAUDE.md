@@ -46,28 +46,37 @@ Re-validate the stack decisions table in `docs/02-implementation-plan.md` agains
 
 ## Layout
 
-**What exists today:**
+**What exists today** (the real `module/`+`ui/` build landed P0→P2 and the P4 UI spike across 2026-08-19/20):
 
 ```
+module/          Nim core behind the muster.lidl contract → muster-module.lgx
+  src/api/       muster.lidl (the only outward seam) + generated surface
+  src/dcbor/     deterministic CDE encoder (inv 5)
+  src/hashing/   sha256 · keccak256 · domain-separated hash-input records (inv 5)
+  src/log/       signed hash-linked log, reduce(log) (inv 4)
+  src/intents/   lifecycle (F-3) · materialization · signing_payload · anon_state · provenance
+  src/drivers/   driver interface (inv 6) · safe · safe_rpc (P2 wedge)
+  src/crypto/    secp256k1 · epochs (inv 7)
+  src/plugins/   plugin sandbox (inv 3) · src/transport/ infra (inv 8)
+  nim-lib/       muster_gen.nim (generated) + muster_module.nim (hosted surface)
+  tools/         lidl_gen.nim — Nim LIDL codegen over lidl_c.h (B4)
+  tests/         lifecycle/safe tests + tests/probes/ (42 invariant probes)
+ui/              QML view + C++ backend → muster-ui.lgx (Logos.Theme, ADR-011)
+  src/qml/       Main.qml · src/muster_ui_backend.{cpp,h} · muster_ui.rep
+infra/anvil/     MiniSafe.sol fixture (faithful Safe-1.4.1 subset) + foundry
 demo/            the speed build — runnable, and deliberately not the specified client
   muster-ui/     fork of logos-co/logos-chat-ui: QML + QtRO C++ backend, wallet journey
+  poc/           LEZ private-transfer POCs + upstream bug write-ups
 docs/            00-vision · 01-furps · 02-implementation-plan
   diagrams/      the figure programme, its manifest, and the rot checker
   labbook/       traps found the expensive way
   posts/         campaign write-ups
-contracts/specs/ typed specs with acceptance oracles, one per invariant
+contracts/specs/ typed specs with acceptance oracles, one per invariant (derived-exo-*)
 ui/prototype/    coordination-prototype-v2.html — the standalone HTML reference build
 scripts/         git hooks
 ```
 
-**What P0 onward adds** — planned, not present. Do not cite these paths as though they resolve:
-
-```
-module/   Nim core behind a LIDL contract → wrapped as muster-module.lgx
-  src/    api (muster.lidl + generated surface — the only outward seam) · schemas · dcbor · crypto · log · intents · drivers · transport · plugins
-ui/       QML frontend → muster-ui.lgx (Logos.Theme + prototype tokens, ADR-011; logos-qt-mcp tests)
-infra/    anvil fixtures (Safe 1.4.1)
-```
+**Not yet present** — do not cite as though these resolve: `module/src/schemas/` (no CDDL parser / cdCDDLe in v0, ADR-009); the full QML component set (P4 has only the health-probe view, not the room/composer/home surfaces); real transport + encryption (P3, still stub/local); the plugin runtime beyond the sandbox type (P5). The `module/` and `ui/` flakes pin `logos-module-builder` as a **local path-input on the `nim-cdylib-authoring` branch** — not upstream yet ([logos-co/logos-module-builder#202](https://github.com/logos-co/logos-module-builder/pull/202), open).
 
 ADRs are **not** in `docs/adr/`; they are a section of `docs/02-implementation-plan.md`.
 
@@ -85,19 +94,37 @@ cd demo/muster-ui && nix build   # the muster_ui module itself
 python3 docs/diagrams/tools/check-manifest.py   # figure-provenance gate (--update, --stamp)
 ```
 
-**These do not exist yet.** They arrive with `module/` at P0 and are listed as the target, not as something to run:
+**The real `module/`+`ui/` build** (needs the local `logos-module-builder@nim-cdylib-authoring` checkout the flakes pin; build via `cache.nix.logos.co` as a substituter — the user is not a trusted nix user, so pass `--extra-substituters` explicitly):
 
 ```
-nix develop                      # dev shell (Nim toolchain, Qt6, deps)
-nix build '.#module'             # muster-module.lgx (dev variant)
-nix build '.#ui'                 # muster-ui.lgx
-nix build '.#tests'              # unit + property + conformance
+cd module && nix build .#lgx            # muster-module.lgx (dev, keyed linux-amd64-dev)
+cd module && nix build .#lgx-portable   # portable variant (keyed linux-amd64; logoscore's default resolver wants this one)
+cd ui     && nix build .#lgx            # muster-ui.lgx (follows module's builder pins)
+nim r -d:release module/tests/probes/probe_*.nim   # pure-Nim invariant probes (no host)
+# P2 crypto/Safe tests need libsecp256k1 linked — see module/tests/README.md
+# Load headless: lgpm install --file ./result*/*.lgx --modules-dir <dir>; logoscore -m <dir> -l muster_module -c 'muster_module.health()' --quit-on-finish
+```
+
+**Not yet wired as one-shot targets** (listed as the intent, not something to run):
+
+```
+nix build '.#tests'              # unified unit + property + conformance runner
 nix run  '.#integration'         # two isolated logoscore instances, stub + safe drivers
-nix run  '.#anvil'               # local chain with Safe fixture
-lgpm install --file ./result/*.lgx && logoscore    # load the module in the headless host
-# UI e2e: basecamp --user-dir per instance + logos-qt-mcp scripts in ui/tests/
+nix run  '.#anvil'               # local chain with Safe fixture (infra/anvil exists; no flake app yet)
+# UI e2e (P4 acceptance): logos-basecamp --user-dir per instance + logos-qt-mcp scripts — BLOCKED on the SDK-rev skew, see Current phase
 ```
 
 ## Current phase
 
-P0 — **first, the loading spike**: a two-method `muster.lidl`, its Nim surface generated over the `lidl_c.h` bridge, loading and answering one call in `logoscore`. It exercises the one part with no precedent (the Nim backend), not the two parts that have one. Everything downstream assumes this works; confirm it in days, not at P4. Then dCBOR golden vectors, domain-separated hash inputs, and the signed hash-linked log. No CDDL parser and no cdCDDLe in P0 (ADR-009). See `docs/02-implementation-plan.md` for accept criteria.
+**P4 — QML surfaces in basecamp, in progress and blocked on an SDK-rev skew.** P0–P2 and all 11 invariant pebbles landed by hand across 2026-08-19/20 (PRs #12–#28); the full 42-probe invariant suite is green.
+
+Done:
+- **P0** — loading spike (Nim-native module loads + dispatches in `logoscore`, ADR-008's central risk retired); deterministic CDE encoder, domain-separated hash-input records, signed hash-linked log. Route B: a `codegen.nim` path added to `logos-module-builder` (PR #202, still open upstream).
+- **B4** — `tools/lidl_gen.nim` generates the Nim module surface from `muster.lidl` over the `lidl_c.h` bridge, retiring the hand-written surface.
+- **P1** — intent lifecycle engine (F-3), driver interface (inv 6), re-derive-or-refuse materialization (inv 1), replay-bound signing payload (inv 2), anonymity (inv 9), membership epochs (inv 7), provenance/accountability (inv 10), plugin sandbox (inv 3), no-server/no-telemetry (inv 8).
+- **P2** — Safe driver: EIP-712 `safeTxHash`, secp256k1 ECDSA owner verification, collect-2-of-3, on-chain `execTransaction` against the anvil `MiniSafe` fixture (no indexer). Wired into the hosted module (`propose`/`approve`/`status`/`txhash` through `logoscore`).
+- **P4 (partial)** — `muster-ui` QML scaffold builds and calls `muster_module` through the logos API; restyled onto `Logos.Theme`/`Logos.Controls` (ADR-011 resolved); the re-materialization strip wired to the real driver `canonicalize` (F-4), not prototype theater.
+
+**The blocker (`exo-c6a`, P1 bug):** `muster-ui` builds but its view won't render to P4 acceptance. Root cause is an SDK-rev skew between `logos-module-builder`'s Nim-cdylib codegen and `logos-basecamp`'s ui-host: `logos-view-module-runtime` (basecamp `1fde7d43` vs builder `3c3735c2`) and `logos-cpp-sdk` (basecamp `4b66dac0` vs builder `e3744fb8`). Pinning view-runtime fixes a `std::bad_alloc`; aligning cpp-sdk fixes the capability-token handshake **but regresses to bad_alloc** because the codegen's view-glue is written against `e3744fb8`. **The real fix is upstream:** update the module-builder's Nim-cdylib codegen to basecamp's `logos-cpp-sdk 4b66dac0` (keep view-runtime `1fde7d43`), then run the designed acceptance flow — logos-qt-mcp drives basecamp's Package Manager to enable `muster_ui`, click its sidebar icon, and assert the view shows `muster_module.health() -> ok`. `logos-standalone-app` cannot render any `ui_qml` view on this box (its own template blanks too); `logos-basecamp` is the working host. This is exactly the "revalidate the stack table each phase" warning biting where predicted.
+
+**Not P4:** P3 (real transport + encryption, ADR-010 chat-module build-vs-consume) was deferred past the P4 UI spike — the hosted flow still runs on the stub/local transport. See `docs/02-implementation-plan.md` for per-phase accept criteria and ADR status.
