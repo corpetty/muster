@@ -19,7 +19,10 @@ import ../src/crypto/secp256k1
 import ../src/intents/materialization
 import ../src/intents/signing_payload
 import ../src/intents/lifecycle
-import ../src/transport/lp_ffi   # the lp_* inter-module call binding (protocol ABI)
+import ../src/transport/lp_ffi        # the lp_* inter-module call binding (protocol ABI)
+import ../src/transport/delivery      # DeliveryTransport (transport over lp_*)
+import ../src/crypto/epoch_crypto     # EpochCrypto (ECIES-secp256k1 + libsodium AEAD)
+import ../src/coordination/session    # the multi-instance coordination flow
 
 proc hexToBytes(s: string): seq[byte] =
   var h = s
@@ -182,3 +185,16 @@ proc musterSubmit(intentId: string): string =
     it.apply(gDriver, IntentEvent(kind: ieFinal, now: gNow))   # submitted -> final
     gIntents[intentId] = it
   $it.state
+
+# ── P3 stack link-check (temporary) ───────────────────────────────────────────
+# The transport (lp_*), crypto (secp256k1 + libsodium AEAD), and coordination
+# layers are compiled into the plugin here. This proc is never called; it exists
+# so the whole P3 stack LINKS in the shipping plugin ahead of the hosted
+# coordination surface (which needs a delivery node to exercise). Delete it when
+# that surface lands and genuinely drives the stack.
+var gP3LinkCheck {.used.}: CoordinationSession
+proc musterP3LinkCheck() {.exportc, used.} =
+  var k: array[32, byte]
+  gP3LinkCheck = newCoordinationSession(newDeliveryTransport(), newEpochCrypto(k),
+                                        "muster.p3.linkcheck")
+  gP3LinkCheck.publish(Event(key: "k", value: "v"))
