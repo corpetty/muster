@@ -18,8 +18,9 @@ nim r -d:release --passC:-I/tmp/secp/include \
 The module build supplies secp256k1 via `nix.packages` once the Safe driver is
 wired into the module surface.
 
-**Exception — `ecdh_test.nim` needs libsecp256k1; `epoch_crypto_test.nim` (F-16)
-needs libsecp256k1 + libsodium:**
+**Exception — `ecdh_test.nim` needs libsecp256k1; `epoch_crypto_test.nim` (F-16),
+`coordination_test.nim`, and `multiparty_intent_test.nim` need libsecp256k1 +
+libsodium (and `--threads:on`):**
 
 ```bash
 nix build nixpkgs#secp256k1 --out-link /tmp/secp
