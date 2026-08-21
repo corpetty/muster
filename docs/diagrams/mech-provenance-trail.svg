@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 638" width="880" height="638" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>Where the data came from, and why re-derivation does not answer it</title>
-  <desc>Re-deriving a materialization proves it agrees with the effect it came from and says nothing about where the effect's own inputs came from, so correctly derived data of unknown origin passes the check. F-20 makes every signing payload commit to each input's class and log position and refuses to sign an input it cannot account for; FS-10 scopes that record to the membership epoch, so the boundary it defends is the room rather than the participant. Specified as F-20 and FS-10; not built.</desc>
+  <desc>Re-deriving a materialization proves it agrees with the effect it came from and says nothing about where the effect's own inputs came from, so correctly derived data of unknown origin passes the check. F-20 makes every signing payload commit to each input's class and log position and refuses to sign an input it cannot account for; FS-10 scopes that record to the membership epoch, so the boundary it defends is the room rather than the participant. Specified as F-20 and FS-10; built at P1.</desc>
 <!-- provenance
      serves:   BOTH
      shows:    Why re-deriving a materialization does not answer where its inputs came

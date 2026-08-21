@@ -56,11 +56,13 @@ module/          Nim core behind the muster.lidl contract → muster-module.lgx
   src/log/       signed hash-linked log, reduce(log) (inv 4)
   src/intents/   lifecycle (F-3) · materialization · signing_payload · anon_state · provenance
   src/drivers/   driver interface (inv 6) · safe · safe_rpc (P2 wedge)
-  src/crypto/    secp256k1 · epochs (inv 7)
-  src/plugins/   plugin sandbox (inv 3) · src/transport/ infra (inv 8)
+  src/crypto/    secp256k1 (+ECDH) · epochs (inv 7) · conversation (ConversationCrypto seam) · epoch_crypto (ECIES stopgap, F-16) · sodium (libsodium AEAD)
+  src/transport/ transport (F-15 interface + LocalTransport) · lp_ffi (lp_* C-ABI binding) · delivery (DeliveryTransport) · inbound_queue (foreign-thread seam) · infra (inv 8)
+  src/coordination/ session (multi-instance flow) · intents (intent lifecycle = reduce(log))
+  src/plugins/   plugin sandbox (inv 3)
   nim-lib/       muster_gen.nim (generated) + muster_module.nim (hosted surface)
   tools/         lidl_gen.nim — Nim LIDL codegen over lidl_c.h (B4)
-  tests/         lifecycle/safe tests + tests/probes/ (42 invariant probes)
+  tests/         lifecycle/safe/crypto/transport/coordination tests + tests/probes/ (42 invariant probes)
 ui/              QML view + C++ backend → muster-ui.lgx (Logos.Theme, ADR-011)
   src/qml/       Main.qml · src/muster_ui_backend.{cpp,h} · muster_ui.rep
 infra/anvil/     MiniSafe.sol fixture (faithful Safe-1.4.1 subset) + foundry
@@ -116,15 +118,15 @@ nix run  '.#anvil'               # local chain with Safe fixture (infra/anvil ex
 
 ## Current phase
 
-**P4 — QML surfaces in basecamp, in progress and blocked on an SDK-rev skew.** P0–P2 and all 11 invariant pebbles landed by hand across 2026-08-19/20 (PRs #12–#28); the full 42-probe invariant suite is green.
+**P3 — real transport + encryption, functionally complete against a local transport; hosted surface + live-node test remain.** P0–P2 and all 11 invariant pebbles landed by hand (42-probe suite green); **P4 shipped** and P3's core is done. The whole transaction lifecycle runs in the UI, and multi-party coordination of real intents works end to end.
 
 Done:
-- **P0** — loading spike (Nim-native module loads + dispatches in `logoscore`, ADR-008's central risk retired); deterministic CDE encoder, domain-separated hash-input records, signed hash-linked log. Route B: a `codegen.nim` path added to `logos-module-builder` (PR #202, still open upstream).
-- **B4** — `tools/lidl_gen.nim` generates the Nim module surface from `muster.lidl` over the `lidl_c.h` bridge, retiring the hand-written surface.
-- **P1** — intent lifecycle engine (F-3), driver interface (inv 6), re-derive-or-refuse materialization (inv 1), replay-bound signing payload (inv 2), anonymity (inv 9), membership epochs (inv 7), provenance/accountability (inv 10), plugin sandbox (inv 3), no-server/no-telemetry (inv 8).
-- **P2** — Safe driver: EIP-712 `safeTxHash`, secp256k1 ECDSA owner verification, collect-2-of-3, on-chain `execTransaction` against the anvil `MiniSafe` fixture (no indexer). Wired into the hosted module (`propose`/`approve`/`status`/`txhash` through `logoscore`).
-- **P4 (partial)** — `muster-ui` QML scaffold builds and calls `muster_module` through the logos API; restyled onto `Logos.Theme`/`Logos.Controls` (ADR-011 resolved); the re-materialization strip wired to the real driver `canonicalize` (F-4), not prototype theater.
+- **P0–P2** — loading spike + signing-path core (dCBOR, hash-input records, signed log); intent lifecycle engine + driver interface + all 11 invariants; Safe driver (EIP-712 `safeTxHash`, secp256k1 owner verification, collect-2-of-3, on-chain `execTransaction` vs the anvil `MiniSafe`, no indexer). B4: `tools/lidl_gen.nim` generates the surface from `muster.lidl`. Route B `codegen.nim` path added to `logos-module-builder` (PR #202, open upstream).
+- **P4 — complete (ADR-013).** The `exo-c6a` SDK-rev render blocker was **routed around** without the upstream fix: build `muster-ui` on basecamp's coherent builder instead of `muster_module`'s Nim-cdylib builder (ADR-013). The full lifecycle runs through the real UI in `logos-basecamp` — `describe()` → the real 2-of-3 Safe, `propose()` → real re-derived `safeTxHash` (F-4), `approve()` → collect owner signatures → executable, `submit()` → a real on-chain `execTransaction` → final. Acceptance harness `ui/tests/muster-ui-test.mjs` is **6/6** (render, health, propose, lifecycle, reject+reset, submit). exo-c6a remains open only for the eventual upstream codegen bump.
+- **P3 — transport + encryption + multi-party coordination.** ADR-010 resolved then **amended** to the persistent, room-scoped identity model (FS-7 reframed; the platform mixnet closes FS-9): build a thin ECIES stopgap behind a `ConversationCrypto` interface, native `logos-chat-module` the target once it ships persistence + removal. Consume `logos-delivery-module` behind a `Transport` interface. Built + tested (against `LocalTransport`): the `lp_*` C-ABI Nim binding + `DeliveryTransport`; ECIES-secp256k1 `EpochCrypto` with **F-16 verified** (a mid-conversation joiner cannot open earlier epochs); the multi-instance coordination flow; the foreign-thread GC seam + async send; and — the payoff — **the intent lifecycle as `reduce(log)`**, so two owners coordinate a real Safe intent over encrypted transport and converge on it reaching executable. The full P3 stack links in the shipping plugin (secp256k1 + libsodium).
 
-**The blocker (`exo-c6a`, P1 bug):** `muster-ui` builds but its view won't render to P4 acceptance. Root cause is an SDK-rev skew between `logos-module-builder`'s Nim-cdylib codegen and `logos-basecamp`'s ui-host: `logos-view-module-runtime` (basecamp `1fde7d43` vs builder `3c3735c2`) and `logos-cpp-sdk` (basecamp `4b66dac0` vs builder `e3744fb8`). Pinning view-runtime fixes a `std::bad_alloc`; aligning cpp-sdk fixes the capability-token handshake **but regresses to bad_alloc** because the codegen's view-glue is written against `e3744fb8`. **The real fix is upstream:** update the module-builder's Nim-cdylib codegen to basecamp's `logos-cpp-sdk 4b66dac0` (keep view-runtime `1fde7d43`), then run the designed acceptance flow — logos-qt-mcp drives basecamp's Package Manager to enable `muster_ui`, click its sidebar icon, and assert the view shows `muster_module.health() -> ok`. `logos-standalone-app` cannot render any `ui_qml` view on this box (its own template blanks too); `logos-basecamp` is the working host. This is exactly the "revalidate the stack table each phase" warning biting where predicted.
+Remaining in P3:
+- **Hosted coordination surface** — lidl methods to drive a conversation from a host, wiring `coordination/intents.nim` into `muster_module` (replacing the `musterP3LinkCheck` stub). Its prerequisite is the **persistent-identity story** (the module needs a stable, persisted key — touches a keystore/F-17); today the coordination stack is tested standalone, not driven by a host.
+- **Live two-instance test over a real delivery node** — delivery embeds its own Waku node; two hosts on separate networks through store nodes; kill mid-collection, restart, contribution still lands (R-4/R-6). Needs a running node.
 
-**Not P4:** P3 (real transport + encryption, ADR-010 chat-module build-vs-consume) was deferred past the P4 UI spike — the hosted flow still runs on the stub/local transport. See `docs/02-implementation-plan.md` for per-phase accept criteria and ADR status.
+Two supporting fixes live **outside** this repo (local, uncommitted, worth upstreaming): the `logos-module-builder` RUNPATH fix (carries secp256k1 + libsodium into the plugin RUNPATH) and the `logos-basecamp` bake-in scaffolding (for the P4 UI render harness). See `docs/02-implementation-plan.md` for per-phase accept criteria and ADR status.

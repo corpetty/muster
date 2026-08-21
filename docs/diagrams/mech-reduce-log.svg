@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 540" width="880" height="540" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>State is a fold over a signed, hash-linked log</title>
-  <desc>Every event is signed and carries a causal reference. State is derived by reducing the log, never stored alongside it, so duplicated and reordered events converge to identical state and a cold start rebuilds from log plus keys. Specified as F-1, R-2 and R-3; not built.</desc>
+  <desc>Every event is signed and carries a causal reference. State is derived by reducing the log, never stored alongside it, so duplicated and reordered events converge to identical state and a cold start rebuilds from log plus keys. Built at P0; the P3 coordination flow makes multi-party intent state a literal reduce(log), with two instances converging over encrypted transport.</desc>
 <!-- provenance
      serves:   BUILD
      shows:    Events reduced to state, with idempotence, order-independence and cold-
@@ -15,7 +15,9 @@
                    test
                [measured] The demo folds get_messages and holds no second record — its
                    own CLAUDE.md states this as a rule, and the build follows it
-     recheck:  P0. The event names shown are F-2's v0 list and change with it.
+     recheck:  Built at P0; made a literal multi-party fold at P3 (two instances converge
+               over encrypted transport). Re-check if the event names (F-2's v0 list)
+               change.
 -->
 
   <defs>

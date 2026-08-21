@@ -15,7 +15,8 @@
                    curriculum section
                [measured] Which states the demo reaches — propose, collect approvals, pay
                    — observed in the running build
-     recheck:  P1, when the lifecycle reducer lands and the purple marks change meaning.
+     recheck:  Built at P1; the P3 coordination flow folds these states over a shared log
+               (state = reduce(log)). Re-check if the state set changes.
 -->
 
   <defs>

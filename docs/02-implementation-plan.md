@@ -114,7 +114,7 @@ muster/
 
 ## Phases
 
-> **Status (2026-08-21):** P0 ✅ · P1 ✅ · P2 ✅ · P4 🚧 (UI spike; blocked on an SDK-rev skew, `exo-c6a`) · P3 deferred past the P4 spike · P5–P6 not started. The 11 invariant pebbles are all closed and the 42-probe suite is green; the `module/`+`ui/` build landed across 2026-08-19/20. Per-phase status lines below.
+> **Status (2026-08-21):** P0 ✅ · P1 ✅ · P2 ✅ · P4 ✅ (UI ships the whole lifecycle; render blocker routed around via ADR-013, 6/6 acceptance harness) · P3 🚧 (transport + encryption + multi-party coordination done and tested on a local transport; hosted surface + live-node test remain) · P5–P6 not started. The 11 invariant pebbles are closed and the 42-probe suite is green. Per-phase status lines below.
 
 ### P0 — Module scaffold and the log
 
@@ -144,7 +144,7 @@ Anvil fixture deploying Safe 1.4.1 as 2-of-3. `canonicalize` computes the EIP-71
 
 ### P3 — Real transport and encryption
 
-**Status: 🚧 started 2026-08-21 — decision gate resolved.** The hosted flow still runs on the stub/local transport. **ADR-010 is resolved (build our own epoch layer; consume only `logos-delivery-module`)** — a code-level investigation of `logos-chat-module`/libchat settled it: the Ed25519-vs-secp256k1 curve+binding gap, a structural FS-7 violation (MLS binds a stable identity to every message, no unlinkable mode), and F-16 being unverifiable-and-partial upstream (joiner forward-secrecy untested in libchat, member removal not implemented) all point away from consuming the chat layer. Next: consume delivery behind the Transport interface, then build the epoch scheme.
+**Status: 🚧 core complete 2026-08-21; hosted surface + live-node test remain.** ADR-010 resolved then **amended** (persistent, room-scoped identity — FS-7 reframed; the platform mixnet closes FS-9): build a thin ECIES stopgap behind a `ConversationCrypto` interface, native `logos-chat-module` the target once it ships persistence + removal. **Built + tested against `LocalTransport`** (`module/src/transport`, `crypto`, `coordination`; commits `7dea6a8`…`2a1f0ad`): the `lp_*` C-ABI Nim binding + `DeliveryTransport`; secp256k1 ECDH (reusing the Safe key) + ECIES-secp256k1 `EpochCrypto` with **F-16 verified** (a mid-conversation joiner cannot open earlier epochs, a removed member cannot open later ones); the multi-instance coordination flow (two instances converge, outsider blind, late member catches up); the foreign-thread GC seam (delivery callback enqueues, `poll()` drains on the module thread) + async send; and the payoff — **the intent lifecycle as `reduce(log)`**, so two owners coordinate a real Safe intent over encrypted transport and converge on it reaching `executable` (a non-owner signature never counts). The full P3 stack links in the shipping plugin (secp256k1 + libsodium). **Remaining:** the hosted coordination surface (lidl methods driving a conversation from a host — needs the module's persistent-identity story) and the live two-instance test over a real delivery node. Original phase intent below.
 
 ADR-006 is resolved: consume `logos-delivery-module` as a module dependency under the capability policy, behind our Transport interface. It wraps `liblogosdelivery`, and its API covers what F-15 needs — content topics, publish with delivery/propagation events, subscribe, store queries, and channels. The Transport interface stays, so embedding nwaku remains reachable if the module's guarantees turn out thinner than advertised.
 

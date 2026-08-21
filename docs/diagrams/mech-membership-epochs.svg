@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 522" width="880" height="522" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>Membership epochs: joining does not grant the past</title>
-  <desc>Adding a member re-keys the conversation forward, so prior epochs stay unreadable to them; removing one rotates the epoch immediately. The seam drawn in the thread depends on this being true rather than merely displayed. Specified as F-16; not built, and entangled with ADR-010.</desc>
+  <desc>Adding a member re-keys the conversation forward, so prior epochs stay unreadable to them; removing one rotates the epoch immediately. The seam drawn in the thread depends on this being true rather than merely displayed. Built at P3 as an ECIES-secp256k1 epoch layer with the F-16 property verified in test; ADR-010 resolved.</desc>
 <!-- provenance
      serves:   BOTH
      shows:    Three epochs across a join and a removal: what a joining member cannot
@@ -15,8 +15,9 @@
                    keying, stated as such in GAPS.md §5
                [illustrative] Alice, Bob and Carol are an example. The forward-only limit
                    on removal is a property of any such scheme, not a measurement
-     recheck:  P3, and at ADR-010 — whose resolution decides whether these epochs are
-               ours at all.
+     recheck:  Built at P3 as ECIES-secp256k1 epochs with F-16 verified in test. Re-check
+               when native logos-chat-module is adopted — its MLS epochs replace these
+               behind the same ConversationCrypto seam.
 -->
 
   <rect width="880" height="522" fill="#E4E6E0"/>
@@ -27,7 +28,7 @@
   <rect x="40" y="80" width="800" height="30" rx="5" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.2"/>
   <rect x="52" y="88" width="150" height="15" rx="7.5" fill="#A32D1E"/>
   <text x="127" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#F6E3DF">SPECIFIED · NOT BUILT</text>
-  <text x="214" y="99" font-size="10" fill="#3F4742">F-16, U-6 · built at P3, and entangled with ADR-010 · the demo neither verifies nor claims the chat module's re-keying</text>
+  <text x="214" y="99" font-size="10" fill="#3F4742">F-16, U-6 · built at P3 (ECIES-secp256k1, F-16 verified); ADR-010 resolved · the demo neither verifies nor claims chat's re-keying</text>
 
   <!-- ══ epochs ══ -->
   <rect x="40" y="140" width="250" height="88" rx="6" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.2"/>

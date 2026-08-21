@@ -18,12 +18,12 @@
         },
         {
           "path": "demo/README.md",
-          "sha256": "1c3512923ee892e0296488baa02e37ce0e72751757766654ee6faa14834734f4",
+          "sha256": "8f335ac55d69d43e987d0a9a6624b683598386079229599bca53197532628faf",
           "note": "what the demo composes, and the invariant-by-invariant table behind the demo-build view"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
+          "sha256": "d80de497f949c005c1a59940ed5e444c322e0452fa0e600deed9350bbf7c313e",
           "note": "the specified build, the three hosts, ADR-008"
         },
         {
@@ -79,7 +79,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
+          "sha256": "d80de497f949c005c1a59940ed5e444c322e0452fa0e600deed9350bbf7c313e",
           "note": "F-4/FS-6 as specified-and-unbuilt, behind the contracting row's gap"
         }
       ],
@@ -147,7 +147,7 @@
         {
           "path": "docs/02-implementation-plan.md",
           "note": "F-4/FS-6 and F-20 as specified-and-unbuilt, behind the step-04 approval flag and the footer",
-          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895"
+          "sha256": "d80de497f949c005c1a59940ed5e444c322e0452fa0e600deed9350bbf7c313e"
         }
       ],
       "evidence": [
@@ -216,12 +216,12 @@
       "sources": [
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
+          "sha256": "d80de497f949c005c1a59940ed5e444c322e0452fa0e600deed9350bbf7c313e",
           "note": "ADR-008, the LIDL contract layer, the Nim gap and the four bridge functions"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "00f37aa0a19598e0640d71ce19310d8cf29402e2a529ec09a8aa0e650437db03",
+          "sha256": "b533197031f41ab07cd6ba065a6f2d7015cf98eb8d627388a371c600f41246e3",
           "note": "the two rules the C header states, and the never-hand-write-what-the-contract-generates rule"
         },
         {
@@ -291,7 +291,7 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
+          "sha256": "7323cb9a25aa5c6828ec52f03beec430d0d2662f73bbff5529f551c06d3ee24e",
           "note": "the normative requirement text and its ids"
         },
         {
@@ -301,7 +301,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
+          "sha256": "d80de497f949c005c1a59940ed5e444c322e0452fa0e600deed9350bbf7c313e",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -324,7 +324,7 @@
           "note": "Which states the demo reaches — propose, collect approvals, pay — observed in the running build"
         }
       ],
-      "recheck": "P1, when the lifecycle reducer lands and the purple marks change meaning."
+      "recheck": "Built at P1; the P3 coordination flow folds these states over a shared log (state = reduce(log)). Re-check if the state set changes."
     },
     {
       "file": "mech-effect-materialization.svg",
@@ -333,17 +333,17 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
+          "sha256": "7323cb9a25aa5c6828ec52f03beec430d0d2662f73bbff5529f551c06d3ee24e",
           "note": "the normative requirement text and its ids"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
+          "sha256": "d80de497f949c005c1a59940ed5e444c322e0452fa0e600deed9350bbf7c313e",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "00f37aa0a19598e0640d71ce19310d8cf29402e2a529ec09a8aa0e650437db03",
+          "sha256": "b533197031f41ab07cd6ba065a6f2d7015cf98eb8d627388a371c600f41246e3",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -366,7 +366,7 @@
           "note": "The example effect and the example hash are made up to show the shape of each side. Neither is a capture"
         }
       ],
-      "recheck": "P4. Until then the status strip is the most important thing on the figure."
+      "recheck": "Built P1 (the core re-derive-or-refuse check) and P4 (wired live in the UI, verified 6/6). Re-check if the driver's canonicalize or the re-materialization surface changes."
     },
     {
       "file": "mech-signing-payload.svg",
@@ -375,12 +375,12 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
+          "sha256": "7323cb9a25aa5c6828ec52f03beec430d0d2662f73bbff5529f551c06d3ee24e",
           "note": "the normative requirement text and its ids"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
+          "sha256": "d80de497f949c005c1a59940ed5e444c322e0452fa0e600deed9350bbf7c313e",
           "note": "which phase builds it, and the accept criteria"
         }
       ],
@@ -411,12 +411,12 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
+          "sha256": "7323cb9a25aa5c6828ec52f03beec430d0d2662f73bbff5529f551c06d3ee24e",
           "note": "F-20 and FS-10, the normative requirement text and its ids"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "00f37aa0a19598e0640d71ce19310d8cf29402e2a529ec09a8aa0e650437db03",
+          "sha256": "b533197031f41ab07cd6ba065a6f2d7015cf98eb8d627388a371c600f41246e3",
           "note": "invariant 10, and invariant 1 whose blind spot the figure draws"
         },
         {
@@ -452,17 +452,17 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
+          "sha256": "7323cb9a25aa5c6828ec52f03beec430d0d2662f73bbff5529f551c06d3ee24e",
           "note": "the normative requirement text and its ids"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
+          "sha256": "d80de497f949c005c1a59940ed5e444c322e0452fa0e600deed9350bbf7c313e",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "00f37aa0a19598e0640d71ce19310d8cf29402e2a529ec09a8aa0e650437db03",
+          "sha256": "b533197031f41ab07cd6ba065a6f2d7015cf98eb8d627388a371c600f41246e3",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -481,7 +481,7 @@
           "note": "The demo folds get_messages and holds no second record — its own CLAUDE.md states this as a rule, and the build follows it"
         }
       ],
-      "recheck": "P0. The event names shown are F-2's v0 list and change with it."
+      "recheck": "Built at P0; made a literal multi-party fold at P3 (two instances converge over encrypted transport). Re-check if the event names (F-2's v0 list) change."
     },
     {
       "file": "mech-membership-epochs.svg",
@@ -490,12 +490,12 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
+          "sha256": "7323cb9a25aa5c6828ec52f03beec430d0d2662f73bbff5529f551c06d3ee24e",
           "note": "the normative requirement text and its ids"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
+          "sha256": "d80de497f949c005c1a59940ed5e444c322e0452fa0e600deed9350bbf7c313e",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -518,7 +518,7 @@
           "note": "Alice, Bob and Carol are an example. The forward-only limit on removal is a property of any such scheme, not a measurement"
         }
       ],
-      "recheck": "P3, and at ADR-010 — whose resolution decides whether these epochs are ours at all."
+      "recheck": "Built at P3 as ECIES-secp256k1 epochs with F-16 verified in test. Re-check when native logos-chat-module is adopted — its MLS epochs replace these behind the same ConversationCrypto seam."
     },
     {
       "file": "mech-driver-seam.svg",
@@ -527,17 +527,17 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
+          "sha256": "7323cb9a25aa5c6828ec52f03beec430d0d2662f73bbff5529f551c06d3ee24e",
           "note": "the normative requirement text and its ids"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
+          "sha256": "d80de497f949c005c1a59940ed5e444c322e0452fa0e600deed9350bbf7c313e",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "00f37aa0a19598e0640d71ce19310d8cf29402e2a529ec09a8aa0e650437db03",
+          "sha256": "b533197031f41ab07cd6ba065a6f2d7015cf98eb8d627388a371c600f41246e3",
           "note": "the invariant this figure draws, in its shortest form"
         }
       ],
@@ -556,16 +556,16 @@
     {
       "file": "mech-two-identities.svg",
       "serves": "BOTH",
-      "shows": "An Ed25519/X25519 chat identity and a secp256k1 transaction identity with no authenticated binding between them, and what F-9 needs that binding for.",
+      "shows": "The identity decision at ADR-010 (amended): a thin ECIES-secp256k1 epoch layer reuses the Safe signing key (one curve, F-14's ideal, no second identity); the Ed25519 chat identity and its binding are deferred to native chat.",
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
+          "sha256": "7323cb9a25aa5c6828ec52f03beec430d0d2662f73bbff5529f551c06d3ee24e",
           "note": "the normative requirement text and its ids"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
+          "sha256": "d80de497f949c005c1a59940ed5e444c322e0452fa0e600deed9350bbf7c313e",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -577,18 +577,22 @@
       "evidence": [
         {
           "grade": "from-source",
-          "note": "F-14 is marked Contested in the requirement document itself; the curve details are read off libchat's account and crypto layers at HEAD 2026-08-04 via ADR-010"
+          "note": "chat identity is Ed25519/X25519, secp256k1 only transitive — read off libchat's account and crypto layers via ADR-010's investigation"
         },
         {
           "grade": "from-source",
-          "note": "F-9 derives role by intersecting chat and account membership, which is what makes the missing binding load-bearing"
+          "note": "F-9 derives role by intersecting chat and account membership, so the binding is load-bearing only when the two identities differ"
+        },
+        {
+          "grade": "from-source",
+          "note": "the decision and its amendment are recorded in ADR-010 and FS-7 (persistent, room-scoped identity)"
         },
         {
           "grade": "measured",
-          "note": "In the demo the two identities are minted independently by different modules and nothing in the code relates them — verified as absent"
+          "note": "the stopgap is built and its F-16 property verified in module/tests/epoch_crypto_test.nim — one secp256k1 key signs and wraps epoch keys"
         }
       ],
-      "recheck": "At ADR-010's resolution, which changes this figure from a problem statement into a decision record. Re-check the libchat curve facts before publishing."
+      "recheck": "When native logos-chat-module ships persistence + member removal — the per-member secp<->Ed25519 binding becomes real work and this figure becomes a migration plan."
     },
     {
       "file": "mech-plugin-blocks.svg",
@@ -597,17 +601,17 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "6c85c4fbcb1fb1439a47a2c21464cb20e4c9c7dfb2151f6fe7c0e576be6b5f2c",
+          "sha256": "7323cb9a25aa5c6828ec52f03beec430d0d2662f73bbff5529f551c06d3ee24e",
           "note": "the normative requirement text and its ids"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "a39936fbb30d4775e03d6db12957c67e45aa0849e030b26b0608cbb51340d895",
+          "sha256": "d80de497f949c005c1a59940ed5e444c322e0452fa0e600deed9350bbf7c313e",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "00f37aa0a19598e0640d71ce19310d8cf29402e2a529ec09a8aa0e650437db03",
+          "sha256": "b533197031f41ab07cd6ba065a6f2d7015cf98eb8d627388a371c600f41246e3",
           "note": "the invariant this figure draws, in its shortest form"
         }
       ],
@@ -667,7 +671,7 @@
       "sources": [
         {
           "path": "demo/README.md",
-          "sha256": "1c3512923ee892e0296488baa02e37ce0e72751757766654ee6faa14834734f4",
+          "sha256": "8f335ac55d69d43e987d0a9a6624b683598386079229599bca53197532628faf",
           "note": "the four-rails table and the floor statement"
         },
         {

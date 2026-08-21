@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 574" width="880" height="574" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>The driver seam: the core never interprets contribution bytes</title>
-  <desc>The core routes opaque blobs and asks a driver what they mean. Rounds, serialization domain, membership model and finality are described by the driver, never hardcoded, and a shared conformance suite is the contract every driver passes. Specified as F-6, F-7 and S-1; not built.</desc>
+  <desc>The core routes opaque blobs and asks a driver what they mean. Rounds, serialization domain, membership model and finality are described by the driver, never hardcoded, and a shared conformance suite is the contract every driver passes. Specified as F-6, F-7 and S-1; built at P1.</desc>
 <!-- provenance
      serves:   BUILD
      shows:    The seven driver methods, the four divergence axes describe returns, three

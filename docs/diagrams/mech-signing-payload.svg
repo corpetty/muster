@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 582" width="880" height="582" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>What a signing payload commits to, and what each field defeats</title>
-  <desc>Every signing payload binds an execution environment, an account or membership commitment, a serialization slot, an expiry, the schema identity of the effect, and a record of where each of its inputs came from — so a contribution collected in one context fails verification in every other, and one built on inputs that cannot be accounted for is never signed at all. Specified as F-5, FS-3 and F-20; not built.</desc>
+  <desc>Every signing payload binds an execution environment, an account or membership commitment, a serialization slot, an expiry, the schema identity of the effect, and a record of where each of its inputs came from — so a contribution collected in one context fails verification in every other, and one built on inputs that cannot be accounted for is never signed at all. Specified as F-5, FS-3 and F-20; built at P1.</desc>
 <!-- provenance
      serves:   POST
      shows:    The fields a signing payload commits to and the specific reuse each one

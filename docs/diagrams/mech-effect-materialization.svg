@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 600" width="880" height="600" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>Effect and materialization: the check that cannot be disabled</title>
-  <desc>Participants review a semantic effect; drivers produce the bytes that get signed. The client independently re-derives those bytes from the displayed effect and refuses to sign on mismatch. Specified as F-4 and FS-6; not built.</desc>
+  <desc>Participants review a semantic effect; drivers produce the bytes that get signed. The client independently re-derives those bytes from the displayed effect and refuses to sign on mismatch. Specified as F-4 and FS-6; built at P1.</desc>
 <!-- provenance
      serves:   BOTH
      shows:    What a participant reviews against what actually gets signed, the client's
@@ -17,7 +17,9 @@
                    GAPS.md §5 states it as an absence
                [illustrative] The example effect and the example hash are made up to show
                    the shape of each side. Neither is a capture
-     recheck:  P4. Until then the status strip is the most important thing on the figure.
+     recheck:  Built P1 (the core re-derive-or-refuse check) and P4 (wired live in the
+               UI, verified 6/6). Re-check if the driver's canonicalize or the re-
+               materialization surface changes.
 -->
 
   <defs>
@@ -87,6 +89,6 @@
   <text x="40" y="530" font-size="10.5" fill="#3F4742">That is blind signing, and it is the norm rather than the failure case: signers routinely approve opaque calldata, or a hash they have</text>
   <text x="40" y="544" font-size="10.5" fill="#3F4742">no independent way to reconstruct. The gap does not need an attacker to be a problem — a driver bug reaches the same place.</text>
 
-  <text x="40" y="570" font-size="10.5" font-weight="600" fill="#A32D1E">In the prototype this strip was theatre. In Muster it is the check —<tspan font-weight="400" fill="#3F4742">&#160;which is precisely the difference this figure is about, and</tspan></text>
-  <text x="40" y="584" font-size="10.5" fill="#3F4742">precisely why the status above says it is not built yet. Scoring Contracting as closed today would be the overclaim.</text>
+  <text x="40" y="570" font-size="10.5" font-weight="600" fill="#1E6B52">In the prototype this strip was theatre. In Muster it is the check —<tspan font-weight="400" fill="#3F4742">&#160;built P1 and wired to the real driver in the P4 UI,</tspan></text>
+  <text x="40" y="584" font-size="10.5" fill="#3F4742">verified end to end: the strip shows the effect against the safeTxHash the module re-derived from it, and refuses on mismatch.</text>
 </svg>
