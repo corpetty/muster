@@ -19,6 +19,7 @@ import ../src/crypto/secp256k1
 import ../src/intents/materialization
 import ../src/intents/signing_payload
 import ../src/intents/lifecycle
+import ../src/transport/lp_ffi   # the lp_* inter-module call binding (protocol ABI)
 
 proc hexToBytes(s: string): seq[byte] =
   var h = s
@@ -78,7 +79,8 @@ proc musterDescribe(): string =
     "safe": SAFE_ADDR,
     "threshold": gDriver.threshold,
     "owners": owners,
-    "environment": "anvil-31337"
+    "environment": "anvil-31337",
+    "protocol": $lp_protocol_version()   # the logos-protocol ABI this module speaks
   })
 
 proc musterPropose(effectJson: string): string =
