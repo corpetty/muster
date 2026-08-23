@@ -31,5 +31,6 @@ public:
     void approve(const QString &signatureHex) override;
     void submit() override;
     void reset() override;
+    void loadBalances() override;
     void onContextReady() override;
 };

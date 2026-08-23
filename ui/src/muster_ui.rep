@@ -22,6 +22,13 @@ class MusterUi
     // A UI-only reset of the intent PROPs; the module keeps its own log.
     SLOT(void reset())
 
+    // Refresh the wallet balances across every configured chain. Result lands on
+    // the balancesJson PROP: a JSON array of {chain, account, asset, display, raw,
+    // grade} — or {..., error} for a read that could not be answered (never a
+    // false zero). `grade` is "attested" (trusts the RPC) or "verified-locally"
+    // (checked against a consensus state root) — the view renders it as a badge.
+    SLOT(void loadBalances())
+
     PROP(QString health="unknown" READONLY)
 
     // The Safe account this walkthrough coordinates against — read from the
@@ -38,4 +45,8 @@ class MusterUi
     PROP(QString intentTxhash="" READONLY)
     PROP(QString intentState="" READONLY)
     PROP(QString lastError="" READONLY)
+
+    // Wallet balances across chains, as JSON (see loadBalances). Each entry carries
+    // its F-10 grade so the view can show what is proven vs merely claimed.
+    PROP(QString balancesJson="[]" READONLY)
 }

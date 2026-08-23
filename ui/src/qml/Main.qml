@@ -48,6 +48,7 @@ Item {
     readonly property string intentTxhash: backend ? backend.intentTxhash : ""
     readonly property string intentState: backend ? backend.intentState : ""
     readonly property string lastError: backend ? backend.lastError : ""
+    readonly property string balancesJson: backend ? backend.balancesJson : "[]"
 
     readonly property bool hasIntent: root.intentId.length > 0
 
@@ -72,6 +73,11 @@ Item {
     readonly property var effect: {
         try { return root.intentEffect ? JSON.parse(root.intentEffect) : null; }
         catch (e) { return null; }
+    }
+    // The wallet balances, parsed. A parse failure yields [] (absent), not fiction.
+    readonly property var balances: {
+        try { return root.balancesJson ? JSON.parse(root.balancesJson) : []; }
+        catch (e) { return []; }
     }
 
     Connections {
@@ -548,6 +554,92 @@ Item {
                     visible: root.hasIntent
                     text: qsTr("New proposal")
                     onClicked: { if (root.backend) root.backend.reset(); }
+                }
+            }
+        }
+
+        // ── wallet: balances across chains, each with its F-10 grade badge ────
+        // The account-level view. A balance is shown with a badge saying whether
+        // it is "verified" (checked against a consensus state root) or "attested"
+        // (what the RPC returned, trusted) — the honesty rule made visible. A read
+        // that could not be answered shows "unavailable", never a false zero.
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: walletCol.implicitHeight + 2 * Theme.spacing.medium
+            radius: Theme.spacing.radiusMedium
+            color: Theme.palette.surface
+            border.width: 1
+            border.color: Theme.palette.borderSubtle
+
+            ColumnLayout {
+                id: walletCol
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: Theme.spacing.medium
+                spacing: Theme.spacing.small
+
+                LogosText {
+                    text: qsTr("WALLET")
+                    color: Theme.palette.textTertiary
+                    font.family: Theme.typography.mono
+                    font.pixelSize: Theme.typography.badgeText
+                    font.weight: Theme.typography.weightMedium
+                }
+
+                Repeater {
+                    model: root.balances
+                    delegate: RowLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+
+                        LogosText {
+                            text: (modelData.asset || "?") + "  " + (modelData.chain || "")
+                            color: Theme.palette.text
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.secondaryText
+                        }
+                        Item { Layout.fillWidth: true }
+                        LogosText {
+                            text: modelData.error ? qsTr("unavailable") : (modelData.display || "")
+                            color: modelData.error ? Theme.palette.warning : Theme.palette.text
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.secondaryText
+                        }
+                        Rectangle {
+                            visible: !modelData.error
+                            implicitWidth: gradeText.implicitWidth + 2 * Theme.spacing.small
+                            implicitHeight: gradeText.implicitHeight + Theme.spacing.tiny
+                            radius: Theme.spacing.radiusMedium
+                            color: modelData.grade === "verified-locally"
+                                   ? Theme.palette.success : Theme.palette.warning
+                            LogosText {
+                                id: gradeText
+                                anchors.centerIn: parent
+                                text: modelData.grade === "verified-locally"
+                                      ? qsTr("verified") : qsTr("attested")
+                                color: Theme.palette.background
+                                font.family: Theme.typography.mono
+                                font.pixelSize: Theme.typography.badgeText
+                                font.weight: Theme.typography.weightMedium
+                            }
+                        }
+                    }
+                }
+
+                LogosText {
+                    visible: root.balances.length === 0
+                    text: qsTr("no balances yet")
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: Theme.typography.badgeText
+                }
+
+                LogosButton {
+                    Layout.fillWidth: true
+                    variant: LogosButton.Variant.Primary
+                    text: qsTr("Refresh balances")
+                    onClicked: root.backend.loadBalances()
                 }
             }
         }

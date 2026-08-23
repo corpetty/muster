@@ -133,10 +133,21 @@ void MusterUiBackend::reset()
     qInfo() << "[muster_ui] reset — view cleared for a new proposal";
 }
 
+void MusterUiBackend::loadBalances()
+{
+    // The wallet's account-level view: balances across every configured chain,
+    // each carrying its F-10 grade (attested vs verified-locally). Straight from
+    // the module — the backend holds no keys, no net, no state.
+    const QString b = modules().muster_module.wallet_balances();
+    qInfo() << "[muster_ui] muster_module.wallet_balances() ->" << b;
+    setBalancesJson(b);
+}
+
 void MusterUiBackend::onContextReady()
 {
-    // Fires once ui-host hands the plugin its wired modules(); read liveness and
-    // the account context immediately so the view opens on real values.
+    // Fires once ui-host hands the plugin its wired modules(); read liveness, the
+    // account context, and the wallet balances so the view opens on real values.
     checkHealth();
     loadAccount();
+    loadBalances();
 }
