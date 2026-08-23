@@ -221,7 +221,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
+          "sha256": "16adec8f108270f6f7de3ba461ff70ada452c1aaf9eed4d8eb8f3f269ed76139",
           "note": "the two rules the C header states, and the never-hand-write-what-the-contract-generates rule"
         },
         {
@@ -343,7 +343,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
+          "sha256": "16adec8f108270f6f7de3ba461ff70ada452c1aaf9eed4d8eb8f3f269ed76139",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -416,7 +416,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
+          "sha256": "16adec8f108270f6f7de3ba461ff70ada452c1aaf9eed4d8eb8f3f269ed76139",
           "note": "invariant 10, and invariant 1 whose blind spot the figure draws"
         },
         {
@@ -462,7 +462,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
+          "sha256": "16adec8f108270f6f7de3ba461ff70ada452c1aaf9eed4d8eb8f3f269ed76139",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -537,7 +537,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
+          "sha256": "16adec8f108270f6f7de3ba461ff70ada452c1aaf9eed4d8eb8f3f269ed76139",
           "note": "the invariant this figure draws, in its shortest form"
         }
       ],
@@ -607,7 +607,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
+          "sha256": "16adec8f108270f6f7de3ba461ff70ada452c1aaf9eed4d8eb8f3f269ed76139",
           "note": "the invariant this figure draws, in its shortest form"
         }
       ],
@@ -994,7 +994,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
+          "sha256": "16adec8f108270f6f7de3ba461ff70ada452c1aaf9eed4d8eb8f3f269ed76139",
           "note": "the src/wallet layout and the reuse posture"
         }
       ],
@@ -1031,7 +1031,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
+          "sha256": "16adec8f108270f6f7de3ba461ff70ada452c1aaf9eed4d8eb8f3f269ed76139",
           "note": "verify.nim reuse of nim-eth and the deferred sidecar"
         }
       ],
@@ -1068,7 +1068,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
+          "sha256": "16adec8f108270f6f7de3ba461ff70ada452c1aaf9eed4d8eb8f3f269ed76139",
           "note": "the reuse note and the src/wallet layout"
         }
       ],
@@ -1087,6 +1087,43 @@
         }
       ],
       "recheck": "Re-check when the nim.packages hook lands upstream, or a pinned rev in module/metadata.json codegen.nim.packages is bumped."
+    },
+    {
+      "file": "mech-driver-contract.svg",
+      "serves": "BOTH",
+      "shows": "The Driver contract (describe/canonicalize/verifyContribution), the driver-generic core it plugs into, the conformance suite that grades any driver (stub + Safe pass), and the recipe for adding a new driver without touching the core.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "5a6d5810e12a4a3a88cfa2de6a6c858deb09474c2105b15743d1dfeaa0326913",
+          "note": "F-6/F-7 driver-divergence axes; invariant 6 and invariant 1"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "efcad3d5889c19e276c1a896872134bba4d96de011278959a93c81aa7d856780",
+          "note": "the conformance suite, and the drivers the contract invites (FROST, LEZ)"
+        },
+        {
+          "path": "CLAUDE.md",
+          "sha256": "16adec8f108270f6f7de3ba461ff70ada452c1aaf9eed4d8eb8f3f269ed76139",
+          "note": "the working agreement and the Driver seam methods"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "invariant 6 (driver-described rounds/domain/membership/finality; the core never reads contribution bytes) and invariant 1 (re-derive-or-refuse)"
+        },
+        {
+          "grade": "measured",
+          "note": "src/drivers/conformance.nim grades a driver on those properties; tests/conformance_test passes it against stub and Safe (6/6 each)"
+        },
+        {
+          "grade": "from-source",
+          "note": "F-6/F-7 name the axes; the plan lists FROST threshold + a describe-only LEZ driver at P6"
+        }
+      ],
+      "recheck": "Re-check when a third driver is added or a new conformance check is added to src/drivers/conformance.nim."
     }
   ]
 }
