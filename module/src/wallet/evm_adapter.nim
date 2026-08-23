@@ -8,12 +8,13 @@
 ## account derivation — are exported and unit-tested without a node; the RPC
 ## methods are thin wrappers over them.
 
-import std/[httpclient, json, tables, strutils]
+import std/[json, strutils]
 import stint
 import ./types
 import ./adapter
 import ./verify
 import ./evm_sign
+import ./evm_rpc
 import ../crypto/secp256k1
 import ../crypto/keystore
 
@@ -55,30 +56,6 @@ proc newEvmAdapter*(chainId, rpcUrl: string, tokens: seq[AssetId] = @[],
   EvmAdapter(chainId: chainId, chainNum: uint64(parseBiggestUInt(digits)),
              rpcUrl: rpcUrl, native: native, tokens: tokens, fromUnlocked: fromUnlocked)
 
-proc bytesHexLower(b: seq[byte]): string =
-  const d = "0123456789abcdef"
-  for x in b: (result.add d[int(x shr 4)]; result.add d[int(x and 0xF)])
-
-proc rpc(a: EvmAdapter, meth: string, params: JsonNode): JsonNode =
-  ## One JSON-RPC call to the user's endpoint. Any transport error, or a JSON-RPC
-  ## `error` object, becomes a raise — a failed call never returns a value a caller
-  ## could read as success.
-  let client = newHttpClient()
-  defer: client.close()
-  let body = %*{"jsonrpc": "2.0", "id": 1, "method": meth, "params": params}
-  var resp: string
-  try:
-    resp = client.request(a.rpcUrl, httpMethod = HttpPost, body = $body,
-                          headers = newHttpHeaders({"Content-Type": "application/json"})).body
-  except CatchableError as e:
-    raise newException(WalletError, "RPC transport error: " & e.msg)
-  let j = parseJson(resp)
-  if j.hasKey("error") and j["error"].kind != JNull:
-    raise newException(WalletError, "RPC error: " & $j["error"])
-  if not j.hasKey("result") or j["result"].kind == JNull:
-    raise newException(WalletError, "RPC returned no result for " & meth)
-  j["result"]
-
 proc toAddress(id: string): Address =
   var h = id
   if h.len >= 2 and h[0] == '0' and (h[1] == 'x' or h[1] == 'X'): h = h[2 .. ^1]
@@ -103,20 +80,21 @@ method accounts*(a: EvmAdapter, ks: Keystore): seq[Account] =
 method assets*(a: EvmAdapter): seq[AssetId] = a.native & a.tokens
 
 method balance*(a: EvmAdapter, account: Account, asset: AssetId): Amount =
-  let owner = toAddress(account.id)
-  let hexQty =
-    if asset.kind == akNative:
-      a.rpc("eth_getBalance", %*[addrHex(owner), "latest"]).getStr()
-    else:
-      a.rpc("eth_call", %*[{"to": asset.reference, "data": erc20BalanceOfData(owner)}, "latest"]).getStr()
-  if hexQty.len == 0: raise newException(WalletError, "empty balance result")
-  amount(asset, hexToDec(hexQty))
+  if asset.kind == akNative:
+    amount(asset, rpcBalance(a.rpcUrl, account.id, "latest"))   # typed UInt256 → decimal
+  else:
+    let ret = rpcCall(a.rpcUrl, asset.reference,
+                      verify.hexBytes(erc20BalanceOfData(toAddress(account.id))), "latest")
+    var word: array[32, byte]
+    if ret.len >= 32:
+      for i in 0 ..< 32: word[i] = ret[ret.len - 32 + i]
+    amount(asset, $UInt256.fromBytesBE(word))
 
 method estimateFee*(a: EvmAdapter, frm: Account, to: string, amt: Amount): FeeEstimate =
-  let gasPrice = hexToDec(a.rpc("eth_gasPrice", %*[]).getStr())
-  let gas = if amt.asset.kind == akNative: 21000 else: 65000
-  FeeEstimate(fee: amount(a.native, mulSmall(gasPrice, gas)),
-              note: "gas " & $gas & " @ " & formatUnits(gasPrice, 9) & " gwei")
+  let gasPrice = rpcGasPrice(a.rpcUrl)
+  let gas = if amt.asset.kind == akNative: 21_000'u64 else: 65_000'u64
+  FeeEstimate(fee: amount(a.native, $(gasPrice * gas)),
+              note: "gas " & $gas & " @ " & formatUnits($gasPrice, 9) & " gwei")
 
 method prepareTransfer*(a: EvmAdapter, frm: Account, to: string, amt: Amount): PreparedTx =
   let payload =
@@ -127,28 +105,31 @@ method prepareTransfer*(a: EvmAdapter, frm: Account, to: string, amt: Amount): P
   PreparedTx(chain: a.chainId, frm: frm, to: to, amount: amt,
              fee: a.estimateFee(frm, to, amt), payload: payload)
 
+proc parsePayload(p: JsonNode): tuple[toHex: string, value: UInt256, data: seq[byte]] =
+  let value = if p.hasKey("value"): UInt256.fromHex(p["value"].getStr()) else: 0.u256
+  let data = if p.hasKey("data"): verify.hexBytes(p["data"].getStr()) else: @[]
+  (p{"to"}.getStr(), value, data)
+
 method submit*(a: EvmAdapter, tx: PreparedTx, ks: Keystore): TxRef =
   ## Anvil unlocks `from`, so eth_sendTransaction needs no client-side signing. For
   ## any other node, sign the EIP-155 transaction with nim-eth + the keystore seam
   ## (the key never leaves the keystore) and broadcast the raw bytes.
-  let p = parseJson(tx.payload)
+  let (toHex, value, data) = parsePayload(parseJson(tx.payload))
   if a.fromUnlocked:
-    var call = %*{"from": tx.frm.id, "gas": "0x100000"}
-    for k, v in p: call[k] = v
-    return TxRef(chain: a.chainId, id: a.rpc("eth_sendTransaction", %*[call]).getStr())
+    let gas = if data.len == 0: 100_000'u64 else: 120_000'u64
+    return TxRef(chain: a.chainId,
+                 id: rpcSendTransaction(a.rpcUrl, tx.frm.id, toHex, value, data, gas))
 
   # Real client-side signing (RLP + secp256k1 via ks.sign), then eth_sendRawTransaction.
-  let value = if p.hasKey("value"): UInt256.fromHex(p["value"].getStr()) else: 0.u256
-  let data = if p.hasKey("data"): verify.hexBytes(p["data"].getStr()) else: @[]
-  let nonce = uint64(fromHex[uint64](a.rpc("eth_getTransactionCount", %*[tx.frm.id, "pending"]).getStr()))
-  let gasPrice = uint64(fromHex[uint64](a.rpc("eth_gasPrice", %*[]).getStr()))
+  let nonce = rpcNonce(a.rpcUrl, tx.frm.id)
+  let gasPrice = rpcGasPrice(a.rpcUrl)
   let gasLimit = if data.len == 0: 21_000'u64 else: 65_000'u64
   var toArr: array[20, byte]
-  let tb = verify.hexBytes(p{"to"}.getStr())
+  let tb = verify.hexBytes(toHex)
   for i in 0 ..< min(20, tb.len): toArr[i] = tb[i]
   let signer = proc(h: array[32, byte]): Signature65 = ks.sign(h)
   let raw = signLegacyTransfer(signer, a.chainNum, nonce, gasPrice, gasLimit, toArr, value, data)
-  TxRef(chain: a.chainId, id: a.rpc("eth_sendRawTransaction", %*["0x" & bytesHexLower(raw)]).getStr())
+  TxRef(chain: a.chainId, id: rpcSendRaw(a.rpcUrl, raw))
 
 proc verifiedBalance*(a: EvmAdapter, account: Account, stateRootHex: string): Amount =
   ## A `verified-locally` balance (F-10): ask the untrusted provider for eth_getProof,
@@ -157,22 +138,15 @@ proc verifiedBalance*(a: EvmAdapter, account: Account, stateRootHex: string): Am
   ## proof does not verify, this raises — the provider's number never passes as real.
   ## Unlike `balance` (which trusts the RPC), this trusts only the state root.
   let owner = toAddress(account.id)
-  let r = a.rpc("eth_getProof", %*[addrHex(owner), newJArray(), "latest"])
-  var proof: seq[seq[byte]]
-  for n in r{"accountProof"}: proof.add verify.hexBytes(n.getStr())
+  let (nonce, balDec, storageHex, codeHex, proof) = rpcGetProof(a.rpcUrl, account.id, "latest")
   var root: array[32, byte]
   let rb = verify.hexBytes(stateRootHex)
   for i in 0 ..< min(32, rb.len): root[31 - i] = rb[rb.len - 1 - i]
-  let v = verifyAccountFields(proof, root, owner,
-    nonce = uint64(fromHex[uint64](r{"nonce"}.getStr("0x0"))),
-    balanceHex = r{"balance"}.getStr("0x0"),
-    storageHashHex = r{"storageHash"}.getStr(),
-    codeHashHex = r{"codeHash"}.getStr())
+  let v = verifyAccountFields(proof, root, owner, nonce, balDec, storageHex, codeHex)
   amount(a.native, v.balanceRaw)
 
 method finality*(a: EvmAdapter, txRef: TxRef): Finality =
-  let r = a.rpc("eth_getTransactionReceipt", %*[txRef.id])
-  if r.kind == JNull: return Finality(status: fsPending, detail: "no receipt yet")
-  let status = r{"status"}.getStr("0x0")
-  if status == "0x1": Finality(status: fsFinal, detail: "receipt status 1")
-  else: Finality(status: fsFailed, detail: "receipt status 0")
+  case rpcReceiptStatus(a.rpcUrl, txRef.id)
+  of 1: Finality(status: fsFinal, detail: "receipt status 1")
+  of 0: Finality(status: fsFailed, detail: "receipt status 0")
+  else: Finality(status: fsPending, detail: "no receipt yet")

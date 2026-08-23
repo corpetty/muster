@@ -26,7 +26,16 @@
         {"owner": "arnetheduck", "repo": "nim-results", "rev": "b319652e98a198fa881ca70a76754c2dd6f09804", "hash": "sha256-chvmxuQw7gxRxXelxxBCXHQGk1LXmg63+VysnJhlxmE="},
         {"owner": "status-im", "repo": "nim-intops", "rev": "d30bd41f7492a21e4e0baeafac493978a010568f", "hash": "sha256-p9H/51ZisgUyeSvFL/Xgk+ZOKwQcZYvBA5+06o1mMN8=", "subdir": "src"},
         {"owner": "status-im", "repo": "nim-eth", "rev": "3cda9027f83ac03643dd15a383d67139eec9df6f", "hash": "sha256-4Sdp06F/740cR/yss6CHjRoocVa6zId+iUOx8DX9oZY="},
-        {"owner": "cheatfate", "repo": "nimcrypto", "rev": "48f4079cf84640e85970298ca7fdf963c6966283", "hash": "sha256-ez4LcwlDTDB/wYCzTxa25oDdBDzQs+ymW9gFWvNij6o="}
+        {"owner": "cheatfate", "repo": "nimcrypto", "rev": "48f4079cf84640e85970298ca7fdf963c6966283", "hash": "sha256-ez4LcwlDTDB/wYCzTxa25oDdBDzQs+ymW9gFWvNij6o="},
+        {"owner": "status-im", "repo": "nim-web3", "rev": "3ac3d92be88230130f1e532261c0e117e66e3436", "hash": "sha256-Xksz8+e26kiJjDKbH4+1uBBStydNi3IqyDK1js2Mxi8="},
+        {"owner": "status-im", "repo": "nim-chronos", "rev": "44742adbf1547c2b52bee71d42c92ef2a8e0781f", "hash": "sha256-uAt3RsWUtdQo8+DtHh1Q6GHoM8pjXm4gcHubom8d3s4="},
+        {"owner": "status-im", "repo": "nim-chronicles", "rev": "bce15af84b1402ccd6f647cd0de897d4a3d2d9c5", "hash": "sha256-Czu3W7r0IdPTV0BICKfa3zH4AUNxlnvScNelvbdnIQk="},
+        {"owner": "status-im", "repo": "nim-bearssl", "rev": "81651473c909f9643087f8ee2f8e9d7be2b2df3e", "hash": "sha256-Qv9pJUv6F/SewTQ04N7f37KsybWCANeEUBNKaAEn2Oc=", "submodules": true},
+        {"owner": "status-im", "repo": "nim-faststreams", "rev": "1df2c2ffb70de10599d17ce3a95421f6febd69cb", "hash": "sha256-1ojCG6UXZ69HK4673e0ACYWbGdeiysSeAcA2HRkNu18="},
+        {"owner": "status-im", "repo": "nim-json-rpc", "rev": "07a7e2fe5df53f9fccc8f91c81892112a289de0b", "hash": "sha256-dy0wAxXEtR85hOuQvBvmz9knBmWaHm8YrAqKlNvsIqc="},
+        {"owner": "status-im", "repo": "nim-serialization", "rev": "3a53ce513e49ff5c2b805936a1b4a233ea5a4fa2", "hash": "sha256-d+nTyOjMcqpAIE9XkNoTi8zJJKrumACdt5U2Ql3iHhA="},
+        {"owner": "status-im", "repo": "nim-json-serialization", "rev": "962ed76ed786e89d8d3fd8882781097fde12f958", "hash": "sha256-NMaUprTYg2MNPqvx2h+h4nffyMbm2GLzfrwLDy5fokY="},
+        {"owner": "status-im", "repo": "nim-http-utils", "rev": "1e11ab929058e43c825d92006660c84caea9b1c0", "hash": "sha256-/uup0Pen1ncXeD0bJFO6IQu1iR4skdvqQrITGCq/ANY="}
       ]
     }
   },

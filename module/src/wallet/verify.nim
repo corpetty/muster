@@ -63,10 +63,10 @@ proc hash32Of(s: string): Hash32 = Hash32(Bytes32.copyFrom(hexBytes(s)))
 
 proc verifyAccountFields*(proof: seq[seq[byte]], stateRoot: array[32, byte],
                           address: array[20, byte], nonce: uint64,
-                          balanceHex, storageHashHex, codeHashHex: string): VerifiedAccount =
-  ## Field-based entry point (from an eth_getProof JSON result) — keeps the eth
-  ## Account type inside this module so callers (the EVM adapter) never collide it
-  ## with the wallet's own Account.
+                          balanceDec, storageHashHex, codeHashHex: string): VerifiedAccount =
+  ## Field-based entry point (from an eth_getProof result) — keeps the eth Account
+  ## type inside this module so callers (the EVM adapter) never collide it with the
+  ## wallet's own Account. Balance is a decimal string (web3 returns a typed UInt256).
   verifyAccount(proof, stateRoot, address, accounts.Account(
-    nonce: nonce, balance: UInt256.fromHex(balanceHex),
+    nonce: nonce, balance: u256(balanceDec),
     storageRoot: hash32Of(storageHashHex), codeHash: hash32Of(codeHashHex)))

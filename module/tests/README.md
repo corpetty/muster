@@ -37,6 +37,22 @@ nim-eth + the secp closure (`$SECP` below):
 nim r -d:release --threads:on $SECP $STINT --path:$D/nim-eth tests/wallet_sign_test.nim
 ```
 
+`wallet_rpc_test` (the nim-web3 RPC seam) and anything importing `evm_adapter`
+(e.g. `wallet_evm_test`) need the full web3 closure — clone with bearssl's
+submodule, and note websock is deliberately NOT needed (we import `web3/eth_api` +
+`json_rpc/clients/httpclient`, not top-level `web3`):
+
+```bash
+for r in nim-web3 nim-chronos nim-chronicles nim-faststreams nim-json-rpc \
+         nim-serialization nim-json-serialization nim-http-utils; do
+  git -C $D clone --depth 1 https://github.com/status-im/$r; done
+git -C $D clone --depth 1 --recurse-submodules https://github.com/status-im/nim-bearssl
+W3="--path:$D/nim-web3 --path:$D/nim-chronos --path:$D/nim-chronicles --path:$D/nim-bearssl \
+    --path:$D/nim-faststreams --path:$D/nim-json-rpc --path:$D/nim-serialization \
+    --path:$D/nim-json-serialization --path:$D/nim-http-utils"
+nim r -d:release --threads:on $W3 $SECP $STINT --path:$D/nim-eth tests/wallet_rpc_test.nim
+```
+
 **Exception — anything importing `src/crypto/secp256k1.nim` or `src/drivers/safe.nim`
 uses `nim-secp256k1` on the path** (`secp256k1_test`, `safe_test`, `safe_collect_test`,
 `binding_test`, and the crypto/coordination tests). We no longer link a system
