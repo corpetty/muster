@@ -18,7 +18,13 @@
       "crate": "nim-lib",
       "main": "muster_module.nim",
       "staticlib": "muster_module",
-      "link": ["secp256k1", "sodium"]
+      "link": ["secp256k1", "sodium"],
+      "packages": [
+        {"owner": "status-im", "repo": "nim-stint", "rev": "91277c984c66196255947b3c58657de7538f62af", "hash": "sha256-aOkQbuqzVIGzY95UjGdig2BL6g8v2ppkXq6EHV1nQhY="},
+        {"owner": "status-im", "repo": "nim-stew", "rev": "232673b2c2ec5ef05962ad8082878869b3b6d084", "hash": "sha256-Yx7RnPCjGsH0j5Q5PzVVZA39NksxXI75aCp/dZTQO6c="},
+        {"owner": "arnetheduck", "repo": "nim-results", "rev": "b319652e98a198fa881ca70a76754c2dd6f09804", "hash": "sha256-chvmxuQw7gxRxXelxxBCXHQGk1LXmg63+VysnJhlxmE="},
+        {"owner": "status-im", "repo": "nim-intops", "rev": "d30bd41f7492a21e4e0baeafac493978a010568f", "hash": "sha256-p9H/51ZisgUyeSvFL/Xgk+ZOKwQcZYvBA5+06o1mMN8=", "subdir": "src"}
+      ]
     }
   },
 

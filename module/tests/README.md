@@ -4,6 +4,22 @@ Most probes/tests run with bare `nim r -d:release tests/<name>.nim` (pure Nim,
 no external deps) — this is how the exophial spec oracles under `tests/probes/`
 are graded.
 
+**Exception — the wallet tests need the stint closure on the Nim path** (the same
+packages `metadata.json` `codegen.nim.packages` pins; the module build fetches
+them, but a local `nim r` needs `--path`). `wallet_types_test` needs only these;
+`wallet_mock_test`/`wallet_evm_test` also need libsecp256k1 + libsodium (keystore
+identity). Clone the four once, then:
+
+```bash
+D=/tmp/nimpkgs; mkdir -p $D
+git -C $D clone --depth 1 https://github.com/status-im/nim-stint
+git -C $D clone --depth 1 https://github.com/status-im/nim-stew
+git -C $D clone --depth 1 https://github.com/arnetheduck/nim-results
+git -C $D clone --depth 1 https://github.com/status-im/nim-intops
+STINT="--path:$D/nim-stint --path:$D/nim-stew --path:$D/nim-results --path:$D/nim-intops/src"
+nim r -d:release $STINT tests/wallet_types_test.nim
+```
+
 **Exception — the P2 Safe crypto tests need libsecp256k1 linked:**
 `secp256k1_test.nim`, `safe_test.nim`, `safe_collect_test.nim` (and anything
 importing `src/crypto/secp256k1.nim` or `src/drivers/safe.nim`). Build the lib

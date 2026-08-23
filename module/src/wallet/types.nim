@@ -13,9 +13,13 @@
 ## for a zero balance or a successful send — the one thing a payment surface must
 ## never get wrong. Adapters translate their quirks into a raise.
 ##
-## Amounts are arbitrary-precision non-negative integers in base units, held as a
-## decimal string: wei (1e18) and 18-decimal token balances overflow uint64, so a
-## bare integer type would silently truncate real balances.
+## Amounts are non-negative integers in base units, held as a canonical decimal
+## string on the wire (JSON-friendly) with the arithmetic done in `stint`'s
+## `UInt256` — the Status/Nimbus bignum, which is exactly the EVM 256-bit word, so
+## real wei and token balances neither overflow uint64 nor need a hand-rolled
+## bignum. We reuse it rather than reimplement it (org libraries first).
+
+import stint
 
 type
   WalletError* = object of CatchableError
@@ -86,57 +90,26 @@ type
 # units for display. Non-negative only — balances and amounts never go below zero,
 # and a subtraction that would (insufficient funds) is an error, not a wrap.
 
-proc normDec*(s: string): string =
-  ## Canonical form: digits only, no leading zeros (except "0"). Raises on junk.
+proc parseU(s: string): UInt256 =
   if s.len == 0: raise newException(WalletError, "empty amount")
-  for c in s:
-    if c < '0' or c > '9': raise newException(WalletError, "non-numeric amount: " & s)
-  var i = 0
-  while i < s.len - 1 and s[i] == '0': inc i
-  s[i .. ^1]
+  try: u256(s)                                   # decimal parse (stint)
+  except CatchableError: raise newException(WalletError, "non-numeric amount: " & s)
+
+proc normDec*(s: string): string =
+  ## Canonical decimal form (validates + strips leading zeros) via stint.
+  parseU(s).toString
 
 proc cmpDec*(a, b: string): int =
-  ## -1 / 0 / 1 on two canonical decimal strings.
-  let x = normDec(a)
-  let y = normDec(b)
-  if x.len != y.len: return (if x.len < y.len: -1 else: 1)
-  if x < y: -1 elif x > y: 1 else: 0
+  let x = parseU(a); let y = parseU(b)
+  if x < y: -1 elif x == y: 0 else: 1
 
-proc addDec*(a, b: string): string =
-  var x = normDec(a)
-  var y = normDec(b)
-  var i = x.high
-  var j = y.high
-  var carry = 0
-  var acc = ""
-  while i >= 0 or j >= 0 or carry > 0:
-    var s = carry
-    if i >= 0: s += ord(x[i]) - ord('0'); dec i
-    if j >= 0: s += ord(y[j]) - ord('0'); dec j
-    acc.add char(ord('0') + (s mod 10))
-    carry = s div 10
-  var res = ""
-  for k in countdown(acc.high, 0): res.add acc[k]
-  normDec(res)
+proc addDec*(a, b: string): string = (parseU(a) + parseU(b)).toString
 
 proc subDec*(a, b: string): string =
   ## a - b; raises if b > a (there is no negative amount).
-  if cmpDec(a, b) < 0: raise newException(WalletError, "amount underflow: " & b & " > " & a)
-  var x = normDec(a)
-  var y = normDec(b)
-  var i = x.high
-  var j = y.high
-  var borrow = 0
-  var acc = ""
-  while i >= 0:
-    var d = (ord(x[i]) - ord('0')) - borrow
-    if j >= 0: d -= (ord(y[j]) - ord('0')); dec j
-    if d < 0: d += 10; borrow = 1 else: borrow = 0
-    acc.add char(ord('0') + d)
-    dec i
-  var res = ""
-  for k in countdown(acc.high, 0): res.add acc[k]
-  normDec(res)
+  let x = parseU(a); let y = parseU(b)
+  if x < y: raise newException(WalletError, "amount underflow: " & b & " > " & a)
+  (x - y).toString
 
 proc formatUnits*(raw: string, decimals: int): string =
   ## Base units → a human decimal string (e.g. 1500000000000000000, 18 -> "1.5").
@@ -151,60 +124,27 @@ proc formatUnits*(raw: string, decimals: int): string =
   if frac.len == 0: whole else: whole & "." & frac
 
 proc mulSmall*(a: string, m: int): string =
-  ## Multiply a canonical decimal by a small factor (0..~36) — a building block for
-  ## hex<->decimal conversion.
-  let x = normDec(a)
-  var carry = 0
-  var acc = ""
-  for i in countdown(x.high, 0):
-    let p = (ord(x[i]) - ord('0')) * m + carry
-    acc.add char(ord('0') + p mod 10)
-    carry = p div 10
-  while carry > 0:
-    acc.add char(ord('0') + carry mod 10); carry = carry div 10
-  var res = ""
-  for k in countdown(acc.high, 0): res.add acc[k]
-  normDec(res)
-
-proc divmodSmall*(a: string, d: int): (string, int) =
-  ## Divide a canonical decimal by a small divisor; returns (quotient, remainder).
-  let x = normDec(a)
-  var rem = 0
-  var q = ""
-  for c in x:
-    let cur = rem * 10 + (ord(c) - ord('0'))
-    q.add char(ord('0') + cur div d)
-    rem = cur mod d
-  (normDec(q), rem)
+  ## Multiply a canonical decimal by a small non-negative factor (e.g. gas × price).
+  (parseU(a) * u256(m)).toString
 
 proc hexToDec*(hex: string): string =
   ## A hex quantity (with or without 0x) to a canonical decimal — how an EVM
   ## eth_getBalance / balanceOf result becomes an Amount without truncation.
   var h = hex
   if h.len >= 2 and h[0] == '0' and (h[1] == 'x' or h[1] == 'X'): h = h[2 .. ^1]
-  result = "0"
-  for c in h:
-    let v =
-      if c >= '0' and c <= '9': ord(c) - ord('0')
-      elif c >= 'a' and c <= 'f': 10 + ord(c) - ord('a')
-      elif c >= 'A' and c <= 'F': 10 + ord(c) - ord('A')
-      else: raise newException(WalletError, "bad hex quantity: " & hex)
-    result = addDec(mulSmall(result, 16), $v)
+  if h.len == 0: return "0"
+  try: fromHex(UInt256, h).toString
+  except CatchableError: raise newException(WalletError, "bad hex quantity: " & hex)
 
 proc decToHex*(dec: string): string =
   ## A canonical decimal to a minimal lowercase hex string (no 0x) — how an Amount
   ## becomes the 32-byte word in EVM calldata (padded by the caller).
-  var n = normDec(dec)
-  if n == "0": return "0"
-  const hexd = "0123456789abcdef"
-  var acc = ""
-  while n != "0":
-    let (q, r) = divmodSmall(n, 16)
-    acc.add hexd[r]
-    n = q
-  var res = ""
-  for k in countdown(acc.high, 0): res.add acc[k]
-  res
+  let x = parseU(dec)
+  if x == u256(0): return "0"
+  var s = x.toHex                      # stint hex; strip any leading zeros to minimal
+  var i = 0
+  while i < s.len - 1 and s[i] == '0': inc i
+  s[i .. ^1]
 
 # ── constructors / helpers ─────────────────────────────────────────────────────
 
