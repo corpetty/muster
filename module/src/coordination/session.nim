@@ -15,8 +15,9 @@
 import std/[json, sequtils]
 import ../transport/transport
 import ../crypto/conversation
+import ../crypto/binding
 import ../log/log
-export log
+export log, binding
 
 type
   CoordinationSession* = ref object
@@ -24,7 +25,7 @@ type
     crypto: ConversationCrypto
     topic: string
     log*: Log
-    pending: seq[Member]        ## join-requests seen but not yet admitted (no authority)
+    pending: seq[LinkStatement]  ## join-requests seen but not yet admitted (each carries a binding; no authority)
 
 # Every frame on the topic carries a 1-byte kind, so the membership handshake
 # shares the topic with data without either misreading the other.
@@ -63,9 +64,10 @@ proc ingestEnvelope(s: CoordinationSession, env: IncomingMessage) =
     of FrameData:
       s.log.ingest(decodeEvent(s.crypto.open(body)))
     of FrameJoinRequest:
-      if body.len == 64:                       # a member identity requesting admission
-        let m = encIdentityFromBytes(body)
-        if m notin s.pending and m notin s.crypto.members(): s.pending.add m
+      let st = decodeLink(body)                # a binding requesting admission
+      let m = st.enc
+      if m notin s.crypto.members() and not s.pending.anyIt(it.enc == m):
+        s.pending.add st
     of FrameControl:
       discard s.crypto.ingestControl(body)     # a grant; ours to open or not
     else: discard
@@ -87,12 +89,18 @@ proc publish*(s: CoordinationSession, e: Event) =
 
 # ── membership handshake ───────────────────────────────────────────────────────
 
-proc requestJoin*(s: CoordinationSession) =
-  ## Announce our member key on the topic, asking to be admitted. This carries no
-  ## authority — a member still has to decide to admit us; it is discovery, not entry.
-  discard s.transport.publish(s.topic, @[FrameJoinRequest] & s.crypto.identity().toBytes())
+proc requestJoin*(s: CoordinationSession, binding: LinkStatement) =
+  ## Announce our binding on the topic, asking to be admitted. The binding lets a
+  ## member VERIFY we are who we claim (our encryption identity is signed by our
+  ## secp key) before admitting — but it carries no authority on its own: a member
+  ## still has to decide. Discovery, not entry.
+  discard s.transport.publish(s.topic, @[FrameJoinRequest] & encodeLink(binding))
 
-proc pendingJoins*(s: CoordinationSession): seq[Member] = s.pending
+proc pendingBindings*(s: CoordinationSession): seq[LinkStatement] = s.pending
+  ## Bindings awaiting an admission decision — the caller verifies each against its
+  ## owner set (F-9, bindingBinds) before deciding, then calls admit.
+
+proc pendingJoins*(s: CoordinationSession): seq[Member] = s.pending.mapIt(it.enc)
 
 proc admit*(s: CoordinationSession, joiner: Member) =
   ## Admit a joiner (an existing member's decision): re-key forward and publish the
@@ -100,7 +108,7 @@ proc admit*(s: CoordinationSession, joiner: Member) =
   ## The joiner receives only this epoch's key, never earlier ones (F-16).
   for frame in s.crypto.admit(joiner):
     discard s.transport.publish(s.topic, @[FrameControl] & frame)
-  s.pending = s.pending.filterIt(it != joiner)
+  s.pending = s.pending.filterIt(it.enc != joiner)
 
 proc catchUp*(s: CoordinationSession) =
   ## Offline catchup (F-15): pull the store's retained envelopes for the topic and

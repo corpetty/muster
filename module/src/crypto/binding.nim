@@ -59,6 +59,38 @@ proc bindingSigner*(st: LinkStatement, now: uint64): Address =
     raise newException(BindingError, "binding expired")
   ecrecover(linkDigest(st.enc, st.ctx), st.sig)
 
+proc encodeLink*(st: LinkStatement): seq[byte] =
+  ## Wire form for carrying a binding on the topic (in a join-request):
+  ## enc(64) ++ accountLen(2 BE) ++ account ++ slotLen(2 BE) ++ slot ++
+  ## expiry(8 BE) ++ sig(65).
+  proc str(s: string): seq[byte] =
+    result = @[byte((s.len shr 8) and 0xFF), byte(s.len and 0xFF)]
+    for c in s: result.add byte(c)
+  result = st.enc.toBytes()
+  result.add str(st.ctx.account)
+  result.add str(st.ctx.slot)
+  let e = st.ctx.expiry
+  for i in countdown(7, 0): result.add byte((e shr (8 * i)) and 0xFF)
+  result.add st.sig
+
+proc decodeLink*(b: seq[byte]): LinkStatement =
+  ## Inverse of encodeLink; raises on a malformed frame.
+  var off = 0
+  proc take(n: int): seq[byte] =
+    if off + n > b.len: raise newException(BindingError, "link frame truncated")
+    result = b[off ..< off + n]; off += n
+  proc str(): string =
+    let n = (int(b[off]) shl 8) or int(b[off + 1]); off += 2
+    let raw = take(n)
+    for x in raw: result.add char(x)
+  result.enc = encIdentityFromBytes(take(64))
+  result.ctx.account = str()
+  result.ctx.slot = str()
+  let e = take(8)
+  for x in e: result.ctx.expiry = (result.ctx.expiry shl 8) or uint64(x)
+  let s = take(65)
+  for i in 0 ..< 65: result.sig[i] = s[i]
+
 proc bindingBinds*(st: LinkStatement, owners: openArray[Address], now: uint64): bool =
   ## True iff the binding is unexpired and its secp256k1 signer is a configured
   ## owner — i.e. this encryption identity provably belongs to a Safe owner (F-9).

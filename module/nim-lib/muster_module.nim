@@ -10,7 +10,7 @@
 
 include muster_gen
 
-import std/[json, tables, strutils, os, algorithm]
+import std/[json, tables, strutils, os, algorithm, times]
 import ../src/dcbor/dcbor
 import ../src/drivers/driver
 import ../src/drivers/safe
@@ -263,22 +263,41 @@ proc musterCoordinateIntents(): string =
   for id, it in intents: arr.add %*{"id": id, "state": $it.state}
   $arr
 
+proc roomContext(): LinkContext =
+  ## The context our binding is scoped to — this Safe, valid for a day. Wall-clock
+  ## expiry is fine here: a binding is an admission-time credential, not a signing-
+  ## path artifact (so it never touches the deterministic log).
+  LinkContext(account: SAFE_ADDR, slot: "0", expiry: uint64(epochTime()) + 86_400)
+
 proc musterCoordinateRequestJoin(): string =
   if gSession == nil: return "not-joined"
-  gSession.requestJoin()
+  gSession.requestJoin(moduleKeystore().bindingFor(roomContext()))
   "ok"
 
 proc musterCoordinatePending(): string =
+  ## Each pending requester with whether its binding proves Safe ownership (F-9),
+  ## so a host admits knowingly rather than blindly.
   if gSession == nil: return "[]"
   gSession.poll()
+  let nowSec = uint64(epochTime())
   var arr = newJArray()
-  for m in gSession.pendingJoins(): arr.add %toHex(m.toBytes())
+  for st in gSession.pendingBindings():
+    arr.add %*{"identity": toHex(st.enc.toBytes()),
+               "bindsOwner": bindingBinds(st, gDriver.owners, nowSec)}
   $arr
 
 proc musterCoordinateAdmit(identityHex: string): string =
+  ## Admit a requester — but only one whose binding proves it is a Safe owner (F-9,
+  ## the admission policy over the "a member decides" model). A request without a
+  ## valid binding is "unverified", never silently admitted.
   if gSession == nil: return "not-joined"
   let b = hexToBytes(identityHex)
   if b.len != 64: return "bad-key"          # a member identity: ed25519(32) ++ x25519(32)
   let m = encIdentityFromBytes(b)
+  let nowSec = uint64(epochTime())
+  var verified = false
+  for st in gSession.pendingBindings():
+    if st.enc == m and bindingBinds(st, gDriver.owners, nowSec): verified = true
+  if not verified: return "unverified"      # no binding proving Safe ownership (F-9)
   gSession.admit(m)
   "ok"
