@@ -297,12 +297,14 @@ proc musterCoordinatePending(): string =
 # non-EVM chain is a registration, not a code change (F-Design: chain-agnostic).
 var gWallet: Wallet = nil
 var gMock: MockChain = nil
+var gEvm: EvmAdapter = nil          ## typed handle for the EVM-specific verified path
 
 proc moduleWallet(): Wallet =
   if gWallet == nil:
     let ks = moduleKeystore()
     gWallet = newWallet(ks)
-    gWallet.register(newEvmAdapter("evm:31337", RPC_URL))
+    gEvm = newEvmAdapter("evm:31337", RPC_URL)
+    gWallet.register(gEvm)
     gMock = newMockChain()
     gWallet.register(gMock)
     for acc in gMock.accounts(ks):        # seed the mock so its balances are demonstrable
@@ -334,7 +336,12 @@ proc musterWalletBalances(): string =
   for acc in w.accounts():
     for asset in w.assets():
       if asset.chain != acc.chain: continue
-      var entry = %*{"chain": acc.chain, "account": acc.id, "asset": asset.symbol}
+      # grade (F-10): "attested" — this reads the balance from the user's RPC and
+      # trusts it. It becomes "verified-locally" only when checked against a
+      # consensus state root (wallet_verified_balance), which needs the beacon
+      # light-client sidecar. The UI renders the grade so the user sees which it is.
+      var entry = %*{"chain": acc.chain, "account": acc.id, "asset": asset.symbol,
+                     "grade": "attested"}
       try:
         let bal = w.balance(acc.chain, acc, asset)
         entry["display"] = %bal.display()
@@ -368,6 +375,18 @@ proc musterWalletFinality(chain, txId: string): string =
   try:
     let f = w.finality(TxRef(chain: chain, id: txId))
     $(%*{"status": $f.status, "detail": f.detail})
+  except CatchableError as e:
+    $(%*{"error": e.msg})
+
+proc musterWalletVerifiedBalance(accountId, stateRootHex: string): string =
+  ## The EVM balance verified against a trusted state root (F-10 verified-locally):
+  ## a valid proof upgrades the grade from "attested" to "verified-locally"; an
+  ## invalid one is an error, never a trusted number.
+  discard moduleWallet()
+  try:
+    let acc = Account(chain: "evm:31337", form: afPublic, id: accountId)
+    let bal = gEvm.verifiedBalance(acc, stateRootHex)
+    $(%*{"display": bal.display(), "raw": bal.raw, "grade": "verified-locally"})
   except CatchableError as e:
     $(%*{"error": e.msg})
 
