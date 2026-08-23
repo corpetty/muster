@@ -20,6 +20,16 @@ STINT="--path:$D/nim-stint --path:$D/nim-stew --path:$D/nim-results --path:$D/ni
 nim r -d:release $STINT tests/wallet_types_test.nim
 ```
 
+`wallet_verify_test` (verified state reads, the reused nim-eth proof primitive)
+also needs nim-eth + nimcrypto on the path:
+
+```bash
+git -C $D clone --depth 1 https://github.com/status-im/nim-eth
+git -C $D clone --depth 1 https://github.com/cheatfate/nimcrypto
+NIMETH="$STINT --path:$D/nim-eth --path:$D/nimcrypto"
+nim r -d:release $NIMETH tests/wallet_verify_test.nim
+```
+
 **Exception — the P2 Safe crypto tests need libsecp256k1 linked:**
 `secp256k1_test.nim`, `safe_test.nim`, `safe_collect_test.nim` (and anything
 importing `src/crypto/secp256k1.nim` or `src/drivers/safe.nim`). Build the lib

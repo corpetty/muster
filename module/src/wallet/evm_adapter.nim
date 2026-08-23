@@ -11,6 +11,7 @@
 import std/[httpclient, json, tables, strutils]
 import ./types
 import ./adapter
+import ./verify
 import ../crypto/secp256k1
 import ../crypto/keystore
 
@@ -129,6 +130,26 @@ method submit*(a: EvmAdapter, tx: PreparedTx, ks: Keystore): TxRef =
   for k, v in p: call[k] = v
   let txHash = a.rpc("eth_sendTransaction", %*[call]).getStr()
   TxRef(chain: a.chainId, id: txHash)
+
+proc verifiedBalance*(a: EvmAdapter, account: Account, stateRootHex: string): Amount =
+  ## A `verified-locally` balance (F-10): ask the untrusted provider for eth_getProof,
+  ## then verify the account's Merkle proof against a TRUSTED state root (from a
+  ## beacon-light-client sidecar — the Nimbus verified proxy in REST mode). If the
+  ## proof does not verify, this raises — the provider's number never passes as real.
+  ## Unlike `balance` (which trusts the RPC), this trusts only the state root.
+  let owner = toAddress(account.id)
+  let r = a.rpc("eth_getProof", %*[addrHex(owner), newJArray(), "latest"])
+  var proof: seq[seq[byte]]
+  for n in r{"accountProof"}: proof.add verify.hexBytes(n.getStr())
+  var root: array[32, byte]
+  let rb = verify.hexBytes(stateRootHex)
+  for i in 0 ..< min(32, rb.len): root[31 - i] = rb[rb.len - 1 - i]
+  let v = verifyAccountFields(proof, root, owner,
+    nonce = uint64(fromHex[uint64](r{"nonce"}.getStr("0x0"))),
+    balanceHex = r{"balance"}.getStr("0x0"),
+    storageHashHex = r{"storageHash"}.getStr(),
+    codeHashHex = r{"codeHash"}.getStr())
+  amount(a.native, v.balanceRaw)
 
 method finality*(a: EvmAdapter, txRef: TxRef): Finality =
   let r = a.rpc("eth_getTransactionReceipt", %*[txRef.id])
