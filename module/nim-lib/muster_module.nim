@@ -25,6 +25,10 @@ import ../src/crypto/epoch_crypto     # EpochCrypto (ECIES-secp256k1 + libsodium
 import ../src/crypto/keystore         # persistent module identity (FS-4)
 import ../src/coordination/session    # the multi-instance coordination flow
 import ../src/coordination/intents     # intent lifecycle = reduce(log) (the multi-party fold)
+import ../src/wallet/types             # chain-agnostic wallet types
+import ../src/wallet/adapter           # ChainAdapter seam + Wallet aggregate
+import ../src/wallet/evm_adapter       # the EVM/Safe chain
+import ../src/wallet/mock_chain        # a second, non-EVM chain (proves agnosticism)
 
 proc hexToBytes(s: string): seq[byte] =
   var h = s
@@ -285,6 +289,87 @@ proc musterCoordinatePending(): string =
     arr.add %*{"identity": toHex(st.enc.toBytes()),
                "bindsOwner": bindingBinds(st, gDriver.owners, nowSec)}
   $arr
+
+# ── wallet: chain-agnostic account/asset/transfer surface ──────────────────────
+# The account-level view of the chains the module touches — distinct from the
+# coordinated intent path. The EVM chain is the same one the Safe settles on; the
+# mock shielded chain is registered alongside it to demonstrate that a second,
+# non-EVM chain is a registration, not a code change (F-Design: chain-agnostic).
+var gWallet: Wallet = nil
+var gMock: MockChain = nil
+
+proc moduleWallet(): Wallet =
+  if gWallet == nil:
+    let ks = moduleKeystore()
+    gWallet = newWallet(ks)
+    gWallet.register(newEvmAdapter("evm:31337", RPC_URL))
+    gMock = newMockChain()
+    gWallet.register(gMock)
+    for acc in gMock.accounts(ks):        # seed the mock so its balances are demonstrable
+      if acc.form == afPublic:
+        gMock.credit(acc.id, "MOCK", "5000000000")
+        gMock.credit(acc.id, "MTK", "1230000")
+  gWallet
+
+proc assetBySymbol(w: Wallet, chain, symbol: string): AssetId =
+  for a in w.assets():
+    if a.chain == chain and a.symbol == symbol: return a
+  raise newException(WalletError, "unknown asset " & symbol & " on " & chain)
+
+proc accountOn(w: Wallet, chain: string): Account =
+  for a in w.accounts():
+    if a.chain == chain and a.form == afPublic: return a
+  raise newException(WalletError, "no account on " & chain)
+
+proc musterWalletAccounts(): string =
+  let w = moduleWallet()
+  var arr = newJArray()
+  for a in w.accounts(): arr.add %*{"chain": a.chain, "form": $a.form, "id": a.id}
+  $arr
+
+proc musterWalletBalances(): string =
+  ## Every account × asset, each entry a balance OR an error — never a false zero.
+  let w = moduleWallet()
+  var arr = newJArray()
+  for acc in w.accounts():
+    for asset in w.assets():
+      if asset.chain != acc.chain: continue
+      var entry = %*{"chain": acc.chain, "account": acc.id, "asset": asset.symbol}
+      try:
+        let bal = w.balance(acc.chain, acc, asset)
+        entry["display"] = %bal.display()
+        entry["raw"] = %bal.raw
+      except CatchableError as e:
+        entry["error"] = %e.msg
+      arr.add entry
+  $arr
+
+proc musterWalletEstimateFee(chain, to, assetSymbol, raw: string): string =
+  let w = moduleWallet()
+  try:
+    let asset = assetBySymbol(w, chain, assetSymbol)
+    let fee = w.estimateFee(chain, accountOn(w, chain), to, amount(asset, raw))
+    $(%*{"fee": fee.fee.display(), "raw": fee.fee.raw, "note": fee.note})
+  except CatchableError as e:
+    $(%*{"error": e.msg})
+
+proc musterWalletSend(chain, fromId, to, assetSymbol, raw: string): string =
+  let w = moduleWallet()
+  try:
+    let asset = assetBySymbol(w, chain, assetSymbol)
+    let frm = Account(chain: chain, form: afPublic, id: fromId)
+    let r = w.send(chain, frm, to, amount(asset, raw))
+    $(%*{"txId": r.id, "chain": r.chain})
+  except CatchableError as e:
+    $(%*{"error": e.msg})
+
+proc musterWalletFinality(chain, txId: string): string =
+  let w = moduleWallet()
+  try:
+    let f = w.finality(TxRef(chain: chain, id: txId))
+    $(%*{"status": $f.status, "detail": f.detail})
+  except CatchableError as e:
+    $(%*{"error": e.msg})
 
 proc musterCoordinateAdmit(identityHex: string): string =
   ## Admit a requester — but only one whose binding proves it is a Safe owner (F-9,

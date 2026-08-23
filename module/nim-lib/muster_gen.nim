@@ -37,6 +37,11 @@ proc musterCoordinate_intents(): string
 proc musterCoordinate_request_join(): string
 proc musterCoordinate_pending(): string
 proc musterCoordinate_admit(identity_hex: string): string
+proc musterWallet_accounts(): string
+proc musterWallet_balances(): string
+proc musterWallet_estimate_fee(chain: string, to: string, asset_symbol: string, raw: string): string
+proc musterWallet_send(chain: string, from_id: string, to: string, asset_symbol: string, raw: string): string
+proc musterWallet_finality(chain: string, tx_id: string): string
 
 proc dispatch(meth: string, args: JsonNode): JsonNode =
   case meth
@@ -79,11 +84,24 @@ proc dispatch(meth: string, args: JsonNode): JsonNode =
   of "coordinate_admit":
     if args.kind != JArray or args.len < 1: return newJNull()
     %musterCoordinate_admit(args[0].getStr())
+  of "wallet_accounts":
+    %musterWallet_accounts()
+  of "wallet_balances":
+    %musterWallet_balances()
+  of "wallet_estimate_fee":
+    if args.kind != JArray or args.len < 4: return newJNull()
+    %musterWallet_estimate_fee(args[0].getStr(), args[1].getStr(), args[2].getStr(), args[3].getStr())
+  of "wallet_send":
+    if args.kind != JArray or args.len < 5: return newJNull()
+    %musterWallet_send(args[0].getStr(), args[1].getStr(), args[2].getStr(), args[3].getStr(), args[4].getStr())
+  of "wallet_finality":
+    if args.kind != JArray or args.len < 2: return newJNull()
+    %musterWallet_finality(args[0].getStr(), args[1].getStr())
   else:
     nil
 
 proc logos_module_get_methods(): cstring {.exportc, cdecl.} =
-  toCString(parseJson("""[{"isInvokable":true,"name":"health","parameters":[],"returnType":"QString","signature":"health()"},{"isInvokable":true,"name":"identity","parameters":[],"returnType":"QString","signature":"identity()"},{"isInvokable":true,"name":"describe","parameters":[],"returnType":"QString","signature":"describe()"},{"isInvokable":true,"name":"propose","parameters":[{"name":"effect_json","type":"QString"}],"returnType":"QString","signature":"propose(QString)"},{"isInvokable":true,"name":"txhash","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"txhash(QString)"},{"isInvokable":true,"name":"approve","parameters":[{"name":"intent_id","type":"QString"},{"name":"signature_hex","type":"QString"}],"returnType":"QString","signature":"approve(QString,QString)"},{"isInvokable":true,"name":"status","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"status(QString)"},{"isInvokable":true,"name":"submit","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"submit(QString)"},{"isInvokable":true,"name":"coordinate_join","parameters":[{"name":"topic","type":"QString"}],"returnType":"QString","signature":"coordinate_join(QString)"},{"isInvokable":true,"name":"coordinate_propose","parameters":[{"name":"effect_json","type":"QString"}],"returnType":"QString","signature":"coordinate_propose(QString)"},{"isInvokable":true,"name":"coordinate_contribute","parameters":[{"name":"intent_id","type":"QString"},{"name":"signature_hex","type":"QString"}],"returnType":"QString","signature":"coordinate_contribute(QString,QString)"},{"isInvokable":true,"name":"coordinate_intents","parameters":[],"returnType":"QString","signature":"coordinate_intents()"},{"isInvokable":true,"name":"coordinate_request_join","parameters":[],"returnType":"QString","signature":"coordinate_request_join()"},{"isInvokable":true,"name":"coordinate_pending","parameters":[],"returnType":"QString","signature":"coordinate_pending()"},{"isInvokable":true,"name":"coordinate_admit","parameters":[{"name":"identity_hex","type":"QString"}],"returnType":"QString","signature":"coordinate_admit(QString)"}]""").`$`)
+  toCString(parseJson("""[{"isInvokable":true,"name":"health","parameters":[],"returnType":"QString","signature":"health()"},{"isInvokable":true,"name":"identity","parameters":[],"returnType":"QString","signature":"identity()"},{"isInvokable":true,"name":"describe","parameters":[],"returnType":"QString","signature":"describe()"},{"isInvokable":true,"name":"propose","parameters":[{"name":"effect_json","type":"QString"}],"returnType":"QString","signature":"propose(QString)"},{"isInvokable":true,"name":"txhash","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"txhash(QString)"},{"isInvokable":true,"name":"approve","parameters":[{"name":"intent_id","type":"QString"},{"name":"signature_hex","type":"QString"}],"returnType":"QString","signature":"approve(QString,QString)"},{"isInvokable":true,"name":"status","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"status(QString)"},{"isInvokable":true,"name":"submit","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"submit(QString)"},{"isInvokable":true,"name":"coordinate_join","parameters":[{"name":"topic","type":"QString"}],"returnType":"QString","signature":"coordinate_join(QString)"},{"isInvokable":true,"name":"coordinate_propose","parameters":[{"name":"effect_json","type":"QString"}],"returnType":"QString","signature":"coordinate_propose(QString)"},{"isInvokable":true,"name":"coordinate_contribute","parameters":[{"name":"intent_id","type":"QString"},{"name":"signature_hex","type":"QString"}],"returnType":"QString","signature":"coordinate_contribute(QString,QString)"},{"isInvokable":true,"name":"coordinate_intents","parameters":[],"returnType":"QString","signature":"coordinate_intents()"},{"isInvokable":true,"name":"coordinate_request_join","parameters":[],"returnType":"QString","signature":"coordinate_request_join()"},{"isInvokable":true,"name":"coordinate_pending","parameters":[],"returnType":"QString","signature":"coordinate_pending()"},{"isInvokable":true,"name":"coordinate_admit","parameters":[{"name":"identity_hex","type":"QString"}],"returnType":"QString","signature":"coordinate_admit(QString)"},{"isInvokable":true,"name":"wallet_accounts","parameters":[],"returnType":"QString","signature":"wallet_accounts()"},{"isInvokable":true,"name":"wallet_balances","parameters":[],"returnType":"QString","signature":"wallet_balances()"},{"isInvokable":true,"name":"wallet_estimate_fee","parameters":[{"name":"chain","type":"QString"},{"name":"to","type":"QString"},{"name":"asset_symbol","type":"QString"},{"name":"raw","type":"QString"}],"returnType":"QString","signature":"wallet_estimate_fee(QString,QString,QString,QString)"},{"isInvokable":true,"name":"wallet_send","parameters":[{"name":"chain","type":"QString"},{"name":"from_id","type":"QString"},{"name":"to","type":"QString"},{"name":"asset_symbol","type":"QString"},{"name":"raw","type":"QString"}],"returnType":"QString","signature":"wallet_send(QString,QString,QString,QString,QString)"},{"isInvokable":true,"name":"wallet_finality","parameters":[{"name":"chain","type":"QString"},{"name":"tx_id","type":"QString"}],"returnType":"QString","signature":"wallet_finality(QString,QString)"}]""").`$`)
 
 proc logos_module_dispatch(meth: cstring, argsJson: cstring): cstring {.exportc, cdecl.} =
   if meth == nil: return nil

@@ -150,6 +150,62 @@ proc formatUnits*(raw: string, decimals: int): string =
   while frac.len > 0 and frac[^1] == '0': frac = frac[0 ..< frac.high]
   if frac.len == 0: whole else: whole & "." & frac
 
+proc mulSmall*(a: string, m: int): string =
+  ## Multiply a canonical decimal by a small factor (0..~36) — a building block for
+  ## hex<->decimal conversion.
+  let x = normDec(a)
+  var carry = 0
+  var acc = ""
+  for i in countdown(x.high, 0):
+    let p = (ord(x[i]) - ord('0')) * m + carry
+    acc.add char(ord('0') + p mod 10)
+    carry = p div 10
+  while carry > 0:
+    acc.add char(ord('0') + carry mod 10); carry = carry div 10
+  var res = ""
+  for k in countdown(acc.high, 0): res.add acc[k]
+  normDec(res)
+
+proc divmodSmall*(a: string, d: int): (string, int) =
+  ## Divide a canonical decimal by a small divisor; returns (quotient, remainder).
+  let x = normDec(a)
+  var rem = 0
+  var q = ""
+  for c in x:
+    let cur = rem * 10 + (ord(c) - ord('0'))
+    q.add char(ord('0') + cur div d)
+    rem = cur mod d
+  (normDec(q), rem)
+
+proc hexToDec*(hex: string): string =
+  ## A hex quantity (with or without 0x) to a canonical decimal — how an EVM
+  ## eth_getBalance / balanceOf result becomes an Amount without truncation.
+  var h = hex
+  if h.len >= 2 and h[0] == '0' and (h[1] == 'x' or h[1] == 'X'): h = h[2 .. ^1]
+  result = "0"
+  for c in h:
+    let v =
+      if c >= '0' and c <= '9': ord(c) - ord('0')
+      elif c >= 'a' and c <= 'f': 10 + ord(c) - ord('a')
+      elif c >= 'A' and c <= 'F': 10 + ord(c) - ord('A')
+      else: raise newException(WalletError, "bad hex quantity: " & hex)
+    result = addDec(mulSmall(result, 16), $v)
+
+proc decToHex*(dec: string): string =
+  ## A canonical decimal to a minimal lowercase hex string (no 0x) — how an Amount
+  ## becomes the 32-byte word in EVM calldata (padded by the caller).
+  var n = normDec(dec)
+  if n == "0": return "0"
+  const hexd = "0123456789abcdef"
+  var acc = ""
+  while n != "0":
+    let (q, r) = divmodSmall(n, 16)
+    acc.add hexd[r]
+    n = q
+  var res = ""
+  for k in countdown(acc.high, 0): res.add acc[k]
+  res
+
 # ── constructors / helpers ─────────────────────────────────────────────────────
 
 proc amount*(asset: AssetId, raw: string): Amount = Amount(asset: asset, raw: normDec(raw))

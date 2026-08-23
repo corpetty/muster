@@ -31,4 +31,14 @@ module muster_module {
   method coordinate_pending() -> tstr description "List the encryption identities that have requested to join the conversation but have not been admitted, as a JSON array of 64-byte hex identities (ed25519 ++ x25519). A join-request confers nothing; a member reviews these and decides whom to admit."
 
   method coordinate_admit(identity_hex: tstr) -> tstr description "Admit a member (a 64-byte encryption identity hex: ed25519 ++ x25519) to the joined conversation: re-key the room forward and publish the grants so the joiner receives the new epoch key. The joiner gets only the new epoch, never earlier ones (F-16, membership epochs). Returns \"ok\", or \"not-joined\"/\"bad-key\"."
+
+  method wallet_accounts() -> tstr description "The module's accounts across every configured chain, as a JSON array of {chain, form, id}. A chain may offer more than one form — a public id and a shielded key-set — from the one module identity. Settlement is chain-agnostic; a chain is a registered adapter, not a hardcoded assumption."
+
+  method wallet_balances() -> tstr description "A balance snapshot across accounts and assets, as a JSON array of {chain, account, asset, display, raw} — or {chain, account, asset, error} when a read could not be answered. A failed read is reported as an error and NEVER as a zero balance, because a chain that fails by returning empty (the LEZ convention) must not be mistaken for an empty account. Balances are read locally against the user's endpoint (invariant 8, F-10 verified-locally)."
+
+  method wallet_estimate_fee(chain: tstr, to: tstr, asset_symbol: tstr, raw: tstr) -> tstr description "Estimate the fee to transfer `raw` base units of the asset on `chain` to `to`, from the module's account there. Returns JSON {fee, raw, note} (the note is chain-described — gas on EVM, a proof cost on a shielded chain), or {error}."
+
+  method wallet_send(chain: tstr, from_id: tstr, to: tstr, asset_symbol: tstr, raw: tstr) -> tstr description "Send `raw` base units of the asset on `chain` from `from_id` to `to`. Prepares and submits the transfer (signing goes through the keystore/Keycard seam, FS-4). Returns JSON {txId, chain} for polling finality, or {error}. This is the account-level transfer, distinct from the coordinated multi-party intent path (propose/approve/submit)."
+
+  method wallet_finality(chain: tstr, tx_id: tstr) -> tstr description "Poll the finality of a submitted transfer. Returns JSON {status, detail} where status is pending/final/failed — observed from the chain, never asserted (R-8). A delayed chain stays pending until settlement really completes; a balance read right after a send can be stale."
 }

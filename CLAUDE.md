@@ -59,6 +59,7 @@ module/          Nim core behind the muster.lidl contract → muster-module.lgx
   src/crypto/    secp256k1 (authorization identity) · curve25519 (Ed25519/X25519 encryption identity, F-14) · binding (secp↔enc link statement, F-14/F-9) · conversation (ConversationCrypto seam) · epoch_crypto (ECIES-via-sealed-box stopgap, F-16) · sodium (libsodium AEAD + Argon2id) · keystore (two-identity seam, FS-4: file stopgap + in-memory)
   src/transport/ transport (F-15 interface + LocalTransport) · lp_ffi (lp_* C-ABI binding) · delivery (DeliveryTransport) · inbound_queue (foreign-thread seam) · infra (inv 8)
   src/coordination/ session (multi-instance flow) · intents (intent lifecycle = reduce(log))
+  src/wallet/    chain-agnostic wallet (F-Design): types (Account/AssetId/Amount bignum) · adapter (ChainAdapter seam + Wallet aggregate) · evm_adapter (ETH + ERC-20 over user RPC) · mock_chain (non-EVM: shielded accounts, delayed finality)
   src/plugins/   plugin sandbox (inv 3)
   nim-lib/       muster_gen.nim (generated) + muster_module.nim (hosted surface)
   tools/         lidl_gen.nim — Nim LIDL codegen over lidl_c.h (B4)
