@@ -66,6 +66,18 @@ proc encFromSeed*(seed: array[32, byte]): EncKeys =
 
 proc identity*(k: EncKeys): EncIdentity = EncIdentity(ed: k.edPk, x: k.xPk)
 
+proc toBytes*(id: EncIdentity): seq[byte] =
+  ## Wire form: ed25519(32) ++ x25519(32). Fixed length, so it frames cleanly.
+  result = newSeq[byte](EdPubBytes + XPubBytes)
+  for i in 0 ..< EdPubBytes: result[i] = id.ed[i]
+  for i in 0 ..< XPubBytes: result[EdPubBytes + i] = id.x[i]
+
+proc encIdentityFromBytes*(b: openArray[byte]): EncIdentity =
+  if b.len != EdPubBytes + XPubBytes:
+    raise newException(Curve25519Error, "encoded identity is not 64 bytes")
+  for i in 0 ..< EdPubBytes: result.ed[i] = b[i]
+  for i in 0 ..< XPubBytes: result.x[i] = b[EdPubBytes + i]
+
 proc edSign*(k: EncKeys, msg: openArray[byte]): Ed25519Sig =
   var m = @msg
   let mp = if m.len > 0: addr m[0] else: nil

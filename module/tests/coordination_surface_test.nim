@@ -11,6 +11,7 @@ import std/strutils
 import ../src/transport/transport
 import ../src/crypto/epoch_crypto
 import ../src/crypto/secp256k1
+import ../src/crypto/keystore
 import ../src/coordination/session
 import ../src/coordination/intents
 import ../src/drivers/safe
@@ -20,13 +21,16 @@ proc key(hex: string): array[32, byte] =
   if h.len >= 2 and h[0] == '0' and (h[1] == 'x' or h[1] == 'X'): h = h[2 .. ^1]
   for i in 0 ..< 32: result[i] = byte(parseHexInt(h[2*i .. 2*i+1]))
 
+proc seed(b: byte): array[32, byte] =
+  for i in 0 ..< 32: result[i] = b
+
 proc toAddr(hex: string): Address =
   var h = hex
   if h.len >= 2 and h[0] == '0' and (h[1] == 'x' or h[1] == 'X'): h = h[2 .. ^1]
   for i in 0 ..< 20: result[i] = byte(parseHexInt(h[2*i .. 2*i+1]))
 
-let aliceSec = key("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
-let bobSec   = key("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d")
+let aliceKs = newInMemoryKeystore(key("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"), seed(1))
+let bobKs   = newInMemoryKeystore(key("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"), seed(2))
 let driver = newSafeDriver(chainId = 31337,
   safe = toAddr("0x5FbDB2315678afecb367f032d93F642f64180aa3"),
   owners = @[toAddr("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
@@ -50,9 +54,10 @@ echo "0. content-addressed intent id OK (", id, ")"
 
 # The room: Alice and Bob share an epoch (their room identity is their Safe key).
 let net = newLocalNetwork()
-let aliceCrypto = newEpochCrypto(aliceSec, @[pubKeyOf(bobSec)])
-let bobCrypto = newEpochJoiner(bobSec)
-bobCrypto.ingestGrant(aliceCrypto.grantFor(0, pubKeyOf(bobSec)))
+let bobMem = bobKs.encIdentity()
+let aliceCrypto = newEpochCrypto(aliceKs, @[bobMem])
+let bobCrypto = newEpochJoiner(bobKs)
+bobCrypto.ingestGrant(aliceCrypto.grantFor(0, bobMem))
 const topic = "/muster/1/safe-5FbD/proto"
 let alice = newCoordinationSession(newLocalTransport(net), aliceCrypto, topic)
 let bob = newCoordinationSession(newLocalTransport(net), bobCrypto, topic)

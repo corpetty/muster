@@ -8,7 +8,7 @@
 import std/[strutils, tables]
 import ../src/transport/transport
 import ../src/crypto/epoch_crypto
-import ../src/crypto/secp256k1
+import ../src/crypto/keystore
 import ../src/coordination/session
 
 proc key(hex: string): array[32, byte] =
@@ -16,20 +16,23 @@ proc key(hex: string): array[32, byte] =
   if h.len >= 2 and h[0] == '0' and (h[1] == 'x' or h[1] == 'X'): h = h[2 .. ^1]
   for i in 0 ..< 32: result[i] = byte(parseHexInt(h[2*i .. 2*i+1]))
 
-let aliceSec = key("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
-let bobSec   = key("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d")
-let daveSec  = key("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a")
-let malSec   = key("0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6")
-let bobPub = pubKeyOf(bobSec)
-let davePub = pubKeyOf(daveSec)
+proc seed(b: byte): array[32, byte] =
+  for i in 0 ..< 32: result[i] = b
+
+let aliceKs = newInMemoryKeystore(key("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"), seed(1))
+let bobKs   = newInMemoryKeystore(key("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"), seed(2))
+let daveKs  = newInMemoryKeystore(key("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"), seed(3))
+let malKs   = newInMemoryKeystore(key("0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"), seed(4))
+let bobMem = bobKs.encIdentity()
+let daveMem = daveKs.encIdentity()
 
 const topic = "/muster/1/room-1/proto"
 let net = newLocalNetwork()
 
 # The room: Alice founds epoch 0 with Bob and Dave; both are granted the key.
-let aliceCrypto = newEpochCrypto(aliceSec, @[bobPub, davePub])
-let bobCrypto = newEpochJoiner(bobSec)
-bobCrypto.ingestGrant(aliceCrypto.grantFor(0, bobPub))
+let aliceCrypto = newEpochCrypto(aliceKs, @[bobMem, daveMem])
+let bobCrypto = newEpochJoiner(bobKs)
+bobCrypto.ingestGrant(aliceCrypto.grantFor(0, bobMem))
 
 let alice = newCoordinationSession(newLocalTransport(net), aliceCrypto, topic)
 let bob = newCoordinationSession(newLocalTransport(net), bobCrypto, topic)
@@ -46,7 +49,7 @@ doAssert bob.state().entries["intent-1:state"] == "collecting", "Alice's events 
 echo "1. two-instance convergence OK"
 
 # ── 2. an outsider on the same topic, without the epoch key, learns nothing ───
-let malCrypto = newEpochJoiner(malSec)          # never granted any epoch
+let malCrypto = newEpochJoiner(malKs)           # never granted any epoch
 let mal = newCoordinationSession(newLocalTransport(net), malCrypto, topic)
 alice.publish(Event(key: "intent-1:state", value: "executable"))
 doAssert mal.log.allEvents().len == 0,
@@ -55,8 +58,8 @@ doAssert alice.digest() == bob.digest(), "members still converge past the outsid
 echo "2. outsider without the epoch key is blind OK"
 
 # ── 3. a member who comes online late catches up from the store ───────────────
-let daveCrypto = newEpochJoiner(daveSec)
-daveCrypto.ingestGrant(aliceCrypto.grantFor(0, davePub))   # Dave held epoch 0 all along
+let daveCrypto = newEpochJoiner(daveKs)
+daveCrypto.ingestGrant(aliceCrypto.grantFor(0, daveMem))   # Dave held epoch 0 all along
 let dave = newCoordinationSession(newLocalTransport(net), daveCrypto, topic)
 dave.catchUp()                                             # pull retained envelopes
 doAssert dave.digest() == alice.digest(),

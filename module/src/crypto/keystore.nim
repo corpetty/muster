@@ -1,151 +1,184 @@
-## Keystore — the module's persistent identity seam (FS-4).
+## Keystore — the module's persistent identity seam (FS-4, two-identity model).
 ##
-## The module needs one stable secp256k1 identity that survives restarts: the key
-## it signs Safe transactions with AND — per ADR-010, one curve, no second
-## identity — the key it does epoch ECDH with. State is `reduce(log)` (inv 4);
-## the key is the *other* half of "log + keys", the part that is never in the log,
-## never in an export, and never reachable by a plugin (FS-4).
+## The module custodies TWO bound identities (F-14, ADR-010 2026-08-23):
+##   • a secp256k1 **authorization** key — signs Safe transactions and the identity
+##     binding (Keycard-backed in v1);
+##   • an Ed25519/X25519 **encryption** identity — encrypts to members and authors
+##     room messages.
+## They are joined by a signed binding this keystore can issue (bindingFor). State
+## is `reduce(log)` (inv 4); these keys are the *other* half of "log + keys" — never
+## in the log, never in an export, never reachable by a plugin (FS-4).
 ##
-## This is an interface **on purpose**, and it exposes *operations*, never the raw
-## secret. FS-4 says key material lives in "the OS keystore or Keycard" — and a
-## Keycard never releases its private key, it signs and does key-agreement on the
-## card. So `sign`/`ecdh` are the only shape a real backend can slot behind: the
-## secret stays on the far side of the seam. Concrete backends:
-##
-##   FileKeystore  — the stopgap here: an Argon2id-encrypted keyfile on disk, held
-##                   decrypted in module memory for the process lifetime.
-##   (later)       — libsecret / Secret Service, or Keycard, behind this same seam;
-##                   adopting one is a backend swap, not a caller rewrite.
-##
-## The stopgap holds the decrypted secret in process memory, which a Keycard would
-## not — that is the honest gap between it and the real thing, and the reason it is
-## labelled a stopgap rather than the answer.
+## This is an interface on purpose, and it exposes *operations*, never a secret.
+## FS-4 puts key material in "the OS keystore or Keycard", and a Keycard never
+## releases its private key — it signs on the card — so sign/sealOpen are the only
+## shape a real backend can slot behind. Concrete backends:
+##   FileKeystore  — the stopgap: an Argon2id-encrypted keyfile on disk, both
+##                   secrets held decrypted in module memory for the process life.
+##   InMemoryKeystore — no persistence; for tests and raw-key call sites.
 
 import std/[os, streams]
 import ./secp256k1
 import ./sodium
+import ./curve25519
+import ./binding
 
 type
   KeystoreError* = object of CatchableError
 
   Keystore* = ref object of RootObj
-    ## The seam. Backends override every method; none exposes the secret.
+    ## The seam. Backends override every method; none exposes a secret.
 
 method address*(ks: Keystore): Address {.base.} =
-  ## The module's Ethereum address — its public, in-the-clear identity.
+  ## The module's Ethereum address — its public authorization identity.
   raise newException(KeystoreError, "Keystore.address is abstract")
 
-method pubKey*(ks: Keystore): PubKey {.base.} =
-  ## The compressed secp256k1 public key — the module's encryption identity, the
-  ## same key it signs with (ADR-010: no separate encryption curve).
-  raise newException(KeystoreError, "Keystore.pubKey is abstract")
-
 method sign*(ks: Keystore, msgHash: array[32, byte]): Signature65 {.base.} =
-  ## Sign a 32-byte hash (e.g. a safeTxHash) without releasing the key. On a
-  ## Keycard this happens on the card; here it happens over the in-memory secret.
+  ## secp256k1-sign a 32-byte hash (a safeTxHash, or a binding digest) without
+  ## releasing the key. On a Keycard this happens on the card.
   raise newException(KeystoreError, "Keystore.sign is abstract")
 
-method ecdh*(ks: Keystore, peer: PubKey): array[32, byte] {.base.} =
-  ## The shared secret with a peer's public key — the ECIES key agreement the
-  ## epoch layer wraps epoch keys under. Also key-agreement-without-release.
-  raise newException(KeystoreError, "Keystore.ecdh is abstract")
+method encIdentity*(ks: Keystore): EncIdentity {.base.} =
+  ## Our public encryption identity (Ed25519 + X25519) — announced to be admitted,
+  ## and what a binding vouches for.
+  raise newException(KeystoreError, "Keystore.encIdentity is abstract")
+
+method sealOpen*(ks: Keystore, sealed: seq[byte]): seq[byte] {.base.} =
+  ## Open a sealed box (an epoch-key grant) addressed to our X25519 key, without
+  ## releasing the key. Raises if it was not for us.
+  raise newException(KeystoreError, "Keystore.sealOpen is abstract")
+
+method bindingFor*(ks: Keystore, ctx: LinkContext): LinkStatement {.base.} =
+  ## Issue the secp256k1-signed binding vouching that our encryption identity is
+  ## ours — the authenticated join F-9 verifies.
+  raise newException(KeystoreError, "Keystore.bindingFor is abstract")
+
+# ── shared assembly ────────────────────────────────────────────────────────────
+
+proc makeBinding(ks: Keystore, ctx: LinkContext): LinkStatement =
+  ## Sign our encryption identity with our secp key via the seam's sign op — the
+  ## secret never leaves the keystore (issueBinding takes a closure, not a key).
+  issueBinding((proc(h: array[32, byte]): Signature65 = ks.sign(h)),
+               ks.encIdentity(), ctx)
 
 # ── FileKeystore — the Argon2id-encrypted-keyfile stopgap ──────────────────────
 
 const
-  Magic = "MKS1"                     # 4-byte tag; a wrong file fails fast, not weirdly
-  Version = 1'u8
-  HeaderLen = 4 + 1 + PwSaltBytes    # magic ++ version ++ salt
+  Magic = "MKS"                      # 3-byte tag; a wrong file fails fast
+  Version = 2'u8                     # v2: secp secret(32) ++ enc seed(32); v1 was secp only
+  HeaderLen = 3 + 1 + PwSaltBytes    # magic ++ version ++ salt
 
 type
   FileKeystore* = ref object of Keystore
-    secret: array[32, byte]          # decrypted, in memory for the process lifetime
+    secret: array[32, byte]          # secp256k1 authorization secret
+    enc: EncKeys                     # Ed25519/X25519 encryption identity
     addr0: Address
-    pub: PubKey
+    path: string
+    pass: string
 
 proc finish(fk: FileKeystore) =
-  ## Derive the public identity once from the loaded secret.
   fk.addr0 = addressOf(fk.secret)
-  fk.pub = pubKeyOf(fk.secret)
 
-proc writeKeyfile(path: string, secret: array[32, byte], passphrase: string) =
+proc writeKeyfile(path: string, secret: array[32, byte], encSeed: array[32, byte],
+                  passphrase: string) =
   var salt: array[PwSaltBytes, byte]
   let s = randomBytes(PwSaltBytes)
   for i in 0 ..< PwSaltBytes: salt[i] = s[i]
   let wrapKey = pwhashKey(passphrase, salt)
-  let sealed = secretboxSeal(wrapKey, secret)
+  var payload: seq[byte]
+  payload.add secret
+  payload.add encSeed
+  let sealed = secretboxSeal(wrapKey, payload)
 
   let dir = parentDir(path)
   if dir.len > 0: createDir(dir)
-  var blob = @[byte Magic[0], byte Magic[1], byte Magic[2], byte Magic[3], Version]
+  var blob = @[byte Magic[0], byte Magic[1], byte Magic[2], Version]
   blob.add salt
   blob.add sealed
   let fs = newFileStream(path, fmWrite)
   if fs == nil: raise newException(KeystoreError, "cannot write keyfile: " & path)
   fs.writeData(addr blob[0], blob.len)
   fs.close()
-  # Owner-only: the ciphertext is passphrase-gated, but the file is still ours.
   try: setFilePermissions(path, {fpUserRead, fpUserWrite})
-  except CatchableError: discard   # best-effort; not all filesystems honour it
+  except CatchableError: discard
 
-proc readKeyfile(path: string, passphrase: string): array[32, byte] =
+proc readKeyfile(path, passphrase: string): (array[32, byte], array[32, byte], bool) =
+  ## Returns (secpSecret, encSeed, upgradedFromV1). A v1 keyfile held only the secp
+  ## secret; we mint a fresh encryption seed for it and signal an in-place upgrade,
+  ## keeping the stable address while adding the encryption identity.
   let raw = readFile(path)
-  if raw.len < HeaderLen or raw[0 ..< 4] != Magic:
+  if raw.len < 4 or raw[0 ..< 3] != Magic:
     raise newException(KeystoreError, "not a muster keyfile: " & path)
-  if byte(raw[4]) != Version:
+  let ver = byte(raw[3])
+  if ver notin {1'u8, 2'u8}:
     raise newException(KeystoreError, "unsupported keyfile version")
+  let hdr = 3 + 1 + PwSaltBytes
   var salt: array[PwSaltBytes, byte]
-  for i in 0 ..< PwSaltBytes: salt[i] = byte(raw[5 + i])
-  var sealed = newSeq[byte](raw.len - HeaderLen)
-  for i in 0 ..< sealed.len: sealed[i] = byte(raw[HeaderLen + i])
+  for i in 0 ..< PwSaltBytes: salt[i] = byte(raw[4 + i])
+  var sealed = newSeq[byte](raw.len - hdr)
+  for i in 0 ..< sealed.len: sealed[i] = byte(raw[hdr + i])
   let wrapKey = pwhashKey(passphrase, salt)
   let opened =
     try: secretboxOpen(wrapKey, sealed)
     except SodiumError:
-      # Poly1305 failed → wrong passphrase or a tampered file. Same signal either
-      # way: the caller cannot open this identity.
       raise newException(KeystoreError, "wrong passphrase or corrupt keyfile")
-  if opened.len != 32:
-    raise newException(KeystoreError, "keyfile payload is not a 32-byte secret")
-  for i in 0 ..< 32: result[i] = opened[i]
+  var secret: array[32, byte]
+  var encSeed: array[32, byte]
+  if ver == 1'u8:
+    if opened.len != 32:
+      raise newException(KeystoreError, "v1 keyfile payload is not a 32-byte secret")
+    for i in 0 ..< 32: secret[i] = opened[i]
+    encSeed = randomKey()
+    return (secret, encSeed, true)
+  if opened.len != 64:
+    raise newException(KeystoreError, "v2 keyfile payload is not 64 bytes")
+  for i in 0 ..< 32: secret[i] = opened[i]
+  for i in 0 ..< 32: encSeed[i] = opened[32 + i]
+  (secret, encSeed, false)
 
-proc openFileKeystore*(path: string, passphrase: string): FileKeystore =
-  ## Load the identity at `path`, or mint a fresh one and persist it if none exists.
-  ## First run generates a random secp256k1 secret; every later run re-opens the
-  ## same identity — so the module's address is stable across restarts (R-3: the
-  ## key half of "log + keys").
-  result = FileKeystore()
+proc openFileKeystore*(path, passphrase: string): FileKeystore =
+  ## Load both identities at `path`, or mint fresh ones and persist them if none
+  ## exists. A v1 keyfile (secp only) is upgraded in place to add the encryption
+  ## identity, preserving the address.
+  result = FileKeystore(path: path, pass: passphrase)
+  var encSeed: array[32, byte]
   if fileExists(path):
-    result.secret = readKeyfile(path, passphrase)
+    let (secret, seed, upgraded) = readKeyfile(path, passphrase)
+    result.secret = secret
+    encSeed = seed
+    if upgraded: writeKeyfile(path, secret, encSeed, passphrase)
   else:
     result.secret = randomKey()
-    writeKeyfile(path, result.secret, passphrase)
+    encSeed = randomKey()
+    writeKeyfile(path, result.secret, encSeed, passphrase)
+  result.enc = encFromSeed(encSeed)
   result.finish()
 
 method address*(fk: FileKeystore): Address = fk.addr0
-method pubKey*(fk: FileKeystore): PubKey = fk.pub
 method sign*(fk: FileKeystore, msgHash: array[32, byte]): Signature65 =
   signRecoverable(msgHash, fk.secret)
-method ecdh*(fk: FileKeystore, peer: PubKey): array[32, byte] =
-  secp256k1.ecdh(fk.secret, peer)
+method encIdentity*(fk: FileKeystore): EncIdentity = fk.enc.identity()
+method sealOpen*(fk: FileKeystore, sealed: seq[byte]): seq[byte] =
+  curve25519.sealOpen(fk.enc, sealed)
+method bindingFor*(fk: FileKeystore, ctx: LinkContext): LinkStatement =
+  makeBinding(fk, ctx)
 
 # ── InMemoryKeystore — no persistence, for tests and raw-key call sites ─────────
-# The same operation seam over a secret held only in memory. Persistence is what
-# FileKeystore adds; this is the seam without it, so code that already holds a raw
-# key (the F-16 tests, the raw-key epoch constructors) can present it as a Keystore.
 
 type
   InMemoryKeystore* = ref object of Keystore
     secret: array[32, byte]
+    enc: EncKeys
     addr0: Address
-    pub: PubKey
 
-proc newInMemoryKeystore*(secret: array[32, byte]): InMemoryKeystore =
-  InMemoryKeystore(secret: secret, addr0: addressOf(secret), pub: pubKeyOf(secret))
+proc newInMemoryKeystore*(secret: array[32, byte], encSeed: array[32, byte]): InMemoryKeystore =
+  InMemoryKeystore(secret: secret, enc: encFromSeed(encSeed), addr0: addressOf(secret))
 
 method address*(ik: InMemoryKeystore): Address = ik.addr0
-method pubKey*(ik: InMemoryKeystore): PubKey = ik.pub
 method sign*(ik: InMemoryKeystore, msgHash: array[32, byte]): Signature65 =
   signRecoverable(msgHash, ik.secret)
-method ecdh*(ik: InMemoryKeystore, peer: PubKey): array[32, byte] =
-  secp256k1.ecdh(ik.secret, peer)
+method encIdentity*(ik: InMemoryKeystore): EncIdentity = ik.enc.identity()
+method sealOpen*(ik: InMemoryKeystore, sealed: seq[byte]): seq[byte] =
+  curve25519.sealOpen(ik.enc, sealed)
+method bindingFor*(ik: InMemoryKeystore, ctx: LinkContext): LinkStatement =
+  makeBinding(ik, ctx)

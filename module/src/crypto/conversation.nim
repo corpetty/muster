@@ -16,10 +16,11 @@
 ## Payloads are opaque both above and below: the Transport carries sealed bytes it
 ## never reads, and this layer seals bytes it never interprets.
 
-import ./secp256k1   # PubKey — a member's identity is their secp256k1 key (no second curve)
+import ./curve25519   # a member's room identity is their encryption identity (F-14, two-identity model)
+export curve25519     # callers manipulate Member (= EncIdentity) and its wire form
 
 type
-  Member* = PubKey
+  Member* = EncIdentity   ## Ed25519 (bound to the secp Safe key) + X25519 (grants wrap to this)
 
   ConversationCrypto* = ref object of RootObj
     ## The seam. Concrete impls (EpochCrypto stopgap now; a chat-module-backed one

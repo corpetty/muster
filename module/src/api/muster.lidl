@@ -28,7 +28,7 @@ module muster_module {
 
   method coordinate_request_join() -> tstr description "Ask to be admitted to the joined conversation: announce our member key on the topic. This carries no authority — an existing member still has to admit us; it is discovery, not entry. Returns \"ok\"."
 
-  method coordinate_pending() -> tstr description "List the member keys that have requested to join the conversation but have not been admitted, as a JSON array of hex pubkeys. A join-request confers nothing; a member reviews these and decides whom to admit."
+  method coordinate_pending() -> tstr description "List the encryption identities that have requested to join the conversation but have not been admitted, as a JSON array of 64-byte hex identities (ed25519 ++ x25519). A join-request confers nothing; a member reviews these and decides whom to admit."
 
-  method coordinate_admit(pubkey_hex: tstr) -> tstr description "Admit a member (a 33-byte compressed secp256k1 pubkey hex) to the joined conversation: re-key the room forward and publish the grants so the joiner receives the new epoch key. The joiner gets only the new epoch, never earlier ones (F-16, membership epochs). Returns \"ok\", or \"not-joined\"/\"bad-key\"."
+  method coordinate_admit(identity_hex: tstr) -> tstr description "Admit a member (a 64-byte encryption identity hex: ed25519 ++ x25519) to the joined conversation: re-key the room forward and publish the grants so the joiner receives the new epoch key. The joiner gets only the new epoch, never earlier ones (F-16, membership epochs). Returns \"ok\", or \"not-joined\"/\"bad-key\"."
 }

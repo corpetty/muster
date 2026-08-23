@@ -89,13 +89,17 @@ proc moduleKeystore(): Keystore =
   gKeystore
 
 proc musterIdentity(): string =
-  ## The module's persistent coordination identity (FS-4) — the secp256k1 address
-  ## and public key it signs and does epoch key-agreement with (ADR-010, one
-  ## curve). Minted on first call, then stable across restarts.
+  ## The module's persistent coordination identity (FS-4, two-identity model,
+  ## F-14). The secp256k1 authorization address that signs Safe transactions, and
+  ## the Ed25519/X25519 encryption identity it encrypts to members with — bound to
+  ## the secp key by a signature the room verifies (see binding.nim). Minted on
+  ## first call, stable across restarts.
   let ks = moduleKeystore()
+  let enc = ks.encIdentity()
   $(%*{
     "address": toHex(ks.address()),
-    "pubkey": toHex(ks.pubKey())
+    "ed25519": toHex(enc.ed),
+    "x25519": toHex(enc.x)
   })
 
 proc musterDescribe(): string =
@@ -268,14 +272,13 @@ proc musterCoordinatePending(): string =
   if gSession == nil: return "[]"
   gSession.poll()
   var arr = newJArray()
-  for m in gSession.pendingJoins(): arr.add %toHex(m)
+  for m in gSession.pendingJoins(): arr.add %toHex(m.toBytes())
   $arr
 
-proc musterCoordinateAdmit(pubkeyHex: string): string =
+proc musterCoordinateAdmit(identityHex: string): string =
   if gSession == nil: return "not-joined"
-  let b = hexToBytes(pubkeyHex)
-  if b.len != 33: return "bad-key"
-  var m: PubKey
-  for i in 0 ..< 33: m[i] = b[i]
+  let b = hexToBytes(identityHex)
+  if b.len != 64: return "bad-key"          # a member identity: ed25519(32) ++ x25519(32)
+  let m = encIdentityFromBytes(b)
   gSession.admit(m)
   "ok"

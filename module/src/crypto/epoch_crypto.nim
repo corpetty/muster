@@ -17,8 +17,8 @@
 ## Envelope wire: epoch(4, big-endian) ++ secretbox(epochKey, plaintext).
 
 import std/tables
-import ./secp256k1
 import ./sodium
+import ./curve25519
 import ./conversation
 import ./keystore
 export conversation
@@ -26,89 +26,54 @@ export conversation
 type
   EpochKeyGrant* = object
     ## What a member is handed to participate in an epoch: the epoch index, its
-    ## member set, and the epoch key ECIES-wrapped to THIS member. In the live
-    ## system a grant is published (sealed) over the Transport; here it is a value
-    ## the founder produces and the joiner ingests.
+    ## member set, and the epoch key wrapped to THIS member. In the live system a
+    ## grant is published (as an opaque control frame) over the Transport; here it
+    ## is a value the founder produces and the joiner ingests.
     epoch*: int
     members*: seq[Member]
     wrappedKey*: seq[byte]
 
   EpochCrypto* = ref object of ConversationCrypto
     ks: Keystore                          ## our identity — the secret stays behind this seam (FS-4)
-    myPub: Member
+    myEnc: Member                         ## our encryption identity (Ed25519 + X25519)
     keys: Table[int, array[32, byte]]     ## the epochs I actually hold keys for
     memberSets: Table[int, seq[Member]]   ## members per epoch (for grants/queries)
     cur: int
 
-# ── ECIES over secp256k1 + libsodium ──────────────────────────────────────────
-
-proc randomSeckey(): array[32, byte] =
-  ## A uniformly random valid secp256k1 secret key (retry the vanishingly rare
-  ## out-of-range draw).
-  while true:
-    result = randomKey()
-    try:
-      discard pubKeyOf(result)
-      return
-    except Secp256k1Error:
-      discard
+# ── ECIES via libsodium sealed boxes (X25519) ─────────────────────────────────
+# A sealed box IS ECIES over X25519: ephemeral key + crypto_box AEAD to the
+# recipient's X25519 key. Anonymous — the wrap names no sender. Wrapping needs
+# only the recipient's public X25519; unwrapping goes through the keystore seam,
+# so our secret never enters this layer (a Keycard would unwrap on-card).
 
 proc eciesWrap*(recipient: Member, secret: array[32, byte]): seq[byte] =
-  ## Encrypt `secret` (an epoch key) to a recipient's public key. Ephemeral-static
-  ## ECDH derives the AEAD key; only the recipient's private key can unwrap it.
-  let ephSec = randomSeckey()
-  let ephPub = pubKeyOf(ephSec)
-  let shared = ecdh(ephSec, recipient)
-  @ephPub & secretboxSeal(shared, secret)
+  sealTo(recipient.x, secret)
 
-proc unwrapWithShared(shared: array[32, byte], wrapped: seq[byte]): array[32, byte] =
-  let plain = secretboxOpen(shared, wrapped[33 .. ^1])
+proc eciesUnwrapVia(ks: Keystore, wrapped: seq[byte]): array[32, byte] =
+  let plain = ks.sealOpen(wrapped)
   if plain.len != 32:
     raise newException(SodiumError, "unwrapped key wrong length")
   for i in 0 ..< 32: result[i] = plain[i]
-
-proc ephPubOf(wrapped: seq[byte]): PubKey =
-  if wrapped.len < 33:
-    raise newException(SodiumError, "wrapped key too short")
-  for i in 0 ..< 33: result[i] = wrapped[i]
-
-proc eciesUnwrap*(mySec: array[32, byte], wrapped: seq[byte]): array[32, byte] =
-  ## Raw-key unwrap (kept for tests that hold a bare key, e.g. the mallory probe).
-  unwrapWithShared(ecdh(mySec, ephPubOf(wrapped)), wrapped)
-
-proc eciesUnwrapVia(ks: Keystore, wrapped: seq[byte]): array[32, byte] =
-  ## Unwrap through the keystore seam — the ECDH happens behind it, so our secret
-  ## is never in this layer (a Keycard would unwrap on-card). This is the path the
-  ## live conversation uses.
-  unwrapWithShared(ks.ecdh(ephPubOf(wrapped)), wrapped)
 
 # ── EpochCrypto ───────────────────────────────────────────────────────────────
 
 proc newEpochCrypto*(ks: Keystore, others: seq[Member] = @[]): EpochCrypto =
   ## Found a conversation: epoch 0 with a fresh key I hold, members = me + others.
   ## Identity comes from the keystore; our secret never enters this layer.
-  result = EpochCrypto(ks: ks, myPub: ks.pubKey(),
+  result = EpochCrypto(ks: ks, myEnc: ks.encIdentity(),
                        keys: initTable[int, array[32, byte]](),
                        memberSets: initTable[int, seq[Member]](), cur: 0)
-  var members = @[result.myPub]
+  var members = @[result.myEnc]
   for m in others:
-    if m != result.myPub: members.add m
+    if m != result.myEnc: members.add m
   result.keys[0] = randomKey()
   result.memberSets[0] = members
 
 proc newEpochJoiner*(ks: Keystore): EpochCrypto =
   ## A member who joins by ingesting grants; holds no key until they do.
-  EpochCrypto(ks: ks, myPub: ks.pubKey(),
+  EpochCrypto(ks: ks, myEnc: ks.encIdentity(),
               keys: initTable[int, array[32, byte]](),
               memberSets: initTable[int, seq[Member]](), cur: -1)
-
-proc newEpochCrypto*(mySec: array[32, byte], others: seq[Member] = @[]): EpochCrypto =
-  ## Raw-key convenience: wrap the secret in an in-memory keystore. Call sites that
-  ## already hold a bare key (the F-16 tests) keep working unchanged.
-  newEpochCrypto(Keystore(newInMemoryKeystore(mySec)), others)
-
-proc newEpochJoiner*(mySec: array[32, byte]): EpochCrypto =
-  newEpochJoiner(Keystore(newInMemoryKeystore(mySec)))
 
 proc grantFor*(cc: EpochCrypto, epoch: int, member: Member): EpochKeyGrant =
   ## Wrap an epoch's key to a member (the founder/driver hands these out). Only
@@ -162,17 +127,19 @@ method open*(cc: EpochCrypto, envelope: seq[byte]): seq[byte] =
 method members*(cc: EpochCrypto): seq[Member] = cc.memberSets.getOrDefault(cc.cur)
 method epoch*(cc: EpochCrypto): int = cc.cur
 
-# ── membership handshake: ECIES grants as the control frames ───────────────────
-# Frame wire: epoch(4 BE) ++ nMembers(2 BE) ++ member pubkeys(33 each) ++
-# ephemeralPub(33) ++ nonce(24) ++ (MAC(16) ++ wrapped epoch key). The tail from
-# ephemeralPub on is exactly eciesWrap's output, so ingest reuses eciesUnwrapVia.
+# ── membership handshake: sealed-box grants as the control frames ──────────────
+# Frame wire: epoch(4 BE) ++ nMembers(2 BE) ++ member identities(64 each:
+# ed25519 ++ x25519) ++ sealed box (the wrapped epoch key). The tail is exactly
+# eciesWrap's output (a sealed box), so ingest reuses eciesUnwrapVia.
+
+const MemberBytes = 64   # EncIdentity: ed25519(32) ++ x25519(32)
 
 proc encodeGrant(g: EpochKeyGrant): seq[byte] =
   let e = g.epoch
   result = @[byte((e shr 24) and 0xFF), byte((e shr 16) and 0xFF),
              byte((e shr 8) and 0xFF), byte(e and 0xFF),
              byte((g.members.len shr 8) and 0xFF), byte(g.members.len and 0xFF)]
-  for m in g.members: result.add m
+  for m in g.members: result.add m.toBytes()
   result.add g.wrappedKey
 
 proc decodeGrant(frame: seq[byte]): EpochKeyGrant =
@@ -182,14 +149,12 @@ proc decodeGrant(frame: seq[byte]): EpochKeyGrant =
   let n = (int(frame[4]) shl 8) or int(frame[5])
   var off = 6
   for _ in 0 ..< n:
-    if off + 33 > frame.len: raise newException(SodiumError, "grant frame truncated")
-    var m: Member
-    for i in 0 ..< 33: m[i] = frame[off + i]
-    result.members.add m
-    off += 33
+    if off + MemberBytes > frame.len: raise newException(SodiumError, "grant frame truncated")
+    result.members.add encIdentityFromBytes(frame[off ..< off + MemberBytes])
+    off += MemberBytes
   result.wrappedKey = frame[off .. ^1]
 
-method identity*(cc: EpochCrypto): Member = cc.myPub
+method identity*(cc: EpochCrypto): Member = cc.myEnc
 
 method admit*(cc: EpochCrypto, joiner: Member): seq[seq[byte]] =
   ## Re-key forward to include the joiner, then wrap the new epoch key to every

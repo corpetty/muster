@@ -8,7 +8,7 @@
 import std/strutils
 import ../src/transport/transport
 import ../src/crypto/epoch_crypto
-import ../src/crypto/secp256k1
+import ../src/crypto/keystore
 import ../src/coordination/session
 
 proc key(hex: string): array[32, byte] =
@@ -16,16 +16,19 @@ proc key(hex: string): array[32, byte] =
   if h.len >= 2 and h[0] == '0' and (h[1] == 'x' or h[1] == 'X'): h = h[2 .. ^1]
   for i in 0 ..< 32: result[i] = byte(parseHexInt(h[2*i .. 2*i+1]))
 
-let aliceSec = key("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
-let bobSec   = key("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d")
-let bobPub = pubKeyOf(bobSec)
+proc seed(b: byte): array[32, byte] =
+  for i in 0 ..< 32: result[i] = b
+
+let aliceKs = newInMemoryKeystore(key("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"), seed(1))
+let bobKs   = newInMemoryKeystore(key("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"), seed(2))
+let bobPub = bobKs.encIdentity()
 
 const topic = "/muster/1/handshake/proto"
 let net = newLocalNetwork()
 
 # Alice founds the room (epoch 0, just her). Bob starts outside it entirely.
-let alice = newCoordinationSession(newLocalTransport(net), newEpochCrypto(aliceSec), topic)
-let bob = newCoordinationSession(newLocalTransport(net), newEpochJoiner(bobSec), topic)
+let alice = newCoordinationSession(newLocalTransport(net), newEpochCrypto(aliceKs), topic)
+let bob = newCoordinationSession(newLocalTransport(net), newEpochJoiner(bobKs), topic)
 
 # Alice says something before Bob is admitted — this is the pre-seam history.
 alice.publish(Event(key: "msg/1", value: "before-bob"))

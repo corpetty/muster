@@ -63,9 +63,8 @@ proc ingestEnvelope(s: CoordinationSession, env: IncomingMessage) =
     of FrameData:
       s.log.ingest(decodeEvent(s.crypto.open(body)))
     of FrameJoinRequest:
-      if body.len == 33:                       # a member key requesting admission
-        var m: Member
-        for i in 0 ..< 33: m[i] = body[i]
+      if body.len == 64:                       # a member identity requesting admission
+        let m = encIdentityFromBytes(body)
         if m notin s.pending and m notin s.crypto.members(): s.pending.add m
     of FrameControl:
       discard s.crypto.ingestControl(body)     # a grant; ours to open or not
@@ -91,7 +90,7 @@ proc publish*(s: CoordinationSession, e: Event) =
 proc requestJoin*(s: CoordinationSession) =
   ## Announce our member key on the topic, asking to be admitted. This carries no
   ## authority — a member still has to decide to admit us; it is discovery, not entry.
-  discard s.transport.publish(s.topic, @[FrameJoinRequest] & @(s.crypto.identity()))
+  discard s.transport.publish(s.topic, @[FrameJoinRequest] & s.crypto.identity().toBytes())
 
 proc pendingJoins*(s: CoordinationSession): seq[Member] = s.pending
 
