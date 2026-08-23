@@ -10,7 +10,9 @@
 import std/[json, strutils]
 import ./driver
 import ./safe
-import ../crypto/secp256k1   # Address
+import ./threshold
+import ../crypto/secp256k1    # Address
+import ../crypto/curve25519   # Ed25519Pub (the threshold roster)
 
 type RegistryError* = object of CatchableError
 
@@ -38,5 +40,17 @@ proc newDriver*(kind: string, config: JsonNode): Driver =
     newStubDriver(rounds = config{"rounds"}.getInt(1),
                   threshold = config{"threshold"}.getInt(2),
                   verifyResult = config{"verifyResult"}.getBool(true))
+  of "threshold":
+    var roster: seq[Ed25519Pub]
+    if config.hasKey("roster") and config["roster"].kind == JArray:
+      for pkHex in config["roster"]:
+        var h = pkHex.getStr()
+        if h.len >= 2 and h[0] == '0' and (h[1] == 'x' or h[1] == 'X'): h = h[2 .. ^1]
+        var pk: Ed25519Pub
+        for i in 0 ..< min(32, h.len div 2):
+          try: pk[i] = byte(parseHexInt(h[2*i .. 2*i+1]))
+          except CatchableError: discard
+        roster.add pk
+    newThresholdDriver(roster, config{"k"}.getInt(2))
   else:
     raise newException(RegistryError, "unknown driver kind: " & kind)

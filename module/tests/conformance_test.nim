@@ -9,9 +9,11 @@ import ../src/dcbor/dcbor
 import ../src/intents/materialization
 import ../src/drivers/driver
 import ../src/drivers/safe
+import ../src/drivers/threshold
 import ../src/drivers/registry
 import ../src/drivers/conformance
 import ../src/crypto/secp256k1
+import ../src/crypto/curve25519
 
 proc bytesOf(hex: string): seq[byte] =
   var h = hex
@@ -69,5 +71,21 @@ block:
   except RegistryError: unknownRejected = true
   doAssert unknownRejected, "an unknown driver kind is refused"
   echo "3. registry builds conforming drivers, refuses unknown kinds OK"
+
+# ── 4. a threshold (Ed25519 k-of-n) driver conforms — a driver unlike Safe ─────
+block:
+  proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
+  let member = encFromSeed(seed(5))
+  let drv = newThresholdDriver(@[member.identity().ed], k = 1)
+  let e = Effect(schemaId: "muster.effect.transfer.v1",
+                 fields: @[("to", cbText("0xabc")), ("value", cbUint(5'u64))])
+  let t = Effect(schemaId: "muster.effect.transfer.v1",
+                 fields: @[("to", cbText("0xabc")), ("value", cbUint(6'u64))])
+  let sig = edSign(member, canonicalize(drv, e).bytes)   # a roster member's endorsement
+  var cb: seq[byte]
+  for b in sig: cb.add b
+  let r = checkConformance(drv, e, t, Contribution(bytes: cb))
+  doAssert r.allPass(), "threshold driver must conform: failed " & $r.failed()
+  echo "4. threshold driver conforms (", r.checks.len, " checks) OK — a driver unlike Safe"
 
 echo "conformance_test: all OK"

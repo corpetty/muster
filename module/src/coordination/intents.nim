@@ -96,7 +96,6 @@ proc reduceIntents*(events: seq[Event], driver: Driver): Table[string, Intent] =
   ## pass rather than by causal parents, so it holds even when a contribution
   ## arrives before its propose.
   result = initTable[string, Intent]()
-  var hashes = initTable[string, array[32, byte]]()
   var seenSig = initHashSet[string]()   # "<id>/<contributor>" — one signature per owner
   var now: uint64 = 0
   let ordered = canonicalOrder(events)
@@ -114,10 +113,7 @@ proc reduceIntents*(events: seq[Event], driver: Driver): Table[string, Intent] =
     let effect = effectFromJson(e.value)
     let ctx = SigningContext(environment: "", account: "coordinated", slot: "0",
                              expiry: high(uint64))
-    var it = newIntent(driver, effect, ctx)   # canonicalize dispatches to the driver (safeTxHash + pendingHash)
-    var h: array[32, byte]
-    for i in 0 ..< 32: h[i] = it.materialization.bytes[i]
-    hashes[id] = h
+    var it = newIntent(driver, effect, ctx)   # canonicalize dispatches to the driver
     it.apply(driver, IntentEvent(kind: iePropose, now: now))
     result[id] = it
 
@@ -128,7 +124,7 @@ proc reduceIntents*(events: seq[Event], driver: Driver): Table[string, Intent] =
     if dedup in seenSig: continue
     seenSig.incl dedup
     inc now
-    driver.expectMaterialization(Materialization(bytes: @(hashes[id])))  # verify against THIS intent
+    driver.expectMaterialization(result[id].materialization)   # verify against THIS intent (full bytes)
     var it = result[id]
     it.apply(driver, IntentEvent(kind: ieContribute, now: now,
                                  contribution: Contribution(bytes: hexToBytes(e.value))))

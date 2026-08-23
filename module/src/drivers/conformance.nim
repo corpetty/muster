@@ -51,9 +51,11 @@ proc checkConformance*(d: Driver, effect, tampered: Effect,
   result.add("tampered effect is refused (inv 1)",
              not reviewAndCheck(d, tampered, claimed))
 
-  # Re-establish any per-effect state the driver set while canonicalizing `tampered`
-  # (e.g. Safe's pendingHash), so the sample contribution is checked against `effect`.
-  discard canonicalize(d, effect)
+  # Bind the verify context to `effect` through the generic seam (undoing any state
+  # the driver set while canonicalizing `tampered`), so the sample contribution is
+  # checked against `effect` — for Safe this is its pending hash, for a threshold
+  # driver its pending materialization, for a stateless driver a no-op.
+  d.expectMaterialization(canonicalize(d, effect))
   result.add("verifyContribution is pure (inv 6)",
              d.verifyContribution(validContribution, 1) ==
                d.verifyContribution(validContribution, 1))
