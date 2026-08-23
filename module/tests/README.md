@@ -30,6 +30,13 @@ NIMETH="$STINT --path:$D/nim-eth --path:$D/nimcrypto"
 nim r -d:release $NIMETH tests/wallet_verify_test.nim
 ```
 
+`wallet_sign_test` (client-side EIP-155 tx signing vs the canonical vector) needs
+nim-eth + the secp closure (`$SECP` below):
+
+```bash
+nim r -d:release --threads:on $SECP $STINT --path:$D/nim-eth tests/wallet_sign_test.nim
+```
+
 **Exception — anything importing `src/crypto/secp256k1.nim` or `src/drivers/safe.nim`
 uses `nim-secp256k1` on the path** (`secp256k1_test`, `safe_test`, `safe_collect_test`,
 `binding_test`, and the crypto/coordination tests). We no longer link a system

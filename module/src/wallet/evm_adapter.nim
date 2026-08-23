@@ -9,9 +9,11 @@
 ## methods are thin wrappers over them.
 
 import std/[httpclient, json, tables, strutils]
+import stint
 import ./types
 import ./adapter
 import ./verify
+import ./evm_sign
 import ../crypto/secp256k1
 import ../crypto/keystore
 
@@ -40,6 +42,7 @@ proc erc20TransferData*(to: Address, rawAmount: string): string =
 type
   EvmAdapter* = ref object of ChainAdapter
     chainId: string
+    chainNum: uint64             ## numeric chain id (for EIP-155 signing)
     rpcUrl: string
     native: AssetId
     tokens: seq[AssetId]         ## reference = the token contract address (0x…)
@@ -48,8 +51,13 @@ type
 proc newEvmAdapter*(chainId, rpcUrl: string, tokens: seq[AssetId] = @[],
                     fromUnlocked = true): EvmAdapter =
   let native = AssetId(chain: chainId, symbol: "ETH", kind: akNative, decimals: 18)
-  EvmAdapter(chainId: chainId, rpcUrl: rpcUrl, native: native, tokens: tokens,
-             fromUnlocked: fromUnlocked)
+  let digits = chainId.split(':')[^1]        # "evm:31337" -> 31337
+  EvmAdapter(chainId: chainId, chainNum: uint64(parseBiggestUInt(digits)),
+             rpcUrl: rpcUrl, native: native, tokens: tokens, fromUnlocked: fromUnlocked)
+
+proc bytesHexLower(b: seq[byte]): string =
+  const d = "0123456789abcdef"
+  for x in b: (result.add d[int(x shr 4)]; result.add d[int(x and 0xF)])
 
 proc rpc(a: EvmAdapter, meth: string, params: JsonNode): JsonNode =
   ## One JSON-RPC call to the user's endpoint. Any transport error, or a JSON-RPC
@@ -120,16 +128,27 @@ method prepareTransfer*(a: EvmAdapter, frm: Account, to: string, amt: Amount): P
              fee: a.estimateFee(frm, to, amt), payload: payload)
 
 method submit*(a: EvmAdapter, tx: PreparedTx, ks: Keystore): TxRef =
-  ## anvil unlocks `from`, so eth_sendTransaction needs no client-side signing.
-  ## A real network needs RLP + secp256k1 signing (ks.sign) — deferred with the
-  ## live-node work; the fixture path is honest for the anvil settlement we run.
-  if not a.fromUnlocked:
-    raise newException(WalletError, "client-side EVM tx signing not implemented (needs a live node)")
+  ## Anvil unlocks `from`, so eth_sendTransaction needs no client-side signing. For
+  ## any other node, sign the EIP-155 transaction with nim-eth + the keystore seam
+  ## (the key never leaves the keystore) and broadcast the raw bytes.
   let p = parseJson(tx.payload)
-  var call = %*{"from": tx.frm.id, "gas": "0x100000"}
-  for k, v in p: call[k] = v
-  let txHash = a.rpc("eth_sendTransaction", %*[call]).getStr()
-  TxRef(chain: a.chainId, id: txHash)
+  if a.fromUnlocked:
+    var call = %*{"from": tx.frm.id, "gas": "0x100000"}
+    for k, v in p: call[k] = v
+    return TxRef(chain: a.chainId, id: a.rpc("eth_sendTransaction", %*[call]).getStr())
+
+  # Real client-side signing (RLP + secp256k1 via ks.sign), then eth_sendRawTransaction.
+  let value = if p.hasKey("value"): UInt256.fromHex(p["value"].getStr()) else: 0.u256
+  let data = if p.hasKey("data"): verify.hexBytes(p["data"].getStr()) else: @[]
+  let nonce = uint64(fromHex[uint64](a.rpc("eth_getTransactionCount", %*[tx.frm.id, "pending"]).getStr()))
+  let gasPrice = uint64(fromHex[uint64](a.rpc("eth_gasPrice", %*[]).getStr()))
+  let gasLimit = if data.len == 0: 21_000'u64 else: 65_000'u64
+  var toArr: array[20, byte]
+  let tb = verify.hexBytes(p{"to"}.getStr())
+  for i in 0 ..< min(20, tb.len): toArr[i] = tb[i]
+  let signer = proc(h: array[32, byte]): Signature65 = ks.sign(h)
+  let raw = signLegacyTransfer(signer, a.chainNum, nonce, gasPrice, gasLimit, toArr, value, data)
+  TxRef(chain: a.chainId, id: a.rpc("eth_sendRawTransaction", %*["0x" & bytesHexLower(raw)]).getStr())
 
 proc verifiedBalance*(a: EvmAdapter, account: Account, stateRootHex: string): Amount =
   ## A `verified-locally` balance (F-10): ask the untrusted provider for eth_getProof,
