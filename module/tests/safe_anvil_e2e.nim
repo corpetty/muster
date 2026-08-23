@@ -41,7 +41,7 @@ let drv = newSafeDriver(chainId = 31337, safe = safeAddr,
 let effect = Effect(schemaId: "muster.effect.transfer.v1", fields: @[
   ("to", cbText("0x00000000000000000000000000000000DeaDBeef")),
   ("value", cbUint(value)), ("nonce", cbUint(0'u64))])
-let mat = canonicalizeSafe(drv, effect)           # muster's local safeTxHash
+let mat = canonicalize(drv, effect)           # muster's local safeTxHash
 var hash: array[32, byte]
 for i in 0 ..< 32: hash[i] = mat.bytes[i]
 

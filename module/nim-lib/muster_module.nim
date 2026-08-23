@@ -138,8 +138,7 @@ proc musterPropose(effectJson: string): string =
                            expiry: high(uint64))
   inc gCounter
   let id = "intent-" & $gCounter
-  var it = newIntent(gDriver, effect, ctx)
-  it.materialization = canonicalizeSafe(gDriver, effect)   # EIP-712 safeTxHash; sets pendingHash
+  var it = newIntent(gDriver, effect, ctx)   # canonicalize dispatches to Safe (EIP-712 safeTxHash + pendingHash)
   var h: array[32, byte]
   for i in 0 ..< 32: h[i] = it.materialization.bytes[i]
   gHashes[id] = h

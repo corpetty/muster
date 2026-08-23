@@ -45,9 +45,9 @@ block driverCanonicalize:
   let effect = Effect(schemaId: "muster.effect.transfer.v1", fields: @[
     ("to", cbText("0x00112233445566778899aabbccddeeff00112233")),
     ("value", cbUint(500'u64)), ("nonce", cbUint(3'u64))])
-  let mat = canonicalizeSafe(drv, effect)
+  let mat = canonicalize(drv, effect)
   doAssert mat.bytes.len == 32
-  doAssert canonicalizeSafe(drv, effect).bytes == mat.bytes   # invariant 1: re-derivable
+  doAssert canonicalize(drv, effect).bytes == mat.bytes   # invariant 1: re-derivable
   echo "SafeDriver canonicalize -> 32-byte safeTxHash, deterministic: OK"
 
 echo "safe: all checks passed"

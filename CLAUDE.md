@@ -37,7 +37,7 @@ Re-validate the stack decisions table in `docs/02-implementation-plan.md` agains
 ## Working agreements
 
 - chronos only; never std asyncdispatch.
-- Conformance suite (`module/src/drivers/conformance`) before driver features; never merge with it red.
+- Conformance suite (`module/src/drivers/conformance.nim`, run by `tests/conformance_test.nim`) before driver features; never merge with it red. A driver is a complete unit behind the `Driver` seam — `describe` (coordination policy), `canonicalize` (effect→signable bytes, a driver method since 2026-08-23), `verifyContribution` — and `checkConformance` grades stub, Safe, and any new driver identically.
 - Integration tests use the stub driver and local transport — never mock `Driver` or `Transport`.
 - Invariant tests are append-only. Extend, don't weaken.
 - Each phase's accept criteria become an integration test (Nim headless, or a logos-qt-mcp script for UI phases) before implementation.

@@ -23,7 +23,7 @@ let drv = newSafeDriver(chainId = 31337, safe = safeAddr, owners = owners, thres
 let effect = Effect(schemaId: "muster.effect.transfer.v1", fields: @[
   ("to", cbText("0x00112233445566778899aabbccddeeff00112233")),
   ("value", cbUint(1000'u64)), ("nonce", cbUint(0'u64))])
-let mat = canonicalizeSafe(drv, effect)
+let mat = canonicalize(drv, effect)
 var hash: array[32, byte]
 for i in 0 ..< 32: hash[i] = mat.bytes[i]
 let sctx = SigningContext(environment: "anvil-31337", account: "safe", slot: "0", expiry: 1_000_000'u64)

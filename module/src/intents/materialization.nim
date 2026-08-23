@@ -20,11 +20,15 @@ type
   Materialization* = object
     bytes*: seq[byte]
 
-proc canonicalize*(driver: Driver, e: Effect): Materialization =
-  ## Deterministic serialization of the effect under the driver's declared
-  ## serialization domain (invariant 6: the domain is driver-described). The stub
-  ## uses dCBOR; a real driver (Safe) computes its EIP-712 encoding here. Because
-  ## it is pure local code, re-running it is the trustworthy derivation.
+method canonicalize*(driver: Driver, e: Effect): Materialization {.base.} =
+  ## Effect → the concrete bytes owners sign — the ONE chain-specific step, now a
+  ## driver method so a driver is a complete unit (its coordination AND its
+  ## materialization live behind one interface). This base is the default: a
+  ## deterministic dCBOR serialization under the driver's declared serialization
+  ## domain (invariant 6: the domain is driver-described), which the stub uses. A
+  ## real driver overrides it — the Safe driver computes its EIP-712 safeTxHash.
+  ## Because it is pure local code, re-running it is the trustworthy derivation
+  ## the re-derive-or-refuse check (invariant 1) depends on.
   let domain = driver.describe().serializationDomain
   var pairs: seq[(CborValue, CborValue)]
   for (k, v) in e.fields: pairs.add (cbText(k), v)

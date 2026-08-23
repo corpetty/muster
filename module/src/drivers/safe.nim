@@ -118,9 +118,11 @@ proc toSafeTx*(e: Effect): SafeTx =
       if v.kind == ckUint: result.nonce = v.u
     else: discard
 
-proc canonicalizeSafe*(d: SafeDriver, e: Effect): Materialization =
-  ## The Safe materialization is the safeTxHash the owners sign. Recording it as
-  ## the pending hash lets verifyContribution check owner signatures against it.
+method canonicalize*(d: SafeDriver, e: Effect): Materialization =
+  ## Override: the Safe materialization is the EIP-712 safeTxHash the owners sign.
+  ## Recording it as the pending hash lets verifyContribution check owner
+  ## signatures against it. Dispatched through the Driver seam — newIntent /
+  ## reduceIntents / the re-derive check all reach this without knowing it is Safe.
   let h = safeTxHash(toSafeTx(e), d.chainId, d.safe)
   for i in 0 ..< 32: d.pendingHash[i] = h[i]
   Materialization(bytes: h)

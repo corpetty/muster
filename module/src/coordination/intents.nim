@@ -69,7 +69,7 @@ proc effectJsonOf*(events: seq[Event], intentId: string): string =
   ""
 
 proc safeTxHashOf*(driver: SafeDriver, effectJson: string): array[32, byte] =
-  let m = canonicalizeSafe(driver, effectFromJson(effectJson))
+  let m = canonicalize(driver, effectFromJson(effectJson))
   for i in 0 ..< 32: result[i] = m.bytes[i]
 
 proc contributorOf*(driver: SafeDriver, effectJson, signatureHex: string): string =
@@ -124,8 +124,7 @@ proc reduceIntents*(events: seq[Event], driver: SafeDriver): Table[string, Inten
     let effect = effectFromJson(e.value)
     let ctx = SigningContext(environment: "", account: "coordinated", slot: "0",
                              expiry: high(uint64))
-    var it = newIntent(driver, effect, ctx)
-    it.materialization = canonicalizeSafe(driver, effect)   # safeTxHash + pendingHash
+    var it = newIntent(driver, effect, ctx)   # canonicalize dispatches to the driver (safeTxHash + pendingHash)
     var h: array[32, byte]
     for i in 0 ..< 32: h[i] = it.materialization.bytes[i]
     hashes[id] = h
