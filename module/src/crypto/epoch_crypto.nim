@@ -161,3 +161,53 @@ method open*(cc: EpochCrypto, envelope: seq[byte]): seq[byte] =
 
 method members*(cc: EpochCrypto): seq[Member] = cc.memberSets.getOrDefault(cc.cur)
 method epoch*(cc: EpochCrypto): int = cc.cur
+
+# ── membership handshake: ECIES grants as the control frames ───────────────────
+# Frame wire: epoch(4 BE) ++ nMembers(2 BE) ++ member pubkeys(33 each) ++
+# ephemeralPub(33) ++ nonce(24) ++ (MAC(16) ++ wrapped epoch key). The tail from
+# ephemeralPub on is exactly eciesWrap's output, so ingest reuses eciesUnwrapVia.
+
+proc encodeGrant(g: EpochKeyGrant): seq[byte] =
+  let e = g.epoch
+  result = @[byte((e shr 24) and 0xFF), byte((e shr 16) and 0xFF),
+             byte((e shr 8) and 0xFF), byte(e and 0xFF),
+             byte((g.members.len shr 8) and 0xFF), byte(g.members.len and 0xFF)]
+  for m in g.members: result.add m
+  result.add g.wrappedKey
+
+proc decodeGrant(frame: seq[byte]): EpochKeyGrant =
+  if frame.len < 6: raise newException(SodiumError, "grant frame too short")
+  result.epoch = (int(frame[0]) shl 24) or (int(frame[1]) shl 16) or
+                 (int(frame[2]) shl 8) or int(frame[3])
+  let n = (int(frame[4]) shl 8) or int(frame[5])
+  var off = 6
+  for _ in 0 ..< n:
+    if off + 33 > frame.len: raise newException(SodiumError, "grant frame truncated")
+    var m: Member
+    for i in 0 ..< 33: m[i] = frame[off + i]
+    result.members.add m
+    off += 33
+  result.wrappedKey = frame[off .. ^1]
+
+method identity*(cc: EpochCrypto): Member = cc.myPub
+
+method admit*(cc: EpochCrypto, joiner: Member): seq[seq[byte]] =
+  ## Re-key forward to include the joiner, then wrap the new epoch key to every
+  ## member of the new epoch (the joiner and everyone who was already here — they
+  ## all need the new key). The joiner gets ONLY this epoch's key, never earlier
+  ## ones (F-16). A frame each member cannot open is simply ignored by them.
+  cc.addMember(joiner)
+  let ne = cc.cur
+  for m in cc.memberSets[ne]:
+    result.add encodeGrant(cc.grantFor(ne, m))
+
+method ingestControl*(cc: EpochCrypto, frame: seq[byte]): bool =
+  ## Try to open a grant addressed to us. Wrong-recipient frames fail the ECIES
+  ## unwrap (a raise) and are reported as "not for me" rather than propagated.
+  try:
+    let g = decodeGrant(frame)
+    if g.epoch in cc.keys: return false      # already hold it — idempotent (R-2)
+    cc.ingestGrant(g)
+    g.epoch in cc.keys
+  except CatchableError:
+    false

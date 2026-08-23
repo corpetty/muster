@@ -34,6 +34,9 @@ proc musterCoordinate_join(topic: string): string
 proc musterCoordinate_propose(effect_json: string): string
 proc musterCoordinate_contribute(intent_id: string, signature_hex: string): string
 proc musterCoordinate_intents(): string
+proc musterCoordinate_request_join(): string
+proc musterCoordinate_pending(): string
+proc musterCoordinate_admit(pubkey_hex: string): string
 
 proc dispatch(meth: string, args: JsonNode): JsonNode =
   case meth
@@ -69,11 +72,18 @@ proc dispatch(meth: string, args: JsonNode): JsonNode =
     %musterCoordinate_contribute(args[0].getStr(), args[1].getStr())
   of "coordinate_intents":
     %musterCoordinate_intents()
+  of "coordinate_request_join":
+    %musterCoordinate_request_join()
+  of "coordinate_pending":
+    %musterCoordinate_pending()
+  of "coordinate_admit":
+    if args.kind != JArray or args.len < 1: return newJNull()
+    %musterCoordinate_admit(args[0].getStr())
   else:
     nil
 
 proc logos_module_get_methods(): cstring {.exportc, cdecl.} =
-  toCString(parseJson("""[{"isInvokable":true,"name":"health","parameters":[],"returnType":"QString","signature":"health()"},{"isInvokable":true,"name":"identity","parameters":[],"returnType":"QString","signature":"identity()"},{"isInvokable":true,"name":"describe","parameters":[],"returnType":"QString","signature":"describe()"},{"isInvokable":true,"name":"propose","parameters":[{"name":"effect_json","type":"QString"}],"returnType":"QString","signature":"propose(QString)"},{"isInvokable":true,"name":"txhash","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"txhash(QString)"},{"isInvokable":true,"name":"approve","parameters":[{"name":"intent_id","type":"QString"},{"name":"signature_hex","type":"QString"}],"returnType":"QString","signature":"approve(QString,QString)"},{"isInvokable":true,"name":"status","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"status(QString)"},{"isInvokable":true,"name":"submit","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"submit(QString)"},{"isInvokable":true,"name":"coordinate_join","parameters":[{"name":"topic","type":"QString"}],"returnType":"QString","signature":"coordinate_join(QString)"},{"isInvokable":true,"name":"coordinate_propose","parameters":[{"name":"effect_json","type":"QString"}],"returnType":"QString","signature":"coordinate_propose(QString)"},{"isInvokable":true,"name":"coordinate_contribute","parameters":[{"name":"intent_id","type":"QString"},{"name":"signature_hex","type":"QString"}],"returnType":"QString","signature":"coordinate_contribute(QString,QString)"},{"isInvokable":true,"name":"coordinate_intents","parameters":[],"returnType":"QString","signature":"coordinate_intents()"}]""").`$`)
+  toCString(parseJson("""[{"isInvokable":true,"name":"health","parameters":[],"returnType":"QString","signature":"health()"},{"isInvokable":true,"name":"identity","parameters":[],"returnType":"QString","signature":"identity()"},{"isInvokable":true,"name":"describe","parameters":[],"returnType":"QString","signature":"describe()"},{"isInvokable":true,"name":"propose","parameters":[{"name":"effect_json","type":"QString"}],"returnType":"QString","signature":"propose(QString)"},{"isInvokable":true,"name":"txhash","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"txhash(QString)"},{"isInvokable":true,"name":"approve","parameters":[{"name":"intent_id","type":"QString"},{"name":"signature_hex","type":"QString"}],"returnType":"QString","signature":"approve(QString,QString)"},{"isInvokable":true,"name":"status","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"status(QString)"},{"isInvokable":true,"name":"submit","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"submit(QString)"},{"isInvokable":true,"name":"coordinate_join","parameters":[{"name":"topic","type":"QString"}],"returnType":"QString","signature":"coordinate_join(QString)"},{"isInvokable":true,"name":"coordinate_propose","parameters":[{"name":"effect_json","type":"QString"}],"returnType":"QString","signature":"coordinate_propose(QString)"},{"isInvokable":true,"name":"coordinate_contribute","parameters":[{"name":"intent_id","type":"QString"},{"name":"signature_hex","type":"QString"}],"returnType":"QString","signature":"coordinate_contribute(QString,QString)"},{"isInvokable":true,"name":"coordinate_intents","parameters":[],"returnType":"QString","signature":"coordinate_intents()"},{"isInvokable":true,"name":"coordinate_request_join","parameters":[],"returnType":"QString","signature":"coordinate_request_join()"},{"isInvokable":true,"name":"coordinate_pending","parameters":[],"returnType":"QString","signature":"coordinate_pending()"},{"isInvokable":true,"name":"coordinate_admit","parameters":[{"name":"pubkey_hex","type":"QString"}],"returnType":"QString","signature":"coordinate_admit(QString)"}]""").`$`)
 
 proc logos_module_dispatch(meth: cstring, argsJson: cstring): cstring {.exportc, cdecl.} =
   if meth == nil: return nil

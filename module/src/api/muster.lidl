@@ -25,4 +25,10 @@ module muster_module {
   method coordinate_contribute(intent_id: tstr, signature_hex: tstr) -> tstr description "Contribute an owner signature (65-byte hex) to a proposed intent in the joined conversation. The signature is verified to recover to a configured owner before it is published (keyed by the recovered owner, so a non-owner is \"rejected\" and a duplicate folds once). Returns the intent's new lifecycle state as folded from the shared log."
 
   method coordinate_intents() -> tstr description "List the intents in the joined conversation as folded from the shared log: a JSON array of {id, state}. Drives inbound delivery first, so it reflects contributions that have arrived from other participants."
+
+  method coordinate_request_join() -> tstr description "Ask to be admitted to the joined conversation: announce our member key on the topic. This carries no authority — an existing member still has to admit us; it is discovery, not entry. Returns \"ok\"."
+
+  method coordinate_pending() -> tstr description "List the member keys that have requested to join the conversation but have not been admitted, as a JSON array of hex pubkeys. A join-request confers nothing; a member reviews these and decides whom to admit."
+
+  method coordinate_admit(pubkey_hex: tstr) -> tstr description "Admit a member (a 33-byte compressed secp256k1 pubkey hex) to the joined conversation: re-key the room forward and publish the grants so the joiner receives the new epoch key. The joiner gets only the new epoch, never earlier ones (F-16, membership epochs). Returns \"ok\", or \"not-joined\"/\"bad-key\"."
 }

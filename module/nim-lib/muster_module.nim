@@ -258,3 +258,24 @@ proc musterCoordinateIntents(): string =
   var arr = newJArray()
   for id, it in intents: arr.add %*{"id": id, "state": $it.state}
   $arr
+
+proc musterCoordinateRequestJoin(): string =
+  if gSession == nil: return "not-joined"
+  gSession.requestJoin()
+  "ok"
+
+proc musterCoordinatePending(): string =
+  if gSession == nil: return "[]"
+  gSession.poll()
+  var arr = newJArray()
+  for m in gSession.pendingJoins(): arr.add %toHex(m)
+  $arr
+
+proc musterCoordinateAdmit(pubkeyHex: string): string =
+  if gSession == nil: return "not-joined"
+  let b = hexToBytes(pubkeyHex)
+  if b.len != 33: return "bad-key"
+  var m: PubKey
+  for i in 0 ..< 33: m[i] = b[i]
+  gSession.admit(m)
+  "ok"

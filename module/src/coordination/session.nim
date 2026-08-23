@@ -12,7 +12,7 @@
 ## This is the join point: swap LocalTransport→delivery for a real network, or
 ## EpochCrypto→native chat, and this layer is unchanged (both are interfaces).
 
-import std/json
+import std/[json, sequtils]
 import ../transport/transport
 import ../crypto/conversation
 import ../log/log
@@ -24,6 +24,14 @@ type
     crypto: ConversationCrypto
     topic: string
     log*: Log
+    pending: seq[Member]        ## join-requests seen but not yet admitted (no authority)
+
+# Every frame on the topic carries a 1-byte kind, so the membership handshake
+# shares the topic with data without either misreading the other.
+const
+  FrameData = 0x00'u8          ## body = epoch-sealed event envelope
+  FrameJoinRequest = 0x01'u8   ## body = the requester's 33-byte member key (no authority)
+  FrameControl = 0x02'u8       ## body = an opaque membership control frame (a grant)
 
 proc toBytes(s: string): seq[byte] = (for c in s: result.add byte(c))
 proc toStr(b: openArray[byte]): string = (for x in b: result.add char(x))
@@ -44,11 +52,24 @@ proc decodeEvent(b: seq[byte]): Event =
     for p in j["parents"]: result.parents.add p.getStr()
 
 proc ingestEnvelope(s: CoordinationSession, env: IncomingMessage) =
-  ## Open + ingest. A raise — we can't decrypt (not a member, or a later-epoch
-  ## envelope we hold no key for, F-16), or the bytes are malformed — is swallowed:
-  ## the message simply isn't ours to reduce.
+  ## Route a frame by its kind byte. A raise — we can't decrypt (not a member, or a
+  ## later-epoch envelope we hold no key for, F-16), a control frame not addressed
+  ## to us, or malformed bytes — is swallowed: the frame simply isn't ours to act on.
+  if env.payload.len == 0: return
+  let kind = env.payload[0]
+  let body = env.payload[1 .. ^1]
   try:
-    s.log.ingest(decodeEvent(s.crypto.open(env.payload)))
+    case kind
+    of FrameData:
+      s.log.ingest(decodeEvent(s.crypto.open(body)))
+    of FrameJoinRequest:
+      if body.len == 33:                       # a member key requesting admission
+        var m: Member
+        for i in 0 ..< 33: m[i] = body[i]
+        if m notin s.pending and m notin s.crypto.members(): s.pending.add m
+    of FrameControl:
+      discard s.crypto.ingestControl(body)     # a grant; ours to open or not
+    else: discard
   except CatchableError:
     discard
 
@@ -63,7 +84,24 @@ proc newCoordinationSession*(transport: Transport, crypto: ConversationCrypto,
 proc publish*(s: CoordinationSession, e: Event) =
   ## Record locally, then broadcast the sealed event to the room.
   s.log.ingest(e)
-  discard s.transport.publish(s.topic, s.crypto.seal(encodeEvent(e)))
+  discard s.transport.publish(s.topic, @[FrameData] & s.crypto.seal(encodeEvent(e)))
+
+# ── membership handshake ───────────────────────────────────────────────────────
+
+proc requestJoin*(s: CoordinationSession) =
+  ## Announce our member key on the topic, asking to be admitted. This carries no
+  ## authority — a member still has to decide to admit us; it is discovery, not entry.
+  discard s.transport.publish(s.topic, @[FrameJoinRequest] & @(s.crypto.identity()))
+
+proc pendingJoins*(s: CoordinationSession): seq[Member] = s.pending
+
+proc admit*(s: CoordinationSession, joiner: Member) =
+  ## Admit a joiner (an existing member's decision): re-key forward and publish the
+  ## grants so every member of the new epoch — the joiner included — gets its key.
+  ## The joiner receives only this epoch's key, never earlier ones (F-16).
+  for frame in s.crypto.admit(joiner):
+    discard s.transport.publish(s.topic, @[FrameControl] & frame)
+  s.pending = s.pending.filterIt(it != joiner)
 
 proc catchUp*(s: CoordinationSession) =
   ## Offline catchup (F-15): pull the store's retained envelopes for the topic and

@@ -54,3 +54,29 @@ method members*(cc: ConversationCrypto): seq[Member] {.base.} =
 method epoch*(cc: ConversationCrypto): int {.base.} =
   ## The current epoch index — monotonic, incremented on every membership change.
   raise newException(CatchableError, "ConversationCrypto.epoch is abstract")
+
+# ── membership handshake (how a joiner actually gets a key) ─────────────────────
+# addMember/removeMember change the local key state; these carry the change over
+# the wire. They are deliberately mechanism-agnostic: the stopgap emits ECIES
+# grants, native chat (MLS) would emit a commit + welcome. The session treats the
+# frames as opaque control bytes, so swapping the backend is a binding change.
+#
+# Authorization is NOT here: a join-request carries no authority, and the core
+# never auto-admits. An existing member decides to call admit(); which members may
+# is a driver policy layered above (default: any current member).
+
+method identity*(cc: ConversationCrypto): Member {.base.} =
+  ## Our own member key — what a join-request announces so a member can admit us.
+  raise newException(CatchableError, "ConversationCrypto.identity is abstract")
+
+method admit*(cc: ConversationCrypto, joiner: Member): seq[seq[byte]] {.base.} =
+  ## Admit a joiner: re-key forward to include them (F-16), and return the control
+  ## frames to publish so every current member — the joiner included — receives the
+  ## new epoch key. Opaque to the transport; each frame protects its own payload.
+  raise newException(CatchableError, "ConversationCrypto.admit is abstract")
+
+method ingestControl*(cc: ConversationCrypto, frame: seq[byte]): bool {.base.} =
+  ## Consume a membership control frame addressed to us (a grant/welcome). Returns
+  ## true if it advanced our membership (we now hold a key we did not before),
+  ## false if it was not for us or we could not open it.
+  raise newException(CatchableError, "ConversationCrypto.ingestControl is abstract")
