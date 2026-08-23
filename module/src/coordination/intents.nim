@@ -21,10 +21,8 @@ import ../intents/lifecycle
 import ../intents/materialization
 import ../intents/signing_payload
 import ../drivers/driver
-import ../drivers/safe
 import ../dcbor/dcbor
 import ../hashing/keccak256
-import ../crypto/secp256k1
 export lifecycle.Intent, lifecycle.LifecycleState
 
 proc effectFromJson*(effectJson: string): Effect =
@@ -68,21 +66,13 @@ proc effectJsonOf*(events: seq[Event], intentId: string): string =
     if e.key == "intent/" & intentId & "/propose": return e.value
   ""
 
-proc safeTxHashOf*(driver: SafeDriver, effectJson: string): array[32, byte] =
+proc contributorOf*(driver: Driver, effectJson, signatureHex: string): string =
+  ## The id of whoever produced this contribution (for Safe: the owner address that
+  ## signed the safeTxHash), or "" if it is not a legitimate contribution. A
+  ## contribution is keyed by this, so a duplicate folds once and a non-participant
+  ## never counts — driver-described (identifyContributor), so the fold is generic.
   let m = canonicalize(driver, effectFromJson(effectJson))
-  for i in 0 ..< 32: result[i] = m.bytes[i]
-
-proc contributorOf*(driver: SafeDriver, effectJson, signatureHex: string): string =
-  ## The owner address (hex) that signed this intent's safeTxHash, or "" if the
-  ## signature does not recover to a configured owner. A contribution is keyed by
-  ## this, so a duplicate owner signature folds once and a non-owner never counts —
-  ## the same verification the hosted approve() does, done before we publish.
-  let h = safeTxHashOf(driver, effectJson)
-  var sig: Signature65
-  let sb = hexToBytes(signatureHex)
-  for i in 0 ..< min(65, sb.len): sig[i] = sb[i]
-  if not recoversToOwner(h, sig, driver.owners): return ""
-  bytesHex(ecrecover(h, sig))
+  identifyContributor(driver, m, Contribution(bytes: hexToBytes(signatureHex)))
 
 # ── event constructors (what a participant publishes) ─────────────────────────
 
@@ -99,7 +89,7 @@ proc submitEvent*(intentId: string, parents: seq[EventId] = @[]): Event =
 
 # ── the fold: intent lifecycle = reduce(log) ──────────────────────────────────
 
-proc reduceIntents*(events: seq[Event], driver: SafeDriver): Table[string, Intent] =
+proc reduceIntents*(events: seq[Event], driver: Driver): Table[string, Intent] =
   ## Deterministic: proposes, then contributions, then submits, each in canonical
   ## order — so the result is a pure function of the event SET, independent of the
   ## order events arrived or were duplicated (invariant 4, R-2/R-3). Ordering is by
@@ -138,7 +128,7 @@ proc reduceIntents*(events: seq[Event], driver: SafeDriver): Table[string, Inten
     if dedup in seenSig: continue
     seenSig.incl dedup
     inc now
-    driver.pendingHash = hashes[id]                    # verify against THIS intent's hash
+    driver.expectMaterialization(Materialization(bytes: @(hashes[id])))  # verify against THIS intent
     var it = result[id]
     it.apply(driver, IntentEvent(kind: ieContribute, now: now,
                                  contribution: Contribution(bytes: hexToBytes(e.value))))
@@ -152,7 +142,7 @@ proc reduceIntents*(events: seq[Event], driver: SafeDriver): Table[string, Inten
     it.apply(driver, IntentEvent(kind: ieSubmit, now: now))
     result[id] = it
 
-proc intentState*(events: seq[Event], driver: SafeDriver, intentId: string): string =
+proc intentState*(events: seq[Event], driver: Driver, intentId: string): string =
   ## The lifecycle state of one intent as a string (draft/proposed/collecting/
   ## executable/…), or "unknown".
   let intents = reduceIntents(events, driver)

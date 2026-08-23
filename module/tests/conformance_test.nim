@@ -4,11 +4,12 @@
 ## driver, so a chain-specific driver is a complete unit behind one interface.
 ## Needs libsecp256k1 (the Safe driver). See tests/README.md.
 
-import std/strutils
+import std/[strutils, json]
 import ../src/dcbor/dcbor
 import ../src/intents/materialization
 import ../src/drivers/driver
 import ../src/drivers/safe
+import ../src/drivers/registry
 import ../src/drivers/conformance
 import ../src/crypto/secp256k1
 
@@ -50,5 +51,23 @@ block:
   let r = checkConformance(drv, effect, tampered, Contribution(bytes: bytesOf(sig0)))
   doAssert r.allPass(), "Safe driver must conform: failed " & $r.failed()
   echo "2. Safe driver conforms (", r.checks.len, " checks) OK"
+
+# ── 3. the registry builds conforming drivers (selection by kind + config) ─────
+block:
+  let stub = newDriver("stub", %*{"rounds": 1, "threshold": 2})
+  let e = Effect(schemaId: "x", fields: @[("a", cbUint(1'u64))])
+  let t = Effect(schemaId: "x", fields: @[("a", cbUint(2'u64))])
+  doAssert checkConformance(stub, e, t, Contribution(bytes: @[1'u8])).allPass(),
+           "registry stub must conform"
+  let safe = newDriver("safe", %*{"chainId": 31337,
+    "safe": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    "owners": ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"], "threshold": 1})
+  doAssert safe.describe().serializationDomain == "eip712.safe.v1.4.1",
+           "registry selected the Safe driver by kind"
+  var unknownRejected = false
+  try: discard newDriver("nope", %*{})
+  except RegistryError: unknownRejected = true
+  doAssert unknownRejected, "an unknown driver kind is refused"
+  echo "3. registry builds conforming drivers, refuses unknown kinds OK"
 
 echo "conformance_test: all OK"

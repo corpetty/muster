@@ -40,6 +40,23 @@ proc reviewAndCheck*(driver: Driver, e: Effect, claimed: Materialization): bool 
   ## they are byte-identical. The one gate every signature passes through.
   canonicalize(driver, e).bytes == claimed.bytes
 
+# ── the multi-party fold's two driver hooks (so the fold is driver-generic) ─────
+
+method expectMaterialization*(d: Driver, m: Materialization) {.base.} =
+  ## Tell the driver which materialization the contributions it is about to verify
+  ## are over. The coordination fold sets this per intent before applying that
+  ## intent's contributions. Default: no-op — a driver whose verifyContribution is
+  ## stateless ignores it; the Safe driver records it as its pending hash.
+  discard
+
+method identifyContributor*(d: Driver, m: Materialization, c: Contribution): string {.base.} =
+  ## The stable id of whoever produced contribution `c` over materialization `m`,
+  ## or "" if it is not a legitimate contribution. This is how the multi-party fold
+  ## keys contributions (dedup) and rejects non-participants without the core ever
+  ## reading the bytes. A driver that supports the fold overrides it; the base
+  ## cannot identify one (returns "").
+  ""
+
 # ── The signing entry point, and a config surface that cannot bypass the check ─
 type
   Config* = object

@@ -126,3 +126,24 @@ method canonicalize*(d: SafeDriver, e: Effect): Materialization =
   let h = safeTxHash(toSafeTx(e), d.chainId, d.safe)
   for i in 0 ..< 32: d.pendingHash[i] = h[i]
   Materialization(bytes: h)
+
+proc mBytes32(m: Materialization): array[32, byte] =
+  for i in 0 ..< min(32, m.bytes.len): result[i] = m.bytes[i]
+
+method expectMaterialization*(d: SafeDriver, m: Materialization) =
+  ## The fold's per-intent hook: contributions now verify against this safeTxHash.
+  ## Replaces the fold reaching into d.pendingHash directly.
+  d.pendingHash = mBytes32(m)
+
+method identifyContributor*(d: SafeDriver, m: Materialization, c: Contribution): string =
+  ## Recover the owner address that signed this safeTxHash, as hex — or "" if the
+  ## 65-byte signature does not recover to a configured owner. This is how the fold
+  ## keys a contribution and rejects a non-owner, without the core reading bytes.
+  if c.bytes.len != 65: return ""
+  let h = mBytes32(m)
+  var sig: Signature65
+  for i in 0 ..< 65: sig[i] = c.bytes[i]
+  if not recoversToOwner(h, sig, d.owners): return ""
+  const hexd = "0123456789abcdef"
+  result = "0x"
+  for b in ecrecover(h, sig): (result.add hexd[int(b shr 4)]; result.add hexd[int(b and 0x0F)])

@@ -14,6 +14,7 @@ import std/[json, tables, strutils, os, algorithm, times]
 import ../src/dcbor/dcbor
 import ../src/drivers/driver
 import ../src/drivers/safe
+import ../src/drivers/registry
 import ../src/drivers/safe_rpc
 import ../src/crypto/secp256k1
 import ../src/intents/materialization
@@ -52,9 +53,12 @@ const OWNER1 = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
 const OWNER2 = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
 const SAFE_ADDR = "0x5FbDB2315678afecb367f032d93F642f64180aa3"
 
-var gDriver = newSafeDriver(chainId = 31337, safe = toAddr(SAFE_ADDR),
-                            owners = @[toAddr(OWNER0), toAddr(OWNER1), toAddr(OWNER2)],
-                            threshold = 2)
+# Selected through the registry by kind + config (not hardcoded to newSafeDriver);
+# a real deployment reads this from the module's persisted config. The single-
+# instance Safe path below uses Safe-specific fields, so it holds the concrete type.
+var gDriver = SafeDriver(newDriver("safe", %*{
+  "chainId": 31337, "safe": SAFE_ADDR,
+  "owners": [OWNER0, OWNER1, OWNER2], "threshold": 2}))
 var gIntents = initTable[string, Intent]()
 var gHashes = initTable[string, array[32, byte]]()
 var gEffects = initTable[string, Effect]()             ## the effect per intent (for execTransaction)
