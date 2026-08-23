@@ -81,5 +81,5 @@
   <text x="40" y="466" font-size="11" font-weight="600" fill="#1A1F1C">Built today: the stub (conformance) and the Safe driver (EIP-712, 2-of-3, on-chain execTransaction).</text>
   <text x="40" y="484" font-size="10.5" fill="#3F4742">The contract invites more without touching the core: a FROST threshold driver (r=2 — the round model's real test), and a</text>
   <text x="40" y="498" font-size="10.5" fill="#3F4742">describe-only LEZ/zone driver to pressure-test membership-as-predicate against private execution (both P6 in the plan).</text>
-  <text x="40" y="522" font-size="10.5" fill="#656E66" font-style="italic">The one gap left: a registry so the module selects a driver by config instead of hardcoding newSafeDriver.</text>
+  <text x="40" y="522" font-size="10.5" fill="#1E6B52" font-weight="600">Turnkey now: newDriver(kind, config) selects by config, and the multi-party fold is driver-generic — a non-Safe driver runs end to end.</text>
 </svg>
