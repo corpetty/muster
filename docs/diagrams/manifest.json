@@ -23,7 +23,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "44c13da6e3743605b1cb2510c5f8046aa3bc6abe573bb125a3f3e38d88697c84",
+          "sha256": "efcad3d5889c19e276c1a896872134bba4d96de011278959a93c81aa7d856780",
           "note": "the specified build, the three hosts, ADR-008"
         },
         {
@@ -79,7 +79,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "44c13da6e3743605b1cb2510c5f8046aa3bc6abe573bb125a3f3e38d88697c84",
+          "sha256": "efcad3d5889c19e276c1a896872134bba4d96de011278959a93c81aa7d856780",
           "note": "F-4/FS-6 as specified-and-unbuilt, behind the contracting row's gap"
         }
       ],
@@ -147,7 +147,7 @@
         {
           "path": "docs/02-implementation-plan.md",
           "note": "F-4/FS-6 and F-20 as specified-and-unbuilt, behind the step-04 approval flag and the footer",
-          "sha256": "44c13da6e3743605b1cb2510c5f8046aa3bc6abe573bb125a3f3e38d88697c84"
+          "sha256": "efcad3d5889c19e276c1a896872134bba4d96de011278959a93c81aa7d856780"
         }
       ],
       "evidence": [
@@ -216,12 +216,12 @@
       "sources": [
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "44c13da6e3743605b1cb2510c5f8046aa3bc6abe573bb125a3f3e38d88697c84",
+          "sha256": "efcad3d5889c19e276c1a896872134bba4d96de011278959a93c81aa7d856780",
           "note": "ADR-008, the LIDL contract layer, the Nim gap and the four bridge functions"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "64ab0ecaa8c73bd845c188e6cdc2850014c8a951e922ee389e0f122b26ceadf5",
+          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
           "note": "the two rules the C header states, and the never-hand-write-what-the-contract-generates rule"
         },
         {
@@ -301,7 +301,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "44c13da6e3743605b1cb2510c5f8046aa3bc6abe573bb125a3f3e38d88697c84",
+          "sha256": "efcad3d5889c19e276c1a896872134bba4d96de011278959a93c81aa7d856780",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -338,12 +338,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "44c13da6e3743605b1cb2510c5f8046aa3bc6abe573bb125a3f3e38d88697c84",
+          "sha256": "efcad3d5889c19e276c1a896872134bba4d96de011278959a93c81aa7d856780",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "64ab0ecaa8c73bd845c188e6cdc2850014c8a951e922ee389e0f122b26ceadf5",
+          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -380,7 +380,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "44c13da6e3743605b1cb2510c5f8046aa3bc6abe573bb125a3f3e38d88697c84",
+          "sha256": "efcad3d5889c19e276c1a896872134bba4d96de011278959a93c81aa7d856780",
           "note": "which phase builds it, and the accept criteria"
         }
       ],
@@ -416,7 +416,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "64ab0ecaa8c73bd845c188e6cdc2850014c8a951e922ee389e0f122b26ceadf5",
+          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
           "note": "invariant 10, and invariant 1 whose blind spot the figure draws"
         },
         {
@@ -457,12 +457,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "44c13da6e3743605b1cb2510c5f8046aa3bc6abe573bb125a3f3e38d88697c84",
+          "sha256": "efcad3d5889c19e276c1a896872134bba4d96de011278959a93c81aa7d856780",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "64ab0ecaa8c73bd845c188e6cdc2850014c8a951e922ee389e0f122b26ceadf5",
+          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -495,7 +495,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "44c13da6e3743605b1cb2510c5f8046aa3bc6abe573bb125a3f3e38d88697c84",
+          "sha256": "efcad3d5889c19e276c1a896872134bba4d96de011278959a93c81aa7d856780",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -532,12 +532,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "44c13da6e3743605b1cb2510c5f8046aa3bc6abe573bb125a3f3e38d88697c84",
+          "sha256": "efcad3d5889c19e276c1a896872134bba4d96de011278959a93c81aa7d856780",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "64ab0ecaa8c73bd845c188e6cdc2850014c8a951e922ee389e0f122b26ceadf5",
+          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
           "note": "the invariant this figure draws, in its shortest form"
         }
       ],
@@ -565,7 +565,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "44c13da6e3743605b1cb2510c5f8046aa3bc6abe573bb125a3f3e38d88697c84",
+          "sha256": "efcad3d5889c19e276c1a896872134bba4d96de011278959a93c81aa7d856780",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -602,12 +602,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "44c13da6e3743605b1cb2510c5f8046aa3bc6abe573bb125a3f3e38d88697c84",
+          "sha256": "efcad3d5889c19e276c1a896872134bba4d96de011278959a93c81aa7d856780",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "64ab0ecaa8c73bd845c188e6cdc2850014c8a951e922ee389e0f122b26ceadf5",
+          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
           "note": "the invariant this figure draws, in its shortest form"
         }
       ],
@@ -989,12 +989,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "44c13da6e3743605b1cb2510c5f8046aa3bc6abe573bb125a3f3e38d88697c84",
+          "sha256": "efcad3d5889c19e276c1a896872134bba4d96de011278959a93c81aa7d856780",
           "note": "where the wallet is built and its accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "64ab0ecaa8c73bd845c188e6cdc2850014c8a951e922ee389e0f122b26ceadf5",
+          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
           "note": "the src/wallet layout and the reuse posture"
         }
       ],
@@ -1026,12 +1026,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "44c13da6e3743605b1cb2510c5f8046aa3bc6abe573bb125a3f3e38d88697c84",
+          "sha256": "efcad3d5889c19e276c1a896872134bba4d96de011278959a93c81aa7d856780",
           "note": "the verified-reads work and its status"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "64ab0ecaa8c73bd845c188e6cdc2850014c8a951e922ee389e0f122b26ceadf5",
+          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
           "note": "verify.nim reuse of nim-eth and the deferred sidecar"
         }
       ],
@@ -1050,6 +1050,43 @@
         }
       ],
       "recheck": "Re-check when the light-client sidecar is wired (the state root becomes trustless end to end) or nim-eth's proof API changes."
+    },
+    {
+      "file": "arch-nim-reuse.svg",
+      "serves": "BUILD",
+      "shows": "The reuse toolchain: metadata.json's pinned nim.packages closure -> the builder's nim.packages hook (fetchFromGitHub + --path) -> the Nim staticlib compile, with the reused Status/Nimbus stack against what is kept ours (dcbor, curve25519) and why.",
+      "sources": [
+        {
+          "path": "module/metadata.json",
+          "sha256": "747ce3da7c0de6f31720d60d6c00365383c77f8888739787a66f47d49c05cdc4",
+          "note": "the pinned codegen.nim.packages closure"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "efcad3d5889c19e276c1a896872134bba4d96de011278959a93c81aa7d856780",
+          "note": "ADR-014: the decision, the hook, reused vs kept-ours"
+        },
+        {
+          "path": "CLAUDE.md",
+          "sha256": "6dc48d62f05bced3dcfdd9ad066cb495b20c187117a44d38c8f66ea81de4d7b6",
+          "note": "the reuse note and the src/wallet layout"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "ADR-014 records the decision, the nim.packages hook, the reused set and what is kept ours; metadata.json carries the pinned closure"
+        },
+        {
+          "grade": "measured",
+          "note": "the portable .lgx builds clean with the whole closure (incl. the bearssl submodule C) fetched through the hook; 42 probes green on nim-secp256k1"
+        },
+        {
+          "grade": "from-source",
+          "note": "invariant 5 keeps dcbor ours; F-14 keeps curve25519 ours (the chat-curve identity)"
+        }
+      ],
+      "recheck": "Re-check when the nim.packages hook lands upstream, or a pinned rev in module/metadata.json codegen.nim.packages is bumped."
     }
   ]
 }

@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 560" width="880" height="560" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>How the module reuses the Nimbus Nim stack</title>
+  <desc>metadata.json's codegen.nim.packages pins a flat closure of Status/Nimbus Nim libraries; the logos-module-builder's nim.packages hook fetches each from GitHub (with submodules where a package vendors C) and adds it to the Nim import path with --path, so the module core compiles against the org stack instead of hand-rolled code. Reused: stint (amounts), nim-secp256k1 (one secp source), nim-eth (RLP signing + verifyMptProof), nim-web3 (typed RPC over chronos), nimcrypto, and their closure. Kept ours on purpose: dcbor (deterministic signing-path encoding, invariant 5) and curve25519 over libsodium (the F-14 chat-curve identity). The hook plus per-package fetchSubmodules are local builder-fork commits worth upstreaming.</desc>
+<!-- provenance
+     serves:   BUILD
+     shows:    The reuse toolchain: metadata.json's pinned nim.packages closure -> the
+               builder's nim.packages hook (fetchFromGitHub + –path) -> the Nim
+               staticlib compile, with the reused Status/Nimbus stack against what is
+               kept ours (dcbor, curve25519) and why.
+     sources:  module/metadata.json
+               docs/02-implementation-plan.md
+               CLAUDE.md
+     evidence: [from-source] ADR-014 records the decision, the nim.packages hook, the
+                   reused set and what is kept ours; metadata.json carries the pinned closure
+               [measured] the portable .lgx builds clean with the whole closure (incl.
+                   the bearssl submodule C) fetched through the hook; 42 probes green on nim-
+                   secp256k1
+               [from-source] invariant 5 keeps dcbor ours; F-14 keeps curve25519 ours
+                   (the chat-curve identity)
+     recheck:  Re-check when the nim.packages hook lands upstream, or a pinned rev in
+               module/metadata.json codegen.nim.packages is bumped.
+-->
+
+  <defs>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8A928C"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="560" fill="#E4E6E0"/>
+
+  <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">Reusing the Nimbus Nim stack</text>
+  <text x="40" y="64" font-size="13.5" fill="#656E66">The module pins the org's libraries and the builder puts them on the Nim path — reuse, not re-implementation.</text>
+
+  <rect x="40" y="80" width="800" height="30" rx="5" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1.2"/>
+  <rect x="52" y="88" width="100" height="15" rx="7.5" fill="#1E6B52"/>
+  <text x="102" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#DFEDE6">BUILT · ADR-014</text>
+  <text x="164" y="99" font-size="10" fill="#2A4A3C">The builder compiled Nim stdlib-only; a nim.packages hook unblocks the whole Status stack</text>
+
+  <!-- ══ the pipeline ══ -->
+  <rect x="40" y="130" width="240" height="66" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="56" y="151" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">metadata.json</text>
+  <text x="56" y="171" font-size="10.5" fill="#3F4742">codegen.nim.packages — a flat,</text>
+  <text x="56" y="185" font-size="10.5" fill="#3F4742">pinned {owner, repo, rev, hash}.</text>
+
+  <path d="M 280 163 L 316 163" stroke="#8A928C" stroke-width="1.4" fill="none" marker-end="url(#g)"/>
+
+  <rect x="318" y="130" width="244" height="66" rx="6" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.4"/>
+  <text x="334" y="151" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">nim.packages HOOK</text>
+  <text x="334" y="171" font-size="10.5" fill="#3F4742">fetchFromGitHub (+ submodules)</text>
+  <text x="334" y="185" font-size="10.5" fill="#3F4742">→ a --path for each package.</text>
+
+  <path d="M 562 163 L 598 163" stroke="#8A928C" stroke-width="1.4" fill="none" marker-end="url(#g)"/>
+
+  <rect x="600" y="130" width="240" height="66" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="616" y="151" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">nim c --app:staticlib</text>
+  <text x="616" y="171" font-size="10.5" fill="#3F4742">The module core compiles against</text>
+  <text x="616" y="185" font-size="10.5" fill="#3F4742">the org stack → muster_module.lgx.</text>
+
+  <!-- ══ reused ══ -->
+  <rect x="40" y="216" width="470" height="196" rx="6" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1.2"/>
+  <text x="56" y="238" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#1E6B52">REUSED — THE STATUS / NIMBUS STACK</text>
+  <text x="56" y="262" font-size="11" fill="#1A1F1C"><tspan font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace">stint</tspan>  — amounts (UInt256 = the EVM word)</text>
+  <text x="56" y="282" font-size="11" fill="#1A1F1C"><tspan font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace">nim-secp256k1</tspan>  — one secp source (vendored C)</text>
+  <text x="56" y="302" font-size="11" fill="#1A1F1C"><tspan font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace">nim-eth</tspan>  — EIP-155 signing + verifyMptProof</text>
+  <text x="56" y="322" font-size="11" fill="#1A1F1C"><tspan font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace">nim-web3</tspan>  — typed eth_* RPC (over chronos)</text>
+  <text x="56" y="342" font-size="11" fill="#1A1F1C"><tspan font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace">nimcrypto</tspan>  — keccak / sha</text>
+  <text x="56" y="368" font-size="9.5" fill="#656E66">closure: stew · results · intops · chronicles ·</text>
+  <text x="56" y="382" font-size="9.5" fill="#656E66">bearssl (submodule) · faststreams · json-rpc ·</text>
+  <text x="56" y="396" font-size="9.5" fill="#656E66">serialization · json-serialization · http-utils</text>
+
+  <!-- ══ kept ours ══ -->
+  <rect x="526" y="216" width="314" height="196" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1.2"/>
+  <text x="542" y="238" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">KEPT OURS — ON PURPOSE</text>
+  <text x="542" y="262" font-size="11" font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">dcbor</text>
+  <text x="542" y="280" font-size="10" fill="#3F4742">Deterministic signing-path encoding</text>
+  <text x="542" y="294" font-size="10" fill="#3F4742">(invariant 5). The platform's own</text>
+  <text x="542" y="308" font-size="10" fill="#3F4742">encoding is non-canonical — this is</text>
+  <text x="542" y="322" font-size="10" fill="#3F4742">ours to enforce.</text>
+  <text x="542" y="348" font-size="11" font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">curve25519 / libsodium</text>
+  <text x="542" y="366" font-size="10" fill="#3F4742">The encryption/chat identity (F-14).</text>
+  <text x="542" y="380" font-size="10" fill="#3F4742">Ed25519/X25519 matches the platform</text>
+  <text x="542" y="394" font-size="10" fill="#3F4742">chat account — the bridge, not a fork.</text>
+
+  <!-- ══ costs ══ -->
+  <rect x="40" y="424" width="800" height="60" rx="6" fill="#23282A"/>
+  <text x="56" y="446" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#96A19B">COSTS ACCEPTED</text>
+  <text x="56" y="466" font-size="11" fill="#DCE2DE"><tspan font-weight="600">chronos</tspan> is now the module's async runtime — driven synchronously with waitFor at the sync lidl boundary (see the labbook).</text>
+  <text x="56" y="480" font-size="11" fill="#96A19B"><tspan font-weight="600">bearssl</tspan> vendors BearSSL C via a git submodule — so the hook gained per-package fetchSubmodules.</text>
+
+  <text x="40" y="512" font-size="10.5" font-weight="600" fill="#1E6B52">Verified: all 42 invariant probes pass on nim-secp256k1 with no system lib; safe_anvil_e2e runs green on live anvil.</text>
+  <text x="40" y="530" font-size="10.5" fill="#3F4742">The nim.packages hook + fetchSubmodules are local builder-fork commits (branch nim-cdylib-authoring), worth upstreaming.</text>
+</svg>
