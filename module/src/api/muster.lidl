@@ -4,6 +4,8 @@ module muster_module {
 
   method health() -> tstr description "Liveness probe. Returns \"ok\" when the module is loaded and dispatching."
 
+  method identity() -> tstr description "Return this module's persistent coordination identity, as JSON: {address, pubkey}. The identity is a secp256k1 key minted on first run and persisted (FS-4) under the host-provided instance path; it is stable across restarts, and is the same key that signs Safe transactions and does epoch key-agreement (ADR-010, one curve). A UI shows this as \"who am I in the room\"."
+
   method describe() -> tstr description "Return the coordination account this module is configured against, as JSON: {chainId, safe, threshold, owners, environment}. Every intent's safeTxHash commits to chainId+safe, so a UI shows the domain it was told rather than one it assumed."
 
   method propose(effect_json: tstr) -> tstr description "Propose an intent from an effect (a JSON object, e.g. {\"to\":\"0x..\",\"value\":1000,\"nonce\":0}). Returns the new intent's id."

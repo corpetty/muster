@@ -22,6 +22,7 @@ import ../src/intents/lifecycle
 import ../src/transport/lp_ffi        # the lp_* inter-module call binding (protocol ABI)
 import ../src/transport/delivery      # DeliveryTransport (transport over lp_*)
 import ../src/crypto/epoch_crypto     # EpochCrypto (ECIES-secp256k1 + libsodium AEAD)
+import ../src/crypto/keystore         # persistent module identity (FS-4)
 import ../src/coordination/session    # the multi-instance coordination flow
 
 proc hexToBytes(s: string): seq[byte] =
@@ -69,6 +70,32 @@ proc cmpSigner(a, b: (Address, Signature65)): int =
   0
 
 proc musterHealth(): string = "ok"
+
+# ── persistent module identity (FS-4) ──────────────────────────────────────────
+# Opened once, lazily. The keyfile lives under the host-provided instance path
+# (gContext.instancePersistencePath, from muster_gen); the module's identity is
+# stable across restarts. The passphrase is a stopgap wart — read from the env
+# with a documented dev default — that the real OS-keystore/Keycard backend
+# removes when it slots behind this same seam.
+var gKeystore: Keystore = nil
+
+proc moduleKeystore(): Keystore =
+  if gKeystore == nil:
+    var dir = gContext.instancePersistencePath
+    if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+    let pass = getEnv("MUSTER_KEY_PASSPHRASE", "muster-dev-passphrase")
+    gKeystore = openFileKeystore(dir / "identity.mks", pass)
+  gKeystore
+
+proc musterIdentity(): string =
+  ## The module's persistent coordination identity (FS-4) — the secp256k1 address
+  ## and public key it signs and does epoch key-agreement with (ADR-010, one
+  ## curve). Minted on first call, then stable across restarts.
+  let ks = moduleKeystore()
+  $(%*{
+    "address": toHex(ks.address()),
+    "pubkey": toHex(ks.pubKey())
+  })
 
 proc musterDescribe(): string =
   ## The Safe account this module coordinates against, read straight from the
@@ -189,12 +216,15 @@ proc musterSubmit(intentId: string): string =
 # ── P3 stack link-check (temporary) ───────────────────────────────────────────
 # The transport (lp_*), crypto (secp256k1 + libsodium AEAD), and coordination
 # layers are compiled into the plugin here. This proc is never called; it exists
-# so the whole P3 stack LINKS in the shipping plugin ahead of the hosted
-# coordination surface (which needs a delivery node to exercise). Delete it when
-# that surface lands and genuinely drives the stack.
+# so the whole P3 stack LINKS in the shipping plugin ahead of the full hosted
+# coordination surface (start/join a conversation, contribute — which needs a
+# delivery node to exercise). Delete it when that surface lands and genuinely
+# drives the stack. The epoch layer is now seeded from the module's persistent
+# identity (FS-4), not a zero key — the identity() method above is the first of
+# the surface to land for real.
 var gP3LinkCheck {.used.}: CoordinationSession
 proc musterP3LinkCheck() {.exportc, used.} =
-  var k: array[32, byte]
-  gP3LinkCheck = newCoordinationSession(newDeliveryTransport(), newEpochCrypto(k),
+  gP3LinkCheck = newCoordinationSession(newDeliveryTransport(),
+                                        newEpochCrypto(moduleKeystore()),
                                         "muster.p3.linkcheck")
   gP3LinkCheck.publish(Event(key: "k", value: "v"))
