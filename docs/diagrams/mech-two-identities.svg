@@ -1,28 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 552" width="880" height="552" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
-  <title>One curve now, the binding deferred — the identity decision (ADR-010)</title>
-  <desc>ADR-010, resolved and amended. Muster builds a thin ECIES-secp256k1 epoch layer that reuses the same secp256k1 key it signs Safe transactions with — F-14's one-curve ideal, no second identity. The platform's Ed25519/X25519 chat identity is the target for later; consuming it reintroduces a per-member binding to the secp256k1 account, which becomes designed work then, not now.</desc>
+  <title>Two bound identities: the F-14 decision (ADR-010 revisited)</title>
+  <desc>ADR-010 revisited (2026-08-23). The one-curve ideal hid a key-reuse problem — the same secp256k1 secret signed Safe transactions and did epoch ECDH. F-14 is relaxed to two keypairs: a secp256k1 authorization identity and an Ed25519/X25519 encryption identity, joined by a signed link statement the room verifies on ingest (F-9). This fixes key separation and builds exactly the binding consuming the platform's Ed25519/X25519 chat layer would need — the curve gap becomes a bridge. Both identities and the binding are built and tested.</desc>
 <!-- provenance
      serves:   BOTH
-     shows:    The identity decision at ADR-010 (amended): a thin ECIES-secp256k1 epoch
-               layer reuses the Safe signing key (one curve, F-14's ideal, no second
-               identity); the Ed25519 chat identity and its binding are deferred to
-               native chat.
+     shows:    The identity decision at ADR-010 as revisited (2026-08-23): two bound
+               keypairs — a secp256k1 authorization identity and an Ed25519/X25519
+               encryption identity, joined by a signed binding the room verifies (F-9) —
+               replacing the one-curve ideal, which hid ECDSA+ECDH key reuse.
      sources:  docs/01-furps.md
                docs/02-implementation-plan.md
                demo/GAPS.md
-     evidence: [from-source] chat identity is Ed25519/X25519, secp256k1 only transitive —
-                   read off libchat's account and crypto layers via ADR-010's investigation
+     evidence: [from-source] F-14 (reworded) and ADR-010's third amendment record the
+                   two-identity decision and its key-separation rationale
                [from-source] F-9 derives role by intersecting chat and account
-                   membership, so the binding is load-bearing only when the two identities
-                   differ
-               [from-source] the decision and its amendment are recorded in ADR-010 and
-                   FS-7 (persistent, room-scoped identity)
-               [measured] the stopgap is built and its F-16 property verified in
-                   module/tests/epoch_crypto_test.nim — one secp256k1 key signs and wraps
-                   epoch keys
-     recheck:  When native logos-chat-module ships persistence + member removal — the
-               per-member secp<->Ed25519 binding becomes real work and this figure
-               becomes a migration plan.
+                   membership, so the binding is what that intersection rests on
+               [measured] both identities and the binding are built and tested in
+                   module/tests (curve25519_test, binding_test, keystore_test,
+                   membership_handshake_test with F-9 verified before admission)
+     recheck:  Both identities and the binding are built and tested (curve25519_test,
+               binding_test, membership_handshake_test). Re-point the binding at native
+               logos-chat-module's Ed25519 account when it ships persistence + removal.
 -->
 
   <defs>
@@ -33,66 +30,64 @@
 
   <rect width="880" height="552" fill="#E4E6E0"/>
 
-  <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">The same principle — now held on one curve, by decision</text>
-  <text x="40" y="64" font-size="13.5" fill="#656E66">This drew a problem; ADR-010 resolved it. Signing and encryption ride one secp256k1 key; native chat is the later target.</text>
+  <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">Two identities, bound — signing is not encryption</text>
+  <text x="40" y="64" font-size="13.5" fill="#656E66">One curve hid a key-reuse problem. F-14 now separates the two roles and binds them with a signature the room verifies.</text>
 
   <rect x="40" y="80" width="800" height="30" rx="5" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1.2"/>
   <rect x="52" y="88" width="128" height="15" rx="7.5" fill="#1E6B52"/>
   <text x="116" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#DFEDE6">RESOLVED · ADR-010</text>
-  <text x="192" y="99" font-size="10" fill="#2A4A3C">F-14, F-9 · build a thin ECIES-secp256k1 stopgap now; native chat (Ed25519) is the target once it ships persistence + removal</text>
+  <text x="192" y="99" font-size="10" fill="#2A4A3C">F-14, F-9 · two keypairs bound by a signed statement the room verifies — and the binding bridges to native chat later</text>
 
   <!-- ══ two identities ══ -->
-  <rect x="40" y="130" width="380" height="120" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1" stroke-dasharray="4 3"/>
-  <text x="56" y="152" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#8FA3F5">THE CHAT IDENTITY · the target, later</text>
-  <text x="56" y="176" font-size="13" font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">Ed25519 / X25519</text>
-  <text x="56" y="196" font-size="10.5" fill="#656E66">logos-chat-module (MLS). Adopted once it ships</text>
-  <text x="56" y="210" font-size="10.5" fill="#656E66">persistence + member removal — then it binds the</text>
-  <text x="56" y="224" font-size="10.5" fill="#656E66">ConversationCrypto seam and this stopgap is deleted.</text>
-  <text x="56" y="242" font-size="9.5" fill="#656E66">Who can read the room — not built yet.</text>
+  <rect x="40" y="130" width="380" height="120" rx="6" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1.4"/>
+  <text x="56" y="152" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#1E6B52">THE AUTHORIZATION IDENTITY · built</text>
+  <text x="56" y="176" font-size="13" font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">secp256k1</text>
+  <text x="56" y="196" font-size="10.5" fill="#2A4A3C">Signs what moves value — the Safe transaction</text>
+  <text x="56" y="210" font-size="10.5" fill="#2A4A3C">(Keycard, v1). And signs the binding below that</text>
+  <text x="56" y="224" font-size="10.5" fill="#2A4A3C">vouches for the encryption identity.</text>
+  <text x="56" y="242" font-size="9.5" fill="#1E6B52">Who may move the money.</text>
 
   <rect x="460" y="130" width="380" height="120" rx="6" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1.4"/>
-  <text x="476" y="152" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#1E6B52">THE ONE IDENTITY · built</text>
-  <text x="476" y="176" font-size="13" font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">secp256k1</text>
-  <text x="476" y="196" font-size="10.5" fill="#2A4A3C">Signs what moves value AND wraps each epoch key</text>
-  <text x="476" y="210" font-size="10.5" fill="#2A4A3C">to members (ECIES, same curve) — F-14's ideal, met.</text>
-  <text x="476" y="224" font-size="10.5" fill="#2A4A3C">The member's encryption key falls out of their signature.</text>
-  <text x="476" y="242" font-size="9.5" fill="#1E6B52">Who can read the room AND move the money — one key.</text>
+  <text x="476" y="152" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#1E6B52">THE ENCRYPTION IDENTITY · built</text>
+  <text x="476" y="176" font-size="13" font-weight="600" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">Ed25519 / X25519</text>
+  <text x="476" y="196" font-size="10.5" fill="#2A4A3C">Encrypts epoch keys to members (sealed boxes,</text>
+  <text x="476" y="210" font-size="10.5" fill="#2A4A3C">ECIES over X25519) and authors room messages —</text>
+  <text x="476" y="224" font-size="10.5" fill="#2A4A3C">the same shape as the platform chat account.</text>
+  <text x="476" y="242" font-size="9.5" fill="#1E6B52">Who may read the room.</text>
 
-  <!-- ══ the binding, deferred ══ -->
-  <path d="M 424 190 L 456 190" stroke="#8FA3F5" stroke-width="1.6" stroke-dasharray="4 4" fill="none"/>
-  <circle cx="440" cy="190" r="5" fill="none" stroke="#8FA3F5" stroke-width="1.6"/>
-
-  <text x="440" y="272" font-size="11" text-anchor="middle" font-weight="600" fill="#656E66">binding needed only if the two differ — deferred</text>
+  <!-- ══ the binding ══ -->
+  <path d="M 424 190 L 456 190" stroke="#1E6B52" stroke-width="1.6" fill="none" marker-end="url(#r)" marker-start="url(#r)"/>
+  <text x="440" y="272" font-size="11" text-anchor="middle" font-weight="600" fill="#1E6B52">the binding — the secp key signs the encryption identity · built, verified on ingest</text>
 
   <!-- ══ what the binding is for ══ -->
-  <rect x="40" y="290" width="800" height="104" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1.4"/>
-  <text x="56" y="312" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">WHAT THE BINDING IS FOR — AND WHY IT ISN'T NEEDED YET</text>
+  <rect x="40" y="290" width="800" height="104" rx="6" fill="#F7F8F5" stroke="#1E6B52" stroke-width="1.4"/>
+  <text x="56" y="312" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#1E6B52">WHAT THE BINDING IS FOR — AND WHY IT IS VERIFIED, NEVER TRUSTED</text>
 
   <text x="56" y="336" font-size="11.5" font-weight="600" fill="#1A1F1C">F-9 derives every member's role by intersecting chat membership with account membership.</text>
-  <text x="56" y="352" font-size="10.5" fill="#3F4742">That intersection needs an authenticated binding only when the chat identity and the account key are different things. The stopgap</text>
-  <text x="56" y="366" font-size="10.5" fill="#3F4742">makes them the SAME secp256k1 key, so the intersection is trivial today — a member's encryption key is recovered from the very</text>
-  <text x="56" y="386" font-size="10.5" fill="#1E6B52" font-weight="600">signature that authenticated them. The binding becomes real work only when native chat (Ed25519) is adopted — per member, then.</text>
+  <text x="56" y="352" font-size="10.5" fill="#3F4742">The binding is a domain-separated statement the secp256k1 key signs over the encryption identity (committing to account and</text>
+  <text x="56" y="366" font-size="10.5" fill="#3F4742">expiry, inv 2/5). On admission the room recovers the secp signer and checks it is a Safe owner — so a joiner is admitted only</text>
+  <text x="56" y="386" font-size="10.5" fill="#1E6B52" font-weight="600">when it proves the two identities are the same actor. A bare asserted identity never counts (membership_handshake_test).</text>
 
   <!-- ══ the decision ══ -->
-  <text x="40" y="422" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">THE DECISION (ADR-010, AMENDED) — THE THIRD WAY, TAKEN</text>
+  <text x="40" y="422" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">THE DECISION (ADR-010, REVISITED) — ONE CURVE WAS THE WRONG SIMPLICITY</text>
 
-  <rect x="40" y="432" width="256" height="86" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1" stroke-dasharray="4 3"/>
-  <text x="56" y="452" font-size="10.5" font-weight="600" fill="#656E66">F-14 changes — not taken</text>
-  <text x="56" y="470" font-size="10" fill="#656E66">No need: the stopgap honors</text>
-  <text x="56" y="483" font-size="10" fill="#656E66">F-14's ideal — one key serves</text>
-  <text x="56" y="496" font-size="10" fill="#656E66">both roles.</text>
+  <rect x="40" y="432" width="256" height="86" rx="6" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1"/>
+  <text x="56" y="452" font-size="10.5" font-weight="600" fill="#A32D1E">Keep one curve — rejected</text>
+  <text x="56" y="470" font-size="10" fill="#3F4742">The same secp secret did ECDSA</text>
+  <text x="56" y="483" font-size="10" fill="#3F4742">and ECDH — key reuse, against</text>
+  <text x="56" y="496" font-size="10" fill="#3F4742">key separation.</text>
 
-  <rect x="312" y="432" width="256" height="86" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1" stroke-dasharray="4 3"/>
-  <text x="328" y="452" font-size="10.5" font-weight="600" fill="#656E66">Design the binding — deferred</text>
-  <text x="328" y="470" font-size="10" fill="#656E66">A per-member secp&#8596;Ed25519</text>
-  <text x="328" y="483" font-size="10" fill="#656E66">statement — built when native</text>
-  <text x="328" y="496" font-size="10" fill="#656E66">chat is adopted, not before.</text>
+  <rect x="312" y="432" width="256" height="86" rx="6" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1.6"/>
+  <text x="328" y="452" font-size="10.5" font-weight="600" fill="#1A1F1C">Two identities + binding ✓ taken</text>
+  <text x="328" y="470" font-size="10" fill="#2A4A3C">Distinct keys per primitive;</text>
+  <text x="328" y="483" font-size="10" fill="#2A4A3C">a signed link statement the</text>
+  <text x="328" y="496" font-size="10" fill="#2A4A3C">room verifies (F-9). Built.</text>
 
-  <rect x="584" y="432" width="256" height="86" rx="6" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1.6"/>
-  <text x="600" y="452" font-size="10.5" font-weight="600" fill="#1A1F1C">Build epochs ourselves ✓ done</text>
-  <text x="600" y="470" font-size="10" fill="#2A4A3C">Consume delivery only, one curve.</text>
-  <text x="600" y="483" font-size="10" fill="#2A4A3C">ECIES-secp256k1 EpochCrypto</text>
-  <text x="600" y="496" font-size="10" fill="#2A4A3C">behind ConversationCrypto — F-16 verified.</text>
+  <rect x="584" y="432" width="256" height="86" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1" stroke-dasharray="4 3"/>
+  <text x="600" y="452" font-size="10.5" font-weight="600" fill="#656E66">Native chat — the target</text>
+  <text x="600" y="470" font-size="10" fill="#656E66">Its Ed25519 account IS this</text>
+  <text x="600" y="483" font-size="10" fill="#656E66">encryption identity, so adoption</text>
+  <text x="600" y="496" font-size="10" fill="#656E66">re-points the binding, not redesigns it.</text>
 
-  <text x="40" y="540" font-size="10.5" font-weight="600" fill="#1E6B52">Decided before P3 wrote code. The stopgap is interface-isolated, so adopting native chat later is a binding change, not a migration.</text>
+  <text x="40" y="540" font-size="10.5" font-weight="600" fill="#1E6B52">The curve gap ADR-010 called a blocker is now a bridge: the binding built here is exactly what consuming native chat requires.</text>
 </svg>
