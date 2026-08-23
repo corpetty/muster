@@ -128,3 +128,24 @@ method sign*(fk: FileKeystore, msgHash: array[32, byte]): Signature65 =
   signRecoverable(msgHash, fk.secret)
 method ecdh*(fk: FileKeystore, peer: PubKey): array[32, byte] =
   secp256k1.ecdh(fk.secret, peer)
+
+# ── InMemoryKeystore — no persistence, for tests and raw-key call sites ─────────
+# The same operation seam over a secret held only in memory. Persistence is what
+# FileKeystore adds; this is the seam without it, so code that already holds a raw
+# key (the F-16 tests, the raw-key epoch constructors) can present it as a Keystore.
+
+type
+  InMemoryKeystore* = ref object of Keystore
+    secret: array[32, byte]
+    addr0: Address
+    pub: PubKey
+
+proc newInMemoryKeystore*(secret: array[32, byte]): InMemoryKeystore =
+  InMemoryKeystore(secret: secret, addr0: addressOf(secret), pub: pubKeyOf(secret))
+
+method address*(ik: InMemoryKeystore): Address = ik.addr0
+method pubKey*(ik: InMemoryKeystore): PubKey = ik.pub
+method sign*(ik: InMemoryKeystore, msgHash: array[32, byte]): Signature65 =
+  signRecoverable(msgHash, ik.secret)
+method ecdh*(ik: InMemoryKeystore, peer: PubKey): array[32, byte] =
+  secp256k1.ecdh(ik.secret, peer)

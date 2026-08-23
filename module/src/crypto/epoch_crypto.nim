@@ -20,6 +20,7 @@ import std/tables
 import ./secp256k1
 import ./sodium
 import ./conversation
+import ./keystore
 export conversation
 
 type
@@ -33,7 +34,7 @@ type
     wrappedKey*: seq[byte]
 
   EpochCrypto* = ref object of ConversationCrypto
-    mySec: array[32, byte]
+    ks: Keystore                          ## our identity — the secret stays behind this seam (FS-4)
     myPub: Member
     keys: Table[int, array[32, byte]]     ## the epochs I actually hold keys for
     memberSets: Table[int, seq[Member]]   ## members per epoch (for grants/queries)
@@ -60,22 +61,33 @@ proc eciesWrap*(recipient: Member, secret: array[32, byte]): seq[byte] =
   let shared = ecdh(ephSec, recipient)
   @ephPub & secretboxSeal(shared, secret)
 
-proc eciesUnwrap*(mySec: array[32, byte], wrapped: seq[byte]): array[32, byte] =
-  if wrapped.len < 33:
-    raise newException(SodiumError, "wrapped key too short")
-  var ephPub: PubKey
-  for i in 0 ..< 33: ephPub[i] = wrapped[i]
-  let shared = ecdh(mySec, ephPub)
+proc unwrapWithShared(shared: array[32, byte], wrapped: seq[byte]): array[32, byte] =
   let plain = secretboxOpen(shared, wrapped[33 .. ^1])
   if plain.len != 32:
     raise newException(SodiumError, "unwrapped key wrong length")
   for i in 0 ..< 32: result[i] = plain[i]
 
+proc ephPubOf(wrapped: seq[byte]): PubKey =
+  if wrapped.len < 33:
+    raise newException(SodiumError, "wrapped key too short")
+  for i in 0 ..< 33: result[i] = wrapped[i]
+
+proc eciesUnwrap*(mySec: array[32, byte], wrapped: seq[byte]): array[32, byte] =
+  ## Raw-key unwrap (kept for tests that hold a bare key, e.g. the mallory probe).
+  unwrapWithShared(ecdh(mySec, ephPubOf(wrapped)), wrapped)
+
+proc eciesUnwrapVia(ks: Keystore, wrapped: seq[byte]): array[32, byte] =
+  ## Unwrap through the keystore seam — the ECDH happens behind it, so our secret
+  ## is never in this layer (a Keycard would unwrap on-card). This is the path the
+  ## live conversation uses.
+  unwrapWithShared(ks.ecdh(ephPubOf(wrapped)), wrapped)
+
 # ── EpochCrypto ───────────────────────────────────────────────────────────────
 
-proc newEpochCrypto*(mySec: array[32, byte], others: seq[Member] = @[]): EpochCrypto =
+proc newEpochCrypto*(ks: Keystore, others: seq[Member] = @[]): EpochCrypto =
   ## Found a conversation: epoch 0 with a fresh key I hold, members = me + others.
-  result = EpochCrypto(mySec: mySec, myPub: pubKeyOf(mySec),
+  ## Identity comes from the keystore; our secret never enters this layer.
+  result = EpochCrypto(ks: ks, myPub: ks.pubKey(),
                        keys: initTable[int, array[32, byte]](),
                        memberSets: initTable[int, seq[Member]](), cur: 0)
   var members = @[result.myPub]
@@ -84,11 +96,19 @@ proc newEpochCrypto*(mySec: array[32, byte], others: seq[Member] = @[]): EpochCr
   result.keys[0] = randomKey()
   result.memberSets[0] = members
 
-proc newEpochJoiner*(mySec: array[32, byte]): EpochCrypto =
+proc newEpochJoiner*(ks: Keystore): EpochCrypto =
   ## A member who joins by ingesting grants; holds no key until they do.
-  EpochCrypto(mySec: mySec, myPub: pubKeyOf(mySec),
+  EpochCrypto(ks: ks, myPub: ks.pubKey(),
               keys: initTable[int, array[32, byte]](),
               memberSets: initTable[int, seq[Member]](), cur: -1)
+
+proc newEpochCrypto*(mySec: array[32, byte], others: seq[Member] = @[]): EpochCrypto =
+  ## Raw-key convenience: wrap the secret in an in-memory keystore. Call sites that
+  ## already hold a bare key (the F-16 tests) keep working unchanged.
+  newEpochCrypto(Keystore(newInMemoryKeystore(mySec)), others)
+
+proc newEpochJoiner*(mySec: array[32, byte]): EpochCrypto =
+  newEpochJoiner(Keystore(newInMemoryKeystore(mySec)))
 
 proc grantFor*(cc: EpochCrypto, epoch: int, member: Member): EpochKeyGrant =
   ## Wrap an epoch's key to a member (the founder/driver hands these out). Only
@@ -101,7 +121,7 @@ proc grantFor*(cc: EpochCrypto, epoch: int, member: Member): EpochKeyGrant =
 proc ingestGrant*(cc: EpochCrypto, grant: EpochKeyGrant) =
   ## Receive an epoch key wrapped to me. After this I can open that epoch's
   ## envelopes — and only that epoch's (F-16), unless I was granted others.
-  cc.keys[grant.epoch] = eciesUnwrap(cc.mySec, grant.wrappedKey)
+  cc.keys[grant.epoch] = eciesUnwrapVia(cc.ks, grant.wrappedKey)
   cc.memberSets[grant.epoch] = grant.members
   if grant.epoch > cc.cur: cc.cur = grant.epoch
 
