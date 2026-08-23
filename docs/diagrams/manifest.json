@@ -221,7 +221,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "a1d944facbcd5248d4b29629e6002b72f0a191be60c9a6e0367d31e549f9c194",
+          "sha256": "64ab0ecaa8c73bd845c188e6cdc2850014c8a951e922ee389e0f122b26ceadf5",
           "note": "the two rules the C header states, and the never-hand-write-what-the-contract-generates rule"
         },
         {
@@ -343,7 +343,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "a1d944facbcd5248d4b29629e6002b72f0a191be60c9a6e0367d31e549f9c194",
+          "sha256": "64ab0ecaa8c73bd845c188e6cdc2850014c8a951e922ee389e0f122b26ceadf5",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -416,7 +416,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "a1d944facbcd5248d4b29629e6002b72f0a191be60c9a6e0367d31e549f9c194",
+          "sha256": "64ab0ecaa8c73bd845c188e6cdc2850014c8a951e922ee389e0f122b26ceadf5",
           "note": "invariant 10, and invariant 1 whose blind spot the figure draws"
         },
         {
@@ -462,7 +462,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "a1d944facbcd5248d4b29629e6002b72f0a191be60c9a6e0367d31e549f9c194",
+          "sha256": "64ab0ecaa8c73bd845c188e6cdc2850014c8a951e922ee389e0f122b26ceadf5",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -537,7 +537,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "a1d944facbcd5248d4b29629e6002b72f0a191be60c9a6e0367d31e549f9c194",
+          "sha256": "64ab0ecaa8c73bd845c188e6cdc2850014c8a951e922ee389e0f122b26ceadf5",
           "note": "the invariant this figure draws, in its shortest form"
         }
       ],
@@ -607,7 +607,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "a1d944facbcd5248d4b29629e6002b72f0a191be60c9a6e0367d31e549f9c194",
+          "sha256": "64ab0ecaa8c73bd845c188e6cdc2850014c8a951e922ee389e0f122b26ceadf5",
           "note": "the invariant this figure draws, in its shortest form"
         }
       ],
@@ -976,6 +976,80 @@
         }
       ],
       "recheck": "Before the settlement post publishes, and any time the zone changes proving. The 'do not state as typical' caveat in §5 travels with this figure."
+    },
+    {
+      "file": "mech-wallet-seam.svg",
+      "serves": "BOTH",
+      "shows": "A Wallet aggregate over a ChainAdapter seam with two adapters (EVM, mock shielded), the four divergences the seam keeps distinct (account model, assets, finality, failure), and where signing (FS-4) and the untrusted RPC (inv 8) sit.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "5a6d5810e12a4a3a88cfa2de6a6c858deb09474c2105b15743d1dfeaa0326913",
+          "note": "F-Design chain-agnostic settlement, F-10, invariant 8, FS-4"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "44c13da6e3743605b1cb2510c5f8046aa3bc6abe573bb125a3f3e38d88697c84",
+          "note": "where the wallet is built and its accept criteria"
+        },
+        {
+          "path": "CLAUDE.md",
+          "sha256": "64ab0ecaa8c73bd845c188e6cdc2850014c8a951e922ee389e0f122b26ceadf5",
+          "note": "the src/wallet layout and the reuse posture"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "F-Design: settlement chain-agnostic, the app never becomes the settlement layer; invariant 8: untrusted user-configurable RPC"
+        },
+        {
+          "grade": "from-source",
+          "note": "FS-4: key material stays behind the keystore seam; the wallet signs through it, never holding a key"
+        },
+        {
+          "grade": "measured",
+          "note": "both adapters built and tested (wallet_types_test, wallet_mock_test, wallet_evm_test); the hosted wallet_* surface is wired"
+        }
+      ],
+      "recheck": "Re-check when the real LEZ adapter lands (registers behind the same seam) or a third chain is added."
+    },
+    {
+      "file": "mech-verified-reads.svg",
+      "serves": "BOTH",
+      "shows": "The verified-read path: an untrusted RPC's eth_getProof checked with nim-eth verifyMptProof against a trusted state root, the three outcomes (valid/absent/invalid), the attested-vs-verified-locally grades, and the deferred light-client anchor.",
+      "sources": [
+        {
+          "path": "docs/01-furps.md",
+          "sha256": "5a6d5810e12a4a3a88cfa2de6a6c858deb09474c2105b15743d1dfeaa0326913",
+          "note": "invariant 8 (untrusted RPC), F-10 (facts render at the grade they can be checked to)"
+        },
+        {
+          "path": "docs/02-implementation-plan.md",
+          "sha256": "44c13da6e3743605b1cb2510c5f8046aa3bc6abe573bb125a3f3e38d88697c84",
+          "note": "the verified-reads work and its status"
+        },
+        {
+          "path": "CLAUDE.md",
+          "sha256": "64ab0ecaa8c73bd845c188e6cdc2850014c8a951e922ee389e0f122b26ceadf5",
+          "note": "verify.nim reuse of nim-eth and the deferred sidecar"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "invariant 8 and F-10 verbatim"
+        },
+        {
+          "grade": "measured",
+          "note": "verify.nim reuses nim-eth verifyMptProof; wallet_verify_test proves valid verifies, tampered is refused, absent is a verified zero — self-contained, no node"
+        },
+        {
+          "grade": "from-source",
+          "note": "a trustless state root needs a beacon light client (Nimbus verified proxy, REST mode) — a documented sidecar, deferred (needs a running beacon endpoint)"
+        }
+      ],
+      "recheck": "Re-check when the light-client sidecar is wired (the state root becomes trustless end to end) or nim-eth's proof API changes."
     }
   ]
 }

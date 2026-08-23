@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 536" width="880" height="536" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>You don't have to trust the RPC — verify the balance</title>
+  <desc>An RPC endpoint is untrusted (invariant 8). A balance becomes a verified-locally fact (F-10) by asking the untrusted provider for eth_getProof and checking the account's Merkle-Patricia proof against a trusted state root with nim-eth's verifyMptProof — the exact primitive the Nimbus verified proxy uses, reused in-process with no beacon stack. A valid proof means the balance is authentic under that state root; a proven-absent account is a verified zero; an invalid proof means the provider is inconsistent with consensus and is refused. The state root is the trust anchor: making it trustless needs a beacon light client (the verified proxy in REST mode) run as a sidecar — deferred. The verification itself is built and tested.</desc>
+<!-- provenance
+     serves:   BOTH
+     shows:    The verified-read path: an untrusted RPC's eth_getProof checked with nim-
+               eth verifyMptProof against a trusted state root, the three outcomes
+               (valid/absent/invalid), the attested-vs-verified-locally grades, and the
+               deferred light-client anchor.
+     sources:  docs/01-furps.md
+               docs/02-implementation-plan.md
+               CLAUDE.md
+     evidence: [from-source] invariant 8 and F-10 verbatim
+               [measured] verify.nim reuses nim-eth verifyMptProof; wallet_verify_test
+                   proves valid verifies, tampered is refused, absent is a verified zero —
+                   self-contained, no node
+               [from-source] a trustless state root needs a beacon light client (Nimbus
+                   verified proxy, REST mode) — a documented sidecar, deferred (needs a
+                   running beacon endpoint)
+     recheck:  Re-check when the light-client sidecar is wired (the state root becomes
+               trustless end to end) or nim-eth's proof API changes.
+-->
+
+  <defs>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8A928C"/>
+    </marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#A32D1E"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="536" fill="#E4E6E0"/>
+
+  <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">You don't have to trust the RPC</text>
+  <text x="40" y="64" font-size="13.5" fill="#656E66">The endpoint is untrusted — check the balance's Merkle proof against a consensus state root instead of believing it.</text>
+
+  <rect x="40" y="80" width="800" height="30" rx="5" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1.2"/>
+  <rect x="52" y="88" width="128" height="15" rx="7.5" fill="#1E6B52"/>
+  <text x="116" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#DFEDE6">BUILT · F-10, INV 8</text>
+  <text x="192" y="99" font-size="10" fill="#2A4A3C">Reuses nim-eth verifyMptProof — the Nimbus verified-proxy core — in-process, no beacon stack, no second service</text>
+
+  <!-- ══ the untrusted provider ══ -->
+  <rect x="40" y="132" width="230" height="76" rx="6" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.2"/>
+  <text x="56" y="154" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#A32D1E">THE PROVIDER · UNTRUSTED (inv 8)</text>
+  <text x="56" y="176" font-size="10.5" fill="#3F4742">The user's RPC. It could lie about a</text>
+  <text x="56" y="190" font-size="10.5" fill="#3F4742">balance — so we do not take its word.</text>
+
+  <path d="M 270 170 L 314 170" stroke="#8A928C" stroke-width="1.4" fill="none" marker-end="url(#g)"/>
+  <text x="292" y="162" font-size="8.5" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#656E66">getProof</text>
+
+  <!-- ══ the proof ══ -->
+  <rect x="318" y="132" width="230" height="76" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="334" y="154" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">WHAT COMES BACK</text>
+  <text x="334" y="176" font-size="10.5" fill="#3F4742">The claimed account {nonce, balance,</text>
+  <text x="334" y="190" font-size="10.5" fill="#3F4742">…} AND a Merkle proof of it.</text>
+
+  <!-- ══ the trusted root ══ -->
+  <rect x="596" y="132" width="244" height="76" rx="6" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1.4"/>
+  <text x="612" y="154" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#1E6B52">THE TRUST ANCHOR · a state root</text>
+  <text x="612" y="176" font-size="10.5" fill="#2A4A3C">A consensus-verified state root. This</text>
+  <text x="612" y="190" font-size="10.5" fill="#2A4A3C">is the ONE thing we trust.</text>
+
+  <!-- ══ the check ══ -->
+  <path d="M 433 208 L 433 232" stroke="#8A928C" stroke-width="1.4" fill="none" marker-end="url(#g)"/>
+  <path d="M 718 208 L 500 232" stroke="#1E6B52" stroke-width="1.4" fill="none" marker-end="url(#g)"/>
+  <rect x="230" y="234" width="420" height="34" rx="17" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.6"/>
+  <text x="440" y="256" font-size="12" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" fill="#4B33C4">verifyMptProof(proof, stateRoot, account)</text>
+
+  <!-- ══ the three outcomes ══ -->
+  <rect x="40" y="290" width="256" height="86" rx="6" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1.2"/>
+  <text x="56" y="312" font-size="10.5" font-weight="600" fill="#1A1F1C">ValidProof → trust the balance</text>
+  <text x="56" y="332" font-size="10" fill="#2A4A3C">The claimed number is authentic</text>
+  <text x="56" y="346" font-size="10" fill="#2A4A3C">under the state root. Grade it</text>
+  <text x="56" y="360" font-size="10" fill="#2A4A3C">verified-locally.</text>
+
+  <rect x="312" y="290" width="256" height="86" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="328" y="312" font-size="10.5" font-weight="600" fill="#1A1F1C">MissingKey → a verified zero</text>
+  <text x="328" y="332" font-size="10" fill="#3F4742">The account is provably absent.</text>
+  <text x="328" y="346" font-size="10" fill="#3F4742">Zero because it is proven, not</text>
+  <text x="328" y="360" font-size="10" fill="#3F4742">because the read failed.</text>
+
+  <rect x="584" y="290" width="256" height="86" rx="6" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.2"/>
+  <text x="600" y="312" font-size="10.5" font-weight="600" fill="#A32D1E">InvalidProof → refuse</text>
+  <text x="600" y="332" font-size="10" fill="#3F4742">The provider is inconsistent with</text>
+  <text x="600" y="346" font-size="10" fill="#3F4742">consensus. It raises — the number</text>
+  <text x="600" y="360" font-size="10" fill="#3F4742">never passes as a real balance.</text>
+
+  <!-- ══ the two grades ══ -->
+  <rect x="40" y="392" width="800" height="46" rx="6" fill="#23282A"/>
+  <text x="56" y="412" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#96A19B">THE GRADE THE UI SHOWS (F-10)</text>
+  <text x="56" y="429" font-size="11" fill="#DCE2DE"><tspan font-weight="600" fill="#8FE3B0">verified-locally</tspan> — checked against consensus, as above.   <tspan font-weight="600" fill="#E9C08A">attested</tspan> — only what the RPC returned, trusted. The badge says which.</text>
+
+  <!-- ══ deferred anchor ══ -->
+  <text x="40" y="466" font-size="11" font-weight="600" fill="#1A1F1C">The verification is ours and built (verify.nim, wallet_verify_test). The trustless state root is the deferred half:</text>
+  <text x="40" y="484" font-size="10.5" fill="#3F4742">a beacon light client (the Nimbus verified proxy in REST mode, run as a sidecar) follows the sync committee from a trusted</text>
+  <text x="40" y="498" font-size="10.5" fill="#3F4742">checkpoint to a consensus-verified state root — it needs a running beacon endpoint, so it is documented, not yet wired.</text>
+  <text x="40" y="522" font-size="10.5" font-weight="600" fill="#1E6B52">Until then a supplied state root is the anchor; the proof check against it is real either way — a lying provider cannot pass it.</text>
+</svg>
