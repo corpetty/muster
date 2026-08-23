@@ -10,6 +10,8 @@ type SodiumError* = object of CatchableError
 proc sodium_init(): cint
 proc crypto_secretbox_easy(c, m: ptr byte, mlen: culonglong, n, k: ptr byte): cint
 proc crypto_secretbox_open_easy(m, c: ptr byte, clen: culonglong, n, k: ptr byte): cint
+proc crypto_pwhash(o: ptr byte, olen: culonglong, passwd: ptr char, passwdlen: culonglong,
+                   salt: ptr byte, opslimit: culonglong, memlimit: csize_t, alg: cint): cint
 proc randombytes_buf(buf: pointer, size: csize_t)
 {.pop.}
 
@@ -17,6 +19,12 @@ const
   KeyBytes* = 32
   NonceBytes = 24
   MacBytes = 16
+  # Argon2id parameters — the "interactive" profile from libsodium (crypto_pwhash_*
+  # _INTERACTIVE), the vetted default for a passphrase that gates a local keyfile.
+  PwSaltBytes* = 16
+  PwOpsInteractive = 2'u64
+  PwMemInteractive = 67108864   # 64 MiB
+  PwAlgArgon2id13 = 2
 
 # One-time init (thread-safe, idempotent in libsodium). Runs at module load.
 discard sodium_init()
@@ -27,6 +35,19 @@ proc randomBytes*(n: int): seq[byte] =
 
 proc randomKey*(): array[32, byte] =
   randombytes_buf(addr result[0], csize_t(32))
+
+proc pwhashKey*(passphrase: string, salt: array[PwSaltBytes, byte]): array[32, byte] =
+  ## Derive a 32-byte symmetric key from a passphrase with Argon2id (memory-hard).
+  ## The same passphrase + salt always yields the same key, so it unwraps a keyfile
+  ## sealed under it; a wrong passphrase yields a different key and the AEAD open
+  ## fails. This is what makes the file-backed keystore stopgap defensible at rest.
+  var s = salt
+  var p = passphrase
+  let pp = if p.len > 0: addr p[0] else: nil
+  if crypto_pwhash(addr result[0], culonglong(32), pp, culonglong(p.len),
+                   addr s[0], PwOpsInteractive, csize_t(PwMemInteractive),
+                   PwAlgArgon2id13) != 0:
+    raise newException(SodiumError, "pwhash failed (out of memory?)")
 
 proc secretboxSeal*(key: array[32, byte], plaintext: openArray[byte]): seq[byte] =
   ## AEAD encrypt. Output is nonce(24) ++ (MAC(16) ++ ciphertext) — self-contained,
