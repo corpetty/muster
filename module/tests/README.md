@@ -30,29 +30,27 @@ NIMETH="$STINT --path:$D/nim-eth --path:$D/nimcrypto"
 nim r -d:release $NIMETH tests/wallet_verify_test.nim
 ```
 
-**Exception — the P2 Safe crypto tests need libsecp256k1 linked:**
-`secp256k1_test.nim`, `safe_test.nim`, `safe_collect_test.nim` (and anything
-importing `src/crypto/secp256k1.nim` or `src/drivers/safe.nim`). Build the lib
-and pass it:
+**Exception — anything importing `src/crypto/secp256k1.nim` or `src/drivers/safe.nim`
+uses `nim-secp256k1` on the path** (`secp256k1_test`, `safe_test`, `safe_collect_test`,
+`binding_test`, and the crypto/coordination tests). We no longer link a system
+libsecp256k1 — `nim-secp256k1` vendors and compiles its own C (clone with
+`--recurse-submodules`). Its own deps are stew + results + nimcrypto:
 
 ```bash
-nix build nixpkgs#secp256k1 --out-link /tmp/secp
-nim r -d:release --passC:-I/tmp/secp/include \
-  --passL:/tmp/secp/lib/libsecp256k1.so tests/safe_collect_test.nim
+git -C $D clone --depth 1 --recurse-submodules https://github.com/status-im/nim-secp256k1
+SECP="--path:$D/nim-secp256k1 --path:$D/nim-stew --path:$D/nim-results --path:$D/nimcrypto"
+nim r -d:release --threads:on $SECP tests/safe_collect_test.nim
 ```
 
-The module build supplies secp256k1 via `nix.packages` once the Safe driver is
-wired into the module surface.
-
-**Exception — `ecdh_test.nim` needs libsecp256k1; `epoch_crypto_test.nim` (F-16),
-`coordination_test.nim`, and `multiparty_intent_test.nim` need libsecp256k1 +
-libsodium (and `--threads:on`):**
+The tests that also seal/encrypt (`epoch_crypto_test` F-16, `keystore_test`,
+`coordination_test`, `multiparty_intent_test`, `coordination_surface_test`,
+`membership_handshake_test`) additionally need libsodium and, where they touch
+amounts, the stint closure:
 
 ```bash
-nix build nixpkgs#secp256k1 --out-link /tmp/secp
 SODIUM=$(nix build nixpkgs#libsodium --no-link --print-out-paths)
-nim r -d:release --passC:-I/tmp/secp/include --passL:/tmp/secp/lib/libsecp256k1.so \
-  --passL:"$SODIUM/lib/libsodium.so" tests/epoch_crypto_test.nim
+nim r -d:release --threads:on $SECP $STINT --passL:"$SODIUM/lib/libsodium.so" \
+  tests/epoch_crypto_test.nim
 ```
 
 **Exception — the host-return probe needs g++ + secp256k1:**
