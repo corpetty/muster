@@ -17,4 +17,12 @@ module muster_module {
   method status(intent_id: tstr) -> tstr description "Return an intent's current lifecycle state (draft, proposed, collecting, executable, ...)."
 
   method submit(intent_id: tstr) -> tstr description "Submit an executable intent on-chain: assemble the Safe execTransaction from the collected owner signatures, send it through the user's RPC, and watch the receipt. Finality is observed from the chain, never asserted by a service. Returns the intent's new lifecycle state (submitted, then final on a confirmed receipt)."
+
+  method coordinate_join(topic: tstr) -> tstr description "Join (or start) a coordination conversation on a content topic, over encrypted transport. The room's encryption identity is this module's persistent key (see identity()). Returns JSON {address, topic}. This is the multi-party counterpart to propose/approve: instead of one client driving the whole lifecycle locally, participants converge on shared intents by folding a signed, encrypted log (state = reduce(log))."
+
+  method coordinate_propose(effect_json: tstr) -> tstr description "Propose an intent into the joined conversation. The intent id is content-addressed from the effect, so every participant derives the same id without coordinating. Publishes a sealed propose event to the room and returns the intent id."
+
+  method coordinate_contribute(intent_id: tstr, signature_hex: tstr) -> tstr description "Contribute an owner signature (65-byte hex) to a proposed intent in the joined conversation. The signature is verified to recover to a configured owner before it is published (keyed by the recovered owner, so a non-owner is \"rejected\" and a duplicate folds once). Returns the intent's new lifecycle state as folded from the shared log."
+
+  method coordinate_intents() -> tstr description "List the intents in the joined conversation as folded from the shared log: a JSON array of {id, state}. Drives inbound delivery first, so it reflects contributions that have arrived from other participants."
 }

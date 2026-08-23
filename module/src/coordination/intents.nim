@@ -23,6 +23,8 @@ import ../intents/signing_payload
 import ../drivers/driver
 import ../drivers/safe
 import ../dcbor/dcbor
+import ../hashing/keccak256
+import ../crypto/secp256k1
 export lifecycle.Intent, lifecycle.LifecycleState
 
 proc effectFromJson*(effectJson: string): Effect =
@@ -42,6 +44,45 @@ proc hexToBytes(s: string): seq[byte] =
   for i in 0 ..< h.len div 2:
     try: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
     except CatchableError: discard
+
+proc bytesHex(b: openArray[byte]): string =
+  const d = "0123456789abcdef"
+  result = "0x"
+  for x in b: (result.add d[int(x shr 4)]; result.add d[int(x and 0x0F)])
+
+# ── surface helpers (the hosted coordination methods are thin glue over these) ──
+
+proc intentIdFor*(effectJson: string): string =
+  ## A content-addressed intent id, so independent hosts derive the SAME id for the
+  ## same effect without a round-trip to agree on one. First 8 bytes of
+  ## keccak256(effect) — enough to key the intents in one conversation, and it makes
+  ## re-proposing the same effect idempotent (same id, folds once).
+  var b: seq[byte]
+  for c in effectJson: b.add byte(c)
+  bytesHex(keccak256(b)[0 ..< 8])
+
+proc effectJsonOf*(events: seq[Event], intentId: string): string =
+  ## The effect a proposal carried, recovered from the log — a contributor needs it
+  ## to recompute the safeTxHash their signature must cover. "" if not proposed here.
+  for e in events:
+    if e.key == "intent/" & intentId & "/propose": return e.value
+  ""
+
+proc safeTxHashOf*(driver: SafeDriver, effectJson: string): array[32, byte] =
+  let m = canonicalizeSafe(driver, effectFromJson(effectJson))
+  for i in 0 ..< 32: result[i] = m.bytes[i]
+
+proc contributorOf*(driver: SafeDriver, effectJson, signatureHex: string): string =
+  ## The owner address (hex) that signed this intent's safeTxHash, or "" if the
+  ## signature does not recover to a configured owner. A contribution is keyed by
+  ## this, so a duplicate owner signature folds once and a non-owner never counts —
+  ## the same verification the hosted approve() does, done before we publish.
+  let h = safeTxHashOf(driver, effectJson)
+  var sig: Signature65
+  let sb = hexToBytes(signatureHex)
+  for i in 0 ..< min(65, sb.len): sig[i] = sb[i]
+  if not recoversToOwner(h, sig, driver.owners): return ""
+  bytesHex(ecrecover(h, sig))
 
 # ── event constructors (what a participant publishes) ─────────────────────────
 

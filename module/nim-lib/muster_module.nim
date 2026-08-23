@@ -24,6 +24,7 @@ import ../src/transport/delivery      # DeliveryTransport (transport over lp_*)
 import ../src/crypto/epoch_crypto     # EpochCrypto (ECIES-secp256k1 + libsodium AEAD)
 import ../src/crypto/keystore         # persistent module identity (FS-4)
 import ../src/coordination/session    # the multi-instance coordination flow
+import ../src/coordination/intents     # intent lifecycle = reduce(log) (the multi-party fold)
 
 proc hexToBytes(s: string): seq[byte] =
   var h = s
@@ -213,18 +214,47 @@ proc musterSubmit(intentId: string): string =
     gIntents[intentId] = it
   $it.state
 
-# ── P3 stack link-check (temporary) ───────────────────────────────────────────
-# The transport (lp_*), crypto (secp256k1 + libsodium AEAD), and coordination
-# layers are compiled into the plugin here. This proc is never called; it exists
-# so the whole P3 stack LINKS in the shipping plugin ahead of the full hosted
-# coordination surface (start/join a conversation, contribute — which needs a
-# delivery node to exercise). Delete it when that surface lands and genuinely
-# drives the stack. The epoch layer is now seeded from the module's persistent
-# identity (FS-4), not a zero key — the identity() method above is the first of
-# the surface to land for real.
-var gP3LinkCheck {.used.}: CoordinationSession
-proc musterP3LinkCheck() {.exportc, used.} =
-  gP3LinkCheck = newCoordinationSession(newDeliveryTransport(),
-                                        newEpochCrypto(moduleKeystore()),
-                                        "muster.p3.linkcheck")
-  gP3LinkCheck.publish(Event(key: "k", value: "v"))
+# ── hosted coordination surface (the multi-party path) ─────────────────────────
+# The counterpart to propose/approve/submit: instead of one client driving the
+# whole lifecycle over local state, participants converge on shared intents by
+# folding a signed, encrypted log (state = reduce(log), invariant 4). This is what
+# compiles session + intents + epoch + delivery + keystore into the plugin — the
+# link-check stub is gone; these methods genuinely drive the stack. One active
+# conversation per module instance (the conversation is the security boundary).
+#
+# Cross-host exchange needs a running delivery node and a membership/grant
+# handshake (deferred, with the live two-instance test); today the transport is
+# DeliveryTransport and the reduce/verify path below is the same one
+# tests/coordination_surface_test.nim exercises in-process over LocalTransport.
+var gSession: CoordinationSession = nil
+var gTopic = ""
+
+proc musterCoordinateJoin(topic: string): string =
+  let ks = moduleKeystore()
+  gTopic = topic
+  gSession = newCoordinationSession(newDeliveryTransport(), newEpochCrypto(ks), topic)
+  $(%*{"address": toHex(ks.address()), "topic": topic})
+
+proc musterCoordinatePropose(effectJson: string): string =
+  if gSession == nil: return "not-joined"
+  let id = intentIdFor(effectJson)
+  gSession.publish(proposeEvent(id, effectJson))
+  id
+
+proc musterCoordinateContribute(intentId: string, signatureHex: string): string =
+  if gSession == nil: return "not-joined"
+  gSession.poll()
+  let effectJson = effectJsonOf(gSession.log.allEvents(), intentId)
+  if effectJson.len == 0: return "unknown-intent"
+  let who = contributorOf(gDriver, effectJson, signatureHex)   # "" iff not an owner
+  if who.len == 0: return "rejected"
+  gSession.publish(contributeEvent(intentId, who, signatureHex))
+  intentState(gSession.log.allEvents(), gDriver, intentId)
+
+proc musterCoordinateIntents(): string =
+  if gSession == nil: return "[]"
+  gSession.poll()
+  let intents = reduceIntents(gSession.log.allEvents(), gDriver)
+  var arr = newJArray()
+  for id, it in intents: arr.add %*{"id": id, "state": $it.state}
+  $arr
