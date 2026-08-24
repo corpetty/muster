@@ -38,6 +38,9 @@ Item {
     readonly property var backend: logos.module("muster_ui")
     property bool ready: false
 
+    // Whether the account card's owner list is expanded (Account view, "dive in").
+    property bool ownersOpen: false
+
     // Which surface is showing. The product opens on "home" (the action list);
     // "compose" (create a room from an action), "room" (the conversation),
     // "dashboard" (the Safe lifecycle spike), "walkthrough" (the claims registry).
@@ -190,7 +193,7 @@ Item {
             onClicked: root.view = "room"
         }
         LogosButton {
-            objectName: "dashboardToggle"; text: qsTr("Safe")
+            objectName: "dashboardToggle"; text: qsTr("Account")
             variant: root.view === "dashboard" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
             onClicked: root.view = "dashboard"
         }
@@ -222,7 +225,8 @@ Item {
         }
 
         LogosText {
-            text: qsTr("Coordinating a multi-party transaction inside a conversation")
+            text: qsTr("The Safe you coordinate against — inspect it, act on it directly, "
+                     + "and settle on-chain. To coordinate with people, open a Room.")
             color: Theme.palette.textTertiary
             font.pixelSize: Theme.typography.secondaryText
             wrapMode: Text.WordWrap
@@ -248,7 +252,7 @@ Item {
                 spacing: Theme.spacing.tiny
 
                 LogosText {
-                    text: qsTr("COORDINATING")
+                    text: qsTr("SAFE ACCOUNT")
                     color: Theme.palette.textTertiary
                     font.family: Theme.typography.mono
                     font.pixelSize: Theme.typography.badgeText
@@ -279,6 +283,52 @@ Item {
                     font.family: Theme.typography.mono
                     font.pixelSize: Theme.typography.badgeText
                 }
+
+                // ── owners (dive in) ─────────────────────────────────────────
+                // The approval policy is who can sign, so the owner addresses are
+                // worth seeing — collapsed to a count by default, the full list a
+                // tap away. Any 2 of these signing meets the threshold above.
+                Item {
+                    Layout.fillWidth: true
+                    Layout.topMargin: Theme.spacing.tiny
+                    implicitHeight: ownersToggle.implicitHeight
+                    visible: !!root.account && !!root.account.owners
+                             && root.account.owners.length > 0
+
+                    LogosText {
+                        id: ownersToggle
+                        text: root.ownersOpen
+                            ? qsTr("Owners — tap to hide  −")
+                            : qsTr("Owners — tap to see all %1  +")
+                                .arg(root.account && root.account.owners ? root.account.owners.length : 0)
+                        color: Theme.palette.textSecondary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                        font.weight: Theme.typography.weightMedium
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.ownersOpen = !root.ownersOpen
+                    }
+                }
+
+                Repeater {
+                    model: (root.ownersOpen && root.account && root.account.owners)
+                           ? root.account.owners : []
+
+                    delegate: LogosText {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Theme.spacing.small
+                        wrapMode: Text.WrapAnywhere
+                        text: "· " + String(modelData)
+                        color: Theme.palette.textTertiary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                }
             }
         }
 
@@ -298,10 +348,20 @@ Item {
                 spacing: Theme.spacing.small
 
                 LogosText {
-                    text: qsTr("Propose a transfer")
+                    text: qsTr("Propose a transfer — directly")
                     color: Theme.palette.text
                     font.pixelSize: Theme.typography.primaryText
                     font.weight: Theme.typography.weightMedium
+                }
+
+                LogosText {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: qsTr("The direct path: you drive the whole lifecycle here — propose, "
+                             + "collect signatures, settle on-chain. To decide it with people in "
+                             + "a conversation instead, open a Room.")
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: Theme.typography.badgeText
                 }
 
                 LogosTextField {

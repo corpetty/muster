@@ -232,7 +232,8 @@ Item {
 
                 LogosText {
                     Layout.fillWidth: true
-                    text: qsTr("The account sets the approval policy. The room looks the same either way.")
+                    text: qsTr("The account sets the approval policy — its owners and threshold live in "
+                             + "the Account view. The room looks the same either way.")
                     color: Theme.palette.textTertiary
                     font.pixelSize: Theme.typography.secondaryText
                     wrapMode: Text.WordWrap
