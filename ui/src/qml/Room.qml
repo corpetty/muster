@@ -68,7 +68,9 @@ Item {
             txhash: (it && it.txhash) ? String(it.txhash) : "",
             chainId: (it && it.chainId !== undefined) ? Number(it.chainId) : 0,
             safe: (it && it.safe) ? String(it.safe) : "",
-            environment: (it && it.environment) ? String(it.environment) : ""
+            environment: (it && it.environment) ? String(it.environment) : "",
+            // the provenance lineage: how this decision's data got here (inv 10)
+            provenance: (it && it.provenance) ? it.provenance : []
         };
     }
 

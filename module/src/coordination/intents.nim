@@ -20,10 +20,12 @@ import ../log/log
 import ../intents/lifecycle
 import ../intents/materialization
 import ../intents/signing_payload
+import ../intents/provenance     # InputClass — the spec's accountability vocabulary (inv 10)
 import ../drivers/driver
 import ../dcbor/dcbor
 import ../hashing/keccak256
 export lifecycle.Intent, lifecycle.LifecycleState
+export provenance.InputClass    # so consumers can name a lineage entry's class
 
 proc effectFromJson*(effectJson: string): Effect =
   var fields: seq[(string, CborValue)]
@@ -226,3 +228,41 @@ proc reduceIntentViews*(events: seq[Event], driver: Driver): seq[IntentView] =
                           approvals: approvals.getOrDefault(id).len,
                           txhash: bytesHex(it.materialization.bytes))
   result.sort(proc (a, b: IntentView): int = cmp(a.id, b.id))
+
+# ── provenance: how this decision's data got in front of you (invariant 10) ────
+
+type ProvItem* = object
+  ## One link in a decision's lineage — a log entry that put this intent in front
+  ## of the reader, named by the spec's accountability vocabulary (InputClass).
+  cls*: InputClass      ## peer-message (the proposal) · driver-contribution (a signature)
+  logPos*: int          ## position in the canonical log order the input came from
+  account*: string      ## the contributing account — named under mmNamed, "" under mmAnonymous
+  accountable*: bool    ## can this input's origin be accounted for? (always true in a live fold)
+  what*: string         ## a plain-language label for the reader
+
+proc intentProvenance*(events: seq[Event], driver: Driver, intentId: string): seq[ProvItem] =
+  ## The lineage of a decision, folded from the log: every entry that reached this
+  ## intent, in canonical order. The propose carried the effect — a peer message,
+  ## sealed to the room's epoch, so only a member could have placed it; each
+  ## signature is a driver-contribution the driver verified recovers to a configured
+  ## member (a non-owner never reaches the fold). Whether an entry names its account
+  ## follows the driver's membership model (6): named for Safe (mmNamed), silent for
+  ## an anonymous driver, so the trail never leaks an identity the room wouldn't.
+  ## Everything here is accountable by construction — an input whose origin could not
+  ## be accounted for would have been refused before signing (invariant 10), so it
+  ## would never appear. A duplicate owner signature folds once, exactly as it counts.
+  let named = driver.describe().membership == mmNamed
+  let ordered = canonicalOrder(events)
+  var seenSig = initHashSet[string]()
+  for i in 0 ..< ordered.len:
+    let p = ordered[i].key.split('/')
+    if p.len < 3 or p[0] != "intent" or p[1] != intentId: continue
+    if p[2] == "propose":
+      result.add ProvItem(cls: icPeerMessage, logPos: i, account: "",
+                          accountable: true, what: "the proposed effect")
+    elif p[2] == "sig" and p.len >= 4:
+      if p[3] in seenSig: continue
+      seenSig.incl p[3]
+      result.add ProvItem(cls: icContribution, logPos: i,
+                          account: (if named: p[3] else: ""),
+                          accountable: true, what: "an owner signature")

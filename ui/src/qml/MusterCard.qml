@@ -28,6 +28,28 @@ Rectangle {
     // state — the card holds no other state, but this is the reader's own toggle.
     property bool verifyOpen: false
 
+    // Whether the provenance lineage ("how do I know this?") is expanded.
+    property bool provOpen: false
+
+    // The trust line for one provenance entry: (named account) · why it can be
+    // trusted, by class · the log position it came from. The "why" is what the code
+    // already guarantees for that class — a driver-contribution was verified to
+    // recover to a configured member; a peer-message was sealed to the room's epoch.
+    function provTrust(item) {
+        var cls = String((item && item["class"]) || "");
+        var acct = String((item && item.account) || "");
+        var pos = (item && item.logPos !== undefined) ? item.logPos : "";
+        var why = cls === "driver-contribution" ? qsTr("verified owner")
+                : cls === "peer-message" ? qsTr("sealed to the room")
+                : cls === "external-read" ? qsTr("read from chain")
+                : cls === "plugin-block" ? qsTr("emitted by a plugin") : "";
+        var parts = [];
+        if (acct.length > 0) parts.push(acct);
+        if (why.length > 0) parts.push(why);
+        if (pos !== "") parts.push(qsTr("log #%1").arg(pos));
+        return parts.join("  ·  ");
+    }
+
     // The verify rows, built off `card` (guarded — a missing field is normal).
     function verifyShown() {
         var amt = String((cardRoot.card && cardRoot.card.amount) || "");
@@ -439,6 +461,105 @@ Rectangle {
                                 wrapMode: Text.WrapAnywhere
                                 text: modelData.v
                                 color: Theme.palette.textSecondary
+                                font.family: Theme.typography.mono
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── provenance: how do I know this? (invariant 10) ──────────────
+            // The deepest dive-in: every input that put this decision in front of
+            // you, by class + where it came from + why it can be trusted. Neutral
+            // ground (not the verify box's green) — this is lineage, not a verdict.
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.topMargin: Theme.spacing.tiny
+                visible: cardRoot.card && cardRoot.card.provenance
+                         && cardRoot.card.provenance.length > 0
+                implicitHeight: provCol.implicitHeight + 2 * Theme.spacing.small
+                radius: Theme.spacing.radiusSmall
+                color: Theme.palette.surfaceRecessed
+                border.width: 1
+                border.color: Theme.palette.borderSubtle
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: cardRoot.provOpen = !cardRoot.provOpen
+                }
+
+                ColumnLayout {
+                    id: provCol
+                    anchors.fill: parent
+                    anchors.margins: Theme.spacing.small
+                    spacing: Theme.spacing.tiny
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+
+                        LogosText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: qsTr("How do I know this? — %1 in the lineage")
+                                .arg(cardRoot.card && cardRoot.card.provenance
+                                     ? cardRoot.card.provenance.length : 0)
+                            color: Theme.palette.textSecondary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                            font.weight: Theme.typography.weightMedium
+                        }
+
+                        LogosText {
+                            text: cardRoot.provOpen ? "−" : "+"
+                            color: Theme.palette.textSecondary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.secondaryText
+                        }
+                    }
+
+                    // intro — only when open.
+                    LogosText {
+                        visible: cardRoot.provOpen
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: qsTr("Where each piece of this came from. Nothing here is "
+                                 + "unaccountable — an input the client couldn't trace would "
+                                 + "have been refused before signing.")
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+
+                    // one entry per input in the lineage.
+                    Repeater {
+                        model: (cardRoot.provOpen && cardRoot.card && cardRoot.card.provenance)
+                               ? cardRoot.card.provenance : []
+
+                        delegate: ColumnLayout {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Layout.topMargin: 2
+                            spacing: 1
+
+                            LogosText {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: "[" + String((modelData && modelData["class"]) || "") + "]  "
+                                      + String((modelData && modelData.what) || "")
+                                color: Theme.palette.text
+                                font.family: Theme.typography.mono
+                                font.pixelSize: Theme.typography.badgeText
+                                font.weight: Theme.typography.weightMedium
+                            }
+
+                            LogosText {
+                                Layout.fillWidth: true
+                                Layout.leftMargin: Theme.spacing.small
+                                wrapMode: Text.WrapAnywhere
+                                text: cardRoot.provTrust(modelData)
+                                color: Theme.palette.textTertiary
                                 font.family: Theme.typography.mono
                                 font.pixelSize: Theme.typography.badgeText
                             }

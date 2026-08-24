@@ -120,4 +120,28 @@ block:
   doAssert again.txhash == v.txhash, "the re-derivation is deterministic across folds"
 echo "6. render-ready intent view (effect + threshold N=2 + approvals M=2 + re-derived txhash) OK"
 
+# 7. Provenance (invariant 10): the decision's lineage folded from the log — the
+#    propose (a peer message) and each distinct owner signature (a driver
+#    contribution, NAMED since Safe is mmNamed). The duplicate from step 5 folds
+#    once; a non-owner never reached the fold, so it is absent by construction.
+block:
+  let prov = intentProvenance(bob.log.allEvents(), driver, id)
+  doAssert prov.len == 3, "one propose + two distinct owner signatures"
+  var proposes = 0
+  var contributors: seq[string]
+  for it in prov:
+    doAssert it.accountable, "every input in a live fold is accountable"
+    if it.cls == icPeerMessage:
+      inc proposes
+      doAssert it.what == "the proposed effect", "the effect entered as a peer message"
+    elif it.cls == icContribution:
+      doAssert it.account.len > 0, "Safe is mmNamed, so the owner account is named"
+      contributors.add it.account
+  doAssert proposes == 1, "exactly one propose (peer message, sealed to the room)"
+  doAssert contributors.len == 2 and contributors[0] != contributors[1],
+           "two DISTINCT owner contributions (the duplicate folded once)"
+  for i in 1 ..< prov.len:
+    doAssert prov[i].logPos > prov[i-1].logPos, "lineage is in canonical log order"
+echo "7. provenance lineage (peer-message propose + 2 named driver-contributions) OK"
+
 echo "coordination_surface_test: all OK"

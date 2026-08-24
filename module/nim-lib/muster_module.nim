@@ -271,8 +271,9 @@ proc musterCoordinateIntents(): string =
   ## its cards come from real state (reduce(log)) rather than posted demo JSON.
   if gSession == nil: return "[]"
   gSession.poll()
+  let events = gSession.log.allEvents()
   var arr = newJArray()
-  for v in reduceIntentViews(gSession.log.allEvents(), gDriver):
+  for v in reduceIntentViews(events, gDriver):
     # txhash is the driver-re-derived materialization (safeTxHash) — the exact
     # bytes an owner signs. domain (chainId + safe) is what that hash is bound to
     # (EIP-712), so a signature is worthless outside it (F-5). Both drive the room
@@ -285,6 +286,15 @@ proc musterCoordinateIntents(): string =
     if v.effectJson.len > 0:
       try: o["effect"] = parseJson(v.effectJson)
       except CatchableError: discard
+    # provenance: the decision's lineage (invariant 10) — every log entry that put
+    # this intent in front of the reader, by class + position + (named) account, so
+    # the UI can answer "how do I know this, and why trust it".
+    var prov = newJArray()
+    for item in intentProvenance(events, gDriver, v.id):
+      prov.add %*{"class": $item.cls, "logPos": item.logPos,
+                  "account": item.account, "accountable": item.accountable,
+                  "what": item.what}
+    o["provenance"] = prov
     arr.add o
   $arr
 
