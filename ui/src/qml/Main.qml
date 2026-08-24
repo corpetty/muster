@@ -38,11 +38,18 @@ Item {
     readonly property var backend: logos.module("muster_ui")
     property bool ready: false
 
-    // The teaching surface (ADR-012 claims registry) sits behind a toggle so it
-    // never crowds the working dashboard; one is shown at a time.
-    // Which surface is showing: "dashboard" (the Safe lifecycle + wallet), "room"
-    // (the conversation), or "walkthrough" (the claims registry). One at a time.
-    property string view: "dashboard"
+    // Which surface is showing. The product opens on "home" (the action list);
+    // "compose" (create a room from an action), "room" (the conversation),
+    // "dashboard" (the Safe lifecycle spike), "walkthrough" (the claims registry).
+    property string view: "home"
+
+    // Enter a room by topic: join it in the module, then show the room surface.
+    function enterRoom(topic) {
+        if (root.backend && topic) {
+            root.backend.joinRoom(topic);
+            root.view = "room";
+        }
+    }
 
     // Backend PROPs, aliased so bindings read cleanly. The backend is the only
     // writer; these are all reads.
@@ -86,6 +93,31 @@ Item {
         catch (e) { return []; }
     }
 
+    // Room state, aliased for the home fold.
+    readonly property string roomTopic: backend ? backend.roomTopic : ""
+    readonly property string intentsJson: backend ? backend.intentsJson : "[]"
+
+    // The home surface (single-room for now): the joined room shows as one action,
+    // its headline folded from the latest intent's state. Empty until a room exists.
+    readonly property var homeActions: {
+        if (!root.roomTopic)
+            return [];
+        var action = "Talking", state = "idle", detail = "in the room";
+        try {
+            var ints = JSON.parse(root.intentsJson);
+            if (ints.length) {
+                var last = ints[ints.length - 1];
+                action = last.state === "executable" ? "Ready to submit"
+                       : last.state === "collecting" ? "Collecting approvals"
+                       : last.state === "final" ? "Done" : "Proposed";
+                state = last.state === "executable" ? "needs"
+                      : last.state === "final" ? "settled" : "waiting";
+                detail = "intent " + String(last.id || "").substring(0, 8) + " · " + last.state;
+            }
+        } catch (e) {}
+        return [{ topic: root.roomTopic, title: root.roomTopic, action: action, state: state, detail: detail }];
+    }
+
     Connections {
         target: logos
         function onViewModuleReadyChanged(moduleName, isReady) {
@@ -102,23 +134,38 @@ Item {
         color: Theme.palette.background
     }
 
-    // The walkthrough (claims registry) fills the view when toggled on; the
-    // dashboard hides while it is up. Declared before `page` so the toggle
-    // button, added last, stays on top.
-    Walkthrough {
+    // ── the product surfaces (one shown at a time) ───────────────────────
+    // Home: the action list. Opening a row joins that room; "Start something"
+    // goes to the composer.
+    Home {
         anchors.fill: parent
-        visible: root.view === "walkthrough"
+        visible: root.view === "home"
+        actions: root.homeActions
+        onActivated: root.enterRoom(topic)
+        onNewActivity: root.view = "compose"
     }
 
-    // The conversation surface. Fills the view when selected; reads its state from
-    // the module through the backend (roomTopic / messagesJson / membersJson).
+    // Compose: create a room from an action (verb → people → account).
+    Composer {
+        anchors.fill: parent
+        visible: root.view === "compose"
+        onCreateRoom: root.enterRoom(topic)
+    }
+
+    // The conversation surface. Reads its state from the module through the backend.
     Room {
         anchors.fill: parent
         visible: root.view === "room"
         backend: root.backend
     }
 
-    // Nav between the surfaces. Always on top (z), reachable in every mode.
+    // The teaching surface (ADR-012 claims registry).
+    Walkthrough {
+        anchors.fill: parent
+        visible: root.view === "walkthrough"
+    }
+
+    // Nav. Always on top (z), reachable in every mode.
     RowLayout {
         anchors.top: parent.top
         anchors.right: parent.right
@@ -126,21 +173,10 @@ Item {
         z: 10
         spacing: Theme.spacing.small
 
-        LogosButton {
-            objectName: "homeToggle"
-            text: qsTr("Home")
-            onClicked: root.view = "dashboard"
-        }
-        LogosButton {
-            objectName: "roomToggle"
-            text: qsTr("Room")
-            onClicked: root.view = "room"
-        }
-        LogosButton {
-            objectName: "walkthroughToggle"
-            text: qsTr("Walkthrough")
-            onClicked: root.view = (root.view === "walkthrough" ? "dashboard" : "walkthrough")
-        }
+        LogosButton { objectName: "homeToggle"; text: qsTr("Home"); onClicked: root.view = "home" }
+        LogosButton { objectName: "roomToggle"; text: qsTr("Room"); onClicked: root.view = "room" }
+        LogosButton { objectName: "dashboardToggle"; text: qsTr("Safe"); onClicked: root.view = "dashboard" }
+        LogosButton { objectName: "walkthroughToggle"; text: qsTr("Walkthrough"); onClicked: root.view = (root.view === "walkthrough" ? "home" : "walkthrough") }
     }
 
     ColumnLayout {

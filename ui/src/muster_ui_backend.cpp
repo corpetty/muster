@@ -158,6 +158,7 @@ void MusterUiBackend::joinRoom(const QString &topic)
     setLastError(QString());
     loadMessages();
     loadMembers();
+    loadIntents();
 }
 
 void MusterUiBackend::postMessage(const QString &body)
@@ -183,6 +184,33 @@ void MusterUiBackend::loadMembers()
 {
     // coordinate_members → the admitted roster (who can read the room).
     setMembersJson(modules().muster_module.coordinate_members());
+}
+
+void MusterUiBackend::proposeInRoom(const QString &effectJson)
+{
+    // coordinate_propose → put an effect to the room as a shared intent
+    // (content-addressed id, so every participant derives the same one). Re-read
+    // intents + messages so the proposal card and its folded state appear.
+    const QString id = modules().muster_module.coordinate_propose(effectJson);
+    qInfo() << "[muster_ui] coordinate_propose ->" << id;
+    loadIntents();
+    loadMessages();
+}
+
+void MusterUiBackend::contributeInRoom(const QString &intentId, const QString &signatureHex)
+{
+    // coordinate_contribute → add an owner signature; the module verifies it
+    // recovers to a configured owner before it counts (a non-owner is rejected).
+    const QString st = modules().muster_module.coordinate_contribute(intentId, signatureHex);
+    qInfo() << "[muster_ui] coordinate_contribute" << intentId << "->" << st;
+    loadIntents();
+}
+
+void MusterUiBackend::loadIntents()
+{
+    // coordinate_intents → the room's proposals folded from the shared log, as
+    // [{id, state}]. Drives inbound delivery first (in the module).
+    setIntentsJson(modules().muster_module.coordinate_intents());
 }
 
 void MusterUiBackend::onContextReady()

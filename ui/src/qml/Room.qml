@@ -32,10 +32,30 @@ Item {
         catch (e) { return []; }
     }
 
-    ColumnLayout {
+    // Post a demo proposal as an intent-propose card (cards are data), so the card
+    // vocabulary renders in the thread. Wiring it to the verified
+    // coordinate_propose/contribute path (with a signature input) is a follow-up.
+    function proposeDemo() {
+        if (!room.backend)
+            return;
+        room.backend.postMessage(JSON.stringify({
+            kind: "intent-propose", intentId: "demo", label: "Pay the room",
+            amount: "100", denom: "TKN", to: "0x1111111111111111111111111111111111111111",
+            rail: "safe", threshold: 2, approvals: 1, approvers: [{ initials: "ME" }],
+            state: "collecting", proposedByMe: true, approvedByMe: true
+        }));
+    }
+
+    RowLayout {
         anchors.fill: parent
         anchors.margins: Theme.spacing.large
         spacing: Theme.spacing.medium
+
+        // Left: the conversation (header, join, thread, composer).
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: Theme.spacing.medium
 
         // ── header ────────────────────────────────────────────────────────
         RowLayout {
@@ -102,24 +122,49 @@ Item {
                 model: room.messages
                 onCountChanged: positionViewAtEnd()
 
-                delegate: ColumnLayout {
+                delegate: Item {
                     width: thread.width
-                    spacing: 2
+                    implicitHeight: parsedCard ? cardHost.implicitHeight : plainHost.implicitHeight
 
-                    LogosText {
-                        text: String(modelData.author || "?").substring(0, 10)
-                              + (modelData.ts ? "  ·  " + modelData.ts : "")
-                        color: Theme.palette.textTertiary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                    // A message body that parses to an object with a `kind` is a
+                    // typed card; anything else renders as plain text.
+                    readonly property var parsedCard: {
+                        try {
+                            var o = JSON.parse(modelData.body);
+                            return (o && (o.kind || o.type)) ? o : null;
+                        } catch (e) { return null; }
                     }
 
-                    LogosText {
-                        Layout.fillWidth: true
-                        text: String(modelData.body || "")
-                        color: Theme.palette.text
-                        font.pixelSize: Theme.typography.secondaryText
-                        wrapMode: Text.WrapAnywhere
+                    MusterCard {
+                        id: cardHost
+                        width: parent.width
+                        visible: parent.parsedCard !== null
+                        card: parent.parsedCard || ({})
+                        onApprove: { if (room.backend) room.backend.postMessage(JSON.stringify({ kind: "intent-approve" })); }
+                        onShareAddress: { if (room.backend) room.backend.postMessage(JSON.stringify({ kind: "address-share", asset: "TKN", address: "0x2222222222222222222222222222222222222222", form: 1 })); }
+                        onPay: { if (room.backend) room.backend.postMessage(JSON.stringify({ kind: "send-receipt", amount: "100", denom: "TKN", rail: "safe", tx: "0xdeadbeef", discloses: { amount: "100", payer: "not disclosed", payee: "0x1111" } })); }
+                    }
+
+                    ColumnLayout {
+                        id: plainHost
+                        width: parent.width
+                        visible: parent.parsedCard === null
+                        spacing: 2
+
+                        LogosText {
+                            text: String(modelData.author || "?").substring(0, 10)
+                                  + (modelData.ts ? "  ·  " + modelData.ts : "")
+                            color: Theme.palette.textTertiary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        LogosText {
+                            Layout.fillWidth: true
+                            text: String(modelData.body || "")
+                            color: Theme.palette.text
+                            font.pixelSize: Theme.typography.secondaryText
+                            wrapMode: Text.WrapAnywhere
+                        }
                     }
                 }
             }
@@ -151,6 +196,22 @@ Item {
                 }
                 onClicked: send()
             }
+
+            LogosButton {
+                objectName: "roomProposeButton"
+                text: qsTr("Propose")
+                onClicked: room.proposeDemo()
+            }
+        }
+        }
+
+        // Right: who can see this — the roster and the scope line.
+        ScopePanel {
+            visible: room.joined
+            Layout.preferredWidth: 300
+            Layout.fillHeight: true
+            members: room.members
+            topic: room.topic
         }
     }
 }

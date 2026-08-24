@@ -44,6 +44,14 @@ class MusterUi
     SLOT(void loadMessages())
     SLOT(void loadMembers())
 
+    // Room intents (the multi-party path). Propose an effect into the joined room
+    // (coordinate_propose), contribute an owner signature (coordinate_contribute),
+    // and read the folded intent list (coordinate_intents) into intentsJson — the
+    // room's proposals as reduce(log), interleaved with messages by the view.
+    SLOT(void proposeInRoom(const QString &effectJson))
+    SLOT(void contributeInRoom(const QString &intentId, const QString &signatureHex))
+    SLOT(void loadIntents())
+
     PROP(QString health="unknown" READONLY)
 
     // The Safe account this walkthrough coordinates against — read from the
@@ -71,4 +79,5 @@ class MusterUi
     PROP(QString roomTopic="" READONLY)
     PROP(QString messagesJson="[]" READONLY)
     PROP(QString membersJson="[]" READONLY)
+    PROP(QString intentsJson="[]" READONLY)
 }
