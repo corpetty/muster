@@ -264,11 +264,22 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string): string 
   intentState(gSession.log.allEvents(), gDriver, intentId)
 
 proc musterCoordinateIntents(): string =
+  ## The room's proposals, folded from the shared log and projected to what a card
+  ## renders: the lifecycle state, the effect it carries, the driver threshold, and
+  ## the distinct-owner approval count. Backward compatible — id + state are still
+  ## present; effect/threshold/approvals/rail are the render fields the room needs so
+  ## its cards come from real state (reduce(log)) rather than posted demo JSON.
   if gSession == nil: return "[]"
   gSession.poll()
-  let intents = reduceIntents(gSession.log.allEvents(), gDriver)
   var arr = newJArray()
-  for id, it in intents: arr.add %*{"id": id, "state": $it.state}
+  for v in reduceIntentViews(gSession.log.allEvents(), gDriver):
+    var o = %*{"id": v.id, "state": v.state,
+               "threshold": gDriver.threshold, "approvals": v.approvals,
+               "rail": "safe"}
+    if v.effectJson.len > 0:
+      try: o["effect"] = parseJson(v.effectJson)
+      except CatchableError: discard
+    arr.add o
   $arr
 
 proc roomContext(): LinkContext =

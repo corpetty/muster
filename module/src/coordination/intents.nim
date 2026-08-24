@@ -192,3 +192,34 @@ proc intentState*(events: seq[Event], driver: Driver, intentId: string): string 
   ## executable/…), or "unknown".
   let intents = reduceIntents(events, driver)
   if intentId in intents: $intents[intentId].state else: "unknown"
+
+# ── render-ready projection (what a card needs, still a pure fold) ─────────────
+
+type IntentView* = object
+  ## Everything a proposal card renders, derived from the log alone. It is the
+  ## intent fold plus the two facts `reduceIntents` doesn't surface on its own: the
+  ## effect the proposal carried, and how many DISTINCT owners have contributed so
+  ## far (the "M" against the driver's threshold "N"). Nothing here is per-viewer —
+  ## the log doesn't say which owner "you" are — so a card renders the room's shared
+  ## truth, never a personalized claim it can't stand behind.
+  id*: string
+  state*: string          ## draft/proposed/collecting/executable/submitted/final
+  effectJson*: string     ## the proposed effect JSON, or "" if not proposed here
+  approvals*: int         ## distinct owners folded in (dedup by contributor)
+
+proc reduceIntentViews*(events: seq[Event], driver: Driver): seq[IntentView] =
+  ## Deterministic (sorted by id), so two instances render the identical list from
+  ## the same event set (invariant 4). Approvals count DISTINCT contributors — the
+  ## same dedup the fold applies — so a re-submitted owner signature never inflates
+  ## the "M of N" a card shows.
+  let intents = reduceIntents(events, driver)
+  var approvals = initTable[string, HashSet[string]]()
+  for e in events:
+    let p = e.key.split('/')
+    if p.len >= 4 and p[0] == "intent" and p[2] == "sig":
+      approvals.mgetOrPut(p[1], initHashSet[string]()).incl(p[3])
+  for id, it in intents:
+    result.add IntentView(id: id, state: $it.state,
+                          effectJson: effectJsonOf(events, id),
+                          approvals: approvals.getOrDefault(id).len)
+  result.sort(proc (a, b: IntentView): int = cmp(a.id, b.id))

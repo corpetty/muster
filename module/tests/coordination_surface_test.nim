@@ -99,4 +99,17 @@ doAssert intentState(alice.log.allEvents(), driver, id) == "executable",
          "a duplicate owner signature does not double-count"
 echo "5. duplicate owner contribution folds once OK"
 
+# 6. The render-ready projection the room draws its cards from: state + the effect
+#    it carried + the driver threshold + the DISTINCT-owner approval count. The
+#    duplicate from step 5 must not inflate the count — two owners signed, so 2.
+block:
+  let views = reduceIntentViews(bob.log.allEvents(), driver)
+  doAssert views.len == 1, "one intent in the room"
+  let v = views[0]
+  doAssert v.id == id, "the view keys on the content-addressed intent id"
+  doAssert v.state == "executable", "state matches the fold"
+  doAssert v.effectJson == effectJson, "the proposed effect travels with the view"
+  doAssert v.approvals == 2, "two distinct owners contributed; the duplicate folds once"
+echo "6. render-ready intent view (effect + threshold N=2 + approvals M=2) OK"
+
 echo "coordination_surface_test: all OK"
