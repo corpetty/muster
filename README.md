@@ -6,30 +6,57 @@ Muster's first mission is education — it walks people through the entire trans
 
 ## What is actually here
 
-Three things, and **the specified client is not yet one of them.** No Nim core has been written; `module/` does not exist and the P0 loading spike is still ahead. Read the table before drawing conclusions from anything below it.
+The specified client now exists and runs. The Nim core (`module/`) and the QML UI (`ui/`) were built P0→P4: the whole transaction lifecycle runs in the UI against a real 2-of-3 Safe, and the invariant-probe suite is green. Read the table before drawing conclusions from anything below it.
 
 | | What it is | State |
 |---|---|---|
-| **[`demo/`](demo/)** | A one-week speed build of the simplest complete journey — one person pays another, coordinated inside a private conversation — composing Logos modules that ship today | **Runs.** Two peers, real payments on the LEZ testnet |
-| **[`docs/`](docs/) + [`contracts/specs/`](contracts/specs/)** | The specification for the real client: vision, normative requirements, phase plan, and eleven typed specs with acceptance oracles derived from the invariants | Written. Nothing implements it yet |
+| **[`module/`](module/) + [`ui/`](ui/)** | The specified client — a Nim core behind the `muster.lidl` contract (`muster-module.lgx`) and a QML frontend (`muster-ui.lgx`), hosted on logos-core | **Runs.** P0–P2 and P4 landed; the full lifecycle (describe → propose → approve → submit) runs in `logos-basecamp` against a real Safe. Invariant probes green |
+| **[`demo/`](demo/)** | A one-week speed build of the simplest complete journey — one person pays another, coordinated inside a private conversation — composing Logos modules that ship today | **Runs.** Two peers, real payments on the LEZ testnet. Deliberately violates most invariants |
+| **[`docs/`](docs/) + [`contracts/specs/`](contracts/specs/)** | The specification for the real client: vision, normative requirements, phase plan, and the ten invariants as twelve typed specs with acceptance oracles | Written, and now substantially implemented and probe-checked |
 | **[`docs/diagrams/`](docs/diagrams/)** | The figure programme — mechanics, architecture, and where each stage of a transaction leaks | Published at **<https://corpetty.github.io/muster/>** |
 
-The demo deliberately violates most of the invariants the real client is specified to hold, which is why it can exist in a week. It says so on itself, at length, in [`demo/README.md`](demo/README.md). Do not cite it as how Muster works.
+The demo and the specified client are different codebases. The demo violates most of the invariants the real client holds, which is why it could exist in a week. It says so on itself, at length, in [`demo/README.md`](demo/README.md). Do not cite it as how Muster works — for that, read `module/`.
+
+**Ten invariants, twelve specs — the mismatch is deliberate.** `CLAUDE.md` numbers the invariants 1–10 (5b is explicitly *not* an invariant). Invariant 5 (deterministic bytes on signing paths) is carried by two specs — the dCBOR encoder and the domain-separated hash-input records — and one further spec pins the P4 loading-spike accept criterion, which is a phase gate rather than an invariant. Ten plus one, plus one, is twelve.
 
 ## Start here
 
 | If you want to… | Go to |
 |---|---|
-| **Run something** | [`demo/RUNBOOK.md`](demo/RUNBOOK.md) — two peers on one machine, and the journey end to end |
+| **Run the specified client** | [`module/README.md`](module/README.md) — build `muster-module.lgx`, load it headless, run the probes |
+| **Run the demo instead** | [`demo/RUNBOOK.md`](demo/RUNBOOK.md) — two peers on one machine, and the journey end to end |
 | **Understand the argument** | [`docs/posts/01-the-pipeline-and-discovery.md`](docs/posts/01-the-pipeline-and-discovery.md), then the [diagram site](https://corpetty.github.io/muster/) |
 | **Know why Muster exists** | [`docs/00-vision.md`](docs/00-vision.md) — the lifecycle-as-curriculum framing, and the honesty rules that bind every surface |
-| **Read what is being built** | [`docs/01-furps.md`](docs/01-furps.md) (normative, stable ids) and [`docs/02-implementation-plan.md`](docs/02-implementation-plan.md) (phases P0–P6) |
+| **Read what is being built** | [`docs/01-furps.md`](docs/01-furps.md) (normative, stable ids) and [`docs/02-implementation-plan.md`](docs/02-implementation-plan.md) (phases P0–P6, ADRs) |
 | **See how a claim is held to account** | The ten invariants in [`CLAUDE.md`](CLAUDE.md), and their typed specs in [`contracts/specs/`](contracts/specs/) |
 | **Read what went wrong** | [`docs/labbook/`](docs/labbook/) — traps found the expensive way, kept rather than tidied |
 
+## Run the specified client
+
+The real build needs [Nix](https://nixos.org/download) with flakes. The `module/` and `ui/` flakes pin `logos-module-builder` as a **local path-input on its `nim-cdylib-authoring` branch** — not upstream yet ([logos-co/logos-module-builder#202](https://github.com/logos-co/logos-module-builder/pull/202)) — so a fresh clone needs that checkout beside this repo. Build through `cache.nix.logos.co` as a substituter; pass it explicitly, since the invoking user is not a trusted nix user:
+
+```bash
+cd module && nix build .#lgx-portable   # muster-module.lgx (logoscore's default resolver wants the portable key)
+```
+
+Load it headless and answer one call:
+
+```bash
+lgpm install --file ./result*/*.lgx --modules-dir <dir>
+logoscore -m <dir> -l muster_module -c 'muster_module.health()' --quit-on-finish
+```
+
+The pure-Nim invariant probes need no host:
+
+```bash
+nim r -d:release module/tests/probes/probe_materialization_mismatch_refused.nim
+```
+
+The full UI lifecycle runs in `logos-basecamp` (ADR-013). See [`module/README.md`](module/README.md) and [`module/tests/README.md`](module/tests/README.md) for the crypto/Safe test link flags and the basecamp harness.
+
 ## Run the demo
 
-Needs [Nix](https://nixos.org/download) with flakes, and an internet connection: each peer joins the public `logos.test` delivery network and talks to the LEZ testnet sequencer. There is no chain to sync and nothing to install beyond this.
+The demo is the low-friction path: no local builder checkout, just Nix with flakes and an internet connection. Each peer joins the public `logos.test` delivery network and talks to the LEZ testnet sequencer. There is no chain to sync.
 
 ```bash
 cd demo && make app
@@ -45,7 +72,7 @@ make alice
 make bob
 ```
 
-**The first `make alice` on a cold store is the slow one — tens of minutes.** It builds the standalone runner, which pulls the RISC Zero proving stack from source, and nix defaults to one job at a time. `make app` is *supposed* to pre-build that and does not; it builds the packaged module instead and returns in seconds. Tracked as `exo-d6d`. Until it is fixed, get the parallelism back with:
+**The first `make alice` on a cold store is the slow one — tens of minutes.** It builds the standalone runner, which pulls the RISC Zero proving stack from source, and nix defaults to one job at a time. Get the parallelism back with:
 
 ```bash
 NIX_CONFIG='max-jobs = 8' make alice
@@ -56,25 +83,39 @@ Wait for both account cards to read **Online**, open and fund each wallet, then 
 ## Repo map
 
 ```
-demo/            the speed build — runnable today, and not the specified client
-  muster-ui/     fork of logos-co/logos-chat-ui: QML + QtRO C++ backend, wallet journey
-  RUNBOOK.md     how to run two peers
-  GAPS.md        what it does not protect, and what would close each gap
+module/          the Nim core behind muster.lidl → muster-module.lgx
+  src/api/       muster.lidl (the only outward seam) + generated surface
+  src/dcbor/     deterministic CDE encoder (inv 5)
+  src/log/       signed hash-linked log, reduce(log) (inv 4)
+  src/intents/   lifecycle · materialization · signing payload · provenance
+  src/drivers/   driver interface (inv 6) · safe · threshold · conformance
+  src/crypto/    two bound identities (secp256k1 auth + Ed25519/X25519 enc), keystore, epochs
+  src/transport/ Transport interface + local/delivery transports (inv 8)
+  src/coordination/ multi-party session · intent lifecycle = reduce(log)
+  src/wallet/    chain-agnostic wallet: EVM + mock shielded adapters, verified reads
+  tests/probes/  invariant probes
+ui/              QML view + C++ backend → muster-ui.lgx
+demo/            the speed build — runnable, and not the specified client
+  RUNBOOK.md     how to run two peers · GAPS.md what it does not protect
 docs/            00-vision · 01-furps · 02-implementation-plan
   diagrams/      the figure programme, its manifest, and the rot checker
-  labbook/       traps found the expensive way
-  posts/         the campaign write-ups
-contracts/specs/ typed specs with acceptance oracles, one per invariant
+  labbook/       traps found the expensive way · posts/ the campaign write-ups
+contracts/specs/ typed specs with acceptance oracles, derived from the invariants
+infra/anvil/     MiniSafe.sol fixture (faithful Safe-1.4.1 subset) + foundry
 ui/prototype/    coordination-prototype-v2.html — the standalone HTML reference build
 ```
 
-`module/` (the Nim core behind `muster.lidl`) and `ui/` proper arrive at P0 and P4. The layout above is what exists; [`CLAUDE.md`](CLAUDE.md) describes the target.
+[`CLAUDE.md`](CLAUDE.md) carries the authoritative layout and the invariants.
 
 ## Status
 
-**P0, at its first step.** The phase opens with a loading spike — a two-method `muster.lidl`, its Nim surface generated over the `lidl_c.h` JSON bridge, loading and answering one call in `logoscore` — chosen deliberately because it exercises the one part of the stack with no precedent. That spike has not been done, so the commands in `CLAUDE.md` describe a tree that does not exist yet.
+**P0–P2 and P4 landed; P3 is functionally complete against a local transport.** The signing-path core (deterministic dCBOR, domain-separated hash-input records, a signed hash-linked log), the intent lifecycle engine and driver interface, and all ten invariants landed by hand — the invariant-probe suite is green. The Safe driver re-derives the EIP-712 `safeTxHash`, verifies secp256k1 owner signatures, collects 2-of-3, and executes a real on-chain `execTransaction` against an anvil `MiniSafe`. **P4** put the whole lifecycle through the real UI in `logos-basecamp` (ADR-013); its acceptance harness is 6/6.
 
-What has been done is the specification work the spike will be measured against: the requirements, the phase plan, ten invariants, and eleven typed specs that passed a gate rejecting a spec whose oracles are vacuous, untraceable to the request, or too weak for the severity of what they guard. Those specs are authored, not discharged — most of their probes are unwritten, so an invariant here is currently asserted more often than it is checked. See [`docs/02-implementation-plan.md`](docs/02-implementation-plan.md) for accept criteria.
+**P3** — real transport, encryption, and multi-party coordination — is built and tested against a local transport: two bound identities (a secp256k1 authorization identity and an Ed25519/X25519 encryption identity, joined by a signed binding the core verifies on ingest), an ECIES epoch layer with forward secrecy verified (a mid-conversation joiner cannot open earlier epochs, F-16), a persistent keystore behind an operation seam, the hosted coordination surface, and a membership/grant handshake. What remains is a **live two-instance test over a real delivery node** — that needs a running node.
+
+**Beyond the phase plan:** a chain-agnostic wallet (a `ChainAdapter` seam with an EVM adapter and a mock shielded chain, verified reads via `eth_getProof` reusing the Nimbus verified-proxy core in-process), and a driver standard (a registry, a conformance suite, and a threshold k-of-n driver proving the driver seam is generic).
+
+See [`docs/02-implementation-plan.md`](docs/02-implementation-plan.md) for per-phase accept criteria and ADR status.
 
 ## License
 
@@ -82,4 +123,4 @@ Dual MIT / Apache-2.0, matching the Logos platform repos.
 
 ## Disclaimer
 
-This is an independent community project intended to demonstrate some of the capabilities and potential uses of the Logos technology stack. It has been developed independently by its contributor(s) and is not built for, on behalf of, or as part of the work of Logos or the Institute of Free Technology ("IFT"). It has not been reviewed, audited, approved, or endorsed by Logos or IFT. The project, including its code, documentation, views, and functionality, is the sole responsibility of its contributor(s) and should not be attributed to Logos or IFT. 
+This is an independent community project intended to demonstrate some of the capabilities and potential uses of the Logos technology stack. It has been developed independently by its contributor(s) and is not built for, on behalf of, or as part of the work of Logos or the Institute of Free Technology ("IFT"). It has not been reviewed, audited, approved, or endorsed by Logos or IFT. The project, including its code, documentation, views, and functionality, is the sole responsibility of its contributor(s) and should not be attributed to Logos or IFT.
