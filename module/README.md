@@ -1,58 +1,91 @@
 # module/ — the real Muster core (Nim behind the `muster.lidl` contract)
 
-Greenfield as of P0. This is the correct-from-the-ground-up build that replaces
-the `demo/` speed build. It is a Nim core, chronos-only, behind the published
-LIDL contract in [`src/api/muster.lidl`](src/api/muster.lidl), wrapped as
-`muster-module.lgx` and hosted headless by `logoscore` (P0–P3) and by
-logos-basecamp (P4+).
+The correct-from-the-ground-up build that replaces the `demo/` speed build. A
+Nim core, chronos-only, behind the published LIDL contract in
+[`src/api/muster.lidl`](src/api/muster.lidl), wrapped as `muster-module.lgx` and
+hosted headless by `logoscore` (P0–P3) and by logos-basecamp (P4+).
 
-See `../docs/02-implementation-plan.md` (phases, ADRs) and `../CLAUDE.md`
-(invariants). Acceptance is graded by the exophial specs in
-`../contracts/specs/derived-exo-*.spec.json`; each names probes under
+See [`../docs/02-implementation-plan.md`](../docs/02-implementation-plan.md)
+(phases, ADRs) and [`../CLAUDE.md`](../CLAUDE.md) (the invariants, and the
+authoritative current-phase status). Acceptance is graded by the exophial specs
+in `../contracts/specs/derived-exo-*.spec.json`; each names probes under
 `tests/probes/probe_*.nim` that its worker writes and must make pass.
 
-## P0 status
+## Status
 
-**Current step: the ADR-008 loading spike.** `src/api/muster.lidl` declares a
-two-method surface (`health`, `echo`) whose only job is to prove a Nim-backed
-module — generated over the `lidl_c.h` JSON bridge (references cloned to
-`~/Github/logos-co/logos-lidl` and `~/Github/logos-co/logos-rust-sdk`) — loads,
-dispatches, and answers one call in `logoscore`. Fallback (ADR-008): if the Nim
-codegen backend stalls, hand-write the generated surface for this one contract;
-`muster.lidl` stays normative either way.
+**P0–P2 and P4 landed; P3 functionally complete against a local transport.** The
+signing-path core, the intent lifecycle and driver interface, all ten
+invariants (the probe suite under `tests/probes/` is green), the Safe driver
+(real EIP-712 `safeTxHash`, secp256k1 owner verification, on-chain
+`execTransaction` against the anvil `MiniSafe`), and the LIDL codegen that
+generates the surface from the contract are all in. P4 put the whole lifecycle
+through the real UI in logos-basecamp (ADR-013). P3 — transport, encryption, and
+multi-party coordination — is built and tested against a local transport; what
+remains is a live two-instance test over a running delivery node. See
+[`../CLAUDE.md`](../CLAUDE.md) for the phase-by-phase detail.
 
-Not yet present (arrive with their phase / spec pebble):
+## Build
 
-- `src/dcbor/` — deterministic CDE encoding (§4.5). Spec `derived-exo-d7c` (`exo-d7c`).
-- `src/schemas/` — domain-separated `hash-input` records. Spec `derived-exo-449` (`exo-449`).
-- `src/log/` — signed hash-linked log, reducers, convergence. Spec `derived-exo-548` (`exo-548`).
-- `src/crypto/` — keys, sign/verify, envelope + epochs (P1/P3).
-- `src/intents/` — effect types, lifecycle reducer, expiry (P1).
-- `src/drivers/` — interface, conformance suite, stub, safe (P1/P2).
-- `src/transport/` — interface, local/memory, messaging (P3).
-- `src/plugins/` — runtime, manifest enforcement, first-party (P5).
+The flake pins `logos-module-builder` as a local path-input on its
+`nim-cdylib-authoring` branch (not upstream yet, PR #202), so a fresh clone needs
+that checkout beside this repo. Build through `cache.nix.logos.co` as a
+substituter — the invoking user is not a trusted nix user, so pass it
+explicitly.
 
-## Intended layout
-
-```
-module/
-  src/
-    api/         muster.lidl (normative contract) + generated surface — the only outward seam
-    schemas/     CDDL sources + generated Nim types + golden vectors
-    dcbor/       deterministic CBOR encode/decode
-    crypto/      keys, sign/verify, envelope + epochs
-    log/         hash-linked signed log, causal order, reducers, persistence
-    intents/     effect types, lifecycle reducer, expiry
-    drivers/     interface, conformance suite, stub, safe
-    transport/   interface, local/memory, messaging impl
-    plugins/     runtime, manifest enforcement, first-party
-  tests/
-    probes/      the probe_*.nim acceptance oracles named by the derived-exo-* specs
+```bash
+nix build .#lgx            # muster-module.lgx (dev, keyed linux-amd64-dev)
+nix build .#lgx-portable   # portable variant (logoscore's default resolver wants this one)
 ```
 
-## Working agreements (from `../CLAUDE.md`)
+Load it headless and answer one call:
+
+```bash
+lgpm install --file ./result*/*.lgx --modules-dir <dir>
+logoscore -m <dir> -l muster_module -c 'muster_module.health()' --quit-on-finish
+```
+
+## Test
+
+The pure-Nim invariant probes need no host:
+
+```bash
+nim r -d:release tests/probes/probe_materialization_mismatch_refused.nim
+```
+
+The P2 crypto/Safe tests link `libsecp256k1` and the full P3 stack links
+`libsodium` too — see [`tests/README.md`](tests/README.md) for the link flags
+and the anvil-backed `safe_anvil_e2e`. Regenerate the generated surface from the
+contract with [`tools/regen.sh`](tools/regen.sh).
+
+## Layout
+
+```
+src/
+  api/          muster.lidl (the only outward seam) + generated surface
+  dcbor/        deterministic CDE encoder (inv 5)
+  hashing/      sha256 · keccak256 · domain-separated hash-input records (inv 5)
+  log/          signed hash-linked log, reduce(log) (inv 4)
+  intents/      lifecycle (F-3) · materialization · signing_payload · provenance
+  drivers/      driver interface (inv 6) · safe · threshold · conformance suite
+  crypto/       two bound identities (secp256k1 auth + Ed25519/X25519 enc),
+                signed binding, keystore seam, epoch crypto (F-14/F-16)
+  transport/    Transport interface + local/delivery transports (inv 8)
+  coordination/ multi-party session · intent lifecycle = reduce(log)
+  wallet/       chain-agnostic wallet: EVM + mock shielded adapters, verified reads
+  plugins/      plugin sandbox (inv 3)
+nim-lib/        muster_gen.nim (generated) + muster_module.nim (hosted surface)
+tools/          lidl_gen.nim (Nim LIDL codegen) · regen.sh
+tests/          lifecycle/safe/crypto/transport/coordination tests
+  probes/       the probe_*.nim acceptance oracles named by the derived-exo-* specs
+```
+
+## Working agreements (from [`../CLAUDE.md`](../CLAUDE.md))
 
 - chronos only; never std asyncdispatch.
 - No ad-hoc serialization where bytes get hashed or signed — deterministic dCBOR only.
 - Every hash on a signing path is a domain-separated `hash-input` record.
+- The conformance suite (`src/drivers/conformance.nim`) is green before driver features.
+- Invariant tests are append-only. Extend, don't weaken.
 - The module imports nothing from `../ui/`; it reaches other modules only through logos-core.
+
+<!-- rot-check: current-phase=CLAUDE.md sha256=f80476bff1bcbe3635834d1d0548ef47f48374f3962f19ed8e8680efddbf7c65 -->

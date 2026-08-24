@@ -95,6 +95,7 @@ make clean-peer PEER=alice       # wipe one peer's chat identity and wallet
 make help                        # every target
 cd demo/muster-ui && nix build   # the muster_ui module itself
 python3 docs/diagrams/tools/check-manifest.py   # figure-provenance gate (--update, --stamp)
+python3 scripts/check-readme-rot.py             # entry-point README staleness gate vs the Current-phase section (--stamp)
 ```
 
 **The real `module/`+`ui/` build** (needs the local `logos-module-builder@nim-cdylib-authoring` checkout the flakes pin; build via `cache.nix.logos.co` as a substituter — the user is not a trusted nix user, so pass `--extra-substituters` explicitly):

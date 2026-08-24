@@ -51,6 +51,15 @@ repos:
     language: system
     pass_filenames: false
     files: ^docs/diagrams/
+- repo: local
+  hooks:
+  - id: readme-rot
+    name: Entry-point READMEs track the current phase
+    entry: scripts/check-readme-rot.py
+    language: system
+    pass_filenames: false
+    verbose: true
+    files: ^(README\.md|module/README\.md|CLAUDE\.md)$
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.6.0
   hooks:
