@@ -213,6 +213,7 @@ test("muster_ui: the walkthrough renders the claims registry", async (app) => {
   if (!(r.matches?.length > 0))
     throw new Error("no claim cards rendered in the walkthrough");
   console.log(`[muster] WALKTHROUGH OK — ${r.matches.length} claim cards across the six steps`);
+  await grab(app, "walkthrough");
 });
 
 async function grab(app, suffix) {
