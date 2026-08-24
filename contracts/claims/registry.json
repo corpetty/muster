@@ -1,0 +1,239 @@
+{
+  "about": "The ADR-012 claims registry: the walkthrough's four questions as structured, CI-validated data. Steps are the F-3 intent lifecycle the real client implements (driver-agnostic), not the demo's payment-specific journey. Each step's `summary` answers 'what just happened'; `protects`/`others-leak`/`gap` claims answer the other three questions. Validated by scripts/check-claims-registry.py; truth is the author's obligation under docs/00-vision.md.",
+  "steps": [
+    {
+      "id": "open-room",
+      "title": "Open the room",
+      "summary": "A conversation is created as an end-to-end encrypted room over the delivery transport. Who is in the room is the security boundary; everything below happens inside it."
+    },
+    {
+      "id": "propose",
+      "title": "Propose the transaction",
+      "summary": "A member proposes an effect (what should happen). The client derives the materialization (the exact bytes that would be signed) and shows both, so the room reviews the effect while the machine commits to the materialization."
+    },
+    {
+      "id": "collect",
+      "title": "Collect approvals",
+      "summary": "The proposal gathers authorizations round by round, as the driver's policy describes. Each contribution is an authored, room-authenticated message folded into the intent's state."
+    },
+    {
+      "id": "executable",
+      "title": "Ready to submit",
+      "summary": "The authorization threshold is met. 'Ready' is not a flag someone set — it is re-derived from the signed log, so every client agrees without trusting a coordinator."
+    },
+    {
+      "id": "submit",
+      "title": "Cross the boundary",
+      "summary": "The assembled transaction leaves the room and is submitted on-chain. This is the one place the conversation boundary is crossed; the client names what became public and what stayed inside."
+    },
+    {
+      "id": "settle",
+      "title": "Settle and record",
+      "summary": "The transaction settles and the room reads the result back. Facts the room shows (balances, confirmations) carry a verification grade so a claim about the world is never taken on faith."
+    }
+  ],
+  "claims": [
+    {
+      "step": "open-room",
+      "kind": "protects",
+      "title": "A later joiner cannot read earlier messages",
+      "body": "Membership is epoch-based: admitting a member re-keys the room forward, so someone added mid-conversation reads from their epoch on and nothing before it. Removal rotates the epoch immediately.",
+      "requirement": "F-16",
+      "test": "module/tests/probes/probe_epoch_new_member_disjoint.nim"
+    },
+    {
+      "step": "open-room",
+      "kind": "protects",
+      "title": "One identity to authorize, one to encrypt, provably the same person",
+      "body": "Each member carries two keypairs — a secp256k1 authorization key (the one that signs transactions) and an Ed25519/X25519 encryption key — joined by a signed link statement the core verifies when it ingests the member, so the two cannot be silently mismatched.",
+      "requirement": "F-14",
+      "test": "module/tests/binding_test.nim"
+    },
+    {
+      "step": "open-room",
+      "kind": "others-leak",
+      "title": "A hosted chat backend sees the whole room",
+      "body": "In a conventional hosted group chat, the server holds the membership roster and sees message timing directly — the room's shape is the operator's data.",
+      "system": "a hosted group-chat backend",
+      "observer": "the server operator"
+    },
+    {
+      "step": "open-room",
+      "kind": "gap",
+      "title": "The store node still sees the conversation graph",
+      "body": "Content is encrypted, but a store node still sees the room's content topic and the timing of publishes and fetches — the conversation graph, pseudonymously. This surface names that limit rather than claiming to hide it (FS-9).",
+      "fix": "route through the Logos transport-layer mixnet, which unlinks the subscription set and timing from the reader",
+      "status": "specified",
+      "spec_stage": "raw (LOGOS-MIXNET, send-only proof-of-concept)"
+    },
+    {
+      "step": "propose",
+      "kind": "protects",
+      "title": "You sign what you saw, not what a screen claimed",
+      "body": "The client independently re-derives the materialization from the displayed effect and refuses to sign if they disagree. The review target and the signing target are provably the same bytes; this check lives in the core and cannot be disabled.",
+      "requirement": "F-4",
+      "test": "module/tests/probes/probe_materialization_mismatch_refused.nim"
+    },
+    {
+      "step": "propose",
+      "kind": "protects",
+      "title": "A signature is worthless anywhere but here",
+      "body": "Every signing payload commits to the execution environment, the account, the serialization slot, and an expiry — so a signature captured here cannot be replayed against another chain, account, or slot.",
+      "requirement": "F-5",
+      "test": "module/tests/probes/probe_replay_binding_field_binds.nim"
+    },
+    {
+      "step": "propose",
+      "kind": "protects",
+      "title": "Nothing is signed whose inputs can't be accounted for",
+      "body": "The signing payload commits to a provenance record naming, for every input that reached the signed bytes, its class and its position in the log. Signing is refused when any input's origin is unaccountable.",
+      "requirement": "F-20",
+      "test": "module/tests/probes/probe_provenance_refusal_stepper.nim"
+    },
+    {
+      "step": "propose",
+      "kind": "others-leak",
+      "title": "Blind signing trusts the screen that drew the hash",
+      "body": "A browser wallet asked to sign a hash handed to it by a dApp cannot re-derive what that hash authorizes — the signer trusts the requesting page's rendering, which is exactly the gap F-4 closes.",
+      "system": "a browser wallet approving a dApp-supplied hash",
+      "observer": "the signer, who cannot verify what the hash authorizes"
+    },
+    {
+      "step": "propose",
+      "kind": "gap",
+      "title": "Schema identity is ours until the platform's profile ratifies",
+      "body": "Signing-path bytes are deterministic and domain-separated (invariant 5). But which profile derives a schema's identity is still hand-assigned ids in v0; a ratified cdCDDLe schema-root profile would let a second module re-derive our schema identity without trusting our ids (ADR-009).",
+      "fix": "adopt cdCDDLe schema roots in the profile field once LOGOS-MODULE-HASH-PROFILE ratifies — no format migration, the field already carries it",
+      "status": "specified",
+      "spec_stage": "draft (unmerged, logos-co/logos-lips branch draft/logos-core-module-specs)"
+    },
+    {
+      "step": "collect",
+      "kind": "protects",
+      "title": "The core never interprets a contribution — the driver does",
+      "body": "The core routes opaque contribution bytes and asks the driver what they mean. Rounds, serialization domain, membership model, and finality are all driver-described, never hardcoded, so a new coordination policy is a new driver, not a core change.",
+      "requirement": "F-6",
+      "test": "module/tests/probes/probe_core_opaque_routing_stepper.nim"
+    },
+    {
+      "step": "collect",
+      "kind": "protects",
+      "title": "A non-owner signature never counts",
+      "body": "A contribution from someone who is not an authorizer for this intent is refused, and a duplicate from the same authorizer folds only once — the threshold reflects real, distinct authorizations.",
+      "requirement": "FS-2",
+      "test": "module/tests/coordination_surface_test.nim"
+    },
+    {
+      "step": "collect",
+      "kind": "protects",
+      "title": "Every driver passes one conformance suite",
+      "body": "Stub, Safe, and threshold drivers are all graded by the same conformance suite; a driver feature does not merge with it red, so the coordination guarantees hold identically whichever driver a room runs.",
+      "requirement": "S-1",
+      "test": "module/tests/conformance_test.nim"
+    },
+    {
+      "step": "collect",
+      "kind": "others-leak",
+      "title": "A hosted coordination service sees every proposal and signer",
+      "body": "A hosted multisig transaction service watches proposals accumulate signatures before anything is on-chain — the operator sees who is coordinating what, in the clear. Muster assembles and submits client-side instead, with no such service.",
+      "system": "a hosted multisig transaction service",
+      "observer": "the service operator"
+    },
+    {
+      "step": "collect",
+      "kind": "gap",
+      "title": "The real multi-round test — FROST — is not built yet",
+      "body": "The round model is exercised by a shipped Ed25519 k-of-n threshold driver, which proves the driver seam is generic. But FROST at r=2, the genuinely multi-round protocol that pressure-tests it hardest, is not yet implemented.",
+      "fix": "implement the FROST r=2 threshold driver from spec against the conformance suite (P6)",
+      "status": "partial"
+    },
+    {
+      "step": "executable",
+      "kind": "protects",
+      "title": "State is re-derived, never asserted",
+      "body": "'Ready' is a reduction over the signed log (state = reduce(log)), rebuilt from log plus keys on a cold start. Nothing exists that cannot be rebuilt, so no coordinator's say-so is trusted for whether the threshold is met.",
+      "requirement": "R-3",
+      "test": "module/tests/probes/probe_state_cold_start_matches.nim"
+    },
+    {
+      "step": "executable",
+      "kind": "protects",
+      "title": "Duplicated or reordered messages converge to the same state",
+      "body": "Reducers are idempotent and order-insensitive up to a deterministic tiebreak, so a message delivered twice or out of order by the transport still lands every client on identical state.",
+      "requirement": "R-2",
+      "test": "module/tests/probes/probe_convergence_reorder_stepper.nim"
+    },
+    {
+      "step": "executable",
+      "kind": "others-leak",
+      "title": "A server-authoritative coordinator both holds and reads the tally",
+      "body": "When a server owns the canonical 'ready' state, every client trusts its count — and the same server can read the running tally at will. Muster's threshold is re-derived locally by each client from the shared log.",
+      "system": "a server-authoritative coordination backend",
+      "observer": "the coordinator, which both holds and can read the tally"
+    },
+    {
+      "step": "executable",
+      "kind": "gap",
+      "title": "Cold-start re-derivation is not yet incremental",
+      "body": "Re-deriving state replays the log; until log snapshotting lands, that is linear in the log length rather than snapshot-plus-tail, so the P-2/P-5 cold-start and reduction targets are not yet met or benchmarked.",
+      "fix": "log snapshotting (periodic snapshot + tail replay) to make reduction incremental after the first pass (P6)",
+      "status": "none"
+    },
+    {
+      "step": "submit",
+      "kind": "protects",
+      "title": "The submit is a real, client-side on-chain call",
+      "body": "Submit re-derives and signs the transaction locally and calls the chain directly (a real Safe execTransaction against the on-chain contract) — there is no hosted transaction service and no server-side application state in the path.",
+      "requirement": "FS-1",
+      "test": "module/tests/safe_anvil_e2e.nim"
+    },
+    {
+      "step": "submit",
+      "kind": "protects",
+      "title": "The one place the ground changes is named",
+      "body": "Crossing the boundary is the single moment the interface's visual ground changes, and the submitted card names what became public versus what stayed inside — the boundary is drawn, not left for the user to infer.",
+      "requirement": "U-2",
+      "test": "ui/tests/muster-ui-test.mjs"
+    },
+    {
+      "step": "submit",
+      "kind": "others-leak",
+      "title": "The chain records the signers, forever",
+      "body": "Under a named driver, the on-chain transaction records the signer addresses permanently and publicly — this is real and unavoidable at settlement, which is why the boundary crossing is made explicit rather than hidden.",
+      "system": "the public blockchain",
+      "observer": "anyone reading the chain"
+    },
+    {
+      "step": "submit",
+      "kind": "gap",
+      "title": "Keeping signers unlinkable at settlement needs an anonymous driver",
+      "body": "The shipped Safe driver names its owners on-chain. The machinery for anonymous membership (count-only slots that leak no signer identity) exists and is probed, but a fully anonymous-membership driver is opt-in and not yet a shipped driver.",
+      "fix": "ship an anonymous-membership driver (count-only authorization slots, FS-7 / ADR-005) whose settlement discloses a threshold proof, not addresses",
+      "status": "partial"
+    },
+    {
+      "step": "settle",
+      "kind": "protects",
+      "title": "A fact about the world carries how it was checked",
+      "body": "Facts the room shows (like a balance) carry a verification grade — verified-locally when the client re-checked the read itself, attested otherwise — always displayed. A read that fails raises; it never quietly renders as a zero.",
+      "requirement": "F-10",
+      "test": "module/tests/wallet_verify_test.nim"
+    },
+    {
+      "step": "settle",
+      "kind": "others-leak",
+      "title": "A custodial balance API asks you to take its number on faith",
+      "body": "A hosted or custodial balance endpoint returns a number you cannot independently check — you trust the provider. Muster earns the verified grade by re-running the proof against a user-configured node, in-process.",
+      "system": "a custodial or hosted balance API",
+      "observer": "the API provider"
+    },
+    {
+      "step": "settle",
+      "kind": "gap",
+      "title": "'Verified-locally' is proof-checked, not yet trustless end-to-end",
+      "body": "A verified read checks a Merkle proof against a state root the client fetches from a user-configured RPC — it trusts that root. Making the root itself trustless needs a beacon light-client sidecar, which is deferred on infrastructure.",
+      "fix": "add the beacon light-client sidecar so the state root is verified against the beacon chain, not taken from the RPC (ADR-014, deferred)",
+      "status": "partial"
+    }
+  ]
+}

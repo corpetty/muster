@@ -60,6 +60,15 @@ repos:
     pass_filenames: false
     verbose: true
     files: ^(README\.md|module/README\.md|CLAUDE\.md)$
+- repo: local
+  hooks:
+  - id: claims-registry
+    name: Walkthrough claims resolve to a requirement and a test (ADR-012)
+    entry: scripts/check-claims-registry.py
+    language: system
+    pass_filenames: false
+    verbose: true
+    files: ^(contracts/claims/|docs/01-furps\.md|module/tests/|ui/tests/)
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.6.0
   hooks:
