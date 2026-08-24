@@ -33,26 +33,27 @@ The demo and the specified client are different codebases. The demo violates mos
 
 ## Run the specified client
 
-The real build needs [Nix](https://nixos.org/download) with flakes. The `module/` and `ui/` flakes pin `logos-module-builder` as a **local path-input on its `nim-cdylib-authoring` branch** — not upstream yet ([logos-co/logos-module-builder#202](https://github.com/logos-co/logos-module-builder/pull/202)) — so a fresh clone needs that checkout beside this repo. Build through `cache.nix.logos.co` as a substituter; pass it explicitly, since the invoking user is not a trusted nix user:
+Needs [Nix](https://nixos.org/download) with flakes. There are three ways in; all build through `cache.nix.logos.co` (the Makefile passes it for you).
+
+**Standalone app — the easy path.** `logos-standalone-app` hosts the muster UI and `muster_module` directly; no basecamp, no package manager.
 
 ```bash
-cd module && nix build .#lgx-portable   # muster-module.lgx (logoscore's default resolver wants the portable key)
+make build   # the slow first build — pre-builds the runner (minutes); do this once
+make run     # launch: the lifecycle dashboard (propose → approve → submit) + the walkthrough
 ```
 
-Load it headless and answer one call:
+**In logos-basecamp** — if you already run basecamp, load `muster-ui.lgx` there as a module instead. See [`ui/tests/README.md`](ui/tests/README.md) § "Producing the app-under-test".
+
+**Headless / module only** — the core with no UI, plus the invariant probes:
 
 ```bash
+cd module && nix build .#lgx-portable
 lgpm install --file ./result*/*.lgx --modules-dir <dir>
 logoscore -m <dir> -l muster_module -c 'muster_module.health()' --quit-on-finish
+nim r -d:release module/tests/probes/probe_materialization_mismatch_refused.nim   # no host needed
 ```
 
-The pure-Nim invariant probes need no host:
-
-```bash
-nim r -d:release module/tests/probes/probe_materialization_mismatch_refused.nim
-```
-
-The full UI lifecycle runs in `logos-basecamp` (ADR-013). See [`module/README.md`](module/README.md) and [`module/tests/README.md`](module/tests/README.md) for the crypto/Safe test link flags and the basecamp harness.
+> **Runs on a contributor's machine today, not yet from a fresh clone.** `module/` and `ui/` pin `logos-module-builder` to a **local** checkout of its `nim-cdylib-authoring` branch (the `nim.packages` hook + a RUNPATH fix, [PR #202](https://github.com/logos-co/logos-module-builder/pull/202)), and `ui/flake.nix` references `muster_module` by absolute path — both machine-specific until those land upstream. Until then, other people run it from a prebuilt release, not `make run` on a clone. See [`module/README.md`](module/README.md) and [`module/tests/README.md`](module/tests/README.md) for build/test details.
 
 ## Run the demo
 

@@ -8,6 +8,9 @@
 result
 result-*
 
+# `make run` / `make build` per-peer state and the runner GC-root (root Makefile).
+.run/
+
 # Machine-local flake locks: module/ and ui/ pin logos-module-builder to a
 # LOCAL path input (the Nim-codegen checkout), so their flake.lock is per-machine
 # and must not enter shared history. Committing one breaks the build on any box
