@@ -186,6 +186,35 @@ test("muster_ui: a non-owner signature is rejected, then reset clears the intent
   console.log("[muster] RESET OK — intent cleared for a new proposal");
 });
 
+// 4c) WALKTHROUGH — the ADR-012 claims registry rendered as the lifecycle
+//     legend. Toggling it on shows the six steps with their protects/leak/gap
+//     claims; the data is ClaimsRegistry.qml (generated from
+//     contracts/claims/registry.json, drift-checked in CI). Off-chain; no anvil.
+test("muster_ui: the walkthrough renders the claims registry", async (app) => {
+  await openMuster(app);
+  await app.waitFor(
+    async () => { await app.expectTexts(["Muster"]); },
+    { timeout: 15000, interval: 500, description: "muster_ui view" }
+  );
+  await clickButton(app, "walkthroughToggle");
+  await app.waitFor(
+    async () => {
+      await app.expectTexts([
+        "The transaction lifecycle", // the walkthrough header
+        "Open the room",             // first step title
+        "Settle and record",         // last step title
+        "PROTECTS",                  // a protects badge
+        "GAP",                       // a gap badge
+      ]);
+    },
+    { timeout: 15000, interval: 500, description: "walkthrough legend rendered" }
+  );
+  const r = await app.inspector.send("findByProperty", { property: "objectName", value: "claimCard" });
+  if (!(r.matches?.length > 0))
+    throw new Error("no claim cards rendered in the walkthrough");
+  console.log(`[muster] WALKTHROUGH OK — ${r.matches.length} claim cards across the six steps`);
+});
+
 async function grab(app, suffix) {
   await new Promise((r) => setTimeout(r, 1500)); // let the render thread catch up
   try {

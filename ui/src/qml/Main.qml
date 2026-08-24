@@ -38,6 +38,10 @@ Item {
     readonly property var backend: logos.module("muster_ui")
     property bool ready: false
 
+    // The teaching surface (ADR-012 claims registry) sits behind a toggle so it
+    // never crowds the working dashboard; one is shown at a time.
+    property bool showWalkthrough: false
+
     // Backend PROPs, aliased so bindings read cleanly. The backend is the only
     // writer; these are all reads.
     readonly property string health: backend ? backend.health : "(no backend)"
@@ -96,8 +100,29 @@ Item {
         color: Theme.palette.background
     }
 
+    // The walkthrough (claims registry) fills the view when toggled on; the
+    // dashboard hides while it is up. Declared before `page` so the toggle
+    // button, added last, stays on top.
+    Walkthrough {
+        anchors.fill: parent
+        visible: root.showWalkthrough
+    }
+
+    // Toggle between the working dashboard and the teaching walkthrough. Always
+    // on top (z), so it is reachable in either mode.
+    LogosButton {
+        objectName: "walkthroughToggle"
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: Theme.spacing.medium
+        z: 10
+        text: root.showWalkthrough ? qsTr("Close") : qsTr("Walkthrough")
+        onClicked: root.showWalkthrough = !root.showWalkthrough
+    }
+
     ColumnLayout {
         id: page
+        visible: !root.showWalkthrough
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.topMargin: Theme.spacing.xlarge
