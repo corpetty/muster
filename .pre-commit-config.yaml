@@ -69,6 +69,15 @@ repos:
     pass_filenames: false
     verbose: true
     files: ^(contracts/claims/|docs/01-furps\.md|module/tests/|ui/tests/)
+- repo: local
+  hooks:
+  - id: claims-qml-sync
+    name: ClaimsRegistry.qml is regenerated from the claims registry
+    entry: ui/tools/gen-claims-qml.py
+    args: [--check]
+    language: system
+    pass_filenames: false
+    files: ^(contracts/claims/|ui/src/qml/ClaimsRegistry\.qml|ui/tools/gen-claims-qml\.py)$
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.6.0
   hooks:

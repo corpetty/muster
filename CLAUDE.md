@@ -97,6 +97,7 @@ cd demo/muster-ui && nix build   # the muster_ui module itself
 python3 docs/diagrams/tools/check-manifest.py   # figure-provenance gate (--update, --stamp)
 python3 scripts/check-readme-rot.py             # entry-point README staleness gate vs the Current-phase section (--stamp)
 python3 scripts/check-claims-registry.py        # ADR-012 claims registry: every protects→requirement+test, every gap→fix+status
+python3 ui/tools/gen-claims-qml.py [--check]    # regen ui/src/qml/ClaimsRegistry.qml from the registry (CI checks drift)
 ```
 
 **The real `module/`+`ui/` build** (needs the local `logos-module-builder@nim-cdylib-authoring` checkout the flakes pin; build via `cache.nix.logos.co` as a substituter — the user is not a trusted nix user, so pass `--extra-substituters` explicitly):
