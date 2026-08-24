@@ -77,9 +77,17 @@ land upstream (both tracked in ADR-013 / `exo-193`):
 In `logos-basecamp/flake.nix`, add the two inputs:
 
 ```nix
-muster_module.url = "path:/ABS/PATH/TO/muster/module";
-muster_ui.url     = "path:/ABS/PATH/TO/muster/ui";
+muster_module.url = "git+file:///ABS/PATH/TO/muster?dir=module";
+muster_ui.url     = "git+file:///ABS/PATH/TO/muster?dir=ui";
 ```
+
+> Use `git+file:` (the git-TRACKED tree), **not** `path:`. A `path:` input copies
+> the working directory including untracked build symlinks and scratch (`result`,
+> `*.log`), which changes the `muster_module` derivation from what `cd module &&
+> nix build` produces — and that rebuild fails the Nim compile with
+> `secp256k1.nim: cannot open file: pkg/results`. `git+file:` copies only tracked
+> files, so it matches the standalone build (which builds clean). Commit your
+> muster changes first — `git+file:` won't see uncommitted view edits.
 
 add them to the `outputs = { ... }` argument set, bind their installs in the
 `forAllSystems` let (co-locating secp for the basecamp case):
