@@ -29,6 +29,21 @@ class MusterUi
     // (checked against a consensus state root) — the view renders it as a badge.
     SLOT(void loadBalances())
 
+    // ── the room / conversation surface ──────────────────────────────────
+    // Join (or start) a conversation on a content topic, over encrypted
+    // transport (coordinate_join). Sets roomTopic and loads its messages+members.
+    SLOT(void joinRoom(const QString &topic))
+
+    // Post an authored event to the joined room (coordinate_post_message): plain
+    // chat text, or a typed card as JSON {kind,...}. One channel; cards are data.
+    SLOT(void postMessage(const QString &body))
+
+    // Refresh the room's message log (coordinate_messages) into messagesJson, and
+    // the roster (coordinate_members) into membersJson. Each drives inbound
+    // delivery first so it reflects events from other participants.
+    SLOT(void loadMessages())
+    SLOT(void loadMembers())
+
     PROP(QString health="unknown" READONLY)
 
     // The Safe account this walkthrough coordinates against — read from the
@@ -49,4 +64,11 @@ class MusterUi
     // Wallet balances across chains, as JSON (see loadBalances). Each entry carries
     // its F-10 grade so the view can show what is proven vs merely claimed.
     PROP(QString balancesJson="[]" READONLY)
+
+    // The joined room's topic (empty until joinRoom), its message log as a JSON
+    // array of {id, author, ts, body}, and its admitted roster as {identity, self}.
+    // The view folds messagesJson into the thread (and, later, the cards/journey).
+    PROP(QString roomTopic="" READONLY)
+    PROP(QString messagesJson="[]" READONLY)
+    PROP(QString membersJson="[]" READONLY)
 }

@@ -143,6 +143,48 @@ void MusterUiBackend::loadBalances()
     setBalancesJson(b);
 }
 
+void MusterUiBackend::joinRoom(const QString &topic)
+{
+    // coordinate_join → start/join the conversation on this topic over encrypted
+    // transport (returns JSON {address, topic}). Key the view off the topic and
+    // pull its messages + roster so the room opens on real state.
+    if (topic.isEmpty()) {
+        setLastError(QStringLiteral("cannot join an empty topic"));
+        return;
+    }
+    const QString r = modules().muster_module.coordinate_join(topic);
+    qInfo() << "[muster_ui] coordinate_join(" << topic << ") ->" << r;
+    setRoomTopic(topic);
+    setLastError(QString());
+    loadMessages();
+    loadMembers();
+}
+
+void MusterUiBackend::postMessage(const QString &body)
+{
+    // coordinate_post_message → one channel for chat and cards. The module adds a
+    // message event to the shared log; we re-read so the view reflects it (and any
+    // that arrived from other participants) — reduce(log), no second record.
+    if (body.isEmpty())
+        return;
+    const QString id = modules().muster_module.coordinate_post_message(body);
+    qInfo() << "[muster_ui] coordinate_post_message ->" << id;
+    loadMessages();
+}
+
+void MusterUiBackend::loadMessages()
+{
+    // coordinate_messages → the room's authored events, oldest-first, as JSON.
+    // The view folds this into the thread; the module drives inbound delivery first.
+    setMessagesJson(modules().muster_module.coordinate_messages());
+}
+
+void MusterUiBackend::loadMembers()
+{
+    // coordinate_members → the admitted roster (who can read the room).
+    setMembersJson(modules().muster_module.coordinate_members());
+}
+
 void MusterUiBackend::onContextReady()
 {
     // Fires once ui-host hands the plugin its wired modules(); read liveness, the

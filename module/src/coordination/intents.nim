@@ -15,7 +15,7 @@
 ## A contribution is keyed by contributor, so a duplicate signature from the same
 ## owner folds once (Safe dedups too).
 
-import std/[json, tables, sets, strutils]
+import std/[json, tables, sets, strutils, algorithm]
 import ../log/log
 import ../intents/lifecycle
 import ../intents/materialization
@@ -86,6 +86,55 @@ proc contributeEvent*(intentId, contributor, signatureHex: string,
 
 proc submitEvent*(intentId: string, parents: seq[EventId] = @[]): Event =
   Event(parents: parents, key: "intent/" & intentId & "/submit", value: "1")
+
+# ── messages: authored chat events folded from the SAME log ───────────────────
+# A message is an authored event on the coordination log — plain chat text or a
+# typed card as JSON, opaque to the core. It is NOT an intent: it never touches
+# the lifecycle engine, it is simply recorded and read back in timestamp order.
+# Each message is its own log entry keyed by a unique content address
+# ("message/<id>"), so the last-write-wins reducer preserves every one of them
+# (append-only), and the same message ingested twice folds once. The id travels
+# in the key inside the sealed envelope, so every participant reads the author's
+# id verbatim — it needn't be re-derivable by a reader, only unique for the author.
+
+type Message* = object
+  id*: string
+  author*: string       ## the author's 64-byte enc identity (ed25519 ++ x25519) hex
+  ts*: int64            ## authoring wall-clock (seconds); the sort key
+  body*: string         ## opaque: plain text OR a typed card as JSON
+
+proc newMessageEvent*(author: string, ts: int64, body: string,
+                      nonce: uint64): (string, Event) =
+  ## Build an authored message event and its message id. The id is
+  ## keccak256(author ++ body ++ ts ++ nonce)[:12]; the nonce (a per-author
+  ## monotonic counter) keeps two identical bodies in the same second distinct.
+  let value = $(%*{"author": author, "ts": ts, "body": body})
+  var b: seq[byte]
+  for c in author: b.add byte(c)
+  for c in body: b.add byte(c)
+  var t = cast[uint64](ts)
+  for _ in 0 ..< 8: (b.add byte(t and 0xff'u64); t = t shr 8)
+  var n = nonce
+  for _ in 0 ..< 8: (b.add byte(n and 0xff'u64); n = n shr 8)
+  let id = bytesHex(keccak256(b)[0 ..< 12])
+  (id, Event(key: "message/" & id, value: value))
+
+proc reduceMessages*(events: seq[Event]): seq[Message] =
+  ## Fold the authored messages out of the shared log, oldest-first. Ordered by
+  ## timestamp with the message id as a deterministic tiebreak, so two instances
+  ## with the same event set produce the identical ordering (invariant 4).
+  const prefix = "message/"
+  for e in canonicalOrder(events):
+    if not e.key.startsWith(prefix): continue
+    try:
+      let j = parseJson(e.value)
+      result.add Message(id: e.key[prefix.len .. ^1],
+                         author: j["author"].getStr(),
+                         ts: j["ts"].getBiggestInt(),
+                         body: j["body"].getStr())
+    except CatchableError: continue
+  result.sort(proc (a, b: Message): int =
+    if a.ts != b.ts: (if a.ts < b.ts: -1 else: 1) else: cmp(a.id, b.id))
 
 # ── the fold: intent lifecycle = reduce(log) ──────────────────────────────────
 

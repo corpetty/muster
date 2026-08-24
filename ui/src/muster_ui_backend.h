@@ -32,5 +32,12 @@ public:
     void submit() override;
     void reset() override;
     void loadBalances() override;
+
+    // The room / conversation surface (see muster_ui.rep).
+    void joinRoom(const QString &topic) override;
+    void postMessage(const QString &body) override;
+    void loadMessages() override;
+    void loadMembers() override;
+
     void onContextReady() override;
 };

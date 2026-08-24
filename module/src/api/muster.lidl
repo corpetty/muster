@@ -32,6 +32,14 @@ module muster_module {
 
   method coordinate_admit(identity_hex: tstr) -> tstr description "Admit a member (a 64-byte encryption identity hex: ed25519 ++ x25519) to the joined conversation: re-key the room forward and publish the grants so the joiner receives the new epoch key. The joiner gets only the new epoch, never earlier ones (F-16, membership epochs). Returns \"ok\", or \"not-joined\"/\"bad-key\"."
 
+  method coordinate_post_message(body: tstr) -> tstr description "Post an authored event to the joined conversation over encrypted transport. `body` is either a plain chat message or a typed card as JSON {kind, ...} (address-share, receipt, fact); everything the room says rides one channel and the UI folds cards out of it (cards are data). Returns the event id. Adds a message event to the shared, sealed log (state = reduce(log), F-1/F-2)."
+
+  method coordinate_messages() -> tstr description "The joined conversation's authored events, oldest-first, as a JSON array of {id, author, ts, body} folded from the shared log. `body` is the string posted — plain text or a typed card. Drives inbound delivery first, then reduces, so it reflects events that arrived from other participants; it is the fold source the UI reduces into the thread, the journey, and the home surface."
+
+  method coordinate_members() -> tstr description "The admitted members of the joined conversation, as a JSON array of {identity, self} — 64-byte encryption identities (ed25519 ++ x25519), self flagged for this module's own. Distinct from coordinate_pending (join-requests not yet admitted): this is the current roster, who can read the room."
+
+  method coordinate_conversations() -> tstr description "The conversations this identity has joined, as a JSON array of {topic, address, lastTs} — the home surface's room list. Drives inbound delivery first so lastTs reflects recent activity. Today the session holds one room at a time, so the array is 0 or 1 entries; it grows when the session becomes multi-room."
+
   method wallet_accounts() -> tstr description "The module's accounts across every configured chain, as a JSON array of {chain, form, id}. A chain may offer more than one form — a public id and a shielded key-set — from the one module identity. Settlement is chain-agnostic; a chain is a registered adapter, not a hardcoded assumption."
 
   method wallet_balances() -> tstr description "A balance snapshot across accounts and assets, as a JSON array of {chain, account, asset, display, raw} — or {chain, account, asset, error} when a read could not be answered. A failed read is reported as an error and NEVER as a zero balance, because a chain that fails by returning empty (the LEZ convention) must not be mistaken for an empty account. Balances are read locally against the user's endpoint (invariant 8, F-10 verified-locally)."

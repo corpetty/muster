@@ -239,6 +239,7 @@ proc musterSubmit(intentId: string): string =
 # tests/coordination_surface_test.nim exercises in-process over LocalTransport.
 var gSession: CoordinationSession = nil
 var gTopic = ""
+var gMsgSeq: uint64 = 0     ## per-instance monotonic nonce, disambiguates identical posts
 
 proc musterCoordinateJoin(topic: string): string =
   let ks = moduleKeystore()
@@ -291,6 +292,58 @@ proc musterCoordinatePending(): string =
   for st in gSession.pendingBindings():
     arr.add %*{"identity": toHex(st.enc.toBytes()),
                "bindsOwner": bindingBinds(st, gDriver.owners, nowSec)}
+  $arr
+
+# ── chat/room surface (messages · roster · conversations) ──────────────────────
+# The product layer the UI renders as a room: authored messages folded from the
+# SAME sealed log the intents ride (state = reduce(log), invariant 4), the admitted
+# roster from the ConversationCrypto seam, and the joined room descriptor. Messages
+# are opaque strings — plain text or a typed card as JSON — the core never
+# interprets them. Reads drive inbound delivery (poll) first, exactly like
+# coordinate_intents, so they reflect what arrived from other participants.
+
+proc musterCoordinatePostMessage(body: string): string =
+  ## Post an authored message (chat text or a JSON card) to the joined room over
+  ## the existing encrypted transport, as a new "message/<id>" event on the shared
+  ## log. Returns the message id.
+  if gSession == nil: return "not-joined"
+  let author = toHex(moduleKeystore().encIdentity().toBytes())
+  inc gMsgSeq
+  let ts = int64(epochTime())
+  let (id, ev) = newMessageEvent(author, ts, body, gMsgSeq)
+  gSession.publish(ev)
+  id
+
+proc musterCoordinateMessages(): string =
+  ## The room's authored messages, oldest-first, folded from the shared log.
+  if gSession == nil: return "[]"
+  gSession.poll()
+  var arr = newJArray()
+  for m in reduceMessages(gSession.log.allEvents()):
+    arr.add %*{"id": m.id, "author": m.author, "ts": m.ts, "body": m.body}
+  $arr
+
+proc musterCoordinateMembers(): string =
+  ## The ADMITTED members of the joined room (the current roster), each flagged
+  ## whether it is our own identity. Distinct from coordinate_pending (requests).
+  if gSession == nil: return "[]"
+  gSession.poll()
+  let me = gSession.selfIdentity()
+  var arr = newJArray()
+  for m in gSession.members():
+    arr.add %*{"identity": toHex(m.toBytes()), "self": (m == me)}
+  $arr
+
+proc musterCoordinateConversations(): string =
+  ## The joined rooms. One room per instance today, so a 0-or-1-entry array:
+  ## the current topic, our address, and the latest message ts (0 if none yet).
+  if gSession == nil: return "[]"
+  gSession.poll()
+  let msgs = reduceMessages(gSession.log.allEvents())
+  let lastTs = if msgs.len > 0: msgs[^1].ts else: 0'i64
+  var arr = newJArray()
+  arr.add %*{"topic": gTopic, "address": toHex(moduleKeystore().address()),
+             "lastTs": lastTs}
   $arr
 
 # ── wallet: chain-agnostic account/asset/transfer surface ──────────────────────

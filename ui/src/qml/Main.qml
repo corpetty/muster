@@ -40,7 +40,9 @@ Item {
 
     // The teaching surface (ADR-012 claims registry) sits behind a toggle so it
     // never crowds the working dashboard; one is shown at a time.
-    property bool showWalkthrough: false
+    // Which surface is showing: "dashboard" (the Safe lifecycle + wallet), "room"
+    // (the conversation), or "walkthrough" (the claims registry). One at a time.
+    property string view: "dashboard"
 
     // Backend PROPs, aliased so bindings read cleanly. The backend is the only
     // writer; these are all reads.
@@ -105,24 +107,45 @@ Item {
     // button, added last, stays on top.
     Walkthrough {
         anchors.fill: parent
-        visible: root.showWalkthrough
+        visible: root.view === "walkthrough"
     }
 
-    // Toggle between the working dashboard and the teaching walkthrough. Always
-    // on top (z), so it is reachable in either mode.
-    LogosButton {
-        objectName: "walkthroughToggle"
+    // The conversation surface. Fills the view when selected; reads its state from
+    // the module through the backend (roomTopic / messagesJson / membersJson).
+    Room {
+        anchors.fill: parent
+        visible: root.view === "room"
+        backend: root.backend
+    }
+
+    // Nav between the surfaces. Always on top (z), reachable in every mode.
+    RowLayout {
         anchors.top: parent.top
         anchors.right: parent.right
         anchors.margins: Theme.spacing.medium
         z: 10
-        text: root.showWalkthrough ? qsTr("Close") : qsTr("Walkthrough")
-        onClicked: root.showWalkthrough = !root.showWalkthrough
+        spacing: Theme.spacing.small
+
+        LogosButton {
+            objectName: "homeToggle"
+            text: qsTr("Home")
+            onClicked: root.view = "dashboard"
+        }
+        LogosButton {
+            objectName: "roomToggle"
+            text: qsTr("Room")
+            onClicked: root.view = "room"
+        }
+        LogosButton {
+            objectName: "walkthroughToggle"
+            text: qsTr("Walkthrough")
+            onClicked: root.view = (root.view === "walkthrough" ? "dashboard" : "walkthrough")
+        }
     }
 
     ColumnLayout {
         id: page
-        visible: !root.showWalkthrough
+        visible: root.view === "dashboard"
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.topMargin: Theme.spacing.xlarge

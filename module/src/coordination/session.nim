@@ -96,6 +96,13 @@ proc requestJoin*(s: CoordinationSession, binding: LinkStatement) =
   ## still has to decide. Discovery, not entry.
   discard s.transport.publish(s.topic, @[FrameJoinRequest] & encodeLink(binding))
 
+proc members*(s: CoordinationSession): seq[Member] = s.crypto.members()
+  ## The ADMITTED roster of the current epoch (recipients of the epoch key) —
+  ## distinct from `pendingBindings` (join-requests not yet admitted).
+
+proc selfIdentity*(s: CoordinationSession): Member = s.crypto.identity()
+  ## Our own member key, so the roster can flag which entry is us.
+
 proc pendingBindings*(s: CoordinationSession): seq[LinkStatement] = s.pending
   ## Bindings awaiting an admission decision — the caller verifies each against its
   ## owner set (F-9, bindingBinds) before deciding, then calls admit.
