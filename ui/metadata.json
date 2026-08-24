@@ -9,7 +9,7 @@
   "main": "muster_ui_plugin",
   "icon": "src/icons/icon.png",
   "view": "qml/Main.qml",
-  "dependencies": ["muster_module"],
+  "dependencies": ["muster_module", "delivery_module"],
   "codegen": { "rep": "src/muster_ui.rep" },
 
   "nix": {
