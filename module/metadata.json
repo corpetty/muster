@@ -8,7 +8,7 @@
   "interface": "cdylib",
   "category": "general",
   "main": "muster_module_plugin",
-  "dependencies": [],
+  "dependencies": ["delivery_module"],
   "include": [],
   "capabilities": [],
 

@@ -16,6 +16,12 @@
     # compile against basecamp's own cpp-sdk/qt-sdk/protocol and ABI-match its
     # ui-host (exo-c6a). Pinned to basecamp's current top-level builder rev.
     logos-module-builder.url = "github:logos-co/logos-module-builder/4717b9af35d88a20a960067ee55bc5417af5a1f0";
+    # The real transport (P3): muster_module depends on delivery_module (it calls it
+    # over the lp_* ABI to boot delivery's Waku node and carry the sealed room
+    # frames). It must therefore be in the standalone runner's module set, so
+    # coordinate_join's lp_client_create("delivery_module") resolves. Same repo/pin
+    # the demo consumes (v0.2.0); mapped to the module name `delivery_module` below.
+    logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.2.0";
   };
 
   outputs = inputs@{ logos-module-builder, ... }:
@@ -26,7 +32,10 @@
         # metadata.json#dependencies = ["muster_module"], resolved from the input
         # of the same name so the generated modules().muster_module client is typed,
         # and so muster_module is bundled into the standalone runner's module set.
-        flakeInputs = inputs;
+        # delivery_module is muster_module's transitive dependency; it is provided
+        # here (mapped from logos-delivery-module) so the builder can pull it into
+        # the same module set — muster_ui does not call it, so it declares no client.
+        flakeInputs = { delivery_module = inputs.logos-delivery-module; } // inputs;
       };
 
       nixpkgs = logos-module-builder.inputs.nixpkgs;
