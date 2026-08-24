@@ -175,10 +175,30 @@ Item {
         z: 10
         spacing: Theme.spacing.small
 
-        LogosButton { objectName: "homeToggle"; text: qsTr("Home"); onClicked: root.view = "home" }
-        LogosButton { objectName: "roomToggle"; text: qsTr("Room"); onClicked: root.view = "room" }
-        LogosButton { objectName: "dashboardToggle"; text: qsTr("Safe"); onClicked: root.view = "dashboard" }
-        LogosButton { objectName: "walkthroughToggle"; text: qsTr("Walkthrough"); onClicked: root.view = (root.view === "walkthrough" ? "home" : "walkthrough") }
+        // The current surface reads as filled (Primary); the rest stay neutral
+        // (Secondary), so "where am I" is answered without a second glance. Compose
+        // is a sub-flow of Home, so Home stays lit through it.
+        LogosButton {
+            objectName: "homeToggle"; text: qsTr("Home")
+            variant: (root.view === "home" || root.view === "compose")
+                     ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+            onClicked: root.view = "home"
+        }
+        LogosButton {
+            objectName: "roomToggle"; text: qsTr("Room")
+            variant: root.view === "room" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+            onClicked: root.view = "room"
+        }
+        LogosButton {
+            objectName: "dashboardToggle"; text: qsTr("Safe")
+            variant: root.view === "dashboard" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+            onClicked: root.view = "dashboard"
+        }
+        LogosButton {
+            objectName: "walkthroughToggle"; text: qsTr("Walkthrough")
+            variant: root.view === "walkthrough" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+            onClicked: root.view = (root.view === "walkthrough" ? "home" : "walkthrough")
+        }
     }
 
     ColumnLayout {

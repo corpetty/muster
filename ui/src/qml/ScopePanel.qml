@@ -90,7 +90,12 @@ Item {
                     model: scope.roster
 
                     delegate: Rectangle {
+                        id: memberCard
                         objectName: "memberRow"
+                        // Tap to reveal the full 64-byte identity. Collapsed by
+                        // default (a short handle scans), expanded when the reader
+                        // wants to check the exact key that can read the room.
+                        property bool revealed: false
                         Layout.fillWidth: true
                         implicitHeight: memberRow.implicitHeight + 2 * Theme.spacing.medium
                         radius: Theme.spacing.radiusSmall
@@ -116,7 +121,8 @@ Item {
                                     var id = modelData && modelData.identity
                                         ? String(modelData.identity) : "";
                                     var label = id.length > 0
-                                        ? id.substring(0, 10) : qsTr("unknown");
+                                        ? (memberCard.revealed ? id : id.substring(0, 10) + "…")
+                                        : qsTr("unknown");
                                     return modelData && modelData.self
                                         ? label + qsTr(" · you") : label;
                                 }
@@ -124,7 +130,8 @@ Item {
                                 font.family: Theme.typography.mono
                                 font.pixelSize: Theme.typography.secondaryText
                                 font.weight: Theme.typography.weightMedium
-                                elide: Text.ElideRight
+                                wrapMode: memberCard.revealed ? Text.WrapAnywhere : Text.NoWrap
+                                elide: memberCard.revealed ? Text.ElideNone : Text.ElideRight
                             }
 
                             // The role tag. For now everyone in the room is a
@@ -137,16 +144,38 @@ Item {
                                 font.pixelSize: Theme.typography.badgeText
                             }
                         }
+
+                        // Tap anywhere on the card to reveal / re-collapse the full
+                        // identity. Above the row (text is inert), so the whole card
+                        // is the target; the pointer cursor signals it.
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: memberCard.revealed = !memberCard.revealed
+                        }
                     }
                 }
             }
 
-            // The one action that grows the room, pinned under the roster.
+            // The one action that grows the room, pinned under the roster. The
+            // module has the join/admit handshake (coordinate_request_join /
+            // coordinate_pending / coordinate_admit), but it is not yet wired to a
+            // UI surface — so this stays disabled rather than a dead click, and says
+            // why. The addMember() signal is kept for when the surface lands.
             LogosButton {
                 objectName: "addMemberButton"
                 Layout.fillWidth: true
                 text: qsTr("Add someone")
+                enabled: false
                 onClicked: scope.addMember()
+            }
+
+            LogosText {
+                Layout.fillWidth: true
+                text: qsTr("Growing the room needs the join handshake wired to a surface — it lands with the live delivery node.")
+                color: Theme.palette.textTertiary
+                font.pixelSize: Theme.typography.badgeText
+                wrapMode: Text.WordWrap
             }
 
             // ── Scope ─────────────────────────────────────────────────────────
