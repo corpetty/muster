@@ -5,6 +5,7 @@
 //   2. muster_module.health() marshals back to "ok",
 //   3. propose → the module re-derives the EIP-712 safeTxHash and the
 //      re-materialization strip shows it (F-4 / invariant 1, the real check).
+//   4. the room surface renders and navigation reaches it (Room.qml on-display).
 // A screenshot is written to MUSTER_SHOT (default ./muster-ui.png).
 //
 // Usage:
@@ -272,6 +273,51 @@ test("muster_ui: submit executes the intent on-chain and reaches final", async (
   );
   console.log("[muster] SUBMIT OK — execTransaction landed on-chain; intent reached final");
   await grab(app, "final");
+});
+
+// 4d) ROOM — the conversation surface renders and navigation reaches it. Clicking
+//     the Room nav switches surfaces (the room becomes visible, home hides) and the
+//     room draws its join affordance (topic field + Join). This is the on-display
+//     gate for Room.qml + MusterCard.qml under ADR-011 (nix build does not evaluate
+//     QML, so a bad type name would blank the view — caught here, on a real host).
+//
+//     It stops at render on purpose: joining drives coordinate_join →
+//     DeliveryTransport, which needs delivery_module loaded. muster_module declares
+//     no dependency on it and this bake does not carry it, so the functional
+//     propose → card → contribute loop belongs with the live delivery node (the
+//     documented cross-host item), not here. The fold those cards render from is
+//     covered headless (module/tests/coordination_surface_test.nim step 6).
+//     Off-chain; no anvil needed.
+test("muster_ui: navigating to the room renders its join affordance", async (app) => {
+  await openMuster(app);
+  await app.waitFor(
+    async () => { await app.expectTexts(["Muster"]); },
+    { timeout: 15000, interval: 500, description: "muster_ui view" }
+  );
+
+  await clickButton(app, "roomToggle");
+
+  // Navigation actually switched surfaces — not just that the text exists in the
+  // (always-instantiated) tree. The room is shown; home is hidden.
+  await app.waitFor(
+    async () => {
+      if ((await propertyOf(app, "roomSurface", "visible")) !== true)
+        throw new Error("room surface not visible after roomToggle");
+      if ((await propertyOf(app, "homeSurface", "visible")) !== false)
+        throw new Error("home surface still visible after roomToggle");
+    },
+    { timeout: 15000, interval: 500, description: "room surface shown" }
+  );
+
+  // The join affordance rendered — proves Room.qml's Logos.Controls instantiated.
+  for (const name of ["roomTopicField", "joinRoomButton"]) {
+    const r = await app.inspector.send("findByProperty", { property: "objectName", value: name });
+    if (!(r.matches?.length > 0))
+      throw new Error(`room element "${name}" not found — Room.qml did not render`);
+  }
+  await app.expectTexts(["Join a room"]);
+  console.log("[muster] ROOM OK — navigated to the room; join affordance rendered");
+  await grab(app, "room");
 });
 
 run();

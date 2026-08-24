@@ -138,6 +138,7 @@ Item {
     // Home: the action list. Opening a row joins that room; "Start something"
     // goes to the composer.
     Home {
+        objectName: "homeSurface"
         anchors.fill: parent
         visible: root.view === "home"
         actions: root.homeActions
@@ -154,6 +155,7 @@ Item {
 
     // The conversation surface. Reads its state from the module through the backend.
     Room {
+        objectName: "roomSurface"
         anchors.fill: parent
         visible: root.view === "room"
         backend: root.backend

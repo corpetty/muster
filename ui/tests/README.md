@@ -24,11 +24,27 @@ and asserts the real lifecycle surfaces:
    user's RPC, and reads finality from the receipt (`submitted → final`). No
    indexer, no Safe service. **Requires anvil** (see below); it is the only test
    that moves the Safe on-chain, so its effect nonce (0) must match a fresh Safe.
+7. **walkthrough** — toggling the walkthrough renders the ADR-012 claims registry
+   (the six lifecycle steps with their `PROTECTS` / `GAP` badges), asserting the
+   generated `ClaimsRegistry.qml` cards are present. Off-chain; no anvil needed.
+8. **room render** — clicking the Room nav switches surfaces (the room becomes
+   visible, home hides) and the room draws its join affordance (topic field +
+   Join). This is the on-display gate for `Room.qml` + `MusterCard.qml` (ADR-011:
+   `nix build` does not evaluate QML, so a bad type name would blank the view). It
+   stops at render on purpose — joining drives `coordinate_join` →
+   `DeliveryTransport`, which needs `delivery_module` (muster_module declares no
+   dependency on it and this bake does not carry it), so the functional
+   propose → card → contribute loop belongs with the live delivery node (the
+   documented cross-host item). The fold those cards render from is covered
+   headless (`module/tests/coordination_surface_test.nim` step 6). Off-chain.
 
 It writes screenshots to `$MUSTER_SHOT` (default `./muster-ui.png`), with
-`-executable` / `-final` suffixes for the lifecycle stages.
+`-executable` / `-final` / `-room` suffixes for the respective surfaces.
 
-Status: **6/6 green** as of 2026-08-21 (ADR-013 + `exo-4a5` + `exo-27b0` + `exo-308`).
+Status: tests 1–5, 7, 8 run in the offscreen bake (submit additionally needs
+anvil). The lifecycle five were **6/6 green** as of 2026-08-21 (ADR-013 + `exo-4a5`
++ `exo-27b0` + `exo-308`); the **room render** test was added 2026-08-24 and awaits
+a harness run against the bake (the local basecamp bake-in is the standing blocker).
 See `docs/02-implementation-plan.md` ADR-013 and pebble `exo-193` for the full story.
 
 ## anvil (for the submit test)
