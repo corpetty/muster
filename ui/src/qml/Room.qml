@@ -136,7 +136,6 @@ Item {
                 objectName: "messageComposer"
                 Layout.fillWidth: true
                 placeholderText: qsTr("Say something")
-                onAccepted: sendButton.send()
             }
 
             LogosButton {
