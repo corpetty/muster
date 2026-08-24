@@ -24,6 +24,29 @@ Rectangle {
     // The parsed card object: { kind, ... }. Never assume more than `kind`.
     property var card
 
+    // Whether the intent-propose verify box is expanded ("dive in"). Local render
+    // state — the card holds no other state, but this is the reader's own toggle.
+    property bool verifyOpen: false
+
+    // The verify rows, built off `card` (guarded — a missing field is normal).
+    function verifyShown() {
+        var amt = String((cardRoot.card && cardRoot.card.amount) || "");
+        var den = String((cardRoot.card && cardRoot.card.denom) || "");
+        var to = String((cardRoot.card && cardRoot.card.to) || "");
+        var lead = (amt + " " + den).replace(/\s+/g, " ").trim();
+        return to.length > 0 ? lead + "  →  " + to : lead;
+    }
+    function verifyDomain() {
+        var parts = [];
+        var env = String((cardRoot.card && cardRoot.card.environment) || "");
+        if (env.length > 0) parts.push(env);
+        if (cardRoot.card && cardRoot.card.chainId)
+            parts.push(qsTr("chain %1").arg(cardRoot.card.chainId));
+        var sf = String((cardRoot.card && cardRoot.card.safe) || "");
+        if (sf.length > 0) parts.push(qsTr("Safe %1").arg(sf));
+        return parts.join("  ·  ");
+    }
+
     // Actions belong to the reader, and the thread decides what each does. The
     // card only says which button was pressed.
     signal approve()
@@ -333,6 +356,95 @@ Rectangle {
                            + "the chain does not enforce it.")
                 color: Theme.palette.textTertiary
                 font.pixelSize: Theme.typography.badgeText
+            }
+
+            // ── verify: dive in to what you'd sign (F-4 / F-5) ──────────────
+            // Collapsed, a one-line reassurance; expanded, the safeTxHash this
+            // client RE-DERIVED and the domain it is bound to. The effect shown
+            // was rebuilt here and compared — a mismatch is refused by the core
+            // before an intent ever reaches this fold, so what shows is the honest
+            // "matches" state, and the trail is one tap away.
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.topMargin: Theme.spacing.tiny
+                visible: cardRoot.card && cardRoot.card.txhash
+                implicitHeight: verifyCol.implicitHeight + 2 * Theme.spacing.small
+                radius: Theme.spacing.radiusSmall
+                color: Theme.palette.surfaceRecessed
+                border.width: 1
+                border.color: Theme.palette.success
+
+                // Below the content: LogosText does not accept mouse events, so a
+                // tap anywhere on the box falls through to here and toggles it.
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: cardRoot.verifyOpen = !cardRoot.verifyOpen
+                }
+
+                ColumnLayout {
+                    id: verifyCol
+                    anchors.fill: parent
+                    anchors.margins: Theme.spacing.small
+                    spacing: Theme.spacing.tiny
+
+                    // header: the claim + the caret affordance.
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+
+                        LogosText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: qsTr("✓ your client re-derived this — the exact bytes you'd sign")
+                            color: Theme.palette.success
+                            font.pixelSize: Theme.typography.badgeText
+                            font.weight: Theme.typography.weightMedium
+                        }
+
+                        LogosText {
+                            text: cardRoot.verifyOpen ? "−" : "+"
+                            color: Theme.palette.success
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.secondaryText
+                        }
+                    }
+
+                    // body: shown / re-derived / domain — only when opened. Three
+                    // explicit rows (the dashboard's re-materialization strip
+                    // pattern), each a mono key + a wrapping value.
+                    Repeater {
+                        model: cardRoot.verifyOpen
+                            ? [{ k: qsTr("shown"),      v: cardRoot.verifyShown() },
+                               { k: qsTr("re-derived"), v: String((cardRoot.card && cardRoot.card.txhash) || "") },
+                               { k: qsTr("domain"),     v: cardRoot.verifyDomain() }]
+                            : []
+
+                        delegate: RowLayout {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            spacing: Theme.spacing.small
+
+                            LogosText {
+                                Layout.preferredWidth: 66
+                                Layout.alignment: Qt.AlignTop
+                                text: modelData.k
+                                color: Theme.palette.textTertiary
+                                font.family: Theme.typography.mono
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+
+                            LogosText {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WrapAnywhere
+                                text: modelData.v
+                                color: Theme.palette.textSecondary
+                                font.family: Theme.typography.mono
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+                        }
+                    }
+                }
             }
         }
 

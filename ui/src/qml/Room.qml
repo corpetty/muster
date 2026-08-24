@@ -63,7 +63,12 @@ Item {
             rail: (it && it.rail) ? String(it.rail) : "safe",
             threshold: Number((it && it.threshold) || 0),
             approvals: Number((it && it.approvals) || 0),
-            state: cardState
+            state: cardState,
+            // the verify view: the re-derived safeTxHash and the domain it binds to
+            txhash: (it && it.txhash) ? String(it.txhash) : "",
+            chainId: (it && it.chainId !== undefined) ? Number(it.chainId) : 0,
+            safe: (it && it.safe) ? String(it.safe) : "",
+            environment: (it && it.environment) ? String(it.environment) : ""
         };
     }
 

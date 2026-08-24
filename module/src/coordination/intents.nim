@@ -206,6 +206,8 @@ type IntentView* = object
   state*: string          ## draft/proposed/collecting/executable/submitted/final
   effectJson*: string     ## the proposed effect JSON, or "" if not proposed here
   approvals*: int         ## distinct owners folded in (dedup by contributor)
+  txhash*: string         ## the driver-re-derived materialization (safeTxHash) as hex —
+                          ## the exact bytes an owner signs (F-4/F-5), for the verify view
 
 proc reduceIntentViews*(events: seq[Event], driver: Driver): seq[IntentView] =
   ## Deterministic (sorted by id), so two instances render the identical list from
@@ -221,5 +223,6 @@ proc reduceIntentViews*(events: seq[Event], driver: Driver): seq[IntentView] =
   for id, it in intents:
     result.add IntentView(id: id, state: $it.state,
                           effectJson: effectJsonOf(events, id),
-                          approvals: approvals.getOrDefault(id).len)
+                          approvals: approvals.getOrDefault(id).len,
+                          txhash: bytesHex(it.materialization.bytes))
   result.sort(proc (a, b: IntentView): int = cmp(a.id, b.id))

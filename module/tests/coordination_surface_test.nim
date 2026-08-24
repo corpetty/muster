@@ -110,6 +110,14 @@ block:
   doAssert v.state == "executable", "state matches the fold"
   doAssert v.effectJson == effectJson, "the proposed effect travels with the view"
   doAssert v.approvals == 2, "two distinct owners contributed; the duplicate folds once"
-echo "6. render-ready intent view (effect + threshold N=2 + approvals M=2) OK"
+  # txhash is the driver-re-derived safeTxHash — the exact bytes an owner signs
+  # (F-4/F-5), for the room's verify view. Well-formed (32-byte hex), non-zero, and
+  # deterministic: a second fold of the same log re-derives the identical bytes.
+  doAssert v.txhash.len == 66 and v.txhash.startsWith("0x"),
+           "the view carries the re-derived materialization (32-byte hex)"
+  doAssert v.txhash != "0x" & repeat("00", 32), "the re-derived hash is not zero"
+  let again = reduceIntentViews(bob.log.allEvents(), driver)[0]
+  doAssert again.txhash == v.txhash, "the re-derivation is deterministic across folds"
+echo "6. render-ready intent view (effect + threshold N=2 + approvals M=2 + re-derived txhash) OK"
 
 echo "coordination_surface_test: all OK"

@@ -273,9 +273,15 @@ proc musterCoordinateIntents(): string =
   gSession.poll()
   var arr = newJArray()
   for v in reduceIntentViews(gSession.log.allEvents(), gDriver):
+    # txhash is the driver-re-derived materialization (safeTxHash) — the exact
+    # bytes an owner signs. domain (chainId + safe) is what that hash is bound to
+    # (EIP-712), so a signature is worthless outside it (F-5). Both drive the room
+    # card's verify view: "your client re-derived this, here is what you'd sign".
     var o = %*{"id": v.id, "state": v.state,
                "threshold": gDriver.threshold, "approvals": v.approvals,
-               "rail": "safe"}
+               "rail": "safe", "txhash": v.txhash,
+               "chainId": gDriver.chainId.int, "safe": SAFE_ADDR,
+               "environment": "anvil-31337"}
     if v.effectJson.len > 0:
       try: o["effect"] = parseJson(v.effectJson)
       except CatchableError: discard
