@@ -114,6 +114,23 @@ app = import ./nix/app.nix { …; installedModules = installedDev ++ musterInsta
 > `qml/Main.qml not found` (a bundler-version skew); the standalone install is
 > self-consistent.
 
+**For the release AppImage** (`../RELEASING.md`), also bake muster into the
+**distributed** app — `appDistributed` uses portable-keyed modules, so use the
+`install-portable` outputs, and append them there too:
+
+```nix
+musterUiInstallPortable     = muster_ui.packages.${system}.install-portable;
+musterModuleInstallPortable = (import nixpkgs { inherit system; }).runCommand "muster-module-install-portable-secp" {} ''
+  cp -r --no-preserve=mode ${muster_module.packages.${system}.install-portable} $out
+  cp -L ${(import nixpkgs { inherit system; }).secp256k1}/lib/libsecp256k1.so.5 $out/modules/muster_module/
+'';
+# …
+appDistributed = import ./nix/app.nix { …; installedModules = installedDistributed ++ [ musterModuleInstallPortable musterUiInstallPortable ]; };
+```
+
+Then `nix build <basecamp>#bin-appimage` (or `make appimage`) yields
+`result-appimage/logos-basecamp.AppImage` with muster inside.
+
 ### 2. Build everything
 
 ```bash

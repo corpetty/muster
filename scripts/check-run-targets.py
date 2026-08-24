@@ -31,7 +31,8 @@ README = REPO_ROOT / "README.md"
 
 # Targets the root Makefile must carry — the ones `help` advertises and the docs
 # tell people to run.
-REQUIRED_TARGETS = {"run", "build", "build-lgx", "clean", "help"}
+REQUIRED_TARGETS = {"run", "build", "build-lgx", "appimage", "clean", "help"}
+RELEASING = REPO_ROOT / "RELEASING.md"
 
 TARGET_RE = re.compile(r"^([a-zA-Z][a-zA-Z0-9_-]*):", re.MULTILINE)
 
@@ -68,6 +69,12 @@ def check() -> list[str]:
             "README.md no longer tells people to `make run` — the run instructions "
             "have drifted from the Makefile"
         )
+
+    # The release path: `make appimage` must be documented in RELEASING.md.
+    if not RELEASING.exists():
+        failures.append("RELEASING.md is missing — the `make appimage` release path is undocumented")
+    elif "make appimage" not in RELEASING.read_text(encoding="utf-8"):
+        failures.append("RELEASING.md no longer documents `make appimage`")
 
     return failures
 

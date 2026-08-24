@@ -12,8 +12,10 @@
 # are not upstream yet. Until those land, other people run it from a prebuilt
 # release, not from a clone. Tracked in ADR-013/ADR-014.
 
-UI      := ui
-RUN_DIR ?= $(CURDIR)/.run/muster
+UI       := ui
+RUN_DIR  ?= $(CURDIR)/.run/muster
+# Local logos-basecamp checkout (with the muster bake-in) — for `make appimage`.
+BASECAMP ?= $(HOME)/Github/logos-co/logos-basecamp
 
 # cache.nix.logos.co as a substituter (the invoking user is not a trusted nix
 # user, so pass it explicitly); --accept-flake-config takes the flake's own.
@@ -21,12 +23,13 @@ CACHE := --accept-flake-config \
   --extra-substituters https://cache.nix.logos.co/public \
   --extra-trusted-public-keys public:l4HrXgL4nw246+LBh2SOJyhz64BoGegOYLheT/iIAPU=
 
-.PHONY: help run build build-lgx clean
+.PHONY: help run build build-lgx appimage clean
 
 help:
 	@echo "make run         launch the standalone muster app (dashboard + walkthrough)"
 	@echo "make build       pre-build the runner — the slow first build; do this once"
 	@echo "make build-lgx   build muster-ui.lgx (to load into logos-basecamp instead)"
+	@echo "make appimage    build the download-and-run AppImage (see RELEASING.md)"
 	@echo "make clean       remove local run state (.run/)"
 	@echo ""
 	@echo "First time: 'make build' (minutes), then 'make run'."
@@ -48,6 +51,13 @@ run:
 
 build-lgx:
 	cd $(UI) && nix build 'path:.#lgx' $(CACHE)
+
+# The download-and-run release artifact: a logos-basecamp AppImage with muster
+# baked in. Needs the local basecamp bake-in (ui/tests/README.md); see RELEASING.md.
+appimage:
+	nix build '$(BASECAMP)#bin-appimage' $(CACHE) --out-link $(CURDIR)/result-appimage
+	@echo "AppImage: $(CURDIR)/result-appimage/logos-basecamp.AppImage"
+	@echo "Run: APPIMAGE_EXTRACT_AND_RUN=1 $(CURDIR)/result-appimage/logos-basecamp.AppImage  (then click Muster)"
 
 clean:
 	rm -rf $(CURDIR)/.run
