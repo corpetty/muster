@@ -20,6 +20,20 @@ void MusterUiBackend::checkHealth()
     setHealth(h);
 }
 
+void MusterUiBackend::loadSettings()
+{
+    // settings() → {rpc, delivery, environment, identity}. The user-configurable
+    // infrastructure (invariant 8) + who this module is.
+    setSettingsJson(modules().muster_module.settings());
+}
+
+void MusterUiBackend::setSetting(const QString &key, const QString &value)
+{
+    // set_setting → repoint the RPC or delivery config; the module returns the
+    // updated settings, which lands back on settingsJson.
+    setSettingsJson(modules().muster_module.set_setting(key, value));
+}
+
 void MusterUiBackend::loadAccount()
 {
     // The Safe account this walkthrough coordinates against. The view displays
@@ -245,4 +259,5 @@ void MusterUiBackend::onContextReady()
     checkHealth();
     loadAccount();
     loadBalances();
+    loadSettings();
 }

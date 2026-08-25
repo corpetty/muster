@@ -27,6 +27,8 @@ class MusterUiBackend : public MusterUiSimpleSource,
 public:
     void checkHealth() override;
     void loadAccount() override;
+    void loadSettings() override;
+    void setSetting(const QString &key, const QString &value) override;
     void propose(const QString &effectJson) override;
     void approve(const QString &signatureHex) override;
     void submit() override;

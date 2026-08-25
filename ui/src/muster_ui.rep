@@ -5,6 +5,13 @@ class MusterUi
 {
     SLOT(void checkHealth())
     SLOT(void loadAccount())
+
+    // Settings — the user-configurable infrastructure (invariant 8). loadSettings
+    // reads {rpc, delivery, environment, identity}; setSetting(key,value) repoints
+    // the RPC or the delivery createNode config. Both land on settingsJson.
+    SLOT(void loadSettings())
+    SLOT(void setSetting(const QString &key, const QString &value))
+
     SLOT(void propose(const QString &effectJson))
 
     // Add one owner signature (65-byte hex) over the current intent's safeTxHash.
@@ -66,6 +73,10 @@ class MusterUi
     SLOT(void loadPolicy())
 
     PROP(QString health="unknown" READONLY)
+
+    // The user-configurable settings + identity, as JSON {rpc, delivery, environment,
+    // identity:{address,ed25519,x25519}}. The Settings surface shows and edits these.
+    PROP(QString settingsJson="{}" READONLY)
 
     // The Safe account this walkthrough coordinates against — read from the
     // module's describe(), never assumed by the view. JSON: {chainId, safe,

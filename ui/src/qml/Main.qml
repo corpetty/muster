@@ -206,6 +206,14 @@ Item {
                 variant: root.view === "walkthrough" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
                 onClicked: root.view = (root.view === "walkthrough" ? "home" : "walkthrough")
             }
+            LogosButton {
+                objectName: "settingsToggle"; text: qsTr("Settings")
+                variant: root.view === "settings" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                onClicked: {
+                    root.view = "settings";
+                    if (root.backend) root.backend.loadSettings();
+                }
+            }
         }
     }
 
@@ -252,6 +260,17 @@ Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "walkthrough"
+    }
+
+    // The config-shell start: identity + user-configurable infrastructure (inv 8).
+    Settings {
+        objectName: "settingsSurface"
+        anchors.top: navBar.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        visible: root.view === "settings"
+        backend: root.backend
     }
 
     ColumnLayout {
