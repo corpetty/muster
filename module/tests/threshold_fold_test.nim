@@ -44,6 +44,45 @@ doAssert intentState(events, drv, id) == "executable",
          "two distinct roster endorsements -> executable"
 echo "2. two endorsements -> executable (generic fold, non-Safe driver) OK"
 
+# 2b. The RENDER path is generic too — reduceIntentViews + intentProvenance (what
+#     the UI draws) fold this non-Safe intent with NO Safe assumptions: the
+#     threshold k comes from describe(), the materialization is re-derived
+#     (base dCBOR, no EIP-712), the endorsers are named as `ed:` roster keys, and
+#     the lineage is one peer-message propose + k driver-contributions.
+block:
+  # Key contributions the way the hosted contribute does — by the identified
+  # endorser (contributorOf → "ed:<pubkey>"), not an arbitrary label — so the
+  # render names the real member.
+  let sigA = endorse(a)
+  let sigB = endorse(b)
+  let revents = @[proposeEvent(id, effectJson),
+                  contributeEvent(id, contributorOf(drv, effectJson, sigA), sigA),
+                  contributeEvent(id, contributorOf(drv, effectJson, sigB), sigB)]
+  let views = reduceIntentViews(revents, drv)
+  doAssert views.len == 1, "one intent"
+  let v = views[0]
+  doAssert v.state == "executable", "render view state matches the fold"
+  doAssert v.approvals == 2, "two distinct roster endorsements counted"
+  # The "bytes you'd sign" are driver-described: Safe's is the 32-byte safeTxHash,
+  # this driver's is the base dCBOR materialization (variable length). Generic check
+  # is well-formed, non-empty hex — the length is the driver's business, not ours.
+  doAssert v.txhash.len > 2 and v.txhash.startsWith("0x"),
+           "the materialization is re-derived generically (no Safe, no secp)"
+  let prov = intentProvenance(revents, drv, id)
+  var proposes = 0
+  var endorsers: seq[string]
+  for it in prov:
+    doAssert it.accountable, "every input in a live fold is accountable"
+    if it.cls == icPeerMessage: inc proposes
+    elif it.cls == icContribution:
+      doAssert it.account.startsWith("ed:"),
+               "the threshold driver names the Ed25519 endorser (mmNamed)"
+      endorsers.add it.account
+  doAssert proposes == 1, "one propose (peer message)"
+  doAssert endorsers.len == 2 and endorsers[0] != endorsers[1],
+           "two distinct endorsers in the lineage"
+echo "2b. render path generic (views + provenance) with the threshold driver OK"
+
 # A non-roster endorsement never counts toward the threshold.
 var ev2 = @[proposeEvent("2", effectJson),
             contributeEvent("2", "A", endorse(a)),
