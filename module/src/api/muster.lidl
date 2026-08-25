@@ -26,6 +26,10 @@ module muster_module {
 
   method coordinate_intents() -> tstr description "List the intents in the joined conversation as folded from the shared log: a JSON array of {id, state}. Drives inbound delivery first, so it reflects contributions that have arrived from other participants."
 
+  method coordinate_set_policy(kind: tstr) -> tstr description "Choose the joined room's coordination policy (its driver): \"safe\" (EIP-712 Safe over secp256k1 owners) or \"threshold\" (a k-of-n Ed25519 endorsement over a demo roster). The policy IS a driver, not hardcoded — the same propose/contribute/fold path runs under either, and the intent view is described by the driver rather than assumed to be Safe (invariant 6). Set before proposing. Returns {policy, threshold, domain, membership}."
+
+  method coordinate_policy() -> tstr description "The joined room's current coordination policy as {policy, threshold, domain, membership}, described by its driver."
+
   method coordinate_request_join() -> tstr description "Ask to be admitted to the joined conversation: announce our member key on the topic. This carries no authority — an existing member still has to admit us; it is discovery, not entry. Returns \"ok\"."
 
   method coordinate_pending() -> tstr description "List the encryption identities that have requested to join the conversation but have not been admitted, as a JSON array of 64-byte hex identities (ed25519 ++ x25519). A join-request confers nothing; a member reviews these and decides whom to admit."
