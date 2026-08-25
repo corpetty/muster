@@ -48,6 +48,15 @@ Item {
         catch (e) { return []; }
     }
 
+    // The room's coordination policy (its driver), from coordinate_policy. The whole
+    // propose/contribute/fold path runs under whichever the room picks.
+    readonly property var policy: {
+        try { return JSON.parse(backend ? backend.policyJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    readonly property string policyKind:
+        (room.policy && room.policy.policy) ? String(room.policy.policy) : "safe"
+
     // Project one folded intent view onto the card vocabulary. The module's
     // lifecycle names (draft/proposed/collecting/executable/submitted/final) map to
     // the card's shorter rail (proposed/collecting/ready/paid). Nothing here is
@@ -333,6 +342,51 @@ Item {
                     font.family: Theme.typography.publicSans
                     font.pixelSize: Theme.typography.secondaryText
                     font.weight: Theme.typography.weightBold
+                }
+
+                // ── policy picker: the room's driver (invariant 6) ────────────
+                // The same propose/contribute/fold runs under either — the policy is
+                // a driver, not hardcoded. Safe = EIP-712 / secp owners; Threshold =
+                // k-of-n Ed25519 endorsement.
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+
+                    LogosText {
+                        text: qsTr("Policy")
+                        color: Theme.palette.textTertiary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                        font.weight: Theme.typography.weightMedium
+                    }
+
+                    LogosButton {
+                        objectName: "roomPolicySafe"
+                        Layout.preferredWidth: 90
+                        text: qsTr("Safe")
+                        variant: room.policyKind === "safe"
+                                 ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                        onClicked: if (room.backend) room.backend.setPolicy("safe")
+                    }
+
+                    LogosButton {
+                        objectName: "roomPolicyThreshold"
+                        Layout.preferredWidth: 130
+                        text: qsTr("Threshold")
+                        variant: room.policyKind === "threshold"
+                                 ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                        onClicked: if (room.backend) room.backend.setPolicy("threshold")
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    LogosText {
+                        text: room.policy && room.policy.threshold !== undefined
+                              ? qsTr("%1 needed").arg(room.policy.threshold) : ""
+                        color: Theme.palette.textTertiary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                    }
                 }
 
                 LogosTextField {

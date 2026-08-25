@@ -52,6 +52,14 @@ class MusterUi
     SLOT(void contributeInRoom(const QString &intentId, const QString &signatureHex))
     SLOT(void loadIntents())
 
+    // Choose the room's coordination policy — its DRIVER (coordinate_set_policy):
+    // "safe" (EIP-712 / secp owners) or "threshold" (k-of-n Ed25519). The whole
+    // propose/contribute/fold path runs under whichever; the policy is a driver, not
+    // hardcoded (invariant 6). Result lands on policyJson {policy, threshold, domain,
+    // membership}. loadPolicy reads the current one (coordinate_policy).
+    SLOT(void setPolicy(const QString &kind))
+    SLOT(void loadPolicy())
+
     PROP(QString health="unknown" READONLY)
 
     // The Safe account this walkthrough coordinates against — read from the
@@ -80,4 +88,8 @@ class MusterUi
     PROP(QString messagesJson="[]" READONLY)
     PROP(QString membersJson="[]" READONLY)
     PROP(QString intentsJson="[]" READONLY)
+
+    // The room's coordination policy — its driver — as JSON {policy, threshold,
+    // domain, membership}. The view shows which policy governs the room and picks it.
+    PROP(QString policyJson="{\"policy\":\"safe\"}" READONLY)
 }

@@ -156,6 +156,7 @@ void MusterUiBackend::joinRoom(const QString &topic)
     qInfo() << "[muster_ui] coordinate_join(" << topic << ") ->" << r;
     setRoomTopic(topic);
     setLastError(QString());
+    loadPolicy();
     loadMessages();
     loadMembers();
     loadIntents();
@@ -211,6 +212,22 @@ void MusterUiBackend::loadIntents()
     // coordinate_intents → the room's proposals folded from the shared log, as
     // [{id, state}]. Drives inbound delivery first (in the module).
     setIntentsJson(modules().muster_module.coordinate_intents());
+}
+
+void MusterUiBackend::setPolicy(const QString &kind)
+{
+    // coordinate_set_policy → choose the room's driver (safe | threshold). The same
+    // propose/contribute/fold path runs under whichever; the policy is a driver, not
+    // hardcoded. Result is {policy, threshold, domain, membership}.
+    const QString r = modules().muster_module.coordinate_set_policy(kind);
+    qInfo() << "[muster_ui] coordinate_set_policy(" << kind << ") ->" << r;
+    setPolicyJson(r);
+}
+
+void MusterUiBackend::loadPolicy()
+{
+    // coordinate_policy → the room's current policy, described by its driver.
+    setPolicyJson(modules().muster_module.coordinate_policy());
 }
 
 void MusterUiBackend::onContextReady()
