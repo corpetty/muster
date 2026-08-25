@@ -31,6 +31,9 @@ Item {
     readonly property string topic: backend ? backend.roomTopic : ""
     readonly property bool joined: room.topic.length > 0
 
+    // Whether the proposal composer is open (the "+" in the message row).
+    property bool composing: false
+
     // Parsed folds. A parse failure yields [] (absent), never fiction.
     readonly property var messages: {
         try { return JSON.parse(backend ? backend.messagesJson : "[]"); }
@@ -87,16 +90,21 @@ Item {
         return null;
     }
 
-    // Put a real proposal to the room through the verified path: a sample transfer
-    // effect, canonicalized by the module to the EIP-712 safeTxHash and folded as a
-    // content-addressed intent. Composing the effect from fields is the next step;
-    // the loop it drives (propose → contribute → executable) is already real.
-    function proposeSample() {
-        if (!room.backend)
+    // Put a real proposal to the room through the verified path: the module
+    // canonicalizes the effect to the EIP-712 safeTxHash and folds it as a
+    // content-addressed intent, then announces it into the thread as an intent-ref
+    // card. Nonce is 0 for now — the room coordinates but does not yet settle
+    // on-chain, so proposals don't contend for a Safe nonce (room-side submit is a
+    // later step). A blank/zero amount is allowed; the recipient is required.
+    function proposeFrom(toAddr, valueStr) {
+        if (!room.backend || String(toAddr).length === 0)
             return;
+        var v = parseInt(valueStr, 10);
+        if (isNaN(v) || v < 0) v = 0;
         room.backend.proposeInRoom(JSON.stringify({
-            to: "0x1111111111111111111111111111111111111111", value: 100, nonce: 0
+            to: String(toAddr), value: v, nonce: 0
         }));
+        room.composing = false;
     }
 
     RowLayout {
@@ -305,37 +313,100 @@ Item {
             }
         }
 
-        // ── composer ──────────────────────────────────────────────────────
-        RowLayout {
+        // ── composer: chat + propose ──────────────────────────────────────
+        // A proposal originates in the conversation the same way a message does —
+        // the "+" opens the effect fields, and proposing posts it inline as a card.
+        ColumnLayout {
             visible: room.joined
             Layout.fillWidth: true
             spacing: Theme.spacing.small
 
-            LogosTextField {
-                id: composer
-                objectName: "messageComposer"
+            // proposal compose, revealed by "+".
+            ColumnLayout {
+                visible: room.composing
                 Layout.fillWidth: true
-                placeholderText: qsTr("Say something")
-            }
+                spacing: Theme.spacing.tiny
 
-            LogosButton {
-                id: sendButton
-                objectName: "sendMessageButton"
-                text: qsTr("Send")
-                enabled: composer.text.length > 0
-                function send() {
-                    if (room.backend && composer.text.length > 0) {
-                        room.backend.postMessage(composer.text);
-                        composer.text = "";
+                LogosText {
+                    text: qsTr("Propose a payment")
+                    color: Theme.palette.text
+                    font.family: Theme.typography.publicSans
+                    font.pixelSize: Theme.typography.secondaryText
+                    font.weight: Theme.typography.weightBold
+                }
+
+                LogosTextField {
+                    id: proposeTo
+                    objectName: "roomProposeTo"
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("recipient (0x…)")
+                    font.family: Theme.typography.mono
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+
+                    LogosTextField {
+                        id: proposeValue
+                        objectName: "roomProposeValue"
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("amount")
+                        font.family: Theme.typography.mono
+                        validator: IntValidator { bottom: 0 }
+                    }
+
+                    LogosButton {
+                        objectName: "roomProposeSubmit"
+                        text: qsTr("Propose")
+                        enabled: proposeTo.text.length > 0
+                        onClicked: {
+                            room.proposeFrom(proposeTo.text, proposeValue.text);
+                            proposeTo.text = "";
+                            proposeValue.text = "";
+                        }
+                    }
+
+                    LogosButton {
+                        objectName: "roomProposeCancel"
+                        text: qsTr("Cancel")
+                        onClicked: room.composing = false
                     }
                 }
-                onClicked: send()
             }
 
-            LogosButton {
-                objectName: "roomProposeButton"
-                text: qsTr("Propose")
-                onClicked: room.proposeSample()
+            // the message row.
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+
+                LogosButton {
+                    objectName: "roomProposeButton"
+                    Layout.preferredWidth: 48
+                    text: room.composing ? qsTr("×") : qsTr("+")
+                    onClicked: room.composing = !room.composing
+                }
+
+                LogosTextField {
+                    id: composer
+                    objectName: "messageComposer"
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("Say something")
+                }
+
+                LogosButton {
+                    id: sendButton
+                    objectName: "sendMessageButton"
+                    text: qsTr("Send")
+                    enabled: composer.text.length > 0
+                    function send() {
+                        if (room.backend && composer.text.length > 0) {
+                            room.backend.postMessage(composer.text);
+                            composer.text = "";
+                        }
+                    }
+                    onClicked: send()
+                }
             }
         }
         }
