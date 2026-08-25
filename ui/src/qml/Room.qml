@@ -4,17 +4,19 @@ import QtQuick.Layouts
 import Logos.Theme
 import Logos.Controls
 
-// The room / conversation surface — the first real product surface of the
-// spec-first client. One encrypted channel with two folds off the SAME sealed
-// log (state = reduce(log)):
-//   • messages — chat text, and address-share / receipt cards (peer data the core
-//     never interprets), from coordinate_messages.
-//   • proposals — the room's intents, folded and verified by the driver, from
-//     coordinate_intents. A proposal card is NOT posted JSON; it is the render of
-//     real folded state (effect + threshold + distinct-owner approvals). Proposing
-//     goes through coordinate_propose (content-addressed id); approving is an owner
-//     signature over the safeTxHash the module re-derives — the client holds no
-//     keys, so you paste the signature your own device produced (coordinate_contribute).
+// The room / conversation surface — the substrate of the spec-first client. ONE
+// timeline: chat text and cards interleave in the order they were sent, because a
+// proposal is a card IN the conversation, not a side panel. Two folds off the SAME
+// sealed log feed it (state = reduce(log)):
+//   • messages (coordinate_messages) — the timeline itself: chat text, address-share
+//     / receipt cards, and `intent-ref` cards that a proposal posts to announce
+//     itself (authored + timestamped, so it lands in order and names who proposed).
+//   • intents (coordinate_intents) — the verified proposal fold. A thread `intent-ref`
+//     resolves to its live intent here (state + verify + provenance), so the inline
+//     card is real folded state, never the posted JSON. Proposing goes through
+//     coordinate_propose (content-addressed id); approving is an owner signature over
+//     the safeTxHash the module re-derives — the client holds no keys, so you paste
+//     the signature your own device produced (coordinate_contribute).
 // Everything the room shows is reduce(log) from the module — this view holds no
 // state of its own.
 //
@@ -72,6 +74,17 @@ Item {
             // the provenance lineage: how this decision's data got here (inv 10)
             provenance: (it && it.provenance) ? it.provenance : []
         };
+    }
+
+    // Resolve a thread ref card to its live intent (verified fold), by id. Returns
+    // null until the fold has it — the thread then shows a quiet placeholder rather
+    // than inventing a card.
+    function intentById(id) {
+        var arr = room.intents;
+        for (var i = 0; i < arr.length; ++i)
+            if (arr[i] && String(arr[i].id || "") === String(id))
+                return arr[i];
+        return null;
     }
 
     // Put a real proposal to the room through the verified path: a sample transfer
@@ -142,104 +155,13 @@ Item {
             }
         }
 
-        // ── proposals: the room's intents, folded and verified ────────────
-        // Each card is the render of real folded state, not posted JSON. Approving
-        // reveals a signature field — the owner signs the module's re-derived
-        // safeTxHash on their own device; the module verifies it recovers to a
-        // configured owner before it counts (coordinate_contribute).
-        ColumnLayout {
-            visible: room.joined && room.intents.length > 0
-            Layout.fillWidth: true
-            spacing: Theme.spacing.small
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Theme.spacing.small
-
-                LogosText {
-                    Layout.fillWidth: true
-                    text: qsTr("PROPOSALS")
-                    color: Theme.palette.textTertiary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
-                    font.weight: Theme.typography.weightMedium
-                }
-
-                LogosButton {
-                    objectName: "refreshIntentsButton"
-                    text: qsTr("Refresh")
-                    onClicked: if (room.backend) room.backend.loadIntents()
-                }
-            }
-
-            Repeater {
-                model: room.intents
-
-                delegate: ColumnLayout {
-                    id: proposal
-                    required property var modelData
-                    required property int index
-                    Layout.fillWidth: true
-                    spacing: Theme.spacing.tiny
-
-                    // Reveal the signature field when this proposal's Approve is
-                    // pressed; hidden again once a signature is submitted.
-                    property bool approving: false
-
-                    readonly property string intentId: String(proposal.modelData.id || "")
-
-                    MusterCard {
-                        Layout.fillWidth: true
-                        card: room.intentToCard(proposal.modelData)
-                        onApprove: proposal.approving = true
-                    }
-
-                    // ── honest approve: paste the owner signature ──────────
-                    ColumnLayout {
-                        visible: proposal.approving
-                        Layout.fillWidth: true
-                        Layout.leftMargin: Theme.spacing.medium
-                        spacing: Theme.spacing.tiny
-
-                        LogosText {
-                            Layout.fillWidth: true
-                            wrapMode: Text.WordWrap
-                            text: qsTr("Sign the re-derived safeTxHash on your own device and paste "
-                                     + "the 65-byte signature. It counts only if it recovers to a configured owner.")
-                            color: Theme.palette.textTertiary
-                            font.pixelSize: Theme.typography.badgeText
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Theme.spacing.small
-
-                            LogosTextField {
-                                id: sigField
-                                objectName: "roomApproveSig"
-                                Layout.fillWidth: true
-                                placeholderText: qsTr("owner signature (65-byte hex)")
-                                font.family: Theme.typography.mono
-                            }
-
-                            LogosButton {
-                                objectName: "roomApproveSubmit"
-                                text: qsTr("Add")
-                                enabled: sigField.text.length > 0
-                                onClicked: {
-                                    if (room.backend && proposal.intentId.length > 0)
-                                        room.backend.contributeInRoom(proposal.intentId, sigField.text);
-                                    sigField.text = "";
-                                    proposal.approving = false;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // ── the thread ────────────────────────────────────────────────────
+        // ── the conversation ──────────────────────────────────────────────
+        // One timeline. Chat and cards interleave in the order they were sent —
+        // proposals are cards IN the conversation, not a side list. A message whose
+        // body is an `intent-ref` card resolves to the live proposal from the
+        // verified fold (state + verify + provenance), rendered inline with its own
+        // approve affordance; address-share / receipt cards render in place; anything
+        // else is plain text.
         Rectangle {
             visible: room.joined
             Layout.fillWidth: true
@@ -260,47 +182,123 @@ Item {
                 onCountChanged: positionViewAtEnd()
 
                 delegate: Item {
+                    id: msg
                     width: thread.width
-                    implicitHeight: parsedCard ? cardHost.implicitHeight : plainHost.implicitHeight
+                    implicitHeight: rowCol.implicitHeight
 
-                    // A message body that parses to an object with a `kind` is a
-                    // typed card (address-share / receipt); anything else is plain
-                    // text. Intents are NOT here — they come from the proposals fold.
+                    // A body that parses to an object with a `kind` is a typed card.
+                    // `intent-ref` points at a proposal in the verified fold; other
+                    // kinds (address-share / receipt) are peer data rendered in place;
+                    // anything else is plain chat text.
                     readonly property var parsedCard: {
                         try {
                             var o = JSON.parse(modelData.body);
                             return (o && (o.kind || o.type)) ? o : null;
                         } catch (e) { return null; }
                     }
+                    readonly property bool isIntentRef:
+                        msg.parsedCard && String(msg.parsedCard.kind || "") === "intent-ref"
+                    readonly property var liveIntent:
+                        msg.isIntentRef ? room.intentById(msg.parsedCard.intentId) : null
 
-                    MusterCard {
-                        id: cardHost
-                        width: parent.width
-                        visible: parent.parsedCard !== null
-                        card: parent.parsedCard || ({})
-                        onShareAddress: { if (room.backend) room.backend.postMessage(JSON.stringify({ kind: "address-share", asset: "TKN", address: "0x2222222222222222222222222222222222222222", form: 1 })); }
-                        onPay: { if (room.backend) room.backend.postMessage(JSON.stringify({ kind: "send-receipt", amount: "100", denom: "TKN", rail: "safe", tx: "0xdeadbeef", discloses: { amount: "100", payer: "not disclosed", payee: "0x1111" } })); }
-                    }
+                    // reveal the signature field for THIS inline proposal.
+                    property bool approving: false
 
                     ColumnLayout {
-                        id: plainHost
+                        id: rowCol
                         width: parent.width
-                        visible: parent.parsedCard === null
-                        spacing: 2
+                        spacing: Theme.spacing.tiny
 
+                        // ── a proposal, inline (live state from the verified fold) ──
+                        MusterCard {
+                            visible: msg.isIntentRef && msg.liveIntent !== null
+                            Layout.fillWidth: true
+                            card: msg.liveIntent ? room.intentToCard(msg.liveIntent) : ({})
+                            onApprove: msg.approving = true
+                        }
+
+                        // its approve affordance — the owner signs on their own device.
+                        ColumnLayout {
+                            visible: msg.isIntentRef && msg.liveIntent !== null && msg.approving
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Theme.spacing.medium
+                            spacing: Theme.spacing.tiny
+
+                            LogosText {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: qsTr("Sign the re-derived safeTxHash on your own device and paste "
+                                         + "the 65-byte signature. It counts only if it recovers to a configured owner.")
+                                color: Theme.palette.textTertiary
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: Theme.spacing.small
+
+                                LogosTextField {
+                                    id: sigField
+                                    objectName: "roomApproveSig"
+                                    Layout.fillWidth: true
+                                    placeholderText: qsTr("owner signature (65-byte hex)")
+                                    font.family: Theme.typography.mono
+                                }
+
+                                LogosButton {
+                                    objectName: "roomApproveSubmit"
+                                    text: qsTr("Add")
+                                    enabled: sigField.text.length > 0
+                                    onClicked: {
+                                        if (room.backend && msg.liveIntent)
+                                            room.backend.contributeInRoom(String(msg.liveIntent.id || ""), sigField.text);
+                                        sigField.text = "";
+                                        msg.approving = false;
+                                    }
+                                }
+                            }
+                        }
+
+                        // a ref the fold hasn't caught up to yet — a quiet placeholder,
+                        // never an invented card.
                         LogosText {
-                            text: String(modelData.author || "?").substring(0, 10)
-                                  + (modelData.ts ? "  ·  " + modelData.ts : "")
+                            visible: msg.isIntentRef && msg.liveIntent === null
+                            Layout.fillWidth: true
+                            text: qsTr("· a proposal")
                             color: Theme.palette.textTertiary
                             font.family: Theme.typography.mono
                             font.pixelSize: Theme.typography.badgeText
                         }
-                        LogosText {
+
+                        // ── other typed cards (address-share / receipt) ────────────
+                        MusterCard {
+                            visible: msg.parsedCard !== null && !msg.isIntentRef
                             Layout.fillWidth: true
-                            text: String(modelData.body || "")
-                            color: Theme.palette.text
-                            font.pixelSize: Theme.typography.secondaryText
-                            wrapMode: Text.WrapAnywhere
+                            card: msg.parsedCard || ({})
+                            onShareAddress: { if (room.backend) room.backend.postMessage(JSON.stringify({ kind: "address-share", asset: "TKN", address: "0x2222222222222222222222222222222222222222", form: 1 })); }
+                            onPay: { if (room.backend) room.backend.postMessage(JSON.stringify({ kind: "send-receipt", amount: "100", denom: "TKN", rail: "safe", tx: "0xdeadbeef", discloses: { amount: "100", payer: "not disclosed", payee: "0x1111" } })); }
+                        }
+
+                        // ── plain chat text ────────────────────────────────────────
+                        ColumnLayout {
+                            visible: msg.parsedCard === null
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            LogosText {
+                                text: String(modelData.author || "?").substring(0, 10)
+                                      + (modelData.ts ? "  ·  " + modelData.ts : "")
+                                color: Theme.palette.textTertiary
+                                font.family: Theme.typography.mono
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+                            LogosText {
+                                Layout.fillWidth: true
+                                text: String(modelData.body || "")
+                                color: Theme.palette.text
+                                font.pixelSize: Theme.typography.secondaryText
+                                wrapMode: Text.WrapAnywhere
+                            }
                         }
                     }
                 }

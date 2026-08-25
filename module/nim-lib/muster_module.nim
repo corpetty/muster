@@ -251,6 +251,17 @@ proc musterCoordinatePropose(effectJson: string): string =
   if gSession == nil: return "not-joined"
   let id = intentIdFor(effectJson)
   gSession.publish(proposeEvent(id, effectJson))
+  # Announce the proposal INTO the conversation: a reference card, authored and
+  # timestamped like any message, so the proposal appears inline in the thread
+  # among the chat (the conversation is the substrate — a proposal is a card in it,
+  # not a side panel). The author attributes who proposed. Its live state, verify,
+  # and provenance still come from the verified intent fold keyed by this id — the
+  # card is a positional reference, never the source of truth.
+  let author = toHex(moduleKeystore().encIdentity().toBytes())
+  inc gMsgSeq
+  let refBody = $(%*{"kind": "intent-ref", "intentId": id})
+  let (_, ev) = newMessageEvent(author, int64(epochTime()), refBody, gMsgSeq)
+  gSession.publish(ev)
   id
 
 proc musterCoordinateContribute(intentId: string, signatureHex: string): string =
