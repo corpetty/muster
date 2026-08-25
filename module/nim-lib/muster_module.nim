@@ -106,6 +106,31 @@ var gNow: uint64 = 0
 var gRpcUrl = "http://127.0.0.1:8545"
 var gDeliveryConfig = "{}"          ## delivery createNode config (store/bootstrap nodes)
 
+# Persist the infra settings beside the keystore, so a user's chosen endpoints
+# survive a restart. Best-effort — a missing/malformed file leaves the defaults.
+proc settingsPath(): string =
+  var dir = gContext.instancePersistencePath
+  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  dir / "settings.json"
+
+var gSettingsLoaded = false
+proc loadSettingsFile() =
+  if gSettingsLoaded: return
+  gSettingsLoaded = true
+  try:
+    let p = settingsPath()
+    if fileExists(p):
+      let j = parseJson(readFile(p))
+      if j.hasKey("rpc"): gRpcUrl = j["rpc"].getStr()
+      if j.hasKey("delivery"): gDeliveryConfig = j["delivery"].getStr()
+  except CatchableError: discard
+
+proc saveSettingsFile() =
+  try:
+    createDir(parentDir(settingsPath()))
+    writeFile(settingsPath(), $(%*{"rpc": gRpcUrl, "delivery": gDeliveryConfig}))
+  except CatchableError: discard
+
 proc toSig65(b: seq[byte]): Signature65 =
   for i in 0 ..< min(65, b.len): result[i] = b[i]
 
@@ -130,6 +155,7 @@ proc moduleKeystore(): Keystore =
     if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
     let pass = getEnv("MUSTER_KEY_PASSPHRASE", "muster-dev-passphrase")
     gKeystore = openFileKeystore(dir / "identity.mks", pass)
+    loadSettingsFile()      # infra settings live beside the identity — load them once
   gKeystore
 
 proc musterIdentity(): string =
@@ -616,4 +642,5 @@ proc musterSetSetting(key, value: string): string =
     gDeliveryConfig = value
   else:
     return $(%*{"error": "unknown setting: " & key})
+  saveSettingsFile()         # persist beside the keystore, so it survives a restart
   musterSettings()
