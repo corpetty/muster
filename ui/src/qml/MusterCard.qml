@@ -140,14 +140,31 @@ Rectangle {
         }
 
         // ── address-request ────────────────────────────────────────────────
-        LogosText {
+        // Primed by the room's intention: it names what the room is for and asks
+        // whoever holds the needed address to share it.
+        ColumnLayout {
             visible: cardRoot.kind === "address-request"
             Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            text: qsTr("They want somewhere to send funds.")
-            color: Theme.palette.text
-            font.family: Theme.typography.publicSans
-            font.pixelSize: Theme.typography.primaryText
+            spacing: 2
+
+            LogosText {
+                visible: cardRoot.card && cardRoot.card.purpose
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("For: %1").arg(String((cardRoot.card && cardRoot.card.purpose) || ""))
+                color: Theme.palette.text
+                font.family: Theme.typography.publicSans
+                font.pixelSize: Theme.typography.primaryText
+                font.weight: Theme.typography.weightMedium
+            }
+            LogosText {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("This room needs somewhere to send funds. Share an address to continue.")
+                color: Theme.palette.textSecondary
+                font.family: Theme.typography.publicSans
+                font.pixelSize: Theme.typography.secondaryText
+            }
         }
 
         // ── address-share ({asset, address, form}) ─────────────────────────

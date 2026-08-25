@@ -47,11 +47,24 @@ Item {
     property string view: "home"
 
     // Enter a room by topic: join it in the module, then show the room surface.
-    function enterRoom(topic) {
-        if (root.backend && topic) {
-            root.backend.joinRoom(topic);
-            root.view = "room";
-        }
+    // When `verb` is given (a freshly composed room), PRIME the conversation — the
+    // intention implies what to ask participants for. A money verb needs an address
+    // exchange, so the room opens with an address-request naming the intent; whoever
+    // holds the needed address answers it with address-share (the card's button).
+    // "talk" primes nothing. Re-opening an existing room passes no verb → no priming.
+    function enterRoom(topic, verb) {
+        if (!root.backend || !topic)
+            return;
+        root.backend.joinRoom(topic);
+        root.view = "room";
+        var v = String(verb || "");
+        var purpose = v === "pay" ? qsTr("Pay someone")
+                    : v === "request" ? qsTr("Ask to be paid")
+                    : v === "split" ? qsTr("Split a cost") : "";
+        if (purpose.length > 0)
+            root.backend.postMessage(JSON.stringify({
+                kind: "address-request", intent: v, purpose: purpose
+            }));
     }
 
     // Backend PROPs, aliased so bindings read cleanly. The backend is the only
@@ -239,7 +252,7 @@ Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "compose"
-        onCreateRoom: root.enterRoom(topic)
+        onCreateRoom: root.enterRoom(topic, verb)
     }
 
     // The conversation surface. Reads its state from the module through the backend.
