@@ -100,25 +100,41 @@ Item {
     readonly property string roomTopic: backend ? backend.roomTopic : ""
     readonly property string intentsJson: backend ? backend.intentsJson : "[]"
 
-    // The home surface (single-room for now): the joined room shows as one action,
-    // its headline folded from the latest intent's state. Empty until a room exists.
+    // Every joined conversation (multi-room), from coordinate_conversations.
+    readonly property var conversations: {
+        try { return JSON.parse(backend ? backend.conversationsJson : "[]"); }
+        catch (e) { return []; }
+    }
+
+    // The home surface lists every joined room. The ACTIVE room also folds its
+    // latest intent into a headline; the rest show when they were last active.
+    // Opening a row re-joins (re-activates) that room. Empty until a room exists.
     readonly property var homeActions: {
-        if (!root.roomTopic)
-            return [];
-        var action = "Talking", state = "idle", detail = "in the room";
+        var rows = [];
+        var convs = root.conversations;
+        var hl = "Talking", st = "waiting", detail = "in the room";
         try {
             var ints = JSON.parse(root.intentsJson);
             if (ints.length) {
                 var last = ints[ints.length - 1];
-                action = last.state === "executable" ? "Ready to submit"
-                       : last.state === "collecting" ? "Collecting approvals"
-                       : last.state === "final" ? "Done" : "Proposed";
-                state = last.state === "executable" ? "needs"
-                      : last.state === "final" ? "settled" : "waiting";
+                hl = last.state === "executable" ? "Ready to submit"
+                   : last.state === "collecting" ? "Collecting approvals"
+                   : last.state === "final" ? "Done" : "Proposed";
+                st = last.state === "executable" ? "needs"
+                   : last.state === "final" ? "settled" : "waiting";
                 detail = "intent " + String(last.id || "").substring(0, 8) + " · " + last.state;
             }
         } catch (e) {}
-        return [{ topic: root.roomTopic, title: root.roomTopic, action: action, state: state, detail: detail }];
+        for (var i = 0; i < convs.length; ++i) {
+            var c = convs[i];
+            var topic = String(c.topic || "");
+            if (c.active)
+                rows.push({ topic: topic, title: topic, action: hl, state: st, detail: detail });
+            else
+                rows.push({ topic: topic, title: topic, action: "Open", state: "idle",
+                            detail: c.lastTs ? ("last active · " + c.lastTs) : "no messages yet" });
+        }
+        return rows;
     }
 
     Connections {
@@ -170,7 +186,10 @@ Item {
                 objectName: "homeToggle"; text: qsTr("Home")
                 variant: (root.view === "home" || root.view === "compose")
                          ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                onClicked: root.view = "home"
+                onClicked: {
+                    root.view = "home";
+                    if (root.backend) root.backend.loadConversations();   // refresh the room list
+                }
             }
             LogosButton {
                 objectName: "roomToggle"; text: qsTr("Room")

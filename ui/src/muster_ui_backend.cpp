@@ -160,6 +160,7 @@ void MusterUiBackend::joinRoom(const QString &topic)
     loadMessages();
     loadMembers();
     loadIntents();
+    loadConversations();   // the room list — this join may have added a room
 }
 
 void MusterUiBackend::postMessage(const QString &body)
@@ -179,6 +180,13 @@ void MusterUiBackend::loadMessages()
     // coordinate_messages → the room's authored events, oldest-first, as JSON.
     // The view folds this into the thread; the module drives inbound delivery first.
     setMessagesJson(modules().muster_module.coordinate_messages());
+}
+
+void MusterUiBackend::loadConversations()
+{
+    // coordinate_conversations → every joined room as {topic, address, lastTs,
+    // active}. The home surface lists them; opening one re-joins to re-activate.
+    setConversationsJson(modules().muster_module.coordinate_conversations());
 }
 
 void MusterUiBackend::loadMembers()

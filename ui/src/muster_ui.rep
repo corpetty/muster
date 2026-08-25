@@ -44,6 +44,11 @@ class MusterUi
     SLOT(void loadMessages())
     SLOT(void loadMembers())
 
+    // Every joined conversation (coordinate_conversations) into conversationsJson —
+    // {topic, address, lastTs, active}. The home surface lists them; opening one
+    // re-joins (re-activates) that room. Multi-room: the module holds a session each.
+    SLOT(void loadConversations())
+
     // Room intents (the multi-party path). Propose an effect into the joined room
     // (coordinate_propose), contribute an owner signature (coordinate_contribute),
     // and read the folded intent list (coordinate_intents) into intentsJson — the
@@ -92,4 +97,8 @@ class MusterUi
     // The room's coordination policy — its driver — as JSON {policy, threshold,
     // domain, membership}. The view shows which policy governs the room and picks it.
     PROP(QString policyJson="{\"policy\":\"safe\"}" READONLY)
+
+    // Every joined conversation, as JSON {topic, address, lastTs, active}. The home
+    // surface lists these — one row per room the module holds a session for.
+    PROP(QString conversationsJson="[]" READONLY)
 }

@@ -254,14 +254,23 @@ proc musterSubmit(intentId: string): string =
 # handshake (deferred, with the live two-instance test); today the transport is
 # DeliveryTransport and the reduce/verify path below is the same one
 # tests/coordination_surface_test.nim exercises in-process over LocalTransport.
+# Multi-room: the module holds a session per joined topic; gSession/gTopic are the
+# ACTIVE one, so every method below operates on the active room unchanged. Joining a
+# topic already in the map re-activates it (no new session, no re-key); a new topic
+# creates one. coordinate_conversations lists them all.
+var gSessions = initTable[string, CoordinationSession]()
 var gSession: CoordinationSession = nil
 var gTopic = ""
 var gMsgSeq: uint64 = 0     ## per-instance monotonic nonce, disambiguates identical posts
 
 proc musterCoordinateJoin(topic: string): string =
   let ks = moduleKeystore()
+  if topic in gSessions:
+    gSession = gSessions[topic]           # re-activate an already-joined room
+  else:
+    gSession = newCoordinationSession(newDeliveryTransport(), newEpochCrypto(ks), topic)
+    gSessions[topic] = gSession
   gTopic = topic
-  gSession = newCoordinationSession(newDeliveryTransport(), newEpochCrypto(ks), topic)
   $(%*{"address": toHex(ks.address()), "topic": topic})
 
 proc policyJson(): JsonNode =
@@ -426,15 +435,17 @@ proc musterCoordinateMembers(): string =
   $arr
 
 proc musterCoordinateConversations(): string =
-  ## The joined rooms. One room per instance today, so a 0-or-1-entry array:
-  ## the current topic, our address, and the latest message ts (0 if none yet).
-  if gSession == nil: return "[]"
-  gSession.poll()
-  let msgs = reduceMessages(gSession.log.allEvents())
-  let lastTs = if msgs.len > 0: msgs[^1].ts else: 0'i64
+  ## Every joined room, as {topic, address, lastTs, active} — the home surface's
+  ## room list. The active room is flagged; lastTs is each room's latest message ts
+  ## (0 if none yet), so home can order by recency. Multi-room: one entry per session.
   var arr = newJArray()
-  arr.add %*{"topic": gTopic, "address": toHex(moduleKeystore().address()),
-             "lastTs": lastTs}
+  let myAddr = toHex(moduleKeystore().address())
+  for topic, s in gSessions:
+    s.poll()
+    let msgs = reduceMessages(s.log.allEvents())
+    let lastTs = if msgs.len > 0: msgs[^1].ts else: 0'i64
+    arr.add %*{"topic": topic, "address": myAddr, "lastTs": lastTs,
+               "active": (topic == gTopic)}
   $arr
 
 # ── wallet: chain-agnostic account/asset/transfer surface ──────────────────────
