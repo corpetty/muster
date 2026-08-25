@@ -10,6 +10,45 @@
 
 **What we build today does not have to be the ideal.** It has to deliver something real, be honest about exactly what that is, place it against what the rest of the ecosystem does at the same step, and point at what would close the remaining gap. A client that ships a genuine improvement and names its residual leak teaches more than one that waits for a perfect stack, and far more than one that claims the perfect stack already exists. The gaps are curriculum, not embarrassment: knowing *why* a protection is hard, and what specifically would fix it, is the part of this that transfers.
 
+## The end state: the shape of the product
+
+The usable client, stated as three layers, from the outside in:
+
+1. **The shell — who you are, and what you can reach.** Opening Muster puts you in a
+   configured place: your identity (keys, backup, a Keycard), your wallets and
+   accounts, the plugins you trust, and the infrastructure you point at — RPC
+   endpoints and delivery/store nodes, *untrusted and user-chosen* (invariant 8, FS-1/
+   FS-8). This is platform work the Logos stack already does: the intended home is
+   **inside logos-basecamp**, consuming its account, wallet, and settings modules
+   rather than reinventing them (ADR-013 already builds the UI on basecamp's coherent
+   builder). The standalone runner is a testing convenience, not the home. What Muster
+   must own regardless is that *nothing about this is hardcoded* — the endpoints and
+   infra are settings, because "untrusted, user-configurable infrastructure" is empty
+   if the user can't configure it.
+
+2. **Starting something — an intention, not an empty chat.** You "start something" by
+   naming what you want to do with a group. The intention is primary: it opens the
+   conversation, pulls in the wallet/account and plugins that intention *depends on*,
+   and **primes** the room — asking each participant for exactly what the intention
+   needs (a payee's address, everyone's share). The conversation is the security
+   boundary; the intention is why the room exists. A chat app asks "who?" first and
+   makes you pick a container before you've said what it's for; Muster asks what you
+   are doing, and derives the rest.
+
+3. **Inside the room — proposals that carry their own accountability.** Anyone in the
+   room can propose an action. A proposal can bring in a **new coordination policy**
+   (a driver) or a **new kind of action** (an effect) — the room's capabilities evolve
+   by proposal, not by config. Every proposal is a **card** carrying its live state,
+   and you can drive into it: *what exactly you'd authorize* (the re-derived bytes and
+   the domain they bind to) and *how the data reached you* (the provenance lineage,
+   invariant 10). Trust is inspectable at the point of decision, for any driver and
+   any effect.
+
+The middle layer — the coordination substrate and the proposal→provenance dive-in —
+is the hard part, and it is built. The shell is mostly the platform's to provide; the
+**intention-and-priming glue** (layer 2) is the main new product surface still to
+write. `docs/02-implementation-plan.md` carries the gap analysis and the sequencing.
+
 ## The lifecycle as curriculum
 
 The intent lifecycle (`draft → proposed → collecting → executable → submitted → settling → final`, per F-3 in `01-furps.md`) is the spine of the walkthrough. At each stage, four questions get answered on-screen:
