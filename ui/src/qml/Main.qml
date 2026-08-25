@@ -137,12 +137,68 @@ Item {
         color: Theme.palette.background
     }
 
-    // ── the product surfaces (one shown at a time) ───────────────────────
+    // ── top nav bar ──────────────────────────────────────────────────────
+    // Occupies its own strip at the top with a solid ground, so it never overlaps
+    // the surface below it. Every surface anchors under `navBar.bottom`.
+    Rectangle {
+        id: navBar
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: navRow.implicitHeight + 2 * Theme.spacing.small
+        color: Theme.palette.background
+        z: 10
+
+        Rectangle {
+            anchors.bottom: parent.bottom
+            width: parent.width
+            height: 1
+            color: Theme.palette.borderSubtle
+        }
+
+        RowLayout {
+            id: navRow
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.rightMargin: Theme.spacing.medium
+            spacing: Theme.spacing.small
+
+            // The current surface reads as filled (Primary); the rest stay neutral
+            // (Secondary), so "where am I" is answered without a second glance.
+            // Compose is a sub-flow of Home, so Home stays lit through it.
+            LogosButton {
+                objectName: "homeToggle"; text: qsTr("Home")
+                variant: (root.view === "home" || root.view === "compose")
+                         ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                onClicked: root.view = "home"
+            }
+            LogosButton {
+                objectName: "roomToggle"; text: qsTr("Room")
+                variant: root.view === "room" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                onClicked: root.view = "room"
+            }
+            LogosButton {
+                objectName: "dashboardToggle"; text: qsTr("Account")
+                variant: root.view === "dashboard" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                onClicked: root.view = "dashboard"
+            }
+            LogosButton {
+                objectName: "walkthroughToggle"; text: qsTr("Walkthrough")
+                variant: root.view === "walkthrough" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                onClicked: root.view = (root.view === "walkthrough" ? "home" : "walkthrough")
+            }
+        }
+    }
+
+    // ── the product surfaces (one shown at a time), below the nav bar ─────
     // Home: the action list. Opening a row joins that room; "Start something"
     // goes to the composer.
     Home {
         objectName: "homeSurface"
-        anchors.fill: parent
+        anchors.top: navBar.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
         visible: root.view === "home"
         actions: root.homeActions
         onActivated: root.enterRoom(topic)
@@ -151,7 +207,10 @@ Item {
 
     // Compose: create a room from an action (verb → people → account).
     Composer {
-        anchors.fill: parent
+        anchors.top: navBar.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
         visible: root.view === "compose"
         onCreateRoom: root.enterRoom(topic)
     }
@@ -159,57 +218,29 @@ Item {
     // The conversation surface. Reads its state from the module through the backend.
     Room {
         objectName: "roomSurface"
-        anchors.fill: parent
+        anchors.top: navBar.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
         visible: root.view === "room"
         backend: root.backend
     }
 
     // The teaching surface (ADR-012 claims registry).
     Walkthrough {
-        anchors.fill: parent
-        visible: root.view === "walkthrough"
-    }
-
-    // Nav. Always on top (z), reachable in every mode.
-    RowLayout {
-        anchors.top: parent.top
+        anchors.top: navBar.bottom
+        anchors.left: parent.left
         anchors.right: parent.right
-        anchors.margins: Theme.spacing.medium
-        z: 10
-        spacing: Theme.spacing.small
-
-        // The current surface reads as filled (Primary); the rest stay neutral
-        // (Secondary), so "where am I" is answered without a second glance. Compose
-        // is a sub-flow of Home, so Home stays lit through it.
-        LogosButton {
-            objectName: "homeToggle"; text: qsTr("Home")
-            variant: (root.view === "home" || root.view === "compose")
-                     ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-            onClicked: root.view = "home"
-        }
-        LogosButton {
-            objectName: "roomToggle"; text: qsTr("Room")
-            variant: root.view === "room" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-            onClicked: root.view = "room"
-        }
-        LogosButton {
-            objectName: "dashboardToggle"; text: qsTr("Account")
-            variant: root.view === "dashboard" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-            onClicked: root.view = "dashboard"
-        }
-        LogosButton {
-            objectName: "walkthroughToggle"; text: qsTr("Walkthrough")
-            variant: root.view === "walkthrough" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-            onClicked: root.view = (root.view === "walkthrough" ? "home" : "walkthrough")
-        }
+        anchors.bottom: parent.bottom
+        visible: root.view === "walkthrough"
     }
 
     ColumnLayout {
         id: page
         visible: root.view === "dashboard"
-        anchors.top: parent.top
+        anchors.top: navBar.bottom
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.topMargin: Theme.spacing.xlarge
+        anchors.topMargin: Theme.spacing.large
         anchors.bottomMargin: Theme.spacing.xlarge
         spacing: Theme.spacing.large
         width: Math.min(parent.width - 2 * Theme.spacing.xlarge, 520)
