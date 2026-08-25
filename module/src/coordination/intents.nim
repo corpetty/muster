@@ -28,15 +28,32 @@ export lifecycle.Intent, lifecycle.LifecycleState
 export provenance.InputClass    # so consumers can name a lineage entry's class
 
 proc effectFromJson*(effectJson: string): Effect =
-  var fields: seq[(string, CborValue)]
+  ## Build a typed effect from JSON. The `effect` field selects the schema (default
+  ## "transfer"); each schema binds its own fields, and the schemaId travels into the
+  ## materialization, so a signature under one effect can never be reinterpreted as
+  ## another (F-5 / invariant 5b). The ACTION is open: a new effect type is a new
+  ## case here (eventually a plugin-emitted typed block, invariant 3), never a change
+  ## to the fold — the core still doesn't read the bytes, the driver canonicalizes them.
   try:
     let j = parseJson(effectJson)
     if j.kind == JObject:
-      if j.hasKey("to"): fields.add ("to", cbText(j["to"].getStr()))
-      if j.hasKey("value"): fields.add ("value", cbUint(uint64(j["value"].getInt())))
-      if j.hasKey("nonce"): fields.add ("nonce", cbUint(uint64(j["nonce"].getInt())))
+      let kind = if j.hasKey("effect"): j["effect"].getStr() else: "transfer"
+      case kind
+      of "statement":
+        # A statement the room ratifies — a decision that produces a signed group
+        # endorsement, not a payment. Canonicalizes under any driver whose
+        # materialization is the base serialization (e.g. the threshold driver).
+        var fields: seq[(string, CborValue)]
+        if j.hasKey("text"): fields.add ("text", cbText(j["text"].getStr()))
+        return Effect(schemaId: "muster.effect.statement.v1", fields: fields)
+      else:
+        var fields: seq[(string, CborValue)]
+        if j.hasKey("to"): fields.add ("to", cbText(j["to"].getStr()))
+        if j.hasKey("value"): fields.add ("value", cbUint(uint64(j["value"].getInt())))
+        if j.hasKey("nonce"): fields.add ("nonce", cbUint(uint64(j["nonce"].getInt())))
+        return Effect(schemaId: "muster.effect.transfer.v1", fields: fields)
   except CatchableError: discard
-  Effect(schemaId: "muster.effect.transfer.v1", fields: fields)
+  Effect(schemaId: "muster.effect.transfer.v1", fields: @[])
 
 proc hexToBytes(s: string): seq[byte] =
   var h = s

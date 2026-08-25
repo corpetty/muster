@@ -91,4 +91,29 @@ doAssert intentState(ev2, drv, "2") != "executable",
          "a non-member endorsement must not reach the threshold"
 echo "3. non-member endorsement refused OK"
 
+# 4. A SECOND effect type — a statement the room ratifies, not a payment — folds
+#    through the SAME path. The ACTION is pluggable, not just the policy: the
+#    statement selects its own schema, so its materialization differs from a
+#    transfer's (a statement endorsement can never be reinterpreted as a payment,
+#    F-5), and k endorsements still reach executable under the same threshold fold.
+block:
+  const stmtJson = """{"effect":"statement","text":"We ratify the treasury plan."}"""
+  let te = effectFromJson(effectJson)
+  let se = effectFromJson(stmtJson)
+  doAssert te.schemaId == "muster.effect.transfer.v1", "default is a transfer"
+  doAssert se.schemaId == "muster.effect.statement.v1", "the statement selects its own schema"
+  let sm = canonicalize(drv, se)
+  doAssert sm.bytes != canonicalize(drv, te).bytes,
+           "a statement materialization differs from a transfer's (schema-bound)"
+  let sid = intentIdFor(stmtJson)
+  proc endorseS(k: EncKeys): string = hex(edSign(k, sm.bytes))
+  let sa = endorseS(a)
+  let sb = endorseS(b)
+  let sevents = @[proposeEvent(sid, stmtJson),
+                  contributeEvent(sid, contributorOf(drv, stmtJson, sa), sa),
+                  contributeEvent(sid, contributorOf(drv, stmtJson, sb), sb)]
+  doAssert intentState(sevents, drv, sid) == "executable",
+           "a statement effect folds to executable under the same threshold path"
+echo "4. a second effect type (statement) folds through the same path OK"
+
 echo "threshold_fold_test: all OK"

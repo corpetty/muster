@@ -31,8 +31,11 @@ Item {
     readonly property string topic: backend ? backend.roomTopic : ""
     readonly property bool joined: room.topic.length > 0
 
-    // Whether the proposal composer is open (the "+" in the message row).
+    // Whether the proposal composer is open (the "+" in the message row), and which
+    // effect type is being composed: "payment" (a transfer) or "statement" (text the
+    // room ratifies). The action is pluggable — the same path coordinates either.
     property bool composing: false
+    property string composeType: "payment"
 
     // Parsed folds. A parse failure yields [] (absent), never fiction.
     readonly property var messages: {
@@ -68,12 +71,16 @@ Item {
                       : st === "final" ? "paid"
                       : st === "collecting" ? "collecting" : "proposed";
         var eff = (it && it.effect) ? it.effect : ({});
+        var isStatement = eff && String(eff.effect || "") === "statement";
         return {
             kind: "intent-propose",
-            label: qsTr("Payment"),
-            amount: eff.value !== undefined ? String(eff.value) : "",
+            label: isStatement ? qsTr("Statement") : qsTr("Payment"),
+            // a statement the room ratifies (a second effect type) — the card shows
+            // the text instead of amount → destination.
+            statement: isStatement ? String(eff.text || "") : "",
+            amount: (!isStatement && eff.value !== undefined) ? String(eff.value) : "",
             denom: "",
-            to: eff.to !== undefined ? String(eff.to) : "",
+            to: (!isStatement && eff.to !== undefined) ? String(eff.to) : "",
             rail: (it && it.rail) ? String(it.rail) : "safe",
             threshold: Number((it && it.threshold) || 0),
             approvals: Number((it && it.approvals) || 0),
@@ -112,6 +119,18 @@ Item {
         if (isNaN(v) || v < 0) v = 0;
         room.backend.proposeInRoom(JSON.stringify({
             to: String(toAddr), value: v, nonce: 0
+        }));
+        room.composing = false;
+    }
+
+    // A statement the room ratifies (a second effect type). It canonicalizes under
+    // any driver whose materialization is the base serialization — the threshold
+    // driver — producing a signed group endorsement rather than a chain transfer.
+    function proposeStatement(text) {
+        if (!room.backend || String(text).length === 0)
+            return;
+        room.backend.proposeInRoom(JSON.stringify({
+            effect: "statement", text: String(text)
         }));
         room.composing = false;
     }
@@ -337,11 +356,48 @@ Item {
                 spacing: Theme.spacing.tiny
 
                 LogosText {
-                    text: qsTr("Propose a payment")
+                    text: room.composeType === "statement"
+                          ? qsTr("Propose a statement") : qsTr("Propose a payment")
                     color: Theme.palette.text
                     font.family: Theme.typography.publicSans
                     font.pixelSize: Theme.typography.secondaryText
                     font.weight: Theme.typography.weightBold
+                }
+
+                // ── kind: the effect type (the ACTION is pluggable) ───────────
+                // A payment (a transfer) or a statement the room ratifies — the same
+                // propose/contribute/fold path coordinates either.
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+
+                    LogosText {
+                        text: qsTr("Kind")
+                        color: Theme.palette.textTertiary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                        font.weight: Theme.typography.weightMedium
+                    }
+
+                    LogosButton {
+                        objectName: "roomKindPayment"
+                        Layout.preferredWidth: 110
+                        text: qsTr("Payment")
+                        variant: room.composeType === "payment"
+                                 ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                        onClicked: room.composeType = "payment"
+                    }
+
+                    LogosButton {
+                        objectName: "roomKindStatement"
+                        Layout.preferredWidth: 120
+                        text: qsTr("Statement")
+                        variant: room.composeType === "statement"
+                                 ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                        onClicked: room.composeType = "statement"
+                    }
+
+                    Item { Layout.fillWidth: true }
                 }
 
                 // ── policy picker: the room's driver (invariant 6) ────────────
@@ -389,12 +445,23 @@ Item {
                     }
                 }
 
+                // payment: recipient (+ amount below).
                 LogosTextField {
                     id: proposeTo
                     objectName: "roomProposeTo"
+                    visible: room.composeType === "payment"
                     Layout.fillWidth: true
                     placeholderText: qsTr("recipient (0x…)")
                     font.family: Theme.typography.mono
+                }
+
+                // statement: the text the room ratifies.
+                LogosTextField {
+                    id: proposeText
+                    objectName: "roomProposeText"
+                    visible: room.composeType === "statement"
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("what the room ratifies…")
                 }
 
                 RowLayout {
@@ -404,20 +471,30 @@ Item {
                     LogosTextField {
                         id: proposeValue
                         objectName: "roomProposeValue"
+                        visible: room.composeType === "payment"
                         Layout.fillWidth: true
                         placeholderText: qsTr("amount")
                         font.family: Theme.typography.mono
                         validator: IntValidator { bottom: 0 }
                     }
 
+                    // keep the buttons right-aligned when the amount field is hidden.
+                    Item { visible: room.composeType === "statement"; Layout.fillWidth: true }
+
                     LogosButton {
                         objectName: "roomProposeSubmit"
                         text: qsTr("Propose")
-                        enabled: proposeTo.text.length > 0
+                        enabled: room.composeType === "statement"
+                                 ? proposeText.text.length > 0 : proposeTo.text.length > 0
                         onClicked: {
-                            room.proposeFrom(proposeTo.text, proposeValue.text);
-                            proposeTo.text = "";
-                            proposeValue.text = "";
+                            if (room.composeType === "statement") {
+                                room.proposeStatement(proposeText.text);
+                                proposeText.text = "";
+                            } else {
+                                room.proposeFrom(proposeTo.text, proposeValue.text);
+                                proposeTo.text = "";
+                                proposeValue.text = "";
+                            }
                         }
                     }
 

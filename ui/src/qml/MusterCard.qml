@@ -52,6 +52,9 @@ Rectangle {
 
     // The verify rows, built off `card` (guarded — a missing field is normal).
     function verifyShown() {
+        var stmt = String((cardRoot.card && cardRoot.card.statement) || "");
+        if (stmt.length > 0)
+            return "“" + stmt + "”";
         var amt = String((cardRoot.card && cardRoot.card.amount) || "");
         var den = String((cardRoot.card && cardRoot.card.denom) || "");
         var to = String((cardRoot.card && cardRoot.card.to) || "");
@@ -240,11 +243,17 @@ Rectangle {
                 font.weight: Theme.typography.weightBold
             }
 
-            // the effect: amount denom → to
+            // the effect. A statement shows its text (quoted); a payment shows
+            // amount denom → to. A statement carries no destination — it is a group
+            // endorsement, not a transfer.
             LogosText {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
+                visible: text.length > 0
                 text: {
+                    var stmt = String((cardRoot.card && cardRoot.card.statement) || "");
+                    if (stmt.length > 0)
+                        return "“" + stmt + "”";
                     var amt = String((cardRoot.card && cardRoot.card.amount) || "");
                     var den = String((cardRoot.card && cardRoot.card.denom) || "");
                     var to = String((cardRoot.card && cardRoot.card.to) || "");
