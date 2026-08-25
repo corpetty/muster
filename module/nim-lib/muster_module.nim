@@ -71,11 +71,28 @@ var gDriver = SafeDriver(newDriver("safe", %*{
 # intent view is described by the driver, never assumed Safe. A real deployment
 # reads the policy + its config from the room; the threshold roster below is a demo
 # fixture, exactly as the Safe owners are.
+# Per-room policy: each conversation remembers its own driver. gCoordKind/gCoordDriver
+# are the ACTIVE room's (so the fold below is unchanged); gCoordKinds keeps each room's
+# choice, so switching rooms restores its policy rather than carrying the last one.
+var gCoordKinds = initTable[string, string]()   # topic -> policy kind
 var gCoordKind = "safe"
 var gCoordDriver: Driver = gDriver
 
 proc seedOf(n: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = n)
 proc thrRosterKey(n: byte): Ed25519Pub = encFromSeed(seedOf(n)).identity().ed
+
+proc driverForKind(kind: string): Driver =
+  ## Build the driver for a policy kind (the demo threshold roster is a fixture, as
+  ## the Safe owners are). Unknown kinds fall back to the Safe.
+  case kind
+  of "threshold":
+    newThresholdDriver(@[thrRosterKey(1), thrRosterKey(2), thrRosterKey(3)], 2)
+  else: gDriver
+
+proc activatePolicy(topic: string) =
+  ## Make the active driver the one this room chose (default safe).
+  gCoordKind = gCoordKinds.getOrDefault(topic, "safe")
+  gCoordDriver = driverForKind(gCoordKind)
 var gIntents = initTable[string, Intent]()
 var gHashes = initTable[string, array[32, byte]]()
 var gEffects = initTable[string, Effect]()             ## the effect per intent (for execTransaction)
@@ -273,6 +290,7 @@ proc musterCoordinateJoin(topic: string): string =
     gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(ks), topic)
     gSessions[topic] = gSession
   gTopic = topic
+  activatePolicy(topic)                 # restore this room's chosen policy (per-room)
   $(%*{"address": toHex(ks.address()), "topic": topic})
 
 proc policyJson(): JsonNode =
@@ -286,11 +304,10 @@ proc musterCoordinateSetPolicy(kind: string): string =
   ## like Safe (no secp, no chain), yet the same propose/contribute/fold path. Set
   ## before proposing; a real deployment fixes this at room creation.
   case kind
-  of "safe":
-    gCoordKind = "safe"; gCoordDriver = gDriver
-  of "threshold":
-    gCoordKind = "threshold"
-    gCoordDriver = newThresholdDriver(@[thrRosterKey(1), thrRosterKey(2), thrRosterKey(3)], 2)
+  of "safe", "threshold":
+    gCoordKind = kind
+    gCoordDriver = driverForKind(kind)
+    if gTopic.len > 0: gCoordKinds[gTopic] = kind   # remember it for THIS room
   else:
     return $(%*{"error": "unknown policy: " & kind})
   $policyJson()

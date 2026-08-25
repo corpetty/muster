@@ -60,6 +60,15 @@ Item {
     readonly property string policyKind:
         (room.policy && room.policy.policy) ? String(room.policy.policy) : "safe"
 
+    // This account's own address (from settings/identity) — what an address-share
+    // answers a priming request with, so it's YOUR address, not a demo one.
+    readonly property string myAddress: {
+        try {
+            var s = JSON.parse(backend ? backend.settingsJson : "{}");
+            return (s && s.identity && s.identity.address) ? String(s.identity.address) : "";
+        } catch (e) { return ""; }
+    }
+
     // Project one folded intent view onto the card vocabulary. The module's
     // lifecycle names (draft/proposed/collecting/executable/submitted/final) map to
     // the card's shorter rail (proposed/collecting/ready/paid). Nothing here is
@@ -311,7 +320,15 @@ Item {
                             visible: msg.parsedCard !== null && !msg.isIntentRef
                             Layout.fillWidth: true
                             card: msg.parsedCard || ({})
-                            onShareAddress: { if (room.backend) room.backend.postMessage(JSON.stringify({ kind: "address-share", asset: "TKN", address: "0x2222222222222222222222222222222222222222", form: 1 })); }
+                            onShareAddress: {
+                                if (room.backend)
+                                    room.backend.postMessage(JSON.stringify({
+                                        kind: "address-share", asset: "ETH",
+                                        address: room.myAddress.length > 0 ? room.myAddress
+                                                 : "0x0000000000000000000000000000000000000000",
+                                        form: 1
+                                    }));
+                            }
                             onPay: { if (room.backend) room.backend.postMessage(JSON.stringify({ kind: "send-receipt", amount: "100", denom: "TKN", rail: "safe", tx: "0xdeadbeef", discloses: { amount: "100", payer: "not disclosed", payee: "0x1111" } })); }
                         }
 
