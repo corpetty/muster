@@ -83,9 +83,11 @@ var gSigs = initTable[string, seq[Signature65]]()      ## collected owner sigs, 
 var gCounter = 0
 var gNow: uint64 = 0
 
-# The user-configurable RPC endpoint (untrusted infra, invariant 8). The anvil
-# fixture default; a real deployment points this at the user's own node.
-const RPC_URL = "http://127.0.0.1:8545"
+# User-settable now (invariant 8: untrusted, user-configurable infrastructure — and
+# that is empty if the user can't configure it). Defaults to the anvil fixture; a
+# settings surface (settings / set_setting) points it at the user's own node/nodes.
+var gRpcUrl = "http://127.0.0.1:8545"
+var gDeliveryConfig = "{}"          ## delivery createNode config (store/bootstrap nodes)
 
 proc toSig65(b: seq[byte]): Signature65 =
   for i in 0 ..< min(65, b.len): result[i] = b[i]
@@ -225,7 +227,7 @@ proc musterSubmit(intentId: string): string =
   # is held here; the Safe verifies the owners on-chain regardless of the sender.
   let tx = toSafeTx(gEffects[intentId])
   let calldata = assembleExecTransaction(tx.to, tx.value, @[], sigbytes)
-  let txHash = submitExecTransaction(RPC_URL, toAddr(OWNER0), gDriver.safe, calldata)
+  let txHash = submitExecTransaction(gRpcUrl, toAddr(OWNER0), gDriver.safe, calldata)
   inc gNow
   it.apply(gDriver, IntentEvent(kind: ieSubmit, now: gNow))    # executable -> submitted
   gIntents[intentId] = it
@@ -233,7 +235,7 @@ proc musterSubmit(intentId: string): string =
   # Observe finality from the chain.
   var status = -1
   for _ in 0 .. 50:
-    status = watchReceiptStatus(RPC_URL, txHash)
+    status = watchReceiptStatus(gRpcUrl, txHash)
     if status >= 0: break
     sleep(200)
   if status == 1:
@@ -268,7 +270,7 @@ proc musterCoordinateJoin(topic: string): string =
   if topic in gSessions:
     gSession = gSessions[topic]           # re-activate an already-joined room
   else:
-    gSession = newCoordinationSession(newDeliveryTransport(), newEpochCrypto(ks), topic)
+    gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(ks), topic)
     gSessions[topic] = gSession
   gTopic = topic
   $(%*{"address": toHex(ks.address()), "topic": topic})
@@ -461,7 +463,7 @@ proc moduleWallet(): Wallet =
   if gWallet == nil:
     let ks = moduleKeystore()
     gWallet = newWallet(ks)
-    gEvm = newEvmAdapter("evm:31337", RPC_URL)
+    gEvm = newEvmAdapter("evm:31337", gRpcUrl)
     gWallet.register(gEvm)
     gMock = newMockChain()
     gWallet.register(gMock)
@@ -563,3 +565,38 @@ proc musterCoordinateAdmit(identityHex: string): string =
   if not verified: return "unverified"      # no binding proving Safe ownership (F-9)
   gSession.admit(m)
   "ok"
+
+# ── settings: user-configurable infrastructure (invariant 8) ────────────────────
+# The endpoints and infra Muster points at are the user's to choose — "untrusted,
+# user-configurable infrastructure" is empty if they can't configure it. In-memory
+# today; a real deployment persists these beside the keystore, and inside basecamp
+# reads them from the platform's own settings (the shell we don't rebuild).
+
+proc musterSettings(): string =
+  ## The current settings + the module identity, for a settings surface: the RPC
+  ## endpoint the wallet/Safe path reads against, the delivery createNode config the
+  ## next room join boots with, the environment, and who this module is.
+  let ks = moduleKeystore()
+  let enc = ks.encIdentity()
+  $(%*{
+    "rpc": gRpcUrl,
+    "delivery": gDeliveryConfig,
+    "environment": "anvil-31337",
+    "identity": {"address": toHex(ks.address()),
+                 "ed25519": toHex(enc.ed), "x25519": toHex(enc.x)}
+  })
+
+proc musterSetSetting(key, value: string): string =
+  ## Set one setting. "rpc" repoints the wallet/Safe RPC (the wallet re-inits on next
+  ## use so the new endpoint takes effect); "delivery" changes the createNode config
+  ## the NEXT coordinate_join boots with (existing sessions keep their node). Returns
+  ## the updated settings, or an error for an unknown key.
+  case key
+  of "rpc":
+    gRpcUrl = value
+    gWallet = nil            # re-init the EVM adapter against the new endpoint
+  of "delivery":
+    gDeliveryConfig = value
+  else:
+    return $(%*{"error": "unknown setting: " & key})
+  musterSettings()

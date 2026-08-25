@@ -8,6 +8,10 @@ module muster_module {
 
   method describe() -> tstr description "Return the coordination account this module is configured against, as JSON: {chainId, safe, threshold, owners, environment}. Every intent's safeTxHash commits to chainId+safe, so a UI shows the domain it was told rather than one it assumed."
 
+  method settings() -> tstr description "The user-configurable infrastructure this module points at, as JSON {rpc, delivery, environment, identity}: the RPC endpoint the wallet/Safe path reads against, the delivery createNode config (store/bootstrap nodes) the next room join boots with, the environment, and the module identity. Untrusted, user-chosen infrastructure (invariant 8) — a settings surface shows and edits these."
+
+  method set_setting(key: tstr, value: tstr) -> tstr description "Set one setting by key: \"rpc\" repoints the wallet/Safe RPC endpoint (the wallet re-inits on next use), \"delivery\" changes the createNode config the NEXT coordinate_join boots with (existing sessions keep their node). Returns the updated settings, or {error} for an unknown key. In-memory today; a real deployment persists these beside the keystore (and inside basecamp reads them from platform settings)."
+
   method propose(effect_json: tstr) -> tstr description "Propose an intent from an effect (a JSON object, e.g. {\"to\":\"0x..\",\"value\":1000,\"nonce\":0}). Returns the new intent's id."
 
   method txhash(intent_id: tstr) -> tstr description "Return the hex materialization the driver canonicalized for this intent — the exact bytes owners sign (for Safe, the EIP-712 safeTxHash)."
