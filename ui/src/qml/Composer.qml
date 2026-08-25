@@ -21,11 +21,15 @@ import Logos.Controls
 Item {
     id: composer
 
-    // Fired when the user confirms. The host opens the room from these.
-    signal createRoom(string verb, string peer, string topic)
+    // Fired when the user confirms. The host opens the room from these — and sets it
+    // to coordinate under `policy` (the driver the intent runs on).
+    signal createRoom(string verb, string peer, string topic, string policy)
 
     // "" until a verb tile is picked. Drives the progressive reveal.
     property string pickedVerb: ""
+    // The coordination policy (driver) the room will run under. Chosen at compose
+    // time — the account/policy is a dependency of the intent.
+    property string pickedPolicy: "safe"
 
     readonly property var verbs: [
         { id: "pay",     name: qsTr("Pay someone"),
@@ -69,7 +73,8 @@ Item {
     function confirm() {
         if (!composer.hasVerb)
             return;
-        composer.createRoom(composer.pickedVerb, composer.peer, composer.derivedTopic());
+        composer.createRoom(composer.pickedVerb, composer.peer,
+                            composer.derivedTopic(), composer.pickedPolicy);
     }
 
     Flickable {
@@ -183,57 +188,72 @@ Item {
                 }
             }
 
-            // ── 3. which account ──────────────────────────────────────────────
+            // ── 3. which policy (the account/driver the intent runs on) ───────
             ColumnLayout {
                 visible: composer.hasVerb
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
 
                 LogosText {
-                    text: qsTr("Which account?")
+                    text: qsTr("How does the room approve?")
                     color: Theme.palette.text
                     font.family: Theme.typography.publicSans
                     font.pixelSize: Theme.typography.primaryText
                     font.weight: Theme.typography.weightBold
                 }
 
-                Rectangle {
-                    Layout.fillWidth: true
-                    implicitHeight: acctRow.implicitHeight + 2 * Theme.spacing.medium
-                    radius: Theme.spacing.radiusMedium
-                    color: Theme.palette.surfaceRaised
-                    border.width: 1
-                    border.color: Theme.palette.borderDefault
+                Repeater {
+                    model: [
+                        { id: "safe",      name: qsTr("Safe · 2 of 3"),
+                          note: qsTr("EIP-712 multisig — owners sign on-chain-bound transactions.") },
+                        { id: "threshold", name: qsTr("Threshold · 2 of 3"),
+                          note: qsTr("k-of-n endorsement — the group signs off, no chain required.") }
+                    ]
+                    delegate: Rectangle {
+                        required property var modelData
+                        readonly property bool picked: composer.pickedPolicy === modelData.id
 
-                    RowLayout {
-                        id: acctRow
-                        anchors.fill: parent
-                        anchors.margins: Theme.spacing.medium
-                        spacing: Theme.spacing.small
+                        Layout.fillWidth: true
+                        implicitHeight: polCol.implicitHeight + 2 * Theme.spacing.medium
+                        radius: Theme.spacing.radiusMedium
+                        color: picked ? Theme.palette.surfaceRaised : Theme.palette.surface
+                        border.width: 1
+                        border.color: picked ? Theme.palette.borderDefault : Theme.palette.borderSubtle
 
-                        LogosText {
-                            Layout.fillWidth: true
-                            text: qsTr("Safe · 2 of 3 · anvil")
-                            color: Theme.palette.text
-                            font.family: Theme.typography.mono
-                            font.pixelSize: Theme.typography.primaryText
-                            font.weight: Theme.typography.weightMedium
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: composer.pickedPolicy = modelData.id
                         }
 
-                        LogosText {
-                            text: qsTr("selected")
-                            color: Theme.palette.success
-                            font.family: Theme.typography.mono
-                            font.pixelSize: Theme.typography.badgeText
-                            font.weight: Theme.typography.weightMedium
+                        ColumnLayout {
+                            id: polCol
+                            anchors.fill: parent
+                            anchors.margins: Theme.spacing.medium
+                            spacing: Theme.spacing.tiny
+
+                            LogosText {
+                                text: modelData.name
+                                color: Theme.palette.text
+                                font.family: Theme.typography.mono
+                                font.pixelSize: Theme.typography.primaryText
+                                font.weight: Theme.typography.weightMedium
+                            }
+                            LogosText {
+                                Layout.fillWidth: true
+                                text: modelData.note
+                                color: Theme.palette.textTertiary
+                                font.pixelSize: Theme.typography.secondaryText
+                                wrapMode: Text.WordWrap
+                            }
                         }
                     }
                 }
 
                 LogosText {
                     Layout.fillWidth: true
-                    text: qsTr("The account sets the approval policy — its owners and threshold live in "
-                             + "the Account view. The room looks the same either way.")
+                    text: qsTr("The policy is the driver the room runs on — you can change it in the room. "
+                             + "The conversation looks the same either way.")
                     color: Theme.palette.textTertiary
                     font.pixelSize: Theme.typography.secondaryText
                     wrapMode: Text.WordWrap

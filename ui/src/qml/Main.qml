@@ -52,11 +52,15 @@ Item {
     // exchange, so the room opens with an address-request naming the intent; whoever
     // holds the needed address answers it with address-share (the card's button).
     // "talk" primes nothing. Re-opening an existing room passes no verb → no priming.
-    function enterRoom(topic, verb) {
+    function enterRoom(topic, verb, policy) {
         if (!root.backend || !topic)
             return;
         root.backend.joinRoom(topic);
         root.view = "room";
+        // Set the room to coordinate under the intent's chosen policy (its driver).
+        var p = String(policy || "");
+        if (p.length > 0)
+            root.backend.setPolicy(p);
         var v = String(verb || "");
         var purpose = v === "pay" ? qsTr("Pay someone")
                     : v === "request" ? qsTr("Ask to be paid")
@@ -252,7 +256,7 @@ Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "compose"
-        onCreateRoom: root.enterRoom(topic, verb)
+        onCreateRoom: root.enterRoom(topic, verb, policy)
     }
 
     // The conversation surface. Reads its state from the module through the backend.
