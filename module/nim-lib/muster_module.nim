@@ -71,10 +71,10 @@ var gDriver = SafeDriver(newDriver("safe", %*{
 # intent view is described by the driver, never assumed Safe. A real deployment
 # reads the policy + its config from the room; the threshold roster below is a demo
 # fixture, exactly as the Safe owners are.
-# Per-room policy: each conversation remembers its own driver. gCoordKind/gCoordDriver
-# are the ACTIVE room's (so the fold below is unchanged); gCoordKinds keeps each room's
-# choice, so switching rooms restores its policy rather than carrying the last one.
-var gCoordKinds = initTable[string, string]()   # topic -> policy kind
+# The room's policy (its driver) is declared in the LOG (policyEvent / activePolicyKind
+# in coordination/intents), so members converge on which driver governs the room — a
+# policy change is a later event, not a local toggle. gCoordKind/gCoordDriver cache the
+# active room's choice for policyJson display; the fold derives the driver from the log.
 var gCoordKind = "safe"
 var gCoordDriver: Driver = gDriver
 
@@ -88,11 +88,6 @@ proc driverForKind(kind: string): Driver =
   of "threshold":
     newThresholdDriver(@[thrRosterKey(1), thrRosterKey(2), thrRosterKey(3)], 2)
   else: gDriver
-
-proc activatePolicy(topic: string) =
-  ## Make the active driver the one this room chose (default safe).
-  gCoordKind = gCoordKinds.getOrDefault(topic, "safe")
-  gCoordDriver = driverForKind(gCoordKind)
 var gIntents = initTable[string, Intent]()
 var gHashes = initTable[string, array[32, byte]]()
 var gEffects = initTable[string, Effect]()             ## the effect per intent (for execTransaction)
@@ -316,7 +311,8 @@ proc musterCoordinateJoin(topic: string): string =
     gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(ks), topic)
     gSessions[topic] = gSession
   gTopic = topic
-  activatePolicy(topic)                 # restore this room's chosen policy (per-room)
+  gCoordKind = activePolicyKind(gSession.log.allEvents())   # the room's log-declared policy
+  gCoordDriver = driverForKind(gCoordKind)
   $(%*{"address": toHex(ks.address()), "topic": topic})
 
 proc policyJson(): JsonNode =
@@ -333,7 +329,9 @@ proc musterCoordinateSetPolicy(kind: string): string =
   of "safe", "threshold":
     gCoordKind = kind
     gCoordDriver = driverForKind(kind)
-    if gTopic.len > 0: gCoordKinds[gTopic] = kind   # remember it for THIS room
+    if gSession != nil:
+      inc gMsgSeq
+      gSession.publish(policyEvent(kind, int64(epochTime())))   # declare it in the log
   else:
     return $(%*{"error": "unknown policy: " & kind})
   $policyJson()
@@ -362,14 +360,16 @@ proc musterCoordinatePropose(effectJson: string): string =
 proc musterCoordinateContribute(intentId: string, signatureHex: string): string =
   if gSession == nil: return "not-joined"
   gSession.poll()
-  let effectJson = effectJsonOf(gSession.log.allEvents(), intentId)
+  let events = gSession.log.allEvents()
+  let drv = driverForKind(activePolicyKind(events))   # the room's log-declared policy
+  let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return "unknown-intent"
   # The room's policy verifies the contribution: a Safe owner's secp signature, or a
   # threshold roster member's Ed25519 endorsement — "" iff it isn't a valid one.
-  let who = contributorOf(gCoordDriver, effectJson, signatureHex)
+  let who = contributorOf(drv, effectJson, signatureHex)
   if who.len == 0: return "rejected"
   gSession.publish(contributeEvent(intentId, who, signatureHex))
-  intentState(gSession.log.allEvents(), gCoordDriver, intentId)
+  intentState(gSession.log.allEvents(), drv, intentId)
 
 proc musterCoordinateIntents(): string =
   ## The room's proposals, folded from the shared log and projected to what a card
@@ -380,9 +380,10 @@ proc musterCoordinateIntents(): string =
   if gSession == nil: return "[]"
   gSession.poll()
   let events = gSession.log.allEvents()
-  let desc = gCoordDriver.describe()             # threshold + domain are driver-described
+  let drv = driverForKind(activePolicyKind(events))   # the room's log-declared policy
+  let desc = drv.describe()                            # threshold + domain are driver-described
   var arr = newJArray()
-  for v in reduceIntentViews(events, gCoordDriver):
+  for v in reduceIntentViews(events, drv):
     # txhash is the driver-re-derived materialization — the exact bytes a member
     # signs (Safe's safeTxHash, or the threshold driver's dCBOR materialization).
     # threshold + domain come from describe(), never hardcoded — so the card renders
@@ -391,10 +392,10 @@ proc musterCoordinateIntents(): string =
                "threshold": desc.threshold, "approvals": v.approvals,
                "policy": gCoordKind, "domain": desc.serializationDomain,
                "txhash": v.txhash}
-    if gCoordDriver of SafeDriver:
+    if drv of SafeDriver:
       # a Safe signature is bound to its EIP-712 domain (chainId + safe); surface it
       # so the verify view names exactly what the bytes are worthless outside of (F-5).
-      let sd = SafeDriver(gCoordDriver)
+      let sd = SafeDriver(drv)
       o["rail"] = %"safe"
       o["chainId"] = %sd.chainId.int
       o["safe"] = %toHex(sd.safe)
@@ -408,7 +409,7 @@ proc musterCoordinateIntents(): string =
     # this intent in front of the reader, by class + position + (named) account, so
     # the UI can answer "how do I know this, and why trust it".
     var prov = newJArray()
-    for item in intentProvenance(events, gCoordDriver, v.id):
+    for item in intentProvenance(events, drv, v.id):
       prov.add %*{"class": $item.cls, "logPos": item.logPos,
                   "account": item.account, "accountable": item.accountable,
                   "what": item.what}

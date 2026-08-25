@@ -106,6 +106,32 @@ proc contributeEvent*(intentId, contributor, signatureHex: string,
 proc submitEvent*(intentId: string, parents: seq[EventId] = @[]): Event =
   Event(parents: parents, key: "intent/" & intentId & "/submit", value: "1")
 
+# ── the room's policy (its driver), declared in the log so members converge ────
+# The policy is not a local toggle — it is a log event every member folds, so a
+# room agrees on which driver governs it (invariant 4), and a policy CHANGE is just
+# a later event. Keyed "policy" (last-by-ts wins, like a message), so re-proposing
+# the same policy folds idempotently and the latest choice is the active one.
+
+proc policyEvent*(kind: string, ts: int64): Event =
+  Event(key: "policy", value: $(%*{"kind": kind, "ts": ts}))
+
+proc activePolicyKind*(events: seq[Event], default = "safe"): string =
+  ## The room's current policy kind, folded from the log: the "policy" event with the
+  ## greatest ts (id as a deterministic tiebreak), or `default` if none. A pure fold —
+  ## two members with the same events agree on the driver.
+  result = default
+  var bestTs = low(int64)
+  var bestId = ""
+  for e in events:
+    if e.key != "policy": continue
+    try:
+      let j = parseJson(e.value)
+      let ts = j["ts"].getBiggestInt()
+      let id = eventId(e)
+      if ts > bestTs or (ts == bestTs and id > bestId):
+        bestTs = ts; bestId = id; result = j["kind"].getStr()
+    except CatchableError: continue
+
 # ── messages: authored chat events folded from the SAME log ───────────────────
 # A message is an authored event on the coordination log — plain chat text or a
 # typed card as JSON, opaque to the core. It is NOT an intent: it never touches

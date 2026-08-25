@@ -116,4 +116,18 @@ block:
            "a statement effect folds to executable under the same threshold path"
 echo "4. a second effect type (statement) folds through the same path OK"
 
+# 5. The room's policy is DECLARED IN THE LOG and converges: a policy event's kind
+#    folds out, and a later event (greater ts) wins — so members agree on the driver
+#    and a policy change is just a later event (the honest core of driver-as-proposal).
+block:
+  var pevents: seq[Event]
+  doAssert activePolicyKind(pevents) == "safe", "no policy event -> default safe"
+  pevents.add policyEvent("threshold", 100)
+  doAssert activePolicyKind(pevents) == "threshold", "the policy event's kind folds out"
+  pevents.add policyEvent("safe", 200)
+  doAssert activePolicyKind(pevents) == "safe", "a later policy (greater ts) wins"
+  pevents.add policyEvent("threshold", 150)   # earlier than the safe@200
+  doAssert activePolicyKind(pevents) == "safe", "an earlier policy does not override a later one"
+echo "5. log-declared policy folds, latest wins (convergent) OK"
+
 echo "threshold_fold_test: all OK"
