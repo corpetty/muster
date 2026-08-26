@@ -202,6 +202,7 @@ On the right side of the Room:
       latest-intent headline (e.g. "Collecting approvals" / "Ready to submit").
 - [x] **Start something** → create a **second** room, this time picking
       **Threshold** at "How does the room approve?" → it opens under Threshold.
+```
   - ✓ **Fixed — confirm:** it now opens a **new, empty** room, not the existing one.
     (Was: "it opens the already existing room." Cause: two rooms of the same shape —
     e.g. two solo "pay" rooms — derived the *identical* topic, so `coordinate_join`
@@ -213,6 +214,7 @@ On the right side of the Room:
       **policy its intent was proposed under** (Safe cards read `safe`, threshold
       cards read `threshold`), regardless of which room you're in or the current
       "Next proposal" default.
+```
 
 ---
 
@@ -225,7 +227,7 @@ settle on-chain).
       **SAFE ACCOUNT** card (`Safe 0x5FbDB2…`, `2 of 3 owners · chain 31337 · anvil`),
       and an **"Owners — tap to see all 3"** line that expands to the three owner
       addresses.
-  - ✓ **Fixed — confirm:** the card now shows the real Safe, not "account not loaded".
+- ✓ **Fixed — confirm:** the card now shows the real Safe, not "account not loaded".
     (Cause: `describe()` ran at startup before the lp/delivery library was initialized,
     and its `lp_protocol_version()` read blanked the whole account. `describe()` is now
     resilient to that read, and the Account nav re-loads on entry.)
