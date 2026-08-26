@@ -77,7 +77,7 @@ make run        # opens the standalone app window
       Pick one; the selected tile is raised. (You can leave it on Safe; you can also
       change it per-proposal in the room.)
 - [x] Click **Open the room** → the **Room** surface opens with a topic like
-      `muster.pay.…` in the header, its first proposal defaulting to the policy you picked.
+`muster.pay.…` in the header, its first proposal defaulting to the policy you picked.
 - [x] **Priming (a money verb):** the room opens with an **address-request** card in
       the thread — headed *"For: Pay someone"* — because the intention needs somewhere
       to send funds. (A *Just talk* room primes nothing.)
@@ -98,12 +98,12 @@ make run        # opens the standalone app window
 ## Part 3 — the room: chat, propose, and the dive-ins (Safe policy)
 
 **Chat**
-- [x] Type in **"Say something"** and press **Send** → your line appears in the
+- [ ] Type in **"Say something"** and press **Send** → your line appears in the
       thread with a short author id + a timestamp.
   - ✓ **Fixed — confirm:** pressing **Enter** in "Say something" also sends the message.
 
 **Answer the priming request**
-- [x] On the address-request card, click **Share an address** → an **address-share**
+- [ ] On the address-request card, click **Share an address** → an **address-share**
       card appears naming a **public account** and an address. ✓ **That address is
       YOUR own** (the account from Settings § identity), not a placeholder.
 
@@ -114,7 +114,7 @@ make run        # opens the standalone app window
       sets the driver for **this proposal** (each card keeps its own — see Part 4).
 - [x] Kind = **Payment**, policy = **Safe**. Recipient:
       `0x1111111111111111111111111111111111111111`, amount `1000`. Click **Propose**.
-  - Note: right-click paste isn't available (design-system limitation); **Ctrl+V** works.
+- Note: right-click paste isn't available (design-system limitation); **Ctrl+V** works.
 - [x] ✓ **Expect:** a proposal card appears **inline in the thread** (not a side
       panel), headed **"Pay… · 2 of 3"**, showing `1000 → 0x1111…1111`, a status rail
       (proposed → collecting → ready → paid), and approval slots (**0 of 2**).
@@ -122,7 +122,7 @@ make run        # opens the standalone app window
     not "2 of 2".
 
 **Dive in #1 — "what am I signing?" (the verify box)**
-- [x] Click the green **"✓ your client re-derived this — the exact bytes you'd sign"**
+- [ ] Click the green **"✓ your client re-derived this — the exact bytes you'd sign"**
       line → it expands to:
       - `shown` — `1000  →  0x1111…1111`
       - `re-derived` — a 32-byte `0x…` hash (the safeTxHash)
@@ -130,7 +130,7 @@ make run        # opens the standalone app window
   - ✓ **Fixed — confirm:** the verify-box text is now larger/legible.
 
 **Dive in #2 — "how do I know this?" (provenance)**
-- [x] Click **"How do I know this? — N in the lineage"** → it expands to at least the
+- [ ] Click **"How do I know this? — N in the lineage"** → it expands to at least the
       **propose** entry: `[peer-message] the proposed effect` · `sealed to the room · log #…`.
 
 **Approve → executable**
