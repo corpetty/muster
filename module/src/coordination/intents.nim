@@ -69,13 +69,17 @@ proc bytesHex(b: openArray[byte]): string =
 
 # ── surface helpers (the hosted coordination methods are thin glue over these) ──
 
-proc intentIdFor*(effectJson: string): string =
+proc intentIdFor*(effectJson: string, policyKind = ""): string =
   ## A content-addressed intent id, so independent hosts derive the SAME id for the
-  ## same effect without a round-trip to agree on one. First 8 bytes of
-  ## keccak256(effect) — enough to key the intents in one conversation, and it makes
-  ## re-proposing the same effect idempotent (same id, folds once).
+  ## same (effect, policy) without a round-trip. The POLICY is part of the identity
+  ## because an intent is a policy boundary: the same effect under two policies is two
+  ## distinct decisions, so it must be two intents (no collision). First 8 bytes of
+  ## keccak256(effect ++ "|" ++ policy). Re-proposing the same effect+policy folds once.
   var b: seq[byte]
   for c in effectJson: b.add byte(c)
+  if policyKind.len > 0:
+    b.add byte('|')
+    for c in policyKind: b.add byte(c)
   bytesHex(keccak256(b)[0 ..< 8])
 
 proc effectJsonOf*(events: seq[Event], intentId: string): string =
@@ -106,31 +110,21 @@ proc contributeEvent*(intentId, contributor, signatureHex: string,
 proc submitEvent*(intentId: string, parents: seq[EventId] = @[]): Event =
   Event(parents: parents, key: "intent/" & intentId & "/submit", value: "1")
 
-# ── the room's policy (its driver), declared in the log so members converge ────
-# The policy is not a local toggle — it is a log event every member folds, so a
-# room agrees on which driver governs it (invariant 4), and a policy CHANGE is just
-# a later event. Keyed "policy" (last-by-ts wins, like a message), so re-proposing
-# the same policy folds idempotently and the latest choice is the active one.
+# ── per-intent policy: the intent is the policy boundary, not the room ─────────
+# The room is a membership/privacy boundary — who can read. WHICH driver governs a
+# decision is the INTENT's, recorded when it is proposed, so a group (one room) can
+# run many things at once, each under its own driver, and changing what you compose
+# next never re-folds a decision already made. Keyed per intent ("intent/<id>/policy").
 
-proc policyEvent*(kind: string, ts: int64): Event =
-  Event(key: "policy", value: $(%*{"kind": kind, "ts": ts}))
+proc policyDeclEvent*(intentId, kind: string): Event =
+  Event(key: "intent/" & intentId & "/policy", value: kind)
 
-proc activePolicyKind*(events: seq[Event], default = "safe"): string =
-  ## The room's current policy kind, folded from the log: the "policy" event with the
-  ## greatest ts (id as a deterministic tiebreak), or `default` if none. A pure fold —
-  ## two members with the same events agree on the driver.
-  result = default
-  var bestTs = low(int64)
-  var bestId = ""
+proc intentPolicyOf*(events: seq[Event], intentId: string, default = "safe"): string =
+  ## The policy an intent was proposed under, recovered from the log — the driver that
+  ## governs THIS decision. `default` if none recorded (a legacy propose).
   for e in events:
-    if e.key != "policy": continue
-    try:
-      let j = parseJson(e.value)
-      let ts = j["ts"].getBiggestInt()
-      let id = eventId(e)
-      if ts > bestTs or (ts == bestTs and id > bestId):
-        bestTs = ts; bestId = id; result = j["kind"].getStr()
-    except CatchableError: continue
+    if e.key == "intent/" & intentId & "/policy": return e.value
+  default
 
 # ── messages: authored chat events folded from the SAME log ───────────────────
 # A message is an authored event on the coordination log — plain chat text or a
@@ -183,12 +177,16 @@ proc reduceMessages*(events: seq[Event]): seq[Message] =
 
 # ── the fold: intent lifecycle = reduce(log) ──────────────────────────────────
 
-proc reduceIntents*(events: seq[Event], driver: Driver): Table[string, Intent] =
+type DriverFor* = proc(kind: string): Driver
+  ## Resolve a policy kind to its driver. Each intent folds under the driver of the
+  ## policy it was proposed with — the intent is the policy boundary.
+
+proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Intent] =
   ## Deterministic: proposes, then contributions, then submits, each in canonical
-  ## order — so the result is a pure function of the event SET, independent of the
-  ## order events arrived or were duplicated (invariant 4, R-2/R-3). Ordering is by
-  ## pass rather than by causal parents, so it holds even when a contribution
-  ## arrives before its propose.
+  ## order — a pure function of the event SET (invariant 4, R-2/R-3). Each intent uses
+  ## ITS OWN driver, resolved from the policy it was proposed under (intentPolicyOf),
+  ## so one room can carry many intents under different drivers at once and changing
+  ## the compose default never re-folds an existing decision.
   result = initTable[string, Intent]()
   var seenSig = initHashSet[string]()   # "<id>/<contributor>" — one signature per owner
   var now: uint64 = 0
@@ -200,14 +198,17 @@ proc reduceIntents*(events: seq[Event], driver: Driver): Table[string, Intent] =
       (p[1], p[2], (if p.len >= 4: p[3] else: ""))
     else: ("", "", "")
 
+  proc driverOf(id: string): Driver = driverFor(intentPolicyOf(events, id))
+
   for e in ordered:                                    # pass 1 — proposes
     let (id, op, _) = opOf(e)
     if op != "propose" or id.len == 0 or id in result: continue
     inc now
     let effect = effectFromJson(e.value)
+    let driver = driverOf(id)
     let ctx = SigningContext(environment: "", account: "coordinated", slot: "0",
                              expiry: high(uint64))
-    var it = newIntent(driver, effect, ctx)   # canonicalize dispatches to the driver
+    var it = newIntent(driver, effect, ctx)   # canonicalize dispatches to THIS intent's driver
     it.apply(driver, IntentEvent(kind: iePropose, now: now))
     result[id] = it
 
@@ -218,6 +219,7 @@ proc reduceIntents*(events: seq[Event], driver: Driver): Table[string, Intent] =
     if dedup in seenSig: continue
     seenSig.incl dedup
     inc now
+    let driver = driverOf(id)
     driver.expectMaterialization(result[id].materialization)   # verify against THIS intent (full bytes)
     var it = result[id]
     it.apply(driver, IntentEvent(kind: ieContribute, now: now,
@@ -228,14 +230,15 @@ proc reduceIntents*(events: seq[Event], driver: Driver): Table[string, Intent] =
     let (id, op, _) = opOf(e)
     if op != "submit" or id notin result: continue
     inc now
+    let driver = driverOf(id)
     var it = result[id]
     it.apply(driver, IntentEvent(kind: ieSubmit, now: now))
     result[id] = it
 
-proc intentState*(events: seq[Event], driver: Driver, intentId: string): string =
+proc intentState*(events: seq[Event], driverFor: DriverFor, intentId: string): string =
   ## The lifecycle state of one intent as a string (draft/proposed/collecting/
   ## executable/…), or "unknown".
-  let intents = reduceIntents(events, driver)
+  let intents = reduceIntents(events, driverFor)
   if intentId in intents: $intents[intentId].state else: "unknown"
 
 # ── render-ready projection (what a card needs, still a pure fold) ─────────────
@@ -253,13 +256,14 @@ type IntentView* = object
   approvals*: int         ## distinct owners folded in (dedup by contributor)
   txhash*: string         ## the driver-re-derived materialization (safeTxHash) as hex —
                           ## the exact bytes an owner signs (F-4/F-5), for the verify view
+  policy*: string         ## the policy (driver kind) THIS intent was proposed under
 
-proc reduceIntentViews*(events: seq[Event], driver: Driver): seq[IntentView] =
+proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentView] =
   ## Deterministic (sorted by id), so two instances render the identical list from
   ## the same event set (invariant 4). Approvals count DISTINCT contributors — the
   ## same dedup the fold applies — so a re-submitted owner signature never inflates
-  ## the "M of N" a card shows.
-  let intents = reduceIntents(events, driver)
+  ## the "M of N" a card shows. Each view carries the intent's own policy.
+  let intents = reduceIntents(events, driverFor)
   var approvals = initTable[string, HashSet[string]]()
   for e in events:
     let p = e.key.split('/')
@@ -269,7 +273,8 @@ proc reduceIntentViews*(events: seq[Event], driver: Driver): seq[IntentView] =
     result.add IntentView(id: id, state: $it.state,
                           effectJson: effectJsonOf(events, id),
                           approvals: approvals.getOrDefault(id).len,
-                          txhash: bytesHex(it.materialization.bytes))
+                          txhash: bytesHex(it.materialization.bytes),
+                          policy: intentPolicyOf(events, id))
   result.sort(proc (a, b: IntentView): int = cmp(a.id, b.id))
 
 # ── provenance: how this decision's data got in front of you (invariant 10) ────
@@ -283,7 +288,7 @@ type ProvItem* = object
   accountable*: bool    ## can this input's origin be accounted for? (always true in a live fold)
   what*: string         ## a plain-language label for the reader
 
-proc intentProvenance*(events: seq[Event], driver: Driver, intentId: string): seq[ProvItem] =
+proc intentProvenance*(events: seq[Event], driverFor: DriverFor, intentId: string): seq[ProvItem] =
   ## The lineage of a decision, folded from the log: every entry that reached this
   ## intent, in canonical order. The propose carried the effect — a peer message,
   ## sealed to the room's epoch, so only a member could have placed it; each
@@ -294,7 +299,7 @@ proc intentProvenance*(events: seq[Event], driver: Driver, intentId: string): se
   ## Everything here is accountable by construction — an input whose origin could not
   ## be accounted for would have been refused before signing (invariant 10), so it
   ## would never appear. A duplicate owner signature folds once, exactly as it counts.
-  let named = driver.describe().membership == mmNamed
+  let named = driverFor(intentPolicyOf(events, intentId)).describe().membership == mmNamed
   let ordered = canonicalOrder(events)
   var seenSig = initHashSet[string]()
   for i in 0 ..< ordered.len:

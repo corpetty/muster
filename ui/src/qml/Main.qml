@@ -189,10 +189,17 @@ Item {
             color: Theme.palette.borderSubtle
         }
 
-        RowLayout {
+        // A Flow (not a right-anchored RowLayout): the buttons wrap to a second row
+        // when the window is too narrow to hold them, instead of the leftmost ones
+        // running off the left edge. navBar's height tracks the wrapped height, so the
+        // surfaces below always start under the real bottom of the nav.
+        Flow {
             id: navRow
+            anchors.top: parent.top
+            anchors.left: parent.left
             anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
+            anchors.topMargin: Theme.spacing.small
+            anchors.leftMargin: Theme.spacing.medium
             anchors.rightMargin: Theme.spacing.medium
             spacing: Theme.spacing.small
 
