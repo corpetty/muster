@@ -3,7 +3,7 @@
 What this validates: everything built for the room/coordination experience that a
 headless test and `nix build` **cannot** confirm — the on-screen render, the
 delivery-backed room loop, the verify/provenance dive-ins, the policy/effect pickers,
-intent-driven **priming**, **multi-room** with per-room policy, and the **Settings**
+intent-driven **priming**, **multi-room**, **per-intent policy**, and the **Settings**
 shell. The module logic underneath each step is already covered by Nim tests; this
 checks that it reaches the screen and behaves.
 
@@ -13,13 +13,29 @@ differs and report it (a short "what to report" list is at the end).
 > Every signature you need is pre-computed in **Appendix A** — copy-paste, no
 > tooling. They are valid only for the exact effect values named in each step.
 
+> **The model in one line:** a room is a *security and privacy boundary*; an
+> individual intent is a *policy boundary*. One room can carry several intents at
+> once, each under its own driver (Safe, Threshold, …), and each proposal keeps the
+> policy it was made under. Parts 3–4 exercise exactly this.
+
 ---
 
 ## Prerequisites
 
-- The machine you've been building on (the local `logos-module-builder` checkout
-  + `cache.nix.logos.co` substituter that `make` passes for you).
-- The local `muster_module` flake lock is current (it is, as of this writing).
+> **Building is not yet bare-clone portable** (Makefile PORTABILITY CAVEAT, ADR-013/
+> ADR-014): the flakes pin the module and the builder by **local absolute paths**, and
+> the build needs `logos-module-builder` fork commits that are not upstream yet. So a
+> follower needs the same local logos setup, not just a checkout of this repo.
+
+- **Nix** (flakes enabled), and access to the `cache.nix.logos.co` substituter that
+  `make` passes for you (you are not a trusted nix user, so `make` passes it explicitly).
+- A local **`logos-module-builder`** checkout on the `nim-cdylib-authoring` branch
+  (PR #202), at the path `module/flake.nix`'s `logos-module-builder.url` points to —
+  **edit that path to your checkout**. It carries the `nim.packages` hook + the RUNPATH
+  fix the module build needs.
+- `ui/flake.nix`'s `muster_module.url` is a `git+file://<abs-path>?dir=module` input —
+  **edit the path to your clone of this repo**, then `cd ui && nix flake update
+  muster_module` to re-lock it.
 - **Optional**, only for Part 7's on-chain submit: `foundry` (anvil + cast).
 
 ---
@@ -42,8 +58,8 @@ make run        # opens the standalone app window
 
 ## Part 1 — nav & surfaces (the render checks)
 
-- [x] The current surface's nav button is **filled** (accent); the others are neutral.
-- [x] Click **Room**, **Account**, **Walkthrough**, **Settings**, **Home** in turn.
+- [ ] The current surface's nav button is **filled** (accent); the others are neutral.
+- [ ] Click **Room**, **Account**, **Walkthrough**, **Settings**, **Home** in turn.
       Each surface renders **below** the nav bar (no overlap), and the filled button
       follows you (Home stays filled while composing, its sub-flow).
 
@@ -51,23 +67,34 @@ make run        # opens the standalone app window
 
 ## Part 2 — home & composing a room
 
-- [x] On a fresh launch Home reads **"Nothing waiting on you"** and
+- [ ] On a fresh launch Home reads **"Nothing waiting on you"** and
       **"Nothing on yet. Start something with someone."** with a **Start something**
       button.
-- [x] Click **Start something** → the **composer** opens: four verb tiles
+  - ✓ **Expect:** the top **nav buttons now wrap to a second row** when the
+    window is too narrow to hold them, instead of running off the left edge. (Was:
+    "buttons get cut off if you make the window smaller.")
+- [ ] Click **Start something** → the **composer** opens: four verb tiles
       (*Pay someone*, *Ask to be paid*, *Split a cost*, *Just talk*).
-- [x] Pick a verb → the **"Who's doing it with you?"** and **"How does the room
+- [ ] Pick a verb → the **"Who's doing it with you?"** and **"How does the room
       approve?"** steps reveal below it (progressive disclosure). The confirm button
       names the next step ("Open the room — just you" if no peer).
-  - clicked options should be accent color... it's too hard to differentiate with just grayscale options.
-- [x] **How does the room approve?** shows two tiles — **Safe · 2 of 3** and
-      **Threshold · 2 of 3** — the policy (driver) the room runs on. Pick one; the
-      selected tile is raised. (You can leave it on Safe.)
-- [x] Click **Open the room** → the **Room** surface opens with a topic like
-      `muster.pay.…` in the header, already under the policy you picked.
-- [x] **Priming (a money verb):** the room opens with an **address-request** card in
+  - ✓ **Expect:** the **selected** tile reads in **accent** (raised + accent
+    border), easy to tell from the unselected ones (was grayscale-only before).
+- [ ] **How does the room approve?** shows two tiles — **Safe · 2 of 3** and
+      **Threshold · 2 of 3** — the policy for the **first** thing you'll propose here.
+      Pick one; the selected tile is raised. (You can leave it on Safe; you can also
+      change it per-proposal in the room.)
+- [ ] Click **Open the room** → the **Room** surface opens with a topic like
+`muster.pay.…` in the header, its first proposal defaulting to the policy you picked.
+- [ ] **Priming (a money verb):** the room opens with an **address-request** card in
       the thread — headed *"For: Pay someone"* — because the intention needs somewhere
       to send funds. (A *Just talk* room primes nothing.)
+  - ✓ **Expect:** the priming card (and in fact **every** card — proposals,
+    address-share, receipts) now renders. (Was: "nothing happens after the room is
+    opened." Cause: a delegate declared `required property int index` for the
+    duplicate-card fix but not `modelData`, and in Qt 6 that stops `modelData` being
+    injected — so every message body failed to parse and rendered blank. Fixed by
+    declaring `modelData` required too.)
 
 > This is also the **delivery-node test.** Opening the room calls `coordinate_join`,
 > which boots the embedded delivery node. If the room opens and the roster shows at
@@ -79,74 +106,83 @@ make run        # opens the standalone app window
 ## Part 3 — the room: chat, propose, and the dive-ins (Safe policy)
 
 **Chat**
-- [x] Type in **"Say something"** and press **Send** → your line appears in the
+- [ ] Type in **"Say something"** and press **Send** → your line appears in the
       thread with a short author id + a timestamp.
-  - pressing "enter" doesn't send the message.
+  - ✓ **Expect:** pressing **Enter** in "Say something" also sends the message.
 
 **Answer the priming request**
-- [x] On the address-request card, click **Share an address** → an **address-share**
+- [ ] On the address-request card, click **Share an address** → an **address-share**
       card appears naming a **public account** and an address. ✓ **That address is
       YOUR own** (the account from Settings § identity), not a placeholder.
 
 **Propose a payment**
-- [x] Click the **`+`** in the message row → the compose panel opens with a **Kind**
-      toggle (*Payment* / *Statement*), a **Policy** toggle (*Safe* / *Threshold*),
-      and fields. ✓ The **Policy** toggle already reflects what you picked in the
-      composer; you can change it here (it applies to this room only).
-- [x] Kind = **Payment**, Policy = **Safe**. Recipient:
+- [ ] Click the **`+`** in the message row → the compose panel opens with a **Kind**
+      toggle (*Payment* / *Statement*), a **Next proposal** policy toggle (*Safe* /
+      *Threshold*), and fields. ✓ The policy toggle reflects your composer pick and
+      sets the driver for **this proposal** (each card keeps its own — see Part 4).
+- [ ] Kind = **Payment**, policy = **Safe**. Recipient:
       `0x1111111111111111111111111111111111111111`, amount `1000`. Click **Propose**.
-  - can't right click and paste
-- [x] ✓ **Expect:** a proposal card appears **inline in the thread** (not a side
+- Note: right-click paste isn't available (design-system limitation); **Ctrl+V** works.
+- [ ] ✓ **Expect:** a proposal card appears **inline in the thread** (not a side
       panel), headed **"Pay… · 2 of 3"**, showing `1000 → 0x1111…1111`, a status rail
       (proposed → collecting → ready → paid), and approval slots (**0 of 2**).
-  - it says: "Payment 2 of 2" not 2 of 3
+  - ✓ **Expect:** the header reads **"… · 2 of 3"** (M-needed of N-owners),
+    not "2 of 2".
 
 **Dive in #1 — "what am I signing?" (the verify box)**
-- [x] Click the green **"✓ your client re-derived this — the exact bytes you'd sign"**
+- [ ] Click the green **"✓ your client re-derived this — the exact bytes you'd sign"**
       line → it expands to:
       - `shown` — `1000  →  0x1111…1111`
       - `re-derived` — a 32-byte `0x…` hash (the safeTxHash)
       - `domain` — `anvil-31337 · chain 31337 · Safe 0x5FbDB2…aa3`
-  - the text is quite small.
+  - ✓ **Expect:** the verify-box text is now larger/legible.
 
 **Dive in #2 — "how do I know this?" (provenance)**
-- [x] Click **"How do I know this? — N in the lineage"** → it expands to at least the
+- [ ] Click **"How do I know this? — N in the lineage"** → it expands to at least the
       **propose** entry: `[peer-message] the proposed effect` · `sealed to the room · log #…`.
 
 **Approve → executable**
-- [x] Click **Approve** on the card → a signature field appears. Paste **Safe owner
-      sig 1** (Appendix A) → **Add**. Then **Approve** again → paste **Safe owner
-      sig 2** → **Add**.
-- [x] ✓ **Expect:** approval slots fill to **2 of 2**, the status rail lights to
+- [ ] Click **Approve** on the card → a signature field appears. Paste **Safe owner
+      sig 1** (Appendix A) → **Add** (or press **Enter**). Then **Approve** again →
+      paste **Safe owner sig 2** → **Add**.
+- [ ] ✓ **Expect:** approval slots fill to **2 of 2**, the status rail lights to
       **ready**, and the provenance box now also lists **two** entries
       `[driver-contribution] an owner signature · 0x…(an owner) · verified owner · log #…`.
-- [x] Paste the **same** sig again, or any random hex → ✓ it is **refused** (the
-      count does not move; a non-owner signature never counts).
-  - after ready, there isn't an option to paste anything else, only "Drop it" is an option. Clicking "Drop it" does nothing.
-  - there is no option to finish the flow and make it "paid"
+- [ ] Before the second sig, paste the **same** sig again, or any random hex → ✓ it is
+      **refused** (the count does not move; a non-owner signature never counts).
+  - ✓ **Expect:** once **ready**, the card shows the honest note
+    **"✓ Ready — settle it on-chain from the Account view"** (no dead *Pay it* /
+    *Drop it* button). Room-side submit is deferred; you settle on-chain in **Part 7**.
 
 ---
 
-## Part 4 — the policy is a driver, the action is pluggable
+## Part 4 — policy is a property of each **intent**, the action is pluggable
 
-**Threshold policy (a payment, no Safe / no chain).** Do this in a **fresh room** —
-re-proposing the *same* effect (`0x1111…1111`, `1000`) in the Safe room above is the
-*same content-addressed intent*, which tangles (see "known issues" at the end).
-**Start something** → pick **Threshold** at "How does the room approve?" → Open the
-room.
-- [ ] In the new room: **`+`** → Kind = **Payment**, recipient
-      `0x1111111111111111111111111111111111111111`, amount `1000` → **Propose**.
-- [ ] ✓ **Expect:** the card's rail now reads **threshold** (not `safe`); open the
-      verify box — `domain` is **`muster.threshold.v1`** (no chain, no Safe address),
-      and `re-derived` is a longer hash (the base serialization, not a 32-byte
-      safeTxHash).
-  - this changed the first (which didn't have the pay it option) and both signatures are done and the option to pay it is now available. So there are two cards now, both identical. The first Safe proposal and the new threashold one, but they are identical and the threshold one but I haven't gone through the steps of the threshold.
+**The model:** a room is a security/privacy boundary; an *intent* is a **policy**
+boundary. A group can do several things at once, each under its own driver — so the
+policy picker (relabelled **"Next proposal"**) sets the driver for the *next* thing
+you propose, and each card keeps the policy it was born with. Because the intent id
+now commits to its policy, the **same** effect under two policies is **two distinct
+intents** — so you can do this **in the same room**, and the earlier tangle (a
+re-proposed effect collapsing into one card) is gone.
+
+**Threshold policy (a payment, no Safe / no chain).** In the **Safe room from Part 3**
+(no fresh room needed): set **Next proposal → Threshold**, then **`+`** → Kind =
+**Payment**, recipient `0x1111111111111111111111111111111111111111`, amount `1000` →
+**Propose**.
+- [ ] ✓ **Expect:** a **new, separate** card appears (the Part-3 Safe card is
+      untouched — its own intent, its own policy). The new card's rail reads
+      **threshold** (not `safe`); open its verify box — `domain` is
+      **`muster.threshold.v1`** (no chain, no Safe address), and `re-derived` is a
+      longer hash (the base serialization, not a 32-byte safeTxHash).
+- [ ] ✓ Two cards now coexist under **different policies** in one room: the Safe
+      payment (rail `safe`) and the threshold payment (rail `threshold`).
 - [ ] Approve with **Threshold payment sig 1** then **sig 2** (Appendix A) →
-      ✓ reaches **2 of 2 / ready**. Provenance names two **`ed:…`** endorsers.
-  - clicking pay it does nothing.
+      ✓ reaches **2 of 2 / ready**, showing the honest **"✓ Ready — settle it on-chain
+      from the Account view"** note. Provenance names two **`ed:…`** endorsers.
 
 **A statement the room ratifies (a second effect type)**
-- [ ] New proposal: **`+`** → Policy = **Threshold**, Kind = **Statement**. Type
+- [ ] New proposal: **`+`** → **Next proposal = Threshold**, Kind = **Statement**. Type
       **exactly**: `We ratify the treasury plan.` → **Propose**.
 - [ ] ✓ **Expect:** the card shows the **quoted statement** ("We ratify the treasury
       plan.") instead of an amount → destination; the verify box's `shown` is the
@@ -174,10 +210,19 @@ On the right side of the Room:
       latest-intent headline (e.g. "Collecting approvals" / "Ready to submit").
 - [ ] **Start something** → create a **second** room, this time picking
       **Threshold** at "How does the room approve?" → it opens under Threshold.
+```
+  - ✓ **Expect:** it now opens a **new, empty** room, not the existing one.
+    (Was: "it opens the already existing room." Cause: two rooms of the same shape —
+    e.g. two solo "pay" rooms — derived the *identical* topic, so `coordinate_join`
+    re-activated the first. Each "Start something" now gives the topic a unique tail,
+    so it's always a fresh conversation. Re-opening an existing room still goes through
+    **Home**, which passes that room's stored topic.)
 - [ ] Go **Home** again → ✓ **both** rooms are listed. Click the first → ✓ it
-      re-opens with its own thread and proposals intact.
-- [ ] **Per-room policy:** open the first room's **`+`** → ✓ its Policy is **Safe**
-      (its own), not Threshold from the second room. Each room keeps its own driver.
+      re-opens with its own thread and proposals intact — each card still showing the
+      **policy its intent was proposed under** (Safe cards read `safe`, threshold
+      cards read `threshold`), regardless of which room you're in or the current
+      "Next proposal" default.
+```
 
 ---
 
@@ -190,6 +235,10 @@ settle on-chain).
       **SAFE ACCOUNT** card (`Safe 0x5FbDB2…`, `2 of 3 owners · chain 31337 · anvil`),
       and an **"Owners — tap to see all 3"** line that expands to the three owner
       addresses.
+- ✓ **Expect:** the card now shows the real Safe, not "account not loaded".
+    (Cause: `describe()` ran at startup before the lp/delivery library was initialized,
+    and its `lp_protocol_version()` read blanked the whole account. `describe()` is now
+    resilient to that read, and the Account nav re-loads on entry.)
 - [ ] **Wallet** card lists balances across chains, each with a **verified**/**attested**
       badge; **Refresh balances** re-reads. (Reads fail gracefully as "unavailable",
       never a false zero.)
@@ -236,6 +285,8 @@ can't configure it.
 - [ ] Click **Walkthrough**. ✓ It renders "The transaction lifecycle" with the six
       steps, each carrying claim cards badged **PROTECTS** / **OTHERS LEAK** / **GAP**,
       and an evidence line (a requirement id + test, or a fix + status).
+  - ✓ **Expect:** the claim **body** and **evidence** text are larger now
+    (bumped from the smallest badge size to the body size), so the cards read easily.
 
 ---
 
@@ -304,10 +355,12 @@ For each part, "pass" or the specific difference. The ones that matter most:
 3. **Part 3/4** — do the **verify** and **provenance** dive-ins expand and show real
    values? Do the **policy** and **kind** toggles change the card (rail/domain,
    payment↔statement)?
-4. **Part 4** — does composing under **Threshold** open the room under it (rail =
-   threshold, domain = `muster.threshold.v1`), and do the threshold sigs reach ready?
-5. **Part 6** — does multi-room list and switch correctly, and does **each room keep
-   its own policy**?
+4. **Part 4** — can a **Safe** intent and a **Threshold** intent coexist in one room
+   (each card its own rail/domain — `muster.threshold.v1` for the threshold one), and
+   do the threshold sigs reach ready? Does proposing the same effect under a different
+   policy make a **separate** card (not collapse into the Safe one)?
+5. **Part 6** — does multi-room list and switch correctly, and does **each card keep
+   the policy its intent was proposed under**, regardless of the current default?
 6. **Part 7** — does the on-chain submit reach **final** against anvil?
 7. **Part 8** — do edited RPC/delivery settings **persist across a restart**?
 8. Anything that renders wrong, overlaps, or reads dishonestly (a claim the code
@@ -315,11 +368,11 @@ For each part, "pass" or the specific difference. The ones that matter most:
 
 ---
 
-## Known issues (from your test pass)
+## Changelog & known limitations
 
-**Fixed** (rebuild with `make build` to get them):
+**Recently landed** (the behavior this guide expects — history, for context):
 
-- **Selected tiles now read in accent**, not grayscale (composer verb + policy tiles).
+- **Selected tiles read in accent**, not grayscale (composer verb + policy tiles).
 - **The proposal header now reads "M of N" honestly** — e.g. `2 of 3` (threshold of
   owners), not `2 of 2`.
 - **Enter sends** a chat message, and **Enter adds** a pasted signature.
@@ -329,15 +382,36 @@ For each part, "pass" or the specific difference. The ones that matter most:
 - **Duplicate proposal cards collapse** — re-proposing the same effect posts a second
   ref to the one intent; it now renders once.
 - **The verify box text is larger.**
+- **Policy is now per-intent, not per-room** — the room is a security/privacy
+  boundary; an *intent* is a policy boundary. Each proposal remembers the driver it
+  was proposed under, so changing the "Next proposal" default never re-folds a
+  decision already collecting signatures, and **two policies can coexist in one room**
+  (the same effect under two policies is now two distinct intents — the earlier
+  collision is gone). The policy picker is relabelled **"Next proposal"**.
+- **The room thread renders again (priming + all cards)** — the duplicate-card fix
+  had declared `required property int index` on the message delegate without also
+  declaring `modelData`; in Qt 6 that suppresses `modelData` injection, so every card
+  body failed to parse and rendered blank ("nothing happens after the room is
+  opened"). Declaring `modelData` required restores priming, proposal, address-share,
+  and receipt cards.
+- **The top nav wraps instead of clipping** — the nav buttons were right-anchored with
+  no wrapping, so a narrow window ran the leftmost ones off-screen. They now wrap to a
+  second row (a `Flow`), and the surfaces below start under the real nav bottom.
+- **"Start something" always opens a new room** — two rooms of the same shape (e.g. two
+  solo "pay" rooms) derived the identical topic, so the second re-joined the first. The
+  composed topic now carries a unique tail; re-opening an existing room still goes
+  through Home (its stored topic).
+- **The Account card loads** — `describe()` ran at startup before the lp/delivery
+  library was ready, and its `lp_protocol_version()` read blanked the SAFE ACCOUNT card
+  as "account not loaded". `describe()` no longer depends on that read to succeed, and
+  the Account nav re-loads the account + balances on entry.
+- **Walkthrough claim text is legible** — the claim body + evidence lines were rendered
+  at the smallest badge size; bumped to the body size so the cards read easily.
 
-**Not yet fixed (design work, not a quick patch):**
+**Known limitations (by design, for now):**
 
 - **Room-side submit** — a room reaches *ready* but settles on-chain only via the
   **Account** dashboard. Bringing submit into the room is a real feature (assembling
   the Safe `execTransaction` from the folded signatures).
-- **Policy change re-folds existing intents** — a room's policy is currently global
-  to the room, so changing it re-evaluates *every* proposal under the new driver.
-  An intent should remember the policy it was proposed under; until it does, keep one
-  policy per room (compose a fresh room to try a different one).
 - **Right-click paste** — the design-system text field has no context menu; **Ctrl+V
   works**, right-click doesn't. A design-system limitation, not ours to fix here.
