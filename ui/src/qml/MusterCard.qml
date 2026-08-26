@@ -97,6 +97,10 @@ Rectangle {
     readonly property string state: cardRoot.card && cardRoot.card.state
         ? String(cardRoot.card.state) : "proposed"
     readonly property int threshold: cardRoot.card ? Number(cardRoot.card.threshold || 0) : 0
+    // How many could sign (owners / roster) — the "N" in "M of N". Falls back to the
+    // threshold when absent, so an older card never reads "2 of 0".
+    readonly property int signerCount: cardRoot.card
+        ? Number(cardRoot.card.n || cardRoot.card.threshold || 0) : 0
     readonly property int approvals: cardRoot.card ? Number(cardRoot.card.approvals || 0) : 0
     readonly property bool paid: cardRoot.state === "paid"
     // "Ready" means enough approvals have landed to pay — by declared state, or
@@ -251,7 +255,7 @@ Rectangle {
                         ? String(cardRoot.card.label) : qsTr("Proposal");
                     return cardRoot.threshold > 0
                         ? label + "  ·  " + qsTr("%1 of %2").arg(cardRoot.threshold)
-                                                            .arg(cardRoot.threshold)
+                                                            .arg(cardRoot.signerCount)
                         : label;
                 }
                 color: Theme.palette.text
@@ -446,7 +450,7 @@ Rectangle {
                             wrapMode: Text.WordWrap
                             text: qsTr("✓ your client re-derived this — the exact bytes you'd sign")
                             color: Theme.palette.success
-                            font.pixelSize: Theme.typography.badgeText
+                            font.pixelSize: Theme.typography.secondaryText
                             font.weight: Theme.typography.weightMedium
                         }
 
@@ -488,7 +492,7 @@ Rectangle {
                                 text: modelData.v
                                 color: Theme.palette.textSecondary
                                 font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.badgeText
+                                font.pixelSize: Theme.typography.secondaryText
                             }
                         }
                     }

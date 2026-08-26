@@ -392,6 +392,11 @@ proc musterCoordinateIntents(): string =
                "threshold": desc.threshold, "approvals": v.approvals,
                "policy": gCoordKind, "domain": desc.serializationDomain,
                "txhash": v.txhash}
+    # n = how many could sign (owners / roster), so the card reads "M of N" honestly
+    # (e.g. 2 of 3), not "threshold of threshold".
+    if drv of SafeDriver: o["n"] = %SafeDriver(drv).owners.len
+    elif drv of ThresholdDriver: o["n"] = %ThresholdDriver(drv).roster.len
+    else: o["n"] = %desc.threshold
     if drv of SafeDriver:
       # a Safe signature is bound to its EIP-712 domain (chainId + safe); surface it
       # so the verify view names exactly what the bytes are worthless outside of (F-5).

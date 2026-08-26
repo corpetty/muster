@@ -92,6 +92,7 @@ Item {
             to: (!isStatement && eff.to !== undefined) ? String(eff.to) : "",
             rail: (it && it.rail) ? String(it.rail) : "safe",
             threshold: Number((it && it.threshold) || 0),
+            n: Number((it && it.n) || 0),
             approvals: Number((it && it.approvals) || 0),
             state: cardState,
             // the verify view: the re-derived safeTxHash and the domain it binds to
@@ -228,8 +229,12 @@ Item {
 
                 delegate: Item {
                     id: msg
+                    required property int index
                     width: thread.width
-                    implicitHeight: rowCol.implicitHeight
+                    // A duplicate ref collapses to nothing — re-proposing the same
+                    // effect (same content-addressed id) posts a second ref to the
+                    // one intent; the intent is one thing, so show it once.
+                    implicitHeight: msg.isDupRef ? 0 : rowCol.implicitHeight
 
                     // A body that parses to an object with a `kind` is a typed card.
                     // `intent-ref` points at a proposal in the verified fold; other
@@ -246,12 +251,30 @@ Item {
                     readonly property var liveIntent:
                         msg.isIntentRef ? room.intentById(msg.parsedCard.intentId) : null
 
+                    // True when an EARLIER message already referenced this intent —
+                    // so only the first ref to an intent renders its card.
+                    readonly property bool isDupRef: {
+                        if (!msg.isIntentRef) return false;
+                        var id = String(msg.parsedCard.intentId || "");
+                        var msgs = room.messages;
+                        for (var i = 0; i < msg.index && i < msgs.length; ++i) {
+                            try {
+                                var o = JSON.parse(msgs[i].body);
+                                if (o && String(o.kind || "") === "intent-ref"
+                                     && String(o.intentId || "") === id)
+                                    return true;
+                            } catch (e) {}
+                        }
+                        return false;
+                    }
+
                     // reveal the signature field for THIS inline proposal.
                     property bool approving: false
 
                     ColumnLayout {
                         id: rowCol
                         width: parent.width
+                        visible: !msg.isDupRef
                         spacing: Theme.spacing.tiny
 
                         // ── a proposal, inline (live state from the verified fold) ──
@@ -290,6 +313,17 @@ Item {
                                     font.family: Theme.typography.mono
                                 }
 
+                                // Enter adds the signature (paste, then Enter).
+                                Connections {
+                                    target: sigField.textInput
+                                    function onAccepted() {
+                                        if (sigField.text.length > 0 && room.backend && msg.liveIntent)
+                                            room.backend.contributeInRoom(String(msg.liveIntent.id || ""), sigField.text);
+                                        sigField.text = "";
+                                        msg.approving = false;
+                                    }
+                                }
+
                                 LogosButton {
                                     objectName: "roomApproveSubmit"
                                     text: qsTr("Add")
@@ -302,6 +336,22 @@ Item {
                                     }
                                 }
                             }
+                        }
+
+                        // ready, but the room does not settle on-chain yet — say so
+                        // honestly and point at the Account view (room-side submit is
+                        // the next step). Never a dead "Pay it" button.
+                        LogosText {
+                            visible: msg.isIntentRef && msg.liveIntent !== null
+                                     && (String((msg.liveIntent && msg.liveIntent.state) || "") === "executable")
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Theme.spacing.medium
+                            wrapMode: Text.WordWrap
+                            text: qsTr("✓ Ready — the approvals are collected. Settle it on-chain from "
+                                     + "the Account view (room-side submit is the next step).")
+                            color: Theme.palette.success
+                            font.pixelSize: Theme.typography.badgeText
+                            font.weight: Theme.typography.weightMedium
                         }
 
                         // a ref the fold hasn't caught up to yet — a quiet placeholder,
@@ -540,6 +590,12 @@ Item {
                     objectName: "messageComposer"
                     Layout.fillWidth: true
                     placeholderText: qsTr("Say something")
+                }
+
+                // Enter sends — the inner TextInput emits accepted on Return.
+                Connections {
+                    target: composer.textInput
+                    function onAccepted() { sendButton.send(); }
                 }
 
                 LogosButton {

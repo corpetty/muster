@@ -42,8 +42,8 @@ make run        # opens the standalone app window
 
 ## Part 1 — nav & surfaces (the render checks)
 
-- [ ] The current surface's nav button is **filled** (accent); the others are neutral.
-- [ ] Click **Room**, **Account**, **Walkthrough**, **Settings**, **Home** in turn.
+- [x] The current surface's nav button is **filled** (accent); the others are neutral.
+- [x] Click **Room**, **Account**, **Walkthrough**, **Settings**, **Home** in turn.
       Each surface renders **below** the nav bar (no overlap), and the filled button
       follows you (Home stays filled while composing, its sub-flow).
 
@@ -51,20 +51,21 @@ make run        # opens the standalone app window
 
 ## Part 2 — home & composing a room
 
-- [ ] On a fresh launch Home reads **"Nothing waiting on you"** and
+- [x] On a fresh launch Home reads **"Nothing waiting on you"** and
       **"Nothing on yet. Start something with someone."** with a **Start something**
       button.
-- [ ] Click **Start something** → the **composer** opens: four verb tiles
+- [x] Click **Start something** → the **composer** opens: four verb tiles
       (*Pay someone*, *Ask to be paid*, *Split a cost*, *Just talk*).
-- [ ] Pick a verb → the **"Who's doing it with you?"** and **"How does the room
+- [x] Pick a verb → the **"Who's doing it with you?"** and **"How does the room
       approve?"** steps reveal below it (progressive disclosure). The confirm button
       names the next step ("Open the room — just you" if no peer).
-- [ ] **How does the room approve?** shows two tiles — **Safe · 2 of 3** and
+  - clicked options should be accent color... it's too hard to differentiate with just grayscale options. 
+- [x] **How does the room approve?** shows two tiles — **Safe · 2 of 3** and
       **Threshold · 2 of 3** — the policy (driver) the room runs on. Pick one; the
       selected tile is raised. (You can leave it on Safe.)
-- [ ] Click **Open the room** → the **Room** surface opens with a topic like
+- [x] Click **Open the room** → the **Room** surface opens with a topic like
       `muster.pay.…` in the header, already under the policy you picked.
-- [ ] **Priming (a money verb):** the room opens with an **address-request** card in
+- [x] **Priming (a money verb):** the room opens with an **address-request** card in
       the thread — headed *"For: Pay someone"* — because the intention needs somewhere
       to send funds. (A *Just talk* room primes nothing.)
 
@@ -78,59 +79,71 @@ make run        # opens the standalone app window
 ## Part 3 — the room: chat, propose, and the dive-ins (Safe policy)
 
 **Chat**
-- [ ] Type in **"Say something"** and press **Send** → your line appears in the
+- [x] Type in **"Say something"** and press **Send** → your line appears in the
       thread with a short author id + a timestamp.
+  - pressing "enter" doesn't send the message. 
 
 **Answer the priming request**
-- [ ] On the address-request card, click **Share an address** → an **address-share**
+- [x] On the address-request card, click **Share an address** → an **address-share**
       card appears naming a **public account** and an address. ✓ **That address is
       YOUR own** (the account from Settings § identity), not a placeholder.
 
 **Propose a payment**
-- [ ] Click the **`+`** in the message row → the compose panel opens with a **Kind**
+- [x] Click the **`+`** in the message row → the compose panel opens with a **Kind**
       toggle (*Payment* / *Statement*), a **Policy** toggle (*Safe* / *Threshold*),
       and fields. ✓ The **Policy** toggle already reflects what you picked in the
       composer; you can change it here (it applies to this room only).
-- [ ] Kind = **Payment**, Policy = **Safe**. Recipient:
+- [x] Kind = **Payment**, Policy = **Safe**. Recipient:
       `0x1111111111111111111111111111111111111111`, amount `1000`. Click **Propose**.
-- [ ] ✓ **Expect:** a proposal card appears **inline in the thread** (not a side
+  - can't right click and paste
+- [x] ✓ **Expect:** a proposal card appears **inline in the thread** (not a side
       panel), headed **"Pay… · 2 of 3"**, showing `1000 → 0x1111…1111`, a status rail
       (proposed → collecting → ready → paid), and approval slots (**0 of 2**).
+  - it says: "Payment 2 of 2" not 2 of 3
 
 **Dive in #1 — "what am I signing?" (the verify box)**
-- [ ] Click the green **"✓ your client re-derived this — the exact bytes you'd sign"**
+- [x] Click the green **"✓ your client re-derived this — the exact bytes you'd sign"**
       line → it expands to:
       - `shown` — `1000  →  0x1111…1111`
       - `re-derived` — a 32-byte `0x…` hash (the safeTxHash)
       - `domain` — `anvil-31337 · chain 31337 · Safe 0x5FbDB2…aa3`
+  - the text is quite small. 
 
 **Dive in #2 — "how do I know this?" (provenance)**
-- [ ] Click **"How do I know this? — N in the lineage"** → it expands to at least the
+- [x] Click **"How do I know this? — N in the lineage"** → it expands to at least the
       **propose** entry: `[peer-message] the proposed effect` · `sealed to the room · log #…`.
 
 **Approve → executable**
-- [ ] Click **Approve** on the card → a signature field appears. Paste **Safe owner
+- [x] Click **Approve** on the card → a signature field appears. Paste **Safe owner
       sig 1** (Appendix A) → **Add**. Then **Approve** again → paste **Safe owner
       sig 2** → **Add**.
-- [ ] ✓ **Expect:** approval slots fill to **2 of 2**, the status rail lights to
+- [x] ✓ **Expect:** approval slots fill to **2 of 2**, the status rail lights to
       **ready**, and the provenance box now also lists **two** entries
       `[driver-contribution] an owner signature · 0x…(an owner) · verified owner · log #…`.
-- [ ] Paste the **same** sig again, or any random hex → ✓ it is **refused** (the
+- [x] Paste the **same** sig again, or any random hex → ✓ it is **refused** (the
       count does not move; a non-owner signature never counts).
+  - after ready, there isn't an option to paste anything else, only "Drop it" is an option. Clicking "Drop it" does nothing. 
+  - there is no option to finish the flow and make it "paid"
 
 ---
 
 ## Part 4 — the policy is a driver, the action is pluggable
 
-**Threshold policy (a payment, no Safe / no chain)**
-- [ ] New proposal: **`+`** → Policy = **Threshold**. Kind = **Payment**, recipient
+**Threshold policy (a payment, no Safe / no chain).** Do this in a **fresh room** —
+re-proposing the *same* effect (`0x1111…1111`, `1000`) in the Safe room above is the
+*same content-addressed intent*, which tangles (see "known issues" at the end).
+**Start something** → pick **Threshold** at "How does the room approve?" → Open the
+room.
+- [ ] In the new room: **`+`** → Kind = **Payment**, recipient
       `0x1111111111111111111111111111111111111111`, amount `1000` → **Propose**.
 - [ ] ✓ **Expect:** the card's rail now reads **threshold** (not `safe`); open the
       verify box — `domain` is **`muster.threshold.v1`** (no chain, no Safe address),
       and `re-derived` is a longer hash (the base serialization, not a 32-byte
       safeTxHash).
+  - this changed the first (which didn't have the pay it option) and both signatures are done and the option to pay it is now available. So there are two cards now, both identical. The first Safe proposal and the new threashold one, but they are identical and the threshold one but I haven't gone through the steps of the threshold. 
 - [ ] Approve with **Threshold payment sig 1** then **sig 2** (Appendix A) →
       ✓ reaches **2 of 2 / ready**. Provenance names two **`ed:…`** endorsers.
+  - clicking pay it does nothing. 
 
 **A statement the room ratifies (a second effect type)**
 - [ ] New proposal: **`+`** → Policy = **Threshold**, Kind = **Statement**. Type
@@ -299,3 +312,32 @@ For each part, "pass" or the specific difference. The ones that matter most:
 7. **Part 8** — do edited RPC/delivery settings **persist across a restart**?
 8. Anything that renders wrong, overlaps, or reads dishonestly (a claim the code
    isn't actually backing).
+
+---
+
+## Known issues (from your test pass)
+
+**Fixed** (rebuild with `make build` to get them):
+
+- **Selected tiles now read in accent**, not grayscale (composer verb + policy tiles).
+- **The proposal header now reads "M of N" honestly** — e.g. `2 of 3` (threshold of
+  owners), not `2 of 2`.
+- **Enter sends** a chat message, and **Enter adds** a pasted signature.
+- **A ready proposal now says so honestly** — "✓ Ready — settle it on-chain from the
+  Account view" — instead of a dead *Pay it* / *Drop it* button. (Room-side submit is
+  the next feature; on-chain settlement lives in **Account** for now.)
+- **Duplicate proposal cards collapse** — re-proposing the same effect posts a second
+  ref to the one intent; it now renders once.
+- **The verify box text is larger.**
+
+**Not yet fixed (design work, not a quick patch):**
+
+- **Room-side submit** — a room reaches *ready* but settles on-chain only via the
+  **Account** dashboard. Bringing submit into the room is a real feature (assembling
+  the Safe `execTransaction` from the folded signatures).
+- **Policy change re-folds existing intents** — a room's policy is currently global
+  to the room, so changing it re-evaluates *every* proposal under the new driver.
+  An intent should remember the policy it was proposed under; until it does, keep one
+  policy per room (compose a fresh room to try a different one).
+- **Right-click paste** — the design-system text field has no context menu; **Ctrl+V
+  works**, right-click doesn't. A design-system limitation, not ours to fix here.

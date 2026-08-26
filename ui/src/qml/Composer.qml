@@ -124,8 +124,8 @@ Item {
                         implicitHeight: verbCol.implicitHeight + 2 * Theme.spacing.medium
                         radius: Theme.spacing.radiusMedium
                         color: picked ? Theme.palette.surfaceRaised : Theme.palette.surface
-                        border.width: 1
-                        border.color: picked ? Theme.palette.borderDefault : Theme.palette.borderSubtle
+                        border.width: picked ? 2 : 1
+                        border.color: picked ? Theme.palette.primary : Theme.palette.borderSubtle
 
                         MouseArea {
                             anchors.fill: parent
@@ -217,8 +217,8 @@ Item {
                         implicitHeight: polCol.implicitHeight + 2 * Theme.spacing.medium
                         radius: Theme.spacing.radiusMedium
                         color: picked ? Theme.palette.surfaceRaised : Theme.palette.surface
-                        border.width: 1
-                        border.color: picked ? Theme.palette.borderDefault : Theme.palette.borderSubtle
+                        border.width: picked ? 2 : 1
+                        border.color: picked ? Theme.palette.primary : Theme.palette.borderSubtle
 
                         MouseArea {
                             anchors.fill: parent
