@@ -50,6 +50,12 @@ Item {
         try { return JSON.parse(backend ? backend.intentsJson : "[]"); }
         catch (e) { return []; }
     }
+    // The outcome of the last room-side submit (coordinate_submit): {id, state,
+    // onchain, txHash} or {id, error, ...}. Matched to a card by its intent id.
+    readonly property var roomSubmit: {
+        try { return JSON.parse(backend ? backend.roomSubmitJson : "{}"); }
+        catch (e) { return ({}); }
+    }
 
     // The COMPOSE DEFAULT policy (driver) for the next thing you propose here, from
     // coordinate_policy. Policy is a property of each intent, not the room — the room
@@ -346,20 +352,72 @@ Item {
                             }
                         }
 
-                        // ready, but the room does not settle on-chain yet — say so
-                        // honestly and point at the Account view (room-side submit is
-                        // the next step). Never a dead "Pay it" button.
-                        LogosText {
+                        // ready (executable) — settle it on-chain FROM the room. For a
+                        // Safe intent, a Submit button assembles the execTransaction
+                        // from the folded owner signatures (coordinate_submit); for a
+                        // threshold endorsement there is nothing on-chain to settle, so
+                        // it says so. The outcome is reported honestly from the module —
+                        // never a false "landed".
+                        ColumnLayout {
+                            id: readyBox
                             visible: msg.isIntentRef && msg.liveIntent !== null
                                      && (String((msg.liveIntent && msg.liveIntent.state) || "") === "executable")
                             Layout.fillWidth: true
                             Layout.leftMargin: Theme.spacing.medium
-                            wrapMode: Text.WordWrap
-                            text: qsTr("✓ Ready — the approvals are collected. Settle it on-chain from "
-                                     + "the Account view (room-side submit is the next step).")
-                            color: Theme.palette.success
-                            font.pixelSize: Theme.typography.badgeText
-                            font.weight: Theme.typography.weightMedium
+                            spacing: Theme.spacing.tiny
+
+                            readonly property string rail: String((msg.liveIntent && msg.liveIntent.rail) || "safe")
+                            // the submit outcome, only when it names THIS intent
+                            readonly property var outcome: (room.roomSubmit
+                                && String(room.roomSubmit.id || "") === String((msg.liveIntent && msg.liveIntent.id) || ""))
+                                ? room.roomSubmit : null
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: Theme.spacing.small
+                                LogosText {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    text: readyBox.rail === "safe"
+                                          ? qsTr("✓ Ready — the approvals are collected.")
+                                          : qsTr("✓ Endorsed — a signed group decision. Nothing settles on-chain.")
+                                    color: Theme.palette.success
+                                    font.pixelSize: Theme.typography.secondaryText
+                                    font.weight: Theme.typography.weightMedium
+                                }
+                                LogosButton {
+                                    objectName: "roomSubmitButton"
+                                    visible: readyBox.rail === "safe"
+                                    text: qsTr("Settle on-chain")
+                                    onClicked: if (room.backend)
+                                                   room.backend.submitInRoom(String((msg.liveIntent && msg.liveIntent.id) || ""));
+                                }
+                            }
+
+                            // honest outcome line (submitted/final/failed, or an error)
+                            LogosText {
+                                visible: readyBox.outcome !== null
+                                Layout.fillWidth: true
+                                wrapMode: Text.WrapAnywhere
+                                text: {
+                                    var o = readyBox.outcome || ({});
+                                    if (o.error !== undefined)
+                                        return qsTr("⚠ ") + String(o.error)
+                                             + (o.detail ? " — " + String(o.detail) : "");
+                                    var oc = String(o.onchain || "");
+                                    var tx = o.txHash ? "  ·  " + String(o.txHash) : "";
+                                    return (oc === "final" ? qsTr("✓ Settled on-chain (final)")
+                                          : oc === "failed" ? qsTr("⚠ On-chain execution reverted")
+                                          : qsTr("Submitted — awaiting finality")) + tx;
+                                }
+                                color: {
+                                    var o = readyBox.outcome || ({});
+                                    return (o.error !== undefined || String(o.onchain || "") === "failed")
+                                           ? Theme.palette.warning : Theme.palette.textSecondary;
+                                }
+                                font.family: Theme.typography.mono
+                                font.pixelSize: Theme.typography.badgeText
+                            }
                         }
 
                         // a ref the fold hasn't caught up to yet — a quiet placeholder,

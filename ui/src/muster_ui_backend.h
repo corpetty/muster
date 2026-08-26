@@ -44,6 +44,7 @@ public:
     void proposeInRoom(const QString &effectJson) override;
     void contributeInRoom(const QString &intentId, const QString &signatureHex) override;
     void loadIntents() override;
+    void submitInRoom(const QString &intentId) override;
     void setPolicy(const QString &kind) override;
     void loadPolicy() override;
 

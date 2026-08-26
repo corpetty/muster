@@ -236,6 +236,19 @@ void MusterUiBackend::loadIntents()
     setIntentsJson(modules().muster_module.coordinate_intents());
 }
 
+void MusterUiBackend::submitInRoom(const QString &intentId)
+{
+    // coordinate_submit → settle a ready room intent on-chain FROM the room: the
+    // module assembles the Safe execTransaction from the owner signatures folded on
+    // the shared log, submits through the user's RPC, and observes finality. The
+    // result ({state, onchain, txHash} or {error}) is surfaced so the card reports
+    // honestly. Re-read the intents so the room converges on submitted.
+    const QString r = modules().muster_module.coordinate_submit(intentId);
+    qInfo() << "[muster_ui] coordinate_submit" << intentId << "->" << r;
+    setRoomSubmitJson(r);
+    loadIntents();
+}
+
 void MusterUiBackend::setPolicy(const QString &kind)
 {
     // coordinate_set_policy → choose the room's driver (safe | threshold). The same

@@ -30,6 +30,8 @@ module muster_module {
 
   method coordinate_intents() -> tstr description "List the intents in the joined conversation as folded from the shared log: a JSON array of {id, state}. Drives inbound delivery first, so it reflects contributions that have arrived from other participants."
 
+  method coordinate_submit(intent_id: tstr) -> tstr description "Settle a room intent on-chain FROM the room. For a Safe-policy intent that has reached executable (its threshold of owner signatures folded from the shared log), re-derive the safeTxHash, assemble the Safe execTransaction from those exact signatures, submit it through the user's RPC, and observe finality from the receipt (R-8, never asserted). Publishes a submit event so every member's fold converges on submitted. Returns JSON {state, onchain, txHash} where onchain is final/pending/failed — or {error} for a non-executable intent, a non-Safe policy (a threshold endorsement settles nothing on-chain), or an unreachable RPC. This is the room-side counterpart to submit(); the coordinated signatures come from the log, not local state."
+
   method coordinate_set_policy(kind: tstr) -> tstr description "Choose the joined room's coordination policy (its driver): \"safe\" (EIP-712 Safe over secp256k1 owners) or \"threshold\" (a k-of-n Ed25519 endorsement over a demo roster). The policy IS a driver, not hardcoded — the same propose/contribute/fold path runs under either, and the intent view is described by the driver rather than assumed to be Safe (invariant 6). Set before proposing. Returns {policy, threshold, domain, membership}."
 
   method coordinate_policy() -> tstr description "The joined room's current coordination policy as {policy, threshold, domain, membership}, described by its driver."

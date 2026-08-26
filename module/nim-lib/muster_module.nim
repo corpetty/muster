@@ -439,6 +439,75 @@ proc musterCoordinateIntents(): string =
     arr.add o
   $arr
 
+proc musterCoordinateSubmit(intentId: string): string =
+  ## Settle a room intent on-chain FROM the room (the room-side counterpart to
+  ## submit()). The coordinated owner signatures come from the shared LOG, not local
+  ## state: fold the intent, re-derive the safeTxHash (F-4), gather the folded owner
+  ## signatures, assemble the Safe execTransaction, submit through the user's RPC, and
+  ## observe finality from the receipt (R-8). A submit event is published so every
+  ## member's fold converges on submitted. Only a Safe-policy, executable intent
+  ## settles on-chain — a threshold endorsement is complete in itself.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  let events = gSession.log.allEvents()
+  let policy = intentPolicyOf(events, intentId)
+  if policy != "safe":
+    return $(%*{"id": intentId, "error": "not-onchain",
+                "detail": "a " & policy & " endorsement settles nothing on-chain"})
+  let st = intentState(events, driverFor, intentId)
+  if st != "executable":
+    return $(%*{"id": intentId, "error": "not-executable", "state": st})
+  let effectJson = effectJsonOf(events, intentId)
+  if effectJson.len == 0: return $(%*{"error": "unknown-intent"})
+  let effect = effectFromJson(effectJson)
+  # Re-derive the exact bytes the owners signed (the safeTxHash) — never trusted from
+  # the log, always recomputed from the effect (invariant 1 / F-4).
+  let ctx = SigningContext(environment: "anvil-31337", account: SAFE_ADDR, slot: "0",
+                           expiry: high(uint64))
+  let it0 = newIntent(gDriver, effect, ctx)
+  var hash: array[32, byte]
+  for i in 0 ..< 32: hash[i] = it0.materialization.bytes[i]
+  # Gather the owner signatures from the shared log (dedup by the recovered signer,
+  # exactly as the fold counts them), sorted by signer address for Safe.checkSignatures.
+  var signed: seq[(Address, Signature65)]
+  var seenSigner: seq[string]
+  for e in events:
+    let p = e.key.split('/')
+    if p.len >= 4 and p[0] == "intent" and p[1] == intentId and p[2] == "sig":
+      let sig65 = toSig65(hexToBytes(e.value))
+      if not recoversToOwner(hash, sig65, gDriver.owners): continue
+      let key = toHex(ecrecover(hash, sig65))
+      if key in seenSigner: continue
+      seenSigner.add key
+      signed.add (ecrecover(hash, sig65), sig65)
+  if signed.len < gDriver.threshold:
+    return $(%*{"id": intentId, "error": "insufficient-signatures",
+                "have": signed.len, "need": gDriver.threshold})
+  signed.sort(cmpSigner)
+  var sigbytes: seq[byte]
+  for (_, s) in signed: sigbytes.add @s
+  # Assemble + submit through the user's RPC. A failed read/submit surfaces honestly —
+  # never a false "landed" (R-8).
+  var txHash = ""
+  try:
+    let tx = toSafeTx(effect)
+    let calldata = assembleExecTransaction(tx.to, tx.value, @[], sigbytes)
+    txHash = submitExecTransaction(gRpcUrl, toAddr(OWNER0), gDriver.safe, calldata)
+  except CatchableError as e:
+    return $(%*{"id": intentId, "error": "rpc-unreachable", "detail": e.msg})
+  # Fold the room forward: submit event → every member converges on "submitted".
+  gSession.publish(submitEvent(intentId))
+  # Observe finality from the chain (never asserted).
+  var status = -1
+  for _ in 0 .. 50:
+    status = watchReceiptStatus(gRpcUrl, txHash)
+    if status >= 0: break
+    sleep(200)
+  let onchain = (if status == 1: "final" elif status == 0: "failed" else: "pending")
+  $(%*{"id": intentId,
+       "state": intentState(gSession.log.allEvents(), driverFor, intentId),
+       "onchain": onchain, "txHash": txHash})
+
 proc roomContext(): LinkContext =
   ## The context our binding is scoped to — this Safe, valid for a day. Wall-clock
   ## expiry is fine here: a binding is an admission-time credential, not a signing-

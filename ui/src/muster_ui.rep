@@ -64,6 +64,12 @@ class MusterUi
     SLOT(void contributeInRoom(const QString &intentId, const QString &signatureHex))
     SLOT(void loadIntents())
 
+    // Settle a ready room intent on-chain FROM the room (coordinate_submit): assemble
+    // the Safe execTransaction from the owner signatures folded on the shared log,
+    // submit through the user's RPC, and observe finality. The result lands on
+    // roomSubmitJson ({state, onchain, txHash} or {error}); intents reload after.
+    SLOT(void submitInRoom(const QString &intentId))
+
     // Choose the room's coordination policy — its DRIVER (coordinate_set_policy):
     // "safe" (EIP-712 / secp owners) or "threshold" (k-of-n Ed25519). The whole
     // propose/contribute/fold path runs under whichever; the policy is a driver, not
@@ -104,6 +110,11 @@ class MusterUi
     PROP(QString messagesJson="[]" READONLY)
     PROP(QString membersJson="[]" READONLY)
     PROP(QString intentsJson="[]" READONLY)
+
+    // The outcome of the last room-side submit (coordinate_submit): JSON
+    // {state, onchain, txHash} on success, or {error, ...}. The room shows it on the
+    // ready card so settling on-chain reports honestly (never a false "landed").
+    PROP(QString roomSubmitJson="{}" READONLY)
 
     // The room's coordination policy — its driver — as JSON {policy, threshold,
     // domain, membership}. The view shows which policy governs the room and picks it.
