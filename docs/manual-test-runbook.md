@@ -59,7 +59,7 @@ make run        # opens the standalone app window
 - [x] Pick a verb → the **"Who's doing it with you?"** and **"How does the room
       approve?"** steps reveal below it (progressive disclosure). The confirm button
       names the next step ("Open the room — just you" if no peer).
-  - clicked options should be accent color... it's too hard to differentiate with just grayscale options. 
+  - clicked options should be accent color... it's too hard to differentiate with just grayscale options.
 - [x] **How does the room approve?** shows two tiles — **Safe · 2 of 3** and
       **Threshold · 2 of 3** — the policy (driver) the room runs on. Pick one; the
       selected tile is raised. (You can leave it on Safe.)
@@ -81,7 +81,7 @@ make run        # opens the standalone app window
 **Chat**
 - [x] Type in **"Say something"** and press **Send** → your line appears in the
       thread with a short author id + a timestamp.
-  - pressing "enter" doesn't send the message. 
+  - pressing "enter" doesn't send the message.
 
 **Answer the priming request**
 - [x] On the address-request card, click **Share an address** → an **address-share**
@@ -107,7 +107,7 @@ make run        # opens the standalone app window
       - `shown` — `1000  →  0x1111…1111`
       - `re-derived` — a 32-byte `0x…` hash (the safeTxHash)
       - `domain` — `anvil-31337 · chain 31337 · Safe 0x5FbDB2…aa3`
-  - the text is quite small. 
+  - the text is quite small.
 
 **Dive in #2 — "how do I know this?" (provenance)**
 - [x] Click **"How do I know this? — N in the lineage"** → it expands to at least the
@@ -122,7 +122,7 @@ make run        # opens the standalone app window
       `[driver-contribution] an owner signature · 0x…(an owner) · verified owner · log #…`.
 - [x] Paste the **same** sig again, or any random hex → ✓ it is **refused** (the
       count does not move; a non-owner signature never counts).
-  - after ready, there isn't an option to paste anything else, only "Drop it" is an option. Clicking "Drop it" does nothing. 
+  - after ready, there isn't an option to paste anything else, only "Drop it" is an option. Clicking "Drop it" does nothing.
   - there is no option to finish the flow and make it "paid"
 
 ---
@@ -140,10 +140,10 @@ room.
       verify box — `domain` is **`muster.threshold.v1`** (no chain, no Safe address),
       and `re-derived` is a longer hash (the base serialization, not a 32-byte
       safeTxHash).
-  - this changed the first (which didn't have the pay it option) and both signatures are done and the option to pay it is now available. So there are two cards now, both identical. The first Safe proposal and the new threashold one, but they are identical and the threshold one but I haven't gone through the steps of the threshold. 
+  - this changed the first (which didn't have the pay it option) and both signatures are done and the option to pay it is now available. So there are two cards now, both identical. The first Safe proposal and the new threashold one, but they are identical and the threshold one but I haven't gone through the steps of the threshold.
 - [ ] Approve with **Threshold payment sig 1** then **sig 2** (Appendix A) →
       ✓ reaches **2 of 2 / ready**. Provenance names two **`ed:…`** endorsers.
-  - clicking pay it does nothing. 
+  - clicking pay it does nothing.
 
 **A statement the room ratifies (a second effect type)**
 - [ ] New proposal: **`+`** → Policy = **Threshold**, Kind = **Statement**. Type
