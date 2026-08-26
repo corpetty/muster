@@ -153,9 +153,15 @@ make run        # opens the standalone app window
       `[driver-contribution] an owner signature · 0x…(an owner) · verified owner · log #…`.
 - [ ] Before the second sig, paste the **same** sig again, or any random hex → ✓ it is
       **refused** (the count does not move; a non-owner signature never counts).
-  - ✓ **Expect:** once **ready**, the card shows the honest note
-    **"✓ Ready — settle it on-chain from the Account view"** (no dead *Pay it* /
-    *Drop it* button). Room-side submit is deferred; you settle on-chain in **Part 7**.
+  - ✓ **Expect:** once **ready**, the card shows **"✓ Ready — the approvals are
+    collected."** with a **Settle on-chain** button (room-side submit). No dead *Pay it*
+    / *Drop it* button.
+- [ ] **Settle on-chain from the room** (needs anvil — see Part 7's setup; skip if it
+      isn't up). Click **Settle on-chain** → ✓ the module assembles the Safe
+      `execTransaction` from the owner signatures folded on the shared log, submits it,
+      and the card reports the outcome honestly: **"✓ Settled on-chain (final)"** with a
+      tx hash. If anvil isn't up, ✓ it says so (**⚠ rpc-unreachable**), never a false
+      "landed".
 
 ---
 
@@ -181,8 +187,9 @@ re-proposed effect collapsing into one card) is gone.
 - [ ] ✓ Two cards now coexist under **different policies** in one room: the Safe
       payment (rail `safe`) and the threshold payment (rail `threshold`).
 - [ ] Approve with **Threshold payment sig 1** then **sig 2** (Appendix A) →
-      ✓ reaches **2 of 2 / ready**, showing the honest **"✓ Ready — settle it on-chain
-      from the Account view"** note. Provenance names two **`ed:…`** endorsers.
+      ✓ reaches **2 of 2 / ready**. Because a threshold endorsement settles nothing
+      on-chain, the ready line reads **"✓ Endorsed — a signed group decision. Nothing
+      settles on-chain."** (no Settle button). Provenance names two **`ed:…`** endorsers.
 
 **A statement the room ratifies (a second effect type)**
 - [ ] New proposal: **`+`** → **Next proposal = Threshold**, Kind = **Statement**. Type
@@ -192,6 +199,19 @@ re-proposed effect collapsing into one card) is gone.
       quoted text.
 - [ ] Approve with **Threshold statement sig 1** then **sig 2** (Appendix A) →
       ✓ reaches **2 of 2 / ready** — a signed group endorsement of text, no payment.
+
+**Driver-as-proposal — the room grows its own policy vocabulary.** What a group *can
+do* isn't a fixed list; a proposal can **introduce a new driver** (invariant 6). The
+founding set is Safe + Threshold; **"unanimous" (n-of-n)** is one the room grants
+itself by proposal.
+- [ ] In the compose panel's **"Next proposal"** row, note the third button reads
+      **"＋ Propose unanimous"** (not yet admitted). Click it → ✓ it proposes an
+      **"Add policy"** card (*"Grant the room the 'unanimous' policy"*) — a governance
+      intent, not a payment.
+- [ ] Approve it with **Governance sig 1** then **sig 2** (Appendix A) → ✓ once it
+      reaches **ready/executable**, the button
+      changes to **"Unanimous"** and is now a **selectable policy** for the next
+      proposal. The room's capability grew by the group's decision, folded from the log.
 
 ---
 
@@ -213,7 +233,6 @@ On the right side of the Room:
       latest-intent headline (e.g. "Collecting approvals" / "Ready to submit").
 - [ ] **Start something** → create a **second** room, this time picking
       **Threshold** at "How does the room approve?" → it opens under Threshold.
-```
   - ✓ **Expect:** it now opens a **new, empty** room, not the existing one.
     (Was: "it opens the already existing room." Cause: two rooms of the same shape —
     e.g. two solo "pay" rooms — derived the *identical* topic, so `coordinate_join`
@@ -225,7 +244,6 @@ On the right side of the Room:
       **policy its intent was proposed under** (Safe cards read `safe`, threshold
       cards read `threshold`), regardless of which room you're in or the current
       "Next proposal" default.
-```
 
 ---
 
@@ -238,7 +256,7 @@ settle on-chain).
       **SAFE ACCOUNT** card (`Safe 0x5FbDB2…`, `2 of 3 owners · chain 31337 · anvil`),
       and an **"Owners — tap to see all 3"** line that expands to the three owner
       addresses.
-- ✓ **Expect:** the card now shows the real Safe, not "account not loaded".
+  - ✓ **Expect:** the card now shows the real Safe, not "account not loaded".
     (Cause: `describe()` ran at startup before the lp/delivery library was initialized,
     and its `lp_protocol_version()` read blanked the whole account. `describe()` is now
     resilient to that read, and the Account nav re-loads on entry.)
@@ -290,7 +308,6 @@ can't configure it.
       and an evidence line (a requirement id + test, or a fix + status).
   - ✓ **Expect:** the claim **body** and **evidence** text are larger now
     (bumped from the smallest badge size to the body size), so the cards read easily.
-  - ✓ **Expect:** the claim **body** and **evidence** text are larger now
 
 ---
 
@@ -327,6 +344,17 @@ Threshold statement sig 1:
 
 Threshold statement sig 2:
 0xd37cef30ca2994f70e4f9363f09767ad406e2040ae1f9c1603494a77504b17bb61b2bb85b181ebc5c1ebe113d7138a4ebe673b25a26115afb9f941af08253405
+```
+
+**Threshold roster** — for the **governance proposal** `add-driver: unanimous` (Part 4
+driver-as-proposal; roster seeds 1 & 2):
+
+```
+Governance sig 1:
+0x94f1ebe7adc4486eead28464ba5b7209cf53f9ebee5daa57da18582f57a366ae3f36a78aa48f570742ce4127b296d6470708af74e8525586c52318ce7187ba03
+
+Governance sig 2:
+0x6550dfebb6bf3e55a64533a859416e6953aff8de6c8dd6877b28398ca7e85fad3a6707a5a2e66e3719aef15d7c408ba5440be25531c2138d52fd27d29914f303
 ```
 
 **To sign your own values** (any recipient/amount/text you type):
@@ -380,9 +408,8 @@ For each part, "pass" or the specific difference. The ones that matter most:
 - **The proposal header now reads "M of N" honestly** — e.g. `2 of 3` (threshold of
   owners), not `2 of 2`.
 - **Enter sends** a chat message, and **Enter adds** a pasted signature.
-- **A ready proposal now says so honestly** — "✓ Ready — settle it on-chain from the
-  Account view" — instead of a dead *Pay it* / *Drop it* button. (Room-side submit is
-  the next feature; on-chain settlement lives in **Account** for now.)
+- **A ready proposal now says so honestly** — "✓ Ready — the approvals are collected" —
+  instead of a dead *Pay it* / *Drop it* button.
 - **Duplicate proposal cards collapse** — re-proposing the same effect posts a second
   ref to the one intent; it now renders once.
 - **The verify box text is larger.**
@@ -411,11 +438,22 @@ For each part, "pass" or the specific difference. The ones that matter most:
   the Account nav re-loads the account + balances on entry.
 - **Walkthrough claim text is legible** — the claim body + evidence lines were rendered
   at the smallest badge size; bumped to the body size so the cards read easily.
+- **Room-side submit** — a ready **Safe** intent now settles on-chain **from the room**
+  (a *Settle on-chain* button): the module assembles the `execTransaction` from the
+  owner signatures folded on the shared log, submits it, and reports the outcome
+  honestly. A threshold endorsement settles nothing on-chain and says so. (Part 3/7.)
+- **Driver-as-proposal** — what a group can do grows by proposal: an `add-driver`
+  governance intent admits a new driver kind (e.g. **unanimous**, n-of-n) once the room
+  approves it, folded from the log. The picker offers only admitted kinds. (Part 4.)
+- **Two-instance coordination** — the full cross-host journey (found → request → admit
+  with forward re-key → propose → contribute → converge) is proven end-to-end over the
+  transport seam (`two_instance_test`).
 
 **Known limitations (by design, for now):**
 
-- **Room-side submit** — a room reaches *ready* but settles on-chain only via the
-  **Account** dashboard. Bringing submit into the room is a real feature (assembling
-  the Safe `execTransaction` from the folded signatures).
+- **Live two-instance over a real delivery node** — the logic is tested over
+  `LocalTransport`; two hosts on separate machines through a store node (killed
+  mid-collection + restarted, R-4/R-6) needs a running delivery node and a shared
+  network config (Settings § delivery). Infra-bound.
 - **Right-click paste** — the design-system text field has no context menu; **Ctrl+V
   works**, right-click doesn't. A design-system limitation, not ours to fix here.

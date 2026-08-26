@@ -68,9 +68,10 @@ nim r -d:release --threads:on $SECP tests/safe_collect_test.nim
 
 The tests that also seal/encrypt (`epoch_crypto_test` F-16, `keystore_test`,
 `coordination_test`, `multiparty_intent_test`, `coordination_surface_test`,
-`membership_handshake_test`, and `threshold_fold_test` — the Ed25519 k-of-n driver
-folding through the generic reduceIntents) additionally need libsodium and, where
-they touch amounts, the stint closure:
+`membership_handshake_test`, `two_instance_test` (the full cross-host journey),
+`governance_test` (driver-as-proposal), and `threshold_fold_test` — the Ed25519 k-of-n
+driver folding through the generic reduceIntents) additionally need libsodium and,
+where they touch amounts, the stint closure:
 
 ```bash
 SODIUM=$(nix build nixpkgs#libsodium --no-link --print-out-paths)
