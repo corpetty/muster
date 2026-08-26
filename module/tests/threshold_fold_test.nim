@@ -23,6 +23,10 @@ let b = encFromSeed(seed(2))
 let c = encFromSeed(seed(3))
 let mal = encFromSeed(seed(9))
 let drv = newThresholdDriver(@[a.identity().ed, b.identity().ed, c.identity().ed], k = 2)
+# The folds take a per-intent driver resolver now (an intent is a policy boundary).
+# Every intent in steps 1–4 runs on this one threshold driver, so the resolver just
+# returns it; step 5 proves the per-intent resolution with two drivers in one log.
+let foldDrv: DriverFor = proc(kind: string): Driver = drv
 
 const effectJson = """{"to":"0x1111111111111111111111111111111111111111","value":1000,"nonce":0}"""
 let id = intentIdFor(effectJson)
@@ -33,14 +37,14 @@ proc endorse(k: EncKeys): string = hex(edSign(k, m.bytes))
 
 # Propose, then one endorsement → collecting (1 of 2).
 var events = @[proposeEvent(id, effectJson), contributeEvent(id, "A", endorse(a))]
-doAssert intentState(events, drv, id) == "collecting",
+doAssert intentState(events, foldDrv, id) == "collecting",
          "one roster endorsement -> collecting"
 echo "1. propose + one endorsement -> collecting OK"
 
 # A second distinct endorsement → executable (threshold met), through the SAME
 # generic reduceIntents — no Safe, no secp.
 events.add contributeEvent(id, "B", endorse(b))
-doAssert intentState(events, drv, id) == "executable",
+doAssert intentState(events, foldDrv, id) == "executable",
          "two distinct roster endorsements -> executable"
 echo "2. two endorsements -> executable (generic fold, non-Safe driver) OK"
 
@@ -58,7 +62,7 @@ block:
   let revents = @[proposeEvent(id, effectJson),
                   contributeEvent(id, contributorOf(drv, effectJson, sigA), sigA),
                   contributeEvent(id, contributorOf(drv, effectJson, sigB), sigB)]
-  let views = reduceIntentViews(revents, drv)
+  let views = reduceIntentViews(revents, foldDrv)
   doAssert views.len == 1, "one intent"
   let v = views[0]
   doAssert v.state == "executable", "render view state matches the fold"
@@ -68,7 +72,7 @@ block:
   # is well-formed, non-empty hex — the length is the driver's business, not ours.
   doAssert v.txhash.len > 2 and v.txhash.startsWith("0x"),
            "the materialization is re-derived generically (no Safe, no secp)"
-  let prov = intentProvenance(revents, drv, id)
+  let prov = intentProvenance(revents, foldDrv, id)
   var proposes = 0
   var endorsers: seq[string]
   for it in prov:
@@ -87,7 +91,7 @@ echo "2b. render path generic (views + provenance) with the threshold driver OK"
 var ev2 = @[proposeEvent("2", effectJson),
             contributeEvent("2", "A", endorse(a)),
             contributeEvent("2", "mallory", endorse(mal))]
-doAssert intentState(ev2, drv, "2") != "executable",
+doAssert intentState(ev2, foldDrv, "2") != "executable",
          "a non-member endorsement must not reach the threshold"
 echo "3. non-member endorsement refused OK"
 
@@ -112,22 +116,47 @@ block:
   let sevents = @[proposeEvent(sid, stmtJson),
                   contributeEvent(sid, contributorOf(drv, stmtJson, sa), sa),
                   contributeEvent(sid, contributorOf(drv, stmtJson, sb), sb)]
-  doAssert intentState(sevents, drv, sid) == "executable",
+  doAssert intentState(sevents, foldDrv, sid) == "executable",
            "a statement effect folds to executable under the same threshold path"
 echo "4. a second effect type (statement) folds through the same path OK"
 
-# 5. The room's policy is DECLARED IN THE LOG and converges: a policy event's kind
-#    folds out, and a later event (greater ts) wins — so members agree on the driver
-#    and a policy change is just a later event (the honest core of driver-as-proposal).
+# 5. Policy is a property of each INTENT, not the room. A room is a security/privacy
+#    boundary; an intent is a policy boundary — a group can do several things at once,
+#    each under its own driver. Policy is declared in the log keyed by the intent id
+#    (policyDeclEvent), the id commits to the policy (same effect + different policy =
+#    distinct intents), and the fold resolves each intent's driver from ITS OWN policy.
 block:
-  var pevents: seq[Event]
-  doAssert activePolicyKind(pevents) == "safe", "no policy event -> default safe"
-  pevents.add policyEvent("threshold", 100)
-  doAssert activePolicyKind(pevents) == "threshold", "the policy event's kind folds out"
-  pevents.add policyEvent("safe", 200)
-  doAssert activePolicyKind(pevents) == "safe", "a later policy (greater ts) wins"
-  pevents.add policyEvent("threshold", 150)   # earlier than the safe@200
-  doAssert activePolicyKind(pevents) == "safe", "an earlier policy does not override a later one"
-echo "5. log-declared policy folds, latest wins (convergent) OK"
+  # Two policies over the same roster, differing only in threshold: "threshold" needs
+  # k=2, "solo" needs k=1. The resolver maps each to its driver — no Safe needed to
+  # prove per-intent resolution changes the fold.
+  let solo = newThresholdDriver(@[a.identity().ed, b.identity().ed, c.identity().ed], k = 1)
+  let resolve: DriverFor = proc(kind: string): Driver =
+    if kind == "solo": solo else: drv
+  # intentPolicyOf: default safe, then each intent's own declaration wins for THAT id.
+  var pe: seq[Event]
+  doAssert intentPolicyOf(pe, "x") == "safe", "no declaration -> default safe"
+  pe.add policyDeclEvent("x", "threshold")
+  pe.add policyDeclEvent("y", "solo")
+  doAssert intentPolicyOf(pe, "x") == "threshold", "each intent's own policy"
+  doAssert intentPolicyOf(pe, "y") == "solo", "a different intent, a different policy"
+  doAssert intentPolicyOf(pe, "z") == "safe", "an undeclared intent stays default"
+  # The id commits to the policy, so the SAME effect under two policies is two intents.
+  let idX = intentIdFor(effectJson, "threshold")
+  let idY = intentIdFor(effectJson, "solo")
+  doAssert idX != idY, "same effect + different policy = distinct intents"
+  # And the fold honours it: one log, two intents, ONE endorsement each — the solo
+  # intent (k=1) reaches executable while the threshold intent (k=2) is still collecting.
+  var ev: seq[Event]
+  ev.add policyDeclEvent(idX, "threshold")
+  ev.add proposeEvent(idX, effectJson)
+  ev.add contributeEvent(idX, "A", endorse(a))
+  ev.add policyDeclEvent(idY, "solo")
+  ev.add proposeEvent(idY, effectJson)
+  ev.add contributeEvent(idY, "A", endorse(a))
+  doAssert intentState(ev, resolve, idX) == "collecting",
+           "the k=2 intent: one endorsement -> still collecting"
+  doAssert intentState(ev, resolve, idY) == "executable",
+           "the k=1 intent in the SAME log: one endorsement -> executable"
+echo "5. per-intent policy: two drivers in one log, each intent folds under its own OK"
 
 echo "threshold_fold_test: all OK"

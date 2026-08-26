@@ -13,6 +13,14 @@ differs and report it (a short "what to report" list is at the end).
 > Every signature you need is pre-computed in **Appendix A** — copy-paste, no
 > tooling. They are valid only for the exact effect values named in each step.
 
+> **This pass (2026-08-26):** `make build` again first — it carries the fixes from
+> your last run (accent tiles, Enter-to-send, the honest "M of N" header, the larger
+> verify text, the honest ready-note) **and** the new model: **policy is per-intent,
+> not per-room** (an intent is a policy boundary; a room can hold several under
+> different drivers). Parts 2–3 are **reset to unchecked** so you re-confirm the fixed
+> behavior; each fix is flagged **✓ Fixed — confirm**. Part 4 is rewritten for the
+> per-intent model (two policies in one room).
+
 > **The model in one line:** a room is a *security and privacy boundary*; an
 > individual intent is a *policy boundary*. One room can carry several intents at
 > once, each under its own driver (Safe, Threshold, …), and each proposal keeps the
@@ -70,7 +78,7 @@ make run        # opens the standalone app window
 - [ ] On a fresh launch Home reads **"Nothing waiting on you"** and
       **"Nothing on yet. Start something with someone."** with a **Start something**
       button.
-  - ✓ **Expect:** the top **nav buttons now wrap to a second row** when the
+- ✓ **Fixed — confirm:** the top **nav buttons now wrap to a second row** when the
     window is too narrow to hold them, instead of running off the left edge. (Was:
     "buttons get cut off if you make the window smaller.")
 - [ ] Click **Start something** → the **composer** opens: four verb tiles
@@ -78,7 +86,7 @@ make run        # opens the standalone app window
 - [ ] Pick a verb → the **"Who's doing it with you?"** and **"How does the room
       approve?"** steps reveal below it (progressive disclosure). The confirm button
       names the next step ("Open the room — just you" if no peer).
-  - ✓ **Expect:** the **selected** tile reads in **accent** (raised + accent
+- ✓ **Fixed — confirm:** the **selected** tile reads in **accent** (raised + accent
     border), easy to tell from the unselected ones (was grayscale-only before).
 - [ ] **How does the room approve?** shows two tiles — **Safe · 2 of 3** and
       **Threshold · 2 of 3** — the policy for the **first** thing you'll propose here.
@@ -89,12 +97,13 @@ make run        # opens the standalone app window
 - [ ] **Priming (a money verb):** the room opens with an **address-request** card in
       the thread — headed *"For: Pay someone"* — because the intention needs somewhere
       to send funds. (A *Just talk* room primes nothing.)
-  - ✓ **Expect:** the priming card (and in fact **every** card — proposals,
+  - ✓ **Fixed — confirm:** the priming card (and in fact **every** card — proposals,
     address-share, receipts) now renders. (Was: "nothing happens after the room is
     opened." Cause: a delegate declared `required property int index` for the
     duplicate-card fix but not `modelData`, and in Qt 6 that stops `modelData` being
     injected — so every message body failed to parse and rendered blank. Fixed by
     declaring `modelData` required too.)
+  - ✓ **Expect:** the priming card (and in fact **every** card — proposals,
 
 > This is also the **delivery-node test.** Opening the room calls `coordinate_join`,
 > which boots the embedded delivery node. If the room opens and the roster shows at
@@ -108,7 +117,7 @@ make run        # opens the standalone app window
 **Chat**
 - [ ] Type in **"Say something"** and press **Send** → your line appears in the
       thread with a short author id + a timestamp.
-  - ✓ **Expect:** pressing **Enter** in "Say something" also sends the message.
+- ✓ **Fixed — confirm:** pressing **Enter** in "Say something" also sends the message.
 
 **Answer the priming request**
 - [ ] On the address-request card, click **Share an address** → an **address-share**
@@ -116,17 +125,17 @@ make run        # opens the standalone app window
       YOUR own** (the account from Settings § identity), not a placeholder.
 
 **Propose a payment**
-- [ ] Click the **`+`** in the message row → the compose panel opens with a **Kind**
+- [x] Click the **`+`** in the message row → the compose panel opens with a **Kind**
       toggle (*Payment* / *Statement*), a **Next proposal** policy toggle (*Safe* /
       *Threshold*), and fields. ✓ The policy toggle reflects your composer pick and
       sets the driver for **this proposal** (each card keeps its own — see Part 4).
-- [ ] Kind = **Payment**, policy = **Safe**. Recipient:
+- [x] Kind = **Payment**, policy = **Safe**. Recipient:
       `0x1111111111111111111111111111111111111111`, amount `1000`. Click **Propose**.
 - Note: right-click paste isn't available (design-system limitation); **Ctrl+V** works.
 - [ ] ✓ **Expect:** a proposal card appears **inline in the thread** (not a side
       panel), headed **"Pay… · 2 of 3"**, showing `1000 → 0x1111…1111`, a status rail
       (proposed → collecting → ready → paid), and approval slots (**0 of 2**).
-  - ✓ **Expect:** the header reads **"… · 2 of 3"** (M-needed of N-owners),
+- ✓ **Expect:** the header reads **"… · 2 of 3"** (M-needed of N-owners),
     not "2 of 2".
 
 **Dive in #1 — "what am I signing?" (the verify box)**
@@ -135,17 +144,19 @@ make run        # opens the standalone app window
       - `shown` — `1000  →  0x1111…1111`
       - `re-derived` — a 32-byte `0x…` hash (the safeTxHash)
       - `domain` — `anvil-31337 · chain 31337 · Safe 0x5FbDB2…aa3`
-  - ✓ **Expect:** the verify-box text is now larger/legible.
+```
+  - ✓ **Fixed — confirm:** the verify-box text is now larger/legible.
+```
 
 **Dive in #2 — "how do I know this?" (provenance)**
 - [ ] Click **"How do I know this? — N in the lineage"** → it expands to at least the
       **propose** entry: `[peer-message] the proposed effect` · `sealed to the room · log #…`.
 
 **Approve → executable**
-- [ ] Click **Approve** on the card → a signature field appears. Paste **Safe owner
+- [x] Click **Approve** on the card → a signature field appears. Paste **Safe owner
       sig 1** (Appendix A) → **Add** (or press **Enter**). Then **Approve** again →
       paste **Safe owner sig 2** → **Add**.
-- [ ] ✓ **Expect:** approval slots fill to **2 of 2**, the status rail lights to
+- [x] ✓ **Expect:** approval slots fill to **2 of 2**, the status rail lights to
       **ready**, and the provenance box now also lists **two** entries
       `[driver-contribution] an owner signature · 0x…(an owner) · verified owner · log #…`.
 - [ ] Before the second sig, paste the **same** sig again, or any random hex → ✓ it is
@@ -170,24 +181,24 @@ re-proposed effect collapsing into one card) is gone.
 (no fresh room needed): set **Next proposal → Threshold**, then **`+`** → Kind =
 **Payment**, recipient `0x1111111111111111111111111111111111111111`, amount `1000` →
 **Propose**.
-- [ ] ✓ **Expect:** a **new, separate** card appears (the Part-3 Safe card is
+- [x] ✓ **Expect:** a **new, separate** card appears (the Part-3 Safe card is
       untouched — its own intent, its own policy). The new card's rail reads
       **threshold** (not `safe`); open its verify box — `domain` is
       **`muster.threshold.v1`** (no chain, no Safe address), and `re-derived` is a
       longer hash (the base serialization, not a 32-byte safeTxHash).
-- [ ] ✓ Two cards now coexist under **different policies** in one room: the Safe
+- [x] ✓ Two cards now coexist under **different policies** in one room: the Safe
       payment (rail `safe`) and the threshold payment (rail `threshold`).
-- [ ] Approve with **Threshold payment sig 1** then **sig 2** (Appendix A) →
+- [x] Approve with **Threshold payment sig 1** then **sig 2** (Appendix A) →
       ✓ reaches **2 of 2 / ready**, showing the honest **"✓ Ready — settle it on-chain
       from the Account view"** note. Provenance names two **`ed:…`** endorsers.
 
 **A statement the room ratifies (a second effect type)**
-- [ ] New proposal: **`+`** → **Next proposal = Threshold**, Kind = **Statement**. Type
+- [x] New proposal: **`+`** → **Next proposal = Threshold**, Kind = **Statement**. Type
       **exactly**: `We ratify the treasury plan.` → **Propose**.
-- [ ] ✓ **Expect:** the card shows the **quoted statement** ("We ratify the treasury
+- [x] ✓ **Expect:** the card shows the **quoted statement** ("We ratify the treasury
       plan.") instead of an amount → destination; the verify box's `shown` is the
       quoted text.
-- [ ] Approve with **Threshold statement sig 1** then **sig 2** (Appendix A) →
+- [x] Approve with **Threshold statement sig 1** then **sig 2** (Appendix A) →
       ✓ reaches **2 of 2 / ready** — a signed group endorsement of text, no payment.
 
 ---
@@ -195,20 +206,20 @@ re-proposed effect collapsing into one card) is gone.
 ## Part 5 — the scope panel (who can read this)
 
 On the right side of the Room:
-- [ ] **In the room** shows a count and at least one member row (**you**, marked `· you`).
-- [ ] Tap a member row → its **full 64-byte identity** reveals (tap again to collapse).
-- [ ] **Add someone** is **disabled**, with a line explaining the join handshake
+- [x] **In the room** shows a count and at least one member row (**you**, marked `· you`).
+- [x] Tap a member row → its **full 64-byte identity** reveals (tap again to collapse).
+- [x] **Add someone** is **disabled**, with a line explaining the join handshake
       isn't wired to a surface yet. (Honest dead-control fix, not a bug.)
-- [ ] The **Scope** line reads `end-to-end · N can read`, with the F-16 note about
+- [x] The **Scope** line reads `end-to-end · N can read`, with the F-16 note about
       re-keying forward.
 
 ---
 
 ## Part 6 — multi-room
 
-- [ ] With one room open, go **Home** (nav). ✓ The room is listed as a row with its
+- [x] With one room open, go **Home** (nav). ✓ The room is listed as a row with its
       latest-intent headline (e.g. "Collecting approvals" / "Ready to submit").
-- [ ] **Start something** → create a **second** room, this time picking
+- [x] **Start something** → create a **second** room, this time picking
       **Threshold** at "How does the room approve?" → it opens under Threshold.
 ```
   - ✓ **Expect:** it now opens a **new, empty** room, not the existing one.
@@ -217,7 +228,7 @@ On the right side of the Room:
     re-activated the first. Each "Start something" now gives the topic a unique tail,
     so it's always a fresh conversation. Re-opening an existing room still goes through
     **Home**, which passes that room's stored topic.)
-- [ ] Go **Home** again → ✓ **both** rooms are listed. Click the first → ✓ it
+- [x] Go **Home** again → ✓ **both** rooms are listed. Click the first → ✓ it
       re-opens with its own thread and proposals intact — each card still showing the
       **policy its intent was proposed under** (Safe cards read `safe`, threshold
       cards read `threshold`), regardless of which room you're in or the current
@@ -231,7 +242,7 @@ On the right side of the Room:
 The **Account** surface is the single-instance Safe path (inspect + act directly +
 settle on-chain).
 
-- [ ] Click **Account**. ✓ It reads "the Safe you coordinate against…", shows a
+- [x] Click **Account**. ✓ It reads "the Safe you coordinate against…", shows a
       **SAFE ACCOUNT** card (`Safe 0x5FbDB2…`, `2 of 3 owners · chain 31337 · anvil`),
       and an **"Owners — tap to see all 3"** line that expands to the three owner
       addresses.
@@ -252,12 +263,12 @@ cd infra/anvil && ./devnet.sh    # deploys MiniSafe at 0x5FbDB…aa3 and funds i
 ```
 
 Then, on the **Account** surface:
-- [ ] **Propose a transfer — directly**: to `0x1111111111111111111111111111111111111111`,
+- [x] **Propose a transfer — directly**: to `0x1111111111111111111111111111111111111111`,
       value `1000`, nonce `0` → **Propose**. The re-materialization strip shows the
       re-derived safeTxHash (green, "matches").
-- [ ] Paste **Safe owner sig 1**, then **sig 2** (Appendix A) via **Add signature** →
+- [x] Paste **Safe owner sig 1**, then **sig 2** (Appendix A) via **Add signature** →
       the rail reaches **executable** and an **executable** notice appears.
-- [ ] **Submit on-chain** → ✓ it reaches **final** ("executed on-chain… finality read
+- [x] **Submit on-chain** → ✓ it reaches **final** ("executed on-chain… finality read
       from the chain"). If anvil isn't up, ✓ it says so honestly ("is the RPC
       reachable?") rather than pretending it landed.
 
@@ -268,25 +279,26 @@ Then, on the **Account** surface:
 The user-configurable infrastructure — "untrusted, user-chosen" is empty if you
 can't configure it.
 
-- [ ] Click **Settings**. ✓ An **IDENTITY** card shows your `address`, `ed25519`, and
+- [x] Click **Settings**. ✓ An **IDENTITY** card shows your `address`, `ed25519`, and
       `x25519` (the keystore's — read-only; keys never leave it). This is the same
       address a Part-3 address-share shared.
-- [ ] An **INFRASTRUCTURE** card shows the current **RPC endpoint** and **delivery
+- [x] An **INFRASTRUCTURE** card shows the current **RPC endpoint** and **delivery
       node config**, each with an editable field + **Save**.
-- [ ] Type a different URL in the RPC field (e.g. `http://127.0.0.1:9999`) → **Save**.
+- [x] Type a different URL in the RPC field (e.g. `http://127.0.0.1:9999`) → **Save**.
       ✓ The "now:" line updates to the new value.
-- [ ] **Persistence:** close the window, `make run` again, open **Settings** → ✓ the
+- [x] **Persistence:** close the window, `make run` again, open **Settings** → ✓ the
       RPC still reads your edited value (it persisted to `settings.json` beside the
       keystore). **Set it back to `http://127.0.0.1:8545`** and Save when done, so any
       later on-chain run (Part 7) points at anvil.
 
 ## Part 9 — the walkthrough
 
-- [ ] Click **Walkthrough**. ✓ It renders "The transaction lifecycle" with the six
+- [x] Click **Walkthrough**. ✓ It renders "The transaction lifecycle" with the six
       steps, each carrying claim cards badged **PROTECTS** / **OTHERS LEAK** / **GAP**,
       and an evidence line (a requirement id + test, or a fix + status).
-  - ✓ **Expect:** the claim **body** and **evidence** text are larger now
+  - ✓ **Fixed — confirm:** the claim **body** and **evidence** text are larger now
     (bumped from the smallest badge size to the body size), so the cards read easily.
+  - ✓ **Expect:** the claim **body** and **evidence** text are larger now
 
 ---
 
