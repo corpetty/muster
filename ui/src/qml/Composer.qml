@@ -73,8 +73,14 @@ Item {
     function confirm() {
         if (!composer.hasVerb)
             return;
+        // Every "Start something" opens a NEW conversation, so give the topic a unique
+        // tail. Without it, two rooms of the same shape — e.g. two solo "pay" rooms —
+        // derive the identical topic, and coordinate_join re-activates the first
+        // instead of creating a second. Re-opening an existing room goes through Home
+        // (which passes its stored topic), never here, so this only affects creation.
+        var uniq = Date.now().toString(36) + Math.floor(Math.random() * 46656).toString(36);
         composer.createRoom(composer.pickedVerb, composer.peer,
-                            composer.derivedTopic(), composer.pickedPolicy);
+                            composer.derivedTopic() + "." + uniq, composer.pickedPolicy);
     }
 
     Flickable {

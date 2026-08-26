@@ -152,7 +152,7 @@ Item {
                                     Layout.fillWidth: true
                                     text: modelData.body
                                     color: Theme.palette.textSecondary
-                                    font.pixelSize: Theme.typography.badgeText
+                                    font.pixelSize: Theme.typography.secondaryText
                                     wrapMode: Text.WordWrap
                                 }
 
@@ -161,7 +161,7 @@ Item {
                                     text: walkthrough.evidenceOf(modelData)
                                     color: Theme.palette.textTertiary
                                     font.family: Theme.typography.mono
-                                    font.pixelSize: Theme.typography.badgeText
+                                    font.pixelSize: Theme.typography.secondaryText
                                     wrapMode: Text.WrapAnywhere
                                 }
                             }

@@ -14,6 +14,7 @@ import ../src/crypto/secp256k1
 import ../src/crypto/keystore
 import ../src/coordination/session
 import ../src/coordination/intents
+import ../src/drivers/driver as drivercore
 import ../src/drivers/safe
 
 proc key(hex: string): array[32, byte] =
@@ -37,6 +38,9 @@ let driver = newSafeDriver(chainId = 31337,
              toAddr("0x70997970C51812dc3A010C7d01b50e0d17dc79C8"),
              toAddr("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC")],
   threshold = 2)
+# The folds resolve a driver per intent now; this test runs one Safe intent, so the
+# resolver returns that Safe driver for any policy.
+let foldDrv: DriverFor = proc(kind: string): drivercore.Driver = driver
 
 # Same fixture effect + pre-signed owner signatures as multiparty_intent_test.
 const effectJson = """{"to":"0x1111111111111111111111111111111111111111","value":1000,"nonce":0}"""
@@ -67,7 +71,7 @@ let bob = newCoordinationSession(newLocalTransport(net), bobCrypto, topic)
 alice.publish(proposeEvent(id, effectJson))
 doAssert effectJsonOf(bob.log.allEvents(), id) == effectJson,
          "Bob recovers the proposed effect from the log"
-doAssert intentState(bob.log.allEvents(), driver, id) == "proposed"
+doAssert intentState(bob.log.allEvents(), foldDrv, id) == "proposed"
 echo "1. propose propagates; effect recovered OK"
 
 # 2. Contribute the way the hosted method does: recover+verify the owner, then key
@@ -75,15 +79,15 @@ echo "1. propose propagates; effect recovered OK"
 let who0 = contributorOf(driver, effectJson, sig0)
 doAssert who0.len > 0, "owner0 signature recovers to a configured owner"
 alice.publish(contributeEvent(id, who0, sig0))
-doAssert intentState(alice.log.allEvents(), driver, id) == "collecting"
+doAssert intentState(alice.log.allEvents(), foldDrv, id) == "collecting"
 echo "2. first owner contribution -> collecting OK"
 
 # 3. Second owner meets the threshold; both instances fold to executable + converge.
 let who1 = contributorOf(driver, effectJson, sig1)
 doAssert who1.len > 0 and who1 != who0, "owner1 is a distinct configured owner"
 bob.publish(contributeEvent(id, who1, sig1))
-let aState = intentState(alice.log.allEvents(), driver, id)
-let bState = intentState(bob.log.allEvents(), driver, id)
+let aState = intentState(alice.log.allEvents(), foldDrv, id)
+let bState = intentState(bob.log.allEvents(), foldDrv, id)
 doAssert aState == "executable" and bState == "executable", "threshold met -> executable"
 doAssert alice.digest() == bob.digest(), "both instances converge (invariant 4)"
 echo "3. threshold met -> executable + convergence OK"
@@ -95,7 +99,7 @@ echo "4. non-owner contribution refused OK"
 
 # 5. A duplicate owner contribution folds once (keyed by the recovered owner).
 alice.publish(contributeEvent(id, who0, sig0))
-doAssert intentState(alice.log.allEvents(), driver, id) == "executable",
+doAssert intentState(alice.log.allEvents(), foldDrv, id) == "executable",
          "a duplicate owner signature does not double-count"
 echo "5. duplicate owner contribution folds once OK"
 
@@ -103,7 +107,7 @@ echo "5. duplicate owner contribution folds once OK"
 #    it carried + the driver threshold + the DISTINCT-owner approval count. The
 #    duplicate from step 5 must not inflate the count — two owners signed, so 2.
 block:
-  let views = reduceIntentViews(bob.log.allEvents(), driver)
+  let views = reduceIntentViews(bob.log.allEvents(), foldDrv)
   doAssert views.len == 1, "one intent in the room"
   let v = views[0]
   doAssert v.id == id, "the view keys on the content-addressed intent id"
@@ -116,7 +120,7 @@ block:
   doAssert v.txhash.len == 66 and v.txhash.startsWith("0x"),
            "the view carries the re-derived materialization (32-byte hex)"
   doAssert v.txhash != "0x" & repeat("00", 32), "the re-derived hash is not zero"
-  let again = reduceIntentViews(bob.log.allEvents(), driver)[0]
+  let again = reduceIntentViews(bob.log.allEvents(), foldDrv)[0]
   doAssert again.txhash == v.txhash, "the re-derivation is deterministic across folds"
 echo "6. render-ready intent view (effect + threshold N=2 + approvals M=2 + re-derived txhash) OK"
 
@@ -125,7 +129,7 @@ echo "6. render-ready intent view (effect + threshold N=2 + approvals M=2 + re-d
 #    contribution, NAMED since Safe is mmNamed). The duplicate from step 5 folds
 #    once; a non-owner never reached the fold, so it is absent by construction.
 block:
-  let prov = intentProvenance(bob.log.allEvents(), driver, id)
+  let prov = intentProvenance(bob.log.allEvents(), foldDrv, id)
   doAssert prov.len == 3, "one propose + two distinct owner signatures"
   var proposes = 0
   var contributors: seq[string]

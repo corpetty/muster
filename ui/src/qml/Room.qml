@@ -51,8 +51,10 @@ Item {
         catch (e) { return []; }
     }
 
-    // The room's coordination policy (its driver), from coordinate_policy. The whole
-    // propose/contribute/fold path runs under whichever the room picks.
+    // The COMPOSE DEFAULT policy (driver) for the next thing you propose here, from
+    // coordinate_policy. Policy is a property of each intent, not the room — the room
+    // is a security/privacy boundary, an intent is a policy boundary — so this only
+    // stamps the next proposal; each card keeps the policy it was proposed under.
     readonly property var policy: {
         try { return JSON.parse(backend ? backend.policyJson : "{}"); }
         catch (e) { return ({}); }
@@ -229,7 +231,13 @@ Item {
 
                 delegate: Item {
                     id: msg
+                    // Both are REQUIRED: once a delegate declares any required property,
+                    // Qt 6 stops injecting context properties, so `modelData` must be
+                    // declared too or it reads as undefined (which silently blanks every
+                    // card — parsedCard parse fails → all rows fall through to empty
+                    // chat text). `index` drives the duplicate-ref collapse below.
                     required property int index
+                    required property var modelData
                     width: thread.width
                     // A duplicate ref collapses to nothing — re-proposing the same
                     // effect (same content-addressed id) posts a second ref to the
@@ -467,16 +475,17 @@ Item {
                     Item { Layout.fillWidth: true }
                 }
 
-                // ── policy picker: the room's driver (invariant 6) ────────────
-                // The same propose/contribute/fold runs under either — the policy is
-                // a driver, not hardcoded. Safe = EIP-712 / secp owners; Threshold =
-                // k-of-n Ed25519 endorsement.
+                // ── policy picker: THIS proposal's driver (invariant 6) ───────
+                // Policy binds to the intent, not the room — so this picks the driver
+                // for the NEXT thing you propose; a card already collecting keeps its
+                // own. The same propose/contribute/fold runs under either. Safe =
+                // EIP-712 / secp owners; Threshold = k-of-n Ed25519 endorsement.
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: Theme.spacing.small
 
                     LogosText {
-                        text: qsTr("Policy")
+                        text: qsTr("Next proposal")
                         color: Theme.palette.textTertiary
                         font.family: Theme.typography.mono
                         font.pixelSize: Theme.typography.badgeText

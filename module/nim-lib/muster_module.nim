@@ -62,21 +62,19 @@ var gDriver = SafeDriver(newDriver("safe", %*{
   "chainId": 31337, "safe": SAFE_ADDR,
   "owners": [OWNER0, OWNER1, OWNER2], "threshold": 2}))
 
-# ── the ROOM's coordination policy (the driver) — swappable per conversation ────
-# The single-instance Safe dashboard above holds a concrete SafeDriver. A ROOM
-# coordinates under a policy the room picks, so its driver is a base Driver here,
-# defaulting to the Safe above. coordinate_set_policy swaps it — proving the policy
-# is a driver, not hardcoded (invariant 6): the same propose/contribute/fold path
-# runs under Safe (secp/EIP-712) or the threshold driver (Ed25519 k-of-n), and the
-# intent view is described by the driver, never assumed Safe. A real deployment
-# reads the policy + its config from the room; the threshold roster below is a demo
-# fixture, exactly as the Safe owners are.
-# The room's policy (its driver) is declared in the LOG (policyEvent / activePolicyKind
-# in coordination/intents), so members converge on which driver governs the room — a
-# policy change is a later event, not a local toggle. gCoordKind/gCoordDriver cache the
-# active room's choice for policyJson display; the fold derives the driver from the log.
+# ── coordination policy (the driver) — a property of each INTENT, not the room ──
+# The room is a security and privacy boundary; an individual intent is a POLICY
+# boundary. A group (a room) can do several things at once, each under its own
+# driver — so policy binds to the intent, not the conversation. A propose declares
+# its intent's policy in the LOG (policyDeclEvent, keyed by the content-addressed
+# intent id), and the fold resolves each intent's driver from that (intentPolicyOf +
+# driverForKind). This is invariant 6 twice over: the driver is never hardcoded, and
+# two intents under two drivers coexist in one thread.
+#
+# gCoordKind is only this instance's COMPOSE DEFAULT — the policy the *next* propose
+# is stamped with. Changing it never re-folds an existing decision, because each
+# intent already carries its own policy. driverFor() is the resolver the folds take.
 var gCoordKind = "safe"
-var gCoordDriver: Driver = gDriver
 
 proc seedOf(n: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = n)
 proc thrRosterKey(n: byte): Ed25519Pub = encFromSeed(seedOf(n)).identity().ed
@@ -88,6 +86,9 @@ proc driverForKind(kind: string): Driver =
   of "threshold":
     newThresholdDriver(@[thrRosterKey(1), thrRosterKey(2), thrRosterKey(3)], 2)
   else: gDriver
+
+let driverFor: DriverFor = proc(kind: string): Driver = driverForKind(kind)
+  ## The per-intent driver resolver the folds take: each intent's own policy → its driver.
 var gIntents = initTable[string, Intent]()
 var gHashes = initTable[string, array[32, byte]]()
 var gEffects = initTable[string, Effect]()             ## the effect per intent (for execTransaction)
@@ -167,6 +168,18 @@ proc musterIdentity(): string =
     "x25519": toHex(enc.x)
   })
 
+proc safeProtocolVersion(): string =
+  ## The logos-protocol ABI version, read defensively. describe() runs at
+  ## context-ready — BEFORE any coordinate_join has initialized the lp/delivery
+  ## library — so this FFI can return nil or raise then. It is informational only,
+  ## and must never decide whether the account loads (a nil/raise here used to blank
+  ## the whole SAFE ACCOUNT card as "not loaded"). Fall back to "unknown".
+  try:
+    let v = lp_protocol_version()
+    if v.isNil: "unknown" else: $v
+  except CatchableError:
+    "unknown"
+
 proc musterDescribe(): string =
   ## The Safe account this module coordinates against, read straight from the
   ## driver so the UI displays domain facts it was told, not ones it hardcoded.
@@ -180,7 +193,7 @@ proc musterDescribe(): string =
     "threshold": gDriver.threshold,
     "owners": owners,
     "environment": "anvil-31337",
-    "protocol": $lp_protocol_version()   # the logos-protocol ABI this module speaks
+    "protocol": safeProtocolVersion()   # the logos-protocol ABI this module speaks
   })
 
 proc musterPropose(effectJson: string): string =
@@ -311,38 +324,41 @@ proc musterCoordinateJoin(topic: string): string =
     gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(ks), topic)
     gSessions[topic] = gSession
   gTopic = topic
-  gCoordKind = activePolicyKind(gSession.log.allEvents())   # the room's log-declared policy
-  gCoordDriver = driverForKind(gCoordKind)
+  # Policy is per-intent now, declared in the log at propose time — so join no longer
+  # overrides this instance's compose default. It keeps whatever policy the user last
+  # picked for the next thing they propose here.
   $(%*{"address": toHex(ks.address()), "topic": topic})
 
 proc policyJson(): JsonNode =
-  let d = gCoordDriver.describe()
+  let d = driverForKind(gCoordKind).describe()
   %*{"policy": gCoordKind, "threshold": d.threshold,
      "domain": d.serializationDomain, "membership": $d.membership}
 
 proc musterCoordinateSetPolicy(kind: string): string =
-  ## Choose the room's coordination policy (its driver). "safe" is the EIP-712 Safe
-  ## above; "threshold" is a k-of-n Ed25519 endorsement over a demo roster — nothing
-  ## like Safe (no secp, no chain), yet the same propose/contribute/fold path. Set
-  ## before proposing; a real deployment fixes this at room creation.
+  ## Choose the COMPOSE DEFAULT policy — the driver the next intent you propose runs
+  ## on. "safe" is the EIP-712 Safe above; "threshold" is a k-of-n Ed25519 endorsement
+  ## over a demo roster — nothing like Safe (no secp, no chain), yet the same
+  ## propose/contribute/fold path. Policy is a property of each intent (declared in the
+  ## log when you propose), so this is a local default, never a room-wide event — an
+  ## intent already collecting signatures keeps the policy it was proposed under.
   case kind
   of "safe", "threshold":
     gCoordKind = kind
-    gCoordDriver = driverForKind(kind)
-    if gSession != nil:
-      inc gMsgSeq
-      gSession.publish(policyEvent(kind, int64(epochTime())))   # declare it in the log
   else:
     return $(%*{"error": "unknown policy: " & kind})
   $policyJson()
 
 proc musterCoordinatePolicy(): string =
-  ## The room's current policy — {policy, threshold, domain, membership}.
+  ## This instance's compose default — {policy, threshold, domain, membership}.
   $policyJson()
 
 proc musterCoordinatePropose(effectJson: string): string =
   if gSession == nil: return "not-joined"
-  let id = intentIdFor(effectJson)
+  # The intent id commits to its policy, so the SAME effect under two policies is two
+  # distinct intents (an intent is a policy boundary). The policy is declared in the
+  # log keyed by that id, so every member folds this intent under the same driver.
+  let id = intentIdFor(effectJson, gCoordKind)
+  gSession.publish(policyDeclEvent(id, gCoordKind))
   gSession.publish(proposeEvent(id, effectJson))
   # Announce the proposal INTO the conversation: a reference card, authored and
   # timestamped like any message, so the proposal appears inline in the thread
@@ -361,15 +377,15 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string): string 
   if gSession == nil: return "not-joined"
   gSession.poll()
   let events = gSession.log.allEvents()
-  let drv = driverForKind(activePolicyKind(events))   # the room's log-declared policy
+  let drv = driverForKind(intentPolicyOf(events, intentId))   # THIS intent's own policy
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return "unknown-intent"
-  # The room's policy verifies the contribution: a Safe owner's secp signature, or a
+  # The intent's policy verifies the contribution: a Safe owner's secp signature, or a
   # threshold roster member's Ed25519 endorsement — "" iff it isn't a valid one.
   let who = contributorOf(drv, effectJson, signatureHex)
   if who.len == 0: return "rejected"
   gSession.publish(contributeEvent(intentId, who, signatureHex))
-  intentState(gSession.log.allEvents(), drv, intentId)
+  intentState(gSession.log.allEvents(), driverFor, intentId)
 
 proc musterCoordinateIntents(): string =
   ## The room's proposals, folded from the shared log and projected to what a card
@@ -380,17 +396,18 @@ proc musterCoordinateIntents(): string =
   if gSession == nil: return "[]"
   gSession.poll()
   let events = gSession.log.allEvents()
-  let drv = driverForKind(activePolicyKind(events))   # the room's log-declared policy
-  let desc = drv.describe()                            # threshold + domain are driver-described
   var arr = newJArray()
-  for v in reduceIntentViews(events, drv):
-    # txhash is the driver-re-derived materialization — the exact bytes a member
-    # signs (Safe's safeTxHash, or the threshold driver's dCBOR materialization).
-    # threshold + domain come from describe(), never hardcoded — so the card renders
-    # whatever policy the room chose (invariant 6). rail names the policy.
+  for v in reduceIntentViews(events, driverFor):
+    # Each intent renders under ITS OWN driver — the policy it was proposed with
+    # (v.policy) — so a room carrying a Safe intent and a threshold intent shows each
+    # honestly at once (invariant 6). txhash is the driver-re-derived materialization —
+    # the exact bytes a member signs (Safe's safeTxHash, or the threshold driver's
+    # dCBOR materialization); threshold + domain come from describe(), never hardcoded.
+    let drv = driverForKind(v.policy)
+    let desc = drv.describe()
     var o = %*{"id": v.id, "state": v.state,
                "threshold": desc.threshold, "approvals": v.approvals,
-               "policy": gCoordKind, "domain": desc.serializationDomain,
+               "policy": v.policy, "domain": desc.serializationDomain,
                "txhash": v.txhash}
     # n = how many could sign (owners / roster), so the card reads "M of N" honestly
     # (e.g. 2 of 3), not "threshold of threshold".
@@ -406,7 +423,7 @@ proc musterCoordinateIntents(): string =
       o["safe"] = %toHex(sd.safe)
       o["environment"] = %"anvil-31337"
     else:
-      o["rail"] = %gCoordKind
+      o["rail"] = %v.policy
     if v.effectJson.len > 0:
       try: o["effect"] = parseJson(v.effectJson)
       except CatchableError: discard
@@ -414,7 +431,7 @@ proc musterCoordinateIntents(): string =
     # this intent in front of the reader, by class + position + (named) account, so
     # the UI can answer "how do I know this, and why trust it".
     var prov = newJArray()
-    for item in intentProvenance(events, drv, v.id):
+    for item in intentProvenance(events, driverFor, v.id):
       prov.add %*{"class": $item.cls, "logPos": item.logPos,
                   "account": item.account, "accountable": item.accountable,
                   "what": item.what}
