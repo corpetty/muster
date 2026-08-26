@@ -2,9 +2,10 @@
 
 What this validates: everything built for the room/coordination experience that a
 headless test and `nix build` **cannot** confirm — the on-screen render, the
-delivery-backed room loop, the dive-ins, the policy/effect pickers, and multi-room.
-The module logic underneath each step is already covered by Nim tests; this checks
-that it reaches the screen and behaves.
+delivery-backed room loop, the verify/provenance dive-ins, the policy/effect pickers,
+intent-driven **priming**, **multi-room** with per-room policy, and the **Settings**
+shell. The module logic underneath each step is already covered by Nim tests; this
+checks that it reaches the screen and behaves.
 
 Work top to bottom. Each **✓ Expect** is what "pass" looks like; note anything that
 differs and report it (a short "what to report" list is at the end).
@@ -32,16 +33,19 @@ make run        # opens the standalone app window
 ```
 
 - ✓ **Expect:** a window opens on the **Home** surface. A nav bar sits across the
-  **top**: `Home | Room | Account | Walkthrough`, with a hairline divider under it.
-- ✗ **The bug we just fixed:** the nav must **not** overlap the content below it.
+  **top** in its own strip: `Home | Room | Account | Walkthrough | Settings`, with a
+  hairline divider under it.
+- ✓ **The nav bar has its own strip** — it must **not** overlap the content below it
+  on any surface (the fix). Content starts *under* the divider, everywhere.
 
 ---
 
 ## Part 1 — nav & surfaces (the render checks)
 
 - [ ] The current surface's nav button is **filled** (accent); the others are neutral.
-- [ ] Click **Room**, **Account**, **Walkthrough**, **Home** in turn. Each surface
-      renders **below** the nav bar (no overlap), and the filled button follows you.
+- [ ] Click **Room**, **Account**, **Walkthrough**, **Settings**, **Home** in turn.
+      Each surface renders **below** the nav bar (no overlap), and the filled button
+      follows you (Home stays filled while composing, its sub-flow).
 
 ---
 
@@ -52,11 +56,17 @@ make run        # opens the standalone app window
       button.
 - [ ] Click **Start something** → the **composer** opens: four verb tiles
       (*Pay someone*, *Ask to be paid*, *Split a cost*, *Just talk*).
-- [ ] Pick a verb → the **"Who's doing it with you?"** and **"Which account?"** steps
-      reveal below it (progressive disclosure). The confirm button names the next
-      step ("Open the room — just you" if no peer).
+- [ ] Pick a verb → the **"Who's doing it with you?"** and **"How does the room
+      approve?"** steps reveal below it (progressive disclosure). The confirm button
+      names the next step ("Open the room — just you" if no peer).
+- [ ] **How does the room approve?** shows two tiles — **Safe · 2 of 3** and
+      **Threshold · 2 of 3** — the policy (driver) the room runs on. Pick one; the
+      selected tile is raised. (You can leave it on Safe.)
 - [ ] Click **Open the room** → the **Room** surface opens with a topic like
-      `muster.pay.…` in the header.
+      `muster.pay.…` in the header, already under the policy you picked.
+- [ ] **Priming (a money verb):** the room opens with an **address-request** card in
+      the thread — headed *"For: Pay someone"* — because the intention needs somewhere
+      to send funds. (A *Just talk* room primes nothing.)
 
 > This is also the **delivery-node test.** Opening the room calls `coordinate_join`,
 > which boots the embedded delivery node. If the room opens and the roster shows at
@@ -71,10 +81,16 @@ make run        # opens the standalone app window
 - [ ] Type in **"Say something"** and press **Send** → your line appears in the
       thread with a short author id + a timestamp.
 
+**Answer the priming request**
+- [ ] On the address-request card, click **Share an address** → an **address-share**
+      card appears naming a **public account** and an address. ✓ **That address is
+      YOUR own** (the account from Settings § identity), not a placeholder.
+
 **Propose a payment**
 - [ ] Click the **`+`** in the message row → the compose panel opens with a **Kind**
       toggle (*Payment* / *Statement*), a **Policy** toggle (*Safe* / *Threshold*),
-      and fields.
+      and fields. ✓ The **Policy** toggle already reflects what you picked in the
+      composer; you can change it here (it applies to this room only).
 - [ ] Kind = **Payment**, Policy = **Safe**. Recipient:
       `0x1111111111111111111111111111111111111111`, amount `1000`. Click **Propose**.
 - [ ] ✓ **Expect:** a proposal card appears **inline in the thread** (not a side
@@ -143,9 +159,12 @@ On the right side of the Room:
 
 - [ ] With one room open, go **Home** (nav). ✓ The room is listed as a row with its
       latest-intent headline (e.g. "Collecting approvals" / "Ready to submit").
-- [ ] **Start something** → create a **second** room (different verb) → it opens.
+- [ ] **Start something** → create a **second** room, this time picking
+      **Threshold** at "How does the room approve?" → it opens under Threshold.
 - [ ] Go **Home** again → ✓ **both** rooms are listed. Click the first → ✓ it
-      re-opens with its own thread and proposals intact (each room kept its state).
+      re-opens with its own thread and proposals intact.
+- [ ] **Per-room policy:** open the first room's **`+`** → ✓ its Policy is **Safe**
+      (its own), not Threshold from the second room. Each room keeps its own driver.
 
 ---
 
@@ -182,7 +201,24 @@ Then, on the **Account** surface:
 
 ---
 
-## Part 8 — the walkthrough
+## Part 8 — Settings & config (the shell start, invariant 8)
+
+The user-configurable infrastructure — "untrusted, user-chosen" is empty if you
+can't configure it.
+
+- [ ] Click **Settings**. ✓ An **IDENTITY** card shows your `address`, `ed25519`, and
+      `x25519` (the keystore's — read-only; keys never leave it). This is the same
+      address a Part-3 address-share shared.
+- [ ] An **INFRASTRUCTURE** card shows the current **RPC endpoint** and **delivery
+      node config**, each with an editable field + **Save**.
+- [ ] Type a different URL in the RPC field (e.g. `http://127.0.0.1:9999`) → **Save**.
+      ✓ The "now:" line updates to the new value.
+- [ ] **Persistence:** close the window, `make run` again, open **Settings** → ✓ the
+      RPC still reads your edited value (it persisted to `settings.json` beside the
+      keystore). **Set it back to `http://127.0.0.1:8545`** and Save when done, so any
+      later on-chain run (Part 7) points at anvil.
+
+## Part 9 — the walkthrough
 
 - [ ] Click **Walkthrough**. ✓ It renders "The transaction lifecycle" with the six
       steps, each carrying claim cards badged **PROTECTS** / **OTHERS LEAK** / **GAP**,
@@ -247,13 +283,19 @@ Threshold statement sig 2:
 
 For each part, "pass" or the specific difference. The ones that matter most:
 
-1. **Part 0** — does it launch, and is the nav overlap gone?
+1. **Part 0/1** — does it launch, and does the nav sit in its own strip with **no
+   overlap** on any surface?
 2. **Part 2/3** — **does the room open and function** (delivery node boots, chat +
-   proposals fold)? This is the biggest unknown.
+   proposals fold)? This is the biggest unknown. And does a money room **prime** with
+   an address-request, answered by an address-share carrying **your own** address?
 3. **Part 3/4** — do the **verify** and **provenance** dive-ins expand and show real
    values? Do the **policy** and **kind** toggles change the card (rail/domain,
    payment↔statement)?
-4. **Part 6** — does multi-room list and switch correctly?
-5. **Part 7** — does the on-chain submit reach **final** against anvil?
-6. Anything that renders wrong, overlaps, or reads dishonestly (a claim the code
+4. **Part 4** — does composing under **Threshold** open the room under it (rail =
+   threshold, domain = `muster.threshold.v1`), and do the threshold sigs reach ready?
+5. **Part 6** — does multi-room list and switch correctly, and does **each room keep
+   its own policy**?
+6. **Part 7** — does the on-chain submit reach **final** against anvil?
+7. **Part 8** — do edited RPC/delivery settings **persist across a restart**?
+8. Anything that renders wrong, overlaps, or reads dishonestly (a claim the code
    isn't actually backing).
