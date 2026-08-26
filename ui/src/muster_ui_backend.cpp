@@ -175,6 +175,7 @@ void MusterUiBackend::joinRoom(const QString &topic)
     loadMembers();
     loadIntents();
     loadConversations();   // the room list — this join may have added a room
+    loadDrivers();         // the room's admitted policy set (driver-as-proposal)
 }
 
 void MusterUiBackend::postMessage(const QString &body)
@@ -227,6 +228,7 @@ void MusterUiBackend::contributeInRoom(const QString &intentId, const QString &s
     const QString st = modules().muster_module.coordinate_contribute(intentId, signatureHex);
     qInfo() << "[muster_ui] coordinate_contribute" << intentId << "->" << st;
     loadIntents();
+    loadDrivers();   // an approval may have admitted a new driver kind (governance)
 }
 
 void MusterUiBackend::loadIntents()
@@ -247,6 +249,14 @@ void MusterUiBackend::submitInRoom(const QString &intentId)
     qInfo() << "[muster_ui] coordinate_submit" << intentId << "->" << r;
     setRoomSubmitJson(r);
     loadIntents();
+}
+
+void MusterUiBackend::loadDrivers()
+{
+    // coordinate_drivers → the driver kinds this room may use (driver-as-proposal).
+    // Folded from the shared log: the founding set plus any kind an approved
+    // add-driver proposal admitted. The policy pickers offer only these.
+    setDriversJson(modules().muster_module.coordinate_drivers());
 }
 
 void MusterUiBackend::setPolicy(const QString &kind)

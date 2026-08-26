@@ -46,6 +46,17 @@ proc effectFromJson*(effectJson: string): Effect =
         var fields: seq[(string, CborValue)]
         if j.hasKey("text"): fields.add ("text", cbText(j["text"].getStr()))
         return Effect(schemaId: "muster.effect.statement.v1", fields: fields)
+      of "add-driver":
+        # GOVERNANCE — driver-as-proposal: a proposal that INTRODUCES a driver kind
+        # into the room's capability set. What a group can do evolves by proposal, not
+        # a fixed compile-time list (invariant 6). Like a statement it produces a signed
+        # group decision, not an on-chain effect; it canonicalizes under the base
+        # serialization, and once the room approves it the kind is admitted (see
+        # roomDriverKinds). Schema-bound, so an add-driver signature can never be
+        # reinterpreted as a payment (F-5).
+        var fields: seq[(string, CborValue)]
+        if j.hasKey("kind"): fields.add ("kind", cbText(j["kind"].getStr()))
+        return Effect(schemaId: "muster.effect.governance.add-driver.v1", fields: fields)
       else:
         var fields: seq[(string, CborValue)]
         if j.hasKey("to"): fields.add ("to", cbText(j["to"].getStr()))
@@ -240,6 +251,25 @@ proc intentState*(events: seq[Event], driverFor: DriverFor, intentId: string): s
   ## executable/…), or "unknown".
   let intents = reduceIntents(events, driverFor)
   if intentId in intents: $intents[intentId].state else: "unknown"
+
+proc roomDriverKinds*(events: seq[Event], driverFor: DriverFor): seq[string] =
+  ## The driver kinds the room may use, folded from the log — driver-as-proposal
+  ## (invariant 6). The base is the founding capability set; each `add-driver`
+  ## governance intent the room APPROVED (reached executable or beyond) admits its
+  ## kind. Deterministic: every member derives the same capability set from the same
+  ## events, and a capability appears only once the group has actually agreed to it.
+  result = @["safe", "threshold"]          # the founding capabilities
+  let intents = reduceIntents(events, driverFor)
+  for id, it in intents:
+    if $it.state notin ["executable", "submitted", "final"]: continue
+    let ej = effectJsonOf(events, id)
+    if ej.len == 0: continue
+    try:
+      let j = parseJson(ej)
+      if j.kind == JObject and j.hasKey("effect") and j["effect"].getStr() == "add-driver":
+        let k = (if j.hasKey("kind"): j["kind"].getStr() else: "")
+        if k.len > 0 and k notin result: result.add k
+    except CatchableError: discard
 
 # ── render-ready projection (what a card needs, still a pure fold) ─────────────
 

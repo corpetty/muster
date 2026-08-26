@@ -45,6 +45,7 @@ public:
     void contributeInRoom(const QString &intentId, const QString &signatureHex) override;
     void loadIntents() override;
     void submitInRoom(const QString &intentId) override;
+    void loadDrivers() override;
     void setPolicy(const QString &kind) override;
     void loadPolicy() override;
 

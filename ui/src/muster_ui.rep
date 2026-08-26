@@ -78,6 +78,11 @@ class MusterUi
     SLOT(void setPolicy(const QString &kind))
     SLOT(void loadPolicy())
 
+    // The driver kinds the room may use (coordinate_drivers): driver-as-proposal.
+    // The founding set plus any kind an approved add-driver governance intent admitted.
+    // Lands on driversJson; the policy pickers offer only these.
+    SLOT(void loadDrivers())
+
     PROP(QString health="unknown" READONLY)
 
     // The user-configurable settings + identity, as JSON {rpc, delivery, environment,
@@ -119,6 +124,10 @@ class MusterUi
     // The room's coordination policy — its driver — as JSON {policy, threshold,
     // domain, membership}. The view shows which policy governs the room and picks it.
     PROP(QString policyJson="{\"policy\":\"safe\"}" READONLY)
+
+    // The room's admitted driver kinds (coordinate_drivers), as a JSON array of
+    // strings. Grows by approved add-driver proposal (driver-as-proposal, invariant 6).
+    PROP(QString driversJson="[\"safe\",\"threshold\"]" READONLY)
 
     // Every joined conversation, as JSON {topic, address, lastTs, active}. The home
     // surface lists these — one row per room the module holds a session for.

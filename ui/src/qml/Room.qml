@@ -56,6 +56,13 @@ Item {
         try { return JSON.parse(backend ? backend.roomSubmitJson : "{}"); }
         catch (e) { return ({}); }
     }
+    // The driver kinds this room may use (coordinate_drivers) — driver-as-proposal.
+    // Grows by approved add-driver proposal; the picker offers only these.
+    readonly property var drivers: {
+        try { return JSON.parse(backend ? backend.driversJson : "[\"safe\",\"threshold\"]"); }
+        catch (e) { return ["safe", "threshold"]; }
+    }
+    function hasDriver(k) { return (room.drivers || []).indexOf(k) >= 0; }
 
     // The COMPOSE DEFAULT policy (driver) for the next thing you propose here, from
     // coordinate_policy. Policy is a property of each intent, not the room — the room
@@ -88,13 +95,20 @@ Item {
                       : st === "final" ? "paid"
                       : st === "collecting" ? "collecting" : "proposed";
         var eff = (it && it.effect) ? it.effect : ({});
-        var isStatement = eff && String(eff.effect || "") === "statement";
+        var effKind = eff ? String(eff.effect || "") : "";
+        var isStatement = effKind === "statement";
+        // driver-as-proposal: an add-driver governance intent renders as a decision to
+        // grant the room a new policy (reusing the statement text slot for the sentence).
+        var isGovernance = effKind === "add-driver";
         return {
             kind: "intent-propose",
-            label: isStatement ? qsTr("Statement") : qsTr("Payment"),
-            // a statement the room ratifies (a second effect type) — the card shows
+            label: isGovernance ? qsTr("Add policy")
+                 : isStatement ? qsTr("Statement") : qsTr("Payment"),
+            // a statement the room ratifies, or a governance decision — the card shows
             // the text instead of amount → destination.
-            statement: isStatement ? String(eff.text || "") : "",
+            statement: isGovernance
+                     ? qsTr("Grant the room the “%1” policy").arg(String(eff.kind || ""))
+                     : isStatement ? String(eff.text || "") : "",
             amount: (!isStatement && eff.value !== undefined) ? String(eff.value) : "",
             denom: "",
             to: (!isStatement && eff.to !== undefined) ? String(eff.to) : "",
@@ -566,6 +580,26 @@ Item {
                         variant: room.policyKind === "threshold"
                                  ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
                         onClicked: if (room.backend) room.backend.setPolicy("threshold")
+                    }
+
+                    // Driver-as-proposal (invariant 6): "unanimous" (n-of-n) is NOT in
+                    // the founding set. If the room has admitted it (an approved
+                    // add-driver proposal), it's a selectable policy; otherwise this
+                    // PROPOSES adding it — a governance intent the group must approve.
+                    LogosButton {
+                        objectName: "roomPolicyUnanimous"
+                        Layout.preferredWidth: 150
+                        text: room.hasDriver("unanimous") ? qsTr("Unanimous")
+                                                          : qsTr("＋ Propose unanimous")
+                        variant: room.policyKind === "unanimous"
+                                 ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                        onClicked: {
+                            if (!room.backend) return;
+                            if (room.hasDriver("unanimous"))
+                                room.backend.setPolicy("unanimous");
+                            else   // propose admitting it — the room approves, then it appears
+                                room.backend.proposeInRoom(JSON.stringify({ effect: "add-driver", kind: "unanimous" }));
+                        }
                     }
 
                     Item { Layout.fillWidth: true }

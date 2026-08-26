@@ -82,9 +82,15 @@ proc thrRosterKey(n: byte): Ed25519Pub = encFromSeed(seedOf(n)).identity().ed
 proc driverForKind(kind: string): Driver =
   ## Build the driver for a policy kind (the demo threshold roster is a fixture, as
   ## the Safe owners are). Unknown kinds fall back to the Safe.
+  ## "unanimous" is the driver a room can ADD by proposal (driver-as-proposal): the
+  ## same Ed25519 roster, but n-of-n — every member must endorse. It is not in the
+  ## founding set the compose pickers offer; a group grants itself unanimity by
+  ## approving an add-driver proposal (see roomDriverKinds / coordinate_drivers).
   case kind
   of "threshold":
     newThresholdDriver(@[thrRosterKey(1), thrRosterKey(2), thrRosterKey(3)], 2)
+  of "unanimous":
+    newThresholdDriver(@[thrRosterKey(1), thrRosterKey(2), thrRosterKey(3)], 3)
   else: gDriver
 
 let driverFor: DriverFor = proc(kind: string): Driver = driverForKind(kind)
@@ -334,6 +340,18 @@ proc policyJson(): JsonNode =
   %*{"policy": gCoordKind, "threshold": d.threshold,
      "domain": d.serializationDomain, "membership": $d.membership}
 
+proc roomKinds(): seq[string] =
+  ## The driver kinds the joined room may use (driver-as-proposal). Folded from the
+  ## room's log; falls back to the founding set when no room is joined.
+  if gSession == nil: return @["safe", "threshold"]
+  roomDriverKinds(gSession.log.allEvents(), driverFor)
+
+proc musterCoordinateDrivers(): string =
+  ## The room's admitted driver kinds, folded from the shared log (invariant 6).
+  var arr = newJArray()
+  for k in roomKinds(): arr.add %k
+  $arr
+
 proc musterCoordinateSetPolicy(kind: string): string =
   ## Choose the COMPOSE DEFAULT policy — the driver the next intent you propose runs
   ## on. "safe" is the EIP-712 Safe above; "threshold" is a k-of-n Ed25519 endorsement
@@ -341,11 +359,12 @@ proc musterCoordinateSetPolicy(kind: string): string =
   ## propose/contribute/fold path. Policy is a property of each intent (declared in the
   ## log when you propose), so this is a local default, never a room-wide event — an
   ## intent already collecting signatures keeps the policy it was proposed under.
-  case kind
-  of "safe", "threshold":
-    gCoordKind = kind
-  else:
-    return $(%*{"error": "unknown policy: " & kind})
+  ## The kind must be one the room has ADMITTED (driver-as-proposal): the founding set,
+  ## or a kind a passed add-driver proposal granted (roomDriverKinds).
+  if kind notin roomKinds():
+    return $(%*{"error": "policy not admitted in this room: " & kind,
+                "admitted": roomKinds()})
+  gCoordKind = kind
   $policyJson()
 
 proc musterCoordinatePolicy(): string =
