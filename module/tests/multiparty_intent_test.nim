@@ -12,6 +12,7 @@ import ../src/crypto/secp256k1
 import ../src/crypto/keystore
 import ../src/coordination/session
 import ../src/coordination/intents
+import ../src/drivers/driver as drivercore
 import ../src/drivers/safe
 
 proc key(hex: string): array[32, byte] =
@@ -36,6 +37,8 @@ let driver = newSafeDriver(chainId = 31337,
              toAddr("0x70997970C51812dc3A010C7d01b50e0d17dc79C8"),
              toAddr("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC")],
   threshold = 2)
+# The lifecycle fold resolves a driver per intent; this test runs one Safe intent.
+let foldDrv: DriverFor = proc(kind: string): drivercore.Driver = driver
 
 # The effect {to,value,nonce}=0x1111…/1000/0 hashes to the safeTxHash these two
 # pre-signed owner signatures cover (same fixture as the P4 harness).
@@ -56,20 +59,20 @@ let bob = newCoordinationSession(newLocalTransport(net), bobCrypto, topic)
 
 # Alice proposes intent-1.
 alice.publish(proposeEvent("1", effectJson))
-doAssert intentState(bob.log.allEvents(), driver, "1") == "proposed",
+doAssert intentState(bob.log.allEvents(), foldDrv, "1") == "proposed",
          "Bob sees the proposal after it propagates"
 echo "1. propose propagates OK"
 
 # Alice contributes her owner signature — collecting (1 of 2).
 alice.publish(contributeEvent("1", "owner0", sig0))
-doAssert intentState(alice.log.allEvents(), driver, "1") == "collecting",
+doAssert intentState(alice.log.allEvents(), foldDrv, "1") == "collecting",
          "one valid owner signature -> collecting"
 echo "2. first signature -> collecting OK"
 
 # Bob contributes his — threshold met, both fold to executable and converge.
 bob.publish(contributeEvent("1", "owner1", sig1))
-let aState = intentState(alice.log.allEvents(), driver, "1")
-let bState = intentState(bob.log.allEvents(), driver, "1")
+let aState = intentState(alice.log.allEvents(), foldDrv, "1")
+let bState = intentState(bob.log.allEvents(), foldDrv, "1")
 doAssert aState == "executable", "two owner signatures -> executable (Alice): " & aState
 doAssert bState == "executable", "two owner signatures -> executable (Bob): " & bState
 doAssert aState == bState and alice.digest() == bob.digest(),
@@ -79,7 +82,7 @@ echo "3. threshold met -> executable + convergence OK"
 # A non-owner signature does not count: it never advances the intent to executable.
 alice.publish(proposeEvent("2", effectJson))
 alice.publish(contributeEvent("2", "intruder", nonOwnerSig))
-doAssert intentState(alice.log.allEvents(), driver, "2") != "executable",
+doAssert intentState(alice.log.allEvents(), foldDrv, "2") != "executable",
          "a non-owner signature must not reach the threshold"
 echo "4. non-owner signature does not count OK"
 
