@@ -91,3 +91,20 @@ it at secp256k1 the same way — an explicit `MUSTER_SECP256K1_LIB` wins, else
 MUSTER_SECP256K1_LIB="-L/path/to/secp/lib -lsecp256k1 -Wl,-rpath,/path/to/secp/lib" \
   nim r -d:release tests/probes/probe_return_marshalling_host.nim
 ```
+
+**On-chain tests (need a live anvil + the MiniSafe fixture).** Bring the devnet up
+with `infra/anvil/devnet.sh` (starts anvil, deploys + funds MiniSafe, prints
+`SAFE_ADDR`). Both take `<safeAddr> [rpcUrl]` and use the `$SECP`/`$STINT` closures:
+
+- `safe_anvil_e2e` — the single-instance path: collect 2-of-3 owner signatures
+  locally, assemble `execTransaction`, submit, confirm the transfer on-chain.
+- `coordinate_submit_anvil` — the ROOM-SIDE path (`coordinate_submit`): the owner
+  signatures travel through the coordination **log** (propose + contribute events);
+  the room folds to executable, the signatures are gathered *from the log*,
+  assembled, and submitted. A successful `execTransaction` proves the room's
+  re-derived safeTxHash matches the contract's on-chain `getTxHash`.
+
+```bash
+SAFE=$(infra/anvil/devnet.sh | grep -oE '0x[0-9a-fA-F]{40}' | tail -1)
+nim r -d:release --threads:on $SECP $STINT tests/coordinate_submit_anvil.nim "$SAFE"
+```
