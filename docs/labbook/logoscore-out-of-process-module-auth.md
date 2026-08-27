@@ -101,3 +101,15 @@ coreTransports)` + `CoreServiceImpl`) as the registry/router and registering mod
 transports/tokens; replicating that (or the minimal acquire path) finishes the harness.
 Ingredients + the exact build recipe are captured in the host's README so this resumes
 from knowledge, not search.
+
+## SOLVED: the coherent host now drives muster headless (2026-08-26)
+
+`module/tools/headless-host/` **works** — it loads muster + delivery in-process with the
+gate off and invokes methods (`health`→`ok`, `identity`/`describe` return real JSON). The
+six things that had to line up (each a dead end until fixed) are in the host's README; the
+last two were the sharp ones: (5) `callRemoteMethod` is still ModuleProxy-gated, so a
+recognized token from `logos_core_get_token(module)` is required even with policy off; and
+(6) `waitForFinished` inside `app.exec()` mis-delivers the QRO reply (double-nested event
+loop) — a `QRemoteObjectPendingCallWatcher` firing from the main loop is the fix. The
+registry-suffix mismatch (`LOGOS_INSTANCE_ID`) was the other non-obvious one. This unblocks
+the two-instance live run: two hosts with distinct `--instance` ids + peered delivery nodes.
