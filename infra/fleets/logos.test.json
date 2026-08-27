@@ -1,0 +1,68 @@
+{
+  "fleet": "logos.test",
+  "clusterId": 2,
+  "source": "https://fleets.logos.co/data.json",
+  "service": "logos-node-delivery",
+  "delivery_createNode_config": {
+    "mode": "Core",
+    "preset": "logos.test",
+    "entryNodes": [
+      "/dns4/node-01.ac-cn-hongkong-c.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmL3oU95jh1BZHozn3uNhx8HEneirgr8M1jEAapzXGDqRF",
+      "/dns4/node-01.do-ams3.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmQ9X2xDfPG3uL77V9piYDhjq14JhKCtcmNYsTMKNqrKCj",
+      "/dns4/node-01.gc-us-central1-a.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmF8WtwGPmeGHgYAX2277jHgy5cW9F7zsB8EqUjBZQAZQ3",
+      "/dns4/node-02.ac-cn-hongkong-c.logos.test.status.im/tcp/30303/p2p/16Uiu2HAm28CoBZjpyxsanC8tQpbvZ7bZJnVYuB1EgFzb571qpWsV",
+      "/dns4/node-02.do-ams3.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmB8NYprrfQrgWVzsJtYWkfjsXbmJEGNMG6othXsQ53BwG",
+      "/dns4/node-02.gc-us-central1-a.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmUuXhUW9bdJpzN1kfDziFiUZo4bszTk66cvr7uuyCHXR7"
+    ]
+  },
+  "nodes": [
+    {
+      "node": "node-01.ac-cn-hongkong-c.logos.test",
+      "cluster": "2",
+      "multiaddr": "/dns4/node-01.ac-cn-hongkong-c.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmL3oU95jh1BZHozn3uNhx8HEneirgr8M1jEAapzXGDqRF",
+      "enr": "enr:-PS4QDngDzEfS511M3N5raXlGz0sMlxrGsunjXC6fBe_bbWcBl8wbdRPPd_hGZ20BJQF8-BCDCA8M6VDqw6Z6BNs7PYCgmlkgnY0gmlwhC9MqLqKbXVsdGlhZGRyc7g-AAgEL0yougZ2XwAyNi1ub2RlLTAxLmFjLWNuLWhvbmdrb25nLWMubG9nb3MudGVzdC5zdGF0dXMuaW0Gdl-CcnOTAAIIAAAAAQACAAMABAAFAAYAB4lzZWNwMjU2azGhA23Z3ObyjsQr5Z8kUvJYPMuBfkH0MWcANCCoYGMQISOOg3RjcIJ2X4N1ZHCCIyiFd2FrdTIv",
+      "peer_id": "16Uiu2HAmL3oU95jh1BZHozn3uNhx8HEneirgr8M1jEAapzXGDqRF",
+      "protocols": "relay,store,filter,lightpush,mix"
+    },
+    {
+      "node": "node-01.do-ams3.logos.test",
+      "cluster": "2",
+      "multiaddr": "/dns4/node-01.do-ams3.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmQ9X2xDfPG3uL77V9piYDhjq14JhKCtcmNYsTMKNqrKCj",
+      "enr": "enr:-Oq4QJeUTTS7F-fgIKajkIRm2rI4aGp_msROT86Dpo0jD6FyBlRQELjrAQ2l4CCmifikOtqqVk5m_E39pdk_n5TVRc4CgmlkgnY0gmlwhLKAjM6KbXVsdGlhZGRyc7UACASygIzOBnZfACk2JG5vZGUtMDEuZG8tYW1zMy5sb2dvcy50ZXN0LnN0YXR1cy5pbQZ2X4Jyc5MAAggAAAABAAIAAwAEAAUABgAHiXNlY3AyNTZrMaEDqr-DX5p_sV6-l1EfcGrcfFhIR0Nrp2Cqb9GKFIAF3niDdGNwgnZfg3VkcIIjKIV3YWt1Mi8",
+      "peer_id": "16Uiu2HAmQ9X2xDfPG3uL77V9piYDhjq14JhKCtcmNYsTMKNqrKCj",
+      "protocols": "relay,store,filter,lightpush,mix"
+    },
+    {
+      "node": "node-01.gc-us-central1-a.logos.test",
+      "cluster": "2",
+      "multiaddr": "/dns4/node-01.gc-us-central1-a.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmF8WtwGPmeGHgYAX2277jHgy5cW9F7zsB8EqUjBZQAZQ3",
+      "enr": "enr:-PS4QCrtlod6D0fdBz4oArl6Z2wL-M-QnCnSD_akcYs16PP7EGJAf5fYvRls0xuwhG8zs9B2jgMn6cMxYmQMDPetMIgCgmlkgnY0gmlwhCJGPMmKbXVsdGlhZGRyc7g-AAgEIkY8yQZ2XwAyNi1ub2RlLTAxLmdjLXVzLWNlbnRyYWwxLWEubG9nb3MudGVzdC5zdGF0dXMuaW0Gdl-CcnOTAAIIAAAAAQACAAMABAAFAAYAB4lzZWNwMjU2azGhAyTEmAAfpIW043YImR7Fn5IBfptZpN2UtcIkFFzbHJQQg3RjcIJ2X4N1ZHCCIyiFd2FrdTIv",
+      "peer_id": "16Uiu2HAmF8WtwGPmeGHgYAX2277jHgy5cW9F7zsB8EqUjBZQAZQ3",
+      "protocols": "relay,store,filter,lightpush,mix"
+    },
+    {
+      "node": "node-02.ac-cn-hongkong-c.logos.test",
+      "cluster": "2",
+      "multiaddr": "/dns4/node-02.ac-cn-hongkong-c.logos.test.status.im/tcp/30303/p2p/16Uiu2HAm28CoBZjpyxsanC8tQpbvZ7bZJnVYuB1EgFzb571qpWsV",
+      "enr": "enr:-PS4QM6G_avDmDxIuImjOs1J6Uc3_NW-5G3vlbGNMPGEtkuoQbboAhPjFiPTzu7-LspQolmPrzG8qp8th-bO43ObRQsCgmlkgnY0gmlwhC9MsqSKbXVsdGlhZGRyc7g-AAgEL0yypAZ2XwAyNi1ub2RlLTAyLmFjLWNuLWhvbmdrb25nLWMubG9nb3MudGVzdC5zdGF0dXMuaW0Gdl-CcnOTAAIIAAAAAQACAAMABAAFAAYAB4lzZWNwMjU2azGhAmOIMunh9ZqVY9J9yf-SOfTCZoqGXT3UAGIC4t7V12Rcg3RjcIJ2X4N1ZHCCIyiFd2FrdTIv",
+      "peer_id": "16Uiu2HAm28CoBZjpyxsanC8tQpbvZ7bZJnVYuB1EgFzb571qpWsV",
+      "protocols": "relay,store,filter,lightpush,mix"
+    },
+    {
+      "node": "node-02.do-ams3.logos.test",
+      "cluster": "2",
+      "multiaddr": "/dns4/node-02.do-ams3.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmB8NYprrfQrgWVzsJtYWkfjsXbmJEGNMG6othXsQ53BwG",
+      "enr": "enr:-Oq4QFSoFj2o3fHpnKlYzTnwcxonPsrMs_tWxcsfRYIEM4dFc80WgCbu-WCE07KSiJbDfZFfKoC6YJZmWmMAkv2zE_cCgmlkgnY0gmlwhIHU3SyKbXVsdGlhZGRyc7UACASB1N0sBnZfACk2JG5vZGUtMDIuZG8tYW1zMy5sb2dvcy50ZXN0LnN0YXR1cy5pbQZ2X4Jyc5MAAggAAAABAAIAAwAEAAUABgAHiXNlY3AyNTZrMaEC6UxoirjpgAdfaextfgOQIY5iRJBdPIFKwj5ET6zBYyODdGNwgnZfg3VkcIIjKIV3YWt1Mi8",
+      "peer_id": "16Uiu2HAmB8NYprrfQrgWVzsJtYWkfjsXbmJEGNMG6othXsQ53BwG",
+      "protocols": "relay,store,filter,lightpush,mix"
+    },
+    {
+      "node": "node-02.gc-us-central1-a.logos.test",
+      "cluster": "2",
+      "multiaddr": "/dns4/node-02.gc-us-central1-a.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmUuXhUW9bdJpzN1kfDziFiUZo4bszTk66cvr7uuyCHXR7",
+      "enr": "enr:-PS4QOTQRcenQNP8RcJx0Ld6g5fUbDK1n8GCpY6quN3Vp4o3dovE-BGkotFmOfz4ehocl2zem7xiOK-7zIcdcV0uFw8CgmlkgnY0gmlwhCJ7tv6KbXVsdGlhZGRyc7g-AAgEInu2_gZ2XwAyNi1ub2RlLTAyLmdjLXVzLWNlbnRyYWwxLWEubG9nb3MudGVzdC5zdGF0dXMuaW0Gdl-CcnOTAAIIAAAAAQACAAMABAAFAAYAB4lzZWNwMjU2azGhA_F0kUWHSWVnDkVJjjRWURonow71wOa7dXIWwQsgL3_eg3RjcIJ2X4N1ZHCCIyiFd2FrdTIv",
+      "peer_id": "16Uiu2HAmUuXhUW9bdJpzN1kfDziFiUZo4bszTk66cvr7uuyCHXR7",
+      "protocols": "relay,store,filter,lightpush,mix"
+    }
+  ]
+}

@@ -47,16 +47,48 @@ the module's dispatch thread inside `app.exec()`, so subsequent QRO calls to del
 no reply (`getAvailableNodeInfoIDs` returns empty / no reply). muster reaches `start` over
 lp (async) and doesn't hit this, but the host's QRO read of the multiaddr does.
 
-## What would unblock it
+## Blocker 2 — SOLVED by piggybacking off the Logos fleet (2026-08-27)
 
-One of:
-1. A running delivery **bootstrap/store node** on a reachable network + its ENR/multiaddr
-   in `entryNodes` — then both muster nodes discover each other (closes blocker 2; still
-   needs blocker 1).
-2. Host-side lp-bridge wiring so muster's `lp_invoke("createNode")` actually boots the node
-   (closes blocker 1), **plus** a way to read A's multiaddr for local `entryNodes` peering
-   — either a muster method that surfaces `getNodeInfo`, or an async QRO read that doesn't
-   sit behind delivery's blocked `start`.
+The bundled `logos.test` preset ships no bootstrap peers, but the public **Logos delivery
+fleet** does. `https://fleets.logos.co/data.json` (the same JSON the fleets dashboard renders,
+mirroring `fleets.status.im`) lists the `logos-node-delivery` service: `logos.test` = cluster
+2 (6 nodes across ams3/us-central1/hongkong), `logos.dev` = cluster 3. Pinned into
+`infra/fleets/{logos.test,logos.dev}.json` (+ `refresh.sh`), each with a ready delivery
+`createNode` config: `{"mode":"Core","preset":"logos.test","entryNodes":[<6 fleet
+multiaddrs>]}`.
 
-Both are infra/integration, tracked under exo-6bc. The headless host itself — the reusable,
-stack-change-resistant driver — is done and landed; this is the last mile to a live wire.
+**Verified end to end at the delivery layer:** a node booted with that config connects to the
+fleet and relays live cluster-2 traffic within seconds — observed `received relay message`
+from `16U*NqrKCj` (node-01.do-ams3), `16U*XGDqRF` (node-01.hongkong), `16U*yCHXR7`
+(node-02.us-central1) on `/waku/2/rs/2/{0,2}`. So two muster nodes both pointed at the fleet
+discover each other through the fleet's relay — no direct peering, no multiaddr lookup. The
+preset's cluster (2) already matches the fleet, so only the missing `entryNodes` had to be
+supplied. See `infra/fleets/README.md`. `logos.test` preferred (matches the preset cluster).
+
+## Blocker 1 — refined: the minimal host doesn't configure muster's embedded lp
+
+`coordinate_join` returns in **0.05s** (instant fail, not a 5s timeout), so muster's
+`lp_invoke("createNode")` resolves its transport immediately to failure — it isn't reaching
+delivery at all. Why: `nm -D` on `muster_module_plugin.so` shows `lp_client_create` /
+`lp_invoke` as **`T` (defined, statically embedded)**, not `U` — muster carries its **own**
+`liblogos_protocol` with its **own** process-global lp state, disconnected from logos-core's
+module registry (where delivery is published, and where a direct QRO `createNode` reaches it).
+muster never binds `lp_set_mode`/`lp_set_default_transport`, so it relies on the loader/host to
+configure that embedded lp; host-side `lp_set_mode` is useless (different copy). The signature
+is *not* mismatched — the current header's `lp_client_create(target, origin, targetTransport,
+capTransport)` matches muster's 4-arg binding. The real runner (standalone-app / basecamp)
+configures muster's embedded lp through logos-core's module-process wiring; the minimal
+in-process host does not, and replicating that wiring is the open work.
+
+## What remains
+
+- **Live two-instance run:** use the **real runner** (`ui/flake.nix#runner` / `make run`,
+  the coherent standalone app that wires muster→delivery correctly) with the fleet delivery
+  config from `infra/fleets/logos.test.json`. Discovery is now solved; the runner handles the
+  lp bridge. The GL-less box blocks the *UI render*, not the delivery/coordinate layer.
+- **Or** fix the minimal host: configure muster's embedded lp at load (the logos-core
+  module-transport wiring the standalone app does) — then the headless host drives the whole
+  two-instance flow itself.
+
+Tracked under exo-e17. The headless host, the fleet resource, and the single-instance
+coordinate fold are done and landed; this is the last mile to a live wire.

@@ -118,6 +118,12 @@ int main(int argc, char** argv)
     if (!modulesDir.isEmpty()) logos_core_add_modules_dir(modulesDir.toUtf8().constData());
     if (!persist.isEmpty())    logos_core_set_persistence_base_path(persist.toUtf8().constData());
     logos_core_start();
+    // The capability_module issues the tokens the lp module→module bridge fetches
+    // automatically (muster→delivery). It is not a declared dependency, so load it
+    // first when present — without it, muster's lp_invoke("createNode") silently fails
+    // its token fetch and the delivery node never boots. Non-fatal if absent.
+    const int capLoaded = logos_core_load_module("capability_module", false);
+    fprintf(stderr, "[host] load capability_module -> %d\n", capLoaded);
     const int loaded = logos_core_load_module(loadModule.toUtf8().constData(), true);
     fprintf(stderr, "[host] load %s -> %d\n", loadModule.toUtf8().constData(), loaded);
     fflush(stderr);
