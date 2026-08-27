@@ -126,6 +126,16 @@ proc loadSettingsFile() =
       if j.hasKey("rpc"): gRpcUrl = j["rpc"].getStr()
       if j.hasKey("delivery"): gDeliveryConfig = j["delivery"].getStr()
   except CatchableError: discard
+  # A host/runner can point every instance at a bootstrap set (e.g. the Logos
+  # delivery fleet, infra/fleets/*.json) without touching a persisted file, the
+  # way the demo UI defaults to a delivery preset. The env is the untrusted,
+  # user-configurable infra of invariant 8 — it seeds the default the user can
+  # still override in Settings; set_setting then persists that choice. Applied
+  # only when nothing explicit is on disk (config still the "{}" default), so a
+  # user's saved delivery endpoint always wins.
+  let envCfg = getEnv("MUSTER_DELIVERY_CONFIG")
+  if envCfg.len > 0 and gDeliveryConfig == "{}":
+    gDeliveryConfig = envCfg
 
 proc saveSettingsFile() =
   try:

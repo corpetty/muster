@@ -23,16 +23,22 @@ CACHE := --accept-flake-config \
   --extra-substituters https://cache.nix.logos.co/public \
   --extra-trusted-public-keys public:l4HrXgL4nw246+LBh2SOJyhz64BoGegOYLheT/iIAPU=
 
-.PHONY: help run build build-lgx appimage clean
+FLEET     ?= logos.test
+FLEET_CFG := infra/fleets/$(FLEET).json
+
+.PHONY: help run run-fleet build build-lgx appimage clean
 
 help:
-	@echo "make run         launch the standalone muster app (dashboard + walkthrough)"
-	@echo "make build       pre-build the runner — the slow first build; do this once"
-	@echo "make build-lgx   build muster-ui.lgx (to load into logos-basecamp instead)"
-	@echo "make appimage    build the download-and-run AppImage (see RELEASING.md)"
-	@echo "make clean       remove local run state (.run/)"
+	@echo "make run                 launch the standalone muster app (dashboard + walkthrough)"
+	@echo "make run-fleet PEER=x     launch a peer on the Logos delivery fleet (two-instance)"
+	@echo "make build               pre-build the runner — the slow first build; do this once"
+	@echo "make build-lgx           build muster-ui.lgx (to load into logos-basecamp instead)"
+	@echo "make appimage            build the download-and-run AppImage (see RELEASING.md)"
+	@echo "make clean               remove local run state (.run/)"
 	@echo ""
 	@echo "First time: 'make build' (minutes), then 'make run'."
+	@echo "Two-instance over the fleet: 'make run-fleet PEER=alice' and 'make run-fleet PEER=bob'"
+	@echo "  in two terminals (FLEET=logos.test|logos.dev; refresh with infra/fleets/refresh.sh)."
 	@echo "Basecamp option: ui/tests/README.md."
 
 # Pre-build the runner so the first 'make run' doesn't stall building it while a
@@ -48,6 +54,21 @@ run:
 	@mkdir -p $(RUN_DIR)
 	@echo "launching muster (standalone) with user-dir $(RUN_DIR)"
 	cd $(UI) && nix run 'path:.' $(CACHE) -- --user-dir $(RUN_DIR)
+
+# Launch one peer already pointed at the Logos delivery fleet, so its transport
+# joins a network with real bootstrap peers (the bundled preset ships none — see
+# infra/fleets/README.md). MUSTER_DELIVERY_CONFIG seeds the delivery createNode
+# config every muster instance in this process boots with (invariant 8 — the user
+# can still override it in Settings). Run twice with distinct PEER for a two-
+# instance live run: `make run-fleet PEER=alice` and `make run-fleet PEER=bob`.
+# Each PEER is its own identity + wallet under .run/, i.e. a separate participant.
+run-fleet: PEER ?= alice
+run-fleet:
+	@mkdir -p $(CURDIR)/.run/$(PEER)
+	@test -f $(FLEET_CFG) || { echo "missing $(FLEET_CFG) — run infra/fleets/refresh.sh"; exit 1; }
+	@echo "launching muster peer '$(PEER)' on fleet '$(FLEET)' (user-dir .run/$(PEER))"
+	cd $(UI) && MUSTER_DELIVERY_CONFIG="$$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))["delivery_createNode_config"]))' $(CURDIR)/$(FLEET_CFG))" \
+	  nix run 'path:.' $(CACHE) -- --user-dir $(CURDIR)/.run/$(PEER)
 
 build-lgx:
 	cd $(UI) && nix build 'path:.#lgx' $(CACHE)
