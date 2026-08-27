@@ -60,11 +60,22 @@ these `-dev` modules); ABI-matching headers from `…-logos-liblogos/include`; Q
 headers from the **same builder pin** the module uses (coherent by construction, no
 hand-picked store paths), exposed as e.g. `apps.headless-host`.
 
-## Two-instance live run (now unblocked)
+## Two-instance live run — attempted, blocked on infra (see labbook)
 
-Two hosts (`--instance` A/B, separate `--persistence`), two delivery nodes peered on
-localhost (A `tcpPort` 60010; B 60011 with A's multiaddr from `delivery_module.getNodeInfo`
-as `entryNodes`). Drive: A `set_setting delivery …` + `coordinate_join` + `coordinate_propose`;
-B `coordinate_request_join`; A `coordinate_admit`; B `coordinate_contribute`; both
-`coordinate_intents` → converge. Kill A mid-collection, restart, confirm the contribution
-still lands (R-4/R-6). `drive.py` is the basis for a two-instance driver.
+Driving two hosts (`--instance` A/B, separate `--persistence`) through join → request_join →
+admit → propose → intents was attempted end to end. It is blocked by two **infrastructure**
+gaps, not muster logic — both diagnosed in
+`docs/labbook/two-instance-live-wire-blockers.md`:
+
+1. **muster's lp→delivery bridge doesn't boot the Waku node in this host.** Direct
+   `createNode` on `delivery_module` via QRO boots a full node (66 lines of Waku logs);
+   muster's `coordinate_join` with the same config emits none — `lp_invoke("createNode")`
+   never reaches liblogosdelivery here. Single-instance folds still work because
+   `publish()` writes the local log first, so that success never exercised the node.
+2. **The bundled `logos.test` preset ships no bootstrap nodes** (`creating service discovery
+   as seed node (no bootstrap nodes)`), so two seed nodes can't discover each other without
+   hand-set `entryNodes` — and reading A's multiaddr via `getNodeInfo` over QRO hangs behind
+   delivery's thread-blocking `start()`.
+
+Unblocking needs a reachable delivery bootstrap node (+ its ENR in `entryNodes`) and/or
+host-side lp-bridge wiring. Tracked under exo-6bc.

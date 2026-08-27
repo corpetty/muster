@@ -33,6 +33,12 @@
 
 static QMap<QString, QRemoteObjectNode*> g_nodes;
 static QMap<QString, QRemoteObjectDynamicReplica*> g_reps;
+// Protocol replies go here, never to stdout — the loaded modules (delivery in
+// particular) write their own node logs to stdout with no newline sync, so an
+// "OK\t..." printed there can land mid-log-line. A dedicated line-buffered stream
+// keeps the reply channel clean. Defaults to stdout when --reply-file is absent.
+static FILE* g_reply = stdout;
+static void reply(const char* s) { fputs(s, g_reply); fflush(g_reply); }
 
 static QRemoteObjectDynamicReplica* acquireModule(const QString& module, int timeoutMs)
 {
@@ -54,7 +60,7 @@ static void handleLine(const QString& line)
     const QString t = line.trimmed();
     if (t.isEmpty()) return;
     const QStringList parts = t.split(QChar('\t'));
-    if (parts.size() < 2) { printf("ERR\tbad-line\n"); fflush(stdout); return; }
+    if (parts.size() < 2) { reply("ERR\tbad-line\n"); return; }
     const QString module = parts[0];
     const QString method = parts[1];
     QVariantList args;
@@ -62,7 +68,7 @@ static void handleLine(const QString& line)
 
     QRemoteObjectDynamicReplica* rep = g_reps.value(module, nullptr);
     if (!rep || rep->state() != QRemoteObjectReplica::Valid) {
-        printf("ERR\tobject_unavailable\t%s\n", module.toUtf8().constData()); fflush(stdout); return;
+        { QByteArray m=module.toUtf8(); QByteArray b="ERR\tobject_unavailable\t"+m+"\n"; reply(b.constData()); } return;
     }
     // The ModuleProxy accepts any issued token; use the one the core minted for this
     // module (auth policy is off, so it need only be recognized, not scoped).
@@ -74,16 +80,16 @@ static void handleLine(const QString& line)
         rep, "callRemoteMethod", Qt::DirectConnection,
         Q_RETURN_ARG(QRemoteObjectPendingCall, call),
         Q_ARG(QString, token), Q_ARG(QString, method), Q_ARG(QVariantList, args));
-    if (!inv) { printf("ERR\tinvoke-failed\n"); fflush(stdout); return; }
+    if (!inv) { reply("ERR\tinvoke-failed\n"); return; }
     // Fully async — a nested waitForFinished inside app.exec() mis-delivers the QRO
     // reply; the watcher fires from the main loop instead.
     auto* w = new QRemoteObjectPendingCallWatcher(call);
     QObject::connect(w, &QRemoteObjectPendingCallWatcher::finished, [w]() {
-        if (w->error() == QRemoteObjectPendingCall::NoError)
-            printf("OK\t%s\n", w->returnValue().toString().toUtf8().constData());
-        else
-            printf("ERR\tpending-error\n");
-        fflush(stdout);
+        if (w->error() == QRemoteObjectPendingCall::NoError) {
+            QByteArray b="OK\t"+w->returnValue().toString().toUtf8()+"\n"; reply(b.constData());
+        } else {
+            reply("ERR\tpending-error\n");
+        }
         w->deleteLater();
     });
 }
@@ -91,15 +97,20 @@ static void handleLine(const QString& line)
 int main(int argc, char** argv)
 {
     QByteArray inst = "muster-headless";
-    QString modulesDir, persist, loadModule = "muster_module";
+    QString modulesDir, persist, loadModule = "muster_module", replyFile;
     for (int i = 1; i < argc; ++i) {
         const QString a = QString::fromUtf8(argv[i]);
         if      (a == "--instance"    && i + 1 < argc) inst = argv[++i];
         else if (a == "--modules-dir" && i + 1 < argc) modulesDir = QString::fromUtf8(argv[++i]);
         else if (a == "--persistence" && i + 1 < argc) persist = QString::fromUtf8(argv[++i]);
         else if (a == "--load"        && i + 1 < argc) loadModule = QString::fromUtf8(argv[++i]);
+        else if (a == "--reply-file"  && i + 1 < argc) replyFile = QString::fromUtf8(argv[++i]);
     }
     qputenv("LOGOS_INSTANCE_ID", inst);
+    if (!replyFile.isEmpty()) {
+        FILE* f = fopen(replyFile.toUtf8().constData(), "w");
+        if (f) g_reply = f;  // clean protocol channel, away from delivery's stdout logs
+    }
 
     QCoreApplication app(argc, argv);
     logos_core_init(argc, argv);
@@ -113,6 +124,9 @@ int main(int argc, char** argv)
 
     { QElapsedTimer t; t.start(); while (t.elapsed() < 4000) app.processEvents(QEventLoop::AllEvents, 100); }
     acquireModule("muster_module", 15000);
+    // Also acquire delivery_module (loaded as muster's dependency) so the driver can
+    // read node multiaddrs (getNodeInfo) for two-instance peering. Non-fatal if absent.
+    acquireModule("delivery_module", 8000);
     fprintf(stderr, "[host] ready\n"); fflush(stderr);
 
     auto* notifier = new QSocketNotifier(fileno(stdin), QSocketNotifier::Read, &app);
