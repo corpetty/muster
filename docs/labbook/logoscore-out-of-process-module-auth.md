@@ -81,3 +81,23 @@ cheapest first:
 
 Until one of those lands, the live two-instance run stays infra-bound — but now with a
 named cause, not a shrug.
+
+## Follow-up: the coherent own host (2026-08-26)
+
+Chosen path (over pinning to logoscore's SDK): **build our own headless host from a
+coherent logos-core**, in-process with the capability gate OFF — so there's no
+cross-process token skew. Landed as `module/tools/headless-host/` (see its README).
+
+**Result:** the host compiles against the standalone-app's own logos-core (the coherent
+one the runner uses with these `-dev` modules) and **loads `muster_module` +
+`delivery_module` in-process with `set_access_policy(nullptr)` and NO capability
+rejection** — the exact barrier that stopped the `logoscore` daemon is passed for
+loading. `[host] load muster_module -> 1`, no "token not recognized".
+
+**Remaining inch:** invoking a module method returns `object_unavailable` — the core's
+`LogosAPIClient` can't yet acquire the module's QRemoteObjects object. The `logoscore`
+daemon does this by standing up a `core_service` provider (`LogosAPI("core_service",
+coreTransports)` + `CoreServiceImpl`) as the registry/router and registering module
+transports/tokens; replicating that (or the minimal acquire path) finishes the harness.
+Ingredients + the exact build recipe are captured in the host's README so this resumes
+from knowledge, not search.
