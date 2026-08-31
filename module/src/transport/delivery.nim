@@ -14,7 +14,7 @@
 ## callback's foreign-thread GC seam (the storage-nim `abandoned`-flag pattern),
 ## come with the P3 integration harness; this increment establishes the binding.
 
-import std/[json, tables, os]
+import std/[json, tables, os, times]
 import ./transport
 import ./lp_ffi
 import ./inbound_queue
@@ -32,8 +32,10 @@ type
     handlers: Table[string, seq[MessageHandler]]  ## contentTopic -> handlers (we route)
     queue: InboundQueue                           ## foreign-thread callbacks land here; poll() drains
     timeoutMs: cint
-    nodeStarted: cint                             ## set 1 by onStartResult (foreign thread); a plain int write
-    pendingTopics: seq[string]                    ## topics to (re)subscribe once the node is started
+    nodeStarted: cint                             ## 1 once createNode+start returned; gates lifecycle
+    storePeer: string                             ## a store service multiaddr (first entryNode); "" disables catchup
+    storeQueue: InboundQueue                      ## async store-query responses land here; poll() parses them
+    lastCatchupMs: int64                          ## throttle: only re-query the store every CatchupPeriodMs
 
 proc invoke(t: DeliveryTransport, meth, argsJson: string): JsonNode =
   ## One synchronous inter-module call. Returns the result JSON (or nil on error).
@@ -80,28 +82,22 @@ proc c_fprintf(stream: pointer, fmt: cstring): cint
   {.importc: "fprintf", header: "<stdio.h>", varargs, discardable.}
 
 proc onSendResult(ok: cint, json: cstring, userData: pointer) {.cdecl, gcsafe.} =
-  ## Fire-and-forget send/subscribe result. Logs raw (no Nim GC on this thread) so a
-  ## failed publish (no peers on the shard / lightpush needed) is visible — the tell
-  ## for send-side vs relay-side when cross-host frames don't arrive.
+  ## Fire-and-forget send result. Logs raw (no Nim GC on this thread) so a failed
+  ## publish (no peers on the shard) is visible under MUSTER_LP_DEBUG — the tell for
+  ## send-side vs receive-side when cross-host frames don't arrive.
   if gLpDebug: c_fprintf(cstderr, "MUSTER-LP send/sub-result ok=%d json=%s\n",
             ok, (if json != nil: json else: cstring"<nil>"))
 
-proc onStartResult(ok: cint, json: cstring, userData: pointer) {.cdecl, gcsafe.} =
-  ## start() completion. Mark the node started so poll() can issue the topic
-  ## subscribes that were deferred (a plain int write — no Nim GC on this thread).
-  if gLpDebug: c_fprintf(cstderr, "MUSTER-LP start async ok=%d json=%s\n",
-            ok, (if json != nil: json else: cstring"<nil>"))
-  if userData != nil: cast[DeliveryTransport](userData).nodeStarted = 1
+const CatchupPeriodMs = 8000'i64        ## re-query the store no more than this often
 
-proc onCreateNodeResult(ok: cint, json: cstring, userData: pointer) {.cdecl, gcsafe.} =
-  ## createNode completed on delivery's thread → log its result/error, then fire
-  ## start(), also async, so the boot sequence stays off the caller's dispatch stack.
-  if gLpDebug: c_fprintf(cstderr, "MUSTER-LP createNode async ok=%d json=%s\n",
-            ok, (if json != nil: json else: cstring"<nil>"))
-  if userData == nil: return
-  let t = cast[DeliveryTransport](userData)
-  discard lp_invoke_async(t.client, cstring"start", cstring"[]", t.timeoutMs,
-                          onStartResult, userData)
+proc onStoreResult(ok: cint, json: cstring, userData: pointer) {.cdecl, gcsafe.} =
+  ## Async storeQuery response, on delivery's thread. Enqueue the raw JSON (malloc +
+  ## copy, no Nim GC) — poll() parses it on the module thread and ingests the missed
+  ## messages, exactly like a live messageReceived. This is the mesh-independent
+  ## receive path: even when the relay never surfaces a message, the store has it.
+  if gLpDebug: c_fprintf(cstderr, "MUSTER-LP store result ok=%d\n", ok)
+  if userData == nil or json == nil: return
+  cast[DeliveryTransport](userData).storeQueue.enqueue(json)
 
 proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000): DeliveryTransport =
   ## Bind a client to delivery_module, boot its node, and open the single
@@ -110,28 +106,33 @@ proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000): DeliveryTra
   result = DeliveryTransport(handlers: initTable[string, seq[MessageHandler]](),
                              timeoutMs: cint(timeoutMs))
   initInboundQueue(result.queue)             # ready before any callback can fire
+  initInboundQueue(result.storeQueue)
+  # A store service peer for offline/mesh-independent catchup — the first entryNode
+  # of the delivery config (the fleet's own nodes serve store). "" if none.
+  try:
+    let j = parseJson(nodeConfigJson)
+    if j.kind == JObject and j.hasKey("entryNodes") and j["entryNodes"].kind == JArray and
+       j["entryNodes"].len > 0:
+      result.storePeer = j["entryNodes"][0].getStr()
+  except CatchableError: discard
   if gLpDebug: stderr.writeLine("MUSTER-LP creating delivery client (mode=" & $lp_get_mode() & ")")
   result.client = lp_client_create("delivery_module", "muster_module", nil, nil)
   if result.client == nil:
     raise newException(CatchableError, "delivery_module: lp_client_create returned null")
-  # Keep `result` alive for the C side that holds the user_data pointer — BEFORE the
-  # async boot, whose callback dereferences it.
-  GC_ref(result)
-  # Register the inbound handler first (local, no round-trip), then boot the node
-  # ASYNC. createNode/start were synchronous, but newDeliveryTransport runs inside
-  # coordinate_join's QRO dispatch — a nested event loop — where a synchronous
-  # lp_invoke can't complete its own QRO round-trip and returns null (the node never
-  # boots). lp_invoke_async queues the call and returns; it runs once the dispatch
-  # unwinds and the event loop pumps. start() is chained from createNode's callback
-  # so it still follows createNode. publish() already sends this way for the same
-  # reason.
+  # Boot the node synchronously (createNode → start), THEN register the inbound
+  # messageReceived handler — the order the working chat bridge uses. With the
+  # module token now saved (logos_module_accept_token → lp_token_save), the
+  # synchronous createNode reaches delivery and succeeds; the async variant booted
+  # the node but the receive path never surfaced messages, so we match the proven
+  # sync ordering (the event handler is registered against a started node).
+  var args = newJArray(); args.add %nodeConfigJson
+  let cn = result.invoke("createNode", $args)
+  if gLpDebug: stderr.writeLine("MUSTER-LP createNode result=" & (if cn != nil: $cn else: "<nil>"))
+  discard result.invoke("start", "[]")
+  result.nodeStarted = 1
+  GC_ref(result)                             # keep alive for the C-held user_data
   result.sub = lp_subscribe(result.client, "messageReceived",
                             onMessageReceived, cast[pointer](result))
-  var args = newJArray(); args.add %nodeConfigJson
-  let argsStr = $args
-  if gLpDebug: stderr.writeLine("MUSTER-LP createNode dispatched async")
-  discard lp_invoke_async(result.client, cstring"createNode", argsStr.cstring,
-                          result.timeoutMs, onCreateNodeResult, cast[pointer](result))
 
 method publish*(t: DeliveryTransport, contentTopic: string, payload: seq[byte]): string =
   var args = newJArray()
@@ -145,24 +146,12 @@ method publish*(t: DeliveryTransport, contentTopic: string, payload: seq[byte]):
                           onSendResult, nil)
   messageHashOf(contentTopic, payload)      # our content address (ingest dedup key)
 
-proc issueSubscribe(t: DeliveryTransport, contentTopic: string) =
-  var args = newJArray(); args.add %contentTopic
-  let argsStr = $args
-  if gLpDebug: stderr.writeLine("MUSTER-LP subscribe " & contentTopic)
-  discard lp_invoke_async(t.client, cstring"subscribe", argsStr.cstring,
-                          t.timeoutMs, onSendResult, nil)
-
 method subscribe*(t: DeliveryTransport, contentTopic: string, handler: MessageHandler) =
   if not t.handlers.hasKey(contentTopic):
     t.handlers[contentTopic] = @[]
-    # Local routing is set up synchronously. The lp `subscribe` to delivery must
-    # wait for the node to be STARTED — subscribe runs inside coordinate_join, when
-    # createNode/start are only just dispatched (async), so subscribing now targets
-    # a node that does not exist yet and the relay never registers the topic (no
-    # cross-host messages ever arrive). Defer to poll(), which issues it once
-    # onStartResult has set nodeStarted.
-    if t.nodeStarted == 1: t.issueSubscribe(contentTopic)
-    else: t.pendingTopics.add contentTopic
+    var args = newJArray(); args.add %contentTopic
+    if gLpDebug: stderr.writeLine("MUSTER-LP subscribe " & contentTopic)
+    discard t.invoke("subscribe", $args)     # tell delivery we want this topic (sync)
   t.handlers[contentTopic].add handler
 
 method unsubscribe*(t: DeliveryTransport, contentTopic: string) =
@@ -170,21 +159,28 @@ method unsubscribe*(t: DeliveryTransport, contentTopic: string) =
   # delivery has no per-topic unsubscribe in the consumed contract; we stop routing.
 
 method storeQuery*(t: DeliveryTransport, contentTopic: string): seq[IncomingMessage] =
-  ## Best-effort catchup: delivery's storeQuery is outside the minimal contract
-  ## (delivery_module.lidl) but present on the full module. If unavailable this
-  ## returns empty, and catchup falls back to live subscription only.
-  var args = newJArray(); args.add %contentTopic
-  let res = t.invoke("storeQuery", $args)
-  if res == nil or res.kind != JArray: return
-  for m in res:
-    if m.kind != JArray or m.len < 4: continue
-    let topic = m[1].getStr()
-    var payload: seq[byte]
-    if m[2].kind == JObject and m[2].hasKey("_bytes"):
-      payload = b64urlDecode(m[2]["_bytes"].getStr())
-    result.add IncomingMessage(contentTopic: topic, payload: payload,
-                               messageHash: messageHashOf(topic, payload),
-                               timestamp: m[3].getBiggestInt().int64)
+  ## Superseded by the async, poll-driven store catchup (fireCatchup + poll). Kept as
+  ## a no-op so the Transport seam stays satisfied; session.catchUp is a no-op on this
+  ## transport (LocalTransport still implements the synchronous form for tests).
+  @[]
+
+proc fireCatchup(t: DeliveryTransport, contentTopic: string) =
+  ## Ask a store service peer for the messages retained on `contentTopic` — the
+  ## mesh-independent receive path. Async (like createNode/send) so it never blocks
+  ## poll's dispatch; onStoreResult enqueues the response, poll parses it. The query
+  ## follows delivery's storeQuery(jsonQuery, peerAddr, timeoutMs) contract.
+  if t.storePeer.len == 0: return
+  let req = %*{"requestId": "muster-" & $int64(epochTime() * 1000),
+               "includeData": true, "paginationForward": true,
+               "contentTopics": [contentTopic], "paginationLimit": 50}
+  var args = newJArray()
+  args.add %($req)                 # jsonQuery (tstr)
+  args.add %t.storePeer            # peerAddr (tstr)
+  args.add %(t.timeoutMs.int)      # timeoutMs (int)
+  let argsStr = $args
+  if gLpDebug: stderr.writeLine("MUSTER-LP storeQuery " & contentTopic)
+  discard lp_invoke_async(t.client, cstring"storeQuery", argsStr.cstring,
+                          t.timeoutMs, onStoreResult, cast[pointer](t))
 
 method poll*(t: DeliveryTransport) =
   ## Drain the foreign-thread queue and dispatch each `messageReceived` event to
@@ -192,11 +188,6 @@ method poll*(t: DeliveryTransport) =
   ## on the module's own thread, so they are GC-safe. The module calls this from
   ## its loop. Our content address is recomputed so ingest dedups identically to
   ## LocalTransport (R-2/R-4), independent of delivery's own hash.
-  # The node has started (onStartResult) — issue any topic subscribes that were
-  # deferred while it was booting. Runs on the module thread (GC-safe).
-  if t.nodeStarted == 1 and t.pendingTopics.len > 0:
-    for topic in t.pendingTopics: t.issueSubscribe(topic)
-    t.pendingTopics = @[]
   for raw in t.queue.drain():
     if gLpDebug: stderr.writeLine("MUSTER-LP inbound frame received")
     var arr: JsonNode
@@ -211,6 +202,50 @@ method poll*(t: DeliveryTransport) =
                               messageHash: messageHashOf(topic, payload),
                               timestamp: arr[3].getBiggestInt().int64)
     if t.handlers.hasKey(topic):
+      for h in t.handlers[topic]:
+        if h != nil: h(msg)
+
+  # Mesh-independent catchup: periodically ask the store for each subscribed topic,
+  # so a message the relay never surfaced (sparse-shard mesh) still arrives. Fire on
+  # the module thread (async invoke returns immediately); responses land on the store
+  # queue, parsed below.
+  if t.storePeer.len > 0 and t.nodeStarted == 1:
+    let nowMs = int64(epochTime() * 1000)
+    if nowMs - t.lastCatchupMs > CatchupPeriodMs:
+      t.lastCatchupMs = nowMs
+      for topic in t.handlers.keys: t.fireCatchup(topic)
+
+  for raw in t.storeQueue.drain():
+    # Parse a store response and dispatch each retained message exactly like a live
+    # one — ingest dedups our own (R-2/R-4), so only genuinely-missed messages take
+    # effect. Shape (confirmed on the logos.test fleet):
+    #   { "value": "<json string>" }                       # lp result envelope
+    #   value -> { "messages": [ { "messageHash",
+    #       "message": { "vResultPrivate": { "contentTopic", "payload": [byte,…] } } } ] }
+    var env: JsonNode
+    try: env = parseJson(bytesToStr(raw))
+    except CatchableError: continue
+    if env.kind != JObject or not env.hasKey("value"): continue
+    var resp: JsonNode
+    try: resp = parseJson(env["value"].getStr())
+    except CatchableError: continue
+    if resp.kind != JObject or not resp.hasKey("messages") or resp["messages"].kind != JArray:
+      continue
+    for m in resp["messages"]:
+      if m.kind != JObject or not m.hasKey("message"): continue
+      var wm = m["message"]
+      if wm.kind == JObject and wm.hasKey("vResultPrivate"): wm = wm["vResultPrivate"]
+      if wm.kind != JObject or not wm.hasKey("contentTopic") or not wm.hasKey("payload"):
+        continue
+      let topic = wm["contentTopic"].getStr()
+      if wm["payload"].kind != JArray or not t.handlers.hasKey(topic): continue
+      var payload = newSeqOfCap[byte](wm["payload"].len)
+      for b in wm["payload"]: payload.add byte(b.getInt() and 0xFF)
+      if payload.len == 0: continue
+      let msg = IncomingMessage(contentTopic: topic, payload: payload,
+                                messageHash: messageHashOf(topic, payload), timestamp: 0)
+      if gLpDebug: stderr.writeLine("MUSTER-LP store message topic=" & topic &
+                                    " bytes=" & $payload.len)
       for h in t.handlers[topic]:
         if h != nil: h(msg)
 

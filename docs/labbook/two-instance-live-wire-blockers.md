@@ -122,6 +122,42 @@ edge nodes need to mesh directly on the shard (peer exchange / direct dial) rath
 on the fleet to gossip between them. `MUSTER_LP_DEBUG=1` shows whether `send` succeeds
 (send-side) vs whether frames arrive (receive-side). This is the last mile now.
 
+### Blocker 3 narrowed (2026-08-31): relay DELIVERS, delivery never emits `messageReceived`
+
+Deep strace of the runner's delivery process (`strace -f -e write` on the `logos_host_qt
+--name delivery_module` pid) settled it. Two instances on one topic, on the fleet:
+
+- **The fleet relays muster's traffic.** A's node logs `received relay message … topic=/waku/2/rs/2/5 contentTopic=/muster/1/…/proto` with B's `msg_hash`es (distinct from A's own sends). So B→fleet→A works at the Waku relay layer. The content topic autoshards to **shard 5** (`/waku/2/rs/2/5`).
+- **delivery never surfaces it.** Over 45s, delivery's `event_callback` fires only `connection_change`, `message_propagated` (its own sends), `relay_topic_health_change` — **zero `message_received`**, so muster's `onMessageReceived` never runs (`inbound=0`, `coordinate_pending` empty on both). The whole `MessageSeenEvent → isSubscribed → MessageReceivedEvent` chain (v1.0.0 source) never runs; no "skipping … not subscribed" either.
+- **Not muster's transport code.** Reverting the boot to fully synchronous (createNode/start/subscribe sync, event-sub after start — the proven chat ordering) behaves identically: `createNode {"success":true}`, `send` ok, **still `inbound=0`**. Async vs sync makes no difference; the token was the only thing that mattered for send.
+- **Version + the known bug.** muster runs delivery_module **v0.2.0** (the source read above is v1.0.0 — receive internals may differ). `demo/poc/BUG-lgx-in-basecamp-cross-network-chat-fails.md` documents this exact "sends fine but never receives" pattern for chat, with the leading cause a peer **not relay-meshing a sparse shard** (chat's `/waku/2/rs/2/0`). muster's shard 5 shows repeated `getPubSubPeersInMesh - there is no mesh peer for the given pubsub topic` (sparse — only muster instances use it), so the gossip mesh never forms even though occasional messages arrive.
+
+### Blocker 3 SOLVED (2026-08-31): store-based catchup — two instances converge over the fleet
+
+Option (1) works. delivery's relay never surfaces the message (v0.2.0, sparse shard), but the
+**fleet retains it in store**, and store is request/response — mesh-independent. muster now
+polls the store for every subscribed topic (`delivery.nim`: `fireCatchup` fires an async
+`storeQuery(jsonQuery, peerAddr, timeoutMs)` every ~8s; the store peer is the first
+`entryNode`; `poll()` parses the response and dispatches each retained message through the
+same handler as a live one — ingest dedups our own, R-2/R-4). **Verified end to end on the
+logos.test fleet:** two runner instances on one topic each **see the other's join request**
+(`coordinate_pending` → `pending=1` on both), ingesting 300+ store messages. That is real
+cross-host delivery; the whole coordinate flow (admit/propose/contribute) rides the same
+transport. (The offscreen self-test can't complete *admission* because `coordinate_admit`
+enforces F-9 — the binding must recover to a Safe owner — and the random test identities
+aren't owners; real owners pass it. That's correct product behaviour, not a transport gap.)
+
+Store-response shape (fleet-confirmed): lp envelope `{"value":"<json>"}` → `value` parses to
+`{"messages":[{"messageHash","message":{"vResultPrivate":{"contentTopic","payload":[byte,…]}}}]}`;
+`payload` is a **byte array**, not hex/base64.
+
+Follow-ups (quality, not correctness): time-window the store query (`timeStart`/cursor) instead
+of re-fetching + deduping the whole topic each tick; rotate the store peer across all
+`entryNodes` for resilience; the ~8s catchup interval is the cross-host latency floor (fine for
+coordination, tune if needed). The parse depends on delivery's `vResultPrivate` serialization —
+revisit on a delivery bump. Debug with `MUSTER_LP_DEBUG=1` + the offscreen self-test rig +
+`strace -f -e write` on the delivery pid.
+
 PR 202 (module-builder cdylib path) is unrelated, and its merged commit is **behind** the
 local fork (the fork has 5 later commits muster needs) — do not switch to it.
 

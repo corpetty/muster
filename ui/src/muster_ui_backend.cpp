@@ -2,6 +2,9 @@
 
 #include <QDebug>
 #include <QTimer>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
 
 // Generated umbrella: LogosModules (behind modules()) built from
 // metadata.json#dependencies — the typed muster_module client the UI calls
@@ -334,13 +337,30 @@ void MusterUiBackend::onContextReady()
             QTimer::singleShot(3000, this, [this]() { requestJoin(); });
             // Poll pending/members so a two-instance self-test shows cross-host
             // delivery (another peer's join-request arriving) in the console.
+            const bool founder = !qgetenv("MUSTER_AUTOADMIT").isEmpty();
             auto* t = new QTimer(this);
             t->setInterval(6000);
-            connect(t, &QTimer::timeout, this, [this]() {
-                loadPending(); loadMembers(); loadMessages();
+            connect(t, &QTimer::timeout, this, [this, founder]() {
+                requestJoin();               // re-announce until admitted (idempotent)
+                loadPending(); loadMembers(); loadMessages(); loadIntents();
+                // Founder-only: admit the first pending asker (one admitter keeps a
+                // single shared epoch), then propose one intent so the other side's
+                // convergence can be observed.
+                if (founder) {
+                    QJsonDocument d = QJsonDocument::fromJson(pendingJson().toUtf8());
+                    if (d.isArray() && !d.array().isEmpty()) {
+                        const QString id = d.array().first().toObject().value("identity").toString();
+                        if (!id.isEmpty()) admit(id);
+                    }
+                    static bool proposed = false;
+                    if (!proposed && membersJson().contains("\"self\":false")) {
+                        proposed = true;
+                        proposeInRoom(QStringLiteral("{\"to\":\"0x1111111111111111111111111111111111111111\",\"value\":1000,\"nonce\":0}"));
+                    }
+                }
                 qInfo() << "[muster_ui] SELFTEST pending=" << pendingJson()
                         << "members=" << membersJson()
-                        << "messages=" << messagesJson().size() << "bytes";
+                        << "intents=" << intentsJson();
             });
             t->start();
         });
