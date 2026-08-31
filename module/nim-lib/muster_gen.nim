@@ -165,8 +165,18 @@ proc logos_module_set_emit_callback(cb: EmitCb, userData: pointer) {.exportc, cd
   gEmitCb = cb
   gEmitUserData = userData
 
+# Store the token in THIS plugin's embedded lp TokenManager. The loader hands a
+# module a token for each dependency it may call (e.g. delivery_module); without
+# saving it here, the plugin's own lp copy has no token and every outbound
+# lp_invoke is rejected by the target's ModuleProxy — the call returns instantly
+# with a null result and never runs (delivery's node never boots). lp_token_save
+# is the consumer-side counterpart to the loader's informModuleToken.
+# NOTE: hand-added to the generated glue — belongs in the codegen template.
+proc lpTokenSaveC(moduleName, token: cstring): cint {.importc: "lp_token_save", cdecl.}
+
 proc logos_module_accept_token(moduleName: cstring, token: cstring): cint {.exportc, cdecl.} =
   if moduleName == nil or token == nil: return -1
+  discard lpTokenSaveC(moduleName, token)
   0
 
 proc logos_module_get_protocol_version(): cstring {.exportc, cdecl.} =

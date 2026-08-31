@@ -24,6 +24,15 @@ const LP_OK* = cint(0)
 proc lp_protocol_version*(): cstring {.importc, cdecl.}
 proc lp_protocol_abi_major*(): cint {.importc, cdecl.}
 
+# Process-global mode / transport of THIS module's embedded lp copy. Each plugin
+# statically links its own logos-protocol, so its lp globals are its own — the host
+# configures a different copy. These let muster configure its own: "remote" (IPC,
+# the default) | "local" (in-process registry) | "mock". lp_set_default_transport
+# takes a transport JSON object, e.g. {"protocol":"local"}.
+proc lp_set_mode*(mode: cstring): cint {.importc, cdecl.}
+proc lp_get_mode*(): cstring {.importc, cdecl.}
+proc lp_set_default_transport*(transportJson: cstring): cint {.importc, cdecl.}
+
 proc lp_string_free*(s: cstring) {.importc, cdecl.}
 
 proc lp_client_create*(targetModule, originModule,

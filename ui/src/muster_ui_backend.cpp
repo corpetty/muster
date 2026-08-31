@@ -1,6 +1,7 @@
 #include "muster_ui_backend.h"
 
 #include <QDebug>
+#include <QTimer>
 
 // Generated umbrella: LogosModules (behind modules()) built from
 // metadata.json#dependencies — the typed muster_module client the UI calls
@@ -318,4 +319,30 @@ void MusterUiBackend::onContextReady()
     loadAccount();
     loadBalances();
     loadSettings();
+
+    // Diagnostic/headless self-test hook: if MUSTER_AUTOJOIN_TOPIC is set, join that
+    // room a few seconds after startup — no GUI click needed. Runs on the ui-host's
+    // Qt main thread (so muster's lp client has an event loop) and drives the full
+    // coordinate_join → delivery createNode path, so the runner can be exercised
+    // offscreen. Off unless the env var is set; never affects a normal launch.
+    const QByteArray autojoin = qgetenv("MUSTER_AUTOJOIN_TOPIC");
+    if (!autojoin.isEmpty()) {
+        const QString topic = QString::fromUtf8(autojoin);
+        QTimer::singleShot(5000, this, [this, topic]() {
+            qInfo() << "[muster_ui] AUTOJOIN ->" << topic;
+            joinRoom(topic);
+            QTimer::singleShot(3000, this, [this]() { requestJoin(); });
+            // Poll pending/members so a two-instance self-test shows cross-host
+            // delivery (another peer's join-request arriving) in the console.
+            auto* t = new QTimer(this);
+            t->setInterval(6000);
+            connect(t, &QTimer::timeout, this, [this]() {
+                loadPending(); loadMembers(); loadMessages();
+                qInfo() << "[muster_ui] SELFTEST pending=" << pendingJson()
+                        << "members=" << membersJson()
+                        << "messages=" << messagesJson().size() << "bytes";
+            });
+            t->start();
+        });
+    }
 }

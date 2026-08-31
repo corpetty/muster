@@ -65,30 +65,65 @@ discover each other through the fleet's relay — no direct peering, no multiadd
 preset's cluster (2) already matches the fleet, so only the missing `entryNodes` had to be
 supplied. See `infra/fleets/README.md`. `logos.test` preferred (matches the preset cluster).
 
-## Blocker 1 — refined: the minimal host doesn't configure muster's embedded lp
+## Blocker 1 — SOLVED (2026-08-31): muster discarded delivery's token
 
-`coordinate_join` returns in **0.05s** (instant fail, not a 5s timeout), so muster's
-`lp_invoke("createNode")` resolves its transport immediately to failure — it isn't reaching
-delivery at all. Why: `nm -D` on `muster_module_plugin.so` shows `lp_client_create` /
-`lp_invoke` as **`T` (defined, statically embedded)**, not `U` — muster carries its **own**
-`liblogos_protocol` with its **own** process-global lp state, disconnected from logos-core's
-module registry (where delivery is published, and where a direct QRO `createNode` reaches it).
-muster never binds `lp_set_mode`/`lp_set_default_transport`, so it relies on the loader/host to
-configure that embedded lp; host-side `lp_set_mode` is useless (different copy). The signature
-is *not* mismatched — the current header's `lp_client_create(target, origin, targetTransport,
-capTransport)` matches muster's 4-arg binding. The real runner (standalone-app / basecamp)
-configures muster's embedded lp through logos-core's module-process wiring; the minimal
-in-process host does not, and replicating that wiring is the open work.
+The real runner spawns a **separate `logos_host_qt` process per module** (muster, delivery,
+capability — all sharing `LOGOS_INSTANCE_ID`), so muster→delivery is IPC in the default
+`remote` lp mode, and the registry URL (`local:logos_delivery_module_<id>`) resolves fine.
+The failure was **not** transport/mode/re-entrancy — it was **tokens**.
 
-## What remains
+muster's plugin statically embeds its own `liblogos_protocol` (lp_* are `T`) with its own
+TokenManager, separate from the `logos_host_qt` loader's. The generated glue
+**`logos_module_accept_token` (muster_gen.nim) was a NO-OP** — the loader hands muster a
+token for each dependency it may call (delivery_module) and muster **discarded** it. So
+muster's embedded lp had no token → delivery's ModuleProxy rejected every outbound
+`lp_invoke`, returning in ~1ms with `ok=1 json=null` (the protocol conflates no-result with
+a rejected call). `createNode` never ran; the Waku node never booted. Single-instance folds
+still passed only because `session.publish()` writes the local log first.
 
-- **Live two-instance run:** use the **real runner** (`ui/flake.nix#runner` / `make run`,
-  the coherent standalone app that wires muster→delivery correctly) with the fleet delivery
-  config from `infra/fleets/logos.test.json`. Discovery is now solved; the runner handles the
-  lp bridge. The GL-less box blocks the *UI render*, not the delivery/coordinate layer.
-- **Or** fix the minimal host: configure muster's embedded lp at load (the logos-core
-  module-transport wiring the standalone app does) — then the headless host drives the whole
-  two-instance flow itself.
+**Fix:** `logos_module_accept_token` calls `lp_token_save(moduleName, token)`
+(logos_protocol.h: "Store a token for module_name") into the plugin's embedded lp.
+**Verified** — with the token saved: `createNode → {"error":null,"success":true,"value":null}`
+and delivery dials all 6 fleet nodes (6 ESTABLISHED conns to `:30303`). Also made
+`createNode`/`start`/`subscribe` **async** (`lp_invoke_async`) and deferred the topic
+subscribe until `start` completes — correct regardless (they run inside `coordinate_join`'s
+QRO dispatch), though the token was the actual blocker.
 
-Tracked under exo-e17. The headless host, the fleet resource, and the single-instance
-coordinate fold are done and landed; this is the last mile to a live wire.
+The fix is hand-added to the generated `muster_gen.nim` → **belongs in the module-builder
+codegen template** (a regen would drop it). Debug the transport with `MUSTER_LP_DEBUG=1`
+(stderr traces of createNode/start/subscribe/inbound/send results, in `delivery.nim`).
+
+### Self-test rig (no GUI)
+Run the real runner offscreen: `MUSTER_DELIVERY_CONFIG=<fleet cfg> MUSTER_AUTOJOIN_TOPIC=<topic>
+QT_QPA_PLATFORM=offscreen .run/runner/bin/muster-ui --user-dir <dir>`. The auto-join hook
+(`muster_ui_backend.cpp onContextReady`, env-gated) drives `coordinate_join` + `requestJoin`
+and polls pending/members. The node-boot tell is `ss -tnp | grep :30303` on delivery's child
+`logos_host_qt` pid (delivery's Waku logs go to *its* process stdout, not the main runner's).
+Iterate from the working tree with `nix build path:.#runner --override-input muster_module
+path:.../module` (the `path:` lock caches by lastModified; `touch` the sources to force a
+re-read — do NOT `nix flake update muster_module`, it bloats ui/flake.lock).
+
+## Blocker 3 (NEW, OPEN) — cross-host relay: both nodes on the fleet, zero frames cross
+
+With Blocker 1 fixed, two instances (distinct `LOGOS_INSTANCE_ID`, same topic) each boot a
+node and connect to all 6 fleet nodes — but **neither receives the other's frames** (`inbound
+frame` count stays 0; `coordinate_pending` stays empty on both). Confirmed the subscribe now
+fires in the right order (createNode → start → subscribe-after-start) and a valid Waku
+content-topic format (`/app/version/name/enc`) doesn't change it. So discovery + transport +
+subscribe all work, but the **relay/gossip layer isn't delivering edge→edge over the fleet**.
+**Send is confirmed good, receive is the break:** with `MUSTER_LP_DEBUG=1`, B's `requestJoin`
+publish returns `send/sub-result ok=1 {"success":true,"value":"<reqId>"}` — delivery accepted
+and published it — yet A's `inbound frame` count stays 0. So the message leaves B's node fine;
+the fleet just never delivers it to A.
+Open hypotheses for the delivery/Waku team: the fleet nodes may not relay arbitrary
+cluster-2 shards edge-to-edge (store/filter/lightpush-oriented), so muster may need
+**lightpush to send + filter to receive** rather than relay `send`/`subscribe`; or the two
+edge nodes need to mesh directly on the shard (peer exchange / direct dial) rather than rely
+on the fleet to gossip between them. `MUSTER_LP_DEBUG=1` shows whether `send` succeeds
+(send-side) vs whether frames arrive (receive-side). This is the last mile now.
+
+PR 202 (module-builder cdylib path) is unrelated, and its merged commit is **behind** the
+local fork (the fork has 5 later commits muster needs) — do not switch to it.
+
+Tracked under exo-e17. The token fix, the fleet resource, the async/deferred boot, and the
+single-instance fold are done; cross-host relay over the fleet is the open item.

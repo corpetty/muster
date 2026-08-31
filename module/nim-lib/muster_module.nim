@@ -558,6 +558,10 @@ proc musterCoordinatePending(): string =
   for st in gSession.pendingBindings():
     arr.add %*{"identity": toHex(st.enc.toBytes()),
                "bindsOwner": bindingBinds(st, gDriver.owners, nowSec)}
+  if gLpDebug:
+    stderr.writeLine("MUSTER-LP pending=" & $arr.len & " members=" &
+                     $gSession.members().len & " msgs=" &
+                     $reduceMessages(gSession.log.allEvents()).len)
   $arr
 
 # ── chat/room surface (messages · roster · conversations) ──────────────────────
