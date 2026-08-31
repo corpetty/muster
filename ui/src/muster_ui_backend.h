@@ -53,4 +53,10 @@ public:
     void loadPolicy() override;
 
     void onContextReady() override;
+
+private:
+    // Re-announce a pending join request until admitted (best-effort delivery over
+    // the fleet). Guarded so only one retry chain runs at a time.
+    void scheduleJoinRetry();
+    bool m_joinRetrying = false;
 };

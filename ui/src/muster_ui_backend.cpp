@@ -224,6 +224,31 @@ void MusterUiBackend::requestJoin()
     const QString r = modules().muster_module.coordinate_request_join();
     qInfo() << "[muster_ui] coordinate_request_join ->" << r;
     loadPending();
+    // Keep re-announcing until admitted. Delivery over the fleet is best-effort and
+    // muster's shard can be sparse (no mesh peer at the instant of a one-shot send),
+    // so a single request can fail to reach a store node and the other side never
+    // sees it. Re-issue every few seconds until this peer is in a shared epoch (its
+    // roster grows past just itself), then stop.
+    if (!m_joinRetrying) {
+        m_joinRetrying = true;
+        scheduleJoinRetry();
+    }
+}
+
+void MusterUiBackend::scheduleJoinRetry()
+{
+    QTimer::singleShot(5000, this, [this]() {
+        loadMembers();
+        const QJsonDocument d = QJsonDocument::fromJson(membersJson().toUtf8());
+        const int members = d.isArray() ? d.array().size() : 0;
+        if (members > 1 || roomTopic().isEmpty()) {   // admitted, or left the room
+            m_joinRetrying = false;
+            return;
+        }
+        modules().muster_module.coordinate_request_join();
+        loadPending();
+        scheduleJoinRetry();
+    });
 }
 
 void MusterUiBackend::loadPending()
@@ -341,7 +366,8 @@ void MusterUiBackend::onContextReady()
             auto* t = new QTimer(this);
             t->setInterval(6000);
             connect(t, &QTimer::timeout, this, [this, founder]() {
-                requestJoin();               // re-announce until admitted (idempotent)
+                // requestJoin() fires ONCE (above) — the backend's own retry chain
+                // re-announces until admitted, exactly as the UI button now does.
                 loadPending(); loadMembers(); loadMessages(); loadIntents();
                 // Founder-only: admit the first pending asker (one admitter keeps a
                 // single shared epoch), then propose one intent so the other side's
