@@ -176,6 +176,7 @@ void MusterUiBackend::joinRoom(const QString &topic)
     loadIntents();
     loadConversations();   // the room list — this join may have added a room
     loadDrivers();         // the room's admitted policy set (driver-as-proposal)
+    loadPending();         // anyone already asking to join this topic
 }
 
 void MusterUiBackend::postMessage(const QString &body)
@@ -208,6 +209,40 @@ void MusterUiBackend::loadMembers()
 {
     // coordinate_members → the admitted roster (who can read the room).
     setMembersJson(modules().muster_module.coordinate_members());
+}
+
+void MusterUiBackend::requestJoin()
+{
+    // coordinate_request_join → announce our encryption key on the topic. Carries no
+    // authority (discovery, not entry) — an existing member still has to admit us.
+    // Two instances that both joined one topic each founded their own epoch; this is
+    // the first half of merging them into one readable room.
+    const QString r = modules().muster_module.coordinate_request_join();
+    qInfo() << "[muster_ui] coordinate_request_join ->" << r;
+    loadPending();
+}
+
+void MusterUiBackend::loadPending()
+{
+    // coordinate_pending → identities that asked to join but aren't admitted yet,
+    // as [{identity, bindsOwner}]. A member reviews these and decides whom to admit.
+    // Drives inbound delivery first, so a request from another host shows up here.
+    setPendingJson(modules().muster_module.coordinate_pending());
+}
+
+void MusterUiBackend::admit(const QString &identityHex)
+{
+    // coordinate_admit → re-key the room forward and grant the joiner the new epoch
+    // key (F-16: the admitted member reads from its epoch on, never earlier). Refresh
+    // the roster, the pending list, and the folds so the newly shared room appears.
+    if (identityHex.isEmpty())
+        return;
+    const QString r = modules().muster_module.coordinate_admit(identityHex);
+    qInfo() << "[muster_ui] coordinate_admit(" << identityHex << ") ->" << r;
+    loadMembers();
+    loadPending();
+    loadMessages();
+    loadIntents();
 }
 
 void MusterUiBackend::proposeInRoom(const QString &effectJson)

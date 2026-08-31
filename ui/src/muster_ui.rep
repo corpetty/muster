@@ -56,6 +56,18 @@ class MusterUi
     // re-joins (re-activates) that room. Multi-room: the module holds a session each.
     SLOT(void loadConversations())
 
+    // ── the membership handshake (grow the room) ─────────────────────────────
+    // Two instances that both coordinate_join one topic each found their OWN
+    // single-member epoch — they can't read each other until one admits the other.
+    // requestJoin announces our encryption key on the topic (coordinate_request_join,
+    // no authority — discovery, not entry). loadPending reads the askers not yet
+    // admitted (coordinate_pending) into pendingJson. admit re-keys the room forward
+    // and grants the joiner the new epoch key (coordinate_admit) — the joiner reads
+    // from its epoch on, never earlier (F-16). This is what makes two hosts converge.
+    SLOT(void requestJoin())
+    SLOT(void loadPending())
+    SLOT(void admit(const QString &identityHex))
+
     // Room intents (the multi-party path). Propose an effect into the joined room
     // (coordinate_propose), contribute an owner signature (coordinate_contribute),
     // and read the folded intent list (coordinate_intents) into intentsJson — the
@@ -132,4 +144,10 @@ class MusterUi
     // Every joined conversation, as JSON {topic, address, lastTs, active}. The home
     // surface lists these — one row per room the module holds a session for.
     PROP(QString conversationsJson="[]" READONLY)
+
+    // Join-requests not yet admitted (coordinate_pending): a JSON array of
+    // {identity, bindsOwner} — 64-byte encryption identity hex, and whether its
+    // binding recovers to a Safe owner (F-9). The scope panel lists these with an
+    // Admit action; admitting re-keys the room forward (F-16).
+    PROP(QString pendingJson="[]" READONLY)
 }

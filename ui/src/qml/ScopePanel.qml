@@ -32,11 +32,26 @@ Item {
     // The room topic — the thing the scope is drawn around.
     property string topic: ""
 
+    // Join-requests not yet admitted: [{ identity, bindsOwner }], identity a
+    // 64-byte hex. A parse failure upstream yields [] (absent), never fiction.
+    property var pending: []
+
     // Asks the host to grow the room; the host collects the new member's key.
     signal addMember()
 
+    // Announce our key into this topic so an existing member can admit us
+    // (coordinate_request_join). The host wires this to the module.
+    signal requestJoin()
+
+    // Admit one asker by its 64-byte identity hex (coordinate_admit): the host
+    // re-keys the room forward, so the joiner reads from its epoch on (F-16).
+    signal admit(string identityHex)
+
     // The roster, guarded to an array so length and the Repeater are always safe.
     readonly property var roster: scope.members ? scope.members : []
+
+    // The pending list, guarded the same way.
+    readonly property var pendingList: scope.pending ? scope.pending : []
 
     Flickable {
         id: flick
@@ -157,22 +172,59 @@ Item {
                 }
             }
 
-            // The one action that grows the room, pinned under the roster. The
-            // module has the join/admit handshake (coordinate_request_join /
-            // coordinate_pending / coordinate_admit), but it is not yet wired to a
-            // UI surface — so this stays disabled rather than a dead click, and says
-            // why. The addMember() signal is kept for when the surface lands.
+            // Grow the room — the join/admit handshake, wired. Two instances that
+            // both opened this topic each start their own single-member epoch; they
+            // can't read each other until one admits the other. "Ask to join"
+            // announces our key on the topic (coordinate_request_join); a member who
+            // is already here sees the request below and admits it.
             LogosButton {
-                objectName: "addMemberButton"
+                objectName: "requestJoinButton"
                 Layout.fillWidth: true
-                text: qsTr("Add someone")
-                enabled: false
-                onClicked: scope.addMember()
+                text: qsTr("Ask to join this room")
+                onClicked: scope.requestJoin()
+            }
+
+            // Pending join-requests: whoever has announced their key but is not yet
+            // admitted. Admitting re-keys the room forward (F-16) and hands them the
+            // new epoch key — they read from here on, never the log before.
+            LogosText {
+                visible: scope.pendingList.length > 0
+                Layout.fillWidth: true
+                text: qsTr("Waiting to join")
+                color: Theme.palette.text
+                font.family: Theme.typography.publicSans
+                font.pixelSize: Theme.typography.subtitleText
+                font.weight: Theme.typography.weightBold
+                elide: Text.ElideRight
+            }
+
+            Repeater {
+                model: scope.pendingList
+                delegate: RowLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+
+                    LogosText {
+                        Layout.fillWidth: true
+                        readonly property string ident: modelData && modelData.identity ? String(modelData.identity) : ""
+                        text: (ident.length > 14 ? ident.substring(0, 10) + "…" + ident.substring(ident.length - 4) : ident)
+                              + ((modelData && modelData.bindsOwner) ? qsTr("  · owner") : "")
+                        color: Theme.palette.textSecondary
+                        font.pixelSize: Theme.typography.badgeText
+                        elide: Text.ElideRight
+                    }
+
+                    LogosButton {
+                        text: qsTr("Admit")
+                        onClicked: if (modelData && modelData.identity) scope.admit(String(modelData.identity))
+                    }
+                }
             }
 
             LogosText {
                 Layout.fillWidth: true
-                text: qsTr("Growing the room needs the join handshake wired to a surface — it lands with the live delivery node.")
+                text: qsTr("Admitting someone re-keys the room forward — they read from here on, never the messages before (F-16).")
                 color: Theme.palette.textTertiary
                 font.pixelSize: Theme.typography.badgeText
                 wrapMode: Text.WordWrap

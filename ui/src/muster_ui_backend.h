@@ -41,6 +41,9 @@ public:
     void loadMessages() override;
     void loadMembers() override;
     void loadConversations() override;
+    void requestJoin() override;
+    void loadPending() override;
+    void admit(const QString &identityHex) override;
     void proposeInRoom(const QString &effectJson) override;
     void contributeInRoom(const QString &intentId, const QString &signatureHex) override;
     void loadIntents() override;

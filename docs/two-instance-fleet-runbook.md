@@ -54,13 +54,16 @@ Do this once both windows are up (give each ~20–40s after joining to find flee
 
 1. **Both** — open (or create) the **same room**: identical topic string in each, e.g.
    `/muster/live/demo-1`. Each instance boots its delivery node on first join and connects
-   to the fleet.
-2. **Alice founds, Bob asks in.** Alice is the room's first member (epoch 0). In Bob's
-   window, **request to join** — Bob announces his encryption key on the topic.
-3. **Alice admits Bob.** Alice sees Bob under pending (`bindsOwner` reflects whether Bob's
-   binding recovers to a Safe owner, F-9) and **admits** him. This re-keys the room forward
-   (epoch 1 = {Alice, Bob}); Bob gets only the new epoch, never Alice's earlier lineage
-   (F-16). Confirm Bob now shows in the roster on both sides.
+   to the fleet. Note: each side starts its *own* single-member room on that topic name —
+   they can't read each other until one admits the other (this is the handshake below).
+2. **Alice founds, Bob asks in.** Pick one side as founder — say **Alice** — and leave her
+   be. In **Bob's** window, in the scope panel (right), click **"Ask to join this room"** —
+   Bob announces his encryption key on the topic. *(Only the joiner asks. Don't have both
+   sides admit each other — one admitter keeps a single shared epoch.)*
+3. **Alice admits Bob.** Within a few seconds Bob appears under **"Waiting to join"** in
+   Alice's scope panel (`· owner` if his binding recovers to a Safe owner, F-9). Alice
+   clicks **Admit**. This re-keys the room forward (epoch 1 = {Alice, Bob}); Bob gets only
+   the new epoch, never Alice's earlier lineage (F-16). Both rosters now show two members.
 4. **Alice proposes an intent.** Propose a Safe transaction (the walkthrough's default is
    fine). The propose event is sealed under epoch 1, relayed through the fleet.
 5. **Bob receives it.** Within a few seconds Bob's room shows the **same intent** — same id,

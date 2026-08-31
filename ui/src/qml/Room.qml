@@ -46,6 +46,12 @@ Item {
         try { return JSON.parse(backend ? backend.membersJson : "[]"); }
         catch (e) { return []; }
     }
+    // Join-requests not yet admitted: [{ identity, bindsOwner }]. The scope panel
+    // lists these with an Admit action (the membership handshake).
+    readonly property var pending: {
+        try { return JSON.parse(backend ? backend.pendingJson : "[]"); }
+        catch (e) { return []; }
+    }
     readonly property var intents: {
         try { return JSON.parse(backend ? backend.intentsJson : "[]"); }
         catch (e) { return []; }
@@ -716,13 +722,34 @@ Item {
         }
         }
 
-        // Right: who can see this — the roster and the scope line.
+        // Right: who can see this — the roster, the pending join-requests, and the
+        // scope line. The handshake signals go to the module through the backend.
         ScopePanel {
             visible: room.joined
             Layout.preferredWidth: 300
             Layout.fillHeight: true
             members: room.members
+            pending: room.pending
             topic: room.topic
+            onRequestJoin: if (room.backend) room.backend.requestJoin()
+            onAdmit: function(identityHex) { if (room.backend) room.backend.admit(identityHex); }
+        }
+    }
+
+    // Live refresh while a room is open. Delivery is polled (inbound arrives on the
+    // module's own thread and is drained on read), so without a tick a request to
+    // join, a peer's message, or a folded contribution from another host would only
+    // appear on the next manual action. Cheap reads; each drives inbound first.
+    Timer {
+        interval: 3000
+        running: room.joined
+        repeat: true
+        onTriggered: {
+            if (!room.backend) return;
+            room.backend.loadPending();
+            room.backend.loadMembers();
+            room.backend.loadMessages();
+            room.backend.loadIntents();
         }
     }
 }
