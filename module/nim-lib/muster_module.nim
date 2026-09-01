@@ -739,9 +739,13 @@ proc musterWalletVerifiedBalance(accountId, stateRootHex: string): string =
     $(%*{"error": e.msg})
 
 proc musterCoordinateAdmit(identityHex: string): string =
-  ## Admit a requester — but only one whose binding proves it is a Safe owner (F-9,
-  ## the admission policy over the "a member decides" model). A request without a
-  ## valid binding is "unverified", never silently admitted.
+  ## Admit a requester the model is "a member decides": an existing member chooses
+  ## whom to let in. The binding must be VALID (F-9 — unexpired and self-consistent:
+  ## its secp signature recovers a real signer over exactly this encryption identity,
+  ## so it can't be forged or replayed), but admission does NOT additionally require
+  ## the signer to be a Safe owner — that is one driver's policy, not the membership
+  ## model. Whether the requester is an owner is surfaced to the admitter as
+  ## `bindsOwner` in coordinate_pending, so a Safe room can still choose owners-only.
   if gSession == nil: return "not-joined"
   let b = hexToBytes(identityHex)
   if b.len != 64: return "bad-key"          # a member identity: ed25519(32) ++ x25519(32)
@@ -749,8 +753,12 @@ proc musterCoordinateAdmit(identityHex: string): string =
   let nowSec = uint64(epochTime())
   var verified = false
   for st in gSession.pendingBindings():
-    if st.enc == m and bindingBinds(st, gDriver.owners, nowSec): verified = true
-  if not verified: return "unverified"      # no binding proving Safe ownership (F-9)
+    if st.enc == m:
+      try:
+        discard bindingSigner(st, nowSec)   # F-9: recovers a signer, raises if expired
+        verified = true
+      except CatchableError: discard        # malformed/expired binding — not admissible
+  if not verified: return "unverified"      # no valid binding for this identity
   gSession.admit(m)
   "ok"
 
