@@ -32,11 +32,17 @@
 >    `bindsOwner` stays advisory in `coordinate_pending`.
 >
 > ### Known limits / follow-ups (quality, not correctness)
-> - **Latency ~8s** (the "slow chatroom" feel): the store-catchup interval is the cross-host
->   floor. Improve by time-windowing the store query (`timeStart`/cursor — fetch only new, so
->   it's cheap enough to poll faster), and/or fixing the real live-relay receive so messages
->   arrive in real time (delivery-internal — why `messageReceived` never fires; the store is
->   the workaround). Rotate the store peer across all `entryNodes` for resilience.
+> - **Latency — tightened to chat cadence (2026-09-01, exo-38e).** Was ~8s; now **~1s
+>   cross-host receive, ~3s to full convergence** (measured offscreen: joiner announce →
+>   founder sees the request ~1.0s; announce → both `members=2` ~3.0s). Two changes: the
+>   store-catchup period dropped 8s→**1s** (env `MUSTER_CATCHUP_MS`, floor 200ms), and each
+>   steady-state query is now **time-windowed** (`timeStart = now − MUSTER_CATCHUP_LOOKBACK_MS`,
+>   default 60s) so the tight cadence stays cheap — the first few queries per topic still fetch
+>   full history so a late joiner catches up, then it slides. The UI live-refresh (`Room.qml`)
+>   and the offscreen self-test timer were matched to 1s (they *drive* `poll()`). Still open:
+>   rotate the store peer across `entryNodes` for resilience, and (the proper fix) delivery's
+>   live-relay receive so messages arrive push-not-poll — `messageReceived` never fires on our
+>   sparse shard, which is why we poll the store at all.
 > - **Safe txn coordination needs owner identities.** Membership works with any identity, but
 >   `contribute` needs a signature that recovers to a Safe owner, and the runner gives each
 >   peer a random key. Next: seed `.run/<peer>` with the anvil owner keys to close
@@ -206,7 +212,8 @@ Deep strace of the runner's delivery process (`strace -f -e write` on the `logos
 Option (1) works. delivery's relay never surfaces the message (v0.2.0, sparse shard), but the
 **fleet retains it in store**, and store is request/response — mesh-independent. muster now
 polls the store for every subscribed topic (`delivery.nim`: `fireCatchup` fires an async
-`storeQuery(jsonQuery, peerAddr, timeoutMs)` every ~8s; the store peer is the first
+`storeQuery(jsonQuery, peerAddr, timeoutMs)` every ~8s *(since tightened to ~1s, see the
+latency follow-up above)*; the store peer is the first
 `entryNode`; `poll()` parses the response and dispatches each retained message through the
 same handler as a live one — ingest dedups our own, R-2/R-4). **Verified end to end on the
 logos.test fleet:** two runner instances on one topic each **see the other's join request**
@@ -220,11 +227,12 @@ Store-response shape (fleet-confirmed): lp envelope `{"value":"<json>"}` → `va
 `{"messages":[{"messageHash","message":{"vResultPrivate":{"contentTopic","payload":[byte,…]}}}]}`;
 `payload` is a **byte array**, not hex/base64.
 
-Follow-ups (quality, not correctness): time-window the store query (`timeStart`/cursor) instead
-of re-fetching + deduping the whole topic each tick; rotate the store peer across all
-`entryNodes` for resilience; the ~8s catchup interval is the cross-host latency floor (fine for
-coordination, tune if needed). The parse depends on delivery's `vResultPrivate` serialization —
-revisit on a delivery bump. Debug with `MUSTER_LP_DEBUG=1` + the offscreen self-test rig +
+Follow-ups (quality, not correctness): **time-windowing + a 1s period landed 2026-09-01
+(exo-38e)** — each steady-state query now carries `timeStart = now − MUSTER_CATCHUP_LOOKBACK_MS`
+(default 60s) instead of re-fetching the whole topic, so the period could drop 8s→1s
+(`MUSTER_CATCHUP_MS`) and cross-host receive is now ~1s (see the latency follow-up at the top).
+Still open: rotate the store peer across all `entryNodes` for resilience. The parse depends on
+delivery's `vResultPrivate` serialization — revisit on a delivery bump. Debug with `MUSTER_LP_DEBUG=1` + the offscreen self-test rig +
 `strace -f -e write` on the delivery pid.
 
 PR 202 (module-builder cdylib path) is unrelated, and its merged commit is **behind** the

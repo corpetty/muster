@@ -14,7 +14,7 @@
 ## callback's foreign-thread GC seam (the storage-nim `abandoned`-flag pattern),
 ## come with the P3 integration harness; this increment establishes the binding.
 
-import std/[json, tables, os, times]
+import std/[json, tables, sets, strutils, os, times]
 import ./transport
 import ./lp_ffi
 import ./inbound_queue
@@ -24,6 +24,28 @@ import ./inbound_queue
 # result, the topic subscribe, inbound frames, and send results on stderr. The
 # foreign-thread callbacks read this bool (no GC) via c_fprintf (no Nim strings).
 let gLpDebug* = getEnv("MUSTER_LP_DEBUG").len > 0
+
+# Cross-host receive is store-polled (delivery's relay doesn't surface messages on
+# our sparse shard, see docs/labbook/two-instance-live-wire-blockers.md), so these
+# two knobs set the felt latency. The period is how often we re-query the store;
+# the lookback is how far back each query reaches. A tight period makes messages
+# arrive chat-fast, and the sliding lookback (below) keeps each query cheap so a
+# tight period doesn't hammer the fleet store or re-parse the whole topic. Both
+# are env-tunable for pushing snappier (or gentler on a shared store).
+proc envMs(name: string, default, floor: int64): int64 =
+  let e = getEnv(name)
+  if e.len == 0: return default
+  try: max(floor, parseInt(e).int64) except CatchableError: default
+
+let gCatchupPeriodMs* = envMs("MUSTER_CATCHUP_MS", 1000, 200)
+  ## re-query the store this often (ms). Default 1s ≈ chat cadence; floor 200ms.
+let gCatchupLookbackMs* = max(gCatchupPeriodMs, envMs("MUSTER_CATCHUP_LOOKBACK_MS", 60_000, 1000))
+  ## each steady-state query reaches back this far (ms). Wide enough to tolerate
+  ## clock skew and a few missed polls (ingest dedups the overlap), small enough
+  ## that a 1s cadence stays cheap. Never below the period.
+const DeepCatchupTicks = 3
+  ## the first few queries per topic fetch full recent history (no time bound) so a
+  ## late joiner catches up on a room older than the lookback; then windowed.
 
 type
   DeliveryTransport* = ref object of Transport
@@ -35,7 +57,8 @@ type
     nodeStarted: cint                             ## 1 once createNode+start returned; gates lifecycle
     storePeer: string                             ## a store service multiaddr (first entryNode); "" disables catchup
     storeQueue: InboundQueue                      ## async store-query responses land here; poll() parses them
-    lastCatchupMs: int64                          ## throttle: only re-query the store every CatchupPeriodMs
+    lastCatchupMs: int64                          ## throttle: only re-query the store every gCatchupPeriodMs
+    catchupTicks: Table[string, int]              ## per-topic query count; first DeepCatchupTicks fetch full history, then windowed
 
 proc invoke(t: DeliveryTransport, meth, argsJson: string): JsonNode =
   ## One synchronous inter-module call. Returns the result JSON (or nil on error).
@@ -88,8 +111,6 @@ proc onSendResult(ok: cint, json: cstring, userData: pointer) {.cdecl, gcsafe.} 
   if gLpDebug: c_fprintf(cstderr, "MUSTER-LP send/sub-result ok=%d json=%s\n",
             ok, (if json != nil: json else: cstring"<nil>"))
 
-const CatchupPeriodMs = 8000'i64        ## re-query the store no more than this often
-
 proc onStoreResult(ok: cint, json: cstring, userData: pointer) {.cdecl, gcsafe.} =
   ## Async storeQuery response, on delivery's thread. Enqueue the raw JSON (malloc +
   ## copy, no Nim GC) — poll() parses it on the module thread and ingests the missed
@@ -104,6 +125,7 @@ proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000): DeliveryTra
   ## messageReceived subscription. `nodeConfigJson` is delivery's createNode config
   ## (the user-configurable endpoint set — invariant 8 lives in this string).
   result = DeliveryTransport(handlers: initTable[string, seq[MessageHandler]](),
+                             catchupTicks: initTable[string, int](),
                              timeoutMs: cint(timeoutMs))
   initInboundQueue(result.queue)             # ready before any callback can fire
   initInboundQueue(result.storeQueue)
@@ -169,16 +191,31 @@ proc fireCatchup(t: DeliveryTransport, contentTopic: string) =
   ## mesh-independent receive path. Async (like createNode/send) so it never blocks
   ## poll's dispatch; onStoreResult enqueues the response, poll parses it. The query
   ## follows delivery's storeQuery(jsonQuery, peerAddr, timeoutMs) contract.
+  ##
+  ## The first DeepCatchupTicks queries fetch full recent history (no time bound) so
+  ## a late joiner catches up; after that each query is bounded to `timeStart = now -
+  ## gCatchupLookbackMs`, a sliding window that stays cheap however long the room runs,
+  ## so a 1s cadence doesn't re-parse the whole topic. Ingest dedups the window overlap
+  ## (R-2/R-4), and the log reduces order-independently (inv 4), so paginationForward
+  ## (kept `true`, the proven direction) and the window boundary are both harmless.
   if t.storePeer.len == 0: return
-  let req = %*{"requestId": "muster-" & $int64(epochTime() * 1000),
+  let nowMs = int64(epochTime() * 1000)
+  let tick = t.catchupTicks.getOrDefault(contentTopic, 0)
+  t.catchupTicks[contentTopic] = tick + 1
+  var req = %*{"requestId": "muster-" & $nowMs,
                "includeData": true, "paginationForward": true,
                "contentTopics": [contentTopic], "paginationLimit": 50}
+  if tick >= DeepCatchupTicks:
+    # Waku store filters on the message's own (nanosecond) timestamp. Second-precision
+    # is plenty for a floor and avoids float64 losing ns digits at epoch scale.
+    req["timeStart"] = %((nowMs - gCatchupLookbackMs) * 1_000_000)
   var args = newJArray()
   args.add %($req)                 # jsonQuery (tstr)
   args.add %t.storePeer            # peerAddr (tstr)
   args.add %(t.timeoutMs.int)      # timeoutMs (int)
   let argsStr = $args
-  if gLpDebug: stderr.writeLine("MUSTER-LP storeQuery " & contentTopic)
+  if gLpDebug: stderr.writeLine("MUSTER-LP storeQuery " & contentTopic &
+                                (if tick >= DeepCatchupTicks: " windowed" else: " deep"))
   discard lp_invoke_async(t.client, cstring"storeQuery", argsStr.cstring,
                           t.timeoutMs, onStoreResult, cast[pointer](t))
 
@@ -211,7 +248,7 @@ method poll*(t: DeliveryTransport) =
   # queue, parsed below.
   if t.storePeer.len > 0 and t.nodeStarted == 1:
     let nowMs = int64(epochTime() * 1000)
-    if nowMs - t.lastCatchupMs > CatchupPeriodMs:
+    if nowMs - t.lastCatchupMs > gCatchupPeriodMs:
       t.lastCatchupMs = nowMs
       for topic in t.handlers.keys: t.fireCatchup(topic)
 

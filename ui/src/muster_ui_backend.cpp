@@ -237,7 +237,11 @@ void MusterUiBackend::requestJoin()
 
 void MusterUiBackend::scheduleJoinRetry()
 {
-    QTimer::singleShot(5000, this, [this]() {
+    // 3s: the common case is the first announce landing in the store and the admitter
+    // seeing it within a catchup period (~1s). This re-announce only covers a send that
+    // reached no store node; keep it brisk but not a flood (the request is a control
+    // frame on the shared topic).
+    QTimer::singleShot(3000, this, [this]() {
         loadMembers();
         const QJsonDocument d = QJsonDocument::fromJson(membersJson().toUtf8());
         const int members = d.isArray() ? d.array().size() : 0;
@@ -364,7 +368,10 @@ void MusterUiBackend::onContextReady()
             // delivery (another peer's join-request arriving) in the console.
             const bool founder = !qgetenv("MUSTER_AUTOADMIT").isEmpty();
             auto* t = new QTimer(this);
-            t->setInterval(6000);
+            // Mirror the real Room live-refresh cadence (Room.qml, 1s) so the offscreen
+            // self-test measures the same felt latency a user sees — this tick is what
+            // drives poll()/catchup here, exactly as the Room timer does in the GUI.
+            t->setInterval(1000);
             connect(t, &QTimer::timeout, this, [this, founder]() {
                 // requestJoin() fires ONCE (above) — the backend's own retry chain
                 // re-announces until admitted, exactly as the UI button now does.

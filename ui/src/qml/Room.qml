@@ -739,9 +739,12 @@ Item {
     // Live refresh while a room is open. Delivery is polled (inbound arrives on the
     // module's own thread and is drained on read), so without a tick a request to
     // join, a peer's message, or a folded contribution from another host would only
-    // appear on the next manual action. Cheap reads; each drives inbound first.
+    // appear on the next manual action. This tick IS the poll driver — each read
+    // drains inbound first — so it paces felt latency together with the transport's
+    // catchup period (module/src/transport/delivery.nim, MUSTER_CATCHUP_MS). Keep the
+    // two in step: 1s ≈ chat cadence; the reads are cheap.
     Timer {
-        interval: 3000
+        interval: 1000
         running: room.joined
         repeat: true
         onTriggered: {

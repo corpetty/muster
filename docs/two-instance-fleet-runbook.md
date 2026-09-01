@@ -12,7 +12,8 @@ run. Each instance is its own identity + wallet; together they coordinate one Sa
 > **works over the live fleet.** The Safe-txn half (propose → sign → settle) works
 > mechanically but needs the two peers to be **Safe owners**; the runner gives each a random
 > key, so seed owner keys first (see the note at step 4). Cross-host delivery rides **store
-> catchup** (~8s poll), so expect a **few-seconds lag** — it is not yet chatroom-fast. The
+> catchup**, tightened to a ~1s poll (2026-09-01), so a request/message shows up in **about a
+> second** — chat cadence. Tune with `MUSTER_CATCHUP_MS` (default 1000, floor 200). The
 > six fixes that got us here, and every gotcha, are in
 > `docs/labbook/two-instance-live-wire-blockers.md` (read the SOLVED box before touching the
 > transport). For a no-GUI convergence check, `./scripts/two-instance-proof.sh`.
@@ -110,8 +111,9 @@ All six known blockers are fixed in the runner (token, store catchup, request re
 normalization, admit model, fleet discovery). If it still stalls:
 
 - **Bob never sees the proposal / Alice never sees the join request:** first give it longer —
-  cross-host is store-catchup-paced (~8s per poll, plus fleet peering can take 30–60s on a
-  cold node). Then confirm both are on the same `FLEET`/cluster and typed the **same topic
+  cross-host is store-catchup-paced (~1s per poll, but fleet peering can still take 30–60s on a
+  cold node before the first message can arrive). Then confirm both are on the same
+  `FLEET`/cluster and typed the **same topic
   string**, and re-pin with `infra/fleets/refresh.sh` (rotated peer ids are the usual cause).
   With `MUSTER_LP_DEBUG=1` the runner logs `MUSTER-LP pending=N members=M` — that's the tell.
 - **Admit does nothing / "unverified":** the binding failed to verify (expired, or malformed
