@@ -1,5 +1,74 @@
 # Two-instance live wire: what actually blocks it (2026-08-26)
 
+> ## ✅ SOLVED (2026-09-01, main `499b512`) — two instances converge over the Logos fleet
+>
+> Two `muster-ui` runners on the public `logos.test` fleet now do the whole handshake end to
+> end: join the same room → one asks to join → the other sees the request and admits → the
+> re-key grant crosses → **both show `members = 2`**. It took a chain of six fixes; each one
+> hid the next. **Read these before touching the transport again** — every one cost hours:
+>
+> 1. **Discovery** (`55b9705`): the bundled `logos.test` preset ships **no bootstrap peers**.
+>    Point the node at the public fleet's nodes as `entryNodes` (`infra/fleets/*.json`).
+> 2. **The lp token** (`4594b41`): the generated glue `logos_module_accept_token` was a
+>    **no-op** — it discarded the token the loader hands muster for delivery, so every
+>    outbound `lp_invoke` was rejected in ~1ms (`ok=1 json=null`) and the Waku node never
+>    booted. Fix: it must call `lp_token_save(moduleName, token)`. **Still hand-added to the
+>    generated `muster_gen.nim` → move it into the module-builder codegen template.**
+> 3. **Receive path** (`c555880`): delivery v0.2.0's relay **never surfaces a received message
+>    as a `messageReceived` event** on muster's sparse shard (strace: the node logs `received
+>    relay message` but delivery only ever emits `connection_change`/`message_propagated`).
+>    Fix: the fleet **retains** the message in **store**, which is request/response —
+>    mesh-independent. muster polls the store (`fireCatchup` → async `storeQuery`) and
+>    dispatches each retained message like a live one (ingest dedups our own).
+> 4. **Best-effort send** (`d6856c1`): a **one-shot** `requestJoin` can miss (sparse-shard
+>    mesh, no peer at that instant). The backend now **re-announces every ~5s until admitted**.
+> 5. **Topic format** (`dbaba6a`): Waku autosharding needs a **4-segment content topic**
+>    `/app/version/name/encoding`. The composer's dot form (`muster.pay.abc`), a bare word,
+>    a 3-segment path — **none shard**, so nothing routes. `coordinate_join` now normalizes
+>    any topic to a valid one (`toContentTopic`); both peers derive the same → they meet.
+> 6. **Admission** (`499b512`): `coordinate_admit` only admitted a **Safe owner** (F-9 as an
+>    owner-gate), but the peers have generated identities. The model is **"a member decides"**
+>    — admit now needs only a **valid** binding (unexpired, unforgeable), not ownership;
+>    `bindsOwner` stays advisory in `coordinate_pending`.
+>
+> ### Known limits / follow-ups (quality, not correctness)
+> - **Latency ~8s** (the "slow chatroom" feel): the store-catchup interval is the cross-host
+>   floor. Improve by time-windowing the store query (`timeStart`/cursor — fetch only new, so
+>   it's cheap enough to poll faster), and/or fixing the real live-relay receive so messages
+>   arrive in real time (delivery-internal — why `messageReceived` never fires; the store is
+>   the workaround). Rotate the store peer across all `entryNodes` for resilience.
+> - **Safe txn coordination needs owner identities.** Membership works with any identity, but
+>   `contribute` needs a signature that recovers to a Safe owner, and the runner gives each
+>   peer a random key. Next: seed `.run/<peer>` with the anvil owner keys to close
+>   propose→sign→settle.
+> - The store parse depends on delivery's `vResultPrivate` byte-array serialization — revisit
+>   on a delivery bump. `toContentTopic` collapses the raw topic into one name segment.
+>
+> ### Self-test rig + iteration gotchas (save yourself the rediscovery)
+> - **No-GUI proof:** `./scripts/two-instance-proof.sh` — two offscreen runners, one topic,
+>   reports whether they converge. Under the hood: run the real runner offscreen
+>   (`QT_QPA_PLATFORM=offscreen`) with `MUSTER_DELIVERY_CONFIG=<fleet cfg>`,
+>   `MUSTER_AUTOJOIN_TOPIC=<topic>`, `MUSTER_AUTOADMIT=1` on the founder, `MUSTER_LP_DEBUG=1`
+>   for stderr traces. Convergence tell: `MUSTER-LP pending=N members=M` in the runner log.
+> - **Delivery's Waku logs pipe away** from the main log. Node-boot tell: `ss -tnp | grep
+>   :30303` on the delivery child `logos_host_qt` pid; deep tell: `strace -f -e trace=write`
+>   on that pid (needs `nix run nixpkgs#strace`; ImageMagick screenshots are blocked here).
+> - **Iterate the runner from the working tree:** `nix build path:.#runner --override-input
+>   muster_module path:.../module`. The `path:` lock caches by `lastModified` — **`touch` the
+>   sources to force a re-read**. **Do NOT `nix flake update muster_module`** — it bloated
+>   `ui/flake.lock` to 200k lines. The runner build reads muster via **git+file (committed)**,
+>   so **commit module changes** for `make run-fleet` to see them; the UI (`path:.`) reads the
+>   working tree.
+> - **A pre-commit hook rewrites files after `git checkout`/`stash`** — to clear a working-tree
+>   change for a FF, use `git checkout <target-commit> -- <file>` then `git checkout HEAD --
+>   <file>`, not plain restore. Preserve uncommitted `.pebbles/reducer_ledger.jsonl` lines
+>   across every FF (back up, restore after).
+>
+> The blow-by-blow that led here is below, oldest first.
+
+---
+
+
 The coherent headless host (`module/tools/headless-host/`) drives muster's full method
 surface headless, including the **single-instance** coordinate fold (join → propose →
 `coordinate_intents` returns the proposal with a re-derived `safeTxHash`, threshold 2).

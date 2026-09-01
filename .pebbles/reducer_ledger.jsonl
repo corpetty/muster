@@ -80,3 +80,11 @@
 {"type": "comment", "issue_id": "exo-526", "payload": {"body": "preserved-work: worker/exo-526 (captured uncommitted worker changes as 005d92a06dea)"}}
 {"type": "comment", "issue_id": "exo-526", "payload": {"body": "exophiald: needs_human \u2014 not merged; worktree kept at /home/petty/Github/corpetty/muster/.worktrees/worker-exo-526. reason: integrate error: [Errno 2] No such file or directory: 'nim' Stays OPEN and PARKED (exo-45e) \u2014 never auto-re-dispatched, not even across a restart; `bus.record_unpark` after clearing the worktree is the deliberate, never-ambient re-dispatch. Model: claude-opus-4-8.\n\nexophial-verdict: {\"verdict\": \"inconclusive\"}\n\nexophial-parked: integrate error: [Errno 2] No such file or directory: 'nim'"}}
 {"type": "comment", "issue_id": "exo-526", "payload": {"body": "exophial-unparked: "}}
+{"type": "comment", "issue_id": "exo-45a", "payload": {"body": "branch-identity: worker/reroute-udxgjap"}}
+{"type": "comment", "issue_id": "exo-45a", "payload": {"body": "exophiald: merged (merged_ff).\n\nexophial-verdict: {\"verdict\": \"pass\"}"}}
+{"type": "comment", "issue_id": "exo-d25", "payload": {"body": "branch-identity: worker/reroute-udd73nx"}}
+{"type": "comment", "issue_id": "exo-d25", "payload": {"body": "exophiald: merged (merged_after_resolution).\n\nexophial-verdict: {\"verdict\": \"pass\"}"}}
+{"type": "comment", "issue_id": "exo-15b", "payload": {"body": "branch-identity: worker/reroute-udirouj"}}
+{"type": "comment", "issue_id": "exo-15b", "payload": {"body": "exophiald: merged (merged_after_resolution).\n\nexophial-verdict: {\"verdict\": \"pass\"}"}}
+{"type": "comment", "issue_id": "exo-c41", "payload": {"body": "branch-identity: worker/reroute-udnhxmi"}}
+{"type": "comment", "issue_id": "exo-c41", "payload": {"body": "exophiald: merged (merged_after_resolution).\n\nexophial-verdict: {\"verdict\": \"pass\"}"}}
