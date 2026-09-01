@@ -332,18 +332,38 @@ var gSession: CoordinationSession = nil
 var gTopic = ""
 var gMsgSeq: uint64 = 0     ## per-instance monotonic nonce, disambiguates identical posts
 
+proc toContentTopic(t: string): string =
+  ## Waku autosharding requires a 4-segment content topic — /app/version/name/encoding
+  ## — to hash a room onto a shard and route it over the fleet. Room topics arrive in
+  ## many shapes (the composer's dot form `muster.pay.abc`, a bare name a user types, a
+  ## 3-segment path), none of which shard, so nothing crosses. Map any of them to a
+  ## valid content topic deterministically, so two peers naming the same room derive
+  ## the identical topic. An already-valid 4-part topic is passed through.
+  if t.len > 0 and t[0] == '/':
+    let parts = t.split('/')            # a valid one splits to ["", app, ver, name, enc]
+    if parts.len == 5 and parts[1].len > 0 and parts[2].len > 0 and
+       parts[3].len > 0 and parts[4].len > 0:
+      return t
+  var name = t.strip(chars = {'/'}).replace("/", ".")
+  if name.len == 0: name = "room"
+  "/muster/1/" & name & "/proto"
+
 proc musterCoordinateJoin(topic: string): string =
   let ks = moduleKeystore()
-  if topic in gSessions:
-    gSession = gSessions[topic]           # re-activate an already-joined room
+  # Normalize to a valid Waku content topic so the room actually shards + routes over
+  # the fleet (a bare/dotted/3-part topic silently goes nowhere). Both peers derive the
+  # same one, so they meet. The normalized topic is the room's identity everywhere.
+  let ctopic = toContentTopic(topic)
+  if ctopic in gSessions:
+    gSession = gSessions[ctopic]          # re-activate an already-joined room
   else:
-    gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(ks), topic)
-    gSessions[topic] = gSession
-  gTopic = topic
+    gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(ks), ctopic)
+    gSessions[ctopic] = gSession
+  gTopic = ctopic
   # Policy is per-intent now, declared in the log at propose time — so join no longer
   # overrides this instance's compose default. It keeps whatever policy the user last
   # picked for the next thing they propose here.
-  $(%*{"address": toHex(ks.address()), "topic": topic})
+  $(%*{"address": toHex(ks.address()), "topic": ctopic})
 
 proc policyJson(): JsonNode =
   let d = driverForKind(gCoordKind).describe()
