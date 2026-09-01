@@ -13,16 +13,20 @@ in `../contracts/specs/derived-exo-*.spec.json`; each names probes under
 
 ## Status
 
-**P0–P2 and P4 landed; P3 functionally complete against a local transport.** The
-signing-path core, the intent lifecycle and driver interface, all ten
-invariants (the probe suite under `tests/probes/` is green), the Safe driver
-(real EIP-712 `safeTxHash`, secp256k1 owner verification, on-chain
-`execTransaction` against the anvil `MiniSafe`), and the LIDL codegen that
-generates the surface from the contract are all in. P4 put the whole lifecycle
-through the real UI in logos-basecamp (ADR-013). P3 — transport, encryption, and
-multi-party coordination — is built and tested against a local transport; what
-remains is a live two-instance test over a running delivery node. See
-[`../CLAUDE.md`](../CLAUDE.md) for the phase-by-phase detail.
+**P0–P2 and P4 landed; P3 built — two instances now converge over the live
+Logos fleet (membership handshake end to end).** The signing-path core, the
+intent lifecycle and driver interface, all ten invariants (the probe suite
+under `tests/probes/` is green), the Safe driver (real EIP-712 `safeTxHash`,
+secp256k1 owner verification, on-chain `execTransaction` against the anvil
+`MiniSafe`), and the LIDL codegen that generates the surface from the contract
+are all in. P4 put the whole lifecycle through the real UI in logos-basecamp
+(ADR-013). P3 — transport, encryption, and multi-party coordination — is built
+and tested; two `muster-ui` instances converge over the public fleet (join →
+ask → admit → both at two members). What remains is the cross-host
+Safe-transaction half (needs owner-seeded peers) and latency polish (~8s
+store-catchup poll). See [`../CLAUDE.md`](../CLAUDE.md) for the phase-by-phase
+detail and [`../docs/two-instance-fleet-runbook.md`](../docs/two-instance-fleet-runbook.md)
+for the operator flow.
 
 ## Build
 
@@ -88,4 +92,4 @@ tests/          lifecycle/safe/crypto/transport/coordination tests
 - Invariant tests are append-only. Extend, don't weaken.
 - The module imports nothing from `../ui/`; it reaches other modules only through logos-core.
 
-<!-- rot-check: current-phase=CLAUDE.md sha256=ebdfb1054dca5b2ada2e123e546958c2d5ef19e442c5bb1b7a9f38e2a85bb6af -->
+<!-- rot-check: current-phase=CLAUDE.md sha256=2b06eeafcaf9594eb96000ac9d5afeed892eddbce130130f15f362f9c8420556 -->
