@@ -196,9 +196,35 @@ finds **0** of 58 commits. The grep-based hook accepts them, but any downstream
 tool using real trailer parsing (`git interpret-trailers`, `%(trailers)`) sees
 nothing. Fix: write all trailers as one contiguous block at the end of the message.
 
-> **VERDICT: CONFIRMED.** Re-checked on the full 271-commit history; the trailer
-> block is still split by blank lines and git's own parser still sees none.
-> Filed as **exo-4ed**.
+> **VERDICT: CONFIRMED, and the cause is upstream — not the authors.** The audit
+> read this as sessions writing trailers wrongly. It is not: it is exophial's own
+> `session-trailer` commit-msg hook. `session_provenance.add_session_trailer`
+> (`session_provenance.py:109`) returns
+>
+> ```python
+> return f"{body}\n\n{trailer}\n" if body else f"{trailer}\n"
+> ```
+>
+> — an **unconditional blank line** before `Session-Id`. Git's parser recognizes
+> only the final contiguous block, so whatever trailers the author wrote are
+> severed from the trailer section while the hook's own trailer survives. This
+> was demonstrated live by the very commit that recorded this verification pass:
+> its `Tested-Behavior` / `TDD-Exempt` / `Co-Authored-By` were written as one
+> contiguous block, the hook appended `Session-Id` after a blank line, and
+> `%(trailers:key=Tested-Behavior)` still returned empty.
+>
+> Across the 271-commit history:
+>
+> | Trailer | Parsable by git | Present in raw text |
+> |---|---|---|
+> | `Session-Id` (hook-written) | **150** | 150 |
+> | `Tested-Behavior` (author-written) | **0** | 62 |
+> | `Co-Authored-By` (author-written) | 17 | many |
+>
+> The 17 `Co-Authored-By` that parse are commits the hook did not stamp. So no
+> amount of author discipline fixes this — the fix is a one-line upstream change
+> (append the trailer to the existing block when the message already ends in
+> one). Filed as **exo-4ed**, and added to the upstream asks in **exo-aa7**.
 
 ### G7 — The labbook's prediction came true, silently
 
