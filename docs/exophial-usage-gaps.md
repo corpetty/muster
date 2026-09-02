@@ -432,6 +432,47 @@ estimated.
 Until then the hook set stays as-is, and the honest description of muster's
 exophial usage is: pebble tracking, twelve authored specs, and no grading loop.
 
+### Outcome (2026-09-02): the grading loop runs, 42/43
+
+`exo-dbc` is done. All 43 probes now speak the oracle's wire contracts, and
+`spec_oracle.run_spec` — the same in-process entrypoint the reducer's completion
+gate calls — grades **42 of 43 checks green across 11 of the 12 specs**, from
+0/43 at the start of the day. Muster has a working grading loop for the first
+time.
+
+Run it with [`scripts/grade-specs.sh`](../scripts/grade-specs.sh) (it provisions
+the Python 3.12 + rtamt venv on first use; see exo-6c5 for why 3.12).
+
+What the fix actually was: probes emitted JSONL; the oracle reads one JSON
+document. `property_test` trace probes now emit a single `{"traces": [[...]]}`,
+and every `model_check` probe became a real transition relation — taking the
+current state as its final argv and returning that state's successors — instead
+of enumerating its whole space. No invariant logic changed; every `doAssert`
+survives, so each probe is still a real test when run by hand.
+
+Three things were found only because the checks finally executed:
+
+- **rtamt is unusable on the shipped interpreter** (exo-6c5). exophial
+  0.2.0+dc69cd1d runs on Python 3.14; its rtamt pins `antlr4-python3-runtime==4.7`,
+  which imports `typing.io`, removed in 3.13. Worked around via
+  `$SPEC_ORACLE_RTAMT_PYTHON`.
+- **A single-state trace crashes rtamt** (`UnboundLocalError: 'duration'`),
+  because `trace_monitor` builds `time = range(len(trace))` and one sample has no
+  interval. Trials are emitted as one trace of N states rather than N traces of
+  one.
+- **Two probes were quietly weaker than they read.** `offline_cold_start`
+  compared a fresh call against another fresh call — vacuously true; it now
+  compares against baselines captured before any reachability is considered.
+  `replay_binding_context` only checked that verification fails at every
+  non-origin context, which a signature verifying *nowhere* would satisfy; the
+  origin state now asserts it does verify there.
+
+The remaining check is `derived-exo-526`, whose probe cannot build without its
+nimble `results` dependency (**exo-a7b**) — a build gap, not an oracle or
+invariant failure.
+
+The posture question is now answerable with data rather than estimates.
+
 ### Filed
 
 | Pebble | What |

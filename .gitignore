@@ -18,3 +18,4 @@ result-*
 # the Nim path lands upstream.
 module/flake.lock
 ui/flake.lock
+.rtamt-venv/
