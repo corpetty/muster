@@ -2,15 +2,17 @@
 ## client's independent derivation in ANY way, the client refuses to sign. Across
 ## random effects and every kind of single tamper (flip a byte, truncate, append,
 ## alter a field then re-derive), the mismatch is always refused. Emits
-## {"refused": ...}.
+## one `refused` observation per trial.
 
 import ../../src/dcbor/dcbor
 import ../../src/drivers/driver
 import ../../src/intents/materialization
 import std/random
+import ./oracle_emit
 
 var r = initRand(0x8E72)
 var allRefused = true
+var obs: seq[JsonNode]
 
 proc randEffect(r: var Rand): Effect =
   var fields: seq[(string, CborValue)]
@@ -44,11 +46,12 @@ for trial in 0 ..< 200:
 
   # Guard: only score trials where the tamper actually changed the bytes.
   if tampered.bytes == honest.bytes:
-    echo "{\"refused\": true}"   # nothing to refuse; not a mismatch
+    obs.add flag("refused", true)   # nothing to refuse; not a mismatch
     continue
 
   let refused = signProposal(Config(), drv, e, tampered) == soRefused
   if not refused: allRefused = false
-  echo "{\"refused\": ", (if refused: "true" else: "false"), "}"
+  obs.add flag("refused", refused)
 
+emitTrials(obs)
 doAssert allRefused, "a mismatched materialization was not refused"
