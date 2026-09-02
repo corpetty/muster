@@ -5,6 +5,9 @@
 
 import ../../src/intents/signing_payload
 import std/random
+import ./oracle_emit
+
+var obs: seq[JsonNode]
 
 var r = initRand(0x3073)
 const key = "signer-key"
@@ -27,6 +30,7 @@ for trial in 0 ..< 200:
 
   let ok = rejectedPastExpiry and validAtExpiry
   if not ok: allRejected = false
-  echo "{\"expiry_rejected\": ", (if ok: "true" else: "false"), "}"
+  obs.add flag("expiry_rejected", ok)
 
+emitTrials(obs)
 doAssert allRejected, "an expired payload verified, or expiry was not the reason it failed"

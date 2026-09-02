@@ -4,12 +4,14 @@
 
 import ../../src/dcbor/dcbor
 import std/algorithm
+import ./oracle_emit
+
+var obs: seq[JsonNode]
 
 var allStable = true
 proc emit(b: bool) =
   if not b: allStable = false
-  echo "{\"bytes_equal\": ", (if b: "true" else: "false"), "}"
-
+  obs.add flag("bytes_equal", b)
 # 1. Re-encoding a value is a pure function of the value.
 let samples = @[
   cbUint(0'u64), cbUint(23'u64), cbUint(24'u64), cbUint(255'u64), cbUint(256'u64),
@@ -38,4 +40,6 @@ while true:
   emit(encode(buildMap(perm)) == reference)
   if not nextPermutation(perm): break
 
+
+emitTrials(obs)
 doAssert allStable, "re-encoding was not byte-stable"

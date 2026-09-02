@@ -8,6 +8,9 @@
 import ../../src/dcbor/dcbor
 import ../../src/hashing/hash_input
 import std/sets
+import ./oracle_emit
+
+var obs: seq[JsonNode]
 
 let domains = @[
   "muster.event.transfer.v1",
@@ -34,12 +37,8 @@ for content in contents:
     digestsHex.add hx
     if hx in seen: allDistinct = false
     seen.incl hx
-  # Emit the collection the oracle checks for distinctness.
-  var arr = "["
-  for i, hx in digestsHex:
-    if i > 0: arr.add ", "
-    arr.add "\"" & hx & "\""
-  arr.add "]"
-  echo "{\"digests\": ", arr, "}"
+  # The collection the oracle's `distinct` atom checks.
+  obs.add %*{"digests": digestsHex}
 
+emitTrials(obs)
 doAssert allDistinct, "two domains produced a colliding digest for identical content"

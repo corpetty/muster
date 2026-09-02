@@ -7,6 +7,9 @@
 
 import ../../src/crypto/epochs
 import std/[random, sets]
+import ./oracle_emit
+
+var obs: seq[JsonNode]
 
 var r = initRand(0x5253)
 var allFailed = true
@@ -35,6 +38,7 @@ for trial in 0 ..< 200:
 
   let ok = couldReadBefore and (not canStillDerive)
   if not ok: allFailed = false
-  echo "{\"decrypt_failed\": ", (if ok: "true" else: "false"), "}"
+  obs.add flag("decrypt_failed", ok)
 
+emitTrials(obs)
 doAssert allFailed, "a removed member's key could still derive the post-removal epoch"

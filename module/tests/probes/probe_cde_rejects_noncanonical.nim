@@ -4,8 +4,10 @@
 ## the offending value is top-level or nested inside an array/map.
 
 import ../../src/dcbor/dcbor
+import ./oracle_emit
 
 var allRejected = true
+var obs: seq[JsonNode]
 proc expectReject(v: CborValue, what: string) =
   var rejected = false
   try:
@@ -13,8 +15,7 @@ proc expectReject(v: CborValue, what: string) =
   except CborError:
     rejected = true
   if not rejected: allRejected = false
-  echo "{\"input_rejected\": ", (if rejected: "true" else: "false"),
-       ", \"case\": \"", what, "\"}"
+  obs.add %*{"input_rejected": rejected, "case": what}
 
 # Floats — every width, special values, and nested positions.
 expectReject(cbFloat(0.0), "float_zero")
@@ -30,4 +31,5 @@ expectReject(cbMap(@[(cbFloat(1.0), cbText("v"))]), "float_in_map_key")
 expectReject(cbIndefinite(), "indefinite_top")
 expectReject(cbArray(@[cbIndefinite()]), "indefinite_in_array")
 
+emitTrials(obs)
 doAssert allRejected, "a non-canonical input (float or indefinite) was accepted"

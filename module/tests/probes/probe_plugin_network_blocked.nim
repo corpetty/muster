@@ -2,10 +2,15 @@
 ## indirectly. Across contexts, an attempt to use the network is not permitted.
 ## Emits {"blocked": ...}.
 import ../../src/plugins/plugin
+import ./oracle_emit
+
+var obs: seq[JsonNode]
 
 var allBlocked = true
 for trial in 0 .. 199:
   let blocked = not permitted(opNetwork)
   if not blocked: allBlocked = false
-  echo "{\"blocked\": ", (if blocked: "true" else: "false"), "}"
+  obs.add flag("blocked", blocked)
+
+emitTrials(obs)
 doAssert allBlocked, "plugin code was able to make a network call"

@@ -4,6 +4,9 @@
 ## raw payload accepted; anything with raw payload or not-a-typed-block rejected.
 ## Emits {"rejected_or_typed": ...}.
 import ../../src/plugins/plugin
+import ./oracle_emit
+
+var obs: seq[JsonNode]
 
 let cases = @[
   PluginOutput(isTypedBlock: true, blk: TypedBlock(kind: bkText, payload: "hi"), raw: ""),
@@ -21,5 +24,7 @@ for o in cases:
   let shouldAccept = o.isTypedBlock and o.raw.len == 0
   let correct = accepted == shouldAccept
   if not correct: allCorrect = false
-  echo "{\"rejected_or_typed\": ", (if correct: "true" else: "false"), "}"
+  obs.add flag("rejected_or_typed", correct)
+
+emitTrials(obs)
 doAssert allCorrect, "a non-typed-block output was not rejected (or a typed block was)"

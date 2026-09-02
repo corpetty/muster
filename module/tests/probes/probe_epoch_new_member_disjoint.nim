@@ -6,6 +6,9 @@
 
 import ../../src/crypto/epochs
 import std/[random, sets]
+import ./oracle_emit
+
+var obs: seq[JsonNode]
 
 var r = initRand(0x525)
 var allDisjoint = true
@@ -34,6 +37,7 @@ for trial in 0 ..< 200:
   let valueDisjoint = (newValStrs * priorValStrs).len == 0
   let disjoint = epochDisjoint and valueDisjoint
   if not disjoint: allDisjoint = false
-  echo "{\"disjoint\": ", (if disjoint: "true" else: "false"), "}"
+  obs.add flag("disjoint", disjoint)
 
+emitTrials(obs)
 doAssert allDisjoint, "a joiner's derived key set overlapped a pre-join epoch"
