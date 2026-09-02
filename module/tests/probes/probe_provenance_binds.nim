@@ -4,6 +4,9 @@
 ## {"provenance_binds": ...}.
 import ../../src/intents/provenance
 import std/random
+import ./oracle_emit
+
+var obs: seq[JsonNode]
 
 var r = initRand(0x3A1)
 let classes = [icPluginBlock, icContribution, icExternalRead, icPeerMessage]
@@ -25,5 +28,7 @@ for trial in 0 ..< 200:
   else: mut[i].class = classes[(ord(mut[i].class) + 1) mod 4]
   let binds = signedBytes(mat, buildProvenance(mut, mmNamed)) != base
   if not binds: allBind = false
-  echo "{\"provenance_binds\": ", (if binds: "true" else: "false"), "}"
+  obs.add flag("provenance_binds", binds)
+
+emitTrials(obs)
 doAssert allBind, "changing an input's provenance did not change the signed bytes"

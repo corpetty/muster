@@ -6,6 +6,9 @@
 
 import ../../src/log/log
 import std/random
+import ./oracle_emit
+
+var obs: seq[JsonNode]
 
 proc randomEvents(r: var Rand, n: int): seq[Event] =
   var ids: seq[EventId]
@@ -37,6 +40,7 @@ for trial in 0 ..< 200:
 
   let matches = (incremental == coldStart) and (incremental == reversed)
   if not matches: allMatch = false
-  echo "{\"matches\": ", (if matches: "true" else: "false"), "}"
+  obs.add flag("matches", matches)
 
+emitTrials(obs)
 doAssert allMatch, "cold-start replay diverged from incrementally-maintained state"

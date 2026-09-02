@@ -5,6 +5,9 @@
 ## {"matches": ...}.
 import ../../src/intents/provenance
 import std/random
+import ./oracle_emit
+
+var obs: seq[JsonNode]
 
 var r = initRand(0x3A15)
 let classes = [icPluginBlock, icContribution, icExternalRead, icPeerMessage]
@@ -24,5 +27,7 @@ for trial in 0 ..< 200:
   let rebuilt = buildProvenance(inputs, model)
   let matches = encodeProvenance(incremental) == encodeProvenance(rebuilt)
   if not matches: allMatch = false
-  echo "{\"matches\": ", (if matches: "true" else: "false"), "}"
+  obs.add flag("matches", matches)
+
+emitTrials(obs)
 doAssert allMatch, "cold-start provenance did not match the incrementally built record"

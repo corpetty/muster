@@ -9,6 +9,9 @@
 
 import ../../src/drivers/driver
 import std/random
+import ./oracle_emit
+
+var obs: seq[JsonNode]
 
 var r = initRand(0x2DC)
 var allMatch = true
@@ -34,6 +37,7 @@ for trial in 0 ..< 200:
   if not col.complete: ok = false                            # never closed after rounds*threshold
 
   if not ok: allMatch = false
-  echo "{\"matches_describe\": ", (if ok: "true" else: "false"), "}"
+  obs.add flag("matches_describe", ok)
 
+emitTrials(obs)
 doAssert allMatch, "core dispatch diverged from the driver's describe()"

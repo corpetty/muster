@@ -1,24 +1,42 @@
 ## derived-exo-8dc s6/c6: no automatic update fetch — updates are manual, or come
-## from an explicitly enabled (default-off) signed feed. Stepper over (feed
-## enabled × feed signed × auto-trigger): a fetch happens only when the feed is
-## explicitly enabled AND signed; never automatically or without consent. Emits
-## {"config": "...", "unconsented_update_fetch": ...} (must be false).
-import ../../src/transport/infra
+## from an explicitly enabled (default-off) signed feed.
+##
+## STEPPER (exo-dbc): state is the lifecycle stage; successors are every other
+## stage. Each stage fixes the feed configuration a client would actually be in
+## at that point, and the verdict is whether a fetch could happen without the
+## user having explicitly enabled the feed.
 
-var anyUnconsented = false
-var states = 0
-for enabled in [false, true]:
-  for signed in [false, true]:
-    for autoTrigger in [false, true]:
-      if states >= 30: break
-      var cfg = newConfig(@["feed"])
-      cfg.updateFeedEnabled = enabled
-      let fetched = wouldFetchUpdate(cfg, signed)
-      # A fetch without explicit enablement (consent) is unconsented. Default-off
-      # means enabled=false must never fetch, regardless of auto-trigger/signed.
-      let unconsented = fetched and (not enabled)
-      if unconsented: anyUnconsented = true
-      echo "{\"config\": \"en", enabled, "-sig", signed, "-auto", autoTrigger,
-           "\", \"unconsented_update_fetch\": ", (if unconsented: "true" else: "false"), "}"
-      inc states
-doAssert not anyUnconsented, "an update was fetched without explicit consent"
+import ../../src/transport/infra
+import ./oracle_emit
+
+const Stages = ["first_launch", "idle", "auto_trigger", "manual_check",
+                "user_enabled_feed", "user_enabled_unsigned", "post_update"]
+
+proc feedEnabledAt(stage: string): bool =
+  ## Default-OFF everywhere the user has not explicitly turned the feed on.
+  stage in ["user_enabled_feed", "user_enabled_unsigned", "post_update"]
+
+proc signedFeedAt(stage: string): bool =
+  stage != "user_enabled_unsigned"
+
+proc unconsentedAt(stage: string): bool =
+  var cfg = newConfig(@["feed"])
+  cfg.updateFeedEnabled = feedEnabledAt(stage)
+  let fetched = wouldFetchUpdate(cfg, signedFeedAt(stage))
+  # A fetch without explicit enablement is unconsented — default-off means an
+  # un-enabled stage must never fetch, whatever triggers it.
+  fetched and not feedEnabledAt(stage)
+
+proc state(stage: string): JsonNode =
+  %*{"lifecycle": stage, "unconsented_update_fetch": unconsentedAt(stage)}
+
+let arg = oracleStateArg()
+let here = oracleStateStr(arg, "lifecycle", "first_launch")
+var succ: seq[JsonNode]
+for s in Stages:
+  if s != here: succ.add state(s)
+emitSuccessors(succ)
+
+if arg == nil:
+  for s in Stages:
+    doAssert not unconsentedAt(s), "an update was fetched without explicit consent"

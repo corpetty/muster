@@ -5,6 +5,9 @@
 
 import ../../src/intents/signing_payload
 import std/random
+import ./oracle_emit
+
+var obs: seq[JsonNode]
 
 var r = initRand(0x307)
 
@@ -31,6 +34,7 @@ for trial in 0 ..< 200:
     else: m.context.expiry = base.context.expiry + 1
     let binds = encodePayload(m) != baseBytes
     if not binds: allBind = false
-    echo "{\"field_binds\": ", (if binds: "true" else: "false"), "}"
+    obs.add flag("field_binds", binds)
 
+emitTrials(obs)
 doAssert allBind, "a context field did not change the signed payload bytes"

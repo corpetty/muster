@@ -6,6 +6,9 @@
 
 import ../../src/log/log
 import std/random
+import ./oracle_emit
+
+var obs: seq[JsonNode]
 
 proc randKey(r: var Rand): string = "k" & $r.rand(0 .. 3)
 proc randVal(r: var Rand): string = "v" & $r.rand(0 .. 5)
@@ -33,6 +36,7 @@ for trial in 0 ..< 200:
   let dup2 = stateDigest(reduce(events & @[e, e]))
   let idem = (once == dup1) and (once == dup2)
   if not idem: allIdem = false
-  echo "{\"idempotent\": ", (if idem: "true" else: "false"), "}"
+  obs.add flag("idempotent", idem)
 
+emitTrials(obs)
 doAssert allIdem, "reducing a duplicated event drifted state beyond applying it once"

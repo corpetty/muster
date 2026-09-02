@@ -1,24 +1,33 @@
 ## derived-exo-8dc s4/c4: nothing a store node or RPC endpoint returns is accepted
 ## on its authority — every datum is verified locally before it can change state.
-## Stepper over node behaviors (honest, tampered, omitting, replaying) crossed with
-## the local verification outcome: a datum is accepted only when it verified
-## locally, so nothing unverified is ever accepted. Emits
-## {"node_behavior": "...", "accepted_unverified": ...} (must be false).
-import ../../src/transport/infra
+##
+## STEPPER (exo-dbc): state is the node's behavior; successors are every other
+## behavior, each carrying the verdict quantified over BOTH local-verification
+## outcomes, since the outcome is not part of the state. A lying or omitting node
+## must degrade availability, never integrity.
 
-let behaviors = @["honest", "tampered", "omitting", "replaying", "garbage"]
-var anyUnverifiedAccepted = false
-var states = 0
-for behavior in behaviors:
+import ../../src/transport/infra
+import ./oracle_emit
+
+const Behaviors = ["honest", "tampered", "omitting", "replaying", "garbage"]
+
+proc acceptsUnverified(behavior: string): bool =
+  ## Acceptance depends ONLY on local verification, never on the node's claim —
+  ## so no behavior may yield an accepted-but-unverified datum.
   for verifiedLocally in [true, false]:
-    for trial in 0 .. 5:
-      if states >= 60: break
-      # An honest datum verifies; tampered/garbage do not. The decision to accept
-      # depends ONLY on local verification, never on the node's claim.
-      let accepted = acceptFromNode(verifiedLocally)
-      let acceptedUnverified = accepted and (not verifiedLocally)
-      if acceptedUnverified: anyUnverifiedAccepted = true
-      echo "{\"node_behavior\": \"", behavior, "\", \"accepted_unverified\": ",
-           (if acceptedUnverified: "true" else: "false"), "}"
-      inc states
-doAssert not anyUnverifiedAccepted, "an unverified datum from a node was accepted"
+    if acceptFromNode(verifiedLocally) and not verifiedLocally: return true
+  false
+
+proc state(behavior: string): JsonNode =
+  %*{"adversary": behavior, "accepted_unverified": acceptsUnverified(behavior)}
+
+let arg = oracleStateArg()
+let here = oracleStateStr(arg, "adversary", "honest")
+var succ: seq[JsonNode]
+for b in Behaviors:
+  if b != here: succ.add state(b)
+emitSuccessors(succ)
+
+if arg == nil:
+  for b in Behaviors:
+    doAssert not acceptsUnverified(b), "an unverified datum from a node was accepted"

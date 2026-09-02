@@ -4,6 +4,9 @@
 ## {"encoded_len": N, "canonical_min_len": M} and fails if they ever differ.
 
 import ../../src/dcbor/dcbor
+import ./oracle_emit
+
+var obs: seq[JsonNode]
 
 proc canonicalMinLen(arg: uint64): int =
   ## Head-only length for a bare integer: 1 + the shortest additional-info width.
@@ -18,7 +21,7 @@ proc check(v: CborValue, arg: uint64) =
   let encodedLen = encode(v).len
   let minLen = canonicalMinLen(arg)
   if encodedLen != minLen: allMinimal = false
-  echo "{\"encoded_len\": ", encodedLen, ", \"canonical_min_len\": ", minLen, "}"
+  obs.add %*{"encoded_len": encodedLen, "canonical_min_len": minLen}
 
 # Unsigned: values straddling every width boundary (23/24, 255/256, 65535/65536,
 # 2^32-1/2^32) plus the extremes.
@@ -31,4 +34,5 @@ for i in [int64(-1), -24, -25, -256, -257, -65536, -65537, low(int64)]:
   let arg = uint64(-(i + 1))
   check(cbInt(i), arg)
 
+emitTrials(obs)
 doAssert allMinimal, "an integer was encoded wider than its canonical minimum"

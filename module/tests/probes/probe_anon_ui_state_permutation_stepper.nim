@@ -2,11 +2,14 @@
 ## only n-of-m slots filled — no field names or distinguishes which member filled
 ## which slot. Stepper over signer→slot assignments on a fixed contribution set:
 ## the UI state must equal the baseline at every assignment (identity absent, not
-## merely unshown). Emits {"assignment": "...", "ui_state_matches_baseline": ...}.
+## merely unshown). STEPPER (exo-dbc): state is the signer→slot assignment; successors are the
+## assignments one transposition away, so BFS from the identity ("identity" in
+## the spec's initial) reaches every permutation.
 
 import ../../src/drivers/driver
 import ../../src/intents/anon_state
 import std/algorithm
+import ./oracle_emit
 
 proc uiRepr(co: AnonCoordination): string =
   result = $co.state.filled & "/" & $co.state.total & ":"
@@ -24,15 +27,19 @@ proc run(assignment: seq[int]): string =
                       signer: signers[assignment[i]]))
   uiRepr(co)
 
-var perm = @[0, 1, 2, 3]
-sort(perm)
-let baseline = run(perm)
-var allMatch = true
-while true:
-  let m = run(perm) == baseline
-  if not m: allMatch = false
-  echo "{\"assignment\": \"", perm, "\", \"ui_state_matches_baseline\": ",
-       (if m: "true" else: "false"), "}"
-  if not nextPermutation(perm): break
+let baseline = run(@[0, 1, 2, 3])
 
-doAssert allMatch, "UI state varied with the signer→slot assignment"
+proc state(p: seq[int]): JsonNode =
+  %*{"assignment": permString(p), "ui_state_matches_baseline": run(p) == baseline}
+
+let here = parsePerm(oracleStateStr(oracleStateArg(), "assignment", "identity"), contribs.len)
+var succ: seq[JsonNode]
+for q in swapNeighbours(here): succ.add state(q)
+emitSuccessors(succ)
+
+if oracleStateArg() == nil:
+  var perm = @[0, 1, 2, 3]
+  sort(perm)
+  while true:
+    doAssert run(perm) == baseline, "UI state varied with the signer→slot assignment"
+    if not nextPermutation(perm): break
