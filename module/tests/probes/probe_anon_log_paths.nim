@@ -1,11 +1,14 @@
 ## derived-exo-f60 s2/c2: local logs carry no signer identity on any path —
 ## debug, info, warn, error, verification-failure, crash, shutdown. Stepper over
 ## (path × signer): no emitted record contains the signer identifier or a value
-## resolving to one. Emits {"log_path": "...", "signer_identity_in_record": ...}.
+## resolving to one. STEPPER (exo-dbc): state is the log path; successors are every other path, each
+## carrying the leak measured across ALL signers for it (the signer is not part
+## of the state, so a path's verdict must quantify over signers).
 
 import ../../src/drivers/driver
 import ../../src/intents/anon_state
 import std/strutils
+import ./oracle_emit
 
 let signers = @["alice", "bob", "carol", "dave", "eve", "frank"]
 let paths = @["startup", "debug", "info", "warn", "error",
@@ -27,14 +30,23 @@ proc recordsForPath(path, signer: string): seq[LogRecord] =
   else: discard
   co.log
 
-var allClean = true
-for path in paths:
+proc leaksAt(path: string): bool =
+  ## True if ANY signer's identity reaches a record on this path.
   for signer in signers:
-    var leak = false
     for r in recordsForPath(path, signer):
-      if signer in r.detail or signer in r.kind: leak = true
-    if leak: allClean = false
-    echo "{\"log_path\": \"", path, "\", \"signer_identity_in_record\": ",
-         (if leak: "true" else: "false"), "}"
+      if signer in r.detail or signer in r.kind: return true
+  false
 
-doAssert allClean, "a log record on some path contained the signer identity"
+proc state(path: string): JsonNode =
+  %*{"log_path": path, "signer_identity_in_record": leaksAt(path)}
+
+let here = oracleStateStr(oracleStateArg(), "log_path", "startup")
+var succ: seq[JsonNode]
+for p in paths:
+  if p != here: succ.add state(p)
+emitSuccessors(succ)
+
+# Run by hand this still enumerates and fails loudly.
+if oracleStateArg() == nil:
+  for path in paths:
+    doAssert not leaksAt(path), "a log record on some path contained the signer identity"

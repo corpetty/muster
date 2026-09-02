@@ -39,6 +39,46 @@ proc oracleStateArg*(): JsonNode =
   try: result = parseJson(raw)
   except JsonParsingError: result = nil
 
+proc oracleStateStr*(arg: JsonNode, field, dflt: string): string =
+  ## A string field of the stepper's current state, or `dflt` when the probe is
+  ## run by hand. `dflt` is also how a spec's symbolic `initial` id (e.g.
+  ## "identity", "arrival_order") maps onto the probe's own encoding.
+  if arg == nil or not arg.hasKey(field) or arg[field].kind != JString: dflt
+  else: arg[field].getStr
+
+proc oracleStateInt*(arg: JsonNode, field: string, dflt: int): int =
+  ## An integer field of the stepper's current state, or `dflt`.
+  if arg == nil or not arg.hasKey(field) or arg[field].kind != JInt: dflt
+  else: arg[field].getInt
+
+proc permString*(p: seq[int]): string =
+  ## A permutation as compact digits ("0123"), so it round-trips through a state
+  ## id without the spaces `$seq` would introduce.
+  for i in p: result.add $i
+
+proc parsePerm*(s: string, n: int): seq[int] =
+  ## Inverse of `permString`. Any id that is not n digits (a spec's symbolic
+  ## initial, say "identity") is the identity permutation.
+  if s.len != n:
+    for i in 0 ..< n: result.add i
+    return
+  for c in s:
+    if c notin '0' .. '9':
+      result = @[]
+      for i in 0 ..< n: result.add i
+      return
+    result.add int(ord(c) - ord('0'))
+
+proc swapNeighbours*(p: seq[int]): seq[seq[int]] =
+  ## Every permutation one transposition away. Transpositions generate the full
+  ## symmetric group, so BFS from the identity reaches every permutation — the
+  ## exhaustiveness the model_check level claims, expressed as a step relation.
+  for i in 0 ..< p.len:
+    for j in i+1 ..< p.len:
+      var q = p
+      swap(q[i], q[j])
+      result.add q
+
 proc emitSuccessors*(successors: seq[JsonNode]) =
   ## The `model_check` stepper contract: one document, `successors` a list.
   ## A state with no successors emits an empty list — a terminal state, not an
