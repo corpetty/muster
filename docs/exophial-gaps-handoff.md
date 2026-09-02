@@ -1,5 +1,15 @@
 # Handoff: verify the exophial gap findings on a machine with exophial installed
 
+> **EXECUTED 2026-09-02.** This handoff has been run on the exophial machine.
+> Preflight was green and checks 1–5 are answered; results are recorded inline in
+> [`exophial-usage-gaps.md`](exophial-usage-gaps.md) as per-finding verdicts plus
+> a "Verification outcome" section. Headline: **G4 is refuted** (the audit ran on
+> a shallow clone; history is intact), and **G3's root cause is refuted** (the
+> regate fails on an output-format mismatch, not the environment — exo-a5d's
+> environment fix held). Six pebbles filed: **exo-dbc** (the load-bearing one),
+> exo-a7b, exo-efc, exo-4ed, exo-c5d, exo-aa7. Check 6 — the posture decision —
+> is the operator's and remains open. Checks below are kept for provenance.
+
 Run this in a **local Claude Code session started from
 `/home/petty/Github/corpetty/muster`** — the workstation that has exophial
 installed (`~/.local/share/uv/tools/exophial`), the kept worker worktrees, and

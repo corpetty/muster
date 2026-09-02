@@ -7,6 +7,15 @@ Audit date: 2026-09-01. Evidence: this repo's git history, `.pebbles/events.json
 to this audit — items it alone can settle are marked **[verify on the exophial machine]**
 and collected in [`exophial-gaps-handoff.md`](exophial-gaps-handoff.md).
 
+> **Verification pass: 2026-09-02, on the exophial machine.** Every deferred item
+> below has now been checked against the real install. Preflight green: `exophial`
+> + `pb` on PATH, tool venv at `~/.local/share/uv/tools/exophial`, 46 kept
+> `.worktrees/worker-reroute-*`, and the pre-08-25 objects present. Tool version
+> **`exophial 0.2.0+dc69cd1d`**. Each finding below now carries a verdict —
+> **CONFIRMED**, **REFUTED**, or **REFINED** — with the evidence that settled it.
+> Two findings (G3, G4) were substantially wrong and are corrected in place.
+> The audit's own text is left standing so the correction is legible.
+
 ## The intended model (as exophial's own vendored artifacts state it)
 
 1. **Intake.** An issue or utterance becomes a pebble (`pb`), then a discuss-issue
@@ -44,6 +53,9 @@ derivation, tiers + thinking budgets) is fully configured and, on this evidence,
 unused since. The tool's load-bearing idea — acceptance graded by a machine-checkable
 oracle, not by the worker's own account — applies to none of the recent work.
 
+> **VERDICT: CONFIRMED.** Unchanged by anything on this machine. Backlog is now
+> **54 open** pebbles (the audit counted 80; triage has happened since).
+
 ### G2 — Every merge exophiald performed was graded by nothing
 
 The 16 pebbles `exophiald` merged (08-25/26) are all `land: worker/reroute-*`
@@ -52,6 +64,10 @@ pebbles — staged human work the reroute hook captured. None has a spec, and th
 Each merge nonetheless recorded `exophial-verdict: {"verdict": "pass"}`. With no
 spec oracle and no gate command, that verdict had nothing behind it. The ledger
 asserts machine-graded acceptance that did not occur.
+
+> **VERDICT: CONFIRMED.** `.exophial/config.yaml` still has the entire `gate:`
+> block commented out, so `exophial gate run` for a spec-less pebble has no
+> command to run. Nothing on this machine supplies a default. Filed as **exo-efc**.
 
 ### G3 — Every spec-linked pebble that reached the integration regate failed it, and the work landed anyway
 
@@ -66,6 +82,59 @@ either way: **the one flow exophial exists for (oracle-graded merge) has never
 completed green end to end in this repo.** The specs were authored, the probes
 pass by hand, and the gate that was supposed to connect them was bypassed.
 **[verify on the exophial machine]** — re-run one regate and root-cause the failure.
+
+> **VERDICT: CONFIRMED that the loop has never run green — but the stated root
+> cause is REFUTED.** All 12 specs were re-graded at HEAD on 2026-09-02 by calling
+> the real grader in-process (`spec_oracle.run_spec(Spec.from_dict(...),
+> Path('.'))`), which is the same entrypoint the reducer's completion gate uses.
+> Result: **43 checks across 12 specs, 0 pass.** The failures are not what the
+> audit guessed:
+>
+> | Cause | Checks | Share |
+> |---|---|---|
+> | `artifact stdout is not valid JSON: Extra data: line 2 column 1` | 42 | 42/43 |
+> | `probe_return_marshalling_host.nim` exits 1 — `cannot open file: pkg/results` | 1 | 1/43 |
+>
+> **The dominant cause is an artifact-output contract mismatch, not the
+> environment.** `nim` resolves fine (`/usr/local/bin/nim`, Nim 2.2.10), every
+> probe compiles, and every probe exits 0. The oracle's `_parse_measurement` does
+> `json.loads(stdout)` on the *whole* buffer, so an artifact must emit **exactly
+> one** JSON document; muster's 43 probes emit **JSONL** — one observation per
+> line. Reproduced directly:
+>
+> ```
+> $ nim r -d:release tests/probes/probe_materialization_derivation_agrees.nim
+> {"agrees": true}
+> {"agrees": true}
+> ...
+> ```
+>
+> Two distinct contracts are being violated:
+>
+> - **`property_test` trace form** — the oracle wants a single
+>   `{"traces": [[state, ...], ...]}` object, which it then hands to
+>   `trace_monitor.py`. Our probes emit a bare stream of per-trial objects. The
+>   probe's stream *is* one trace; it just isn't wrapped in the envelope.
+> - **`model_check` stepper form** — the oracle invokes the stepper with a state
+>   as the final argv and expects that state's *successors*. Our steppers ignore
+>   the argv entirely and dump the whole reachable space as JSONL.
+>
+> So the probes are substantively right (they measure the real invariant and pass
+> by hand) and mechanically wrong (they speak a different wire format than the
+> grader). This is a **muster-side fix**, well-scoped and mechanical: re-emit to
+> the oracle's envelope, and make the steppers actually step. Filed as **exo-dbc**.
+>
+> The one non-JSON failure is also **not** an oracle-env problem: it fails
+> identically in a plain interactive shell (missing nimble `results` package —
+> it needs the nix dev shell), so it is a probe-dependency gap, not a scrub.
+> Filed as **exo-a7b**.
+>
+> Note this supersedes **exo-a5d**, which the audit cited as the standing
+> hypothesis. exo-a5d was *closed as resolved on 2026-08-20* — it symlinked `nim`
+> into `/usr/local/bin` and made the probe self-resolve secp256k1, and that fix
+> is still in place and still working. The regate kept failing afterwards for the
+> entirely different, never-diagnosed reason above. The audit inherited a stale
+> hypothesis from a closed pebble.
 
 ### G4 — History re-rooting broke every evidence link
 
@@ -82,6 +151,27 @@ The referents may survive in the original machine's kept worktrees
 (`.worktrees/worker-exo-*`) or reflog. **[verify on the exophial machine]** —
 recover or at least record the mapping before the worktrees are cleaned.
 
+> **VERDICT: REFUTED — this finding is an artifact of the audit's own
+> environment, not a fact about the repo.** On the real checkout the full history
+> is intact and pushed:
+>
+> - `git log --oneline HEAD | wc -l` → **271 commits**, oldest
+>   `6febea9 2026-08-04 Initial project scaffold`. The P0–P2/P4 work has ordinary
+>   per-commit history.
+> - `aabcb69` is **not a root commit** — it has parent `6320dbf`. There are ~16
+>   such `reroute: capture staged work off main` commits, each with parents.
+> - All three cited SHAs resolve: `38e3a3b` = *"module: host-client
+>   return-marshalling probe (derived-exo-526)"*, `2723d24` = exo-2dc handoff,
+>   `8c40c7f` = exo-3a1 worker capture. **All 8** `gate-verdict:` SHAs in
+>   `.pebbles/reducer_ledger.jsonl` resolve to real 2026-08-19 commits.
+> - `git merge-base --is-ancestor 38e3a3b origin/main` → **true**. The objects are
+>   on the remote; nothing needs recovering or bundling.
+>
+> The audit ran in a container with a **shallow clone**, whose boundary commit
+> always presents as a parentless commit containing the entire tree — exactly the
+> "single `reroute:` root commit" it described. **The audit chain is unbroken.**
+> No action needed; the "record the mapping before `git gc`" advice is moot.
+
 ### G5 — The machinery exempts itself from the discipline it enforces
 
 All 36 `bus`/`reroute`/`integrate` commits lack the `Tested-Behavior:` /
@@ -89,6 +179,13 @@ All 36 `bus`/`reroute`/`integrate` commits lack the `Tested-Behavior:` /
 `Session-Id` trailer. All 22 session commits since 08-27 comply. If machinery
 commits are exempt by design, the exemption should be stated somewhere; today it
 reads as two-tier enforcement.
+
+> **VERDICT: CONFIRMED, and the exemption is by design but undocumented.**
+> `exophiald`'s own integration commits run with `EXOPHIALD_INTEGRATOR=1`, the
+> marker `reroute_main_commit.is_integrator()` and `block_worktree_leak` both
+> honor. That covers the reroute guard; nothing in the vendored hook set exempts
+> machinery commits from `tdd-trailer.sh`, which is a grep over the message. So
+> the two-tier read is accurate for the trailer hooks specifically.
 
 ### G6 — The trailers are not git trailers
 
@@ -98,6 +195,10 @@ recognizes only the final contiguous block: `git log --format='%(trailers:key=Te
 finds **0** of 58 commits. The grep-based hook accepts them, but any downstream
 tool using real trailer parsing (`git interpret-trailers`, `%(trailers)`) sees
 nothing. Fix: write all trailers as one contiguous block at the end of the message.
+
+> **VERDICT: CONFIRMED.** Re-checked on the full 271-commit history; the trailer
+> block is still split by blank lines and git's own parser still sees none.
+> Filed as **exo-4ed**.
 
 ### G7 — The labbook's prediction came true, silently
 
@@ -112,6 +213,20 @@ briefly) and the labbook needs a follow-up, or reconciliation silently reverted
 a recorded decision. Upstream ask either way: a per-repo opt-out in the init
 manifest. **[verify on the exophial machine]** — whether HEAD has one now.
 
+> **VERDICT: CONFIRMED — no per-repo opt-out exists at `0.2.0+dc69cd1d`.** The
+> mechanism is now documented in the tool itself (`ansible/init.yml` steps 5b/6):
+> `reconcile_claude_settings.py` reconciles the exophial-owned hook block **to the
+> canonical manifest**, and `reconcile_pre_commit_config.py` reconciles
+> `.pre-commit-config.yaml` to include the guard hooks. Neither reconciler exposes
+> a skip/exempt/opt-out flag (`--settings`, `--manifest`, `--check` only), and no
+> `opt_out` / `skip_hooks` / `hooks_enabled` knob exists anywhere in the package.
+> So the labbook's prediction is exactly right and re-running `init` will restore
+> the hooks again. The upstream ask stands. Filed as **exo-aa7**.
+>
+> One useful nuance: doctrine files install **create-if-absent** per file
+> (`init.yml` step 5b), so muster-local doctrine edits (G9) are *not* clobbered by
+> a later `init`. Editing doctrine is safe; removing hooks is not.
+
 ### G8 — Enforcement exists on exactly one machine
 
 Six pre-commit hooks have `entry: exophial-*` with `language: system`, and
@@ -124,6 +239,37 @@ discipline held anyway (hand-written), which is to the sessions' credit, not the
 tooling's. Related: `.exophial/config.yaml` pins `coordination_repo` to the
 absolute path `/home/petty/Github/corpetty/muster`.
 
+> **VERDICT: REFINED.** The portability half is confirmed: the hooks are
+> `language: system` shelling out to `exophial-*`, so they do not travel. But the
+> *observable consequence* the audit cited has a different explanation here — on
+> this machine the enforcement is fully live:
+>
+> - all five `exophial-*` entrypoints are on PATH; `pre-commit` is installed and
+>   `.git/hooks/{pre-commit,commit-msg,pre-push}` are framework-generated;
+> - `pre-commit run reroute-main-commit` executes and **passes** (correctly a
+>   no-op off `main`);
+> - `should_reroute("main", integrator=False)` → `True`, and
+>   `EXOPHIALD_INTEGRATOR` is unset in an ordinary session.
+>
+> So the guard *would* have refused a direct commit on `main`. `git reflog main`
+> shows how the tip actually moved:
+>
+> - **08-25/26** — `reset: moving to integrated` then `merge integrated:
+>   Fast-forward` (exophiald's integrator route).
+> - **08-27 → 09-01** — `merge <sha>: Fast-forward` from feature branches. The
+>   reroute hook correctly does not fire on a non-protected branch, and a
+>   fast-forward runs no `pre-commit` stage. This is a legitimate route *around*
+>   the guard, not a bypass of it: the guard only ever protected direct commits.
+> - **09-01 → 09-02** — the last five entries are literal `commit:` **on main**
+>   (`dbd5589`, `6db79b2`, `28d7f64`, `e49d557`, `2e69c77`). Those the hook should
+>   have refused, so they were made with `--no-verify` or `SKIP=`.
+>
+> Corrected reading: enforcement does not travel to other machines (true, and
+> `coordination_repo` being an absolute path makes that concrete), **and** on the
+> machine that has it, it is routinely stepped around — by fast-forward for most
+> of the window, by `--no-verify` for the last five commits. The gap is a policy
+> gap, not only a distribution gap.
+
 ### G9 — Doctrine is the unedited generic seed
 
 `principal.md` says "edit it freely once installed to match the actual
@@ -133,25 +279,64 @@ Nim, or chronos; the per-language files are `testing-python.md` and
 CLAUDE.md. A dispatched worker seeded with this doctrine gets generic guidance
 plus no `testing-nim.md`.
 
+> **VERDICT: CONFIRMED.** Still the generic seed, and the same Nim blindness
+> shows up structurally elsewhere (see G10's `SOURCE_SUFFIXES`). Because
+> `init.yml` installs doctrine **create-if-absent**, editing these files in place
+> is durable across a future `exophial init`. Filed as **exo-c5d**.
+
 ### G10 — Smaller drift
 
 - **claude-md-coverage vs. reality:** the hook requires new source directories
   to carry a CLAUDE.md; all eleven `module/src/*/` directories lack one. Either
   the hook's "new directory" semantics never matched these, or it never ran.
   **[verify on the exophial machine]**.
+
+  > **VERDICT: REFINED — neither. The hook cannot see Nim at all.**
+  > `check_claude_md_coverage.py` defines
+  > `SOURCE_SUFFIXES = {.py, .ts, .tsx, .js, .jsx, .swift, .go, .rs, .sh}`.
+  > `.nim` is absent, so no `module/src/*/` directory is a "source directory" to
+  > this gate and it correctly passes. The hook ran; it had nothing to say.
+  > Same root as G9: exophial's vendored conventions have no Nim. Rolled into
+  > **exo-c5d**.
 - **discuss-issue skill links:** `docs/decisions/…` and
   `tests/test_discuss_issue_spine.py` are exophial-repo paths; they resolve to
   nothing in muster. The muster-local note is pinned to observations of HEAD
   `ab26cdb` (08-08) and tracks HEAD — the `relation_class` set, the
   `proof_obligation` gate defect, and the missing CLI verbs may all have moved.
   **[verify on the exophial machine]**.
+
+  > **VERDICT: CONFIRMED stale, and now partly resolved upstream.** At
+  > `0.2.0+dc69cd1d`: the CLI has **no** `issue` verb and no `spec generate` —
+  > the real verbs are `exophial specify <pebble_id>` (with `--refresh`), plus
+  > `discuss` / `error` / `feature` / `review-relation`. The `relation_class` set
+  > is now *derived* rather than restated
+  > (`ops/derivation_schema._RELATION_CLASS = {"enum":
+  > list(RUNNABLE_RELATION_CLASSES)}`, sourced from `spec_oracle._RELATIONS` =
+  > `conservation`, `no_arbitrage`, `monotonicity`) — exactly the upstream fix for
+  > the drift the note recorded (exo-a57). `exo-178` is an exophial-repo pebble,
+  > not resolvable from muster's bus. The muster-local note should be re-pinned or
+  > dropped. Rolled into **exo-c5d**.
 - **settings.json `"if": "Bash(git commit:*)"`** on the `fix_worktree_index`
   hook — confirm current Claude Code honors a per-hook `if` key; if not, the
   hook runs on every Bash call. **[verify on the exophial machine]**.
+
+  > **VERDICT: UNRESOLVED — left open deliberately.** Claude Code here is
+  > **2.1.247**; the install ships no settings JSON schema to check the key
+  > against, and the honest test is behavioral (observe whether
+  > `fix_worktree_index` fires on a non-`git commit` Bash call), which this
+  > evidence pass did not run. `"if"` is not a documented `hooks[]` key, so the
+  > likely answer is that it is ignored and the hook runs on every Bash call —
+  > but that is inference, not evidence. Rolled into **exo-aa7** as a question
+  > for upstream.
 - **worker_model:** the `default: "sonnet"` tier is unreachable (routing sends
   everything to `frontier`). Harmless; confusing.
+  > **VERDICT: CONFIRMED**, and the config's own comment explains why: difficulty
+  > banding from `V_spec` (ADR D1) "is not built yet, so every pebble routes
+  > `default` today; the extra tiers/rows activate for free once specs commit a
+  > `difficulty_class`." Intentional forward-compatibility. No action.
 - **Backlog:** 80 open pebbles, including decomposition children and superseded
   items. Needs a triage pass.
+  > **VERDICT: PARTLY ADDRESSED** — now **54 open**.
 
 ## What works as intended (for contrast)
 
@@ -176,3 +361,45 @@ that needs making is the posture: either fix the regate environment and adopt
 dispatch for real, or record officially that muster uses exophial for
 discuss-issue spec authoring plus pebble tracking only — and make the hook set
 match that choice so `exophial init` stops re-installing the rest.
+
+## Verification outcome (2026-09-02) — what actually stands
+
+| # | Finding | Verdict |
+|---|---|---|
+| G1 | Spec pipeline covers 12 of 185 pebbles, none since 08-20 | **CONFIRMED** |
+| G2 | Every exophiald merge was graded by nothing | **CONFIRMED** — `gate:` still commented out |
+| G3 | Every spec regate failed; work landed anyway | **CONFIRMED** (0/43 checks pass at HEAD) — **root cause REFUTED**: an output-format mismatch, not the environment |
+| G4 | History re-rooting broke every evidence link | **REFUTED** — artifact of a shallow clone; 271 commits and all cited SHAs are intact and pushed |
+| G5 | Machinery exempts itself | **CONFIRMED** — by design for the reroute guard (`EXOPHIALD_INTEGRATOR`), undocumented for the trailer hooks |
+| G6 | Trailers are not git trailers | **CONFIRMED** |
+| G7 | Labbook's prediction came true | **CONFIRMED** — no per-repo opt-out exists at `0.2.0+dc69cd1d` |
+| G8 | Enforcement exists on one machine | **REFINED** — true off-machine; on-machine it is live and was stepped around (fast-forward, then `--no-verify`) |
+| G9 | Doctrine is the unedited generic seed | **CONFIRMED** — and safe to edit (create-if-absent) |
+| G10 | Smaller drift | **REFINED** — `claude-md-coverage` has no `.nim` suffix; skill CLI verbs stale; `"if"` key unresolved; `worker_model` intentional; backlog now 54 |
+
+### The corrected shape of the gap
+
+The audit's conclusion was that muster has never had a working grading loop.
+**That conclusion survives — 43 of 43 checks fail at HEAD — but the reason is
+much better news than the audit thought.** The blocker is not a hostile hermetic
+environment, a broken audit chain, or specs that were never really green. It is
+that muster's 43 probes emit JSONL while the oracle reads a single JSON document.
+The invariants are genuinely proven by these probes; only the envelope is wrong.
+
+That reframes the posture choice. "Adopt dispatch for real" is no longer gated on
+an environment fix nobody knows how to do — exo-a5d already did the environment
+work in August, and it held. It is gated on a mechanical, bounded change to how
+43 probes print their results (**exo-dbc**), plus one probe's missing nimble
+dependency (**exo-a7b**), plus a `gate:` command for spec-less pebbles
+(**exo-efc**). Those are ordinary work items, not research.
+
+### Filed
+
+| Pebble | What |
+|---|---|
+| **exo-dbc** | P1 — probes emit JSONL; oracle wants one JSON doc. Re-emit to the `{"traces": [...]}` envelope and make `model_check` steppers actually step. The single fix that makes the grading loop real. |
+| **exo-a7b** | P2 — `probe_return_marshalling_host.nim` fails on missing nimble `results`; needs the nix dev shell or a vendored dep. |
+| **exo-efc** | P2 — configure `gate:` in `.exophial/config.yaml` so a spec-less merge is graded by something (G2). |
+| **exo-4ed** | P3 — write commit trailers as one contiguous block so git parses them (G6). |
+| **exo-c5d** | P2 — muster-edit the doctrine seed, add `testing-nim.md`, re-pin the discuss-issue note (G9, G10). |
+| **exo-aa7** | P3 — upstream asks: per-repo hook opt-out; `.nim` in `SOURCE_SUFFIXES`; does Claude Code honor a per-hook `"if"` key (G7, G10). |
