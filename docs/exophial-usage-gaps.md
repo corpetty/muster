@@ -419,6 +419,19 @@ work in August, and it held. It is gated on a mechanical, bounded change to how
 dependency (**exo-a7b**), plus a `gate:` command for spec-less pebbles
 (**exo-efc**). Those are ordinary work items, not research.
 
+### The posture decision (2026-09-02): deferred, deliberately
+
+The operator's call, recorded so the next `exophial init` is run with open eyes:
+**neither posture is adopted yet.** `exo-dbc` is worth doing on its own merits —
+it turns `spec_oracle.run_spec` into a usable on-demand check over the 11
+invariants — and it is a prerequisite for the "adopt dispatch" branch anyway. So
+it is being done first, and the dispatch-vs-tracking question is re-opened once
+the specs actually grade green and the loop's real cost is observable rather than
+estimated.
+
+Until then the hook set stays as-is, and the honest description of muster's
+exophial usage is: pebble tracking, twelve authored specs, and no grading loop.
+
 ### Filed
 
 | Pebble | What |
