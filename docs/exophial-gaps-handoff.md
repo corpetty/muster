@@ -1,18 +1,37 @@
 # Handoff: verify the exophial gap findings on a machine with exophial installed
 
-Paste this into a session on the machine that has exophial (`~/.local/share/uv/tools/exophial`)
-and the original checkout at `/home/petty/Github/corpetty/muster`. The findings it
-verifies are in [`exophial-usage-gaps.md`](exophial-usage-gaps.md) — read that first.
-Everything below is a check the repo-only audit (2026-09-01) could not complete
-because the exophial install, the kept worktrees, and the original reflog are not
-in the repo.
+Run this in a **local Claude Code session started from
+`/home/petty/Github/corpetty/muster`** — the workstation that has exophial
+installed (`~/.local/share/uv/tools/exophial`), the kept worker worktrees, and
+the original reflog. It cannot run in a Claude Code on the web / remote session:
+those get a fresh clone of the pushed repo in a container with no exophial, no
+`.worktrees/`, and no pre-08-25 objects. Switching the model in a remote session
+does not change the machine.
+
+The findings this verifies are in [`exophial-usage-gaps.md`](exophial-usage-gaps.md)
+— read that first. Everything below is a check the repo-only audit (2026-09-01)
+could not complete for exactly that reason.
 
 ## Prompt for the session
 
-You are on the machine with exophial installed. Work through the numbered checks.
-For each: run the command, record the actual output, and update
-`docs/exophial-usage-gaps.md` — confirm the finding, refute it, or refine it.
-Do not fix anything yet unless a check says so; this pass is evidence collection.
+### 0. Preflight — prove you are on the right machine before anything else
+
+Run this first and read the output. If any line says MISSING, **stop** and report
+that the session is on the wrong machine. Do not substitute, simulate, or reason
+around a missing tool — every check below depends on the real install.
+
+```bash
+command -v exophial pb || echo "MISSING: exophial/pb not on PATH"
+ls -d ~/.local/share/uv/tools/exophial || echo "MISSING: exophial tool venv"
+ls -d /home/petty/Github/corpetty/muster/.worktrees || echo "MISSING: kept worktrees"
+git -C /home/petty/Github/corpetty/muster cat-file -t 38e3a3b1887c0ad74cfb930a285bf31f7f04ce52 \
+  || echo "MISSING: pre-08-25 objects (check 3 is already answered: unrecoverable here)"
+```
+
+With preflight green, work through the numbered checks. For each: run the
+command, record the actual output, and update `docs/exophial-usage-gaps.md` —
+confirm the finding, refute it, or refine it. Do not fix anything yet unless a
+check says so; this pass is evidence collection.
 
 ### 1. Pin the tool version the findings were made against
 
