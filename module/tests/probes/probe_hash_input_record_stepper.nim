@@ -1,15 +1,18 @@
 ## derived-exo-449 s1/c1: every signing-path hash goes through the typed,
 ## domain-separated hash-input record — never ad-hoc concatenation.
 ##
-## Stepper over hash-input record shapes (domain tag × field sets). At each state
-## the module's encodeHashInput is compared to an INDEPENDENTLY assembled
-## reference for the declared framing ([domain, {fields}] in dCBOR). An encoder
-## that concatenated domain and content bytes ad hoc — instead of framing them as
-## the structured record — would diverge from the reference and fail. Emits
-## {"record_shape": "...", "matches_reference_encoder": ...}.
+## STEPPER (exo-dbc): state is the record shape "d<i>-f<j>" over (domain tag ×
+## field set); successors are every other shape. At each, the module's
+## encodeHashInput is compared to an INDEPENDENTLY assembled reference for the
+## declared framing ([domain, {fields}] in dCBOR) — an encoder that concatenated
+## domain and content ad hoc instead of framing them as the structured record
+## would diverge. The spec's initial id "minimal" is the empty domain with no
+## fields.
 
 import ../../src/dcbor/dcbor
 import ../../src/hashing/hash_input
+import std/strutils
+import ./oracle_emit
 
 # Independent reference for the hash-input framing, assembled here rather than
 # calling the module's encodeHashInput — so agreement is evidence the module uses
@@ -30,15 +33,32 @@ let fieldSets: seq[seq[(string, CborValue)]] = @[
   @[("nested", cbArray(@[cbUint(1'u64), cbText("q")])), ("n", cbInt(-5))],
 ]
 
-var allMatch = true
-var shape = 0
-for d in domains:
-  for fs in fieldSets:
-    let hi = hashInput(d, fs)
-    let matches = encodeHashInput(hi) == referenceEncode(d, fs)
-    if not matches: allMatch = false
-    echo "{\"record_shape\": \"", shape, "\", \"matches_reference_encoder\": ",
-         (if matches: "true" else: "false"), "}"
-    inc shape
+const Minimal = "d0-f0"
 
-doAssert allMatch, "hash-input encoding diverged from the structured-record reference"
+proc shapeIds(): seq[string] =
+  for i in 0 ..< domains.len:
+    for j in 0 ..< fieldSets.len:
+      result.add "d" & $i & "-f" & $j
+
+proc matchesReference(id: string): bool =
+  let parts = id.split('-')
+  doAssert parts.len == 2, "malformed record_shape: " & id
+  let d = domains[parseInt(parts[0][1 .. ^1])]
+  let fs = fieldSets[parseInt(parts[1][1 .. ^1])]
+  encodeHashInput(hashInput(d, fs)) == referenceEncode(d, fs)
+
+proc state(id: string): JsonNode =
+  %*{"record_shape": id, "matches_reference_encoder": matchesReference(id)}
+
+let arg = oracleStateArg()
+var here = oracleStateStr(arg, "record_shape", "minimal")
+if here == "minimal": here = Minimal
+var succ: seq[JsonNode]
+for id in shapeIds():
+  if id != here: succ.add state(id)
+emitSuccessors(succ)
+
+if arg == nil:
+  for id in shapeIds():
+    doAssert matchesReference(id),
+      "hash-input encoding diverged from the structured-record reference"

@@ -1,14 +1,15 @@
 ## derived-exo-d7c s2/c2: map keys serialize in bytewise-lexicographic order of
 ## their ENCODED bytes, never length-first, regardless of insertion order.
 ##
-## Stepper over the insertion-permutation space of a fixed map content. The key
-## set is chosen so bytewise-lex and RFC-8949 length-first orderings DISAGREE, so
-## "matches_canonical_encoding" is only true if the encoder is genuinely bytewise
-## (a length-first encoder would fail every state). Emits one state per reachable
-## permutation: {"insertion_order": "...", "matches_canonical_encoding": ...}.
+## STEPPER (exo-dbc): state is the insertion permutation; successors are the
+## permutations one transposition away, so BFS from the spec's initial
+## ("identity") reaches every insertion order. The key set is chosen so bytewise
+## and RFC-8949 length-first orderings DISAGREE, so a length-first encoder fails
+## every state rather than passing by coincidence.
 
 import ../../src/dcbor/dcbor
 import std/algorithm
+import ./oracle_emit
 
 # Keys whose encoded first bytes are 0x05, 0x1A, 0x61, 0x62 but whose encoded
 # lengths are 1, 5, 2, 3 — so bytewise order (by first byte) and length-first
@@ -39,17 +40,25 @@ let lengthFirstExpected = expectedBytes(lengthFirstCmp)
 doAssert bytewiseExpected != lengthFirstExpected,
   "test key set does not discriminate bytewise from length-first"
 
-var allMatch = true
-var perm = @[0, 1, 2, 3]
-sort(perm)
-while true:
+proc canonicalAt(perm: seq[int]): bool =
   var pairs: seq[(CborValue, CborValue)]
   for i in perm: pairs.add (entries[i].key, entries[i].val)
   let got = encode(cbMap(pairs))
-  let matches = (got == bytewiseExpected) and (got != lengthFirstExpected)
-  if not matches: allMatch = false
-  echo "{\"insertion_order\": \"", perm, "\", \"matches_canonical_encoding\": ",
-       (if matches: "true" else: "false"), "}"
-  if not nextPermutation(perm): break
+  (got == bytewiseExpected) and (got != lengthFirstExpected)
 
-doAssert allMatch, "map key order was not canonical bytewise-lex for some insertion order"
+proc state(perm: seq[int]): JsonNode =
+  %*{"insertion_order": permString(perm), "matches_canonical_encoding": canonicalAt(perm)}
+
+let arg = oracleStateArg()
+let here = parsePerm(oracleStateStr(arg, "insertion_order", "identity"), entries.len)
+var succ: seq[JsonNode]
+for q in swapNeighbours(here): succ.add state(q)
+emitSuccessors(succ)
+
+if arg == nil:
+  var perm = @[0, 1, 2, 3]
+  sort(perm)
+  while true:
+    doAssert canonicalAt(perm),
+      "map key order was not canonical bytewise-lex for some insertion order"
+    if not nextPermutation(perm): break

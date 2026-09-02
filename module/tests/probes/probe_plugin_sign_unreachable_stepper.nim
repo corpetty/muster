@@ -1,27 +1,40 @@
 ## derived-exo-51e s1/c1: no signing operation is reachable from plugin code
-## through any invocation path. Stepper over invocation-path shapes (direct call,
-## via a helper, via a callback, via a data-dependency read, nested combinations):
-## at every path a plugin's attempt to sign is not permitted. Emits
-## {"path": "...", "sign_succeeded": ...} (must be false everywhere).
-import ../../src/plugins/plugin
+## through any invocation path.
+##
+## STEPPER (exo-dbc): state is the attempt vector — a chain of indirections,
+## optionally through a callback or a data-dependency read, ending in an attempt
+## to sign. Successors are every other vector. The spec's initial id
+## "direct_call" is the zero-indirection vector.
 
-# Model the reachable invocation paths as chains ending in an attempt to sign.
-# Whatever the path, plugin code only ever reaches host operations through the
-# capability grant, which excludes opSign.
-proc signViaPath(depth: int, viaCallback, viaDataDep: bool): bool =
-  # Simulate reaching the host operation through `depth` indirections / a callback
-  # / a data-dependency read — the permission check is the same at the end.
+import ../../src/plugins/plugin
+import ./oracle_emit
+
+proc vectorIds(): seq[string] =
+  for depth in 0 .. 4:
+    for viaCallback in [false, true]:
+      for viaDataDep in [false, true]:
+        result.add "d" & $depth & "-cb" & $viaCallback & "-dd" & $viaDataDep
+
+const DirectCall = "d0-cbfalse-ddfalse"
+
+proc signSucceeds(vector: string): bool =
+  ## However plugin code gets there — depth of indirection, a callback, a
+  ## data-dependency read — it reaches host operations only through the
+  ## capability grant, and that grant excludes opSign. The permission check is
+  ## the same at the end of every path, which is exactly the claim.
   permitted(opSign)
 
-var anySucceeded = false
-var states = 0
-for depth in 0 .. 4:
-  for viaCallback in [false, true]:
-    for viaDataDep in [false, true]:
-      if states >= 30: break
-      let succeeded = signViaPath(depth, viaCallback, viaDataDep)
-      if succeeded: anySucceeded = true
-      echo "{\"path\": \"d", depth, "-cb", viaCallback, "-dd", viaDataDep,
-           "\", \"sign_succeeded\": ", (if succeeded: "true" else: "false"), "}"
-      inc states
-doAssert not anySucceeded, "a signing operation was reachable from plugin code"
+proc state(vector: string): JsonNode =
+  %*{"attempt_vector_id": vector, "sign_succeeded": signSucceeds(vector)}
+
+let arg = oracleStateArg()
+var here = oracleStateStr(arg, "attempt_vector_id", "direct_call")
+if here == "direct_call": here = DirectCall
+var succ: seq[JsonNode]
+for v in vectorIds():
+  if v != here: succ.add state(v)
+emitSuccessors(succ)
+
+if arg == nil:
+  for v in vectorIds():
+    doAssert not signSucceeds(v), "a signing operation was reachable from plugin code"
