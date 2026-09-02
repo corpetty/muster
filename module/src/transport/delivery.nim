@@ -55,7 +55,8 @@ type
     queue: InboundQueue                           ## foreign-thread callbacks land here; poll() drains
     timeoutMs: cint
     nodeStarted: cint                             ## 1 once createNode+start returned; gates lifecycle
-    storePeer: string                             ## a store service multiaddr (first entryNode); "" disables catchup
+    storePeers: seq[string]                       ## store service multiaddrs (all entryNodes); empty disables catchup
+    storePeerIdx: int                             ## round-robin cursor into storePeers — a dead node stalls one tick, not all
     storeQueue: InboundQueue                      ## async store-query responses land here; poll() parses them
     lastCatchupMs: int64                          ## throttle: only re-query the store every gCatchupPeriodMs
     catchupTicks: Table[string, int]              ## per-topic query count; first DeepCatchupTicks fetch full history, then windowed
@@ -129,13 +130,16 @@ proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000): DeliveryTra
                              timeoutMs: cint(timeoutMs))
   initInboundQueue(result.queue)             # ready before any callback can fire
   initInboundQueue(result.storeQueue)
-  # A store service peer for offline/mesh-independent catchup — the first entryNode
-  # of the delivery config (the fleet's own nodes serve store). "" if none.
+  # Store service peers for mesh-independent catchup — ALL entryNodes of the delivery
+  # config (the fleet's own nodes serve store). fireCatchup round-robins across them,
+  # so a peer that's down or throttling stalls one tick, not the whole catchup. Empty
+  # if the config names none (catchup then disabled).
   try:
     let j = parseJson(nodeConfigJson)
-    if j.kind == JObject and j.hasKey("entryNodes") and j["entryNodes"].kind == JArray and
-       j["entryNodes"].len > 0:
-      result.storePeer = j["entryNodes"][0].getStr()
+    if j.kind == JObject and j.hasKey("entryNodes") and j["entryNodes"].kind == JArray:
+      for n in j["entryNodes"]:
+        let s = n.getStr()
+        if s.len > 0: result.storePeers.add s
   except CatchableError: discard
   if gLpDebug: stderr.writeLine("MUSTER-LP creating delivery client (mode=" & $lp_get_mode() & ")")
   result.client = lp_client_create("delivery_module", "muster_module", nil, nil)
@@ -198,7 +202,10 @@ proc fireCatchup(t: DeliveryTransport, contentTopic: string) =
   ## so a 1s cadence doesn't re-parse the whole topic. Ingest dedups the window overlap
   ## (R-2/R-4), and the log reduces order-independently (inv 4), so paginationForward
   ## (kept `true`, the proven direction) and the window boundary are both harmless.
-  if t.storePeer.len == 0: return
+  if t.storePeers.len == 0: return
+  # Round-robin the store peer: a down/throttling node costs one tick, not the catchup.
+  let peer = t.storePeers[t.storePeerIdx mod t.storePeers.len]
+  t.storePeerIdx = (t.storePeerIdx + 1) mod t.storePeers.len
   let nowMs = int64(epochTime() * 1000)
   let tick = t.catchupTicks.getOrDefault(contentTopic, 0)
   t.catchupTicks[contentTopic] = tick + 1
@@ -211,11 +218,12 @@ proc fireCatchup(t: DeliveryTransport, contentTopic: string) =
     req["timeStart"] = %((nowMs - gCatchupLookbackMs) * 1_000_000)
   var args = newJArray()
   args.add %($req)                 # jsonQuery (tstr)
-  args.add %t.storePeer            # peerAddr (tstr)
+  args.add %peer                   # peerAddr (tstr)
   args.add %(t.timeoutMs.int)      # timeoutMs (int)
   let argsStr = $args
   if gLpDebug: stderr.writeLine("MUSTER-LP storeQuery " & contentTopic &
-                                (if tick >= DeepCatchupTicks: " windowed" else: " deep"))
+                                (if tick >= DeepCatchupTicks: " windowed" else: " deep") &
+                                " peer=" & peer)
   discard lp_invoke_async(t.client, cstring"storeQuery", argsStr.cstring,
                           t.timeoutMs, onStoreResult, cast[pointer](t))
 
@@ -246,7 +254,7 @@ method poll*(t: DeliveryTransport) =
   # so a message the relay never surfaced (sparse-shard mesh) still arrives. Fire on
   # the module thread (async invoke returns immediately); responses land on the store
   # queue, parsed below.
-  if t.storePeer.len > 0 and t.nodeStarted == 1:
+  if t.storePeers.len > 0 and t.nodeStarted == 1:
     let nowMs = int64(epochTime() * 1000)
     if nowMs - t.lastCatchupMs > gCatchupPeriodMs:
       t.lastCatchupMs = nowMs

@@ -39,10 +39,30 @@
 >   steady-state query is now **time-windowed** (`timeStart = now − MUSTER_CATCHUP_LOOKBACK_MS`,
 >   default 60s) so the tight cadence stays cheap — the first few queries per topic still fetch
 >   full history so a late joiner catches up, then it slides. The UI live-refresh (`Room.qml`)
->   and the offscreen self-test timer were matched to 1s (they *drive* `poll()`). Still open:
->   rotate the store peer across `entryNodes` for resilience, and (the proper fix) delivery's
->   live-relay receive so messages arrive push-not-poll — `messageReceived` never fires on our
->   sparse shard, which is why we poll the store at all.
+>   and the offscreen self-test timer were matched to 1s (they *drive* `poll()`).
+> - **Store-peer rotation — landed (2026-09-02, exo-d01).** `fireCatchup` round-robins the
+>   query across *all* `entryNodes` (was fixed to `entryNodes[0]`), so a store node that's down
+>   or throttling costs one ~1s tick, not the whole catchup. Verified: one instance cycled
+>   evenly across all six fleet nodes while still converging.
+> - **Real-time push receive — investigated, blocked upstream in the delivery kernel (exo-d01).
+>   Not fixable from muster; store-poll stays the reliable path.** The old theory here ("the
+>   sparse shard surfaces nothing, `messageReceived` never fires") is only half right, and the
+>   corrected picture matters:
+>   - Ran a light node (`mode:"Edge"` → mounts the Waku **filter + lightpush** clients). Its
+>     filter client **does receive message pushes on our sparse shard** (`/waku/2/rs/2/5`) — on
+>     *both* peers, many per run. So Filter push works; the shard is not the problem.
+>   - But the delivery **kernel** (`liblogosdelivery` v0.38.1) only converts *some* of those
+>     pushes into `message_received` events: in a 2-node run the founder got 8 (14–16 pushes),
+>     the joiner got **0** (14 pushes). The delivery C++ faithfully forwards every event the
+>     kernel emits (`connection_change`, `message_propagated`, …) — it simply never receives a
+>     `message_received` for the joiner. The drop is inside the closed kernel's recv→event path.
+>   - **Core vs Edge is identical** for this: `message_received` counts were 8/0 under *both*
+>     relay (Core) and filter (Edge). So switching transport mode buys nothing, and the
+>     asymmetry tracks role/subscribe-order (founder subscribes first, opportunistically gets
+>     live events; the later joiner never does), not relay-vs-filter. muster has no lever — the
+>     pushes arrive at the kernel; the kernel doesn't event them. Hence we poll the store, and
+>     `Epoch-store` catchup (now ~1s) is the reliable receive path until an upstream kernel fix
+>     surfaces filter/relay receipts as `message_received` for every subscriber.
 > - **Safe txn coordination needs owner identities.** Membership works with any identity, but
 >   `contribute` needs a signature that recovers to a Safe owner, and the runner gives each
 >   peer a random key. Next: seed `.run/<peer>` with the anvil owner keys to close
@@ -209,8 +229,11 @@ Deep strace of the runner's delivery process (`strace -f -e write` on the `logos
 
 ### Blocker 3 SOLVED (2026-08-31): store-based catchup — two instances converge over the fleet
 
-Option (1) works. delivery's relay never surfaces the message (v0.2.0, sparse shard), but the
-**fleet retains it in store**, and store is request/response — mesh-independent. muster now
+Option (1) works. delivery's live path surfaces the message only unreliably (see the corrected
+"real-time push receive" finding in the SOLVED box above — the shard isn't the blocker, the
+kernel's recv→`message_received` path is, and it drops the joiner's messages under both relay
+and filter), but the **fleet retains every message in store**, and store is request/response —
+mesh-independent, so it delivers to every subscriber regardless. muster now
 polls the store for every subscribed topic (`delivery.nim`: `fireCatchup` fires an async
 `storeQuery(jsonQuery, peerAddr, timeoutMs)` every ~8s *(since tightened to ~1s, see the
 latency follow-up above)*; the store peer is the first
