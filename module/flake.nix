@@ -2,9 +2,17 @@
   description = "Muster module — Nim core behind the muster.lidl contract (P0 loading spike)";
 
   inputs = {
-    # Local checkout with the codegen.nim path (B1). Switch to a pinned
-    # github ref once the Nim path lands upstream.
-    logos-module-builder.url = "path:/home/petty/Github/logos-co/logos-module-builder";
+    # The Nim cdylib authoring path (B1). PR #202 landed codegen.nim upstream
+    # (2026-08-31, master 65c3b58) but stdlib-only; this module additionally
+    # needs codegen.nim.packages — the pinned nimble deps the whole ADR-014
+    # Nimbus/Status reuse rides on (stint, nim-eth, nim-web3, nimcrypto,
+    # nim-secp256k1 with submodules) — and the RUNPATH half of nim.link, without
+    # which logos-core's LD_LIBRARY_PATH-less load cannot dlopen libsodium.
+    # Both are upstream-pending in logos-co/logos-module-builder#226, so this
+    # pins the PR's own rev on the fork. It is a real github ref, not a machine
+    # path: a fresh clone builds from it. Repoint at logos-co master once #226
+    # merges.
+    logos-module-builder.url = "github:corpetty/logos-module-builder/720ac2feb72eca60e73c9aba5a9f9ad579de1cb7";
     # The real transport (P3): muster_module calls delivery_module over the lp_*
     # C ABI (src/transport/delivery.nim) — it boots delivery's embedded Waku node
     # and carries the sealed coordination frames. Same repo the demo consumes
