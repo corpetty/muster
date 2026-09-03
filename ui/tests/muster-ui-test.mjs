@@ -320,4 +320,83 @@ test("muster_ui: navigating to the room renders its join affordance", async (app
   await grab(app, "room");
 });
 
+// 9) ROOM VERIFY BOX — the contracting-stage on-display proof. Join a room, propose
+//    a Safe transfer in-room, and assert the proposal card's verify box renders the
+//    client-RE-DERIVED safeTxHash (shown → re-derived → domain) with the "exact bytes
+//    you'd sign" affirmation. This is the render that moves the Contracting stage from
+//    ◑ to ● — invariant 1 / F-4 visible in the shipping Room card, not only the
+//    Account/propose strip (test 3). Needs delivery_module in the bake so
+//    coordinate_join resolves; a single instance folds locally (publish() records to
+//    the log before broadcasting), so the card renders offscreen with no peer.
+//    Off-chain; no anvil needed.
+test("muster_ui: an in-room proposal renders the re-derived verify box", async (app) => {
+  await openMuster(app);
+  await app.waitFor(
+    async () => { await app.expectTexts(["Muster"]); },
+    { timeout: 15000, interval: 500, description: "muster_ui view" }
+  );
+
+  // Navigate to the room and join a local topic. A single instance boots an
+  // isolated delivery node and folds its own proposals locally.
+  await clickButton(app, "roomToggle");
+  await setField(app, "roomTopicField", "muster.contracting.verify");
+  await clickButton(app, "joinRoomButton");
+  await app.waitFor(
+    async () => {
+      if ((await propertyOf(app, "roomMembersLabel", "visible")) !== true)
+        throw new Error("room not joined (is delivery_module in the bake?)");
+    },
+    { timeout: 20000, interval: 500, description: "room joined" }
+  );
+
+  // Compose a Safe payment in-room: open the composer, pick payment + Safe (so the
+  // driver re-derives an EIP-712 safeTxHash), fill the effect, propose.
+  await clickButton(app, "roomProposeButton");
+  await clickButton(app, "roomKindPayment");
+  await clickButton(app, "roomPolicySafe");
+  await setField(app, "roomProposeTo", "0x1111111111111111111111111111111111111111");
+  await setField(app, "roomProposeValue", "1000");
+  await clickButton(app, "roomProposeSubmit");
+
+  // A proposal card renders from the verified fold. Open its verify box (the card
+  // owns the toggle) on every rendered card — the intent card is the one with a hash.
+  await app.waitFor(
+    async () => {
+      const r = await app.inspector.send("findByProperty", { property: "objectName", value: "musterCard" });
+      if (!(r.matches?.length > 0)) throw new Error("no proposal card rendered");
+      for (const m of r.matches)
+        await app.inspector.send("setProperty", { objectId: m.id, property: "verifyOpen", value: true });
+    },
+    { timeout: 20000, interval: 500, description: "proposal card in the thread" }
+  );
+
+  // The verify box is on-display and carries the re-derivation affirmation.
+  await app.waitFor(
+    async () => {
+      if ((await propertyOf(app, "verifyBox", "visible")) !== true)
+        throw new Error("verify box not visible (card has no txhash?)");
+    },
+    { timeout: 15000, interval: 500, description: "verify box on-display" }
+  );
+  await app.expectTexts(["✓ your client re-derived this — the exact bytes you'd sign"]);
+
+  // The decisive assertion: the box shows a real re-derived safeTxHash (32 bytes)
+  // bound to a non-empty domain (chain + Safe). Polled — the Repeater rows populate
+  // a tick after verifyOpen flips.
+  let rederived = "", domain = "";
+  await app.waitFor(
+    async () => {
+      rederived = String((await propertyOf(app, "verifyVal_re-derived", "text")) || "");
+      domain    = String((await propertyOf(app, "verifyVal_domain", "text")) || "");
+      if (!/^0x[0-9a-fA-F]{64}$/.test(rederived))
+        throw new Error(`re-derived not yet a 32-byte safeTxHash: "${rederived}"`);
+      if (domain.length === 0)
+        throw new Error("domain row empty — signature not shown bound to (chain, Safe)");
+    },
+    { timeout: 15000, interval: 500, description: "verify rows populated" }
+  );
+  console.log(`[muster] VERIFY BOX OK — re-derived ${rederived} bound to ${domain}`);
+  await grab(app, "verify");
+});
+
 run();
