@@ -620,3 +620,5 @@
 {"type":"dep_add","timestamp":"2026-09-03T14:43:15.703158434Z","issue_id":"exo-891.4","payload":{"dep_type":"blocks","depends_on":"exo-891.3"}}
 {"type":"status_update","timestamp":"2026-09-03T14:44:02.019583307Z","issue_id":"exo-891.2","payload":{"status":"in_progress"}}
 {"type":"close","timestamp":"2026-09-03T14:45:29.654569708Z","issue_id":"exo-891.2","payload":{}}
+{"type":"status_update","timestamp":"2026-09-03T14:46:04.414474595Z","issue_id":"exo-891.1","payload":{"status":"in_progress"}}
+{"type":"status_update","timestamp":"2026-09-03T14:53:35.161348534Z","issue_id":"exo-891.3","payload":{"status":"in_progress"}}
