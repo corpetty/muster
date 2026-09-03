@@ -200,6 +200,7 @@ Item {
             }
 
             LogosText {
+                objectName: "roomMembersLabel"
                 visible: room.joined
                 text: qsTr("%1 in the room").arg(room.members.length)
                 color: Theme.palette.textTertiary
