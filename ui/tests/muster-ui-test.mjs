@@ -32,6 +32,32 @@ async function openMuster(app) {
   throw new Error("no muster sidebar launcher (tried Muster / muster_ui)");
 }
 
+// Click a nav toggle once it exists — the view loads async after the launcher is
+// clicked, so a bare click races on a cold start ("<toggle> not found").
+async function navTo(app, toggle) {
+  await app.waitFor(
+    async () => {
+      const r = await app.inspector.send("findByProperty", { property: "objectName", value: toggle });
+      if (!(r.matches?.length > 0)) throw new Error(`nav ${toggle} not up yet`);
+    },
+    { timeout: 15000, interval: 500, description: `nav ${toggle} up` }
+  );
+  await clickButton(app, toggle);
+}
+
+// The lifecycle/propose surface moved off the landing screen: the UI now lands on
+// Home and the propose dashboard lives behind the "Account" nav. Open Muster, wait
+// for the view, then switch to the Account surface where proposeTo/proposeButton and
+// the re-materialization strip live.
+async function openAccount(app) {
+  await openMuster(app);
+  await navTo(app, "dashboardToggle");
+  await app.waitFor(
+    async () => { await app.expectTexts(["Propose a transfer — directly"]); },
+    { timeout: 15000, interval: 500, description: "account/propose surface" }
+  );
+}
+
 async function setField(app, objectName, value) {
   const r = await app.inspector.send("findByProperty", { property: "objectName", value: objectName });
   const id = r.matches?.[0]?.id;
@@ -70,11 +96,9 @@ const NON_OWNER_SIG =
 
 // 1) RENDER — the decisive ADR-013 check: the coherent-built view instantiates.
 test("muster_ui: the view instantiates and renders", async (app) => {
-  await openMuster(app);
-  await app.waitFor(
-    async () => { await app.expectTexts(["Muster", "Propose a transfer"]); },
-    { timeout: 15000, interval: 500, description: "muster_ui view to render" }
-  );
+  // Lands on Home, then the Account surface draws the propose dashboard — reaching
+  // "Propose a transfer — directly" proves the view instantiated and navigates.
+  await openAccount(app);
 });
 
 // 2) BACKEND — muster_module.health() marshals to "ok" over the coherent chain.
@@ -86,17 +110,117 @@ test("muster_ui: muster_module.health() marshals to ok", async (app) => {
   );
 });
 
+// ROOM RENDER — the conversation surface renders and navigation reaches it (the
+// on-display gate for Room.qml + MusterCard.qml under ADR-011: nix build doesn't
+// evaluate QML, so a bad type would blank the view — caught here on a real host).
+// Runs BEFORE the verify test below, which joins a room — this one asserts the
+// unjoined join affordance, so it must see a fresh (unjoined) room first.
+test("muster_ui: navigating to the room renders its join affordance", async (app) => {
+  await openMuster(app);
+  await navTo(app, "roomToggle");
+  // Navigation actually switched surfaces — the room is shown; home is hidden.
+  await app.waitFor(
+    async () => {
+      if ((await propertyOf(app, "roomSurface", "visible")) !== true)
+        throw new Error("room surface not visible after roomToggle");
+      if ((await propertyOf(app, "homeSurface", "visible")) !== false)
+        throw new Error("home surface still visible after roomToggle");
+    },
+    { timeout: 15000, interval: 500, description: "room surface shown" }
+  );
+  // The join affordance rendered — proves Room.qml's Logos.Controls instantiated.
+  for (const name of ["roomTopicField", "joinRoomButton"]) {
+    const r = await app.inspector.send("findByProperty", { property: "objectName", value: name });
+    if (!(r.matches?.length > 0))
+      throw new Error(`room element "${name}" not found — Room.qml did not render`);
+  }
+  await app.expectTexts(["Join a room"]);
+  console.log("[muster] ROOM OK — navigated to the room; join affordance rendered");
+  await grab(app, "room");
+});
+
+// ROOM VERIFY BOX — the contracting-stage on-display proof. Join a room, propose a
+// Safe transfer in-room, and assert the proposal card's verify box renders the
+// client-RE-DERIVED safeTxHash (shown → re-derived → domain) with the "exact bytes
+// you'd sign" affirmation. This is the render that moves the Contracting stage from
+// ◑ to ● — invariant 1 / F-4 visible in the shipping Room card, not only the
+// Account/propose strip. Needs delivery_module in the bake so coordinate_join
+// resolves; a single instance folds locally (publish() records to the log before
+// broadcasting), so the card renders offscreen with no peer. Off-chain; no anvil.
+// Runs EARLY (right after health) so it folds on a clean coordination session — the
+// account-lifecycle + failed-submit tests below mutate shared module state.
+test("muster_ui: an in-room proposal renders the re-derived verify box", async (app) => {
+  await openMuster(app);
+  // Navigate to the room and join a local topic. A single instance boots an
+  // isolated delivery node and folds its own proposals locally.
+  await navTo(app, "roomToggle");
+  await setField(app, "roomTopicField", "muster.contracting.verify");
+  await clickButton(app, "joinRoomButton");
+  await app.waitFor(
+    async () => {
+      if ((await propertyOf(app, "roomMembersLabel", "visible")) !== true)
+        throw new Error("room not joined (is delivery_module in the bake?)");
+    },
+    { timeout: 20000, interval: 500, description: "room joined" }
+  );
+
+  // Compose a Safe payment in-room: open the composer, pick payment + Safe (so the
+  // driver re-derives an EIP-712 safeTxHash), fill the effect, propose.
+  await clickButton(app, "roomProposeButton");
+  await clickButton(app, "roomKindPayment");
+  await clickButton(app, "roomPolicySafe");
+  await setField(app, "roomProposeTo", "0x1111111111111111111111111111111111111111");
+  await setField(app, "roomProposeValue", "1000");
+  await clickButton(app, "roomProposeSubmit");
+
+  // A proposal card renders from the verified fold. Open its verify box (the card
+  // owns the toggle) on every rendered card — the intent card is the one with a hash.
+  await app.waitFor(
+    async () => {
+      const r = await app.inspector.send("findByProperty", { property: "objectName", value: "musterCard" });
+      if (!(r.matches?.length > 0)) throw new Error("no proposal card rendered");
+      for (const m of r.matches)
+        await app.inspector.send("setProperty", { objectId: m.id, property: "verifyOpen", value: true });
+    },
+    { timeout: 20000, interval: 500, description: "proposal card in the thread" }
+  );
+
+  // The verify box is on-display and carries the re-derivation affirmation.
+  await app.waitFor(
+    async () => {
+      if ((await propertyOf(app, "verifyBox", "visible")) !== true)
+        throw new Error("verify box not visible (card has no txhash?)");
+    },
+    { timeout: 15000, interval: 500, description: "verify box on-display" }
+  );
+  await app.expectTexts(["✓ your client re-derived this — the exact bytes you'd sign"]);
+
+  // The decisive assertion: the box shows a real re-derived safeTxHash (32 bytes)
+  // bound to a non-empty domain (chain + Safe). Polled — the Repeater rows populate
+  // a tick after verifyOpen flips.
+  let rederived = "", domain = "";
+  await app.waitFor(
+    async () => {
+      rederived = String((await propertyOf(app, "verifyVal_re-derived", "text")) || "");
+      domain    = String((await propertyOf(app, "verifyVal_domain", "text")) || "");
+      if (!/^0x[0-9a-fA-F]{64}$/.test(rederived))
+        throw new Error(`re-derived not yet a 32-byte safeTxHash: "${rederived}"`);
+      if (domain.length === 0)
+        throw new Error("domain row empty — signature not shown bound to (chain, Safe)");
+    },
+    { timeout: 15000, interval: 500, description: "verify rows populated" }
+  );
+  console.log(`[muster] VERIFY BOX OK — re-derived ${rederived} bound to ${domain}`);
+  await grab(app, "verify");
+});
+
 // 3) PROPOSE — the module re-derives the safeTxHash from the effect and the
 //    re-materialization strip shows it. This is the first real F-4 check in the
 //    UI (not the prototype's simulated hashes). findByProperty is exact-match, so
 //    assert on the strip's row label ("re-derived") and the status rail
 //    ("proposed") — both render only once an intent exists.
 test("muster_ui: propose drives the real re-materialization strip", async (app) => {
-  await openMuster(app);
-  await app.waitFor(
-    async () => { await app.expectTexts(["Propose a transfer"]); },
-    { timeout: 15000, interval: 500, description: "composer ready" }
-  );
+  await openAccount(app);
   await setField(app, "proposeTo", "0x1111111111111111111111111111111111111111");
   await setField(app, "proposeValue", "1000");
   await setField(app, "proposeNonce", "0");
@@ -114,11 +238,7 @@ test("muster_ui: propose drives the real re-materialization strip", async (app) 
 //    owner) before it counts; the status rail advances proposed → collecting →
 //    executable. This exercises the real approve/status surface end to end.
 test("muster_ui: collecting owner signatures advances to executable", async (app) => {
-  await openMuster(app);
-  await app.waitFor(
-    async () => { await app.expectTexts(["Propose a transfer"]); },
-    { timeout: 15000, interval: 500, description: "composer ready" }
-  );
+  await openAccount(app);
   await setField(app, "proposeTo", "0x1111111111111111111111111111111111111111");
   await setField(app, "proposeValue", "1000");
   await setField(app, "proposeNonce", "0");
@@ -149,11 +269,7 @@ test("muster_ui: collecting owner signatures advances to executable", async (app
 //     shows the module's own reason and the intent does not advance), and reset
 //     clears the intent for a fresh walkthrough. Off-chain; no anvil needed.
 test("muster_ui: a non-owner signature is rejected, then reset clears the intent", async (app) => {
-  await openMuster(app);
-  await app.waitFor(
-    async () => { await app.expectTexts(["Propose a transfer"]); },
-    { timeout: 15000, interval: 500, description: "composer ready" }
-  );
+  await openAccount(app);
   await setField(app, "proposeTo", "0x1111111111111111111111111111111111111111");
   await setField(app, "proposeValue", "1000");
   await setField(app, "proposeNonce", "0");
@@ -238,11 +354,7 @@ async function grab(app, suffix) {
 //    see README.md. The effect's nonce (0) must match the Safe's on-chain nonce, so
 //    run this against a fresh Safe (this is the only test that moves it on-chain).
 test("muster_ui: submit executes the intent on-chain and reaches final", async (app) => {
-  await openMuster(app);
-  await app.waitFor(
-    async () => { await app.expectTexts(["Propose a transfer"]); },
-    { timeout: 15000, interval: 500, description: "composer ready" }
-  );
+  await openAccount(app);
   await setField(app, "proposeTo", "0x1111111111111111111111111111111111111111");
   await setField(app, "proposeValue", "1000");
   await setField(app, "proposeNonce", "0");
@@ -275,128 +387,5 @@ test("muster_ui: submit executes the intent on-chain and reaches final", async (
   await grab(app, "final");
 });
 
-// 4d) ROOM — the conversation surface renders and navigation reaches it. Clicking
-//     the Room nav switches surfaces (the room becomes visible, home hides) and the
-//     room draws its join affordance (topic field + Join). This is the on-display
-//     gate for Room.qml + MusterCard.qml under ADR-011 (nix build does not evaluate
-//     QML, so a bad type name would blank the view — caught here, on a real host).
-//
-//     It stops at render on purpose: joining drives coordinate_join →
-//     DeliveryTransport, which needs delivery_module loaded. muster_module declares
-//     no dependency on it and this bake does not carry it, so the functional
-//     propose → card → contribute loop belongs with the live delivery node (the
-//     documented cross-host item), not here. The fold those cards render from is
-//     covered headless (module/tests/coordination_surface_test.nim step 6).
-//     Off-chain; no anvil needed.
-test("muster_ui: navigating to the room renders its join affordance", async (app) => {
-  await openMuster(app);
-  await app.waitFor(
-    async () => { await app.expectTexts(["Muster"]); },
-    { timeout: 15000, interval: 500, description: "muster_ui view" }
-  );
-
-  await clickButton(app, "roomToggle");
-
-  // Navigation actually switched surfaces — not just that the text exists in the
-  // (always-instantiated) tree. The room is shown; home is hidden.
-  await app.waitFor(
-    async () => {
-      if ((await propertyOf(app, "roomSurface", "visible")) !== true)
-        throw new Error("room surface not visible after roomToggle");
-      if ((await propertyOf(app, "homeSurface", "visible")) !== false)
-        throw new Error("home surface still visible after roomToggle");
-    },
-    { timeout: 15000, interval: 500, description: "room surface shown" }
-  );
-
-  // The join affordance rendered — proves Room.qml's Logos.Controls instantiated.
-  for (const name of ["roomTopicField", "joinRoomButton"]) {
-    const r = await app.inspector.send("findByProperty", { property: "objectName", value: name });
-    if (!(r.matches?.length > 0))
-      throw new Error(`room element "${name}" not found — Room.qml did not render`);
-  }
-  await app.expectTexts(["Join a room"]);
-  console.log("[muster] ROOM OK — navigated to the room; join affordance rendered");
-  await grab(app, "room");
-});
-
-// 9) ROOM VERIFY BOX — the contracting-stage on-display proof. Join a room, propose
-//    a Safe transfer in-room, and assert the proposal card's verify box renders the
-//    client-RE-DERIVED safeTxHash (shown → re-derived → domain) with the "exact bytes
-//    you'd sign" affirmation. This is the render that moves the Contracting stage from
-//    ◑ to ● — invariant 1 / F-4 visible in the shipping Room card, not only the
-//    Account/propose strip (test 3). Needs delivery_module in the bake so
-//    coordinate_join resolves; a single instance folds locally (publish() records to
-//    the log before broadcasting), so the card renders offscreen with no peer.
-//    Off-chain; no anvil needed.
-test("muster_ui: an in-room proposal renders the re-derived verify box", async (app) => {
-  await openMuster(app);
-  await app.waitFor(
-    async () => { await app.expectTexts(["Muster"]); },
-    { timeout: 15000, interval: 500, description: "muster_ui view" }
-  );
-
-  // Navigate to the room and join a local topic. A single instance boots an
-  // isolated delivery node and folds its own proposals locally.
-  await clickButton(app, "roomToggle");
-  await setField(app, "roomTopicField", "muster.contracting.verify");
-  await clickButton(app, "joinRoomButton");
-  await app.waitFor(
-    async () => {
-      if ((await propertyOf(app, "roomMembersLabel", "visible")) !== true)
-        throw new Error("room not joined (is delivery_module in the bake?)");
-    },
-    { timeout: 20000, interval: 500, description: "room joined" }
-  );
-
-  // Compose a Safe payment in-room: open the composer, pick payment + Safe (so the
-  // driver re-derives an EIP-712 safeTxHash), fill the effect, propose.
-  await clickButton(app, "roomProposeButton");
-  await clickButton(app, "roomKindPayment");
-  await clickButton(app, "roomPolicySafe");
-  await setField(app, "roomProposeTo", "0x1111111111111111111111111111111111111111");
-  await setField(app, "roomProposeValue", "1000");
-  await clickButton(app, "roomProposeSubmit");
-
-  // A proposal card renders from the verified fold. Open its verify box (the card
-  // owns the toggle) on every rendered card — the intent card is the one with a hash.
-  await app.waitFor(
-    async () => {
-      const r = await app.inspector.send("findByProperty", { property: "objectName", value: "musterCard" });
-      if (!(r.matches?.length > 0)) throw new Error("no proposal card rendered");
-      for (const m of r.matches)
-        await app.inspector.send("setProperty", { objectId: m.id, property: "verifyOpen", value: true });
-    },
-    { timeout: 20000, interval: 500, description: "proposal card in the thread" }
-  );
-
-  // The verify box is on-display and carries the re-derivation affirmation.
-  await app.waitFor(
-    async () => {
-      if ((await propertyOf(app, "verifyBox", "visible")) !== true)
-        throw new Error("verify box not visible (card has no txhash?)");
-    },
-    { timeout: 15000, interval: 500, description: "verify box on-display" }
-  );
-  await app.expectTexts(["✓ your client re-derived this — the exact bytes you'd sign"]);
-
-  // The decisive assertion: the box shows a real re-derived safeTxHash (32 bytes)
-  // bound to a non-empty domain (chain + Safe). Polled — the Repeater rows populate
-  // a tick after verifyOpen flips.
-  let rederived = "", domain = "";
-  await app.waitFor(
-    async () => {
-      rederived = String((await propertyOf(app, "verifyVal_re-derived", "text")) || "");
-      domain    = String((await propertyOf(app, "verifyVal_domain", "text")) || "");
-      if (!/^0x[0-9a-fA-F]{64}$/.test(rederived))
-        throw new Error(`re-derived not yet a 32-byte safeTxHash: "${rederived}"`);
-      if (domain.length === 0)
-        throw new Error("domain row empty — signature not shown bound to (chain, Safe)");
-    },
-    { timeout: 15000, interval: 500, description: "verify rows populated" }
-  );
-  console.log(`[muster] VERIFY BOX OK — re-derived ${rederived} bound to ${domain}`);
-  await grab(app, "verify");
-});
 
 run();
