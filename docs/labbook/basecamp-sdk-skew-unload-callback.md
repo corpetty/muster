@@ -58,6 +58,39 @@ Bump muster's **builder pins** to a `logos-module-builder` rev whose `logos-cpp-
 
 Then re-verify: (1) muster still builds (the SDK bump may cascade into the Nim/C++ glue and the generated client), and (2) `nm -D muster_module_plugin.so` shows the symbol **defined (T)**, like basecamp's own modules. Alternatively, pin basecamp's host down to muster's SDK generation. Either way it is a coherence *re-alignment*, the same move ADR-013 made originally — the pins have simply drifted apart again as upstream moved.
 
+## ✅ RESOLVED (2026-09-04)
+
+Fixed by realigning muster_module's builder generation, not by follows. The fork
+`720ac2f` = basecamp's builder base `logos-co/4717b9af` + **78 commits**, which mix
+the codegen work muster needs (`65c3b58` #202 codegen, `165839f` codegen.packages,
+`720ac2f` RUNPATH — all touching only `cmake/LogosModule.cmake` + `lib/mkLogosModule.nix`)
+with **SDK-bump chores** (`12cbe94` cpp-sdk→58c6573, `9e13ae8` protocol 0.9, …) that
+pushed the load contract newer.
+
+The fix (a builder branch `codegen-on-basecamp`): cherry-pick **only** the three
+codegen commits onto `4717b9af`, none of the SDK bumps — they apply clean (disjoint
+files). Then in muster's `module/flake.nix`, point the builder at that branch and
+**pin its floated SDK inputs** to basecamp's coherent generation (cpp-sdk `c3fa1b5a`,
+qt-sdk `2ec59459`, module `2ec64c4a`, protocol `6401e30a`, plugin-qt `f33f264a`,
+rust-overlay `14f58845`, …). Now muster_module builds the same contract the host
+loads: `nm -D muster_module_plugin.so` no longer lists the symbol as an undefined
+import, the module loads in the bake, and the full `muster_ui` view renders.
+
+Dead ends confirmed along the way: (a) pinning muster's SDKs DOWN while keeping the
+fork builder `720ac2f` fails the build — the fork needs the *newer* `logos-plugin-qt`
+(`logos-qt-host` attribute), absent in basecamp's older one; (b) toolchain follows
+(`rust-overlay`/`nixpkgs`) change nothing about the symbol. The generation is a matched
+set: builder logic ↔ SDK API ↔ host contract must all agree.
+
+**Harness result on the coherent bake: 8/9 green** — render, health, room render,
+the verify box on-display (re-derived safeTxHash bound to chain+Safe), propose strip,
+lifecycle, reject+reset, walkthrough. Only `submit` fails, and only for want of a live
+anvil (independently covered by `safe_anvil_e2e` / `coordinate_submit_anvil`).
+
+**One follow-up before this leaves the machine:** `module/flake.nix` points the builder
+at a LOCAL `git+file://…?ref=codegen-on-basecamp`. Push `codegen-on-basecamp` to
+`corpetty/logos-module-builder` and repin to a github ref so a fresh clone builds.
+
 ## Independent of this: delivery bundling works (exo-050)
 
 `delivery_module@v0.2.0` bundles into the bake cleanly (`modules/delivery_module/{delivery_module_plugin.so,liblogosdelivery.so}`) and the ui-host connects to its registry (`RemoteTransportConnection: Successfully connected to registry logos_delivery_module`). That part of the exo-891 plan is done; only the SDK re-alignment stands between here and a green in-room verify-box render (exo-4be).
