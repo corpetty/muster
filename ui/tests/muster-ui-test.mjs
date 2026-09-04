@@ -214,13 +214,13 @@ test("muster_ui: an in-room proposal renders the re-derived verify box", async (
   await grab(app, "verify");
 });
 
-// FROST — the 2-round driver, usable in a room. Join a room, pick the FROST policy
-// (a founding capability), propose a payment, and assert the card renders as a
-// multi-round intent: its `rounds` property is 2 and the header names "round 1 of 2".
-// This proves FROST is selectable and its round chrome renders on-display; the
-// backend convergence (round 1 → round 2 → executable) is proven headless by
-// module/tests/frost_room_test.nim. Off-chain; no anvil.
-test("muster_ui: FROST is selectable and renders a 2-round proposal card", async (app) => {
+// FROST end to end with IN-APP signing — the whole point of the identity layer.
+// Join a room, pick the FROST policy, propose a payment, then Approve twice: each
+// click signs the re-derived materialization with the LOCAL keystore identity (no
+// pasted fixture), closing round 1 then round 2 to executable. As the sole member the
+// roster is [me] and k=1, so one signer carries each round. Proves selectability, the
+// round chrome, AND that pasting is gone for the room-native path. Off-chain; no anvil.
+test("muster_ui: FROST — in-app approve signs both rounds to executable (no paste)", async (app) => {
   await openMuster(app);
   await navTo(app, "roomToggle");
   await setField(app, "roomTopicField", "muster.frost.demo");
@@ -257,7 +257,7 @@ test("muster_ui: FROST is selectable and renders a 2-round proposal card", async
     { timeout: 20000, interval: 500, description: "FROST 2-round card in the thread" }
   );
 
-  // The header names the round being collected ("… · round 1 of 2 (0 of 2 this round)").
+  // The header names the round being collected.
   let header = "";
   await app.waitFor(
     async () => {
@@ -265,9 +265,34 @@ test("muster_ui: FROST is selectable and renders a 2-round proposal card", async
       if (header.indexOf("round 1 of 2") < 0)
         throw new Error(`card header missing the round chrome: "${header}"`);
     },
-    { timeout: 15000, interval: 500, description: "round chrome in the header" }
+    { timeout: 15000, interval: 500, description: "round 1 chrome" }
   );
-  console.log(`[muster] FROST OK — 2-round proposal card rendered — "${header}"`);
+  console.log(`[muster] FROST card rendered — "${header}"`);
+
+  // Approve IN-APP (round 1): one click signs the re-derived materialization with the
+  // local keystore identity — no paste. As the sole member (k=1) this closes round 1
+  // and the fold advances to round 2.
+  await clickButton(app, "cardApprove");
+  await app.waitFor(
+    async () => {
+      const h = String((await propertyOf(app, "cardHeader", "text")) || "");
+      if (h.indexOf("round 2 of 2") < 0)
+        throw new Error(`did not advance to round 2 after in-app approve: "${h}"`);
+    },
+    { timeout: 15000, interval: 500, description: "advanced to round 2 (in-app approve)" }
+  );
+
+  // Approve IN-APP (round 2) → executable; the header flips to "2 rounds complete".
+  await clickButton(app, "cardApprove");
+  await app.waitFor(
+    async () => {
+      const h = String((await propertyOf(app, "cardHeader", "text")) || "");
+      if (h.indexOf("rounds complete") < 0)
+        throw new Error(`not executable after the second in-app approve: "${h}"`);
+    },
+    { timeout: 15000, interval: 500, description: "executable after two in-app approvals" }
+  );
+  console.log("[muster] FROST IN-APP OK — signed both rounds with the local identity (no paste) → executable");
   await grab(app, "frost");
 });
 

@@ -322,10 +322,28 @@ Item {
                             visible: msg.isIntentRef && msg.liveIntent !== null
                             Layout.fillWidth: true
                             card: msg.liveIntent ? room.intentToCard(msg.liveIntent) : ({})
-                            onApprove: msg.approving = true
+                            // Primary: sign in-app with YOUR own identity — no paste. An
+                            // empty signature tells the module to endorse the re-derived
+                            // materialization with the keystore (Ed25519 for a room-native
+                            // driver where you are a member; secp for a Safe you own).
+                            onApprove: {
+                                if (room.backend && msg.liveIntent)
+                                    room.backend.contributeInRoom(String(msg.liveIntent.id || ""), "");
+                            }
                         }
 
-                        // its approve affordance — the owner signs on their own device.
+                        // Advanced: paste a signature produced elsewhere (a Safe owner on
+                        // another device, or a member signing off-app). Hidden behind a
+                        // toggle — one-click in-app Approve above is the primary path.
+                        LogosButton {
+                            objectName: "roomApprovePasteToggle"
+                            visible: msg.isIntentRef && msg.liveIntent !== null && !msg.approving
+                            Layout.leftMargin: Theme.spacing.medium
+                            text: qsTr("Paste a signature instead")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: msg.approving = true
+                        }
+
                         ColumnLayout {
                             visible: msg.isIntentRef && msg.liveIntent !== null && msg.approving
                             Layout.fillWidth: true
@@ -335,8 +353,9 @@ Item {
                             LogosText {
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
-                                text: qsTr("Sign the re-derived safeTxHash on your own device and paste "
-                                         + "the 65-byte signature. It counts only if it recovers to a configured owner.")
+                                text: qsTr("Paste a signature produced elsewhere over the re-derived "
+                                         + "materialization. It counts only if it comes from a signer this "
+                                         + "intent's policy recognizes (a Safe owner, or a room member).")
                                 color: Theme.palette.textTertiary
                                 font.pixelSize: Theme.typography.badgeText
                             }
@@ -349,7 +368,7 @@ Item {
                                     id: sigField
                                     objectName: "roomApproveSig"
                                     Layout.fillWidth: true
-                                    placeholderText: qsTr("owner signature (65-byte hex)")
+                                    placeholderText: qsTr("signature (hex)")
                                     font.family: Theme.typography.mono
                                 }
 
