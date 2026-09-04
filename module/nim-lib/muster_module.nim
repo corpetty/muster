@@ -81,6 +81,7 @@ proc seedOf(n: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = n)
 proc thrRosterKey(n: byte): Ed25519Pub = encFromSeed(seedOf(n)).identity().ed
 
 proc currentRoster(): seq[Ed25519Pub]   ## forward — defined once gSession + the keystore are
+proc myAddress(): Address                ## forward — this instance's secp account, defined below
 
 proc driverForKind(kind: string): Driver =
   ## Build the driver for a policy kind. For the room-native drivers (threshold /
@@ -96,6 +97,20 @@ proc driverForKind(kind: string): Driver =
   of "threshold": newThresholdDriver(roster, min(2, n))
   of "unanimous": newThresholdDriver(roster, n)
   of "frost":     newFrostDriver(roster, min(2, n))
+  of "safe":
+    # The room's Safe recognizes THIS instance's account as an owner too, so you
+    # approve a Safe intent IN-APP (no paste for YOUR own signature) — completing the
+    # in-app-signing pattern the room-native drivers already have. The configured
+    # owners remain for the Safe's other owners. The safeTxHash does NOT commit to the
+    # owner set, so re-derivation (F-4) and the materialization are unchanged; only
+    # WHO the fold recognizes grows. (On-chain settlement still needs the folded
+    # signers to be REAL on-chain owners — that is the anvil-seeded remainder, exo-001;
+    # in-app APPROVAL to executable is what this enables.)
+    var owners = gDriver.owners
+    let mine = myAddress()
+    if mine notin owners: owners.add mine
+    newSafeDriver(chainId = gDriver.chainId, safe = gDriver.safe,
+                  owners = owners, threshold = gDriver.threshold)
   else: gDriver
 
 let driverFor: DriverFor = proc(kind: string): Driver = driverForKind(kind)
@@ -174,6 +189,10 @@ proc moduleKeystore(): Keystore =
     gKeystore = openFileKeystore(dir / "identity.mks", pass)
     loadSettingsFile()      # infra settings live beside the identity — load them once
   gKeystore
+
+proc myAddress(): Address = moduleKeystore().address()
+  ## This instance's own secp account — its public authorization identity, and (once
+  ## added to a room Safe's owner set) the owner it signs Safe intents in-app as.
 
 proc musterIdentity(): string =
   ## The module's persistent coordination identity (FS-4, two-identity model,
