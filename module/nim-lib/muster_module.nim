@@ -80,22 +80,22 @@ var gCoordKind = "safe"
 proc seedOf(n: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = n)
 proc thrRosterKey(n: byte): Ed25519Pub = encFromSeed(seedOf(n)).identity().ed
 
+proc currentRoster(): seq[Ed25519Pub]   ## forward — defined once gSession + the keystore are
+
 proc driverForKind(kind: string): Driver =
-  ## Build the driver for a policy kind (the demo threshold roster is a fixture, as
-  ## the Safe owners are). Unknown kinds fall back to the Safe.
-  ## "unanimous" is the driver a room can ADD by proposal (driver-as-proposal): the
-  ## same Ed25519 roster, but n-of-n — every member must endorse. It is not in the
-  ## founding set the compose pickers offer; a group grants itself unanimity by
-  ## approving an add-driver proposal (see roomDriverKinds / coordinate_drivers).
+  ## Build the driver for a policy kind. For the room-native drivers (threshold /
+  ## unanimous / frost) the roster is the room's ACTUAL members — their Ed25519
+  ## encryption identities, from the membership fold — so THIS instance's own identity
+  ## IS a signer and it endorses in-app (no pasted fixture). k is the configured
+  ## threshold capped at the roster size (a 1-member room needs 1); "unanimous" is
+  ## n-of-n. Safe stays the on-chain owner set (gDriver, its owners are not room
+  ## members). Unknown kinds fall back to the Safe.
+  let roster = currentRoster()
+  let n = max(1, roster.len)
   case kind
-  of "threshold":
-    newThresholdDriver(@[thrRosterKey(1), thrRosterKey(2), thrRosterKey(3)], 2)
-  of "unanimous":
-    newThresholdDriver(@[thrRosterKey(1), thrRosterKey(2), thrRosterKey(3)], 3)
-  of "frost":
-    # 2-round Schnorr-threshold structure over the same demo roster, k=2 per round —
-    # the driver that exercises rounds > 1 end to end in a room (describe().rounds = 2).
-    newFrostDriver(@[thrRosterKey(1), thrRosterKey(2), thrRosterKey(3)], 2)
+  of "threshold": newThresholdDriver(roster, min(2, n))
+  of "unanimous": newThresholdDriver(roster, n)
+  of "frost":     newFrostDriver(roster, min(2, n))
   else: gDriver
 
 let driverFor: DriverFor = proc(kind: string): Driver = driverForKind(kind)
@@ -335,6 +335,16 @@ proc musterSubmit(intentId: string): string =
 var gSessions = initTable[string, CoordinationSession]()
 var gSession: CoordinationSession = nil
 var gTopic = ""
+
+proc currentRoster(): seq[Ed25519Pub] =
+  ## The room-native signer set: every current member's Ed25519 key (from the
+  ## membership fold), including this instance. Falls back to just our own identity
+  ## when no room is joined yet, so a driver is always well-formed. (forward-declared
+  ## above driverForKind, which reads it.)
+  if gSession != nil:
+    for m in gSession.members(): result.add m.ed
+  if result.len == 0:
+    result.add moduleKeystore().encIdentity().ed
 var gMsgSeq: uint64 = 0     ## per-instance monotonic nonce, disambiguates identical posts
 
 proc toContentTopic(t: string): string =
@@ -428,22 +438,38 @@ proc musterCoordinatePropose(effectJson: string): string =
   id
 
 proc musterCoordinateContribute(intentId: string, signatureHex: string): string =
+  ## Add a contribution to a proposed intent. If `signatureHex` is EMPTY, sign in-app
+  ## with THIS instance's own keystore identity — no paste: the room-native drivers
+  ## (threshold/frost) endorse with the Ed25519 encryption key (which is in the room's
+  ## roster, so it counts), Safe signs the safeTxHash with the secp key (counts only if
+  ## our address is a Safe owner). The secret never leaves the keystore.
   if gSession == nil: return "not-joined"
   gSession.poll()
   let events = gSession.log.allEvents()
   let drv = driverForKind(intentPolicyOf(events, intentId))   # THIS intent's own policy
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return "unknown-intent"
+  var sig = signatureHex
+  if sig.len == 0:
+    let mat = canonicalize(drv, effectFromJson(effectJson))
+    let ks = moduleKeystore()
+    if drv of SafeDriver:
+      var h: array[32, byte]
+      for i in 0 ..< min(32, mat.bytes.len): h[i] = mat.bytes[i]
+      sig = toHex(ks.sign(h))                 # secp Signature65 over the safeTxHash
+    else:
+      sig = toHex(ks.edSign(mat.bytes))       # Ed25519 endorsement over the materialization
   # The intent's policy verifies the contribution: a Safe owner's secp signature, or a
-  # threshold roster member's Ed25519 endorsement — "" iff it isn't a valid one.
-  let who = contributorOf(drv, effectJson, signatureHex)
+  # roster member's Ed25519 endorsement — "" iff it isn't a valid one (e.g. our own
+  # identity is not a signer for this intent's policy).
+  let who = contributorOf(drv, effectJson, sig)
   if who.len == 0: return "rejected"
   # Tag the contribution with the round this intent is currently collecting, so a
   # multi-round driver (FROST) can have the same member contribute once per round and
   # the fold dedups per (contributor, round). Single-round drivers stay at round 1.
   let folded = reduceIntents(events, driverFor)
   let curRound = (if intentId in folded: folded[intentId].collection.round else: 1)
-  gSession.publish(contributeEvent(intentId, who, signatureHex, round = curRound))
+  gSession.publish(contributeEvent(intentId, who, sig, round = curRound))
   intentState(gSession.log.allEvents(), driverFor, intentId)
 
 proc musterCoordinateIntents(): string =
