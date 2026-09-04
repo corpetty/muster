@@ -20,6 +20,7 @@ import Logos.Controls
 // types Room.qml / Walkthrough.qml already prove — LogosText, LogosButton.
 Rectangle {
     id: cardRoot
+    objectName: "musterCard"
 
     // The parsed card object: { kind, ... }. Never assume more than `kind`.
     property var card
@@ -417,6 +418,7 @@ Rectangle {
             // before an intent ever reaches this fold, so what shows is the honest
             // "matches" state, and the trail is one tap away.
             Rectangle {
+                objectName: "verifyBox"
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.spacing.tiny
                 visible: cardRoot.card && cardRoot.card.txhash
@@ -446,6 +448,7 @@ Rectangle {
                         spacing: Theme.spacing.small
 
                         LogosText {
+                            objectName: "verifyHeader"
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             text: qsTr("✓ your client re-derived this — the exact bytes you'd sign")
@@ -467,9 +470,9 @@ Rectangle {
                     // pattern), each a mono key + a wrapping value.
                     Repeater {
                         model: cardRoot.verifyOpen
-                            ? [{ k: qsTr("shown"),      v: cardRoot.verifyShown() },
-                               { k: qsTr("re-derived"), v: String((cardRoot.card && cardRoot.card.txhash) || "") },
-                               { k: qsTr("domain"),     v: cardRoot.verifyDomain() }]
+                            ? [{ id: "shown",      k: qsTr("shown"),      v: cardRoot.verifyShown() },
+                               { id: "re-derived", k: qsTr("re-derived"), v: String((cardRoot.card && cardRoot.card.txhash) || "") },
+                               { id: "domain",     k: qsTr("domain"),     v: cardRoot.verifyDomain() }]
                             : []
 
                         delegate: RowLayout {
@@ -487,6 +490,7 @@ Rectangle {
                             }
 
                             LogosText {
+                                objectName: "verifyVal_" + modelData.id
                                 Layout.fillWidth: true
                                 wrapMode: Text.WrapAnywhere
                                 text: modelData.v
@@ -504,6 +508,7 @@ Rectangle {
             // you, by class + where it came from + why it can be trusted. Neutral
             // ground (not the verify box's green) — this is lineage, not a verdict.
             Rectangle {
+                objectName: "provenanceBox"
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.spacing.tiny
                 visible: cardRoot.card && cardRoot.card.provenance
