@@ -476,6 +476,7 @@ proc musterCoordinateIntents(): string =
     # (e.g. 2 of 3), not "threshold of threshold".
     if drv of SafeDriver: o["n"] = %SafeDriver(drv).owners.len
     elif drv of ThresholdDriver: o["n"] = %ThresholdDriver(drv).roster.len
+    elif drv of FrostDriver: o["n"] = %FrostDriver(drv).roster.len
     else: o["n"] = %desc.threshold
     if drv of SafeDriver:
       # a Safe signature is bound to its EIP-712 domain (chainId + safe); surface it
