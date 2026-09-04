@@ -257,8 +257,9 @@ Rectangle {
             Layout.fillWidth: true
             spacing: Theme.spacing.tiny
 
-            // header: label · M of N
+            // header: label · M of N  (· round R of N for multi-round)
             LogosText {
+                objectName: "cardHeader"
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: {

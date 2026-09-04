@@ -214,6 +214,63 @@ test("muster_ui: an in-room proposal renders the re-derived verify box", async (
   await grab(app, "verify");
 });
 
+// FROST — the 2-round driver, usable in a room. Join a room, pick the FROST policy
+// (a founding capability), propose a payment, and assert the card renders as a
+// multi-round intent: its `rounds` property is 2 and the header names "round 1 of 2".
+// This proves FROST is selectable and its round chrome renders on-display; the
+// backend convergence (round 1 → round 2 → executable) is proven headless by
+// module/tests/frost_room_test.nim. Off-chain; no anvil.
+test("muster_ui: FROST is selectable and renders a 2-round proposal card", async (app) => {
+  await openMuster(app);
+  await navTo(app, "roomToggle");
+  await setField(app, "roomTopicField", "muster.frost.demo");
+  await clickButton(app, "joinRoomButton");
+  await app.waitFor(
+    async () => {
+      if ((await propertyOf(app, "roomMembersLabel", "visible")) !== true)
+        throw new Error("room not joined");
+    },
+    { timeout: 20000, interval: 500, description: "room joined" }
+  );
+
+  // Compose a payment under the FROST policy.
+  await clickButton(app, "roomProposeButton");
+  await clickButton(app, "roomKindPayment");
+  await clickButton(app, "roomPolicyFrost");
+  await setField(app, "roomProposeTo", "0x2222222222222222222222222222222222222222");
+  await setField(app, "roomProposeValue", "500");
+  await clickButton(app, "roomProposeSubmit");
+
+  // The card renders as a 2-round intent.
+  await app.waitFor(
+    async () => {
+      const r = await app.inspector.send("findByProperty", { property: "objectName", value: "musterCard" });
+      if (!(r.matches?.length > 0)) throw new Error("no FROST proposal card rendered");
+      // the card exposes its driver's round count
+      let seenRounds = false;
+      for (const m of r.matches) {
+        const rounds = (await app.inspector.send("evaluate", { objectId: m.id, expression: "rounds" })).result;
+        if (Number(rounds) === 2) seenRounds = true;
+      }
+      if (!seenRounds) throw new Error("no card reports rounds=2 (FROST not applied?)");
+    },
+    { timeout: 20000, interval: 500, description: "FROST 2-round card in the thread" }
+  );
+
+  // The header names the round being collected ("… · round 1 of 2 (0 of 2 this round)").
+  let header = "";
+  await app.waitFor(
+    async () => {
+      header = String((await propertyOf(app, "cardHeader", "text")) || "");
+      if (header.indexOf("round 1 of 2") < 0)
+        throw new Error(`card header missing the round chrome: "${header}"`);
+    },
+    { timeout: 15000, interval: 500, description: "round chrome in the header" }
+  );
+  console.log(`[muster] FROST OK — 2-round proposal card rendered — "${header}"`);
+  await grab(app, "frost");
+});
+
 // 3) PROPOSE — the module re-derives the safeTxHash from the effect and the
 //    re-materialization strip shows it. This is the first real F-4 check in the
 //    UI (not the prototype's simulated hashes). findByProperty is exact-match, so
