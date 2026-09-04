@@ -15,6 +15,7 @@ import ../src/dcbor/dcbor
 import ../src/drivers/driver
 import ../src/drivers/safe
 import ../src/drivers/threshold      # a second coordination policy (Ed25519 k-of-n)
+import ../src/drivers/frost          # 2-round FROST-style — the multi-round policy
 import ../src/drivers/registry
 import ../src/drivers/safe_rpc
 import ../src/crypto/secp256k1
@@ -79,18 +80,37 @@ var gCoordKind = "safe"
 proc seedOf(n: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = n)
 proc thrRosterKey(n: byte): Ed25519Pub = encFromSeed(seedOf(n)).identity().ed
 
+proc currentRoster(): seq[Ed25519Pub]   ## forward — defined once gSession + the keystore are
+proc myAddress(): Address                ## forward — this instance's secp account, defined below
+
 proc driverForKind(kind: string): Driver =
-  ## Build the driver for a policy kind (the demo threshold roster is a fixture, as
-  ## the Safe owners are). Unknown kinds fall back to the Safe.
-  ## "unanimous" is the driver a room can ADD by proposal (driver-as-proposal): the
-  ## same Ed25519 roster, but n-of-n — every member must endorse. It is not in the
-  ## founding set the compose pickers offer; a group grants itself unanimity by
-  ## approving an add-driver proposal (see roomDriverKinds / coordinate_drivers).
+  ## Build the driver for a policy kind. For the room-native drivers (threshold /
+  ## unanimous / frost) the roster is the room's ACTUAL members — their Ed25519
+  ## encryption identities, from the membership fold — so THIS instance's own identity
+  ## IS a signer and it endorses in-app (no pasted fixture). k is the configured
+  ## threshold capped at the roster size (a 1-member room needs 1); "unanimous" is
+  ## n-of-n. Safe stays the on-chain owner set (gDriver, its owners are not room
+  ## members). Unknown kinds fall back to the Safe.
+  let roster = currentRoster()
+  let n = max(1, roster.len)
   case kind
-  of "threshold":
-    newThresholdDriver(@[thrRosterKey(1), thrRosterKey(2), thrRosterKey(3)], 2)
-  of "unanimous":
-    newThresholdDriver(@[thrRosterKey(1), thrRosterKey(2), thrRosterKey(3)], 3)
+  of "threshold": newThresholdDriver(roster, min(2, n))
+  of "unanimous": newThresholdDriver(roster, n)
+  of "frost":     newFrostDriver(roster, min(2, n))
+  of "safe":
+    # The room's Safe recognizes THIS instance's account as an owner too, so you
+    # approve a Safe intent IN-APP (no paste for YOUR own signature) — completing the
+    # in-app-signing pattern the room-native drivers already have. The configured
+    # owners remain for the Safe's other owners. The safeTxHash does NOT commit to the
+    # owner set, so re-derivation (F-4) and the materialization are unchanged; only
+    # WHO the fold recognizes grows. (On-chain settlement still needs the folded
+    # signers to be REAL on-chain owners — that is the anvil-seeded remainder, exo-001;
+    # in-app APPROVAL to executable is what this enables.)
+    var owners = gDriver.owners
+    let mine = myAddress()
+    if mine notin owners: owners.add mine
+    newSafeDriver(chainId = gDriver.chainId, safe = gDriver.safe,
+                  owners = owners, threshold = gDriver.threshold)
   else: gDriver
 
 let driverFor: DriverFor = proc(kind: string): Driver = driverForKind(kind)
@@ -169,6 +189,10 @@ proc moduleKeystore(): Keystore =
     gKeystore = openFileKeystore(dir / "identity.mks", pass)
     loadSettingsFile()      # infra settings live beside the identity — load them once
   gKeystore
+
+proc myAddress(): Address = moduleKeystore().address()
+  ## This instance's own secp account — its public authorization identity, and (once
+  ## added to a room Safe's owner set) the owner it signs Safe intents in-app as.
 
 proc musterIdentity(): string =
   ## The module's persistent coordination identity (FS-4, two-identity model,
@@ -330,6 +354,16 @@ proc musterSubmit(intentId: string): string =
 var gSessions = initTable[string, CoordinationSession]()
 var gSession: CoordinationSession = nil
 var gTopic = ""
+
+proc currentRoster(): seq[Ed25519Pub] =
+  ## The room-native signer set: every current member's Ed25519 key (from the
+  ## membership fold), including this instance. Falls back to just our own identity
+  ## when no room is joined yet, so a driver is always well-formed. (forward-declared
+  ## above driverForKind, which reads it.)
+  if gSession != nil:
+    for m in gSession.members(): result.add m.ed
+  if result.len == 0:
+    result.add moduleKeystore().encIdentity().ed
 var gMsgSeq: uint64 = 0     ## per-instance monotonic nonce, disambiguates identical posts
 
 proc toContentTopic(t: string): string =
@@ -423,17 +457,38 @@ proc musterCoordinatePropose(effectJson: string): string =
   id
 
 proc musterCoordinateContribute(intentId: string, signatureHex: string): string =
+  ## Add a contribution to a proposed intent. If `signatureHex` is EMPTY, sign in-app
+  ## with THIS instance's own keystore identity — no paste: the room-native drivers
+  ## (threshold/frost) endorse with the Ed25519 encryption key (which is in the room's
+  ## roster, so it counts), Safe signs the safeTxHash with the secp key (counts only if
+  ## our address is a Safe owner). The secret never leaves the keystore.
   if gSession == nil: return "not-joined"
   gSession.poll()
   let events = gSession.log.allEvents()
   let drv = driverForKind(intentPolicyOf(events, intentId))   # THIS intent's own policy
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return "unknown-intent"
+  var sig = signatureHex
+  if sig.len == 0:
+    let mat = canonicalize(drv, effectFromJson(effectJson))
+    let ks = moduleKeystore()
+    if drv of SafeDriver:
+      var h: array[32, byte]
+      for i in 0 ..< min(32, mat.bytes.len): h[i] = mat.bytes[i]
+      sig = toHex(ks.sign(h))                 # secp Signature65 over the safeTxHash
+    else:
+      sig = toHex(ks.edSign(mat.bytes))       # Ed25519 endorsement over the materialization
   # The intent's policy verifies the contribution: a Safe owner's secp signature, or a
-  # threshold roster member's Ed25519 endorsement — "" iff it isn't a valid one.
-  let who = contributorOf(drv, effectJson, signatureHex)
+  # roster member's Ed25519 endorsement — "" iff it isn't a valid one (e.g. our own
+  # identity is not a signer for this intent's policy).
+  let who = contributorOf(drv, effectJson, sig)
   if who.len == 0: return "rejected"
-  gSession.publish(contributeEvent(intentId, who, signatureHex))
+  # Tag the contribution with the round this intent is currently collecting, so a
+  # multi-round driver (FROST) can have the same member contribute once per round and
+  # the fold dedups per (contributor, round). Single-round drivers stay at round 1.
+  let folded = reduceIntents(events, driverFor)
+  let curRound = (if intentId in folded: folded[intentId].collection.round else: 1)
+  gSession.publish(contributeEvent(intentId, who, sig, round = curRound))
   intentState(gSession.log.allEvents(), driverFor, intentId)
 
 proc musterCoordinateIntents(): string =
@@ -457,11 +512,16 @@ proc musterCoordinateIntents(): string =
     var o = %*{"id": v.id, "state": v.state,
                "threshold": desc.threshold, "approvals": v.approvals,
                "policy": v.policy, "domain": desc.serializationDomain,
-               "txhash": v.txhash}
+               "txhash": v.txhash,
+               # multi-round (FROST): the round being collected, the total, and the
+               # distinct approvals THIS round — so a card shows "round R of N, M of k
+               # this round". For single-round drivers rounds == 1 and the UI ignores it.
+               "round": v.round, "rounds": v.rounds, "roundApprovals": v.roundApprovals}
     # n = how many could sign (owners / roster), so the card reads "M of N" honestly
     # (e.g. 2 of 3), not "threshold of threshold".
     if drv of SafeDriver: o["n"] = %SafeDriver(drv).owners.len
     elif drv of ThresholdDriver: o["n"] = %ThresholdDriver(drv).roster.len
+    elif drv of FrostDriver: o["n"] = %FrostDriver(drv).roster.len
     else: o["n"] = %desc.threshold
     if drv of SafeDriver:
       # a Safe signature is bound to its EIP-712 domain (chainId + safe); surface it

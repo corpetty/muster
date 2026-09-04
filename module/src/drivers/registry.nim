@@ -11,6 +11,7 @@ import std/[json, strutils]
 import ./driver
 import ./safe
 import ./threshold
+import ./frost
 import ../crypto/secp256k1    # Address
 import ../crypto/curve25519   # Ed25519Pub (the threshold roster)
 
@@ -52,5 +53,20 @@ proc newDriver*(kind: string, config: JsonNode): Driver =
           except CatchableError: discard
         roster.add pk
     newThresholdDriver(roster, config{"k"}.getInt(2))
+  of "frost":
+    # 2-round Schnorr-threshold structure over an Ed25519 roster. Same roster/k
+    # config shape as "threshold"; the difference is describe().rounds = 2, so the
+    # core runs two collection passes. See frost.nim for the scaffold boundary.
+    var roster: seq[Ed25519Pub]
+    if config.hasKey("roster") and config["roster"].kind == JArray:
+      for pkHex in config["roster"]:
+        var h = pkHex.getStr()
+        if h.len >= 2 and h[0] == '0' and (h[1] == 'x' or h[1] == 'X'): h = h[2 .. ^1]
+        var pk: Ed25519Pub
+        for i in 0 ..< min(32, h.len div 2):
+          try: pk[i] = byte(parseHexInt(h[2*i .. 2*i+1]))
+          except CatchableError: discard
+        roster.add pk
+    newFrostDriver(roster, config{"k"}.getInt(2))
   else:
     raise newException(RegistryError, "unknown driver kind: " & kind)
