@@ -27,15 +27,18 @@
 ##      conformance suite's convergence check reuses one contribution across both
 ##      rounds, so round-agnostic acceptance is also what lets this pass conformance
 ##      — a real per-round-tagged FROST would need that check generalized.)
-##   2. To run END TO END IN A ROOM it needs a round-aware contribution dedup:
-##      `reduceIntents` today dedups one contribution per member per intent
-##      (`<id>/<contributor>`), which stalls any per-round protocol at round 2 (every
-##      member is spent after round 1). See the follow-up pebble. The core
-##      `Collection` path (and therefore `checkConformance`) is unaffected and green.
+##   2. Real per-round content. Round 1 (commitment) and round 2 (share) carry the
+##      same authenticated bytes here; a production FROST would send distinct
+##      round-tagged content and verify it per round.
 ##
-## Production FROST would slot in behind this same interface by (1) carrying real
-## commitment/share bytes and round-tagging them, and (2) landing the round-aware
-## dedup. The seam does not change.
+## Room usability (was a scaffold gap, now LANDED — exo-cbf): running a rounds > 1
+## driver in a room needed round-aware contribution dedup. `reduceIntents` now keys
+## contributions by (contributor, ROUND) and folds them in round order, so FROST
+## converges end to end through the room fold (frost_room_test), it is a selectable
+## room policy, and the card shows "round R of N". Single-round drivers pass round 1,
+## so Safe/threshold are unchanged. Production FROST slots in behind this same
+## interface by carrying real round-tagged commitment/share bytes — the seam does not
+## change.
 
 import ../crypto/curve25519
 import ../intents/materialization
