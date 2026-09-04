@@ -15,6 +15,7 @@ import ../src/dcbor/dcbor
 import ../src/drivers/driver
 import ../src/drivers/safe
 import ../src/drivers/threshold      # a second coordination policy (Ed25519 k-of-n)
+import ../src/drivers/frost          # 2-round FROST-style — the multi-round policy
 import ../src/drivers/registry
 import ../src/drivers/safe_rpc
 import ../src/crypto/secp256k1
@@ -91,6 +92,10 @@ proc driverForKind(kind: string): Driver =
     newThresholdDriver(@[thrRosterKey(1), thrRosterKey(2), thrRosterKey(3)], 2)
   of "unanimous":
     newThresholdDriver(@[thrRosterKey(1), thrRosterKey(2), thrRosterKey(3)], 3)
+  of "frost":
+    # 2-round Schnorr-threshold structure over the same demo roster, k=2 per round —
+    # the driver that exercises rounds > 1 end to end in a room (describe().rounds = 2).
+    newFrostDriver(@[thrRosterKey(1), thrRosterKey(2), thrRosterKey(3)], 2)
   else: gDriver
 
 let driverFor: DriverFor = proc(kind: string): Driver = driverForKind(kind)
@@ -433,7 +438,12 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string): string 
   # threshold roster member's Ed25519 endorsement — "" iff it isn't a valid one.
   let who = contributorOf(drv, effectJson, signatureHex)
   if who.len == 0: return "rejected"
-  gSession.publish(contributeEvent(intentId, who, signatureHex))
+  # Tag the contribution with the round this intent is currently collecting, so a
+  # multi-round driver (FROST) can have the same member contribute once per round and
+  # the fold dedups per (contributor, round). Single-round drivers stay at round 1.
+  let folded = reduceIntents(events, driverFor)
+  let curRound = (if intentId in folded: folded[intentId].collection.round else: 1)
+  gSession.publish(contributeEvent(intentId, who, signatureHex, round = curRound))
   intentState(gSession.log.allEvents(), driverFor, intentId)
 
 proc musterCoordinateIntents(): string =
@@ -457,7 +467,11 @@ proc musterCoordinateIntents(): string =
     var o = %*{"id": v.id, "state": v.state,
                "threshold": desc.threshold, "approvals": v.approvals,
                "policy": v.policy, "domain": desc.serializationDomain,
-               "txhash": v.txhash}
+               "txhash": v.txhash,
+               # multi-round (FROST): the round being collected, the total, and the
+               # distinct approvals THIS round — so a card shows "round R of N, M of k
+               # this round". For single-round drivers rounds == 1 and the UI ignores it.
+               "round": v.round, "rounds": v.rounds, "roundApprovals": v.roundApprovals}
     # n = how many could sign (owners / roster), so the card reads "M of N" honestly
     # (e.g. 2 of 3), not "threshold of threshold".
     if drv of SafeDriver: o["n"] = %SafeDriver(drv).owners.len

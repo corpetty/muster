@@ -589,6 +589,18 @@ Item {
                         onClicked: if (room.backend) room.backend.setPolicy("threshold")
                     }
 
+                    // FROST — a 2-round Schnorr-threshold policy (the only driver with
+                    // rounds > 1). In the founding set, so it's directly selectable; the
+                    // card shows "round R of 2" as it collects.
+                    LogosButton {
+                        objectName: "roomPolicyFrost"
+                        Layout.preferredWidth: 90
+                        text: qsTr("FROST")
+                        variant: room.policyKind === "frost"
+                                 ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                        onClicked: if (room.backend) room.backend.setPolicy("frost")
+                    }
+
                     // Driver-as-proposal (invariant 6): "unanimous" (n-of-n) is NOT in
                     // the founding set. If the room has admitted it (an approved
                     // add-driver proposal), it's a selectable policy; otherwise this

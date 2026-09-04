@@ -103,11 +103,21 @@ Rectangle {
     readonly property int signerCount: cardRoot.card
         ? Number(cardRoot.card.n || cardRoot.card.threshold || 0) : 0
     readonly property int approvals: cardRoot.card ? Number(cardRoot.card.approvals || 0) : 0
+    // Multi-round (FROST): how many rounds the driver runs, which round is collecting,
+    // and the distinct approvals THIS round. rounds == 1 for single-round drivers, and
+    // the round chrome then stays hidden.
+    readonly property int rounds: cardRoot.card ? Number(cardRoot.card.rounds || 1) : 1
+    readonly property int roundNo: cardRoot.card ? Number(cardRoot.card.round || 1) : 1
+    readonly property int roundApprovals: cardRoot.card ? Number(cardRoot.card.roundApprovals || 0) : 0
     readonly property bool paid: cardRoot.state === "paid"
-    // "Ready" means enough approvals have landed to pay — by declared state, or
-    // by the count reaching the threshold. Either is enough to stop asking.
-    readonly property bool ready: cardRoot.state === "ready" || cardRoot.paid
-        || (cardRoot.threshold > 0 && cardRoot.approvals >= cardRoot.threshold)
+    // "Ready" means the intent has collected enough to act — by the authoritative
+    // folded state (executable/ready), or, for a SINGLE-round driver only, by the
+    // approval count reaching the threshold. A multi-round driver must NOT use the
+    // count heuristic: distinct approvals accrue across rounds, so it would read
+    // ready after round 1; only the folded state (executable) is authoritative there.
+    readonly property bool ready: cardRoot.state === "ready" || cardRoot.state === "executable"
+        || cardRoot.paid
+        || (cardRoot.rounds <= 1 && cardRoot.threshold > 0 && cardRoot.approvals >= cardRoot.threshold)
 
     visible: cardRoot.known
     Layout.fillWidth: true
@@ -254,10 +264,19 @@ Rectangle {
                 text: {
                     var label = cardRoot.card && cardRoot.card.label
                         ? String(cardRoot.card.label) : qsTr("Proposal");
-                    return cardRoot.threshold > 0
+                    var head = cardRoot.threshold > 0
                         ? label + "  ·  " + qsTr("%1 of %2").arg(cardRoot.threshold)
                                                             .arg(cardRoot.signerCount)
                         : label;
+                    // FROST-style multi-round: name the round being collected and the
+                    // distinct approvals in it — the honest "M of k this round".
+                    if (cardRoot.rounds > 1 && !cardRoot.ready)
+                        head += "  ·  " + qsTr("round %1 of %2 (%3 of %4 this round)")
+                                    .arg(cardRoot.roundNo).arg(cardRoot.rounds)
+                                    .arg(cardRoot.roundApprovals).arg(cardRoot.threshold);
+                    else if (cardRoot.rounds > 1)
+                        head += "  ·  " + qsTr("%1 rounds complete").arg(cardRoot.rounds);
+                    return head;
                 }
                 color: Theme.palette.text
                 font.family: Theme.typography.publicSans
