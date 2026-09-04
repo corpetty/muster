@@ -129,7 +129,12 @@ Item {
             safe: (it && it.safe) ? String(it.safe) : "",
             environment: (it && it.environment) ? String(it.environment) : "",
             // the provenance lineage: how this decision's data got here (inv 10)
-            provenance: (it && it.provenance) ? it.provenance : []
+            provenance: (it && it.provenance) ? it.provenance : [],
+            // multi-round (FROST): the round chrome the card header renders
+            rounds: Number((it && it.rounds) || 1),
+            round: Number((it && it.round) || 1),
+            roundApprovals: Number((it && it.roundApprovals) || 0),
+            policy: (it && it.policy) ? String(it.policy) : ""
         };
     }
 
