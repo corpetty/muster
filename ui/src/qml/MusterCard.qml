@@ -76,8 +76,6 @@ Rectangle {
     // Actions belong to the reader, and the thread decides what each does. The
     // card only says which button was pressed.
     signal approve()
-    signal pay()
-    signal drop()
     signal shareAddress()
 
     readonly property string kind: cardRoot.card ? String(cardRoot.card.kind || "") : ""
@@ -734,8 +732,12 @@ Rectangle {
             onClicked: cardRoot.shareAddress()
         }
 
-        // intent-propose: approve while it still needs you; pay only if it is
-        // ready and yours to pay; drop while it is yours and unpaid.
+        // intent-propose: approve while it still needs you. Settling a ready
+        // Safe intent is the room's "Settle on-chain" affordance (Room.qml's
+        // ready box), driven by the verified fold — not a card button. The old
+        // "Pay it"/"Drop it" buttons had no wired path (no coordinate_drop, and
+        // paying flows through propose→approve→settle), so they only ever fired
+        // signals nothing listened to; removed rather than leave dead controls.
         LogosButton {
             objectName: "cardApprove"
             visible: cardRoot.kind === "intent-propose"
@@ -744,26 +746,6 @@ Rectangle {
             Layout.fillWidth: true
             text: qsTr("Approve")
             onClicked: cardRoot.approve()
-        }
-
-        LogosButton {
-            objectName: "cardPay"
-            visible: cardRoot.kind === "intent-propose"
-                && cardRoot.ready && !cardRoot.paid
-                && cardRoot.card && cardRoot.card.proposedByMe
-            Layout.fillWidth: true
-            text: qsTr("Pay it")
-            onClicked: cardRoot.pay()
-        }
-
-        LogosButton {
-            objectName: "cardDrop"
-            visible: cardRoot.kind === "intent-propose"
-                && !cardRoot.paid
-                && cardRoot.card && cardRoot.card.proposedByMe
-            Layout.fillWidth: true
-            text: qsTr("Drop it")
-            onClicked: cardRoot.drop()
         }
     }
 }
