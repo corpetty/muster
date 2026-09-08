@@ -640,12 +640,17 @@ proc musterCoordinateSubmit(intentId: string): string =
     return $(%*{"id": intentId, "error": "rpc-unreachable", "detail": e.msg})
   # Fold the room forward: submit event → every member converges on "submitted".
   gSession.publish(submitEvent(intentId))
-  # Observe finality from the chain (never asserted).
+  # Observe finality from the chain (never asserted). Bounded poll (~4s) so a slow or
+  # unreachable node reports "pending" rather than freezing the UI; anvil auto-mines,
+  # so a healthy receipt returns on the first tick.
   var status = -1
-  for _ in 0 .. 50:
+  for _ in 0 .. 20:
     status = watchReceiptStatus(gRpcUrl, txHash)
     if status >= 0: break
     sleep(200)
+  # On a real on-chain success, fold the intent to `final` so every member's card
+  # advances to "paid" — not just the submitted state the submit event set.
+  if status == 1: gSession.publish(finalEvent(intentId))
   let onchain = (if status == 1: "final" elif status == 0: "failed" else: "pending")
   $(%*{"id": intentId,
        "state": intentState(gSession.log.allEvents(), driverFor, intentId),
