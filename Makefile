@@ -26,7 +26,17 @@ CACHE := --accept-flake-config \
 FLEET     ?= logos.test
 FLEET_CFG := infra/fleets/$(FLEET).json
 
-.PHONY: help run run-fleet build build-lgx appimage clean
+# dev/demo owner seeding (exo-001). These are the *well-known* anvil dev keys —
+# never real funds. Seeding a peer with an anvil Safe owner key makes its in-app
+# approval recover to a real on-chain owner, so a 2-of-3 Safe intent settles on
+# chain from in-app Approve. run-fleet auto-maps alice→owner0, bob→owner1; any
+# other PEER is unseeded (random identity) unless you pass SEED=0x…. Honoured only
+# when minting a fresh identity — `make clean-peer PEER=<x>` first to re-seed.
+ANVIL_KEY0 := 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+ANVIL_KEY1 := 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
+SEED      ?=
+
+.PHONY: help run run-fleet build build-lgx appimage clean clean-peer
 
 help:
 	@echo "make run                 launch the standalone muster app (dashboard + walkthrough)"
@@ -35,10 +45,12 @@ help:
 	@echo "make build-lgx           build muster-ui.lgx (to load into logos-basecamp instead)"
 	@echo "make appimage            build the download-and-run AppImage (see RELEASING.md)"
 	@echo "make clean               remove local run state (.run/)"
+	@echo "make clean-peer PEER=x   wipe one peer's identity+wallet (to re-seed owner keys)"
 	@echo ""
 	@echo "First time: 'make build' (minutes), then 'make run'."
 	@echo "Two-instance over the fleet: 'make run-fleet PEER=alice' and 'make run-fleet PEER=bob'"
 	@echo "  in two terminals (FLEET=logos.test|logos.dev; refresh with infra/fleets/refresh.sh)."
+	@echo "  alice/bob auto-seed as anvil Safe owners 0/1 so in-app Approve can settle on-chain."
 	@echo "Basecamp option: ui/tests/README.md."
 
 # Pre-build the runner so the first 'make run' doesn't stall building it while a
@@ -67,7 +79,14 @@ run-fleet:
 	@mkdir -p $(CURDIR)/.run/$(PEER)
 	@test -f $(FLEET_CFG) || { echo "missing $(FLEET_CFG) — run infra/fleets/refresh.sh"; exit 1; }
 	@echo "launching muster peer '$(PEER)' on fleet '$(FLEET)' (user-dir .run/$(PEER))"
+	SEED_VAL="$(SEED)"; \
+	if [ -z "$$SEED_VAL" ]; then case "$(PEER)" in \
+	  alice) SEED_VAL=$(ANVIL_KEY0) ;; \
+	  bob)   SEED_VAL=$(ANVIL_KEY1) ;; \
+	esac; fi; \
+	[ -n "$$SEED_VAL" ] && echo "  seeding '$(PEER)' as an anvil Safe owner (in-app Approve can settle on-chain)"; \
 	cd $(UI) && MUSTER_DELIVERY_CONFIG="$$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))["delivery_createNode_config"]))' $(CURDIR)/$(FLEET_CFG))" \
+	  MUSTER_DEV_SECP_KEY="$$SEED_VAL" \
 	  nix run 'path:.' $(CACHE) -- --user-dir $(CURDIR)/.run/$(PEER)
 
 build-lgx:
@@ -83,3 +102,10 @@ appimage:
 clean:
 	rm -rf $(CURDIR)/.run
 	@echo "removed .run/ — next launch mints a fresh identity and wallet"
+
+# Wipe ONE peer's identity + wallet so the next launch mints (and re-seeds) it.
+# Needed to re-seed owner keys, since seeding is honoured only on a fresh identity.
+clean-peer:
+	@test -n "$(PEER)" || { echo "usage: make clean-peer PEER=<name>"; exit 1; }
+	rm -rf $(CURDIR)/.run/$(PEER)
+	@echo "removed .run/$(PEER) — next launch mints a fresh identity (re-seeds if PEER is alice/bob)"
