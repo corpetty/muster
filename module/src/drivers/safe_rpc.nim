@@ -67,3 +67,24 @@ proc watchReceiptStatus*(url, txHash: string): int =
 
 proc getBalance*(url: string, a: Address): string =
   rpc(url, "eth_getBalance", %*[toHex0x(a), "latest"]).getStr()
+
+proc probeRpc*(url: string): tuple[ok: bool, chainId: int, detail: string] =
+  ## A cheap liveness probe of the user's RPC endpoint (invariant 8: untrusted,
+  ## user-chosen infra, so its reachability must be *visible*, never assumed).
+  ## eth_chainId with a short timeout — reachable + the chain it reports, or the
+  ## error. Never raises: a failed probe is a real answer (down), not an exception.
+  try:
+    let client = newHttpClient(timeout = 1500)
+    defer: client.close()
+    let body = %*{"jsonrpc": "2.0", "id": 1, "method": "eth_chainId", "params": []}
+    let resp = client.request(url, httpMethod = HttpPost, body = $body,
+                              headers = newHttpHeaders({"Content-Type": "application/json"}))
+    let j = parseJson(resp.body)
+    if j.kind == JObject and j.hasKey("result"):
+      let cid = parseHexInt(j["result"].getStr("0x0"))
+      return (true, cid, "chain " & $cid)
+    if j.kind == JObject and j.hasKey("error"):
+      return (false, -1, j["error"]{"message"}.getStr("rpc error"))
+    return (false, -1, "no result")
+  except CatchableError as e:
+    return (false, -1, e.msg)

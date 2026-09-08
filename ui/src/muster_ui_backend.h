@@ -50,6 +50,7 @@ public:
     void loadActivity() override;
     void submitInRoom(const QString &intentId) override;
     void loadDrivers() override;
+    void loadConnectivity() override;
     void setPolicy(const QString &kind) override;
     void loadPolicy() override;
 
