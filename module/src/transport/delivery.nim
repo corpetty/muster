@@ -294,6 +294,13 @@ method poll*(t: DeliveryTransport) =
       for h in t.handlers[topic]:
         if h != nil: h(msg)
 
+method nodeInfo*(t: DeliveryTransport): string {.gcsafe.} =
+  ## The delivery node's own view of itself (getNodeInfo) — proof the embedded lp
+  ## node actually booted, for the connectivity indicator. "{}" if the call fails
+  ## (node not up / unreachable), so a down node reads as down, never a false green.
+  try: $t.invoke("getNodeInfo", "[]")
+  except CatchableError: "{}"
+
 proc close*(t: DeliveryTransport) =
   ## Release the subscription + client and drop the GC anchor.
   if t.sub != nil: (lp_unsubscribe(t.sub); t.sub = nil)

@@ -178,6 +178,7 @@ void MusterUiBackend::joinRoom(const QString &topic)
     loadMessages();
     loadMembers();
     loadIntents();
+    loadConnectivity();    // probe RPC + the freshly-booted delivery node
     loadConversations();   // the room list — this join may have added a room
     loadDrivers();         // the room's admitted policy set (driver-as-proposal)
     loadPending();         // anyone already asking to join this topic
@@ -335,6 +336,14 @@ void MusterUiBackend::loadDrivers()
     // Folded from the shared log: the founding set plus any kind an approved
     // add-driver proposal admitted. The policy pickers offer only these.
     setDriversJson(modules().muster_module.coordinate_drivers());
+}
+
+void MusterUiBackend::loadConnectivity()
+{
+    // connectivity → liveness of the RPC endpoint + delivery node the room relies on
+    // (invariant 8). The RPC probe blocks briefly, so the view calls this on a slower
+    // cadence than the 1s message tick.
+    setConnectivityJson(modules().muster_module.connectivity());
 }
 
 void MusterUiBackend::setPolicy(const QString &kind)

@@ -598,6 +598,42 @@ proc musterCoordinateActivity(): string =
                "account": a.account, "title": a.title, "detail": a.detail}
   $arr
 
+proc musterConnectivity(): string =
+  ## Liveness of the infrastructure the room relies on (invariant 8: store nodes and
+  ## RPC are untrusted, user-chosen infra — so their reachability must be *visible*,
+  ## never assumed). The RPC endpoint the wallet/Safe path reads, and the delivery
+  ## node the room rides. Probed live; never a false green. Levels: "ok" (up and the
+  ## expected chain / node running), "warn" (reachable but not what we expect), "down"
+  ## (unreachable / no node). Returns {rpc:{name,level,endpoint,detail},
+  ## delivery:{name,level,detail}}.
+  let (rpcOk, rpcChain, rpcDetail) = probeRpc(gRpcUrl)
+  let rpcLevel = if not rpcOk: "down"
+                 elif rpcChain == gDriver.chainId.int: "ok"
+                 else: "warn"
+  let rpc = %*{"name": "RPC", "level": rpcLevel, "endpoint": gRpcUrl,
+               "detail": (if rpcOk and rpcChain != gDriver.chainId.int:
+                            rpcDetail & " (the Safe expects chain " & $gDriver.chainId.int & ")"
+                          else: rpcDetail)}
+  var delLevel = "down"
+  var delDetail = "no node — join a room to start it"
+  if gSession != nil:
+    let ni = gSession.nodeInfo()
+    if ni.len > 2:                       # something past an empty "{}"
+      delLevel = "ok"; delDetail = "node running"
+      try:
+        let j = parseJson(ni)
+        if j.kind == JObject:
+          for k in ["connectedPeers", "peers", "numConnected"]:
+            if j.hasKey(k) and j[k].kind == JArray:
+              delDetail = $j[k].len & " peers"; break
+            elif j.hasKey(k) and j[k].kind == JInt:
+              delDetail = $j[k].getInt() & " peers"; break
+      except CatchableError: discard
+    else:
+      delLevel = "warn"; delDetail = "joined; node info unavailable"
+  let delivery = %*{"name": "Delivery", "level": delLevel, "detail": delDetail}
+  $(%*{"rpc": rpc, "delivery": delivery})
+
 proc musterCoordinateSubmit(intentId: string): string =
   ## Settle a room intent on-chain FROM the room (the room-side counterpart to
   ## submit()). The coordinated owner signatures come from the shared LOG, not local

@@ -101,6 +101,11 @@ class MusterUi
     // Lands on driversJson; the policy pickers offer only these.
     SLOT(void loadDrivers())
 
+    // Liveness of the infrastructure the room relies on (connectivity): probes the
+    // RPC endpoint and the delivery node, landing {rpc, delivery} on connectivityJson.
+    // Refreshed on a slower cadence than the message tick (the RPC probe blocks).
+    SLOT(void loadConnectivity())
+
     PROP(QString health="unknown" READONLY)
 
     // The user-configurable settings + identity, as JSON {rpc, delivery, environment,
@@ -138,6 +143,11 @@ class MusterUi
     // {seq, kind, intentId, account, title, detail} in causal order. The room
     // renders it as a live "how we got here" feed.
     PROP(QString activityJson="[]" READONLY)
+
+    // Liveness of the room's infrastructure (connectivity), as JSON
+    // {rpc:{name,level,endpoint,detail}, delivery:{name,level,detail}}. level is
+    // ok/warn/down; the room renders each as a status indicator (invariant 8).
+    PROP(QString connectivityJson="{}" READONLY)
 
     // The outcome of the last room-side submit (coordinate_submit): JSON
     // {state, onchain, txHash} on success, or {error, ...}. The room shows it on the

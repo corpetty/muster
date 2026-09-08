@@ -63,6 +63,14 @@ Item {
         try { return JSON.parse(backend ? backend.activityJson : "[]"); }
         catch (e) { return []; }
     }
+    // Liveness of the infrastructure the room relies on (connectivity):
+    // {rpc:{name,level,endpoint,detail}, delivery:{name,level,detail}}. Invariant 8
+    // — the store nodes and RPC are untrusted, user-chosen infra, so their status
+    // is shown, never assumed.
+    readonly property var connectivity: {
+        try { return JSON.parse(backend ? backend.connectivityJson : "{}"); }
+        catch (e) { return ({}); }
+    }
     // The outcome of the last room-side submit (coordinate_submit): {id, state,
     // onchain, txHash} or {id, error, ...}. Matched to a card by its intent id.
     readonly property var roomSubmit: {
@@ -809,6 +817,18 @@ Item {
             Layout.fillHeight: true
             spacing: Theme.spacing.large
 
+            // What the room depends on, and whether it's actually there (invariant 8).
+            ConnectionIndicators {
+                Layout.fillWidth: true
+                status: room.connectivity
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+                color: Theme.palette.borderSubtle
+            }
+
             // History first — paramount to the education mission: a member sees the
             // decisions that led to the current state, and each update as it lands.
             ActivityFeed {
@@ -855,5 +875,15 @@ Item {
             room.backend.loadMessages();
             room.backend.loadIntents();
         }
+    }
+
+    // Connectivity on a slower cadence than the message tick: the RPC probe makes a
+    // blocking eth_chainId call (short timeout), so probing it every second would
+    // stutter the room. Every 5s is plenty to keep the indicators honest.
+    Timer {
+        interval: 5000
+        running: room.joined
+        repeat: true
+        onTriggered: if (room.backend) room.backend.loadConnectivity();
     }
 }

@@ -59,6 +59,13 @@ method poll*(t: Transport) {.base, gcsafe.} =
   ## dispatches them here, on the caller's (the module's own) thread.
   discard
 
+method nodeInfo*(t: Transport): string {.base, gcsafe.} =
+  ## A JSON blob describing the transport's own node — for the connectivity
+  ## indicators (invariant 8). "{}" when there is nothing to report (the in-process
+  ## LocalTransport is always "up" and has no node); the delivery-backed transport
+  ## overrides this with its node's live view of itself. Never on a signing path.
+  "{}"
+
 # ── content address ───────────────────────────────────────────────────────────
 
 proc messageHashOf*(contentTopic: string, payload: seq[byte]): string =

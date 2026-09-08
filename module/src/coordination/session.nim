@@ -100,6 +100,10 @@ proc members*(s: CoordinationSession): seq[Member] = s.crypto.members()
   ## The ADMITTED roster of the current epoch (recipients of the epoch key) —
   ## distinct from `pendingBindings` (join-requests not yet admitted).
 
+proc nodeInfo*(s: CoordinationSession): string = s.transport.nodeInfo()
+  ## The transport node's live view of itself (delivery: getNodeInfo) — for the
+  ## connectivity indicators. "{}" for the in-process transport / a down node.
+
 proc selfIdentity*(s: CoordinationSession): Member = s.crypto.identity()
   ## Our own member key, so the roster can flag which entry is us.
 
