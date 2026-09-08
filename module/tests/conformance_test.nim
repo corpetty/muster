@@ -10,6 +10,7 @@ import ../src/intents/materialization
 import ../src/drivers/driver
 import ../src/drivers/safe
 import ../src/drivers/threshold
+import ../src/drivers/frost
 import ../src/drivers/registry
 import ../src/drivers/conformance
 import ../src/crypto/secp256k1
@@ -87,5 +88,39 @@ block:
   let r = checkConformance(drv, e, t, Contribution(bytes: cb))
   doAssert r.allPass(), "threshold driver must conform: failed " & $r.failed()
   echo "4. threshold driver conforms (", r.checks.len, " checks) OK — a driver unlike Safe"
+
+# ── 5. a 2-round FROST-style driver conforms — the first driver with rounds > 1 ──
+# Same Ed25519-roster shape as the threshold driver, but describe().rounds = 2, so
+# the conformance convergence check drives the core through TWO collection passes
+# (it submits the sample k*rounds times). This is the multi-round core path that no
+# real driver exercised before.
+block:
+  proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
+  let member = encFromSeed(seed(7))
+  let drv = newFrostDriver(@[member.identity().ed], k = 1)
+  doAssert drv.describe().rounds == 2, "the FROST driver must declare two rounds"
+  let e = Effect(schemaId: "muster.effect.transfer.v1",
+                 fields: @[("to", cbText("0xdef")), ("value", cbUint(7'u64))])
+  let t = Effect(schemaId: "muster.effect.transfer.v1",
+                 fields: @[("to", cbText("0xdef")), ("value", cbUint(8'u64))])
+  let sig = edSign(member, canonicalize(drv, e).bytes)   # a roster member's per-round contribution
+  var cb: seq[byte]
+  for b in sig: cb.add b
+  let r = checkConformance(drv, e, t, Contribution(bytes: cb))
+  doAssert r.allPass(), "FROST driver must conform: failed " & $r.failed()
+  echo "5. FROST driver conforms (", r.checks.len, " checks) OK — the first rounds>1 driver"
+
+# ── 6. the registry builds the FROST driver by kind ───────────────────────────
+block:
+  proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
+  let member = encFromSeed(seed(9))
+  var rosterHex = "0x"
+  const hexd = "0123456789abcdef"
+  for b in member.identity().ed: (rosterHex.add hexd[int(b shr 4)]; rosterHex.add hexd[int(b and 0x0F)])
+  let frost = newDriver("frost", %*{"roster": [rosterHex], "k": 1})
+  doAssert frost.describe().serializationDomain == "muster.frost.v1",
+           "registry selected the FROST driver by kind"
+  doAssert frost.describe().rounds == 2, "registry FROST driver keeps its two rounds"
+  echo "6. registry builds the FROST driver by kind OK"
 
 echo "conformance_test: all OK"

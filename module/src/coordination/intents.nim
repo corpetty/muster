@@ -9,11 +9,13 @@
 ## `approve` does; here that verification is part of the pure fold.
 ##
 ## Events (key/value on the coordination log):
-##   propose : "intent/<id>/propose"            value = effect JSON {to,value,nonce}
-##   sign    : "intent/<id>/sig/<contributor>"  value = 65-byte owner signature hex
-##   submit  : "intent/<id>/submit"             value = "1"
-## A contribution is keyed by contributor, so a duplicate signature from the same
-## owner folds once (Safe dedups too).
+##   propose : "intent/<id>/propose"                   value = effect JSON {to,value,nonce}
+##   sign    : "intent/<id>/sig/<contributor>/<round>" value = signature hex
+##   submit  : "intent/<id>/submit"                    value = "1"
+## A contribution is keyed by contributor AND round, so a duplicate signature from the
+## same contributor in the same round folds once, while a multi-round driver (FROST)
+## can have the same member contribute in each round. Single-round drivers pass round
+## 1, so this is behaviour-preserving for Safe/threshold.
 
 import std/[json, tables, sets, strutils, algorithm]
 import ../log/log
@@ -114,8 +116,14 @@ proc proposeEvent*(intentId, effectJson: string): Event =
   Event(key: "intent/" & intentId & "/propose", value: effectJson)
 
 proc contributeEvent*(intentId, contributor, signatureHex: string,
-                      parents: seq[EventId] = @[]): Event =
-  Event(parents: parents, key: "intent/" & intentId & "/sig/" & contributor,
+                      round = 1, parents: seq[EventId] = @[]): Event =
+  ## `round` is the collection round this contribution belongs to. It is part of the
+  ## dedup key (one contribution per contributor PER ROUND), so a multi-round driver
+  ## (FROST, rounds > 1) can have the same member contribute in each round without the
+  ## fold collapsing them into one. Single-round drivers always pass round 1, so the
+  ## key is `…/sig/<contributor>/1` and behaviour is unchanged. The signed bytes are
+  ## the materialization, never this key, so this does not touch the signing path.
+  Event(parents: parents, key: "intent/" & intentId & "/sig/" & contributor & "/" & $round,
         value: signatureHex)
 
 proc submitEvent*(intentId: string, parents: seq[EventId] = @[]): Event =
@@ -203,16 +211,18 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
   var now: uint64 = 0
   let ordered = canonicalOrder(events)
 
-  proc opOf(e: Event): (string, string, string) =
+  proc opOf(e: Event): (string, string, string, string) =
     let p = e.key.split('/')
     if p.len >= 3 and p[0] == "intent":
-      (p[1], p[2], (if p.len >= 4: p[3] else: ""))
-    else: ("", "", "")
+      # id, op, who (p[3]), round (p[4] — "1" when absent, so single-round drivers
+      # and any pre-round-tag events dedup by contributor exactly as before).
+      (p[1], p[2], (if p.len >= 4: p[3] else: ""), (if p.len >= 5: p[4] else: "1"))
+    else: ("", "", "", "")
 
   proc driverOf(id: string): Driver = driverFor(intentPolicyOf(events, id))
 
   for e in ordered:                                    # pass 1 — proposes
-    let (id, op, _) = opOf(e)
+    let (id, op, _, _) = opOf(e)
     if op != "propose" or id.len == 0 or id in result: continue
     inc now
     let effect = effectFromJson(e.value)
@@ -223,22 +233,36 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
     it.apply(driver, IntentEvent(kind: iePropose, now: now))
     result[id] = it
 
-  for e in ordered:                                    # pass 2 — contributions
-    let (id, op, who) = opOf(e)
+  # pass 2 — contributions, processed in ROUND ORDER (then canonical order within a
+  # round). A driver's collection counts contributions positionally against the round
+  # it is currently in, so for a MULTI-round driver every round-1 contribution must be
+  # folded before any round-2 one — otherwise a member racing ahead could be counted
+  # into the wrong round. Sorting by round makes this hold regardless of how canonical
+  # order interleaves the events, and stays a pure function of the event SET (inv 4).
+  # Single-round drivers put everything in round 1, so this is a no-op for them.
+  var sigs: seq[tuple[id, who, value: string, round, ord: int]]
+  for i, e in ordered:
+    let (id, op, who, roundStr) = opOf(e)
     if op != "sig" or id notin result: continue
-    let dedup = id & "/" & who
+    var r = 1
+    try: r = parseInt(roundStr) except CatchableError: discard
+    sigs.add (id: id, who: who, value: e.value, round: r, ord: i)
+  sigs.sort(proc (a, b: auto): int =
+    (if a.round != b.round: cmp(a.round, b.round) else: cmp(a.ord, b.ord)))
+  for s in sigs:
+    let dedup = s.id & "/" & $s.round & "/" & s.who      # one contribution per (contributor, round)
     if dedup in seenSig: continue
     seenSig.incl dedup
     inc now
-    let driver = driverOf(id)
-    driver.expectMaterialization(result[id].materialization)   # verify against THIS intent (full bytes)
-    var it = result[id]
+    let driver = driverOf(s.id)
+    driver.expectMaterialization(result[s.id].materialization)   # verify against THIS intent (full bytes)
+    var it = result[s.id]
     it.apply(driver, IntentEvent(kind: ieContribute, now: now,
-                                 contribution: Contribution(bytes: hexToBytes(e.value))))
-    result[id] = it
+                                 contribution: Contribution(bytes: hexToBytes(s.value))))
+    result[s.id] = it
 
   for e in ordered:                                    # pass 3 — submits
-    let (id, op, _) = opOf(e)
+    let (id, op, _, _) = opOf(e)
     if op != "submit" or id notin result: continue
     inc now
     let driver = driverOf(id)
@@ -258,7 +282,7 @@ proc roomDriverKinds*(events: seq[Event], driverFor: DriverFor): seq[string] =
   ## governance intent the room APPROVED (reached executable or beyond) admits its
   ## kind. Deterministic: every member derives the same capability set from the same
   ## events, and a capability appears only once the group has actually agreed to it.
-  result = @["safe", "threshold"]          # the founding capabilities
+  result = @["safe", "threshold", "frost"]   # the founding capabilities
   let intents = reduceIntents(events, driverFor)
   for id, it in intents:
     if $it.state notin ["executable", "submitted", "final"]: continue
@@ -287,6 +311,11 @@ type IntentView* = object
   txhash*: string         ## the driver-re-derived materialization (safeTxHash) as hex —
                           ## the exact bytes an owner signs (F-4/F-5), for the verify view
   policy*: string         ## the policy (driver kind) THIS intent was proposed under
+  round*: int             ## the collection's current round, 1-based
+  rounds*: int            ## how many rounds this driver runs (describe().rounds; 1 = single-round)
+  roundApprovals*: int    ## distinct contributors folded in THE CURRENT round — the honest
+                          ## "M of N this round" for a multi-round driver; equals `approvals`
+                          ## when rounds == 1
 
 proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentView] =
   ## Deterministic (sorted by id), so two instances render the identical list from
@@ -294,17 +323,25 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
   ## same dedup the fold applies — so a re-submitted owner signature never inflates
   ## the "M of N" a card shows. Each view carries the intent's own policy.
   let intents = reduceIntents(events, driverFor)
-  var approvals = initTable[string, HashSet[string]]()
+  var approvals = initTable[string, HashSet[string]]()            # <id> -> distinct contributors (any round)
+  var roundApp = initTable[string, HashSet[string]]()            # "<id>/<round>" -> contributors that round
   for e in events:
     let p = e.key.split('/')
     if p.len >= 4 and p[0] == "intent" and p[2] == "sig":
       approvals.mgetOrPut(p[1], initHashSet[string]()).incl(p[3])
+      let rnd = (if p.len >= 5: p[4] else: "1")
+      roundApp.mgetOrPut(p[1] & "/" & rnd, initHashSet[string]()).incl(p[3])
   for id, it in intents:
+    let pol = intentPolicyOf(events, id)
+    let curRound = it.collection.round
     result.add IntentView(id: id, state: $it.state,
                           effectJson: effectJsonOf(events, id),
                           approvals: approvals.getOrDefault(id).len,
                           txhash: bytesHex(it.materialization.bytes),
-                          policy: intentPolicyOf(events, id))
+                          policy: pol,
+                          round: curRound,
+                          rounds: driverFor(pol).describe().rounds,
+                          roundApprovals: roundApp.getOrDefault(id & "/" & $curRound, initHashSet[string]()).len)
   result.sort(proc (a, b: IntentView): int = cmp(a.id, b.id))
 
 # ── provenance: how this decision's data got in front of you (invariant 10) ────

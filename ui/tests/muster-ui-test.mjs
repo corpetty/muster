@@ -214,6 +214,149 @@ test("muster_ui: an in-room proposal renders the re-derived verify box", async (
   await grab(app, "verify");
 });
 
+// FROST end to end with IN-APP signing — the whole point of the identity layer.
+// Join a room, pick the FROST policy, propose a payment, then Approve twice: each
+// click signs the re-derived materialization with the LOCAL keystore identity (no
+// pasted fixture), closing round 1 then round 2 to executable. As the sole member the
+// roster is [me] and k=1, so one signer carries each round. Proves selectability, the
+// round chrome, AND that pasting is gone for the room-native path. Off-chain; no anvil.
+test("muster_ui: FROST — in-app approve signs both rounds to executable (no paste)", async (app) => {
+  await openMuster(app);
+  await navTo(app, "roomToggle");
+  await setField(app, "roomTopicField", "muster.frost.demo");
+  await clickButton(app, "joinRoomButton");
+  await app.waitFor(
+    async () => {
+      if ((await propertyOf(app, "roomMembersLabel", "visible")) !== true)
+        throw new Error("room not joined");
+    },
+    { timeout: 20000, interval: 500, description: "room joined" }
+  );
+
+  // Compose a payment under the FROST policy.
+  await clickButton(app, "roomProposeButton");
+  await clickButton(app, "roomKindPayment");
+  await clickButton(app, "roomPolicyFrost");
+  await setField(app, "roomProposeTo", "0x2222222222222222222222222222222222222222");
+  await setField(app, "roomProposeValue", "500");
+  await clickButton(app, "roomProposeSubmit");
+
+  // The card renders as a 2-round intent.
+  await app.waitFor(
+    async () => {
+      const r = await app.inspector.send("findByProperty", { property: "objectName", value: "musterCard" });
+      if (!(r.matches?.length > 0)) throw new Error("no FROST proposal card rendered");
+      // the card exposes its driver's round count
+      let seenRounds = false;
+      for (const m of r.matches) {
+        const rounds = (await app.inspector.send("evaluate", { objectId: m.id, expression: "rounds" })).result;
+        if (Number(rounds) === 2) seenRounds = true;
+      }
+      if (!seenRounds) throw new Error("no card reports rounds=2 (FROST not applied?)");
+    },
+    { timeout: 20000, interval: 500, description: "FROST 2-round card in the thread" }
+  );
+
+  // The header names the round being collected.
+  let header = "";
+  await app.waitFor(
+    async () => {
+      header = String((await propertyOf(app, "cardHeader", "text")) || "");
+      if (header.indexOf("round 1 of 2") < 0)
+        throw new Error(`card header missing the round chrome: "${header}"`);
+    },
+    { timeout: 15000, interval: 500, description: "round 1 chrome" }
+  );
+  console.log(`[muster] FROST card rendered — "${header}"`);
+
+  // Approve IN-APP (round 1): one click signs the re-derived materialization with the
+  // local keystore identity — no paste. As the sole member (k=1) this closes round 1
+  // and the fold advances to round 2.
+  await clickButton(app, "cardApprove");
+  await app.waitFor(
+    async () => {
+      const h = String((await propertyOf(app, "cardHeader", "text")) || "");
+      if (h.indexOf("round 2 of 2") < 0)
+        throw new Error(`did not advance to round 2 after in-app approve: "${h}"`);
+    },
+    { timeout: 15000, interval: 500, description: "advanced to round 2 (in-app approve)" }
+  );
+
+  // Approve IN-APP (round 2) → executable; the header flips to "2 rounds complete".
+  await clickButton(app, "cardApprove");
+  await app.waitFor(
+    async () => {
+      const h = String((await propertyOf(app, "cardHeader", "text")) || "");
+      if (h.indexOf("rounds complete") < 0)
+        throw new Error(`not executable after the second in-app approve: "${h}"`);
+    },
+    { timeout: 15000, interval: 500, description: "executable after two in-app approvals" }
+  );
+  console.log("[muster] FROST IN-APP OK — signed both rounds with the local identity (no paste) → executable");
+  await grab(app, "frost");
+});
+
+// SAFE in-app approval — the identity layer for the Safe path too. Propose a Safe
+// payment in a room and Approve: the module signs the safeTxHash in-app with the
+// local secp key, which the room's Safe now recognizes as an owner (driverForKind
+// adds this account to the owner set), so the approval COUNTS — the card's approvals
+// go 0 → 1 with no pasted fixture. (Reaching executable still needs the Safe's
+// threshold of owners; the other owners are external, and on-chain settlement needs
+// real on-chain owners — the anvil-seeded remainder. This asserts the in-app owner
+// signature itself.) Off-chain; no anvil.
+test("muster_ui: Safe approve signs in-app and counts the local owner", async (app) => {
+  await openMuster(app);
+  await navTo(app, "roomToggle");
+  await setField(app, "roomTopicField", "muster.safe.inapp");
+  await clickButton(app, "joinRoomButton");
+  await app.waitFor(
+    async () => {
+      if ((await propertyOf(app, "roomMembersLabel", "visible")) !== true)
+        throw new Error("room not joined");
+    },
+    { timeout: 20000, interval: 500, description: "room joined" }
+  );
+
+  await clickButton(app, "roomProposeButton");
+  await clickButton(app, "roomKindPayment");
+  await clickButton(app, "roomPolicySafe");
+  await setField(app, "roomProposeTo", "0x3333333333333333333333333333333333333333");
+  await setField(app, "roomProposeValue", "250");
+  await clickButton(app, "roomProposeSubmit");
+
+  // A Safe card renders (rail "safe"), then Approve IN-APP.
+  await app.waitFor(
+    async () => {
+      const r = await app.inspector.send("findByProperty", { property: "objectName", value: "musterCard" });
+      if (!(r.matches?.length > 0)) throw new Error("no Safe proposal card rendered");
+      let seenSafe = false;
+      for (const m of r.matches) {
+        const rail = (await app.inspector.send("evaluate", { objectId: m.id, expression: "card ? String(card.rail) : ''" })).result;
+        if (String(rail) === "safe") seenSafe = true;
+      }
+      if (!seenSafe) throw new Error("no Safe-rail card (policy not applied?)");
+    },
+    { timeout: 20000, interval: 500, description: "Safe card in the thread" }
+  );
+  await clickButton(app, "cardApprove");
+
+  // The local owner's in-app signature counted — approvals reached 1, no paste.
+  await app.waitFor(
+    async () => {
+      const r = await app.inspector.send("findByProperty", { property: "objectName", value: "musterCard" });
+      let counted = false;
+      for (const m of (r.matches || [])) {
+        const a = (await app.inspector.send("evaluate", { objectId: m.id, expression: "approvals" })).result;
+        if (Number(a) >= 1) counted = true;
+      }
+      if (!counted) throw new Error("in-app Safe signature did not count (local account not an owner?)");
+    },
+    { timeout: 15000, interval: 500, description: "in-app Safe approval counted" }
+  );
+  console.log("[muster] SAFE IN-APP OK — the local account's own signature counted (no paste)");
+  await grab(app, "safe-inapp");
+});
+
 // 3) PROPOSE — the module re-derives the safeTxHash from the effect and the
 //    re-materialization strip shows it. This is the first real F-4 check in the
 //    UI (not the prototype's simulated hashes). findByProperty is exact-match, so

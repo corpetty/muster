@@ -38,6 +38,14 @@ method sign*(ks: Keystore, msgHash: array[32, byte]): Signature65 {.base.} =
   ## releasing the key. On a Keycard this happens on the card.
   raise newException(KeystoreError, "Keystore.sign is abstract")
 
+method edSign*(ks: Keystore, msg: openArray[byte]): Ed25519Sig {.base.} =
+  ## Ed25519-sign a message with the ENCRYPTION identity. This is how a member
+  ## endorses an intent under a room-native driver (threshold / FROST): the
+  ## contribution is the member's own signature over the intent's materialization,
+  ## and the member's Ed25519 key is in the room's roster. Like sign(), the secret
+  ## never leaves the keystore — a Keycard backend signs on the card.
+  raise newException(KeystoreError, "Keystore.edSign is abstract")
+
 method encIdentity*(ks: Keystore): EncIdentity {.base.} =
   ## Our public encryption identity (Ed25519 + X25519) — announced to be admitted,
   ## and what a binding vouches for.
@@ -136,10 +144,16 @@ proc readKeyfile(path, passphrase: string): (array[32, byte], array[32, byte], b
   for i in 0 ..< 32: encSeed[i] = opened[32 + i]
   (secret, encSeed, false)
 
-proc openFileKeystore*(path, passphrase: string): FileKeystore =
+proc openFileKeystore*(path, passphrase: string, secpSeed: seq[byte] = @[]): FileKeystore =
   ## Load both identities at `path`, or mint fresh ones and persist them if none
   ## exists. A v1 keyfile (secp only) is upgraded in place to add the encryption
   ## identity, preserving the address.
+  ##
+  ## `secpSeed` (32 bytes) seeds the secp AUTHORIZATION key when MINTING a new
+  ## keyfile — so a dev/demo instance can be given a known account, e.g. an anvil
+  ## Safe owner key, and thus sign Safe intents in-app AS a real on-chain owner
+  ## (exo-001). It is honoured only on first mint; an existing keyfile keeps its
+  ## identity. Empty ⇒ a fresh random key, the normal path.
   result = FileKeystore(path: path, pass: passphrase)
   var encSeed: array[32, byte]
   if fileExists(path):
@@ -148,7 +162,10 @@ proc openFileKeystore*(path, passphrase: string): FileKeystore =
     encSeed = seed
     if upgraded: writeKeyfile(path, secret, encSeed, passphrase)
   else:
-    result.secret = randomKey()
+    if secpSeed.len == 32:
+      for i in 0 ..< 32: result.secret[i] = secpSeed[i]
+    else:
+      result.secret = randomKey()
     encSeed = randomKey()
     writeKeyfile(path, result.secret, encSeed, passphrase)
   result.enc = encFromSeed(encSeed)
@@ -157,6 +174,8 @@ proc openFileKeystore*(path, passphrase: string): FileKeystore =
 method address*(fk: FileKeystore): Address = fk.addr0
 method sign*(fk: FileKeystore, msgHash: array[32, byte]): Signature65 =
   signRecoverable(msgHash, fk.secret)
+method edSign*(fk: FileKeystore, msg: openArray[byte]): Ed25519Sig =
+  curve25519.edSign(fk.enc, msg)
 method encIdentity*(fk: FileKeystore): EncIdentity = fk.enc.identity()
 method sealOpen*(fk: FileKeystore, sealed: seq[byte]): seq[byte] =
   curve25519.sealOpen(fk.enc, sealed)
@@ -177,6 +196,8 @@ proc newInMemoryKeystore*(secret: array[32, byte], encSeed: array[32, byte]): In
 method address*(ik: InMemoryKeystore): Address = ik.addr0
 method sign*(ik: InMemoryKeystore, msgHash: array[32, byte]): Signature65 =
   signRecoverable(msgHash, ik.secret)
+method edSign*(ik: InMemoryKeystore, msg: openArray[byte]): Ed25519Sig =
+  curve25519.edSign(ik.enc, msg)
 method encIdentity*(ik: InMemoryKeystore): EncIdentity = ik.enc.identity()
 method sealOpen*(ik: InMemoryKeystore, sealed: seq[byte]): seq[byte] =
   curve25519.sealOpen(ik.enc, sealed)
