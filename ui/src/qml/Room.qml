@@ -405,13 +405,23 @@ Item {
                         // never a false "landed".
                         ColumnLayout {
                             id: readyBox
+                            // Show once the intent is ready AND keep showing through
+                            // submitted/settling/final — and whenever a submit outcome
+                            // names this intent — so the Settle result (✓ settled, or an
+                            // ⚠ error/revert) stays on screen instead of vanishing the
+                            // instant Settle moves the state off "executable".
                             visible: msg.isIntentRef && msg.liveIntent !== null
-                                     && (String((msg.liveIntent && msg.liveIntent.state) || "") === "executable")
+                                     && (["executable", "submitted", "settling", "final"]
+                                            .indexOf(String((msg.liveIntent && msg.liveIntent.state) || "")) >= 0
+                                         || (room.roomSubmit
+                                             && String(room.roomSubmit.id || "")
+                                                === String((msg.liveIntent && msg.liveIntent.id) || "")))
                             Layout.fillWidth: true
                             Layout.leftMargin: Theme.spacing.medium
                             spacing: Theme.spacing.tiny
 
                             readonly property string rail: String((msg.liveIntent && msg.liveIntent.rail) || "safe")
+                            readonly property string st: String((msg.liveIntent && msg.liveIntent.state) || "")
                             // the submit outcome, only when it names THIS intent
                             readonly property var outcome: (room.roomSubmit
                                 && String(room.roomSubmit.id || "") === String((msg.liveIntent && msg.liveIntent.id) || ""))
@@ -423,16 +433,25 @@ Item {
                                 LogosText {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
-                                    text: readyBox.rail === "safe"
-                                          ? qsTr("✓ Ready — the approvals are collected.")
-                                          : qsTr("✓ Endorsed — a signed group decision. Nothing settles on-chain.")
-                                    color: Theme.palette.success
+                                    // Track the folded state so the line doesn't keep
+                                    // saying "Ready" after the intent has been settled.
+                                    text: readyBox.rail !== "safe"
+                                          ? qsTr("✓ Endorsed — a signed group decision. Nothing settles on-chain.")
+                                          : readyBox.st === "final"
+                                          ? qsTr("✓ Paid — settled on-chain.")
+                                          : (readyBox.st === "submitted" || readyBox.st === "settling")
+                                          ? qsTr("Submitted — awaiting finality…")
+                                          : qsTr("✓ Ready — the approvals are collected.")
+                                    color: (readyBox.st === "submitted" || readyBox.st === "settling")
+                                           ? Theme.palette.textSecondary : Theme.palette.success
                                     font.pixelSize: Theme.typography.secondaryText
                                     font.weight: Theme.typography.weightMedium
                                 }
                                 LogosButton {
                                     objectName: "roomSubmitButton"
-                                    visible: readyBox.rail === "safe"
+                                    // only while it is actually executable — once it is
+                                    // submitted/final there is nothing left to settle.
+                                    visible: readyBox.rail === "safe" && readyBox.st === "executable"
                                     text: qsTr("Settle on-chain")
                                     onClicked: if (room.backend)
                                                    room.backend.submitInRoom(String((msg.liveIntent && msg.liveIntent.id) || ""));
@@ -446,13 +465,29 @@ Item {
                                 wrapMode: Text.WrapAnywhere
                                 text: {
                                     var o = readyBox.outcome || ({});
-                                    if (o.error !== undefined)
-                                        return qsTr("⚠ ") + String(o.error)
-                                             + (o.detail ? " — " + String(o.detail) : "");
+                                    if (o.error !== undefined) {
+                                        var err = String(o.error);
+                                        // spell out the cases the module reports so the
+                                        // reader sees *why*, not just a slug.
+                                        if (err === "insufficient-signatures")
+                                            return qsTr("⚠ Not enough owner signatures — have %1 of %2. "
+                                                     + "The approvers must be real Safe owners.")
+                                                   .arg(String(o.have)).arg(String(o.need));
+                                        if (err === "rpc-unreachable")
+                                            return qsTr("⚠ Couldn't reach the chain (RPC). Is your node running? — %1")
+                                                   .arg(String(o.detail || ""));
+                                        if (err === "not-executable")
+                                            return qsTr("⚠ Not ready to settle — state is \"%1\".")
+                                                   .arg(String(o.state || ""));
+                                        if (err === "not-onchain")
+                                            return qsTr("This endorsement settles nothing on-chain — %1")
+                                                   .arg(String(o.detail || ""));
+                                        return qsTr("⚠ ") + err + (o.detail ? " — " + String(o.detail) : "");
+                                    }
                                     var oc = String(o.onchain || "");
                                     var tx = o.txHash ? "  ·  " + String(o.txHash) : "";
                                     return (oc === "final" ? qsTr("✓ Settled on-chain (final)")
-                                          : oc === "failed" ? qsTr("⚠ On-chain execution reverted")
+                                          : oc === "failed" ? qsTr("⚠ On-chain execution reverted — the Safe rejected it")
                                           : qsTr("Submitted — awaiting finality")) + tx;
                                 }
                                 color: {
@@ -490,7 +525,6 @@ Item {
                                         form: 1
                                     }));
                             }
-                            onPay: { if (room.backend) room.backend.postMessage(JSON.stringify({ kind: "send-receipt", amount: "100", denom: "TKN", rail: "safe", tx: "0xdeadbeef", discloses: { amount: "100", payer: "not disclosed", payee: "0x1111" } })); }
                         }
 
                         // ── plain chat text ────────────────────────────────────────
