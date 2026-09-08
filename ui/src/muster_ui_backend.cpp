@@ -304,6 +304,16 @@ void MusterUiBackend::loadIntents()
     // coordinate_intents → the room's proposals folded from the shared log, as
     // [{id, state}]. Drives inbound delivery first (in the module).
     setIntentsJson(modules().muster_module.coordinate_intents());
+    // The activity feed folds from the SAME log, so refresh it whenever the
+    // intents do — every join, propose, contribute, submit, and periodic tick.
+    loadActivity();
+}
+
+void MusterUiBackend::loadActivity()
+{
+    // coordinate_activity → the room's coordination history (proposed / approved /
+    // ready / submitted / settled) in causal order, folded from the shared log.
+    setActivityJson(modules().muster_module.coordinate_activity());
 }
 
 void MusterUiBackend::submitInRoom(const QString &intentId)

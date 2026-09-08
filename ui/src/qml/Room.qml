@@ -56,6 +56,13 @@ Item {
         try { return JSON.parse(backend ? backend.intentsJson : "[]"); }
         catch (e) { return []; }
     }
+    // The room's coordination history (coordinate_activity): a plain-language
+    // narrative of every state transition, in causal order, folded from the SAME
+    // log the cards come from. The education seam — how the room got here.
+    readonly property var activity: {
+        try { return JSON.parse(backend ? backend.activityJson : "[]"); }
+        catch (e) { return []; }
+    }
     // The outcome of the last room-side submit (coordinate_submit): {id, state,
     // onchain, txHash} or {id, error, ...}. Matched to a card by its intent id.
     readonly property var roomSubmit: {
@@ -793,17 +800,40 @@ Item {
         }
         }
 
-        // Right: who can see this — the roster, the pending join-requests, and the
-        // scope line. The handshake signals go to the module through the backend.
-        ScopePanel {
+        // Right: the room's meta-state — its history (how it got here) on top, then
+        // who can see this (the roster + scope). Both are folds of the same sealed
+        // log; the handshake signals go to the module through the backend.
+        ColumnLayout {
             visible: room.joined
-            Layout.preferredWidth: 300
+            Layout.preferredWidth: 320
             Layout.fillHeight: true
-            members: room.members
-            pending: room.pending
-            topic: room.topic
-            onRequestJoin: if (room.backend) room.backend.requestJoin()
-            onAdmit: function(identityHex) { if (room.backend) room.backend.admit(identityHex); }
+            spacing: Theme.spacing.large
+
+            // History first — paramount to the education mission: a member sees the
+            // decisions that led to the current state, and each update as it lands.
+            ActivityFeed {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredHeight: 1     // share the column with the scope panel
+                entries: room.activity
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+                color: Theme.palette.borderSubtle
+            }
+
+            ScopePanel {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredHeight: 1
+                members: room.members
+                pending: room.pending
+                topic: room.topic
+                onRequestJoin: if (room.backend) room.backend.requestJoin()
+                onAdmit: function(identityHex) { if (room.backend) room.backend.admit(identityHex); }
+            }
         }
     }
 
