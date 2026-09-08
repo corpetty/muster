@@ -126,7 +126,28 @@ var gNow: uint64 = 0
 # that is empty if the user can't configure it). Defaults to the anvil fixture; a
 # settings surface (settings / set_setting) points it at the user's own node/nodes.
 var gRpcUrl = "http://127.0.0.1:8545"
-var gDeliveryConfig = "{}"          ## delivery createNode config (store/bootstrap nodes)
+proc deliveryPreset(name: string): string =
+  ## Embedded fleet createNode configs, so delivery WORKS out of the box (invariant 8
+  ## says the infra is user-configurable, not that it must start empty). Keep in sync
+  ## with infra/fleets/<name>.json — regenerate those via infra/fleets/refresh.sh and
+  ## repaste here if the fleet's entry nodes rotate. A settings value may be one of
+  ## these short names or a full createNode JSON.
+  case name
+  of "logos.test":
+    """{"mode":"Core","preset":"logos.test","entryNodes":["/dns4/node-01.ac-cn-hongkong-c.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmL3oU95jh1BZHozn3uNhx8HEneirgr8M1jEAapzXGDqRF","/dns4/node-01.do-ams3.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmQ9X2xDfPG3uL77V9piYDhjq14JhKCtcmNYsTMKNqrKCj","/dns4/node-01.gc-us-central1-a.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmF8WtwGPmeGHgYAX2277jHgy5cW9F7zsB8EqUjBZQAZQ3","/dns4/node-02.ac-cn-hongkong-c.logos.test.status.im/tcp/30303/p2p/16Uiu2HAm28CoBZjpyxsanC8tQpbvZ7bZJnVYuB1EgFzb571qpWsV","/dns4/node-02.do-ams3.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmB8NYprrfQrgWVzsJtYWkfjsXbmJEGNMG6othXsQ53BwG","/dns4/node-02.gc-us-central1-a.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmUuXhUW9bdJpzN1kfDziFiUZo4bszTk66cvr7uuyCHXR7"]}"""
+  else: ""
+
+proc deliveryConfigFor(v: string): string =
+  ## Resolve a delivery setting: a short fleet name → its embedded preset; empty or the
+  ## inert "{}" → the default fleet (so a fresh instance connects instead of failing to
+  ## autoshard); anything else → verbatim (a hand-written createNode JSON).
+  if v.len == 0 or v == "{}": return deliveryPreset("logos.test")
+  let p = deliveryPreset(v)
+  if p.len > 0: return p
+  v
+
+var gDeliveryConfig = deliveryPreset("logos.test")   ## default: the logos.test fleet, so
+                                                     ## the room works with no env/flags
 
 # Persist the infra settings beside the keystore, so a user's chosen endpoints
 # survive a restart. Best-effort — a missing/malformed file leaves the defaults.
@@ -136,6 +157,7 @@ proc settingsPath(): string =
   dir / "settings.json"
 
 var gSettingsLoaded = false
+var gDeliverySaved = false          ## did the user persist a delivery choice? (else env/default)
 proc loadSettingsFile() =
   if gSettingsLoaded: return
   gSettingsLoaded = true
@@ -144,18 +166,18 @@ proc loadSettingsFile() =
     if fileExists(p):
       let j = parseJson(readFile(p))
       if j.hasKey("rpc"): gRpcUrl = j["rpc"].getStr()
-      if j.hasKey("delivery"): gDeliveryConfig = j["delivery"].getStr()
+      if j.hasKey("delivery"):
+        gDeliveryConfig = deliveryConfigFor(j["delivery"].getStr())
+        gDeliverySaved = true
   except CatchableError: discard
-  # A host/runner can point every instance at a bootstrap set (e.g. the Logos
-  # delivery fleet, infra/fleets/*.json) without touching a persisted file, the
-  # way the demo UI defaults to a delivery preset. The env is the untrusted,
-  # user-configurable infra of invariant 8 — it seeds the default the user can
-  # still override in Settings; set_setting then persists that choice. Applied
-  # only when nothing explicit is on disk (config still the "{}" default), so a
-  # user's saved delivery endpoint always wins.
+  # A host/runner can still point every instance at a specific bootstrap set via
+  # MUSTER_DELIVERY_CONFIG (a full createNode JSON or a fleet short-name), the way
+  # `make run-fleet` does. It applies only when the user has NOT persisted a delivery
+  # choice — a saved setting always wins — and otherwise the built-in fleet default
+  # (above) already works, so no env is needed to get a connected room.
   let envCfg = getEnv("MUSTER_DELIVERY_CONFIG")
-  if envCfg.len > 0 and gDeliveryConfig == "{}":
-    gDeliveryConfig = envCfg
+  if envCfg.len > 0 and not gDeliverySaved:
+    gDeliveryConfig = deliveryConfigFor(envCfg)
 
 proc saveSettingsFile() =
   try:
@@ -618,12 +640,17 @@ proc musterCoordinateSubmit(intentId: string): string =
     return $(%*{"id": intentId, "error": "rpc-unreachable", "detail": e.msg})
   # Fold the room forward: submit event → every member converges on "submitted".
   gSession.publish(submitEvent(intentId))
-  # Observe finality from the chain (never asserted).
+  # Observe finality from the chain (never asserted). Bounded poll (~4s) so a slow or
+  # unreachable node reports "pending" rather than freezing the UI; anvil auto-mines,
+  # so a healthy receipt returns on the first tick.
   var status = -1
-  for _ in 0 .. 50:
+  for _ in 0 .. 20:
     status = watchReceiptStatus(gRpcUrl, txHash)
     if status >= 0: break
     sleep(200)
+  # On a real on-chain success, fold the intent to `final` so every member's card
+  # advances to "paid" — not just the submitted state the submit event set.
+  if status == 1: gSession.publish(finalEvent(intentId))
   let onchain = (if status == 1: "final" elif status == 0: "failed" else: "pending")
   $(%*{"id": intentId,
        "state": intentState(gSession.log.allEvents(), driverFor, intentId),
@@ -864,7 +891,11 @@ proc musterSetSetting(key, value: string): string =
     gRpcUrl = value
     gWallet = nil            # re-init the EVM adapter against the new endpoint
   of "delivery":
-    gDeliveryConfig = value
+    # Accept a fleet short-name ("logos.test"), a full createNode JSON, or "{}"/"" to
+    # fall back to the default fleet — and remember that the user chose, so it wins
+    # over the env on the next launch.
+    gDeliveryConfig = deliveryConfigFor(value)
+    gDeliverySaved = true
   else:
     return $(%*{"error": "unknown setting: " & key})
   saveSettingsFile()         # persist beside the keystore, so it survives a restart

@@ -129,6 +129,11 @@ proc contributeEvent*(intentId, contributor, signatureHex: string,
 proc submitEvent*(intentId: string, parents: seq[EventId] = @[]): Event =
   Event(parents: parents, key: "intent/" & intentId & "/submit", value: "1")
 
+proc finalEvent*(intentId: string, parents: seq[EventId] = @[]): Event =
+  ## Published once the on-chain execution is observed final (R-8) — folds the intent
+  ## to `final` so every member's card converges on "paid", not just "submitted".
+  Event(parents: parents, key: "intent/" & intentId & "/final", value: "1")
+
 # ── per-intent policy: the intent is the policy boundary, not the room ─────────
 # The room is a membership/privacy boundary — who can read. WHICH driver governs a
 # decision is the INTENT's, recorded when it is proposed, so a group (one room) can
@@ -268,6 +273,15 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
     let driver = driverOf(id)
     var it = result[id]
     it.apply(driver, IntentEvent(kind: ieSubmit, now: now))
+    result[id] = it
+
+  for e in ordered:                                    # pass 4 — finals (on-chain settled)
+    let (id, op, _, _) = opOf(e)
+    if op != "final" or id notin result: continue
+    inc now
+    let driver = driverOf(id)
+    var it = result[id]
+    it.apply(driver, IntentEvent(kind: ieFinal, now: now))   # submitted/settling → final ("paid")
     result[id] = it
 
 proc intentState*(events: seq[Event], driverFor: DriverFor, intentId: string): string =

@@ -198,7 +198,7 @@ Item {
                             id: deliveryField
                             objectName: "settingsDelivery"
                             Layout.fillWidth: true
-                            placeholderText: qsTr("createNode config JSON, e.g. {}")
+                            placeholderText: qsTr("full createNode JSON, or a fleet name like 'logos.test'")
                             font.family: Theme.typography.mono
                         }
                         LogosButton {
@@ -210,6 +210,14 @@ Item {
                                 deliveryField.text = "";
                             }
                         }
+                    }
+                    // one-click preset — the default already points here, but this
+                    // restores it after a hand edit, no JSON to paste.
+                    LogosButton {
+                        objectName: "settingsDeliveryFleet"
+                        text: qsTr("Use the logos.test fleet")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: if (settings.backend) settings.backend.setSetting("delivery", "logos.test")
                     }
 
                     LogosText {
