@@ -186,7 +186,19 @@ proc moduleKeystore(): Keystore =
     var dir = gContext.instancePersistencePath
     if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
     let pass = getEnv("MUSTER_KEY_PASSPHRASE", "muster-dev-passphrase")
-    gKeystore = openFileKeystore(dir / "identity.mks", pass)
+    # dev/demo: MUSTER_DEV_SECP_KEY seeds this instance's account with a known secp
+    # key (e.g. an anvil Safe owner key) so it signs Safe intents in-app AS a real
+    # on-chain owner — the seam that lets an in-app approval settle on-chain (exo-001).
+    # Honoured only when minting a fresh keyfile; an existing identity is kept.
+    var seed: seq[byte] = @[]
+    let devKey = getEnv("MUSTER_DEV_SECP_KEY")
+    if devKey.len > 0:
+      var h = devKey
+      if h.len >= 2 and h[0] == '0' and (h[1] == 'x' or h[1] == 'X'): h = h[2 .. ^1]
+      for i in 0 ..< h.len div 2:
+        try: seed.add byte(parseHexInt(h[2*i .. 2*i+1]))
+        except CatchableError: discard
+    gKeystore = openFileKeystore(dir / "identity.mks", pass, seed)
     loadSettingsFile()      # infra settings live beside the identity — load them once
   gKeystore
 
