@@ -76,6 +76,12 @@ class MusterUi
     SLOT(void contributeInRoom(const QString &intentId, const QString &signatureHex))
     SLOT(void loadIntents())
 
+    // The room's coordination history (coordinate_activity): a plain-language
+    // narrative of every state transition — proposed, approved (M of N), ready,
+    // submitted, settled — folded from the SAME log, in causal order. Lands on
+    // activityJson. The education seam: see how the room reached its state.
+    SLOT(void loadActivity())
+
     // Settle a ready room intent on-chain FROM the room (coordinate_submit): assemble
     // the Safe execTransaction from the owner signatures folded on the shared log,
     // submit through the user's RPC, and observe finality. The result lands on
@@ -127,6 +133,11 @@ class MusterUi
     PROP(QString messagesJson="[]" READONLY)
     PROP(QString membersJson="[]" READONLY)
     PROP(QString intentsJson="[]" READONLY)
+
+    // The room's coordination history (coordinate_activity), as a JSON array of
+    // {seq, kind, intentId, account, title, detail} in causal order. The room
+    // renders it as a live "how we got here" feed.
+    PROP(QString activityJson="[]" READONLY)
 
     // The outcome of the last room-side submit (coordinate_submit): JSON
     // {state, onchain, txHash} on success, or {error, ...}. The room shows it on the

@@ -358,6 +358,104 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
                           roundApprovals: roundApp.getOrDefault(id & "/" & $curRound, initHashSet[string]()).len)
   result.sort(proc (a, b: IntentView): int = cmp(a.id, b.id))
 
+# ── activity: how the room reached its state (the education seam) ──────────────
+# A human-readable narrative of every state transition on the coordination log, in
+# canonical (causal) order — proposed, each approval (running count, and who under a
+# named driver), threshold reached, submitted on-chain, settled. This is not a new
+# source of truth: it is the SAME reduce(log) the cards are drawn from, retold as a
+# timeline, so a member can see how the room got where it is and watch it change as
+# it happens. Deterministic and idempotent (invariant 4): two members fold the
+# identical timeline. Membership changes (join/admit/re-key) are transport control
+# frames, not log events, so they do not appear here yet — see the follow-up.
+
+type
+  ActivityEntry* = object
+    seq*: int            ## canonical log index — the stable ordering key (inv 4)
+    order*: int          ## tiebreak within one index (a derived line after its trigger)
+    kind*: string        ## "propose" | "approve" | "ready" | "submit" | "settled"
+    intentId*: string    ## the intent this concerns
+    account*: string     ## the contributor, named only where the driver is mmNamed, else ""
+    title*: string       ## the plain-language headline
+    detail*: string      ## a supporting line (may be "")
+
+proc shortId(s: string): string =
+  ## A short, stable handle for a long hex id (an owner address / identity).
+  if s.len > 12: s[0 ..< 6] & "…" & s[^4 .. ^1] else: s
+
+proc activityEffectLabel(events: seq[Event], id: string): string =
+  ## A short summary of an intent's effect for the activity feed — honest about the
+  ## three effect shapes (payment / statement / add-driver), never fabricated.
+  let ej = effectJsonOf(events, id)
+  if ej.len == 0: return "a proposal"
+  try:
+    let j = parseJson(ej)
+    let kind = if j.hasKey("effect"): j["effect"].getStr() else: ""
+    if kind == "statement":
+      let t = if j.hasKey("text"): j["text"].getStr() else: ""
+      return "a statement: “" & t & "”"
+    if kind == "add-driver":
+      let k = if j.hasKey("kind"): j["kind"].getStr() else: "?"
+      return "a new policy: " & k
+    let val = if j.hasKey("value"): $j["value"] else: "0"
+    let to = if j.hasKey("to"): j["to"].getStr() else: ""
+    return "a payment: " & val & " → " & shortId(to)
+  except CatchableError:
+    return "a proposal"
+
+proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntry] =
+  ## The room's coordination history as reduce(log). See the section note above.
+  let ordered = canonicalOrder(events)
+  let folded = reduceIntents(events, driverFor)
+  var approvers = initTable[string, HashSet[string]]()   # id -> {who/round} seen
+  var lastSig = initTable[string, int]()                 # id -> index of its last sig
+  for i in 0 ..< ordered.len:
+    let p = ordered[i].key.split('/')
+    if p.len < 3 or p[0] != "intent": continue
+    let id = p[1]
+    let op = p[2]
+    if op == "policy": continue        # the policy decl rides with the propose line
+    let desc = driverFor(intentPolicyOf(events, id)).describe()
+    let named = desc.membership == mmNamed
+    case op
+    of "propose":
+      result.add ActivityEntry(seq: i, order: 0, kind: "propose", intentId: id,
+        account: "", title: "Proposed " & activityEffectLabel(events, id),
+        detail: "under the " & intentPolicyOf(events, id) & " policy")
+    of "sig":
+      if p.len < 4: continue
+      let who = p[3]
+      let rnd = if p.len >= 5: p[4] else: "1"
+      if id notin approvers: approvers[id] = initHashSet[string]()
+      let dkey = who & "/" & rnd
+      if dkey in approvers[id]: continue     # one contribution per (contributor, round)
+      approvers[id].incl dkey
+      lastSig[id] = i
+      var distinctWho = initHashSet[string]()
+      for k in approvers[id]: distinctWho.incl k.split('/')[0]
+      result.add ActivityEntry(seq: i, order: 0, kind: "approve", intentId: id,
+        account: (if named: who else: ""),
+        title: (if named: "Approved by " & shortId(who) else: "An owner approved"),
+        detail: $distinctWho.len & " of " & $desc.threshold & " needed" &
+                (if desc.rounds > 1: "  ·  round " & rnd & " of " & $desc.rounds else: ""))
+    of "submit":
+      result.add ActivityEntry(seq: i, order: 0, kind: "submit", intentId: id,
+        account: "", title: "Submitted on-chain",
+        detail: "the Safe execTransaction was sent through the RPC")
+    of "final":
+      result.add ActivityEntry(seq: i, order: 0, kind: "settled", intentId: id,
+        account: "", title: "Settled on-chain", detail: "final — the payment landed")
+    else: discard
+  # Derived "ready" line: narrate the threshold being met, positioned right after the
+  # intent's last approval. Authoritative from the fold's own state — never a
+  # re-implemented count that could diverge from the driver's finality (invariant 6).
+  for id, it in folded:
+    if id notin lastSig: continue
+    if $it.state in ["executable", "submitted", "settling", "final"]:
+      result.add ActivityEntry(seq: lastSig[id], order: 1, kind: "ready", intentId: id,
+        account: "", title: "Ready — the approvals are collected", detail: "")
+  result.sort(proc (a, b: ActivityEntry): int =
+    if a.seq != b.seq: cmp(a.seq, b.seq) else: cmp(a.order, b.order))
+
 # ── provenance: how this decision's data got in front of you (invariant 10) ────
 
 type ProvItem* = object

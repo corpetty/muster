@@ -582,6 +582,22 @@ proc musterCoordinateIntents(): string =
     arr.add o
   $arr
 
+proc musterCoordinateActivity(): string =
+  ## The room's coordination history as reduce(log): every state transition that
+  ## moved a proposal along — proposed, each approval (running count, and who under a
+  ## named driver), threshold reached, submitted on-chain, settled — in canonical
+  ## (causal) order. The education seam (docs/00-vision): a member sees how the room
+  ## reached its state and watches it change as it happens, from the SAME sealed log
+  ## the cards are drawn from, inventing nothing. Returns a JSON array of
+  ## {seq, kind, intentId, account, title, detail}.
+  if gSession == nil: return "[]"
+  gSession.poll()
+  var arr = newJArray()
+  for a in reduceActivity(gSession.log.allEvents(), driverFor):
+    arr.add %*{"seq": a.seq, "kind": a.kind, "intentId": a.intentId,
+               "account": a.account, "title": a.title, "detail": a.detail}
+  $arr
+
 proc musterCoordinateSubmit(intentId: string): string =
   ## Settle a room intent on-chain FROM the room (the room-side counterpart to
   ## submit()). The coordinated owner signatures come from the shared LOG, not local
