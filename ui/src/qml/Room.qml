@@ -71,6 +71,29 @@ Item {
         try { return JSON.parse(backend ? backend.connectivityJson : "{}"); }
         catch (e) { return ({}); }
     }
+    // The composer's sending context (coordinate_account): what an intent here would
+    // move (the Safe's live balance — what's available to send) and who you act as
+    // (your owner address + whether it's a real Safe owner). Ask-then-disclose: this
+    // is loaded when the composer opens, not silently on room entry.
+    readonly property var roomAccount: {
+        try { return JSON.parse(backend ? backend.roomAccountJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    // The one asset available to send today (ETH). A picker when ERC-20 lands; for now
+    // the composer shows it and the amount is checked against its balance.
+    readonly property var roomAsset: {
+        var a = (room.roomAccount && room.roomAccount.assets) ? room.roomAccount.assets : [];
+        return a.length > 0 ? a[0] : null;
+    }
+    // Ask the module for the sending context — called when the composer opens (it reads
+    // the RPC, so not on the message tick).
+    function refreshRoomAccount() { if (room.backend) room.backend.loadRoomAccount(); }
+
+    // Load the sending context the moment the composer opens, and again if the policy
+    // changes while it's open (the acting-as owner check is Safe-specific). Not on
+    // entry — ask-then-disclose.
+    onComposingChanged: if (composing) refreshRoomAccount()
+    onPolicyKindChanged: if (composing) refreshRoomAccount()
     // The outcome of the last room-side submit (coordinate_submit): {id, state,
     // onchain, txHash} or {id, error, ...}. Matched to a card by its intent id.
     readonly property var roomSubmit: {
@@ -705,6 +728,108 @@ Item {
                     }
                 }
 
+                // payment: the sending context — WHAT you're sending (the Safe's own
+                // balance, so you send from real holdings, not a blind number) and WHO
+                // you act as (surfaced here at propose time — ask-then-disclose — with
+                // an owner check so you know before proposing whether your approval will
+                // count on-chain). Only for the Safe policy; a statement settles nothing.
+                Rectangle {
+                    objectName: "roomSendContext"
+                    visible: room.composeType === "payment" && room.policyKind === "safe"
+                    Layout.fillWidth: true
+                    implicitHeight: sendCtx.implicitHeight + 2 * Theme.spacing.small
+                    radius: Theme.spacing.radiusSmall
+                    color: Theme.palette.surfaceRaised
+                    border.width: 1
+                    border.color: Theme.palette.borderSubtle
+
+                    ColumnLayout {
+                        id: sendCtx
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: Theme.spacing.small
+                        anchors.rightMargin: Theme.spacing.small
+                        spacing: 2
+
+                        // WHAT can be sent: the asset + the Safe's live balance (or an
+                        // honest error — never a false zero).
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Theme.spacing.small
+                            LogosText {
+                                text: qsTr("Sending")
+                                color: Theme.palette.textTertiary
+                                font.family: Theme.typography.mono
+                                font.pixelSize: Theme.typography.badgeText
+                                font.weight: Theme.typography.weightMedium
+                            }
+                            LogosText {
+                                Layout.fillWidth: true
+                                text: {
+                                    if (!room.roomAsset) return qsTr("checking the Safe…");
+                                    if (room.roomAsset.error) return qsTr("⚠ balance unavailable — %1").arg(String(room.roomAsset.error));
+                                    return qsTr("%1  ·  %2 available  (%3 wei)")
+                                           .arg(String(room.roomAsset.symbol || "ETH"))
+                                           .arg(String(room.roomAsset.display || "?"))
+                                           .arg(String(room.roomAsset.raw || "0"));
+                                }
+                                color: (room.roomAsset && room.roomAsset.error) ? Theme.palette.warning : Theme.palette.textSecondary
+                                font.family: Theme.typography.mono
+                                font.pixelSize: Theme.typography.badgeText
+                                wrapMode: Text.WrapAnywhere
+                            }
+                        }
+
+                        // from the Safe (the room's account — whose funds move)
+                        LogosText {
+                            Layout.fillWidth: true
+                            text: qsTr("from Safe %1").arg(String((room.roomAccount && room.roomAccount.account) || "…"))
+                            color: Theme.palette.textTertiary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                            elide: Text.ElideMiddle
+                        }
+
+                        // WHO you act as — the disclosure, made explicit here, with the
+                        // owner check that turns the old "insufficient-signatures"
+                        // surprise into a warning you see before you propose.
+                        LogosText {
+                            Layout.fillWidth: true
+                            text: {
+                                var a = String((room.roomAccount && room.roomAccount.actingAs) || "");
+                                if (a.length === 0) return qsTr("acting as: (loading…)");
+                                var isOwner = room.roomAccount && room.roomAccount.isOwner;
+                                return qsTr("you act as %1  ·  %2")
+                                       .arg(a)
+                                       .arg(isOwner ? qsTr("✓ a Safe owner — your approval counts")
+                                                    : qsTr("⚠ not a Safe owner — your approval won't count on-chain"));
+                            }
+                            color: (room.roomAccount && room.roomAccount.isOwner) ? Theme.palette.success : Theme.palette.warning
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                            wrapMode: Text.WrapAnywhere
+                        }
+
+                        // soft guard: typing more than the Safe holds would revert
+                        // on-chain — say so before the propose, not after the settle.
+                        LogosText {
+                            Layout.fillWidth: true
+                            visible: {
+                                if (!room.roomAsset || room.roomAsset.error) return false;
+                                var amt = parseFloat(proposeValue.text || "0");
+                                var avail = parseFloat(room.roomAsset.raw || "0");
+                                return amt > 0 && amt > avail;
+                            }
+                            text: qsTr("⚠ more than the Safe holds — this would revert on-chain")
+                            color: Theme.palette.warning
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                }
+
                 // payment: recipient (+ amount below).
                 LogosTextField {
                     id: proposeTo
@@ -733,7 +858,9 @@ Item {
                         objectName: "roomProposeValue"
                         visible: room.composeType === "payment"
                         Layout.fillWidth: true
-                        placeholderText: qsTr("amount")
+                        // wei — the Safe transfers this exact value; the balance above is
+                        // shown in ETH and in wei so the unit you type against is explicit.
+                        placeholderText: qsTr("amount (wei)")
                         font.family: Theme.typography.mono
                         validator: IntValidator { bottom: 0 }
                     }

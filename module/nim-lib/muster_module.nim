@@ -18,6 +18,7 @@ import ../src/drivers/threshold      # a second coordination policy (Ed25519 k-o
 import ../src/drivers/frost          # 2-round FROST-style — the multi-round policy
 import ../src/drivers/registry
 import ../src/drivers/safe_rpc
+import ../src/wallet/types as wallet_types   # hexToDec + formatUnits: a live balance → "N ETH"
 import ../src/crypto/secp256k1
 import ../src/crypto/curve25519      # Ed25519 roster keys for the threshold policy
 import ../src/intents/materialization
@@ -633,6 +634,38 @@ proc musterConnectivity(): string =
       delLevel = "warn"; delDetail = "joined; node info unavailable"
   let delivery = %*{"name": "Delivery", "level": delLevel, "detail": delDetail}
   $(%*{"rpc": rpc, "delivery": delivery})
+
+proc musterCoordinateAccount(): string =
+  ## The room's sending context for the composer — WHAT an intent proposed here would
+  ## move, and WHO you would act as. Ask-then-disclose (not assumed on entry): the
+  ## composer surfaces this only at propose time. For a Safe room: the Safe (the account
+  ## whose funds actually move) with its live ETH balance — what is available to send,
+  ## so the amount isn't typed blind — and YOUR owner address (who you sign as) with an
+  ## owner check, so you learn *before* proposing whether your approval will count on
+  ## chain (this is exactly the "insufficient-signatures" surprise, surfaced early). A
+  ## non-Safe policy settles nothing on-chain, so there is no balance to show. Never a
+  ## false balance: an unreachable RPC surfaces an error, not a zero.
+  let policy = gCoordKind
+  var o = %*{"policy": policy}
+  if policy == "safe":
+    let acting = toHex(myAddress())
+    o["account"] = %toHex(gDriver.safe)
+    o["actingAs"] = %acting
+    var isOwner = false
+    for ow in gDriver.owners:
+      if toHex(ow) == acting: isOwner = true
+    o["isOwner"] = %isOwner
+    var assets = newJArray()
+    var eth = %*{"symbol": "ETH", "decimals": 18}
+    try:
+      let raw = hexToDec(getBalance(gRpcUrl, gDriver.safe))
+      eth["raw"] = %raw
+      eth["display"] = %(formatUnits(raw, 18) & " ETH")
+    except CatchableError as e:
+      eth["error"] = %e.msg
+    assets.add eth
+    o["assets"] = assets
+  $o
 
 proc musterCoordinateSubmit(intentId: string): string =
   ## Settle a room intent on-chain FROM the room (the room-side counterpart to

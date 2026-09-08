@@ -346,6 +346,14 @@ void MusterUiBackend::loadConnectivity()
     setConnectivityJson(modules().muster_module.connectivity());
 }
 
+void MusterUiBackend::loadRoomAccount()
+{
+    // coordinate_account → the composer's sending context: what's available to send
+    // (the Safe's live balance) and who you act as (+ owner check). Reads the RPC, so
+    // the view calls this when the composer opens, not on the message tick.
+    setRoomAccountJson(modules().muster_module.coordinate_account());
+}
+
 void MusterUiBackend::setPolicy(const QString &kind)
 {
     // coordinate_set_policy → choose the room's driver (safe | threshold). The same
