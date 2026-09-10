@@ -664,3 +664,4 @@
 {"type":"close","timestamp":"2026-09-08T15:07:15.90312032Z","issue_id":"exo-701","payload":{}}
 {"type":"status_update","timestamp":"2026-09-08T15:17:34.400579699Z","issue_id":"exo-080","payload":{"status":"in_progress"}}
 {"type":"status_update","timestamp":"2026-09-08T15:17:34.434791758Z","issue_id":"exo-bf9","payload":{"status":"in_progress"}}
+{"type":"create","timestamp":"2026-09-10T19:18:07.097175018Z","issue_id":"exo-2c1","payload":{"description":"Standalone Nim SDK in sdk/: runtime (ffi/bytes/plugin/api) extracted+generalized from module/src/transport/lp_ffi.nim + delivery.nim, and a lidl-gen generalized from module/tools/lidl_gen.nim to emit BOTH provider surface and consumer client. Mirrors logos-rust-sdk. Future-proofs the LIDL-\u003eCDDL/new-core transition (Dario); contributes back to Logos.","priority":"1","title":"Nim SDK (logos_sdk) modeled on logos-rust-sdk","type":"epic"}}
