@@ -231,6 +231,47 @@ Item {
                     }
                 }
             }
+
+            // ── about & legal (public-release disclaimer) ─────────────────────
+            // Placeholder wording — refine with legal. Muster ships as an
+            // experimental, testnet-only demonstration tool; this states that plainly.
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: aboutCol.implicitHeight + 2 * Theme.spacing.medium
+                radius: Theme.spacing.radiusMedium
+                color: Theme.palette.surface
+                border.width: 1
+                border.color: Theme.palette.borderSubtle
+
+                ColumnLayout {
+                    id: aboutCol
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: Theme.spacing.medium
+                    spacing: Theme.spacing.tiny
+
+                    LogosText {
+                        text: qsTr("ABOUT & LEGAL")
+                        color: Theme.palette.textTertiary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                        font.weight: Theme.typography.weightMedium
+                    }
+                    LogosText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: qsTr("Muster is experimental, pre-release software for demonstration and "
+                                 + "education only. It is unaudited and provided “as is”, without "
+                                 + "warranty of any kind, and may contain bugs that cause loss of data or "
+                                 + "funds. Do NOT use it with real assets or on mainnet — connect only "
+                                 + "to test networks. Nothing here is financial, investment, or legal "
+                                 + "advice. By using this software you accept all risk.")
+                        color: Theme.palette.textSecondary
+                        font.pixelSize: Theme.typography.secondaryText
+                    }
+                }
+            }
         }
     }
 }
