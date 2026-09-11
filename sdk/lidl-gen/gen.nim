@@ -172,7 +172,7 @@ proc genProvider*(contract: JsonNode): string =
   result = "## GENERATED from " & contractName(contract) &
            " by logos_sdk lidl-gen — do not edit.\n" &
            "## The author supplies one `proc " & stem & "<Method>*(...)` per method.\n" &
-           "import std/json\nimport logos_sdk\n\n"
+           "import std/json\nimport logos_sdk/api\n\n"
   result.add genForwardDecls(ms, stem) & "\n"
   result.add genDispatch(ms, stem) & "\n"
   result.add "proc logos_module_get_methods(): cstring {.exportc, cdecl.} =\n"
