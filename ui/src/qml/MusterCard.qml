@@ -331,6 +331,18 @@ Rectangle {
                 wrapMode: Text.WordWrap
                 visible: text.length > 0
                 text: {
+                    // a generic module action (P-D4): "call module.method(N args)" — the
+                    // action lives in the effect, not the driver, so the card reads it off
+                    // the effect the same way it reads a payment's amount → destination.
+                    var act = String((cardRoot.card && cardRoot.card.action) || "");
+                    if (act.length > 0) {
+                        var args = (cardRoot.card && cardRoot.card.actionArgs)
+                                 ? cardRoot.card.actionArgs : [];
+                        var n = args.length;
+                        return qsTr("call %1(%2)").arg(act)
+                            .arg(n === 0 ? "" : qsTr("%1 %2").arg(n)
+                                 .arg(n === 1 ? qsTr("arg") : qsTr("args")));
+                    }
                     var stmt = String((cardRoot.card && cardRoot.card.statement) || "");
                     if (stmt.length > 0)
                         return "“" + stmt + "”";

@@ -363,6 +363,27 @@ void MusterUiBackend::loadDrivers()
     setDriversJson(modules().muster_module.coordinate_drivers());
 }
 
+void MusterUiBackend::loadAvailableActions()
+{
+    // coordinate_available_actions → the module actions the room can coordinate
+    // (P-D4): for each candidate module (the invoke allowlist + MUSTER_INVOKE_MODULES,
+    // never a blind scan), its non-read methods as [{module, method, signature,
+    // params, allowed}]. The composer renders these as the action menu.
+    setAvailableActionsJson(modules().muster_module.coordinate_available_actions());
+}
+
+void MusterUiBackend::executeInRoom(const QString &intentId)
+{
+    // coordinate_execute → run a generic module-action intent that reached executable,
+    // FROM the room: the core re-derives, gates (allowlist + capability), invokes
+    // module.method(args), and publishes submit+final. The result is surfaced so the
+    // invoke card reports honestly; re-read the intents so the room converges on final.
+    const QString r = modules().muster_module.coordinate_execute(intentId);
+    qInfo() << "[muster_ui] coordinate_execute" << intentId << "->" << r;
+    setExecuteJson(r);
+    loadIntents();
+}
+
 void MusterUiBackend::loadConnectivity()
 {
     // connectivity → liveness of the RPC endpoint + delivery node the room relies on
