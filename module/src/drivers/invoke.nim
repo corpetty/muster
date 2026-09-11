@@ -1,20 +1,21 @@
-## The generic "invoke" driver (P-D1 · design: docs/design/driver-derivation.md).
+## The generic "invoke" driver (P-D1/P-D2 · design: docs/design/driver-derivation.md).
 ##
 ## Coordinates the intent to CALL a Logos module method — "we, the room, agree to
-## invoke module.method(args)". Its coordination is a k-of-n Ed25519 endorsement
-## over the room roster, identical in shape to the threshold driver (invariant 6:
-## the core reads no bytes). What makes it distinct is exactly two things:
+## invoke module.method(args)" — as a k-of-n Ed25519 endorsement over the room
+## roster. Any module action becomes coordinatable with no per-module code.
 ##
-##   1. a per-(module, method) serialization domain, so the same args to *different*
-##      methods sign to *different* bytes (invariant 5 — domain separation), and
-##   2. the target + finality config the EXECUTION path (P-D2, not here) reads to
-##      lp_invoke the method after the threshold is met and observe its completion.
+## The driver is GENERIC: it carries no module/method. The action lives entirely in
+## the EFFECT — its `schemaId` is `invokeDomain(module, method)` and its fields carry
+## the module/method/args — so the base dCBOR materialization (which commits to
+## schemaId) already binds the signed bytes to the specific action (invariant 5:
+## different method → different schemaId → different bytes). This is what lets the
+## coordination fold resolve the driver by KIND alone (DriverFor = proc(kind)) and
+## still re-derive the exact materialization: the effect is the sole source of the
+## action, and every member folds the identical driver.
 ##
-## It deliberately does NOT override canonicalize: the base dCBOR materialization of
-## the {module, method, args} effect under this domain IS the signable form (the
-## same default path the threshold driver exercises). Nothing here signs, holds
-## keys, or touches the network — the driver only describes and verifies; the CORE
-## invokes (invariant 3), exactly as coordinate_submit does for the Safe driver.
+## Nothing here signs, holds keys, or touches the network — it describes + verifies.
+## The CORE invokes the method after the threshold is met (P-D2's execution path),
+## exactly as coordinate_submit does for the Safe driver (invariant 3).
 
 import ../crypto/curve25519
 import ../intents/materialization
@@ -24,31 +25,26 @@ type
   InvokeDriver* = ref object of Driver
     roster*: seq[Ed25519Pub]     ## the room members eligible to endorse (the authority)
     k*: int                      ## distinct endorsements that complete it
-    targetModule*: string        ## the module the core will lp_invoke (read by P-D2)
-    targetMethod*: string        ## the method to call
-    finalityKind*: FinalityType  ## how completion is observed
-    finalityEvent*: string       ## the completion event name (for finExternal)
     pending: Materialization     ## what contributions currently verify against
 
 proc invokeDomain*(targetModule, targetMethod: string): string =
-  ## The per-(module, method) serialization domain. Two methods (or two modules)
-  ## never share signable bytes for the same args — invariant 5's domain separation
-  ## applied to a call intent.
+  ## The per-(module, method) schema id an invoke effect carries. Two methods (or
+  ## modules) never share signable bytes for the same args — invariant 5's domain
+  ## separation, carried by the effect's schemaId rather than the driver.
   "muster.invoke." & targetModule & "." & targetMethod & ".v1"
 
-proc newInvokeDriver*(targetModule, targetMethod: string, roster: seq[Ed25519Pub],
-                      k: int, finality = finImmediate, finalityEvent = ""): InvokeDriver =
-  InvokeDriver(roster: roster, k: k, targetModule: targetModule,
-               targetMethod: targetMethod, finalityKind: finality,
-               finalityEvent: finalityEvent)
+proc newInvokeDriver*(roster: seq[Ed25519Pub], k: int): InvokeDriver =
+  InvokeDriver(roster: roster, k: k)
 
 method describe*(d: InvokeDriver): DriverDescriptor =
-  DriverDescriptor(rounds: 1,
-                   serializationDomain: invokeDomain(d.targetModule, d.targetMethod),
-                   membership: mmNamed, finality: d.finalityKind, threshold: d.k)
+  ## A single round, k-of-n over a named roster. The coordination-level domain is the
+  ## generic "muster.invoke.v1"; the per-action separation is in the effect's schemaId
+  ## (see invokeDomain), which the base canonicalize folds into the signed bytes.
+  DriverDescriptor(rounds: 1, serializationDomain: "muster.invoke.v1",
+                   membership: mmNamed, finality: finImmediate, threshold: d.k)
 
-# canonicalize is NOT overridden — the base dCBOR serialization of the effect under
-# this driver's domain is the materialization (like the threshold driver).
+# canonicalize is NOT overridden — the base dCBOR serialization of the effect (which
+# encodes the effect's schemaId = invokeDomain(module, method)) is the materialization.
 
 proc sigOf(c: Contribution): (bool, Ed25519Sig) =
   if c.bytes.len != 64: return (false, default(Ed25519Sig))

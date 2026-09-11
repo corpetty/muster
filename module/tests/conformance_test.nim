@@ -132,7 +132,7 @@ block:
 block:
   proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
   let member = encFromSeed(seed(11))
-  let drv = newInvokeDriver("delivery_module", "send", @[member.identity().ed], k = 1)
+  let drv = newInvokeDriver(@[member.identity().ed], k = 1)   # generic; the effect carries the action
   let e = Effect(schemaId: invokeDomain("delivery_module", "send"),
                  fields: @[("module", cbText("delivery_module")), ("method", cbText("send")),
                            ("contentTopic", cbText("/muster/1/room/proto")),
@@ -146,12 +146,13 @@ block:
   for b in sig: cb.add b
   let r = checkConformance(drv, e, t, Contribution(bytes: cb))
   doAssert r.allPass(), "invoke driver must conform: failed " & $r.failed()
-  # invariant 5 domain separation: the SAME effect under a DIFFERENT target method
-  # must materialize to DIFFERENT bytes (the domain comes from describe()).
-  let drv2 = newInvokeDriver("delivery_module", "subscribe", @[member.identity().ed], k = 1)
-  doAssert canonicalize(drv, e).bytes != canonicalize(drv2, e).bytes,
+  # invariant 5 domain separation: the SAME args to a DIFFERENT method carry a
+  # different effect.schemaId (invokeDomain), so the SAME generic driver materializes
+  # them to DIFFERENT bytes.
+  let eSub = Effect(schemaId: invokeDomain("delivery_module", "subscribe"), fields: e.fields)
+  doAssert canonicalize(drv, e).bytes != canonicalize(drv, eSub).bytes,
            "same args to a different method must sign to different bytes (inv 5)"
-  echo "7. invoke driver conforms (", r.checks.len, " checks) + per-method domain separation OK"
+  echo "7. invoke driver conforms (", r.checks.len, " checks) + per-action domain separation OK"
 
 # ── 8. the registry builds the invoke driver by kind ──────────────────────────
 block:
@@ -160,12 +161,11 @@ block:
   var rosterHex = "0x"
   const hexd = "0123456789abcdef"
   for b in member.identity().ed: (rosterHex.add hexd[int(b shr 4)]; rosterHex.add hexd[int(b and 0x0F)])
-  let inv = newDriver("invoke", %*{"module": "vote_module", "method": "cast",
-                                   "roster": [rosterHex], "k": 1, "finality": "event"})
-  doAssert inv.describe().serializationDomain == "muster.invoke.vote_module.cast.v1",
-           "registry selected the invoke driver with a per-(module,method) domain"
-  doAssert inv.describe().finality == finExternal, "invoke finality 'event' maps to finExternal"
+  let inv = newDriver("invoke", %*{"roster": [rosterHex], "k": 1})
+  doAssert inv.describe().serializationDomain == "muster.invoke.v1",
+           "registry selected the generic invoke driver"
   doAssert inv.describe().threshold == 1, "registry invoke driver keeps k"
+  doAssert inv.describe().membership == mmNamed, "invoke endorses over a named roster"
   echo "8. registry builds the invoke driver by kind OK"
 
 echo "conformance_test: all OK"
