@@ -58,6 +58,11 @@ help:
 # under .run/ so 'make clean' keeps it (delete .run/runner to release it).
 build:
 	@mkdir -p $(CURDIR)/.run
+	@# ui/flake.lock is machine-local + gitignored (it pins muster_module by absolute
+	@# path), so a lock from an earlier session goes stale as the module evolves and
+	@# `make run` silently launches an OLD build. Relock the local muster_module to the
+	@# repo's current state first, so `make run` always reflects your module edits.
+	cd $(UI) && nix flake update muster_module $(CACHE) 2>/dev/null || true
 	cd $(UI) && nix build 'path:.#runner' $(CACHE) --out-link $(CURDIR)/.run/runner
 
 # nix run resolves apps.default (the standalone runner), NOT packages.default
