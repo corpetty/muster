@@ -4,15 +4,18 @@ import QtQuick.Layouts
 import Logos.Theme
 import Logos.Controls
 
-// F-18 — create a room from an action. The composer asks in the order the app
-// argues in: what you want to do, then who with, then which account does it.
-// The verb comes first because everything after it is scoped by that choice; a
-// chat app asks "one person or a group?" first and makes you pick a container
-// before you have said what it is for.
+// F-18 — create a room from an action. Two steps: WHAT you're doing together, then
+// WHO with. The action comes first because everything after it is scoped by that
+// choice; a chat app asks "one person or a group?" first and makes you pick a
+// container before you have said what it is for. Muster is a coordination client,
+// not a payments app — a payment is one action among others (a decision, a
+// conversation), and the coordination MECHANISM (the driver) follows from the action
+// rather than being a jargon step the user must reason about.
 //
-// PURE-RENDER: this view calls no backend. It emits createRoom(verb, peer,
-// topic) when the user confirms and lets the host wire that to the module. The
-// topic is derived here so the room opens knowing what it is for.
+// PURE-RENDER: this view calls no backend. It emits createRoom(verb, peer, topic,
+// policy) when the user confirms and lets the host wire that to the module — `policy`
+// is the driver the chosen action implies. The topic is derived here so the room
+// opens knowing what it is for.
 //
 // NB (ADR-011): nix build does not evaluate QML — a QML error blanks the whole
 // view and is invisible to the build. This restricts itself to Theme keys and
@@ -25,22 +28,32 @@ Item {
     // to coordinate under `policy` (the driver the intent runs on).
     signal createRoom(string verb, string peer, string topic, string policy)
 
-    // "" until a verb tile is picked. Drives the progressive reveal.
+    // "" until an action is picked. Drives the progressive reveal.
     property string pickedVerb: ""
-    // The coordination policy (driver) the room will run under. Chosen at compose
-    // time — the account/policy is a dependency of the intent.
-    property string pickedPolicy: "safe"
 
+    // The things a room can do together. Each carries the driver it runs on, so the
+    // user picks an ACTION, not a policy — the coordination mechanism follows from
+    // what you're doing (a payment settles on a Safe; a decision is a group
+    // endorsement) and stays changeable in the room. Muster is a coordination client,
+    // not a payments app: money is one of the things you can do together, not the frame.
     readonly property var verbs: [
-        { id: "pay",     name: qsTr("Pay someone"),
-          note: qsTr("You send. Their address stays in the room.") },
-        { id: "request", name: qsTr("Ask to be paid"),
-          note: qsTr("They send. Yours stays in the room.") },
-        { id: "split",   name: qsTr("Split a cost"),
-          note: qsTr("Shared bill, one room, everyone sees the same thing.") },
-        { id: "talk",    name: qsTr("Just talk"),
-          note: qsTr("No money, same room.") }
+        { id: "decide", policy: "threshold", name: qsTr("Decide something together"),
+          note: qsTr("The room agrees on something — a k-of-n group sign-off. No chain, nothing on a public ledger; just the people who agreed.") },
+        { id: "pay",    policy: "safe",      name: qsTr("Send a payment"),
+          note: qsTr("Money moves from a shared account, coordinated by the room. Each person's address stays in the room — the transaction is signed off together.") },
+        { id: "talk",   policy: "threshold", name: qsTr("Just talk"),
+          note: qsTr("A private conversation. Only the people in the room can read it — the room is the boundary.") }
     ]
+
+    // The driver the room runs on follows from the chosen action, never a separate
+    // jargon step. Changeable later from the room's policy row.
+    readonly property string pickedPolicy: {
+        var vs = composer.verbs;
+        for (var i = 0; i < vs.length; i++)
+            if (vs[i].id === composer.pickedVerb)
+                return String(vs[i].policy);
+        return "safe";
+    }
 
     readonly property string peer: peerField ? peerField.text.trim() : ""
     readonly property bool hasVerb: composer.pickedVerb.length > 0
@@ -112,7 +125,7 @@ Item {
                 spacing: Theme.spacing.small
 
                 LogosText {
-                    text: qsTr("What do you want to do?")
+                    text: qsTr("What are we doing together?")
                     color: Theme.palette.text
                     font.family: Theme.typography.publicSans
                     font.pixelSize: Theme.typography.primaryText
@@ -194,72 +207,20 @@ Item {
                 }
             }
 
-            // ── 3. which policy (the account/driver the intent runs on) ───────
+            // The mechanism (the driver) follows from the action above — a payment
+            // settles on a Safe, a decision is a group endorsement — so there is no
+            // separate "pick a policy" step here. A one-line reassurance names it, and
+            // the room's policy row lets anyone change it later.
             ColumnLayout {
                 visible: composer.hasVerb
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
 
                 LogosText {
-                    text: qsTr("How does the room approve?")
-                    color: Theme.palette.text
-                    font.family: Theme.typography.publicSans
-                    font.pixelSize: Theme.typography.primaryText
-                    font.weight: Theme.typography.weightBold
-                }
-
-                Repeater {
-                    model: [
-                        { id: "safe",      name: qsTr("Safe · 2 of 3"),
-                          note: qsTr("EIP-712 multisig — owners sign on-chain-bound transactions.") },
-                        { id: "threshold", name: qsTr("Threshold · 2 of 3"),
-                          note: qsTr("k-of-n endorsement — the group signs off, no chain required.") }
-                    ]
-                    delegate: Rectangle {
-                        required property var modelData
-                        readonly property bool picked: composer.pickedPolicy === modelData.id
-
-                        Layout.fillWidth: true
-                        implicitHeight: polCol.implicitHeight + 2 * Theme.spacing.medium
-                        radius: Theme.spacing.radiusMedium
-                        color: picked ? Theme.palette.surfaceRaised : Theme.palette.surface
-                        border.width: picked ? 2 : 1
-                        border.color: picked ? Theme.palette.primary : Theme.palette.borderSubtle
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: composer.pickedPolicy = modelData.id
-                        }
-
-                        ColumnLayout {
-                            id: polCol
-                            anchors.fill: parent
-                            anchors.margins: Theme.spacing.medium
-                            spacing: Theme.spacing.tiny
-
-                            LogosText {
-                                text: modelData.name
-                                color: Theme.palette.text
-                                font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.primaryText
-                                font.weight: Theme.typography.weightMedium
-                            }
-                            LogosText {
-                                Layout.fillWidth: true
-                                text: modelData.note
-                                color: Theme.palette.textTertiary
-                                font.pixelSize: Theme.typography.secondaryText
-                                wrapMode: Text.WordWrap
-                            }
-                        }
-                    }
-                }
-
-                LogosText {
                     Layout.fillWidth: true
-                    text: qsTr("The policy is the driver the room runs on — you can change it in the room. "
-                             + "The conversation looks the same either way.")
+                    text: composer.pickedPolicy === "safe"
+                          ? qsTr("This settles on a shared Safe — signed off by the room, on-chain. You can change how the room approves once you're in it.")
+                          : qsTr("This is a group endorsement — the room signs off, nothing touches a chain. You can change how the room approves once you're in it.")
                     color: Theme.palette.textTertiary
                     font.pixelSize: Theme.typography.secondaryText
                     wrapMode: Text.WordWrap
