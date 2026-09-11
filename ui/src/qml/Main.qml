@@ -243,6 +243,14 @@ Item {
                     if (root.backend) root.backend.loadSettings();
                 }
             }
+            LogosButton {
+                objectName: "contactsToggle"; text: qsTr("Contacts")
+                variant: root.view === "contacts" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                onClicked: {
+                    root.view = "contacts";
+                    if (root.backend) root.backend.loadContacts();
+                }
+            }
         }
     }
 
@@ -258,16 +266,24 @@ Item {
         visible: root.view === "home"
         actions: root.homeActions
         onActivated: root.enterRoom(topic)
-        onNewActivity: root.view = "compose"
+        onNewActivity: {
+            root.view = "compose";
+            if (root.backend) root.backend.loadContacts();   // so "who with" can pick a name
+        }
     }
 
-    // Compose: create a room from an action (verb → people → account).
+    // Compose: create a room from an action (what → who). "who" can be a tap on an
+    // address-book name, fed in here from the host's contactsJson.
     Composer {
         anchors.top: navBar.bottom
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "compose"
+        contacts: {
+            try { return JSON.parse(root.backend ? root.backend.contactsJson : "[]"); }
+            catch (e) { return []; }
+        }
         onCreateRoom: root.enterRoom(topic, verb, policy)
     }
 
@@ -299,6 +315,18 @@ Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "settings"
+        backend: root.backend
+    }
+
+    // The address book — name the ids you coordinate with (aliases resolve into the
+    // roster and the join prompt).
+    AddressBook {
+        objectName: "addressBookSurface"
+        anchors.top: navBar.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        visible: root.view === "contacts"
         backend: root.backend
     }
 

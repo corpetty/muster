@@ -34,6 +34,7 @@ import ../src/coordination/intents     # intent lifecycle = reduce(log) (the mul
 import ../src/coordination/invoker     # the execute seam + allowlist/capability gate (P-D2)
 import ../src/coordination/lp_invoker  # LpInvoker — call the target module over lp_*
 import ../src/coordination/discovery   # discover coordinatable module actions (P-D3)
+import ../src/coordination/contacts    # the address book (aliases for member ids)
 import ../src/wallet/types             # chain-agnostic wallet types
 import ../src/wallet/adapter           # ChainAdapter seam + Wallet aggregate
 import ../src/wallet/evm_adapter       # the EVM/Safe chain
@@ -838,15 +839,41 @@ proc musterCoordinateRequestJoin(): string =
   gSession.requestJoin(moduleKeystore().bindingFor(roomContext()))
   "ok"
 
+# ── the address book (aliases for member ids) ───────────────────────────────────
+# A persisted map from a room-membership id (the 64-byte encryption identity) to an
+# alias + optional secp address, so members / pending / the composer show names, not
+# raw hex. Beside the keystore, so it survives restarts (contacts.nim).
+var gContacts: ContactBook = nil
+proc contactBook(): ContactBook =
+  if gContacts == nil:
+    var dir = context().instancePersistencePath
+    if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+    gContacts = newContactBook(dir / "contacts.json")
+  gContacts
+
+proc musterContacts(): string =
+  ## The address book — [{identity, alias, address}].
+  $contactBook().asJson()
+proc musterContactAdd(identityHex, alias: string): string =
+  ## Add or update a contact by its 64-byte encryption identity hex (0x optional).
+  contactBook().add(identityHex, alias); "ok"
+proc musterContactSetAlias(identityHex, alias: string): string =
+  contactBook().setAlias(identityHex, alias); "ok"
+proc musterContactRemove(identityHex: string): string =
+  contactBook().remove(identityHex); "ok"
+
 proc musterCoordinatePending(): string =
   ## Each pending requester with whether its binding proves Safe ownership (F-9),
-  ## so a host admits knowingly rather than blindly.
+  ## so a host admits knowingly rather than blindly. Carries the address-book alias
+  ## (if any) so the admit prompt shows a name, not raw hex.
   if gSession == nil: return "[]"
   gSession.poll()
   let nowSec = uint64(epochTime())
   var arr = newJArray()
   for st in gSession.pendingBindings():
-    arr.add %*{"identity": toHex(st.enc.toBytes()),
+    let idHex = toHex(st.enc.toBytes())
+    arr.add %*{"identity": idHex,
+               "alias": contactBook().aliasOf(idHex),
                "bindsOwner": bindingBinds(st, gDriver.owners, nowSec)}
   if gLpDebug:
     stderr.writeLine("MUSTER-LP pending=" & $arr.len & " members=" &
@@ -891,7 +918,9 @@ proc musterCoordinateMembers(): string =
   let me = gSession.selfIdentity()
   var arr = newJArray()
   for m in gSession.members():
-    arr.add %*{"identity": toHex(m.toBytes()), "self": (m == me)}
+    let idHex = toHex(m.toBytes())
+    arr.add %*{"identity": idHex, "self": (m == me),
+               "alias": contactBook().aliasOf(idHex)}
   $arr
 
 proc musterCoordinateConversations(): string =
