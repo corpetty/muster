@@ -38,17 +38,43 @@ Rectangle {
     // recover to a configured member; a peer-message was sealed to the room's epoch.
     function provTrust(item) {
         var cls = String((item && item["class"]) || "");
+        var alias = String((item && item.alias) || "");
         var acct = String((item && item.account) || "");
         var pos = (item && item.logPos !== undefined) ? item.logPos : "";
-        var why = cls === "driver-contribution" ? qsTr("verified owner")
+        // WHO: the address-book name if we have one, else the short raw account.
+        var who = alias.length > 0 ? alias
+                : (acct.length > 0 ? acct.substring(0, 10) + "…" : "");
+        // WHY: the guarantee the module states for this input (authoritative), with a
+        // per-class fallback so an older payload still reads sensibly.
+        var why = String((item && item.guarantee) || "");
+        if (why.length === 0)
+            why = cls === "driver-contribution" ? qsTr("verified member")
                 : cls === "peer-message" ? qsTr("sealed to the room")
                 : cls === "external-read" ? qsTr("read from chain")
                 : cls === "plugin-block" ? qsTr("emitted by a plugin") : "";
         var parts = [];
-        if (acct.length > 0) parts.push(acct);
+        if (who.length > 0) parts.push(who);
         if (why.length > 0) parts.push(why);
         if (pos !== "") parts.push(qsTr("log #%1").arg(pos));
         return parts.join("  ·  ");
+    }
+
+    // A one-line "who is behind this" for the collapsed lineage header — the distinct
+    // names (aliases where known) that contributed, so you see the people behind a
+    // decision at a glance before diving into the full per-piece lineage.
+    function provWho(prov) {
+        if (!prov || prov.length === 0) return "";
+        var names = [];
+        for (var i = 0; i < prov.length; i++) {
+            var it = prov[i];
+            var who = String((it && it.alias) || "");
+            if (who.length === 0) {
+                var a = String((it && it.account) || "");
+                who = a.length > 0 ? a.substring(0, 8) + "…" : "";
+            }
+            if (who.length > 0 && names.indexOf(who) === -1) names.push(who);
+        }
+        return names.join(", ");
     }
 
     // The verify rows, built off `card` (guarded — a missing field is normal).
@@ -573,6 +599,18 @@ Rectangle {
                         }
                     }
 
+                    // Collapsed glance: who is behind this decision (names where known).
+                    LogosText {
+                        readonly property string who:
+                            cardRoot.provWho(cardRoot.card ? cardRoot.card.provenance : [])
+                        visible: !cardRoot.provOpen && who.length > 0
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: qsTr("by %1").arg(who)
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+
                     // intro — only when open.
                     LogosText {
                         visible: cardRoot.provOpen
@@ -599,8 +637,16 @@ Rectangle {
                             LogosText {
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
-                                text: "[" + String((modelData && modelData["class"]) || "") + "]  "
-                                      + String((modelData && modelData.what) || "")
+                                // WHAT this input is, and its concrete content — the
+                                // proposal shows the effect it carried ("pay 42 to
+                                // 0x…"), an approval its round; so you investigate the
+                                // actual piece of information, not a generic label.
+                                text: {
+                                    var lbl = "[" + String((modelData && modelData["class"]) || "") + "]  "
+                                            + String((modelData && modelData.what) || "");
+                                    var d = String((modelData && modelData.detail) || "");
+                                    return d.length > 0 ? lbl + "  —  " + d : lbl;
+                                }
                                 color: Theme.palette.text
                                 font.family: Theme.typography.mono
                                 font.pixelSize: Theme.typography.badgeText
