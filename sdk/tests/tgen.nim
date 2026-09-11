@@ -24,8 +24,8 @@ let contract = %*{
 suite "lidl-gen: provider surface":
   let p = genProvider(contract)
 
-  test "imports the SDK runtime":
-    check "import logos_sdk" in p
+  test "imports the SDK runtime (api seam)":
+    check "import logos_sdk/api" in p
 
   test "emits all seven logos_module_* exports":
     for e in ["logos_module_dispatch", "logos_module_set_context",

@@ -1,5 +1,5 @@
 ## DeliveryTransport — the real-network Transport (ADR-006), consuming
-## `logos-delivery-module` over the `lp_*` C ABI (see lp_ffi.nim). It is a
+## `logos-delivery-module` over the `lp_*` C ABI (see logos_sdk/ffi). It is a
 ## Transport like LocalTransport, so everything above it (the epoch layer, F-16)
 ## is unchanged whether it runs on the in-process bus or a real Waku fleet.
 ##
@@ -16,7 +16,8 @@
 
 import std/[json, tables, sets, strutils, os, times]
 import ./transport
-import ./lp_ffi
+import logos_sdk/ffi        # lp_* C-ABI bindings (was ./lp_ffi, now the shared SDK)
+import logos_sdk/bytes      # {"_bytes":<b64url>} codec
 import ./inbound_queue
 
 # Transport diagnostics — off unless MUSTER_LP_DEBUG is set. When the delivery

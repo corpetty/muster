@@ -24,7 +24,7 @@ import ../src/crypto/curve25519      # Ed25519 roster keys for the threshold pol
 import ../src/intents/materialization
 import ../src/intents/signing_payload
 import ../src/intents/lifecycle
-import ../src/transport/lp_ffi        # the lp_* inter-module call binding (protocol ABI)
+import logos_sdk/ffi                  # the lp_* inter-module call binding (protocol ABI, shared SDK)
 import ../src/transport/delivery      # DeliveryTransport (transport over lp_*)
 import ../src/crypto/epoch_crypto     # EpochCrypto (ECIES-secp256k1 + libsodium AEAD)
 import ../src/crypto/keystore         # persistent module identity (FS-4)
@@ -153,7 +153,7 @@ var gDeliveryConfig = deliveryPreset("logos.test")   ## default: the logos.test 
 # Persist the infra settings beside the keystore, so a user's chosen endpoints
 # survive a restart. Best-effort — a missing/malformed file leaves the defaults.
 proc settingsPath(): string =
-  var dir = gContext.instancePersistencePath
+  var dir = context().instancePersistencePath
   if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
   dir / "settings.json"
 
@@ -198,7 +198,7 @@ proc musterHealth(): string = "ok"
 
 # ── persistent module identity (FS-4) ──────────────────────────────────────────
 # Opened once, lazily. The keyfile lives under the host-provided instance path
-# (gContext.instancePersistencePath, from muster_gen); the module's identity is
+# (context().instancePersistencePath, from logos_sdk/api via muster_gen); the module's identity is
 # stable across restarts. The passphrase is a stopgap wart — read from the env
 # with a documented dev default — that the real OS-keystore/Keycard backend
 # removes when it slots behind this same seam.
@@ -206,7 +206,7 @@ var gKeystore: Keystore = nil
 
 proc moduleKeystore(): Keystore =
   if gKeystore == nil:
-    var dir = gContext.instancePersistencePath
+    var dir = context().instancePersistencePath
     if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
     let pass = getEnv("MUSTER_KEY_PASSPHRASE", "muster-dev-passphrase")
     # dev/demo: MUSTER_DEV_SECP_KEY seeds this instance's account with a known secp

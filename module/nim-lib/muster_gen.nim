@@ -1,26 +1,7 @@
-## GENERATED from muster.lidl by tools/lidl_gen.nim — do not edit.
-## Regenerate: see module/tools/README.md. The impl seam is muster_module.nim.
+## GENERATED from muster_module by logos_sdk lidl-gen — do not edit.
+## The author supplies one `proc muster<Method>*(...)` per method.
 import std/json
-import std/strutils
-from system/ansi_c import c_malloc, c_free
-
-type MusterModuleContext = object
-  modulePath: string
-  instanceId: string
-  instancePersistencePath: string
-var gContext: MusterModuleContext
-var gContextReady = false
-type EmitCb = proc (name: cstring, payload: cstring, userData: pointer) {.cdecl.}
-var gEmitCb: EmitCb = nil
-var gEmitUserData: pointer = nil
-
-proc toCString(s: string): cstring =
-  let n = s.len
-  let buf = cast[ptr UncheckedArray[char]](c_malloc(csize_t(n + 1)))
-  if buf == nil: return nil
-  if n > 0: copyMem(addr buf[0], unsafeAddr s[0], n)
-  buf[n] = '\0'
-  cast[cstring](buf)
+import logos_sdk/api
 
 proc musterHealth(): string
 proc musterIdentity(): string
@@ -148,7 +129,7 @@ proc dispatch(meth: string, args: JsonNode): JsonNode =
     nil
 
 proc logos_module_get_methods(): cstring {.exportc, cdecl.} =
-  toCString(parseJson("""[{"isInvokable":true,"name":"health","parameters":[],"returnType":"QString","signature":"health()"},{"isInvokable":true,"name":"identity","parameters":[],"returnType":"QString","signature":"identity()"},{"isInvokable":true,"name":"describe","parameters":[],"returnType":"QString","signature":"describe()"},{"isInvokable":true,"name":"settings","parameters":[],"returnType":"QString","signature":"settings()"},{"isInvokable":true,"name":"set_setting","parameters":[{"name":"key","type":"QString"},{"name":"value","type":"QString"}],"returnType":"QString","signature":"set_setting(QString,QString)"},{"isInvokable":true,"name":"propose","parameters":[{"name":"effect_json","type":"QString"}],"returnType":"QString","signature":"propose(QString)"},{"isInvokable":true,"name":"txhash","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"txhash(QString)"},{"isInvokable":true,"name":"approve","parameters":[{"name":"intent_id","type":"QString"},{"name":"signature_hex","type":"QString"}],"returnType":"QString","signature":"approve(QString,QString)"},{"isInvokable":true,"name":"status","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"status(QString)"},{"isInvokable":true,"name":"submit","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"submit(QString)"},{"isInvokable":true,"name":"coordinate_join","parameters":[{"name":"topic","type":"QString"}],"returnType":"QString","signature":"coordinate_join(QString)"},{"isInvokable":true,"name":"coordinate_propose","parameters":[{"name":"effect_json","type":"QString"}],"returnType":"QString","signature":"coordinate_propose(QString)"},{"isInvokable":true,"name":"coordinate_contribute","parameters":[{"name":"intent_id","type":"QString"},{"name":"signature_hex","type":"QString"}],"returnType":"QString","signature":"coordinate_contribute(QString,QString)"},{"isInvokable":true,"name":"coordinate_intents","parameters":[],"returnType":"QString","signature":"coordinate_intents()"},{"isInvokable":true,"name":"coordinate_activity","parameters":[],"returnType":"QString","signature":"coordinate_activity()"},{"isInvokable":true,"name":"connectivity","parameters":[],"returnType":"QString","signature":"connectivity()"},{"isInvokable":true,"name":"coordinate_account","parameters":[],"returnType":"QString","signature":"coordinate_account()"},{"isInvokable":true,"name":"coordinate_submit","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"coordinate_submit(QString)"},{"isInvokable":true,"name":"coordinate_drivers","parameters":[],"returnType":"QString","signature":"coordinate_drivers()"},{"isInvokable":true,"name":"coordinate_set_policy","parameters":[{"name":"kind","type":"QString"}],"returnType":"QString","signature":"coordinate_set_policy(QString)"},{"isInvokable":true,"name":"coordinate_policy","parameters":[],"returnType":"QString","signature":"coordinate_policy()"},{"isInvokable":true,"name":"coordinate_request_join","parameters":[],"returnType":"QString","signature":"coordinate_request_join()"},{"isInvokable":true,"name":"coordinate_pending","parameters":[],"returnType":"QString","signature":"coordinate_pending()"},{"isInvokable":true,"name":"coordinate_admit","parameters":[{"name":"identity_hex","type":"QString"}],"returnType":"QString","signature":"coordinate_admit(QString)"},{"isInvokable":true,"name":"coordinate_post_message","parameters":[{"name":"body","type":"QString"}],"returnType":"QString","signature":"coordinate_post_message(QString)"},{"isInvokable":true,"name":"coordinate_messages","parameters":[],"returnType":"QString","signature":"coordinate_messages()"},{"isInvokable":true,"name":"coordinate_members","parameters":[],"returnType":"QString","signature":"coordinate_members()"},{"isInvokable":true,"name":"coordinate_conversations","parameters":[],"returnType":"QString","signature":"coordinate_conversations()"},{"isInvokable":true,"name":"wallet_accounts","parameters":[],"returnType":"QString","signature":"wallet_accounts()"},{"isInvokable":true,"name":"wallet_balances","parameters":[],"returnType":"QString","signature":"wallet_balances()"},{"isInvokable":true,"name":"wallet_estimate_fee","parameters":[{"name":"chain","type":"QString"},{"name":"to","type":"QString"},{"name":"asset_symbol","type":"QString"},{"name":"raw","type":"QString"}],"returnType":"QString","signature":"wallet_estimate_fee(QString,QString,QString,QString)"},{"isInvokable":true,"name":"wallet_send","parameters":[{"name":"chain","type":"QString"},{"name":"from_id","type":"QString"},{"name":"to","type":"QString"},{"name":"asset_symbol","type":"QString"},{"name":"raw","type":"QString"}],"returnType":"QString","signature":"wallet_send(QString,QString,QString,QString,QString)"},{"isInvokable":true,"name":"wallet_finality","parameters":[{"name":"chain","type":"QString"},{"name":"tx_id","type":"QString"}],"returnType":"QString","signature":"wallet_finality(QString,QString)"},{"isInvokable":true,"name":"wallet_verified_balance","parameters":[{"name":"account_id","type":"QString"},{"name":"state_root_hex","type":"QString"}],"returnType":"QString","signature":"wallet_verified_balance(QString,QString)"}]""").`$`)
+  allocCString($parseJson("""[{"isInvokable":true,"name":"health","parameters":[],"returnType":"QString","signature":"health()"},{"isInvokable":true,"name":"identity","parameters":[],"returnType":"QString","signature":"identity()"},{"isInvokable":true,"name":"describe","parameters":[],"returnType":"QString","signature":"describe()"},{"isInvokable":true,"name":"settings","parameters":[],"returnType":"QString","signature":"settings()"},{"isInvokable":true,"name":"set_setting","parameters":[{"name":"key","type":"QString"},{"name":"value","type":"QString"}],"returnType":"QString","signature":"set_setting(QString,QString)"},{"isInvokable":true,"name":"propose","parameters":[{"name":"effect_json","type":"QString"}],"returnType":"QString","signature":"propose(QString)"},{"isInvokable":true,"name":"txhash","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"txhash(QString)"},{"isInvokable":true,"name":"approve","parameters":[{"name":"intent_id","type":"QString"},{"name":"signature_hex","type":"QString"}],"returnType":"QString","signature":"approve(QString,QString)"},{"isInvokable":true,"name":"status","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"status(QString)"},{"isInvokable":true,"name":"submit","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"submit(QString)"},{"isInvokable":true,"name":"coordinate_join","parameters":[{"name":"topic","type":"QString"}],"returnType":"QString","signature":"coordinate_join(QString)"},{"isInvokable":true,"name":"coordinate_propose","parameters":[{"name":"effect_json","type":"QString"}],"returnType":"QString","signature":"coordinate_propose(QString)"},{"isInvokable":true,"name":"coordinate_contribute","parameters":[{"name":"intent_id","type":"QString"},{"name":"signature_hex","type":"QString"}],"returnType":"QString","signature":"coordinate_contribute(QString,QString)"},{"isInvokable":true,"name":"coordinate_intents","parameters":[],"returnType":"QString","signature":"coordinate_intents()"},{"isInvokable":true,"name":"coordinate_activity","parameters":[],"returnType":"QString","signature":"coordinate_activity()"},{"isInvokable":true,"name":"connectivity","parameters":[],"returnType":"QString","signature":"connectivity()"},{"isInvokable":true,"name":"coordinate_account","parameters":[],"returnType":"QString","signature":"coordinate_account()"},{"isInvokable":true,"name":"coordinate_submit","parameters":[{"name":"intent_id","type":"QString"}],"returnType":"QString","signature":"coordinate_submit(QString)"},{"isInvokable":true,"name":"coordinate_drivers","parameters":[],"returnType":"QString","signature":"coordinate_drivers()"},{"isInvokable":true,"name":"coordinate_set_policy","parameters":[{"name":"kind","type":"QString"}],"returnType":"QString","signature":"coordinate_set_policy(QString)"},{"isInvokable":true,"name":"coordinate_policy","parameters":[],"returnType":"QString","signature":"coordinate_policy()"},{"isInvokable":true,"name":"coordinate_request_join","parameters":[],"returnType":"QString","signature":"coordinate_request_join()"},{"isInvokable":true,"name":"coordinate_pending","parameters":[],"returnType":"QString","signature":"coordinate_pending()"},{"isInvokable":true,"name":"coordinate_admit","parameters":[{"name":"identity_hex","type":"QString"}],"returnType":"QString","signature":"coordinate_admit(QString)"},{"isInvokable":true,"name":"coordinate_post_message","parameters":[{"name":"body","type":"QString"}],"returnType":"QString","signature":"coordinate_post_message(QString)"},{"isInvokable":true,"name":"coordinate_messages","parameters":[],"returnType":"QString","signature":"coordinate_messages()"},{"isInvokable":true,"name":"coordinate_members","parameters":[],"returnType":"QString","signature":"coordinate_members()"},{"isInvokable":true,"name":"coordinate_conversations","parameters":[],"returnType":"QString","signature":"coordinate_conversations()"},{"isInvokable":true,"name":"wallet_accounts","parameters":[],"returnType":"QString","signature":"wallet_accounts()"},{"isInvokable":true,"name":"wallet_balances","parameters":[],"returnType":"QString","signature":"wallet_balances()"},{"isInvokable":true,"name":"wallet_estimate_fee","parameters":[{"name":"chain","type":"QString"},{"name":"to","type":"QString"},{"name":"asset_symbol","type":"QString"},{"name":"raw","type":"QString"}],"returnType":"QString","signature":"wallet_estimate_fee(QString,QString,QString,QString)"},{"isInvokable":true,"name":"wallet_send","parameters":[{"name":"chain","type":"QString"},{"name":"from_id","type":"QString"},{"name":"to","type":"QString"},{"name":"asset_symbol","type":"QString"},{"name":"raw","type":"QString"}],"returnType":"QString","signature":"wallet_send(QString,QString,QString,QString,QString)"},{"isInvokable":true,"name":"wallet_finality","parameters":[{"name":"chain","type":"QString"},{"name":"tx_id","type":"QString"}],"returnType":"QString","signature":"wallet_finality(QString,QString)"},{"isInvokable":true,"name":"wallet_verified_balance","parameters":[{"name":"account_id","type":"QString"},{"name":"state_root_hex","type":"QString"}],"returnType":"QString","signature":"wallet_verified_balance(QString,QString)"}]"""))
 
 proc logos_module_dispatch(meth: cstring, argsJson: cstring): cstring {.exportc, cdecl.} =
   if meth == nil: return nil
@@ -161,39 +142,28 @@ proc logos_module_dispatch(meth: cstring, argsJson: cstring): cstring {.exportc,
     except CatchableError: return nil
   let res = dispatch($meth, args)
   if res == nil or res.isNil: return nil
-  toCString($res)
+  allocCString($res)
 
 proc logos_module_set_context(modulePath: cstring, instanceId: cstring,
                               instancePersistencePath: cstring) {.exportc, cdecl.} =
   proc s(p: cstring): string = (if p == nil: "" else: $p)
-  gContext = MusterModuleContext(modulePath: s(modulePath), instanceId: s(instanceId),
-                                 instancePersistencePath: s(instancePersistencePath))
-  gContextReady = true
+  setContext(s(modulePath), s(instanceId), s(instancePersistencePath))
 
 proc logos_module_set_emit_callback(cb: EmitCb, userData: pointer) {.exportc, cdecl.} =
-  gEmitCb = cb
-  gEmitUserData = userData
+  setEmitCallback(cb, userData)
 
-# Store the token in THIS plugin's embedded lp TokenManager. The loader hands a
-# module a token for each dependency it may call (e.g. delivery_module); without
-# saving it here, the plugin's own lp copy has no token and every outbound
-# lp_invoke is rejected by the target's ModuleProxy — the call returns instantly
-# with a null result and never runs (delivery's node never boots, so cross-host
-# coordination silently fails while single-instance folds still pass). lp_token_save
-# is the consumer-side counterpart to the loader's informModuleToken (exo-e17).
-# This lives in the codegen TEMPLATE precisely so a regen can never drop it again —
-# it was hand-added to the generated file once and a later regen silently lost it.
-proc lpTokenSaveC(moduleName, token: cstring): cint {.importc: "lp_token_save", cdecl.}
-
+# Save the token in THIS plugin's protocol stack, or every outbound lp_invoke is
+# rejected and the target's node never boots. Delegates to the SDK's saveToken so
+# a regen can never drop it (the lesson of muster's cross-host regression).
 proc logos_module_accept_token(moduleName: cstring, token: cstring): cint {.exportc, cdecl.} =
   if moduleName == nil or token == nil: return -1
-  discard lpTokenSaveC(moduleName, token)
+  discard saveToken($moduleName, $token)
   0
 
 proc logos_module_get_protocol_version(): cstring {.exportc, cdecl.} =
   cstring"0.1.0"
 
 proc logos_module_string_free(s: cstring) {.exportc, cdecl.} =
-  if s != nil: c_free(s)
+  freeCString(s)
 
-{.emit: "extern void NimMain(void); static void __attribute__((constructor)) muster_module_ctor(void) { NimMain(); }".}
+{.emit: "extern void NimMain(void); static void __attribute__((constructor)) logos_module_ctor(void) { NimMain(); }".}
