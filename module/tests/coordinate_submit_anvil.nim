@@ -109,4 +109,45 @@ echo "recipient balance after:  ", balAfter
 doAssert balAfter - balBefore == 1_000_000_000_000_000_000,
          "recipient did not receive 1 ETH (delta " & $(balAfter - balBefore) & ")"
 echo "3. room-side execTransaction executed on-chain -> final, transfer landed OK"
-echo "coordinate_submit_anvil: room fold -> sigs from log -> on-chain final: all OK"
+
+# 4. exo-275 regression: a SECOND settle must commit to the Safe's NEW on-chain nonce
+#    (now 1), read via safeNonce — NOT a hardcoded 0. A second proposal at nonce 0
+#    re-derives a safeTxHash the contract's getTxHash (which uses the live nonce) no
+#    longer matches, so checkSignatures reverts. This proves the room reads the live
+#    nonce so sequential settles each land.
+let n2 = safeNonce(rpc, safeAddr)
+doAssert n2 == 1'u64, "Safe nonce advanced to 1 after the first settle (safeNonce got " & $n2 & ")"
+let effectJson2 = """{"to":"0x00000000000000000000000000000000DeaDBeef","value":""" &
+                  $value & ""","nonce":""" & $n2 & """}"""
+let mat2 = canonicalize(drv, effectFromJson(effectJson2))
+var hash2: array[32, byte]
+for i in 0 ..< 32: hash2[i] = mat2.bytes[i]
+let id2 = intentIdFor(effectJson2)
+let s20 = toHex(signRecoverable(hash2, k0))
+let s21 = toHex(signRecoverable(hash2, k1))
+let events2 = @[
+  proposeEvent(id2, effectJson2),
+  contributeEvent(id2, contributorOf(drv, effectJson2, s20), s20),
+  contributeEvent(id2, contributorOf(drv, effectJson2, s21), s21)]
+doAssert intentState(events2, foldDrv, id2) == "executable", "second intent folds to executable"
+var signed2: seq[(Address, Signature65)]
+signed2.add (ecrecover(hash2, toSig65(hexToBytes(s20))), toSig65(hexToBytes(s20)))
+signed2.add (ecrecover(hash2, toSig65(hexToBytes(s21))), toSig65(hexToBytes(s21)))
+signed2.sort(cmpSigner)
+var sigbytes2: seq[byte]
+for (_, s) in signed2: sigbytes2.add @s
+let bal2Before = parseHexInt(getBalance(rpc, recipient))
+let calldata2 = assembleExecTransaction(recipient, value, @[], sigbytes2)
+let txHash2 = submitExecTransaction(rpc, relayer, safeAddr, calldata2)
+var status2 = -1
+for i in 0 .. 50:
+  status2 = watchReceiptStatus(rpc, txHash2)
+  if status2 >= 0: break
+  sleep(200)
+doAssert status2 == 1,
+  "SECOND room-side execTransaction failed (status " & $status2 & ") — the nonce-0 regression (exo-275)"
+let bal2After = parseHexInt(getBalance(rpc, recipient))
+doAssert bal2After - bal2Before == 1_000_000_000_000_000_000, "second transfer did not land"
+echo "4. exo-275: second settle at live nonce ", n2, " (safeNonce) succeeded on-chain OK"
+
+echo "coordinate_submit_anvil: room fold -> sigs from log -> on-chain final (x2, live nonce): all OK"

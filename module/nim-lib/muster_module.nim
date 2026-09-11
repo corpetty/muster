@@ -665,6 +665,14 @@ proc musterCoordinateAccount(): string =
       eth["error"] = %e.msg
     assets.add eth
     o["assets"] = assets
+    # The Safe's live nonce — the value the NEXT proposal must commit to (invariant 2).
+    # A proposal built at propose time reads this so sequential settles each use the
+    # right nonce; without it every proposal used 0 and only the first could settle
+    # (exo-275). Best-effort: a failed read omits it and the UI falls back to 0.
+    try:
+      o["nonce"] = %(safeNonce(gRpcUrl, gDriver.safe).int)
+    except CatchableError:
+      discard
   $o
 
 proc musterCoordinateSubmit(intentId: string): string =

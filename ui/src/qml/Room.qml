@@ -190,16 +190,20 @@ Item {
     // Put a real proposal to the room through the verified path: the module
     // canonicalizes the effect to the EIP-712 safeTxHash and folds it as a
     // content-addressed intent, then announces it into the thread as an intent-ref
-    // card. Nonce is 0 for now — the room coordinates but does not yet settle
-    // on-chain, so proposals don't contend for a Safe nonce (room-side submit is a
-    // later step). A blank/zero amount is allowed; the recipient is required.
+    // card. The nonce is the Safe's LIVE on-chain nonce (from coordinate_account),
+    // which the safeTxHash commits to — so sequential settles each use the right one
+    // (the Safe increments it per execTransaction). Falls back to 0 when the account
+    // read is unavailable. A blank/zero amount is allowed; the recipient is required.
     function proposeFrom(toAddr, valueStr) {
         if (!room.backend || String(toAddr).length === 0)
             return;
         var v = parseInt(valueStr, 10);
         if (isNaN(v) || v < 0) v = 0;
+        var n = (room.roomAccount && room.roomAccount.nonce !== undefined)
+                ? parseInt(room.roomAccount.nonce, 10) : 0;
+        if (isNaN(n) || n < 0) n = 0;
         room.backend.proposeInRoom(JSON.stringify({
-            to: String(toAddr), value: v, nonce: 0
+            to: String(toAddr), value: v, nonce: n
         }));
         room.composing = false;
     }
