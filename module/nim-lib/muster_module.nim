@@ -235,6 +235,19 @@ proc myAddress(): Address = moduleKeystore().address()
   ## This instance's own secp account — its public authorization identity, and (once
   ## added to a room Safe's owner set) the owner it signs Safe intents in-app as.
 
+# ── the address book (aliases for member ids) ───────────────────────────────────
+# A persisted map from a room-membership id (the 64-byte encryption identity) to an
+# alias + optional secp address, so members / pending / the composer / a decision's
+# provenance show names, not raw hex. Beside the keystore, so it survives restarts
+# (contacts.nim). Defined here — before the intent projection that resolves aliases.
+var gContacts: ContactBook = nil
+proc contactBook(): ContactBook =
+  if gContacts == nil:
+    var dir = context().instancePersistencePath
+    if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+    gContacts = newContactBook(dir / "contacts.json")
+  gContacts
+
 proc musterIdentity(): string =
   ## The module's persistent coordination identity (FS-4, two-identity model,
   ## F-14). The secp256k1 authorization address that signs Safe transactions, and
@@ -582,9 +595,14 @@ proc musterCoordinateIntents(): string =
     # the UI can answer "how do I know this, and why trust it".
     var prov = newJArray()
     for item in intentProvenance(events, driverFor, v.id):
+      # Resolve the contributing account to an address-book name, so the lineage reads
+      # "Alice", not raw hex, when known — the alias is investigative, the raw account
+      # stays for verification.
+      let alias = (if item.account.len > 0: contactBook().aliasOf(item.account) else: "")
       prov.add %*{"class": $item.cls, "logPos": item.logPos,
-                  "account": item.account, "accountable": item.accountable,
-                  "what": item.what}
+                  "account": item.account, "alias": alias,
+                  "accountable": item.accountable, "what": item.what,
+                  "detail": item.detail, "guarantee": item.guarantee}
     o["provenance"] = prov
     arr.add o
   $arr
@@ -838,18 +856,6 @@ proc musterCoordinateRequestJoin(): string =
   if gSession == nil: return "not-joined"
   gSession.requestJoin(moduleKeystore().bindingFor(roomContext()))
   "ok"
-
-# ── the address book (aliases for member ids) ───────────────────────────────────
-# A persisted map from a room-membership id (the 64-byte encryption identity) to an
-# alias + optional secp address, so members / pending / the composer show names, not
-# raw hex. Beside the keystore, so it survives restarts (contacts.nim).
-var gContacts: ContactBook = nil
-proc contactBook(): ContactBook =
-  if gContacts == nil:
-    var dir = context().instancePersistencePath
-    if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
-    gContacts = newContactBook(dir / "contacts.json")
-  gContacts
 
 proc musterContacts(): string =
   ## The address book — [{identity, alias, address}].

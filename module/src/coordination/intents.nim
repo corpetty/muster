@@ -482,6 +482,24 @@ type ProvItem* = object
   account*: string      ## the contributing account — named under mmNamed, "" under mmAnonymous
   accountable*: bool    ## can this input's origin be accounted for? (always true in a live fold)
   what*: string         ## a plain-language label for the reader
+  detail*: string       ## the concrete content — the effect summary for a proposal, the round for a signature
+  guarantee*: string    ## WHY this input can be trusted, by class — the guarantee the code enforces
+
+proc summarizeEffect*(effectJson: string): string =
+  ## A one-line, human summary of what a proposal would do — so its provenance entry
+  ## reads "pay 1000 to 0x…", not "the proposed effect". Pure, from the effect JSON.
+  try:
+    let j = parseJson(effectJson)
+    if j.kind != JObject: return ""
+    case j{"effect"}.getStr("transfer")
+    of "statement":  return "a statement: \"" & j{"text"}.getStr() & "\""
+    of "invoke":     return "call " & j{"module"}.getStr() & "." & j{"method"}.getStr() & "(…)"
+    of "add-driver": return "admit the driver kind: " & j{"kind"}.getStr()
+    else:
+      if j.hasKey("to") or j.hasKey("value"):
+        return "pay " & $j{"value"}.getInt() & " to " & j{"to"}.getStr()
+  except CatchableError: discard
+  ""
 
 proc intentProvenance*(events: seq[Event], driverFor: DriverFor, intentId: string): seq[ProvItem] =
   ## The lineage of a decision, folded from the log: every entry that reached this
@@ -502,10 +520,15 @@ proc intentProvenance*(events: seq[Event], driverFor: DriverFor, intentId: strin
     if p.len < 3 or p[0] != "intent" or p[1] != intentId: continue
     if p[2] == "propose":
       result.add ProvItem(cls: icPeerMessage, logPos: i, account: "",
-                          accountable: true, what: "the proposed effect")
+                          accountable: true, what: "the proposal",
+                          detail: summarizeEffect(ordered[i].value),
+                          guarantee: "sealed to the room's epoch — only a member could have placed it")
     elif p[2] == "sig" and p.len >= 4:
       if p[3] in seenSig: continue
       seenSig.incl p[3]
+      let round = (if p.len >= 5: p[4] else: "1")
       result.add ProvItem(cls: icContribution, logPos: i,
                           account: (if named: p[3] else: ""),
-                          accountable: true, what: "an owner signature")
+                          accountable: true, what: "an approval",
+                          detail: (if round != "1": "round " & round else: ""),
+                          guarantee: "the driver verified this recovers to a configured member — a non-member never reaches the fold")
