@@ -175,8 +175,9 @@ Discovery is the public fleet, so **the FROST track works with zero shared infra
   it models the 2-round k-of-n *structure* faithfully with Ed25519 roster signatures
   (`module/src/drivers/frost.nim` states the boundary). The disclosure contrast it
   demonstrates is real; the on-the-wire bytes are a stand-in for real FROST shares.
-- **One proposal per Safe nonce.** Room proposals currently use Safe nonce 0, so only the
-  first Safe settle per fresh anvil works; restart anvil + re-deploy between Safe settles
-  (follow-up exo-275).
+- **Repeated Safe settles work** (fixed 2026-09-11). Room proposals commit to the Safe's
+  *live* on-chain nonce (`safeNonce`), read at propose time, so sequential settles each use
+  the right nonce — no anvil restart needed between them. (Was: hardcoded nonce 0, only the
+  first settle worked; verified fixed by `coordinate_submit_anvil`'s two-settle step.)
 - **Safe address is fixed** to the anvil fixture; there's no in-app Safe-address setting,
   so the Safe track requires the anvil MiniSafe (not an arbitrary chain).

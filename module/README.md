@@ -22,9 +22,11 @@ secp256k1 owner verification, on-chain `execTransaction` against the anvil
 are all in. P4 put the whole lifecycle through the real UI in logos-basecamp
 (ADR-013). P3 — transport, encryption, and multi-party coordination — is built
 and tested; two `muster-ui` instances converge over the public fleet (join →
-ask → admit → both at two members). What remains is the cross-host
-Safe-transaction half (needs owner-seeded peers) and latency polish (~8s
-store-catchup poll). See [`../CLAUDE.md`](../CLAUDE.md) for the phase-by-phase
+ask → admit → both at two members), and the room settles Safe intents on-chain
+(`coordinate_submit`, proven on anvil, at the live nonce). Latency polish landed
+(~1s store-catchup, time-windowed); what remains is the cross-host Safe-transaction
+settle over the live wire (seeding now ships in `scripts/demo-peer.sh`). See
+[`../CLAUDE.md`](../CLAUDE.md) for the phase-by-phase
 detail and [`../docs/two-instance-fleet-runbook.md`](../docs/two-instance-fleet-runbook.md)
 for the operator flow.
 
@@ -78,7 +80,7 @@ src/
   wallet/       chain-agnostic wallet: EVM + mock shielded adapters, verified reads
   plugins/      plugin sandbox (inv 3)
 nim-lib/        muster_gen.nim (generated) + muster_module.nim (hosted surface)
-tools/          lidl_gen.nim (Nim LIDL codegen) · regen.sh
+tools/          regen.sh (fetches the SDK's lidl-gen + regenerates muster_gen.nim) · headless-host/
 tests/          lifecycle/safe/crypto/transport/coordination tests
   probes/       the probe_*.nim acceptance oracles named by the derived-exo-* specs
 ```
@@ -92,4 +94,4 @@ tests/          lifecycle/safe/crypto/transport/coordination tests
 - Invariant tests are append-only. Extend, don't weaken.
 - The module imports nothing from `../ui/`; it reaches other modules only through logos-core.
 
-<!-- rot-check: current-phase=CLAUDE.md sha256=3adc867b16fbd8a9f3d021ecd7e317e8f21ec27c144be71a909b405a2fd20343 -->
+<!-- rot-check: current-phase=CLAUDE.md sha256=0b02ad1d25889749d6b69901bc86f1224e6fc32ce37396e0a07bd40407809769 -->
