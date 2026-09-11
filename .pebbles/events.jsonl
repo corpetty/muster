@@ -693,3 +693,5 @@
 {"type":"create","timestamp":"2026-09-11T12:46:16.018028306Z","issue_id":"exo-12a","payload":{"description":"","priority":"2","title":"P-D6: a second real Tier-0 driver end-to-end (non-Safe) + one Tier-1 case beyond Safe, validating the skeleton path","type":"task"}}
 {"type":"rename","timestamp":"2026-09-11T12:46:16.056308592Z","issue_id":"exo-12a","payload":{"new_id":"exo-fa4.6"}}
 {"type":"dep_add","timestamp":"2026-09-11T12:46:16.056308592Z","issue_id":"exo-fa4.6","payload":{"dep_type":"parent-child","depends_on":"exo-fa4"}}
+{"type":"status_update","timestamp":"2026-09-11T13:06:45.249471941Z","issue_id":"exo-fa4.1","payload":{"status":"in_progress"}}
+{"type":"comment","timestamp":"2026-09-11T13:06:45.285300965Z","issue_id":"exo-fa4.1","payload":{"body":"Landed: module/src/drivers/invoke.nim (generic InvokeDriver — k-of-n Ed25519 roster endorsement, per-(module,method) dCBOR domain, target+finality config for P-D2). Registry 'invoke' arm + parseRoster/parseFinality helpers. conformance_test blocks 7-8: conforms (6 checks) + domain separation + registry-by-kind. Next: P-D2 execution path (exo-fa4.2)."}}
