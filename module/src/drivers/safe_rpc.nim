@@ -68,6 +68,31 @@ proc watchReceiptStatus*(url, txHash: string): int =
 proc getBalance*(url: string, a: Address): string =
   rpc(url, "eth_getBalance", %*[toHex0x(a), "latest"]).getStr()
 
+proc hexToU64(h: string): uint64 =
+  ## Parse a 0x-prefixed big-endian hex word as uint64. Leading zeros (a 32-byte
+  ## word carrying a small value) contribute nothing, so a demo-range nonce is exact.
+  var s = h
+  if s.len >= 2 and s[0] == '0' and (s[1] in {'x', 'X'}): s = s[2 .. ^1]
+  for c in s:
+    let d = case c
+      of '0'..'9': int(c) - int('0')
+      of 'a'..'f': int(c) - int('a') + 10
+      of 'A'..'F': int(c) - int('A') + 10
+      else: 0
+    result = result * 16 + uint64(d)
+
+proc safeNonce*(url: string, safe: Address): uint64 =
+  ## The Safe's current on-chain nonce — the value the NEXT execTransaction must use,
+  ## and which the safeTxHash commits to (invariant 2). Read via `eth_call nonce()`;
+  ## a fresh Safe returns 0, and it increments by one per settled execTransaction, so
+  ## reading it at propose time lets sequential settles each use the right nonce
+  ## instead of a hardcoded 0 (only the first of which the Safe would accept).
+  let sel = keccak256(strBytes("nonce()"))
+  let data = @[sel[0], sel[1], sel[2], sel[3]]
+  let r = rpc(url, "eth_call", %*[{"to": toHex0x(safe), "data": toHex0x(data)}, "latest"])
+  if r.isNil or r.kind == JNull: return 0
+  hexToU64(r.getStr("0x0"))
+
 proc probeRpc*(url: string): tuple[ok: bool, chainId: int, detail: string] =
   ## A cheap liveness probe of the user's RPC endpoint (invariant 8: untrusted,
   ## user-chosen infra, so its reachability must be *visible*, never assumed).
