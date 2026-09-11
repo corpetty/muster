@@ -32,6 +32,20 @@ Rectangle {
     // Whether the provenance lineage ("how do I know this?") is expanded.
     property bool provOpen: false
 
+    // When the reader taps "trace this" on a specific piece of the card (the effect,
+    // the approvals), the lineage opens focused on that piece's class — its entries
+    // are lit, the rest dimmed — so a card element leads straight to its own origin.
+    // "" means no focus (the box was opened from its own header): show all evenly.
+    property string provFocus: ""
+
+    // Open the lineage focused on one input class (invariant-10 vocabulary), from a
+    // tap on the card element that class produced. Idempotent, so tapping the same
+    // trace again just keeps it open on that piece.
+    function traceClass(cls) {
+        cardRoot.provFocus = String(cls || "");
+        cardRoot.provOpen = true;
+    }
+
     // The trust line for one provenance entry: (named account) · why it can be
     // trusted, by class · the log position it came from. The "why" is what the code
     // already guarantees for that class — a driver-contribution was verified to
@@ -332,6 +346,28 @@ Rectangle {
                 font.weight: Theme.typography.weightMedium
             }
 
+            // trace this: the effect is a peer-message (someone proposed it into the
+            // room). One tap opens the lineage focused on that origin — the card
+            // element leads to where it came from, not a separate hunt.
+            Item {
+                Layout.fillWidth: true
+                implicitHeight: effectTrace.implicitHeight
+                visible: cardRoot.card && cardRoot.card.provenance
+                         && cardRoot.card.provenance.length > 0
+                LogosText {
+                    id: effectTrace
+                    text: qsTr("⌕ trace this")
+                    color: Theme.palette.textTertiary
+                    font.family: Theme.typography.mono
+                    font.pixelSize: Theme.typography.badgeText
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: cardRoot.traceClass("peer-message")
+                }
+            }
+
             // which rail the room is being asked to agree to
             LogosText {
                 Layout.fillWidth: true
@@ -440,6 +476,28 @@ Rectangle {
                     font.family: Theme.typography.mono
                     font.pixelSize: Theme.typography.badgeText
                     font.weight: Theme.typography.weightMedium
+                }
+            }
+
+            // trace these: each filled slot is a driver-contribution the driver
+            // verified recovers to a configured member. One tap opens the lineage
+            // focused on the approvals — who signed, and the guarantee behind each.
+            Item {
+                Layout.fillWidth: true
+                implicitHeight: approvalsTrace.implicitHeight
+                visible: cardRoot.approvals > 0 && cardRoot.card
+                         && cardRoot.card.provenance && cardRoot.card.provenance.length > 0
+                LogosText {
+                    id: approvalsTrace
+                    text: qsTr("⌕ trace the approvals")
+                    color: Theme.palette.textTertiary
+                    font.family: Theme.typography.mono
+                    font.pixelSize: Theme.typography.badgeText
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: cardRoot.traceClass("driver-contribution")
                 }
             }
 
@@ -566,7 +624,12 @@ Rectangle {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: cardRoot.provOpen = !cardRoot.provOpen
+                    // Opened from its own header = no element focus: show the whole
+                    // lineage evenly. A "trace this" tap sets focus before opening.
+                    onClicked: {
+                        cardRoot.provOpen = !cardRoot.provOpen;
+                        cardRoot.provFocus = "";
+                    }
                 }
 
                 ColumnLayout {
@@ -628,39 +691,60 @@ Rectangle {
                         model: (cardRoot.provOpen && cardRoot.card && cardRoot.card.provenance)
                                ? cardRoot.card.provenance : []
 
-                        delegate: ColumnLayout {
+                        // A "trace this" tap focuses one class: its entries are lit
+                        // with an accent bar, the rest dimmed, so the tapped card
+                        // element leads the eye to exactly its own lineage.
+                        delegate: RowLayout {
+                            id: provEntry
                             required property var modelData
+                            readonly property bool focused: cardRoot.provFocus.length > 0
+                                && String((modelData && modelData["class"]) || "") === cardRoot.provFocus
+                            readonly property bool dimmed: cardRoot.provFocus.length > 0 && !focused
                             Layout.fillWidth: true
                             Layout.topMargin: 2
-                            spacing: 1
+                            spacing: Theme.spacing.tiny
+                            opacity: dimmed ? 0.4 : 1.0
 
-                            LogosText {
-                                Layout.fillWidth: true
-                                wrapMode: Text.WordWrap
-                                // WHAT this input is, and its concrete content — the
-                                // proposal shows the effect it carried ("pay 42 to
-                                // 0x…"), an approval its round; so you investigate the
-                                // actual piece of information, not a generic label.
-                                text: {
-                                    var lbl = "[" + String((modelData && modelData["class"]) || "") + "]  "
-                                            + String((modelData && modelData.what) || "");
-                                    var d = String((modelData && modelData.detail) || "");
-                                    return d.length > 0 ? lbl + "  —  " + d : lbl;
-                                }
-                                color: Theme.palette.text
-                                font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.badgeText
-                                font.weight: Theme.typography.weightMedium
+                            Rectangle {
+                                Layout.fillHeight: true
+                                Layout.preferredWidth: 2
+                                radius: 1
+                                visible: provEntry.focused
+                                color: Theme.palette.textSecondary
                             }
 
-                            LogosText {
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                Layout.leftMargin: Theme.spacing.small
-                                wrapMode: Text.WrapAnywhere
-                                text: cardRoot.provTrust(modelData)
-                                color: Theme.palette.textTertiary
-                                font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.badgeText
+                                spacing: 1
+
+                                LogosText {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    // WHAT this input is, and its concrete content — the
+                                    // proposal shows the effect it carried ("pay 42 to
+                                    // 0x…"), an approval its round; so you investigate the
+                                    // actual piece of information, not a generic label.
+                                    text: {
+                                        var lbl = "[" + String((modelData && modelData["class"]) || "") + "]  "
+                                                + String((modelData && modelData.what) || "");
+                                        var d = String((modelData && modelData.detail) || "");
+                                        return d.length > 0 ? lbl + "  —  " + d : lbl;
+                                    }
+                                    color: Theme.palette.text
+                                    font.family: Theme.typography.mono
+                                    font.pixelSize: Theme.typography.badgeText
+                                    font.weight: Theme.typography.weightMedium
+                                }
+
+                                LogosText {
+                                    Layout.fillWidth: true
+                                    Layout.leftMargin: Theme.spacing.small
+                                    wrapMode: Text.WrapAnywhere
+                                    text: cardRoot.provTrust(modelData)
+                                    color: Theme.palette.textTertiary
+                                    font.family: Theme.typography.mono
+                                    font.pixelSize: Theme.typography.badgeText
+                                }
                             }
                         }
                     }
