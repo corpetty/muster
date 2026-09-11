@@ -29,6 +29,15 @@ Item {
     }
     readonly property var identity: (settings.s && settings.s.identity) ? settings.s.identity : ({})
 
+    // The shareable chat id: the 64-byte encryption identity (ed25519 ++ x25519) that
+    // coordinate_admit takes — exactly what someone needs to add you to a room. The
+    // three keys are shown separately below; this is the one string you hand out.
+    readonly property string chatId: {
+        var ed = String((settings.identity && settings.identity.ed25519) || "").replace(/^0x/i, "");
+        var x  = String((settings.identity && settings.identity.x25519) || "").replace(/^0x/i, "");
+        return (ed.length > 0 && x.length > 0) ? (ed + x) : "";
+    }
+
     Flickable {
         id: flick
         anchors.fill: parent
@@ -104,6 +113,49 @@ Item {
                                 font.family: Theme.typography.mono
                                 font.pixelSize: Theme.typography.badgeText
                             }
+                        }
+                    }
+
+                    // ── your shareable chat id ────────────────────────────────
+                    LogosText {
+                        Layout.topMargin: Theme.spacing.small
+                        text: qsTr("YOUR CHAT ID")
+                        color: Theme.palette.textTertiary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                        font.weight: Theme.typography.weightMedium
+                    }
+                    LogosText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: qsTr("Share this so someone can add you to a room. It's your two encryption keys as one string — paste it to them, or into the composer.")
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        // Read-only + selectByMouse so the id can be HIGHLIGHTED (drag to
+                        // select, Ctrl-C) as well as copied by the button — the two things
+                        // that were missing. Styled to match the mono key rows above.
+                        TextEdit {
+                            id: chatIdField
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignVCenter
+                            readOnly: true
+                            selectByMouse: true
+                            wrapMode: TextEdit.WrapAnywhere
+                            text: settings.chatId.length > 0 ? settings.chatId : qsTr("(not loaded)")
+                            color: Theme.palette.textSecondary
+                            selectionColor: Theme.palette.primary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        LogosButton {
+                            objectName: "copyChatId"
+                            text: qsTr("Copy")
+                            enabled: settings.chatId.length > 0
+                            onClicked: { chatIdField.selectAll(); chatIdField.copy(); }
                         }
                     }
 
