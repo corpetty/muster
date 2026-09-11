@@ -16,6 +16,7 @@ import ../src/drivers/driver
 import ../src/drivers/safe
 import ../src/drivers/threshold      # a second coordination policy (Ed25519 k-of-n)
 import ../src/drivers/frost          # 2-round FROST-style — the multi-round policy
+import ../src/drivers/invoke         # the generic module-action driver (P-D1/P-D2)
 import ../src/drivers/registry
 import ../src/drivers/safe_rpc
 import ../src/wallet/types as wallet_types   # hexToDec + formatUnits: a live balance → "N ETH"
@@ -30,6 +31,8 @@ import ../src/crypto/epoch_crypto     # EpochCrypto (ECIES-secp256k1 + libsodium
 import ../src/crypto/keystore         # persistent module identity (FS-4)
 import ../src/coordination/session    # the multi-instance coordination flow
 import ../src/coordination/intents     # intent lifecycle = reduce(log) (the multi-party fold)
+import ../src/coordination/invoker     # the execute seam + allowlist/capability gate (P-D2)
+import ../src/coordination/lp_invoker  # LpInvoker — call the target module over lp_*
 import ../src/wallet/types             # chain-agnostic wallet types
 import ../src/wallet/adapter           # ChainAdapter seam + Wallet aggregate
 import ../src/wallet/evm_adapter       # the EVM/Safe chain
@@ -98,6 +101,7 @@ proc driverForKind(kind: string): Driver =
   of "threshold": newThresholdDriver(roster, min(2, n))
   of "unanimous": newThresholdDriver(roster, n)
   of "frost":     newFrostDriver(roster, min(2, n))
+  of "invoke":    newInvokeDriver(roster, min(2, n))   # generic module-action (P-D2); action in the effect
   of "safe":
     # The room's Safe recognizes THIS instance's account as an owner too, so you
     # approve a Safe intent IN-APP (no paste for YOUR own signature) — completing the
@@ -748,6 +752,64 @@ proc musterCoordinateSubmit(intentId: string): string =
   $(%*{"id": intentId,
        "state": intentState(gSession.log.allEvents(), driverFor, intentId),
        "onchain": onchain, "txHash": txHash})
+
+# ── invoke-intent execution (P-D2) — the generic counterpart to coordinate_submit ─
+# An executable invoke intent is executed by the CORE (invariant 3): call the module
+# method the effect names over lp_*, gated by the ALLOWLIST (only configured
+# module.method pairs run) AND the target's own CAPABILITY policy (the lp_* layer
+# rejects an unauthorized call, surfaced as a refusal — never a false success). Start
+# CLOSED: the allowlist is empty until an operator opts actions in via
+# MUSTER_INVOKE_ALLOWLIST (JSON [{"module","method","finalityEvent"}]).
+var gInvoker: Invoker = nil
+var gInvokeAllowlist: Allowlist = @[]
+var gAllowlistLoaded = false
+
+proc invokeAllowlist(): Allowlist =
+  if not gAllowlistLoaded:
+    gAllowlistLoaded = true
+    let env = getEnv("MUSTER_INVOKE_ALLOWLIST")
+    if env.len > 0:
+      try: gInvokeAllowlist = parseAllowlist(parseJson(env))
+      except CatchableError: discard
+  gInvokeAllowlist
+
+proc musterCoordinateExecute(intentId: string): string =
+  ## Execute an invoke-policy intent that reached executable — the room-side
+  ## counterpart to coordinate_submit for generic module actions. The effect
+  ## (module/method/args) comes from the shared LOG and the fold proves the room
+  ## endorsed it; the core re-derived the materialization to fold it (invariant 1).
+  ## Gate on allowlist + capability, invoke, and fold the room forward.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  let events = gSession.log.allEvents()
+  let policy = intentPolicyOf(events, intentId)
+  if policy != "invoke":
+    return $(%*{"id": intentId, "error": "not-invoke",
+                "detail": "a " & policy & " intent is not a generic module action"})
+  let st = intentState(events, driverFor, intentId)
+  if st != "executable":
+    return $(%*{"id": intentId, "error": "not-executable", "state": st})
+  let ej = effectJsonOf(events, intentId)
+  var module, meth, argsJson: string
+  try:
+    let je = parseJson(ej)
+    module = je{"module"}.getStr()
+    meth = je{"method"}.getStr()
+    argsJson = (if je.hasKey("args"): $je["args"] else: "[]")
+  except CatchableError:
+    return $(%*{"id": intentId, "error": "bad-effect"})
+  if gInvoker == nil: gInvoker = newLpInvoker("muster_module")
+  let ex = executeInvoke(gInvoker, invokeAllowlist(), module, meth, argsJson)
+  if not ex.executed:
+    return $(%*{"id": intentId, "executed": false, "state": "refused", "detail": ex.reason})
+  # Fold forward: submit → (immediate finality) final. Event/receipt finality is a
+  # later refinement — an immediate action folds straight to final here.
+  gSession.publish(submitEvent(intentId))
+  if ex.finalityEvent.len == 0:
+    gSession.publish(finalEvent(intentId))
+  $(%*{"id": intentId, "executed": true,
+       "state": intentState(gSession.log.allEvents(), driverFor, intentId),
+       "detail": ex.reason})
 
 proc roomContext(): LinkContext =
   ## The context our binding is scoped to — this Safe, valid for a day. Wall-clock

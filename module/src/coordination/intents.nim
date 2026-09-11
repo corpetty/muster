@@ -24,6 +24,7 @@ import ../intents/materialization
 import ../intents/signing_payload
 import ../intents/provenance     # InputClass — the spec's accountability vocabulary (inv 10)
 import ../drivers/driver
+import ../drivers/invoke          # invokeDomain — the invoke effect's schema id
 import ../dcbor/dcbor
 import ../hashing/keccak256
 export lifecycle.Intent, lifecycle.LifecycleState
@@ -59,6 +60,21 @@ proc effectFromJson*(effectJson: string): Effect =
         var fields: seq[(string, CborValue)]
         if j.hasKey("kind"): fields.add ("kind", cbText(j["kind"].getStr()))
         return Effect(schemaId: "muster.effect.governance.add-driver.v1", fields: fields)
+      of "invoke":
+        # A generic module-action intent: call module.method(args). The schemaId is
+        # invokeDomain(module, method), so the signed bytes commit to the specific
+        # action (invariant 5 — different method → different schemaId → different
+        # bytes). The core executes it after the room endorses it (P-D2). args are
+        # stored as their verbatim JSON text: every member folds the SAME propose
+        # event, so the materialization is identical across the room, and the
+        # execution path reparses the text into the positional lp_invoke args.
+        let module = j{"module"}.getStr()
+        let meth = j{"method"}.getStr()
+        var fields: seq[(string, CborValue)]
+        fields.add ("module", cbText(module))
+        fields.add ("method", cbText(meth))
+        if j.hasKey("args"): fields.add ("args", cbText($j["args"]))
+        return Effect(schemaId: invokeDomain(module, meth), fields: fields)
       else:
         var fields: seq[(string, CborValue)]
         if j.hasKey("to"): fields.add ("to", cbText(j["to"].getStr()))

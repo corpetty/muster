@@ -39,13 +39,6 @@ proc parseRoster(config: JsonNode): seq[Ed25519Pub] =
         except CatchableError: discard
       result.add pk
 
-proc parseFinality(s: string): FinalityType =
-  ## Map an invoke driver's declared completion signal to the core's FinalityType.
-  case s
-  of "immediate": finImmediate
-  of "receipt", "probabilistic": finProbabilistic
-  else: finExternal        # "event" and anything else — completion via a named event
-
 proc newDriver*(kind: string, config: JsonNode): Driver =
   ## The one place driver selection lives. Returns the generic `Driver` — the
   ## coordination fold and the core take it as-is; a driver-specific host path can
@@ -73,13 +66,9 @@ proc newDriver*(kind: string, config: JsonNode): Driver =
   of "invoke":
     # The generic module-action driver (P-D1): coordinate "the room agrees to call
     # module.method(args)" as a k-of-n Ed25519 endorsement over the room roster. The
-    # module/method/finality are config the EXECUTION path (P-D2) reads; the domain
-    # is per-(module, method) so the same args to different methods sign differently.
-    newInvokeDriver(targetModule = config{"module"}.getStr(),
-                    targetMethod = config{"method"}.getStr(),
-                    roster = parseRoster(config),
-                    k = config{"k"}.getInt(1),
-                    finality = parseFinality(config{"finality"}.getStr("immediate")),
-                    finalityEvent = config{"finalityEvent"}.getStr(""))
+    # action (module/method/args) lives in the EFFECT, not the driver, so this is a
+    # generic roster driver; the EXECUTION path (P-D2) reads the module/method from
+    # the effect and gates on the allowlist + the target's capability policy.
+    newInvokeDriver(parseRoster(config), config{"k"}.getInt(1))
   else:
     raise newException(RegistryError, "unknown driver kind: " & kind)
