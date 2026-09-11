@@ -665,3 +665,12 @@
 {"type":"status_update","timestamp":"2026-09-08T15:17:34.400579699Z","issue_id":"exo-080","payload":{"status":"in_progress"}}
 {"type":"status_update","timestamp":"2026-09-08T15:17:34.434791758Z","issue_id":"exo-bf9","payload":{"status":"in_progress"}}
 {"type":"create","timestamp":"2026-09-10T19:18:07.097175018Z","issue_id":"exo-2c1","payload":{"description":"Standalone Nim SDK in sdk/: runtime (ffi/bytes/plugin/api) extracted+generalized from module/src/transport/lp_ffi.nim + delivery.nim, and a lidl-gen generalized from module/tools/lidl_gen.nim to emit BOTH provider surface and consumer client. Mirrors logos-rust-sdk. Future-proofs the LIDL-\u003eCDDL/new-core transition (Dario); contributes back to Logos.","priority":"1","title":"Nim SDK (logos_sdk) modeled on logos-rust-sdk","type":"epic"}}
+{"type":"create","timestamp":"2026-09-11T12:41:38.149076133Z","issue_id":"exo-9ac","payload":{"description":"Fixed in PR #45: safeNonce() reader + coordinate_account surfaces it + Room.qml uses it; verified live (coordinate_submit_anvil step 4, two settles). NB the PR's 'exo-275' label was a mislabel — tracker exo-275 is the separate membership-transitions feature.","priority":"2","title":"Room proposals commit to the Safe's live on-chain nonce (not hardcoded 0)","type":"bug"}}
+{"type":"close","timestamp":"2026-09-11T12:41:38.217062397Z","issue_id":"exo-9ac","payload":{}}
+{"type":"close","timestamp":"2026-09-11T12:41:38.26012324Z","issue_id":"exo-2c1","payload":{}}
+{"type":"close","timestamp":"2026-09-11T12:41:38.26012324Z","issue_id":"exo-001","payload":{}}
+{"type":"close","timestamp":"2026-09-11T12:41:38.26012324Z","issue_id":"exo-080","payload":{}}
+{"type":"close","timestamp":"2026-09-11T12:41:38.26012324Z","issue_id":"exo-bf9","payload":{}}
+{"type":"close","timestamp":"2026-09-11T12:41:38.26012324Z","issue_id":"exo-193","payload":{}}
+{"type":"close","timestamp":"2026-09-11T12:41:38.26012324Z","issue_id":"exo-d40","payload":{}}
+{"type":"close","timestamp":"2026-09-11T12:41:38.26012324Z","issue_id":"exo-1f8","payload":{}}
