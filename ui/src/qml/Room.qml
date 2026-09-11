@@ -37,6 +37,10 @@ Item {
     property bool composing: false
     property string composeType: "payment"
 
+    // When composeType is "action" (a generic module action, P-D4), which action the
+    // picker has selected — {module, method, signature, params, allowed} — or null.
+    property var chosenAction: null
+
     // Parsed folds. A parse failure yields [] (absent), never fiction.
     readonly property var messages: {
         try { return JSON.parse(backend ? backend.messagesJson : "[]"); }
@@ -108,6 +112,25 @@ Item {
     }
     function hasDriver(k) { return (room.drivers || []).indexOf(k) >= 0; }
 
+    // The coordinatable module actions available to the room (loadAvailableActions):
+    // [{module, method, signature, params, allowed}]. The action composer lists these;
+    // picking one composes an invoke intent. Loaded when the action composer opens.
+    readonly property var availableActions: {
+        try { return JSON.parse(backend ? backend.availableActionsJson : "[]"); }
+        catch (e) { return []; }
+    }
+    // The outcome of the last room-side invoke execution (executeInRoom): {id, state,
+    // executed, detail} or {id, error, ...}. Matched to a card by its intent id, just
+    // like roomSubmit is for a Safe settle.
+    readonly property var executeResult: {
+        try { return JSON.parse(backend ? backend.executeJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    // Refresh the action menu when the action composer opens — the module queries each
+    // candidate module's methods (never a blind scan), so not on the message tick.
+    onComposeTypeChanged: if (composing && composeType === "action" && room.backend)
+                              room.backend.loadAvailableActions();
+
     // The COMPOSE DEFAULT policy (driver) for the next thing you propose here, from
     // coordinate_policy. Policy is a property of each intent, not the room — the room
     // is a security/privacy boundary, an intent is a policy boundary — so this only
@@ -144,10 +167,18 @@ Item {
         // driver-as-proposal: an add-driver governance intent renders as a decision to
         // grant the room a new policy (reusing the statement text slot for the sentence).
         var isGovernance = effKind === "add-driver";
+        // a generic module action (P-D4): the effect names module.method(args); the card
+        // shows "call module.method(…)" instead of amount → destination.
+        var isInvoke = effKind === "invoke";
+        var invokeArgs = (isInvoke && eff.args) ? eff.args : [];
         return {
             kind: "intent-propose",
             label: isGovernance ? qsTr("Add policy")
+                 : isInvoke ? qsTr("Action")
                  : isStatement ? qsTr("Statement") : qsTr("Payment"),
+            // an invoke intent's target, rendered by the card as "call module.method(…)".
+            action: isInvoke ? (String(eff.module || "") + "." + String(eff.method || "")) : "",
+            actionArgs: invokeArgs,
             // a statement the room ratifies, or a governance decision — the card shows
             // the text instead of amount → destination.
             statement: isGovernance
@@ -217,6 +248,34 @@ Item {
         room.backend.proposeInRoom(JSON.stringify({
             effect: "statement", text: String(text)
         }));
+        room.composing = false;
+    }
+
+    // A generic module action (P-D4): coordinate calling module.method(args). The
+    // policy for THIS proposal is the invoke driver (k-of-n over the room roster) — the
+    // action itself lives in the effect, so the same propose/contribute/fold path
+    // coordinates it, and coordinate_execute runs it once the room endorses it. argsText
+    // is a JSON array; a blank or unparseable value falls back to []. Idempotent id:
+    // the same call composes the same content-addressed intent.
+    function proposeAction(action, argsText) {
+        if (!room.backend || !action) return;
+        var args = [];
+        var raw = String(argsText || "").trim();
+        if (raw.length > 0) {
+            try {
+                var parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) args = parsed;
+            } catch (e) { args = []; }   // never send fiction — empty on a bad parse
+        }
+        // the invoke driver governs this proposal; each card keeps its own policy.
+        room.backend.setPolicy("invoke");
+        room.backend.proposeInRoom(JSON.stringify({
+            effect: "invoke",
+            module: String(action.module || ""),
+            method: String(action.method || ""),
+            args: args
+        }));
+        room.chosenAction = null;
         room.composing = false;
     }
 
@@ -457,6 +516,9 @@ Item {
                                             .indexOf(String((msg.liveIntent && msg.liveIntent.state) || "")) >= 0
                                          || (room.roomSubmit
                                              && String(room.roomSubmit.id || "")
+                                                === String((msg.liveIntent && msg.liveIntent.id) || ""))
+                                         || (room.executeResult
+                                             && String(room.executeResult.id || "")
                                                 === String((msg.liveIntent && msg.liveIntent.id) || "")))
                             Layout.fillWidth: true
                             Layout.leftMargin: Theme.spacing.medium
@@ -464,10 +526,18 @@ Item {
 
                             readonly property string rail: String((msg.liveIntent && msg.liveIntent.rail) || "safe")
                             readonly property string st: String((msg.liveIntent && msg.liveIntent.state) || "")
+                            // an invoke intent settles by RUNNING the action (coordinate_execute),
+                            // not by an on-chain Safe settle — the policy tells them apart.
+                            readonly property bool isInvoke:
+                                String((msg.liveIntent && msg.liveIntent.policy) || "") === "invoke"
                             // the submit outcome, only when it names THIS intent
                             readonly property var outcome: (room.roomSubmit
                                 && String(room.roomSubmit.id || "") === String((msg.liveIntent && msg.liveIntent.id) || ""))
                                 ? room.roomSubmit : null
+                            // the invoke-execute outcome, only when it names THIS intent
+                            readonly property var execOutcome: (room.executeResult
+                                && String(room.executeResult.id || "") === String((msg.liveIntent && msg.liveIntent.id) || ""))
+                                ? room.executeResult : null
 
                             RowLayout {
                                 Layout.fillWidth: true
@@ -477,7 +547,13 @@ Item {
                                     wrapMode: Text.WordWrap
                                     // Track the folded state so the line doesn't keep
                                     // saying "Ready" after the intent has been settled.
-                                    text: readyBox.rail !== "safe"
+                                    text: readyBox.isInvoke
+                                          ? (readyBox.st === "final"
+                                             ? qsTr("✓ Ran — the action executed.")
+                                             : readyBox.st === "submitted"
+                                             ? qsTr("Running the action…")
+                                             : qsTr("✓ Ready — endorsed. Run the action."))
+                                          : readyBox.rail !== "safe"
                                           ? qsTr("✓ Endorsed — a signed group decision. Nothing settles on-chain.")
                                           : readyBox.st === "final"
                                           ? qsTr("✓ Paid — settled on-chain.")
@@ -489,11 +565,19 @@ Item {
                                     font.pixelSize: Theme.typography.secondaryText
                                     font.weight: Theme.typography.weightMedium
                                 }
+                                // invoke: run the action FROM the room (coordinate_execute).
+                                LogosButton {
+                                    objectName: "roomExecuteButton"
+                                    visible: readyBox.isInvoke && readyBox.st === "executable"
+                                    text: qsTr("Run the action")
+                                    onClicked: if (room.backend)
+                                                   room.backend.executeInRoom(String((msg.liveIntent && msg.liveIntent.id) || ""));
+                                }
                                 LogosButton {
                                     objectName: "roomSubmitButton"
                                     // only while it is actually executable — once it is
                                     // submitted/final there is nothing left to settle.
-                                    visible: readyBox.rail === "safe" && readyBox.st === "executable"
+                                    visible: !readyBox.isInvoke && readyBox.rail === "safe" && readyBox.st === "executable"
                                     text: qsTr("Settle on-chain")
                                     onClicked: if (room.backend)
                                                    room.backend.submitInRoom(String((msg.liveIntent && msg.liveIntent.id) || ""));
@@ -536,6 +620,41 @@ Item {
                                     var o = readyBox.outcome || ({});
                                     return (o.error !== undefined || String(o.onchain || "") === "failed")
                                            ? Theme.palette.warning : Theme.palette.textSecondary;
+                                }
+                                font.family: Theme.typography.mono
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+
+                            // honest invoke-execute outcome (executed/detail, or an error).
+                            // The core never reports a false success — a gated or failed
+                            // call is an error here, not a silent "ran".
+                            LogosText {
+                                visible: readyBox.execOutcome !== null
+                                Layout.fillWidth: true
+                                wrapMode: Text.WrapAnywhere
+                                text: {
+                                    var o = readyBox.execOutcome || ({});
+                                    if (o.error !== undefined) {
+                                        var err = String(o.error);
+                                        if (err === "not-invoke")
+                                            return qsTr("⚠ Not an action intent — nothing to run.");
+                                        if (err === "not-executable")
+                                            return qsTr("⚠ Not ready to run — state is \"%1\".")
+                                                   .arg(String(o.state || ""));
+                                        if (err === "not-allowed")
+                                            return qsTr("⚠ Blocked by the gate — %1.%2 is not on the invoke "
+                                                     + "allowlist, or the target's capability policy denied it.")
+                                                   .arg(String(o.module || "")).arg(String(o.method || ""));
+                                        return qsTr("⚠ ") + err + (o.detail ? " — " + String(o.detail) : "");
+                                    }
+                                    return o.executed
+                                         ? qsTr("✓ Action ran%1").arg(o.detail ? "  ·  " + String(o.detail) : "")
+                                         : qsTr("Running…");
+                                }
+                                color: {
+                                    var o = readyBox.execOutcome || ({});
+                                    return (o.error !== undefined) ? Theme.palette.warning
+                                                                   : Theme.palette.textSecondary;
                                 }
                                 font.family: Theme.typography.mono
                                 font.pixelSize: Theme.typography.badgeText
@@ -610,8 +729,9 @@ Item {
                 spacing: Theme.spacing.tiny
 
                 LogosText {
-                    text: room.composeType === "statement"
-                          ? qsTr("Propose a statement") : qsTr("Propose a payment")
+                    text: room.composeType === "statement" ? qsTr("Propose a statement")
+                        : room.composeType === "action" ? qsTr("Propose an action")
+                        : qsTr("Propose a payment")
                     color: Theme.palette.text
                     font.family: Theme.typography.publicSans
                     font.pixelSize: Theme.typography.secondaryText
@@ -649,6 +769,17 @@ Item {
                         variant: room.composeType === "statement"
                                  ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
                         onClicked: room.composeType = "statement"
+                    }
+
+                    // a generic module action (P-D4): coordinate calling a loaded
+                    // module's method — the room endorses it, the core invokes it.
+                    LogosButton {
+                        objectName: "roomKindAction"
+                        Layout.preferredWidth: 110
+                        text: qsTr("Action")
+                        variant: room.composeType === "action"
+                                 ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                        onClicked: room.composeType = "action"
                     }
 
                     Item { Layout.fillWidth: true }
@@ -834,6 +965,88 @@ Item {
                     }
                 }
 
+                // ── action: pick a module method the room will coordinate ──────
+                // The menu is coordinate_available_actions — only the actions your
+                // loaded modules expose (allowlist + MUSTER_INVOKE_MODULES, never a
+                // blind scan). Picking one composes an invoke intent; the room endorses
+                // it k-of-n and the core invokes it (the driver never does, invariant 3).
+                ColumnLayout {
+                    visible: room.composeType === "action"
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.tiny
+
+                    LogosText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: room.availableActions.length > 0
+                              ? qsTr("What your modules let the room do:")
+                              : qsTr("No coordinatable actions — set MUSTER_INVOKE_MODULES "
+                                   + "or the invoke allowlist to expose a module's methods.")
+                        color: Theme.palette.textTertiary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+
+                    // one selectable row per available action.
+                    Repeater {
+                        model: room.availableActions
+
+                        delegate: Rectangle {
+                            id: actionRow
+                            required property var modelData
+                            readonly property bool chosen: room.chosenAction
+                                && String(room.chosenAction.module || "") === String(modelData.module || "")
+                                && String(room.chosenAction.method || "") === String(modelData.method || "")
+                            Layout.fillWidth: true
+                            implicitHeight: actionLbl.implicitHeight + Theme.spacing.small
+                            radius: Theme.spacing.radiusSmall
+                            color: actionRow.chosen ? Theme.palette.surfaceRaised : "transparent"
+                            border.width: 1
+                            border.color: actionRow.chosen ? Theme.palette.textSecondary
+                                                           : Theme.palette.borderSubtle
+
+                            LogosText {
+                                id: actionLbl
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.leftMargin: Theme.spacing.small
+                                anchors.rightMargin: Theme.spacing.small
+                                wrapMode: Text.WordWrap
+                                text: {
+                                    var sig = String(actionRow.modelData.signature
+                                                     || actionRow.modelData.method || "");
+                                    var mod = String(actionRow.modelData.module || "");
+                                    var mark = actionRow.modelData.allowed
+                                             ? qsTr("  ·  ✓ runs now")
+                                             : qsTr("  ·  needs opt-in to run");
+                                    return mod + "." + sig + mark;
+                                }
+                                color: Theme.palette.text
+                                font.family: Theme.typography.mono
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: room.chosenAction = actionRow.modelData
+                            }
+                        }
+                    }
+
+                    // args for the chosen action — a JSON array, exactly what the effect
+                    // carries. Kept honest: the raw args the module.method will receive.
+                    LogosTextField {
+                        id: proposeArgs
+                        objectName: "roomProposeArgs"
+                        visible: room.chosenAction !== null
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("args as a JSON array, e.g. [\"/room\",\"hello\"]")
+                        font.family: Theme.typography.mono
+                    }
+                }
+
                 // payment: recipient (+ amount below).
                 LogosTextField {
                     id: proposeTo
@@ -870,17 +1083,21 @@ Item {
                     }
 
                     // keep the buttons right-aligned when the amount field is hidden.
-                    Item { visible: room.composeType === "statement"; Layout.fillWidth: true }
+                    Item { visible: room.composeType !== "payment"; Layout.fillWidth: true }
 
                     LogosButton {
                         objectName: "roomProposeSubmit"
                         text: qsTr("Propose")
-                        enabled: room.composeType === "statement"
-                                 ? proposeText.text.length > 0 : proposeTo.text.length > 0
+                        enabled: room.composeType === "statement" ? proposeText.text.length > 0
+                               : room.composeType === "action" ? room.chosenAction !== null
+                               : proposeTo.text.length > 0
                         onClicked: {
                             if (room.composeType === "statement") {
                                 room.proposeStatement(proposeText.text);
                                 proposeText.text = "";
+                            } else if (room.composeType === "action") {
+                                room.proposeAction(room.chosenAction, proposeArgs.text);
+                                proposeArgs.text = "";
                             } else {
                                 room.proposeFrom(proposeTo.text, proposeValue.text);
                                 proposeTo.text = "";

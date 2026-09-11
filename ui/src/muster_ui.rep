@@ -110,6 +110,23 @@ class MusterUi
     // Lands on driversJson; the policy pickers offer only these.
     SLOT(void loadDrivers())
 
+    // ── generic module actions (the invoke driver, P-D4) ─────────────────────
+    // Discover the coordinatable actions your loaded modules expose
+    // (coordinate_available_actions): the things you can DO together, beyond a Safe
+    // payment. Lands on availableActionsJson as [{module, method, signature, params,
+    // allowed}] — `allowed` marks what the invoke allowlist will actually execute.
+    // The composer renders these as an action menu; picking one composes an invoke
+    // intent the room coordinates exactly like any other proposal.
+    SLOT(void loadAvailableActions())
+
+    // Execute a generic module-action intent FROM the room (coordinate_execute): the
+    // invoke-policy counterpart to submitInRoom. For an invoke intent that reached
+    // executable (the room endorsed it k-of-n), the core re-derives, gates (allowlist
+    // + the target's capability), invokes module.method(args), and publishes
+    // submit+final so every fold converges. The result ({state, executed, detail} or
+    // {error}) lands on executeJson; intents reload. The driver never invokes (inv 3).
+    SLOT(void executeInRoom(const QString &intentId))
+
     // Liveness of the infrastructure the room relies on (connectivity): probes the
     // RPC endpoint and the delivery node, landing {rpc, delivery} on connectivityJson.
     // Refreshed on a slower cadence than the message tick (the RPC probe blocks).
@@ -182,6 +199,16 @@ class MusterUi
     // The room's admitted driver kinds (coordinate_drivers), as a JSON array of
     // strings. Grows by approved add-driver proposal (driver-as-proposal, invariant 6).
     PROP(QString driversJson="[\"safe\",\"threshold\"]" READONLY)
+
+    // The coordinatable module actions available to the room (loadAvailableActions),
+    // as a JSON array of {module, method, signature, params, allowed}. The composer's
+    // action menu renders these; picking one composes an invoke intent.
+    PROP(QString availableActionsJson="[]" READONLY)
+
+    // The outcome of the last room-side invoke execution (executeInRoom): JSON
+    // {state, executed, detail} on success, or {error, ...}. The room shows it on the
+    // ready invoke card so running the action reports honestly.
+    PROP(QString executeJson="{}" READONLY)
 
     // Every joined conversation, as JSON {topic, address, lastTs, active}. The home
     // surface lists these — one row per room the module holds a session for.
