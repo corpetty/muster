@@ -75,6 +75,15 @@ suite "lidl-gen: consumer client":
     check "r.value.getStr()" in c        # echo -> string
     check "r.value.getBool()" in c       # store -> bool
 
+  test "each method also gets a raising twin":
+    check "proc incrementOrRaise*(c: CounterClient, amount: int): int =" in c
+    check "proc echoOrRaise*(c: CounterClient, msg: string): string =" in c
+    check "proc storeOrRaise*(c: CounterClient, blob: seq[byte]): bool =" in c
+
+  test "the raising twin raises on !ok and on decode mismatch":
+    check "if not r.ok: raise newLogosCallError(\"increment\", r.error)" in c
+    check "raise newLogosCallError(\"increment\", %\"result did not decode to int\")" in c
+
   test "bstr return would decode via b64urlDecode":
     let c2 = genClient(%*{"name": "blob_module",
       "methods": [{"name": "fetch", "params": [], "returnType": {"name": "bstr"}}]})

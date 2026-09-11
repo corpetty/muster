@@ -21,10 +21,12 @@
 
 import ./logos_sdk/ffi
 import ./logos_sdk/bytes
+import ./logos_sdk/error
 import ./logos_sdk/plugin
 import ./logos_sdk/api
 
 export ffi
 export bytes
+export error
 export plugin
 export api
