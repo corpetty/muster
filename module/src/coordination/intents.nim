@@ -312,7 +312,7 @@ proc roomDriverKinds*(events: seq[Event], driverFor: DriverFor): seq[string] =
   ## governance intent the room APPROVED (reached executable or beyond) admits its
   ## kind. Deterministic: every member derives the same capability set from the same
   ## events, and a capability appears only once the group has actually agreed to it.
-  result = @["safe", "threshold", "frost", "invoke"]   # the founding capabilities
+  result = @["safe", "threshold", "frost", "invoke", "eip191"]   # the founding capabilities
   let intents = reduceIntents(events, driverFor)
   for id, it in intents:
     if $it.state notin ["executable", "submitted", "final"]: continue

@@ -832,6 +832,19 @@ Item {
                         onClicked: if (room.backend) room.backend.setPolicy("frost")
                     }
 
+                    // Attest — an EIP-191 personal-sign by the room's Safe owners (P-D6),
+                    // a signed group statement that settles nothing on-chain. In the
+                    // founding set, so it's directly selectable; distinct from the Safe
+                    // policy (which settles) and from the Ed25519 threshold endorsement.
+                    LogosButton {
+                        objectName: "roomPolicyEip191"
+                        Layout.preferredWidth: 90
+                        text: qsTr("Attest")
+                        variant: room.policyKind === "eip191"
+                                 ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                        onClicked: if (room.backend) room.backend.setPolicy("eip191")
+                    }
+
                     // Driver-as-proposal (invariant 6): "unanimous" (n-of-n) is NOT in
                     // the founding set. If the room has admitted it (an approved
                     // add-driver proposal), it's a selectable policy; otherwise this
