@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 640" width="880" height="640" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>What is generated, and what is written by hand</title>
-  <desc>Two codegen paths — muster.lidl through the lidl_c.h JSON bridge to a Nim surface, and metadata.json plus a .rep file through logos-module-builder to plugin and QtRO glue — each ending in a small hand-written region. The Nim backend does not exist yet.</desc>
+  <desc>Two codegen paths — muster.lidl through the lidl_c.h JSON bridge to a Nim surface, and metadata.json plus a .rep file through logos-module-builder to plugin and QtRO glue — each ending in a small hand-written region. The Nim backend now exists as the external logos-nim-sdk, consumed here.</desc>
 <!-- provenance
      serves:   BOTH
      shows:    The two codegen paths and the hand-written region each ends in:
@@ -11,15 +11,17 @@
                CLAUDE.md
                demo/muster-ui/metadata.json
                demo/muster-ui/CMakeLists.txt
+               module/metadata.json
      evidence: [from-source] The four lidl_c.h functions, the two rules the header states
                    outright, and the codegen keys — read off the header and metadata.json
-               [from-source] The Nim codegen backend is marked as not existing, because
-                   it does not: it is the P0 spike, and ADR-008's fallback is printed beside
-                   it
+               [from-source] The Nim codegen backend now EXISTS: it was built, then
+                   extracted to github.com/corpetty/logos-nim-sdk, and muster consumes it via
+                   metadata.json codegen.nim.packages (owner corpetty, subdir src). The box
+                   is solid; the ADR-008 fallback was not taken.
                [illustrative] The ~106-line figure for the Rust FFI binding is the plan's
                    characterisation of logos-rust-sdk/lidl-gen, not a line count taken here
-     recheck:  At P0. The moment the Nim backend exists the dashed box stops being
-               dashed, and if the fallback is taken instead the left column loses a step.
+     recheck:  When the SDK's rev pin in module/metadata.json codegen.nim.packages bumps,
+               or if the generator's emitted surface shape changes.
 -->
 
   <defs>
@@ -50,11 +52,11 @@
 
   <path d="M 230 222 L 230 240" stroke="#8A928C" stroke-width="1.2" fill="none" marker-end="url(#s)"/>
 
-  <rect x="40" y="242" width="380" height="76" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.4" stroke-dasharray="5 4"/>
-  <text x="54" y="260" font-size="11" font-weight="600" fill="#1A1F1C">A Nim codegen backend</text>
-  <text x="54" y="276" font-size="9.5" fill="#A32D1E" font-weight="600">Ours to write. It does not exist yet — this is the P0 spike.</text>
-  <text x="54" y="292" font-size="9.5" fill="#656E66">logos-rust-sdk/lidl-gen is the worked example: ~106 lines of FFI,</text>
-  <text x="54" y="303" font-size="9.5" fill="#656E66">the rest language-specific emission.</text>
+  <rect x="40" y="242" width="380" height="76" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.4"/>
+  <text x="54" y="260" font-size="11" font-weight="600" fill="#1A1F1C">logos-nim-sdk — lidl-gen</text>
+  <text x="54" y="276" font-size="9.5" fill="#2E6B4F" font-weight="600">Built, then extracted to its own repo; muster consumes it.</text>
+  <text x="54" y="292" font-size="9.5" fill="#656E66">Modeled on logos-rust-sdk/lidl-gen; pulled in via a github package</text>
+  <text x="54" y="303" font-size="9.5" fill="#656E66">in metadata.json (codegen.nim.packages, subdir src).</text>
 
   <path d="M 230 318 L 230 336" stroke="#8A928C" stroke-width="1.2" fill="none" marker-end="url(#s)"/>
 
@@ -108,6 +110,6 @@
   <text x="56" y="542" font-size="10.5" fill="#1A1F1C" font-weight="600">Read optionality from the derived <tspan font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="400">isOptional</tspan> / <tspan font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="400">valueType</tspan> keys — never the raw spelling.</text>
   <text x="56" y="557" font-size="10" fill="#656E66">The raw <tspan font-family="'DM Mono',ui-monospace,Menlo,monospace">optional</tspan> / <tspan font-family="'DM Mono',ui-monospace,Menlo,monospace">type</tspan> fields exist only so the wire form round-trips. Reading them is a bug that type-checks.</text>
 
-  <text x="56" y="583" font-size="10.5" fill="#1A1F1C" font-weight="600">If the Nim backend stalls (ADR-008): <tspan font-weight="400" fill="#656E66">hand-write the generated surface for this one contract and keep going.</tspan></text>
+  <text x="56" y="583" font-size="10.5" fill="#1A1F1C" font-weight="600">The ADR-008 fallback was not needed: <tspan font-weight="400" fill="#656E66">the backend shipped as logos-nim-sdk, so the surface is generated, not hand-written.</tspan></text>
   <text x="56" y="598" font-size="10" fill="#656E66"><tspan font-family="'DM Mono',ui-monospace,Menlo,monospace">muster.lidl</tspan> stays normative either way — which is the whole reason the contract comes first.</text>
 </svg>

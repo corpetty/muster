@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 560" width="880" height="560" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>How the module reuses the Nimbus Nim stack</title>
-  <desc>metadata.json's codegen.nim.packages pins a flat closure of Status/Nimbus Nim libraries; the logos-module-builder's nim.packages hook fetches each from GitHub (with submodules where a package vendors C) and adds it to the Nim import path with --path, so the module core compiles against the org stack instead of hand-rolled code. Reused: stint (amounts), nim-secp256k1 (one secp source), nim-eth (RLP signing + verifyMptProof), nim-web3 (typed RPC over chronos), nimcrypto, and their closure. Kept ours on purpose: dcbor (deterministic signing-path encoding, invariant 5) and curve25519 over libsodium (the F-14 chat-curve identity). The hook plus per-package fetchSubmodules are local builder-fork commits worth upstreaming.</desc>
+  <desc>metadata.json's codegen.nim.packages pins a flat closure of Status/Nimbus Nim libraries; the logos-module-builder's nim.packages hook fetches each from GitHub (with submodules where a package vendors C) and adds it to the Nim import path with --path, so the module core compiles against the org stack instead of hand-rolled code. Reused: stint (amounts), nim-secp256k1 (one secp source), nim-eth (RLP signing + verifyMptProof), nim-web3 (typed RPC over chronos), nimcrypto, and their closure. Kept ours on purpose: dcbor (deterministic signing-path encoding, invariant 5) and curve25519 over libsodium (the F-14 chat-curve identity). The same hook now also pins muster's own SDK, logos_sdk (github: corpetty/logos-nim-sdk, subdir src), which provides the lp_* runtime + the generated surface. The hook plus per-package fetchSubmodules are local builder-fork commits worth upstreaming.</desc>
 <!-- provenance
      serves:   BUILD
      shows:    The reuse toolchain: metadata.json's pinned nim.packages closure -> the
@@ -40,8 +40,8 @@
   <!-- ══ the pipeline ══ -->
   <rect x="40" y="130" width="240" height="66" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
   <text x="56" y="151" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">metadata.json</text>
-  <text x="56" y="171" font-size="10.5" fill="#3F4742">codegen.nim.packages — a flat,</text>
-  <text x="56" y="185" font-size="10.5" fill="#3F4742">pinned {owner, repo, rev, hash}.</text>
+  <text x="56" y="171" font-size="10.5" fill="#3F4742">codegen.nim.packages — a flat, pinned</text>
+  <text x="56" y="185" font-size="10.5" fill="#3F4742">{owner, repo, rev, hash} (incl. logos_sdk).</text>
 
   <path d="M 280 163 L 316 163" stroke="#8A928C" stroke-width="1.4" fill="none" marker-end="url(#g)"/>
 
