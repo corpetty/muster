@@ -20,7 +20,7 @@
       "staticlib": "muster_module",
       "link": ["sodium"],
       "packages": [
-        {"owner": "corpetty", "repo": "logos-nim-sdk", "rev": "504dea88f0b9f6209a7ffd1e0a34c155f871084b", "hash": "sha256-dro4SjYgJ0M6gxxaV1n42syjNVPStzO+wKnpiqPlaTs=", "subdir": "src", "_note": "logos_sdk (the Nim SDK) — github.com/corpetty/logos-nim-sdk. Provides logos_sdk/{ffi,bytes,api} on the import path at build time. Bump rev+hash when the SDK runtime (src/logos_sdk/*) changes; tools/regen.sh reads this same rev to build the matching generator."},
+        {"owner": "corpetty", "repo": "logos-nim-sdk", "rev": "38240154719b7947f0a3886cf18f94f8781e13a9", "hash": "sha256-7xchkppZZEC3RQ/3A9RgTiZgbKIomgKZSn27cYxRJMM=", "subdir": "src", "_note": "logos_sdk (the Nim SDK) — github.com/corpetty/logos-nim-sdk. Provides logos_sdk/{ffi,bytes,api} on the import path at build time. Bump rev+hash when the SDK runtime (src/logos_sdk/*) changes; tools/regen.sh reads this same rev to build the matching generator."},
         {"owner": "status-im", "repo": "nim-secp256k1", "rev": "f44cff901dff2a24fedcf4ef9e12a6f72355d58f", "hash": "sha256-3pAKa7x4hqKFdOM0smDYxUqCr82qfqKLWdoKp3KRQCY=", "submodules": true},
         {"owner": "status-im", "repo": "nim-stint", "rev": "91277c984c66196255947b3c58657de7538f62af", "hash": "sha256-aOkQbuqzVIGzY95UjGdig2BL6g8v2ppkXq6EHV1nQhY="},
         {"owner": "status-im", "repo": "nim-stew", "rev": "232673b2c2ec5ef05962ad8082878869b3b6d084", "hash": "sha256-Yx7RnPCjGsH0j5Q5PzVVZA39NksxXI75aCp/dZTQO6c="},

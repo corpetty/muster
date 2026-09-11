@@ -17,6 +17,7 @@ import ../src/drivers/safe
 import ../src/drivers/threshold      # a second coordination policy (Ed25519 k-of-n)
 import ../src/drivers/frost          # 2-round FROST-style — the multi-round policy
 import ../src/drivers/invoke         # the generic module-action driver (P-D1/P-D2)
+import ../src/drivers/eip191         # EIP-191 personal-sign attestation (Tier-1, P-D6)
 import ../src/drivers/registry
 import ../src/drivers/safe_rpc
 import ../src/wallet/types as wallet_types   # hexToDec + formatUnits: a live balance → "N ETH"
@@ -104,6 +105,16 @@ proc driverForKind(kind: string): Driver =
   of "unanimous": newThresholdDriver(roster, n)
   of "frost":     newFrostDriver(roster, min(2, n))
   of "invoke":    newInvokeDriver(roster, min(2, n))   # generic module-action (P-D2); action in the effect
+  of "eip191":
+    # A room-native EIP-191 personal-sign attestation (P-D6): the room's owners each
+    # personal-sign the effect off-chain — a signed group statement that settles
+    # nothing on-chain. The signer set is EXACTLY the room's Safe OWNER set — the one
+    # secp address set every instance shares identically, so the fold converges (the
+    # Ed25519 membership roster carries no secp addresses, and unioning THIS instance
+    # would give each peer a different set and diverge the count). An instance that is
+    # a configured owner attests in-app; a non-owner honestly cannot. Threshold is the
+    # Safe's, so "the owners attest" mirrors "the owners would settle".
+    newPersonalSignDriver(signers = gDriver.owners, threshold = gDriver.threshold)
   of "safe":
     # The room's Safe recognizes THIS instance's account as an owner too, so you
     # approve a Safe intent IN-APP (no paste for YOUR own signature) — completing the
@@ -526,10 +537,13 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string): string 
   if sig.len == 0:
     let mat = canonicalize(drv, effectFromJson(effectJson))
     let ks = moduleKeystore()
-    if drv of SafeDriver:
+    if drv of SafeDriver or drv of PersonalSignDriver:
+      # Both sign a 32-byte digest with the secp key: Safe the EIP-712 safeTxHash,
+      # eip191 the EIP-191 personal_sign digest. The keystore signs; the driver
+      # verifies the signature recovers to a configured owner/signer.
       var h: array[32, byte]
       for i in 0 ..< min(32, mat.bytes.len): h[i] = mat.bytes[i]
-      sig = toHex(ks.sign(h))                 # secp Signature65 over the safeTxHash
+      sig = toHex(ks.sign(h))                 # secp Signature65 over the digest
     else:
       sig = toHex(ks.edSign(mat.bytes))       # Ed25519 endorsement over the materialization
   # The intent's policy verifies the contribution: a Safe owner's secp signature, or a
