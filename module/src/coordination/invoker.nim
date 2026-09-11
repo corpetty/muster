@@ -30,6 +30,12 @@ method call*(inv: Invoker, targetModule, targetMethod, argsJson: string): Invoke
     {.base, gcsafe.} =
   raise newException(CatchableError, "Invoker.call is abstract")
 
+method methodsOf*(inv: Invoker, targetModule: string): JsonNode {.base, gcsafe.} =
+  ## The target module's method descriptors (the lp_get_methods array), for discovery
+  ## (P-D3). Empty by default; the real invoker asks the module, the local one returns
+  ## a registered descriptor.
+  newJArray()
+
 # ── the allowlist (config) ─────────────────────────────────────────────────────
 
 type
@@ -82,13 +88,22 @@ type
   InvokeHandler* = proc(argsJson: string): InvokeOutcome {.gcsafe.}
   LocalInvoker* = ref object of Invoker
     handlers: Table[string, InvokeHandler]   ## "module.method" → handler
+    descriptors: Table[string, JsonNode]     ## module → its lp_get_methods descriptor
     lastModule*, lastMethod*, lastArgs*: string  ## the last call, for tests to inspect
 
 proc newLocalInvoker*(): LocalInvoker =
-  LocalInvoker(handlers: initTable[string, InvokeHandler]())
+  LocalInvoker(handlers: initTable[string, InvokeHandler](),
+               descriptors: initTable[string, JsonNode]())
 
 proc register*(inv: LocalInvoker, targetModule, targetMethod: string, h: InvokeHandler) =
   inv.handlers[targetModule & "." & targetMethod] = h
+
+proc registerMethods*(inv: LocalInvoker, targetModule: string, descriptor: JsonNode) =
+  ## Stand in for a module's lp_get_methods descriptor, so discovery is testable.
+  inv.descriptors[targetModule] = descriptor
+
+method methodsOf*(inv: LocalInvoker, targetModule: string): JsonNode =
+  if targetModule in inv.descriptors: inv.descriptors[targetModule] else: newJArray()
 
 method call*(inv: LocalInvoker, targetModule, targetMethod, argsJson: string): InvokeOutcome =
   ## A registered handler stands in for the target module. NO registered handler
