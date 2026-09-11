@@ -28,3 +28,9 @@ method call*(inv: LpInvoker, targetModule, targetMethod, argsJson: string): Invo
     InvokeOutcome(ok: true, value: (if r.value != nil: $r.value else: ""))
   else:
     InvokeOutcome(ok: false, error: (if r.error != nil: $r.error else: "invoke failed"))
+
+method methodsOf*(inv: LpInvoker, targetModule: string): JsonNode =
+  ## The target's method descriptors over lp_get_methods (via the SDK proxy), for
+  ## discovery. An unreachable/unloaded module yields an empty array, not a raise.
+  try: newPluginProxy(targetModule, inv.origin).methodsOf()
+  except CatchableError: newJArray()

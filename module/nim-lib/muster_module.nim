@@ -33,6 +33,7 @@ import ../src/coordination/session    # the multi-instance coordination flow
 import ../src/coordination/intents     # intent lifecycle = reduce(log) (the multi-party fold)
 import ../src/coordination/invoker     # the execute seam + allowlist/capability gate (P-D2)
 import ../src/coordination/lp_invoker  # LpInvoker — call the target module over lp_*
+import ../src/coordination/discovery   # discover coordinatable module actions (P-D3)
 import ../src/wallet/types             # chain-agnostic wallet types
 import ../src/wallet/adapter           # ChainAdapter seam + Wallet aggregate
 import ../src/wallet/evm_adapter       # the EVM/Safe chain
@@ -810,6 +811,21 @@ proc musterCoordinateExecute(intentId: string): string =
   $(%*{"id": intentId, "executed": true,
        "state": intentState(gSession.log.allEvents(), driverFor, intentId),
        "detail": ex.reason})
+
+proc musterCoordinateAvailableActions(): string =
+  ## The coordinatable module actions available to the room (P-D3): the compose menu.
+  ## Candidate modules = the invoke allowlist's modules + MUSTER_INVOKE_MODULES (muster
+  ## does not blind-scan every loaded module). Each is queried for its lp_get_methods
+  ## descriptors, reads pruned, and the allowlisted ones marked executable-now.
+  let allow = invokeAllowlist()
+  var modules: seq[string]
+  for e in allow:
+    if e.module notin modules: modules.add e.module
+  for m in getEnv("MUSTER_INVOKE_MODULES").split(','):
+    let t = m.strip()
+    if t.len > 0 and t notin modules: modules.add t
+  if gInvoker == nil: gInvoker = newLpInvoker("muster_module")
+  $discoverAcross(gInvoker, modules, allow)
 
 proc roomContext(): LinkContext =
   ## The context our binding is scoped to — this Safe, valid for a day. Wall-clock
