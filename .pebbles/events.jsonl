@@ -674,3 +674,22 @@
 {"type":"close","timestamp":"2026-09-11T12:41:38.26012324Z","issue_id":"exo-193","payload":{}}
 {"type":"close","timestamp":"2026-09-11T12:41:38.26012324Z","issue_id":"exo-d40","payload":{}}
 {"type":"close","timestamp":"2026-09-11T12:41:38.26012324Z","issue_id":"exo-1f8","payload":{}}
+{"type":"create","timestamp":"2026-09-11T12:46:15.604875673Z","issue_id":"exo-fa4","payload":{"description":"Every Logos module that lets a user 'do something' becomes a Muster driver, so the module is infrastructure for doing that thing with others. Design: docs/design/driver-derivation.md. Tier 0 = generic 'invoke' driver (runtime config, room-authorized k-of-n, core lp_invokes after threshold); Tier 1 = module-native auth (hand canonicalize, like Safe). Derivation tool extends logos-nim-sdk lidl-gen.","priority":"2","title":"Module→driver/card derivation: coordinate any Logos module action","type":"epic"}}
+{"type":"create","timestamp":"2026-09-11T12:46:15.644232413Z","issue_id":"exo-9a9","payload":{"description":"","priority":"2","title":"P-D1: generic 'invoke' driver + conformance (describe/canonicalize dCBOR call-intent/verify roster Ed25519); the foundational abstraction, no UI","type":"task"}}
+{"type":"rename","timestamp":"2026-09-11T12:46:15.688031041Z","issue_id":"exo-9a9","payload":{"new_id":"exo-fa4.1"}}
+{"type":"dep_add","timestamp":"2026-09-11T12:46:15.688031041Z","issue_id":"exo-fa4.1","payload":{"dep_type":"parent-child","depends_on":"exo-fa4"}}
+{"type":"create","timestamp":"2026-09-11T12:46:15.723192931Z","issue_id":"exo-0d5","payload":{"description":"","priority":"2","title":"P-D2: generic execution path — coordinate_submit-style route that re-derives + lp_invokes module.method(args) + observes finality (event/immediate); headless test vs stub module","type":"task"}}
+{"type":"rename","timestamp":"2026-09-11T12:46:15.762284079Z","issue_id":"exo-0d5","payload":{"new_id":"exo-fa4.2"}}
+{"type":"dep_add","timestamp":"2026-09-11T12:46:15.762284079Z","issue_id":"exo-fa4.2","payload":{"dep_type":"parent-child","depends_on":"exo-fa4"}}
+{"type":"create","timestamp":"2026-09-11T12:46:15.795116119Z","issue_id":"exo-64a","payload":{"description":"","priority":"2","title":"P-D3: discovery + curation — enumerate loaded modules (methodsOf/registry), prune reads, honor @coordinatable, expose coordinate_available_actions","type":"task"}}
+{"type":"rename","timestamp":"2026-09-11T12:46:15.835521684Z","issue_id":"exo-64a","payload":{"new_id":"exo-fa4.3"}}
+{"type":"dep_add","timestamp":"2026-09-11T12:46:15.835521684Z","issue_id":"exo-fa4.3","payload":{"dep_type":"parent-child","depends_on":"exo-fa4"}}
+{"type":"create","timestamp":"2026-09-11T12:46:15.869453102Z","issue_id":"exo-a11","payload":{"description":"","priority":"2","title":"P-D4: generic action card — render an arbitrary effect schema (labels from LIDL @brief/@param) from the fold","type":"task"}}
+{"type":"rename","timestamp":"2026-09-11T12:46:15.910777359Z","issue_id":"exo-a11","payload":{"new_id":"exo-fa4.4"}}
+{"type":"dep_add","timestamp":"2026-09-11T12:46:15.910777359Z","issue_id":"exo-fa4.4","payload":{"dep_type":"parent-child","depends_on":"exo-fa4"}}
+{"type":"create","timestamp":"2026-09-11T12:46:15.945353574Z","issue_id":"exo-507","payload":{"description":"","priority":"2","title":"P-D5: lidl-gen 'driver' mode in logos-nim-sdk — emit effect schema + card descriptor + Tier-1 skeletons from a contract","type":"task"}}
+{"type":"rename","timestamp":"2026-09-11T12:46:15.98280209Z","issue_id":"exo-507","payload":{"new_id":"exo-fa4.5"}}
+{"type":"dep_add","timestamp":"2026-09-11T12:46:15.98280209Z","issue_id":"exo-fa4.5","payload":{"dep_type":"parent-child","depends_on":"exo-fa4"}}
+{"type":"create","timestamp":"2026-09-11T12:46:16.018028306Z","issue_id":"exo-12a","payload":{"description":"","priority":"2","title":"P-D6: a second real Tier-0 driver end-to-end (non-Safe) + one Tier-1 case beyond Safe, validating the skeleton path","type":"task"}}
+{"type":"rename","timestamp":"2026-09-11T12:46:16.056308592Z","issue_id":"exo-12a","payload":{"new_id":"exo-fa4.6"}}
+{"type":"dep_add","timestamp":"2026-09-11T12:46:16.056308592Z","issue_id":"exo-fa4.6","payload":{"dep_type":"parent-child","depends_on":"exo-fa4"}}
