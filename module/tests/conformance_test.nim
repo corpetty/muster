@@ -11,6 +11,7 @@ import ../src/drivers/driver
 import ../src/drivers/safe
 import ../src/drivers/threshold
 import ../src/drivers/frost
+import ../src/drivers/invoke
 import ../src/drivers/registry
 import ../src/drivers/conformance
 import ../src/crypto/secp256k1
@@ -122,5 +123,49 @@ block:
            "registry selected the FROST driver by kind"
   doAssert frost.describe().rounds == 2, "registry FROST driver keeps its two rounds"
   echo "6. registry builds the FROST driver by kind OK"
+
+# ── 7. the generic invoke driver conforms — coordinate any module action ──────
+# A k-of-n Ed25519 endorsement over the room roster of the intent to call
+# module.method(args). Same coordination as threshold; what's new is a
+# per-(module, method) serialization domain (invariant 5) and the target config the
+# execution path (P-D2) will read. The driver never invokes — the core does.
+block:
+  proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
+  let member = encFromSeed(seed(11))
+  let drv = newInvokeDriver("delivery_module", "send", @[member.identity().ed], k = 1)
+  let e = Effect(schemaId: invokeDomain("delivery_module", "send"),
+                 fields: @[("module", cbText("delivery_module")), ("method", cbText("send")),
+                           ("contentTopic", cbText("/muster/1/room/proto")),
+                           ("payload", cbText("hi"))])
+  let t = Effect(schemaId: invokeDomain("delivery_module", "send"),
+                 fields: @[("module", cbText("delivery_module")), ("method", cbText("send")),
+                           ("contentTopic", cbText("/muster/1/room/proto")),
+                           ("payload", cbText("bye"))])
+  let sig = edSign(member, canonicalize(drv, e).bytes)   # a roster member's endorsement
+  var cb: seq[byte]
+  for b in sig: cb.add b
+  let r = checkConformance(drv, e, t, Contribution(bytes: cb))
+  doAssert r.allPass(), "invoke driver must conform: failed " & $r.failed()
+  # invariant 5 domain separation: the SAME effect under a DIFFERENT target method
+  # must materialize to DIFFERENT bytes (the domain comes from describe()).
+  let drv2 = newInvokeDriver("delivery_module", "subscribe", @[member.identity().ed], k = 1)
+  doAssert canonicalize(drv, e).bytes != canonicalize(drv2, e).bytes,
+           "same args to a different method must sign to different bytes (inv 5)"
+  echo "7. invoke driver conforms (", r.checks.len, " checks) + per-method domain separation OK"
+
+# ── 8. the registry builds the invoke driver by kind ──────────────────────────
+block:
+  proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
+  let member = encFromSeed(seed(13))
+  var rosterHex = "0x"
+  const hexd = "0123456789abcdef"
+  for b in member.identity().ed: (rosterHex.add hexd[int(b shr 4)]; rosterHex.add hexd[int(b and 0x0F)])
+  let inv = newDriver("invoke", %*{"module": "vote_module", "method": "cast",
+                                   "roster": [rosterHex], "k": 1, "finality": "event"})
+  doAssert inv.describe().serializationDomain == "muster.invoke.vote_module.cast.v1",
+           "registry selected the invoke driver with a per-(module,method) domain"
+  doAssert inv.describe().finality == finExternal, "invoke finality 'event' maps to finExternal"
+  doAssert inv.describe().threshold == 1, "registry invoke driver keeps k"
+  echo "8. registry builds the invoke driver by kind OK"
 
 echo "conformance_test: all OK"
