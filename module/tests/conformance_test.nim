@@ -12,6 +12,7 @@ import ../src/drivers/safe
 import ../src/drivers/threshold
 import ../src/drivers/frost
 import ../src/drivers/invoke
+import ../src/drivers/eip191
 import ../src/drivers/registry
 import ../src/drivers/conformance
 import ../src/crypto/secp256k1
@@ -167,5 +168,33 @@ block:
   doAssert inv.describe().threshold == 1, "registry invoke driver keeps k"
   doAssert inv.describe().membership == mmNamed, "invoke endorses over a named roster"
   echo "8. registry builds the invoke driver by kind OK"
+
+# ── 9. the eip191 Tier-1 driver conforms — a module-native signing model beyond
+#      Safe (P-D6), the completed driver-derivation skeleton. secp personal_sign,
+#      not the Ed25519 roster; an EIP-191 digest, not EIP-712. Grades identically. ─
+block:
+  const sk0 = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+  var k0: array[32, byte]
+  block:
+    let b = bytesOf(sk0)
+    for i in 0 ..< 32: k0[i] = b[i]
+  let signer0 = addressOf(k0)
+  const hexd = "0123456789abcdef"
+  var signerHex = "0x"
+  for b in signer0: (signerHex.add hexd[int(b shr 4)]; signerHex.add hexd[int(b and 0x0F)])
+  let d = newDriver("eip191", %*{"signers": [signerHex], "threshold": 1})
+  let e = Effect(schemaId: "muster.effect.statement.v1", fields: @[
+    ("text", cbText("attest: ship")), ("nonce", cbUint(0'u64))])
+  let t = Effect(schemaId: "muster.effect.statement.v1", fields: @[
+    ("text", cbText("attest: don't ship")), ("nonce", cbUint(0'u64))])
+  # sign the real EIP-191 digest of `e` (what canonicalize produces).
+  var h: array[32, byte]
+  let mb = canonicalize(d, e).bytes
+  for i in 0 ..< 32: h[i] = mb[i]
+  let sig = signRecoverable(h, k0)
+  let r = checkConformance(d, e, t, Contribution(bytes: @sig))
+  doAssert r.allPass(), "eip191 driver must conform: " & $r.failed()
+  doAssert d.describe().serializationDomain == EIP191_DOMAIN
+  echo "9. eip191 (Tier-1, module-native personal_sign) conforms (", r.checks.len, " checks) OK"
 
 echo "conformance_test: all OK"

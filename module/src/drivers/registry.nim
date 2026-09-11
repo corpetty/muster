@@ -13,6 +13,7 @@ import ./safe
 import ./threshold
 import ./frost
 import ./invoke
+import ./eip191
 import ../crypto/secp256k1    # Address
 import ../crypto/curve25519   # Ed25519Pub (the roster)
 
@@ -70,5 +71,14 @@ proc newDriver*(kind: string, config: JsonNode): Driver =
     # generic roster driver; the EXECUTION path (P-D2) reads the module/method from
     # the effect and gates on the allowlist + the target's capability policy.
     newInvokeDriver(parseRoster(config), config{"k"}.getInt(1))
+  of "eip191":
+    # A Tier-1 (module-native) driver beyond Safe (P-D6): the room's signers each
+    # EIP-191 personal-sign the effect; a contribution counts only if its secp256k1
+    # signature recovers to a configured signer. Settles nothing on-chain — a signed
+    # group attestation. `signers` are 20-byte hex addresses, like a Safe's owners.
+    var signers: seq[Address]
+    if config.hasKey("signers") and config["signers"].kind == JArray:
+      for s in config["signers"]: signers.add hexToAddr(s.getStr())
+    newPersonalSignDriver(signers = signers, threshold = config{"threshold"}.getInt(2))
   else:
     raise newException(RegistryError, "unknown driver kind: " & kind)
