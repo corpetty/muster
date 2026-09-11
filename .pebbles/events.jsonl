@@ -706,3 +706,10 @@
 {"type":"status_update","timestamp":"2026-09-11T15:43:57.282258283Z","issue_id":"exo-fa4.4","payload":{"status":"in_progress"}}
 {"type":"comment","timestamp":"2026-09-11T15:44:53.706239558Z","issue_id":"exo-fa4.4","payload":{"body":"P-D4 UI shipped in PR #58 (stacked on #57). View seam: loadAvailableActions/executeInRoom + availableActionsJson/executeJson in muster_ui.rep+backend. Composer 'Action' kind lists coordinate_available_actions; picking one proposes an invoke intent under the invoke driver. MusterCard renders 'call module.method(N args)'. Ready box 'Run the action' → coordinate_execute with honest outcome. ui .lgx compiles backend against the generated client; qmllint clean. Render is the logos-qt-mcp harness gate. Close on merge."}}
 {"type":"close","timestamp":"2026-09-11T15:49:41.696760163Z","issue_id":"exo-fa4.4","payload":{}}
+{"type":"status_update","timestamp":"2026-09-11T15:51:45.987065038Z","issue_id":"exo-fa4.5","payload":{"status":"in_progress"}}
+{"type":"status_update","timestamp":"2026-09-11T15:51:46.023603632Z","issue_id":"exo-fa4.6","payload":{"status":"in_progress"}}
+{"type":"close","timestamp":"2026-09-11T16:07:21.867521093Z","issue_id":"exo-fa4.5","payload":{}}
+{"type":"close","timestamp":"2026-09-11T16:07:21.867521093Z","issue_id":"exo-fa4.6","payload":{}}
+{"type":"comment","timestamp":"2026-09-11T16:07:21.908436365Z","issue_id":"exo-fa4.5","payload":{"body":"Done: logos-nim-sdk PR #1 — lidl_gen driver mode (genDriver): effect schema + domain tag + card + Tier-1 skeleton, 28 headless tests, emitted manifest nim-checks clean."}}
+{"type":"comment","timestamp":"2026-09-11T16:07:21.949016861Z","issue_id":"exo-fa4.6","payload":{"body":"Done: muster PR #60. Tier-1 eip191 driver (EIP-191 personal_sign, secp ecrecover) + registry + conformance block 9 + eip191_test; second Tier-0 action (vote_module.cast) in coordination_invoke_test. Room-native policy wiring deferred (needs members→secp mapping)."}}
+{"type":"close","timestamp":"2026-09-11T16:07:21.98658029Z","issue_id":"exo-fa4","payload":{}}
