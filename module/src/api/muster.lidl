@@ -1,6 +1,6 @@
 module muster_module {
   version "0.1.0"
-  description "Muster — local-first client for coordinating multi-party transactions inside conversations. The coordination surface: propose an intent from an effect, read the exact bytes to sign (the driver-canonicalized materialization), approve it with owner signatures until the driver's threshold is met, and read its lifecycle state. The Nim core behind this contract drives the intent lifecycle engine over a real driver (Safe: EIP-712 safeTxHash + secp256k1 owner recovery). This .lidl stays the single normative surface; the Nim module surface is generated from it by the shared logos_sdk generator (sdk/lidl-gen)."
+  description "Muster — local-first client for coordinating multi-party transactions inside conversations. The coordination surface: propose an intent from an effect, read the exact bytes to sign (the driver-canonicalized materialization), approve it with owner signatures until the driver's threshold is met, and read its lifecycle state. The Nim core behind this contract drives the intent lifecycle engine over a real driver (Safe: EIP-712 safeTxHash + secp256k1 owner recovery). This .lidl stays the single normative surface; the Nim module surface is generated from it by the shared logos_sdk generator (github.com/corpetty/logos-nim-sdk)."
 
   method health() -> tstr description "Liveness probe. Returns \"ok\" when the module is loaded and dispatching."
 
