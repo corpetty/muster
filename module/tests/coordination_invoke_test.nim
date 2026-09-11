@@ -100,4 +100,39 @@ doAssert intentState(alice.log.allEvents(), foldDrv, id) == "final" and
 doAssert alice.digest() == bob.digest(), "final state converges too"
 echo "3. core executes (allowlist+capability) -> submitted -> final, both converge OK"
 
+# 4. A SECOND, distinct module action over the SAME generic Tier-0 driver (P-D6):
+#    the action lives in the effect, so a different module.method needs no new driver
+#    code — only a different effect. Its signed bytes differ (invariant 5: the per-
+#    (module, method) schemaId separates them), and it coordinates + executes the same
+#    way. This is what "a second real Tier-0 driver end-to-end" means: genericity, not
+#    a delivery-specific path.
+block:
+  const voteJson = """{"effect":"invoke","module":"vote_module","method":"cast","args":["prop-1",1]}"""
+  let vid = intentIdFor(voteJson, "invoke")
+  let vmat = canonicalize(drv, effectFromJson(voteJson))
+  doAssert vmat.bytes != mat.bytes,
+    "a different action canonicalizes to different signed bytes (invariant 5 domain separation)"
+  doAssert vid != id, "a distinct content-addressed intent"
+
+  alice.publish(policyDeclEvent(vid, "invoke"))
+  alice.publish(proposeEvent(vid, voteJson))
+  doAssert effectJsonOf(bob.log.allEvents(), vid) == voteJson, "Bob recovers the second action's effect"
+
+  let vaSig = toHex(edSign(aliceMem, vmat.bytes))
+  let vbSig = toHex(edSign(bobMem, vmat.bytes))
+  alice.publish(contributeEvent(vid, contributorOf(drv, voteJson, vaSig), vaSig))
+  bob.publish(contributeEvent(vid, contributorOf(drv, voteJson, vbSig), vbSig))
+  doAssert intentState(alice.log.allEvents(), foldDrv, vid) == "executable" and
+           intentState(bob.log.allEvents(), foldDrv, vid) == "executable",
+           "the second action reaches executable over the same driver"
+
+  let vinv = newLocalInvoker()
+  vinv.register("vote_module", "cast", proc(argsJson: string): InvokeOutcome {.gcsafe.} =
+    InvokeOutcome(ok: true, value: "true"))
+  let vallow = @[AllowEntry(module: "vote_module", meth: "cast")]
+  let vex = executeInvoke(vinv, vallow, "vote_module", "cast", """["prop-1",1]""")
+  doAssert vex.executed, "the second module action runs too: " & vex.reason
+  doAssert vinv.lastArgs == """["prop-1",1]""", "vote_module received the coordinated args"
+  echo "4. a second, distinct module action coordinates + executes over the same Tier-0 driver OK"
+
 echo "coordination_invoke_test: the invoke flow works end to end over a real session — all OK"

@@ -1,6 +1,7 @@
 # Deriving Muster drivers and cards from Logos modules
 
-**Status:** design note / plan (not yet implemented). Author: 2026-09-11.
+**Status:** implemented — P-D1…P-D6 all landed (2026-09-11). This note remains the
+design rationale; see §6 for the per-phase state. Author: 2026-09-11.
 **Thesis:** every Logos module that lets a user *do something* should become a Muster
 driver, so the module is *infrastructure for doing that thing with other people,
 securely and privately*. This note works out how to think about that and a phased
@@ -145,8 +146,8 @@ Each phase is independently useful and shippable.
 - **P-D2 — the generic execution path.** A `coordinate_submit`-style route for `invoke` intents: re-derive → `lp_invoke module.method(args)` (SDK client) → observe finality (event/immediate). Headless test against a stub module + the local transport (never mock `Driver`/`Transport`).
 - **P-D3 — discovery + curation.** Enumerate loaded modules (`methodsOf`/registry), prune reads by heuristic, honor a `@coordinatable` annotation, and expose the coordinatable-actions list through a `coordinate_available_actions` lidl method.
 - **P-D4 — the generic action card.** Generalize the intent-propose card to render an arbitrary effect schema (label + fields from LIDL descriptions), fed by the fold. qmllint + the render harness.
-- **P-D5 — `lidl-gen driver` mode.** Extend the SDK generator to emit effect schema + card descriptor + Tier-1 skeletons from a contract. (Upstream to logos-nim-sdk.)
-- **P-D6 — a second real driver end-to-end** (a non-Safe module — a vote or a shared-fund action) proving Tier 0, and one Tier-1 module-native case beyond Safe, to validate the skeleton path.
+- **P-D5 — `lidl-gen driver` mode. ✅ Done** (logos-nim-sdk PR #1). `lidl_gen driver contract.lidl out.nim [coordinatable-csv] [tier1-csv]` emits, per curated action: the effect schema + its dCBOR domain tag `muster.invoke.<module>.<method>.v1` (byte-exact with the invoke driver), the intent-propose card copy (label from the LIDL `description`, fields from the params), a Tier-0 invoke-driver config, and a Tier-1 `Driver` skeleton (block comment) to complete. Only the mechanical parts are derived; curation (`coordinatable-csv`) and the auth model (`tier1-csv`) are declared, never guessed. 28 headless tests; the emitted manifest `nim check`s clean.
+- **P-D6 — a second real driver end-to-end. ✅ Done.** *Tier 0:* `coordination_invoke_test` now coordinates a second, distinct module action (`vote_module.cast`) over the same generic invoke driver — different signed bytes (invariant 5), same propose→endorse→executable→execute path — proving genericity beyond `delivery.send`. *Tier 1:* `module/src/drivers/eip191.nim` — an **EIP-191 personal-sign driver**, the worked completion of the P-D5 skeleton: a module-native `canonicalize` (the EIP-191 digest, not generic dCBOR) + `verifyContribution` (secp `ecrecover` to a configured signer set, not the Ed25519 roster). Registered (`newDriver("eip191", …)`), conformant (the standing `conformance_test` block 9 + a dedicated `eip191_test`), and compiled into the plugin. *Follow-up:* wiring it as a **room-native** policy (mapping room members → their secp addresses) so a room can pick "attestation" from the composer — deferred, not offered until wired, so no policy silently falls back.
 
 **First step:** P-D1 — it's self-contained, invariant-critical, and everything else builds on it. It answers the load-bearing question (can a generic call-intent be a conformant driver?) before any UI or codegen investment.
 
