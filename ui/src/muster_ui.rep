@@ -68,6 +68,15 @@ class MusterUi
     SLOT(void loadPending())
     SLOT(void admit(const QString &identityHex))
 
+    // The address book (contacts + aliases). loadContacts reads the persisted book
+    // (contacts) into contactsJson; add/rename/remove edit it (contact_add /
+    // contact_set_alias / contact_remove) and refresh the prop. The module resolves
+    // these aliases into membersJson/pendingJson, so the roster shows names.
+    SLOT(void loadContacts())
+    SLOT(void addContact(const QString &identityHex, const QString &alias))
+    SLOT(void setContactAlias(const QString &identityHex, const QString &alias))
+    SLOT(void removeContact(const QString &identityHex))
+
     // Room intents (the multi-party path). Propose an effect into the joined room
     // (coordinate_propose), contribute an owner signature (coordinate_contribute),
     // and read the folded intent list (coordinate_intents) into intentsJson — the
@@ -143,6 +152,7 @@ class MusterUi
     PROP(QString roomTopic="" READONLY)
     PROP(QString messagesJson="[]" READONLY)
     PROP(QString membersJson="[]" READONLY)
+    PROP(QString contactsJson="[]" READONLY)
     PROP(QString intentsJson="[]" READONLY)
 
     // The room's coordination history (coordinate_activity), as a JSON array of

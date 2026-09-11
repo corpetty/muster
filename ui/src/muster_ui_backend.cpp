@@ -212,8 +212,33 @@ void MusterUiBackend::loadConversations()
 
 void MusterUiBackend::loadMembers()
 {
-    // coordinate_members → the admitted roster (who can read the room).
+    // coordinate_members → the admitted roster (who can read the room), each with its
+    // address-book alias resolved by the module.
     setMembersJson(modules().muster_module.coordinate_members());
+}
+
+void MusterUiBackend::loadContacts()
+{
+    // contacts → the persisted address book [{identity, alias, address}].
+    setContactsJson(modules().muster_module.contacts());
+}
+
+void MusterUiBackend::addContact(const QString &identityHex, const QString &alias)
+{
+    modules().muster_module.contact_add(identityHex, alias);
+    setContactsJson(modules().muster_module.contacts());
+}
+
+void MusterUiBackend::setContactAlias(const QString &identityHex, const QString &alias)
+{
+    modules().muster_module.contact_set_alias(identityHex, alias);
+    setContactsJson(modules().muster_module.contacts());
+}
+
+void MusterUiBackend::removeContact(const QString &identityHex)
+{
+    modules().muster_module.contact_remove(identityHex);
+    setContactsJson(modules().muster_module.contacts());
 }
 
 void MusterUiBackend::requestJoin()

@@ -127,22 +127,28 @@ Item {
                             anchors.rightMargin: Theme.spacing.medium
                             spacing: Theme.spacing.small
 
-                            // A short, stable handle for a 64-byte hex identity,
-                            // marked where it is this account. A member with no
-                            // identity reads "unknown" rather than blank.
+                            // An address-book name when we have one, else a short,
+                            // stable handle for the 64-byte hex identity — marked
+                            // where it is this account. Tap reveals the exact key. A
+                            // member with no identity reads "unknown" rather than blank.
+                            readonly property string memberAlias:
+                                modelData && modelData.alias ? String(modelData.alias) : ""
                             LogosText {
                                 Layout.fillWidth: true
                                 text: {
                                     var id = modelData && modelData.identity
                                         ? String(modelData.identity) : "";
-                                    var label = id.length > 0
+                                    var handle = id.length > 0
                                         ? (memberCard.revealed ? id : id.substring(0, 10) + "…")
                                         : qsTr("unknown");
+                                    var label = (memberRow.memberAlias.length > 0 && !memberCard.revealed)
+                                        ? memberRow.memberAlias : handle;
                                     return modelData && modelData.self
                                         ? label + qsTr(" · you") : label;
                                 }
                                 color: Theme.palette.text
-                                font.family: Theme.typography.mono
+                                font.family: (memberRow.memberAlias.length > 0 && !memberCard.revealed)
+                                    ? Theme.typography.publicSans : Theme.typography.mono
                                 font.pixelSize: Theme.typography.secondaryText
                                 font.weight: Theme.typography.weightMedium
                                 wrapMode: memberCard.revealed ? Text.WrapAnywhere : Text.NoWrap

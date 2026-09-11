@@ -31,6 +31,10 @@ Item {
     // "" until an action is picked. Drives the progressive reveal.
     property string pickedVerb: ""
 
+    // The address book (from the host): [{identity, alias, address}] — so "who with"
+    // can be a tap on a name rather than a pasted id.
+    property var contacts: []
+
     // The things a room can do together. Each carries the driver it runs on, so the
     // user picks an ACTION, not a policy — the coordination mechanism follows from
     // what you're doing (a payment settles on a Safe; a decision is a group
@@ -195,7 +199,46 @@ Item {
                     id: peerField
                     objectName: "composerPeerField"
                     Layout.fillWidth: true
-                    placeholderText: qsTr("paste their address (leave empty for just you)")
+                    placeholderText: qsTr("paste their chat id (leave empty for just you)")
+                }
+
+                // …or tap a name from your address book instead of pasting.
+                LogosText {
+                    visible: (composer.contacts || []).length > 0
+                    text: qsTr("or pick from your contacts")
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: Theme.typography.badgeText
+                }
+                Flow {
+                    Layout.fillWidth: true
+                    visible: (composer.contacts || []).length > 0
+                    spacing: Theme.spacing.small
+                    Repeater {
+                        model: composer.contacts
+                        delegate: Rectangle {
+                            required property var modelData
+                            radius: Theme.spacing.radiusSmall
+                            color: Theme.palette.surface
+                            border.width: 1
+                            border.color: Theme.palette.borderSubtle
+                            implicitWidth: chipText.implicitWidth + 2 * Theme.spacing.medium
+                            implicitHeight: chipText.implicitHeight + Theme.spacing.small
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: peerField.text = String(modelData.identity || "")
+                            }
+                            LogosText {
+                                id: chipText
+                                anchors.centerIn: parent
+                                text: String(modelData.alias || "").length > 0
+                                      ? String(modelData.alias)
+                                      : String(modelData.identity || "").substring(0, 10) + "…"
+                                color: Theme.palette.textSecondary
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+                        }
+                    }
                 }
 
                 LogosText {
