@@ -200,9 +200,9 @@ proc clientArgEncode(pname: string, t: JsonNode): string =
   else: "%" & pname            # string/int/bool → JSON scalar; JsonNode passes through as %
 
 proc clientRetDecode(t: JsonNode): string =
-  ## Decode `r.value` into the Nim return type, with a typed zero-value fallback so
-  ## a failed call never raises from the typed surface (callers check via a raising
-  ## variant if they want — future work).
+  ## LENIENT decode of `r.value` into the Nim return type — a typed zero-value on
+  ## any failure, so the plain `<method>` never raises. The `<method>OrRaise` twin
+  ## surfaces the error instead (see clientRetDecodeStrict).
   case primName(t)
   of "tstr":
     "(if r.ok and r.value != nil and r.value.kind == JString: r.value.getStr() else: \"\")"
@@ -215,6 +215,25 @@ proc clientRetDecode(t: JsonNode): string =
       "b64urlDecode(r.value[\"_bytes\"].getStr()) else: newSeq[byte]())"
   else:
     "(if r.ok and r.value != nil: r.value else: newJNull())"
+
+proc clientRetDecodeStrict(t: JsonNode, meth: string): string =
+  ## STRICT decode for the raising twin: assumes `r.ok` already checked. Raises a
+  ## LogosCallError when the result doesn't match the contract's declared type,
+  ## rather than fabricating a zero-value.
+  let bad = "raise newLogosCallError(\"" & meth & "\", %\"result did not decode to " &
+            primName(t) & "\")"
+  case primName(t)
+  of "tstr":
+    "(if r.value != nil and r.value.kind == JString: r.value.getStr() else: " & bad & ")"
+  of "int", "uint":
+    "(if r.value != nil and r.value.kind == JInt: r.value.getInt() else: " & bad & ")"
+  of "bool":
+    "(if r.value != nil and r.value.kind == JBool: r.value.getBool() else: " & bad & ")"
+  of "bstr":
+    "(if r.value != nil and r.value.kind == JObject and r.value.hasKey(\"_bytes\"): " &
+      "b64urlDecode(r.value[\"_bytes\"].getStr()) else: " & bad & ")"
+  else:
+    "(if r.value != nil: r.value else: newJNull())"
 
 proc genClient*(contract: JsonNode, target = ""): string =
   ## A typed consumer client for the module described by `contract`. `target` is
@@ -238,7 +257,14 @@ proc genClient*(contract: JsonNode, target = ""): string =
         sig.add pn & ": " & clientParamType(p["type"])
         enc.add clientArgEncode(pn, p["type"])
     let sigStr = (if sig.len > 0: ", " & sig.join(", ") else: "")
-    result.add "proc " & name & "*(c: " & cn & sigStr & "): " &
-               clientParamType(m["returnType"]) & " =\n"
-    result.add "  let r = c.proxy.callSync(\"" & name & "\", args(" & enc.join(", ") & "))\n"
+    let retT = clientParamType(m["returnType"])
+    let callLine = "  let r = c.proxy.callSync(\"" & name & "\", args(" & enc.join(", ") & "))\n"
+    # lenient: typed zero-value on failure, never raises
+    result.add "proc " & name & "*(c: " & cn & sigStr & "): " & retT & " =\n"
+    result.add callLine
     result.add "  " & clientRetDecode(m["returnType"]) & "\n\n"
+    # raising twin: surfaces transport/method errors and decode mismatches
+    result.add "proc " & name & "OrRaise*(c: " & cn & sigStr & "): " & retT & " =\n"
+    result.add callLine
+    result.add "  if not r.ok: raise newLogosCallError(\"" & name & "\", r.error)\n"
+    result.add "  " & clientRetDecodeStrict(m["returnType"], name) & "\n\n"

@@ -3,7 +3,9 @@
 A standalone Nim package (`logos_sdk`) mirroring `logos-rust-sdk`: the lp_* runtime
 + a LIDL→Nim generator. See `README.md` for the full design. Extracted/generalized
 from muster's `module/src/transport/lp_ffi.nim`, `delivery.nim`, and
-`module/tools/lidl_gen.nim`; muster does not yet consume it (follow-up).
+`module/tools/lidl_gen.nim` — which muster now consumes (those originals were
+deleted in PR #42; muster reaches the SDK via a self-referential `nim.package` in
+`module/metadata.json`, `subdir: sdk/src`).
 
 ## Rules
 - **Pure logic stays FFI-free.** `bytes.nim` and `lidl-gen/gen.nim` must not import
