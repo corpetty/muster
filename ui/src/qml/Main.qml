@@ -251,6 +251,15 @@ Item {
                     if (root.backend) root.backend.loadContacts();
                 }
             }
+
+            LogosButton {
+                objectName: "lezToggle"; text: qsTr("Send λ")
+                variant: root.view === "lez" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                onClicked: {
+                    root.view = "lez";
+                    if (root.backend) root.backend.loadWalletAccounts();
+                }
+            }
         }
     }
 
@@ -327,6 +336,17 @@ Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "contacts"
+        backend: root.backend
+    }
+
+    // Send assets via Logos (the LEZ) — Mode A: request → share → send.
+    LezSend {
+        objectName: "lezSendSurface"
+        anchors.top: navBar.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        visible: root.view === "lez"
         backend: root.backend
     }
 

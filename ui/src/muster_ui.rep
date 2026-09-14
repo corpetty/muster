@@ -36,6 +36,24 @@ class MusterUi
     // (checked against a consensus state root) — the view renders it as a badge.
     SLOT(void loadBalances())
 
+    // ── send assets via Logos (the LEZ, Mode A: request → share → send) ──────
+    // Every wallet account (wallet_accounts) into walletAccountsJson — {chain, form,
+    // id, share?}. A LEZ account's `share` is the address to hand out to be paid: a
+    // public id, or a shielded key node "priv:<npk>:<vpk>". Which you share is your
+    // own disclosure choice — the receiver decides how much they reveal.
+    SLOT(void loadWalletAccounts())
+
+    // Preview a LEZ send WITHOUT committing (wallet_estimate_fee): names the rail and
+    // what it would disclose {amount, payer, payee}, so the sender sees the honesty
+    // first — a public destination names the payee, a shielded key node doesn't. Lands
+    // on lezPreviewJson.
+    SLOT(void previewLezSend(const QString &fromId, const QString &to, const QString &raw))
+
+    // Send on the LEZ (wallet_send, chain lez:testnet, asset LEZ). The rail follows
+    // from (source form, destination kind); the result carries {txId, rail, discloses}
+    // or {error}, landing on lezSendJson. Accounts refresh after.
+    SLOT(void sendLez(const QString &fromId, const QString &to, const QString &raw))
+
     // ── the room / conversation surface ──────────────────────────────────
     // Join (or start) a conversation on a content topic, over encrypted
     // transport (coordinate_join). Sets roomTopic and loads its messages+members.
@@ -162,6 +180,17 @@ class MusterUi
     // Wallet balances across chains, as JSON (see loadBalances). Each entry carries
     // its F-10 grade so the view can show what is proven vs merely claimed.
     PROP(QString balancesJson="[]" READONLY)
+
+    // Wallet accounts (loadWalletAccounts) — [{chain, form, id, share?}]. The LEZ send
+    // panel lists your shareable addresses from the `share` field.
+    PROP(QString walletAccountsJson="[]" READONLY)
+
+    // The last LEZ send preview (previewLezSend): {rail, discloses:{amount,payer,payee},
+    // fee, note} or {error}. The panel shows the honesty before you commit.
+    PROP(QString lezPreviewJson="{}" READONLY)
+
+    // The last LEZ send outcome (sendLez): {txId, rail, discloses, fee} or {error}.
+    PROP(QString lezSendJson="{}" READONLY)
 
     // The joined room's topic (empty until joinRoom), its message log as a JSON
     // array of {id, author, ts, body}, and its admitted roster as {identity, self}.
