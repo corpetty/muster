@@ -321,6 +321,15 @@ void MusterUiBackend::contributeInRoom(const QString &intentId, const QString &s
     // recovers to a configured owner before it counts (a non-owner is rejected).
     const QString st = modules().muster_module.coordinate_contribute(intentId, signatureHex);
     qInfo() << "[muster_ui] coordinate_contribute" << intentId << "->" << st;
+    // Surface the outcome: an approval that didn't count (your key isn't a recognized
+    // signer for this policy) must SAY so, not vanish. ok iff st is a lifecycle state.
+    const bool ok = (st != "rejected" && st != "not-joined" && st != "unknown-intent");
+    QJsonObject r;
+    r.insert("intentId", intentId);
+    r.insert("state", st);
+    r.insert("ok", ok);
+    r.insert("reason", st);
+    setContributeJson(QString::fromUtf8(QJsonDocument(r).toJson(QJsonDocument::Compact)));
     loadIntents();
     loadDrivers();   // an approval may have admitted a new driver kind (governance)
 }

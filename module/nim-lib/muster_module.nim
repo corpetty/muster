@@ -112,9 +112,13 @@ proc driverForKind(kind: string): Driver =
     # secp address set every instance shares identically, so the fold converges (the
     # Ed25519 membership roster carries no secp addresses, and unioning THIS instance
     # would give each peer a different set and diverge the count). An instance that is
-    # a configured owner attests in-app; a non-owner honestly cannot. Threshold is the
-    # Safe's, so "the owners attest" mirrors "the owners would settle".
-    newPersonalSignDriver(signers = gDriver.owners, threshold = gDriver.threshold)
+    # a configured owner attests in-app; a non-owner honestly cannot.
+    #
+    # Threshold 1: an attestation is a per-signer act — "an owner attests this" — so a
+    # single recognized owner completes it (and others may still co-sign, folded in).
+    # This is what lets a solo owner reach an Endorsed attestation, unlike the Safe
+    # policy whose 2-of-3 is a real on-chain requirement that genuinely needs the group.
+    newPersonalSignDriver(signers = gDriver.owners, threshold = 1)
   of "safe":
     # The room's Safe recognizes THIS instance's account as an owner too, so you
     # approve a Safe intent IN-APP (no paste for YOUR own signature) — completing the
@@ -685,14 +689,27 @@ proc musterCoordinateAccount(): string =
   ## false balance: an unreachable RPC surfaces an error, not a zero.
   let policy = gCoordKind
   var o = %*{"policy": policy}
-  if policy == "safe":
-    let acting = toHex(myAddress())
-    o["account"] = %toHex(gDriver.safe)
-    o["actingAs"] = %acting
+  let acting = toHex(myAddress())
+  o["actingAs"] = %acting
+  # WHAT identity backs a signature here. Safe approvals and eip191 attestations are
+  # made with THIS instance's secp256k1 AUTHORIZATION key (the same key that signs
+  # Safe transactions) — NOT the Ed25519/X25519 encryption identity that names you in
+  # the room and encrypts messages. The threshold/frost policies instead endorse with
+  # that Ed25519 encryption key. Disclosed so a signer always knows what they're using.
+  o["signsWith"] = %(if policy in ["safe", "eip191"]: "secp256k1 authorization key"
+                     else: "Ed25519 encryption identity")
+  # A recognized-signer check for the secp policies: your key must be a configured
+  # signer or your signature won't count (the "nothing happened" you'd otherwise hit).
+  if policy in ["safe", "eip191"]:
     var isOwner = false
     for ow in gDriver.owners:
       if toHex(ow) == acting: isOwner = true
-    o["isOwner"] = %isOwner
+    o["isSigner"] = %isOwner
+    o["isOwner"] = %isOwner                 # kept for the Safe composer's existing read
+    o["signerSet"] = %(if policy == "eip191": "the room's Safe owners (attesters)"
+                       else: "the Safe owners")
+  if policy == "safe":
+    o["account"] = %toHex(gDriver.safe)
     var assets = newJArray()
     var eth = %*{"symbol": "ETH", "decimals": 18}
     try:
