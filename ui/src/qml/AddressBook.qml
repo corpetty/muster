@@ -157,10 +157,17 @@ Item {
                                 Layout.fillWidth: true
                                 text: String(row.modelData.alias || "")
                                 font.family: Theme.typography.publicSans
-                                onEditingFinished: {
-                                    if (book.backend && text.trim() !== String(row.modelData.alias || ""))
-                                        book.backend.setContactAlias(String(row.modelData.identity || ""),
-                                                                     text.trim());
+                                // LogosTextField wraps a TextInput (exposed as textInput)
+                                // and has no editingFinished of its own — bind the inner
+                                // one (fires on Enter or focus loss), the same seam the
+                                // room composer uses for onAccepted.
+                                Connections {
+                                    target: aliasEdit.textInput
+                                    function onEditingFinished() {
+                                        if (book.backend && aliasEdit.text.trim() !== String(row.modelData.alias || ""))
+                                            book.backend.setContactAlias(String(row.modelData.identity || ""),
+                                                                         aliasEdit.text.trim());
+                                    }
                                 }
                             }
                             LogosButton {
