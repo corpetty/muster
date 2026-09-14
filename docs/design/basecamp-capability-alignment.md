@@ -127,8 +127,27 @@ for this and should stay that way:
 3. **Make the driver-derivation manifest carry the capability name** beside the schema
    id (extend the P-D5 `genDriver` entry), so a muster is addressable *both* as a
    Basecamp capability and as a CDDL-typed effect.
-4. **Decide the solo-send delegation** (§4 option b) vs the current direct `lez_core`
-   drive — a product call, not a correctness one.
+4. **Solo-send delegation — DECIDED: keep the direct `lez_core` drive.** The "Send λ"
+   path stays core-to-core (`muster_module → lez_core`), not an `app-to-app` intent to
+   the LEZ Wallet App, because: (a) it works in the **standalone runner** (`make run`),
+   where there is no Basecamp broker to dispatch an intent; (b) it is the same path a
+   **coordinated** send needs (Mode B), so one mechanism serves both; and (c)
+   `muster_module` calling `lez_core` is the sanctioned backend pattern (§1) — no chooser
+   is wanted for an action muster already mediates (solo: the user; coordinated: the
+   room). Delegating to the LEZ Wallet App via `logos.request` is recorded as a
+   **Basecamp-only future refinement** — worth it only if muster runs exclusively inside
+   Basecamp and wants to stop shipping its own LEZ wallet code; until then the direct
+   drive is the correct call, and it is why muster_ui declares **no `uses`** for a wallet
+   capability today.
+
+**Done so far (2026-09-14):** step 1 — muster_ui declares `provides:
+["coordinate.request"]` + `uses: []` (the handler is the remaining wire); step 2 —
+[`docs/basecamp-access-policy.md`](../basecamp-access-policy.md) +
+[`infra/access-policy.json`](../../infra/access-policy.json); step 3 — the P-D5 manifest
+carries a `capability` name beside the schema id (logos-nim-sdk); step 4 — decided above.
+The one piece left is the **`coordinate.request` provider handler** in muster_ui (a QML
+`onIntentRequested` that opens/uses a room), which needs the Basecamp intent broker and
+careful guarding so referencing `logos` doesn't break the standalone render.
 
 Related: [[muster-driver-derivation]], `docs/design/driver-derivation.md`,
 `docs/design/lez-adapter.md`, the invoke gate (`module/src/coordination/invoker.nim`).

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "mode": "enforce",
+  "restrictions": {
+    "muster_module": { "allowedCallers": ["muster_ui"] }
+  }
+}
