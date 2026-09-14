@@ -149,6 +149,20 @@ proc claimFaucet*(a: LezAdapter, pinataId: string, account: Account, nonce = 0) 
   if not res.success:
     raise newException(WalletError, "pinata claim failed: " & res.error)
 
+proc receiveAddresses*(a: LezAdapter, ks: Keystore): seq[tuple[form, address: string]] =
+  ## The addresses this instance can SHARE to be paid (the recipient half of Mode A's
+  ## request→share→send). A public account shares its id; a shielded account shares its
+  ## KEY NODE ("priv:<npk>:<vpk>") — because a shielded payment addresses a key node,
+  ## not an id, and publishing it is both how you receive privately AND your consent to
+  ## be paid. WHICH one you share is your own disclosure choice: a public id names you
+  ## as payee, a key node does not.
+  for acc in a.accounts(ks):
+    if acc.form == afPublic:
+      result.add (form: "public", address: acc.id)
+    elif acc.id in a.keyNode:
+      let kn = a.keyNode[acc.id]
+      result.add (form: "shielded", address: "priv:" & kn.npk & ":" & kn.vpk)
+
 proc syncPrivate*(a: LezAdapter): seq[Account] =
   ## Scan for received private notes and return every private account now discoverable
   ## (the receive-by-scan step: a payment you didn't name lands here). Raises on a

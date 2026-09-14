@@ -152,4 +152,24 @@ block:
   doAssert a.finality(pTx).status == fsPending, "private→private lands shielded — delayed"
   echo "6. four rails — public / shield / deshield / private + disclosure OK"
 
+# ── 7. receiveAddresses — the shareable half of request→share→send (Mode A) ────
+block:
+  let a = newLezAdapter(newFakeLezCore())
+  let share = a.receiveAddresses(ks)
+  doAssert share.len == 2
+  var pub, shielded = ""
+  for r in share:
+    if r.form == "public": pub = r.address
+    elif r.form == "shielded": shielded = r.address
+  doAssert pub.len > 0 and not pub.startsWith("priv:"), "a public account shares its id"
+  doAssert shielded.startsWith("priv:"), "a shielded account shares its key node priv:npk:vpk"
+  # and what you share picks the rail: sharing the public id → payee named; sharing the
+  # key node → payee hidden. (The receiver chooses their own disclosure.)
+  let pubFrm = a.accounts(ks)[0]
+  let toPub = parseJson(a.prepareTransfer(pubFrm, pub, amount(a.assets()[0], "1")).payload)
+  let toShd = parseJson(a.prepareTransfer(pubFrm, shielded, amount(a.assets()[0], "1")).payload)
+  doAssert toPub["discloses"]["payee"].getBool() == true, "paying a shared public id names the payee"
+  doAssert toShd["discloses"]["payee"].getBool() == false, "paying a shared key node hides the payee"
+  echo "7. receiveAddresses — public id vs shielded key node; the share sets the disclosure OK"
+
 echo "wallet_lez_test: the LEZ adapter honours the zone's shape — all OK"
