@@ -54,11 +54,47 @@ JSON-RPC. It is a note/commitment shielded system (Zcash-lineage), reachable two
   / estimateFee / prepareTransfer / submit / finality`, every method raising
   `WalletError` on any chain quirk (empty-string / `success:false` / timeout), so a
   failed read is never a false zero. Signing goes through the `Keystore` seam.
-- **Prior LEZ work** — a C reproducer against `wallet_ffi`
-  (`demo/poc/lez-private-transfer-poc.c`), the connection-lifecycle post
-  (`docs/posts/muster-connection-lifecycle.md`), and the labbook
-  (`docs/labbook/lez-core-error-conventions.md`) — the source of every operational fact
-  below. The real adapter was deferred as infra-bound; this note un-defers it.
+- **Prior LEZ work — a WORKING end-to-end driver already exists.** `demo/muster-ui/`
+  (the chat-ui fork) drives `lez_core` for real, and it is the primary thing to reuse:
+  - **`demo/muster-ui/src/Zone.h`** — the clean wrapper to port: `kSequencer =
+    https://testnet.lez.logos.co`, two timeouts (`kReadMs = 15_000`, `kProveMs =
+    900_000` — 15 min, from the measured 6m41s proof), `amountLe16Hex(u64)` (the zone
+    takes every amount as **16-byte little-endian hex**), `Result{ok,tx,error}` +
+    `parse()` (the JSON envelope), and `sequencerPost()` (a curl JSON-RPC POST for the
+    public-account reads the wallet can't answer from its own state).
+  - **`demo/muster-ui/src/ChatBackendAssets.cpp`** — the four **rails**, each a real
+    `lez_core` call, and a `Disclosure{amount, payer, payee}` per rail (the education
+    surface, already worked out):
+
+    | Rail | `lez_core` call | from → to | discloses {amt, payer, payee} |
+    |---|---|---|---|
+    | Public → public | `transfer_publicAsync` | public → account id | {T, T, T} |
+    | Public → private (shield) | `transfer_shieldedAsync` | public → shielded keys | {T, T, F} |
+    | Private → public (deshield) | `transfer_deshieldedAsync` | private → account id | {T, F, T} |
+    | Private → private | `transfer_privateAsync` | private → shielded keys | {F, F, F} |
+
+    plus `get_vault_balance`, `vault_claim_privateAsync`, `get_private_account_keys`
+    (the npk/vpk key node). All async with `Timeout(kProveMs)`; all envelope-checked.
+  - **Receive-by-scan is confirmed in the working code**: spending *received* private
+    money uses `spendFromAccount()` — the **discovered** account, not the published one,
+    because "money received from someone else is held by a different, discovered
+    account." Exactly the model P-L2 built.
+  - Also: `demo/poc/lez-private-transfer-poc.c` (a `wallet_ffi` reproducer + the
+    random-identifier finding), the labbook (`lez-core-error-conventions.md`), and the
+    connection-lifecycle post. The real adapter was deferred as infra-bound; **this
+    un-defers it by porting the demo's proven `Zone.h` + rails into the Nim seam.**
+  - The `lez_core` module itself is `github:logos-blockchain/logos-execution-zone-module`
+    — already a flake input in `demo/muster-ui/flake.nix` (declared as a `dependencies`
+    entry, called dynamically by name). That's the wiring precedent for P-L3.
+
+- **Account activation (the atomic-swaps POC, `docs.logos.co/basecamp/atomic-swaps-poc`).**
+  A LEZ account must be **explicitly activated on-chain before it can receive** — the
+  sequencer *silently discards* transactions to an uninitialized account, with no error.
+  So the adapter must activate a fresh account (and surface "not yet activated" rather
+  than a silent black hole). The POC also fixes the config: HTLC program id
+  `9eb88f51aae87a58fb74b8d2dc7327b39333585e63280e3f9cf8d86dac0ed702`, explorer
+  `https://explorer.testnet.lez.logos.co/transaction/<hash>`, and the LEZ charges **no
+  fees** (a buyer can start empty).
 
 ## 3. The `lez_core` surface → the `ChainAdapter` seam
 

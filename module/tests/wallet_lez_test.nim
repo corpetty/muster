@@ -5,7 +5,7 @@
 ## adapter imports the Keystore seam, so the crypto closure (secp + stint + libsodium)
 ## is on the path — the SECP..SODIUM set in module/tests/README.md.
 
-import std/strutils
+import std/[strutils, json]
 import ../src/wallet/types
 import ../src/wallet/adapter
 import ../src/wallet/lez_core
@@ -114,5 +114,42 @@ block:
   except WalletError: raised = true
   doAssert raised, "overspend raises"
   echo "5. failure conventions — empty / success:false / overspend all raise OK"
+
+# ── 6. the four rails + their disclosure (the education square) ────────────────
+block:
+  # the disclosure model, verbatim from the demo's rails: the amount is public unless
+  # BOTH ends are shielded; the payer is named iff the source is public; the payee iff
+  # the destination is public.
+  doAssert disclosureOf(tfPublic)   == Disclosure(amount: true,  payer: true,  payee: true)
+  doAssert disclosureOf(tfShield)   == Disclosure(amount: true,  payer: true,  payee: false)
+  doAssert disclosureOf(tfDeshield) == Disclosure(amount: true,  payer: false, payee: true)
+  doAssert disclosureOf(tfPrivate)  == Disclosure(amount: false, payer: false, payee: false)
+
+  let core = newFakeLezCore()
+  let a = newLezAdapter(core)
+  let accs = a.accounts(ks)
+  let pub = accs[0]; let shielded = accs[1]
+
+  # prepareTransfer picks the rail from (source form, destination kind) and carries
+  # the disclosure so a review can show the honesty before committing.
+  let pubTx = a.prepareTransfer(pub, core.createAccount(lakPublic).id, amount(a.assets()[0], "1"))
+  doAssert parseJson(pubTx.payload)["form"].getStr() == "public"
+  doAssert parseJson(pubTx.payload)["discloses"]["payee"].getBool() == true
+
+  let recip = core.createAccount(lakPrivate)
+  let shieldTx = a.prepareTransfer(pub, "priv:" & recip.npk & ":" & recip.vpk, amount(a.assets()[0], "1"))
+  doAssert parseJson(shieldTx.payload)["form"].getStr() == "shield", "public→private is a shield"
+  doAssert parseJson(shieldTx.payload)["discloses"]["payee"].getBool() == false, "the payee is hidden"
+
+  # fund the shielded account, then DESHIELD (private→public) and PRIVATE (private→private).
+  a.claimFaucet("pinata-1", shielded)
+  let deTx = a.submit(a.prepareTransfer(shielded, core.createAccount(lakPublic).id,
+                                        amount(a.assets()[0], "100000000")), ks)
+  doAssert a.finality(deTx).status == fsFinal, "deshield lands public — final at once"
+
+  let pTx = a.submit(a.prepareTransfer(shielded, "priv:" & recip.npk & ":" & recip.vpk,
+                                       amount(a.assets()[0], "100000000")), ks)
+  doAssert a.finality(pTx).status == fsPending, "private→private lands shielded — delayed"
+  echo "6. four rails — public / shield / deshield / private + disclosure OK"
 
 echo "wallet_lez_test: the LEZ adapter honours the zone's shape — all OK"

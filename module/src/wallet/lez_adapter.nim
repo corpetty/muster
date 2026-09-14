@@ -74,42 +74,53 @@ method estimateFee*(a: LezAdapter, frm: Account, to: string, amt: Amount): FeeEs
               note: (if shielded: "shielded proof cost — proving takes minutes"
                      else: "public transfer fee"))
 
-# The `to` convention: a public destination is a plain account id; a PRIVATE
+# The `to` convention: a public destination is a plain account id; a SHIELDED
 # destination is "priv:<npk>:<vpk>" — the recipient's key node, since a shielded send
-# addresses a key node, not an id (the module invents the identifier).
-proc parseDest(to: string): tuple[priv: bool, id, npk, vpk: string] =
-  if to.startsWith("priv:"):
+# addresses a key node, not an id (the module invents the identifier). The RAIL is the
+# (source form, destination kind) square: public/public, public/private (shield),
+# private/public (deshield), private/private.
+proc railFor(frm: Account, to: string): tuple[form: TransferForm, seamTo: string] =
+  let destShielded = to.startsWith("priv:")
+  var seamTo = to
+  if destShielded:
     let parts = to["priv:".len .. ^1].split(':')
     if parts.len != 2 or parts[0].len == 0 or parts[1].len == 0:
-      raise newException(WalletError, "private destination must be priv:<npk>:<vpk>")
-    (true, "", parts[0], parts[1])
-  else:
-    if to.len == 0: raise newException(WalletError, "empty destination")
-    (false, to, "", "")
+      raise newException(WalletError, "shielded destination must be priv:<npk>:<vpk>")
+    seamTo = parts[0] & ":" & parts[1]     # the seam takes the bare key node "npk:vpk"
+  elif to.len == 0:
+    raise newException(WalletError, "empty destination")
+  let srcShielded = frm.form == afShielded
+  let form =
+    if not srcShielded and not destShielded: tfPublic
+    elif not srcShielded and destShielded:   tfShield
+    elif srcShielded and not destShielded:   tfDeshield
+    else:                                    tfPrivate
+  (form, seamTo)
 
 method prepareTransfer*(a: LezAdapter, frm: Account, to: string, amt: Amount): PreparedTx =
-  ## Build (not submit) — so the transfer is reviewable before it's signed/proved.
-  let d = parseDest(to)
-  let payload = $(%*{"mode": (if d.priv: "private" else: "public"),
-                     "to": d.id, "npk": d.npk, "vpk": d.vpk})
+  ## Build (not submit) — so the transfer is reviewable before it's signed/proved. The
+  ## payload carries the rail + the seam destination + the DISCLOSURE (what this rail
+  ## puts on the public record) so the review can show the honesty before committing.
+  let r = railFor(frm, to)
+  let disc = disclosureOf(r.form)
+  let payload = $(%*{"form": $r.form, "to": r.seamTo,
+                     "discloses": {"amount": disc.amount, "payer": disc.payer, "payee": disc.payee}})
   PreparedTx(chain: ChainId, frm: frm, to: to, amount: amt,
              fee: a.estimateFee(frm, to, amt), payload: payload)
 
 method submit*(a: LezAdapter, tx: PreparedTx, ks: Keystore): TxRef =
-  ## Execute the transfer through lez_core. A `success:false` envelope (or an empty /
-  ## unparseable one) is a raise — never a false receipt. The LEZ wallet signs
-  ## internally, so the keystore is unused here.
+  ## Execute the transfer through lez_core on its rail. A `success:false` envelope (or
+  ## an empty / unparseable one) is a raise — never a false receipt. The LEZ wallet
+  ## signs internally, so the keystore is unused here.
   let d = parseJson(tx.payload)
-  let priv = d{"mode"}.getStr() == "private"
-  let res =
-    if priv:
-      a.core.transferPrivate(tx.frm.id, d{"npk"}.getStr(), d{"vpk"}.getStr(), tx.amount.raw)
-    else:
-      a.core.transferPublic(tx.frm.id, d{"to"}.getStr(), tx.amount.raw)
+  let form = parseEnum[TransferForm](d{"form"}.getStr())
+  let res = a.core.transfer(form, tx.frm.id, d{"to"}.getStr(), tx.amount.raw)
   if not res.success:
     raise newException(WalletError, "LEZ transfer failed: " &
                        (if res.error.len > 0: res.error else: "success=false"))
-  a.submitted[res.txHash] = (priv: priv, polls: 0)
+  # A shielded landing (shield/private) settles by scan → delayed finality; a public
+  # landing (public/deshield) is immediate.
+  a.submitted[res.txHash] = (priv: form in {tfShield, tfPrivate}, polls: 0)
   TxRef(chain: ChainId, id: res.txHash)
 
 method finality*(a: LezAdapter, txRef: TxRef): Finality =

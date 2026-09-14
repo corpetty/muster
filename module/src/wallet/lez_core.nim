@@ -36,8 +36,31 @@ type
     txHash*: string
     error*: string
 
+  ## The four transfer rails the zone supports (from demo/muster-ui's ChatBackendAssets
+  ## — the working driver). The source decides whether the payer is named, the
+  ## destination whether the payee is, and the amount is public unless BOTH ends are
+  ## shielded. This square is the education surface: the same transfer, four honesties.
+  TransferForm* = enum
+    tfPublic    = "public"     ## public → public         (transfer_public)
+    tfShield    = "shield"     ## public → private         (transfer_shielded)
+    tfDeshield  = "deshield"   ## private → public         (transfer_deshielded)
+    tfPrivate   = "private"    ## private → private        (transfer_private)
+
+  Disclosure* = object
+    amount*, payer*, payee*: bool   ## what THIS rail puts on the public record
+
   LezCore* = ref object of RootObj
     ## The seam. Concrete impls: FakeLezCore (here), LpLezCore (real, P-L3).
+
+proc disclosureOf*(f: TransferForm): Disclosure =
+  ## What each rail leaks — verbatim from the demo's rails. The amount is public unless
+  ## both ends are shielded (private→private); the payer is named iff the source is
+  ## public; the payee is named iff the destination is public.
+  case f
+  of tfPublic:   Disclosure(amount: true,  payer: true,  payee: true)
+  of tfShield:   Disclosure(amount: true,  payer: true,  payee: false)
+  of tfDeshield: Disclosure(amount: true,  payer: false, payee: true)
+  of tfPrivate:  Disclosure(amount: false, payer: false, payee: false)
 
 method createAccount*(c: LezCore, kind: LezAccountKind): LezAccount {.base, gcsafe.} =
   raise newException(WalletError, "LezCore.createAccount is abstract")
@@ -50,14 +73,14 @@ method getBalanceRaw*(c: LezCore, accountId: string): string {.base, gcsafe.} =
   ## can't answer (labbook §1) — the adapter raises on "" so it's never a false zero.
   raise newException(WalletError, "LezCore.getBalanceRaw is abstract")
 
-method transferPublic*(c: LezCore, frm, to, amountRaw: string): LezResult {.base, gcsafe.} =
-  raise newException(WalletError, "LezCore.transferPublic is abstract")
-
-method transferPrivate*(c: LezCore, frm, toNpk, toVpk, amountRaw: string): LezResult {.base, gcsafe.} =
-  ## Public→private or private→private. `toNpk`/`toVpk` are the recipient's key node;
-  ## the module invents a random identifier, so the recipient RECOVERS by scan, never
-  ## by querying a named id (labbook §5 / the POC). Proves — minutes — in the real one.
-  raise newException(WalletError, "LezCore.transferPrivate is abstract")
+method transfer*(c: LezCore, form: TransferForm, frm, to, amountRaw: string): LezResult {.base, gcsafe.} =
+  ## Move value on one of the four rails. `to` is an account id for a public
+  ## destination (tfPublic/tfDeshield) and the recipient's key node for a shielded one
+  ## (tfShield/tfPrivate). A shielded send invents a random identifier, so the
+  ## recipient RECOVERS by scan, never by querying a named id (labbook / the POC). The
+  ## real module maps these to transfer_public/shielded/deshielded/private, async +
+  ## 900s, amount as 16-byte LE hex; each PROVES (minutes) except tfPublic.
+  raise newException(WalletError, "LezCore.transfer is abstract")
 
 method sync*(c: LezCore): int {.base, gcsafe.} =
   ## Scan to the tip, discovering received private notes. Non-zero == failure (the
@@ -136,22 +159,22 @@ proc debitOrRaise(c: FakeLezCore, id, amountRaw: string) =
     raise newException(WalletError, "insufficient funds")
   c.balances[id] = $(parseBiggestUInt(cur) - parseBiggestUInt(amountRaw))
 
-method transferPublic*(c: FakeLezCore, frm, to, amountRaw: string): LezResult =
+method transfer*(c: FakeLezCore, form: TransferForm, frm, to, amountRaw: string): LezResult =
   if c.failNextTransfer:
     c.failNextTransfer = false
-    return LezResult(success: false, error: "wallet FFI error 99")
+    return LezResult(success: false, error: "wallet FFI error 99")   # the envelope failure
   c.debitOrRaise(frm, amountRaw)
-  c.credit(to, amountRaw)
-  LezResult(success: true, txHash: c.nextId("tx"))
-
-method transferPrivate*(c: FakeLezCore, frm, toNpk, toVpk, amountRaw: string): LezResult =
-  if c.failNextTransfer:
-    c.failNextTransfer = false
-    return LezResult(success: false, error: "ProgramProveFailed")
-  c.debitOrRaise(frm, amountRaw)
-  # The note is NOT yet discoverable — it settles into a fresh account on sync, which
-  # the recipient finds by scanning under its key node (receive-by-scan).
-  c.pending.add PendingNote(npk: toNpk, vpk: toVpk, amountRaw: amountRaw)
+  case form
+  of tfPublic, tfDeshield:
+    # public destination (an account id) — credited at once.
+    c.credit(to, amountRaw)
+  of tfShield, tfPrivate:
+    # shielded destination (a "npk:vpk" key node) — the note is NOT yet discoverable;
+    # it settles into a fresh account on sync, found by scanning under its key node.
+    let parts = to.split(':')
+    let npk = (if parts.len > 0: parts[0] else: to)
+    let vpk = (if parts.len > 1: parts[1] else: "")
+    c.pending.add PendingNote(npk: npk, vpk: vpk, amountRaw: amountRaw)
   LezResult(success: true, txHash: c.nextId("tx"))
 
 method sync*(c: FakeLezCore): int =
