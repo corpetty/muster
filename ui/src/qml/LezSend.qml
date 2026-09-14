@@ -26,12 +26,41 @@ Item {
         try { return JSON.parse(backend ? backend.walletAccountsJson : "[]"); }
         catch (e) { return []; }
     }
+    // LEZ rows that are real accounts (have an id) vs an {chain, error} marker the
+    // backend emits when the zone can't be reached / the wallet isn't set up.
     readonly property var lezAccounts: {
         var out = [];
         var a = lez.accounts || [];
         for (var i = 0; i < a.length; ++i)
-            if (a[i] && String(a[i].chain) === "lez:testnet") out.push(a[i]);
+            if (a[i] && String(a[i].chain) === "lez:testnet" && a[i].id !== undefined) out.push(a[i]);
         return out;
+    }
+    readonly property string lezError: {
+        var a = lez.accounts || [];
+        for (var i = 0; i < a.length; ++i)
+            if (a[i] && String(a[i].chain) === "lez:testnet" && a[i].error !== undefined)
+                return String(a[i].error);
+        return "";
+    }
+    // balances (loadBalances) — keyed by account id, so each row shows what you have.
+    readonly property var balances: {
+        try { return JSON.parse(backend ? backend.balancesJson : "[]"); }
+        catch (e) { return []; }
+    }
+    function balanceOf(id) {
+        var b = lez.balances || [];
+        for (var i = 0; i < b.length; ++i) {
+            if (b[i] && String(b[i].account) === String(id) && String(b[i].chain) === "lez:testnet") {
+                if (b[i].error !== undefined) return qsTr("balance unavailable");
+                return String(b[i].display || (b[i].raw + " base units"));
+            }
+        }
+        return "";
+    }
+    function refresh() {
+        if (!lez.backend) return;
+        lez.backend.loadWalletAccounts();
+        lez.backend.loadBalances();
     }
     readonly property var preview: {
         try { return JSON.parse(backend ? backend.lezPreviewJson : "{}"); }
@@ -42,7 +71,8 @@ Item {
         catch (e) { return ({}); }
     }
 
-    Component.onCompleted: if (lez.backend) lez.backend.loadWalletAccounts()
+    Component.onCompleted: lez.refresh()
+    onVisibleChanged: if (visible) lez.refresh()
 
     function formLabel(f) { return f === "shielded" ? qsTr("shielded keys") : qsTr("public account"); }
     function shareHint(f) {
@@ -84,13 +114,46 @@ Item {
             }
 
             // ── your addresses to be paid ──────────────────────────────────────
+            RowLayout {
+                Layout.fillWidth: true
+                LogosText {
+                    Layout.fillWidth: true
+                    text: qsTr("YOUR ADDRESSES — SHARE ONE TO BE PAID")
+                    color: Theme.palette.textTertiary
+                    font.family: Theme.typography.mono
+                    font.pixelSize: Theme.typography.badgeText
+                    font.weight: Theme.typography.weightMedium
+                }
+                LogosButton {
+                    text: qsTr("Refresh")
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: lez.refresh()
+                }
+            }
+
+            // The zone couldn't answer (unreachable, or the wallet isn't set up) — say
+            // so instead of showing empty headers. This is what you'd hit under
+            // MUSTER_LEZ_REAL when the real lez_core can't reach testnet.lez.logos.co.
             LogosText {
-                text: qsTr("YOUR ADDRESSES — SHARE ONE TO BE PAID")
-                color: Theme.palette.textTertiary
+                visible: lez.lezError.length > 0
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("⚠ The Logos zone couldn't be reached: %1\n\nRun without MUSTER_LEZ_REAL "
+                         + "to use the funded demo wallet, or check the sequencer/network.")
+                    .arg(lez.lezError)
+                color: Theme.palette.warning
                 font.family: Theme.typography.mono
                 font.pixelSize: Theme.typography.badgeText
-                font.weight: Theme.typography.weightMedium
             }
+            LogosText {
+                visible: lez.lezError.length === 0 && lez.lezAccounts.length === 0
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("Setting up your Logos wallet… (if this stays empty, hit Refresh).")
+                color: Theme.palette.textTertiary
+                font.pixelSize: Theme.typography.secondaryText
+            }
+
             Repeater {
                 model: lez.lezAccounts
                 delegate: Rectangle {
@@ -113,12 +176,24 @@ Item {
                         anchors.margins: Theme.spacing.medium
                         spacing: Theme.spacing.tiny
 
-                        LogosText {
-                            text: lez.formLabel(shareRow.form)
-                            color: Theme.palette.text
-                            font.family: Theme.typography.publicSans
-                            font.pixelSize: Theme.typography.secondaryText
-                            font.weight: Theme.typography.weightMedium
+                        RowLayout {
+                            Layout.fillWidth: true
+                            LogosText {
+                                text: lez.formLabel(shareRow.form)
+                                color: Theme.palette.text
+                                font.family: Theme.typography.publicSans
+                                font.pixelSize: Theme.typography.secondaryText
+                                font.weight: Theme.typography.weightMedium
+                            }
+                            Item { Layout.fillWidth: true }
+                            // what you have in this account (loadBalances)
+                            LogosText {
+                                readonly property string bal: lez.balanceOf(shareRow.modelData.id)
+                                text: bal.length > 0 ? qsTr("balance: %1").arg(bal) : qsTr("balance: —")
+                                color: Theme.palette.textSecondary
+                                font.family: Theme.typography.mono
+                                font.pixelSize: Theme.typography.badgeText
+                            }
                         }
                         LogosText {
                             Layout.fillWidth: true

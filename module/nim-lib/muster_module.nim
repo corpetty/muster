@@ -1039,26 +1039,44 @@ proc accountOn(w: Wallet, chain: string): Account =
   raise newException(WalletError, "no account on " & chain)
 
 proc musterWalletAccounts(): string =
+  ## Every account across chains. LEZ accounts also carry a `share` — the address to
+  ## hand out to BE paid (Mode A's request→share→send): a public id, or a shielded key
+  ## node "priv:npk:vpk". PER-CHAIN resilient: one chain that can't answer (e.g. the LEZ
+  ## zone unreachable, or its wallet not yet set up) contributes an {chain, error} entry
+  ## instead of emptying the whole list — so the UI can SAY why, not just show nothing.
   let w = moduleWallet()
-  # LEZ accounts also carry a `share` — the address to hand out to BE paid (Mode A's
-  # request→share→send): a public id, or a shielded key node "priv:npk:vpk". Which one
-  # you share is your disclosure choice, so the composer/address-share can offer both.
-  var lezShare = initTable[string, string]()       # form -> shareable address
-  if gLez != nil:
-    for r in gLez.receiveAddresses(moduleKeystore()): lezShare[r.form] = r.address
+  let ks = moduleKeystore()
   var arr = newJArray()
-  for a in w.accounts():
-    var o = %*{"chain": a.chain, "form": $a.form, "id": a.id}
-    if a.chain == lez_adapter.ChainId and ($a.form) in lezShare:
-      o["share"] = %lezShare[$a.form]
-    arr.add o
+  for desc in w.chains():
+    let chain = desc.chain
+    try:
+      # the LEZ shareable addresses (best-effort; drives account creation for the real
+      # core, which is where a zone/setup failure would surface).
+      var lezShare = initTable[string, string]()
+      if chain == lez_adapter.ChainId and gLez != nil:
+        for r in gLez.receiveAddresses(ks): lezShare[r.form] = r.address
+      for a in w.adapterFor(chain).accounts(ks):
+        var o = %*{"chain": a.chain, "form": $a.form, "id": a.id}
+        if ($a.form) in lezShare: o["share"] = %lezShare[$a.form]
+        arr.add o
+    except CatchableError as e:
+      arr.add %*{"chain": chain, "error": e.msg}
   $arr
 
 proc musterWalletBalances(): string =
   ## Every account × asset, each entry a balance OR an error — never a false zero.
+  ## Per-chain resilient: a chain whose accounts can't be listed (the LEZ zone
+  ## unreachable) contributes an error entry, never empties the whole list.
   let w = moduleWallet()
+  let ks = moduleKeystore()
   var arr = newJArray()
-  for acc in w.accounts():
+  var accts: seq[Account]
+  for desc in w.chains():
+    try:
+      for a in w.adapterFor(desc.chain).accounts(ks): accts.add a
+    except CatchableError as e:
+      arr.add %*{"chain": desc.chain, "error": e.msg}
+  for acc in accts:
     for asset in w.assets():
       if asset.chain != acc.chain: continue
       # grade (F-10): "attested" — this reads the balance from the user's RPC and
