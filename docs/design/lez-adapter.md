@@ -155,30 +155,53 @@ Design the surface for these, not around them:
 5. **Read `[lez_core]`/`[wallet-ffi]` in the app log**, not the view log, for the reason
    a call failed.
 
-## 6. The coordination angle — a LEZ send as a room intent
+## 6. The coordination angle — two modes, and agreement is the *smaller* one
 
-This is the muster half. A LEZ transfer is a **module action**, so it rides the
-driver-derivation machinery (epic exo-fa4) rather than a bespoke path:
+Not every transfer needs the room to *agree*. Most need the room to **exchange
+information** — the sender proposes a transfer and asks the recipient for what it
+takes to do it. That is the original demo use case (a money verb primes the room with
+an **`address-request`**; whoever holds the address answers with **`address-share`**),
+and it is the *default* for a LEZ send. On-chain agreement (k-of-n, escrow) is a second
+mode for the rooms that actually want joint control — not the baseline.
 
-- **The effect** names the transfer: `{effect:"invoke", module:"lez_core",
-  method:"transfer_private", args:[from, toKeys, amountHex]}` — or a typed
-  `{effect:"lez-transfer", from, toKeys, amount, shielded:true}` the LEZ adapter
-  canonicalizes. Either way the action lives in the effect (invariant 6), and its
-  `schemaId` domain-separates it (invariant 5).
-- **The room approves** it k-of-n (the invoke/threshold driver), then **the core**
-  executes it via `lez_core` over `lp_*` — the same "core does the doing, the driver
-  only describes" path as `coordinate_submit` (Safe) and `coordinate_execute` (invoke),
-  so **invariant 3 holds**: the plugin/driver never touches the zone; the core does.
-- **Finality is the proof job.** `coordinate_execute` publishes `submit`, and `final`
-  only when `sync` confirms — the room converges on the real settled state, not an
-  optimistic one. The ~7-minute proof is a background job the whole room watches
-  reach `final`, which is exactly what the "job not interaction" constraint wants.
-- **Provenance + privacy (F-20, FS-10, spec `derived-exo-3a1`).** The lineage records
-  that a transfer effect was proposed and approved, scoped to the room's epoch — while
-  the *shielded* amounts/recipients stay off the public record. The room is the
-  disclosure boundary; the chain learns nothing. This is the education payoff: show the
-  same transfer on EVM (amount, from, to public) beside the LEZ (a commitment, a
-  nullifier, nothing else) — where Logos closes the leak.
+**Mode A — request → share → send (the default).** No approval, no driver threshold.
+1. Alice composes "pay Bob on the LEZ" → the room primes with an `address-request`
+   naming the intent and the rail she means.
+2. **Bob answers with `address-share`** — and *what he shares sets the rail and the
+   privacy*. The card vocabulary already carries this: `{asset, address, form}` with
+   `form` = shielded vs public account. A **public LEZ account id** → Alice sends
+   `tfPublic`/`tfDeshield` (Bob is named as payee). Bob's **shielded key node**
+   (`get_private_account_keys` → npk/vpk) → Alice sends `tfShield`/`tfPrivate` (Bob is
+   not named). Publishing the key node is *both* how you receive shielded on the LEZ
+   *and* Bob's consent to be paid — the receiver chooses his own disclosure.
+3. Alice's `LezAdapter` executes with what Bob shared. The "coordination" was the
+   information exchange; nobody had to approve.
+
+This is why the disclosure square (§adapter) lives at the seam and not behind a
+threshold: the rail is decided by the pair (Alice's source form, the form Bob shared),
+and the room shows the honesty before Alice commits.
+
+**Mode B — the room agrees (opt-in).** When the room genuinely wants joint control over
+the funds, a LEZ transfer becomes a coordinated intent like any other:
+- **As a module action** (reusing epic exo-fa4): `{effect:"invoke", module:"lez_core",
+  method:"transfer_shielded", args:[from, toKeys, amountHex]}`; the room approves k-of-n
+  (the invoke/threshold driver), then **the core** executes it via `lez_core` over
+  `lp_*` — the same "core does the doing, the driver only describes" path as
+  `coordinate_submit`/`coordinate_execute`, so **invariant 3 holds**.
+- **Or enforced on the zone** — the atomic-swap pattern (`eth-lez-atomic-swaps`): a
+  guest program (`#[lez_program]`) holds the funds in an escrow PDA and releases them
+  only on the room's condition (a preimage, a timelock, an M-of-N — `lez-multisig` is
+  exactly on-zone M-of-N). Trust-minimized on the zone itself, at the cost of deploying
+  a program. This is the LEZ-native analog of our Safe/threshold drivers; a later phase.
+
+**Finality is the proof job** in both modes: a shielded send reaches `final` only when
+`sync` confirms (~minutes) — a background job the room watches, not a button someone
+holds. **Provenance + privacy (F-20, FS-10, `derived-exo-3a1`):** the lineage records
+that a transfer was proposed and (in Mode B) approved, scoped to the room's epoch, while
+the shielded amounts/recipients stay off the public record. The education payoff: the
+same transfer on EVM (amount, from, to public) beside the LEZ (a commitment, a
+nullifier, nothing else), and — in Mode A — *the receiver deciding* how much to reveal
+by which address form he shares.
 
 ## 7. Invariants preserved
 
@@ -204,12 +227,22 @@ driver-derivation machinery (epic exo-fa4) rather than a bespoke path:
   dependency; the real client over `PluginProxy`, async + queued deferral. Wire funding
   (`claim_pinata`) + register-at-creation. Register the adapter in the wallet
   (`gLez = newLezAdapter(...)`).
-- **P-L4 — coordinate a LEZ send.** A LEZ transfer as a room intent (§6) — reuse the
-  invoke driver + `coordinate_execute`, or a typed `lez-transfer` effect. The room
-  approves; the core settles via `lez_core`; the fold reaches `final` when the proof
-  settles. UI: the transfer card + the shielded/public disclosure.
+- **P-L4 — request → share → send (the default, Mode A, §6).** Extend the existing
+  priming so a money verb on a LEZ room asks for the recipient's LEZ address, and
+  `address-share` answers with a public account id **or** a shielded key node
+  (`get_private_account_keys` → npk/vpk); the sender's `LezAdapter` then sends on the
+  rail that pairing implies, showing the disclosure first. **No driver/threshold** —
+  the info exchange is the coordination. Mostly reuses the address-request/address-share
+  cards already in the build.
+- **P-L4b — agreement, opt-in (Mode B).** For rooms that want joint control: a LEZ
+  transfer as a coordinated intent (reuse the invoke driver + `coordinate_execute`), so
+  the room approves k-of-n and the core settles via `lez_core`. A later, optional phase.
+- **P-L4c — on-zone enforcement (Mode B, trust-minimized).** An escrow / M-of-N guest
+  program (`#[lez_program]`, the atomic-swap / `lez-multisig` pattern) the room settles
+  against. The heaviest, latest phase; needs program deployment.
 - **P-L5 — the education surface.** The side-by-side (EVM leaks vs LEZ shields) the
-  vision doc promises, driven from the two real adapters.
+  vision doc promises, driven from the two real adapters + the receiver's own
+  disclosure choice (which address form they share).
 
 ## 9. Infra needed to run it real (the "point me at it" list)
 
