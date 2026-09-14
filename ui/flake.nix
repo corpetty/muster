@@ -22,6 +22,10 @@
     # coordinate_join's lp_client_create("delivery_module") resolves. Same repo/pin
     # the demo consumes (v0.2.0); mapped to the module name `delivery_module` below.
     logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.2.0";
+    # The LEZ wallet (P-L3): muster_module calls lez_core over lp_* to send assets on
+    # the zone, so it must be in the standalone runner's module set for
+    # lp_client_create("lez_core") to resolve. Same repo/pin the demo consumes (549cf115).
+    lez_core.url = "github:logos-blockchain/logos-execution-zone-module/549cf1159f20fa0c3fe8e88a5ab71de68a5aa34b";
   };
 
   outputs = inputs@{ logos-module-builder, ... }:
@@ -35,7 +39,7 @@
         # delivery_module is muster_module's transitive dependency; it is provided
         # here (mapped from logos-delivery-module) so the builder can pull it into
         # the same module set — muster_ui does not call it, so it declares no client.
-        flakeInputs = { delivery_module = inputs.logos-delivery-module; } // inputs;
+        flakeInputs = { delivery_module = inputs.logos-delivery-module; lez_core = inputs.lez_core; } // inputs;
       };
 
       nixpkgs = logos-module-builder.inputs.nixpkgs;
