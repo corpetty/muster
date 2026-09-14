@@ -126,6 +126,13 @@ Item {
         try { return JSON.parse(backend ? backend.executeJson : "{}"); }
         catch (e) { return ({}); }
     }
+    // The outcome of the last in-app approval: {intentId, state, ok, reason}. When ok
+    // is false the approval didn't count — surfaced so a rejected signature says WHY
+    // instead of nothing happening (the "I clicked Approve and nothing changed" case).
+    readonly property var contributeResult: {
+        try { return JSON.parse(backend ? backend.contributeJson : "{}"); }
+        catch (e) { return ({}); }
+    }
     // Refresh the action menu when the action composer opens — the module queries each
     // candidate module's methods (never a blind scan), so not on the message tick.
     onComposeTypeChanged: if (composing && composeType === "action" && room.backend)
@@ -876,6 +883,70 @@ Item {
                     }
                 }
 
+                // attest: WHAT identity backs your attestation. An EIP-191 attestation
+                // is a personal_sign with your secp256k1 AUTHORIZATION key — the same
+                // key that signs Safe transactions, NOT the encryption identity that
+                // names you in the room. Recognized signers are the Safe owners, so this
+                // says plainly whether your attestation will count (else it's silently
+                // rejected). The same disclosure the Safe composer makes, for Attest.
+                Rectangle {
+                    objectName: "roomAttestContext"
+                    visible: room.policyKind === "eip191"
+                    Layout.fillWidth: true
+                    implicitHeight: attestCtx.implicitHeight + 2 * Theme.spacing.small
+                    radius: Theme.spacing.radiusSmall
+                    color: Theme.palette.surfaceRaised
+                    border.width: 1
+                    border.color: (room.roomAccount && room.roomAccount.isSigner)
+                                  ? Theme.palette.success : Theme.palette.warning
+
+                    ColumnLayout {
+                        id: attestCtx
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: Theme.spacing.small
+                        anchors.rightMargin: Theme.spacing.small
+                        spacing: 2
+
+                        LogosText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: qsTr("You attest with your secp256k1 authorization key — the "
+                                     + "same key that signs Safe transactions, not your room "
+                                     + "encryption identity.")
+                            color: Theme.palette.textSecondary
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        LogosText {
+                            Layout.fillWidth: true
+                            text: qsTr("signing as %1")
+                                  .arg(String((room.roomAccount && room.roomAccount.actingAs) || "…"))
+                            color: Theme.palette.textTertiary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                            elide: Text.ElideMiddle
+                        }
+                        LogosText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: {
+                                if (!room.roomAccount || room.roomAccount.isSigner === undefined)
+                                    return qsTr("checking whether your key is a recognized attester…");
+                                return room.roomAccount.isSigner
+                                     ? qsTr("✓ a recognized attester (a Safe owner) — your attestation counts")
+                                     : qsTr("⚠ not a recognized attester — your attestation won't count. "
+                                          + "Recognized signers: %1.")
+                                       .arg(String(room.roomAccount.signerSet || "the Safe owners"));
+                            }
+                            color: (room.roomAccount && room.roomAccount.isSigner)
+                                   ? Theme.palette.success : Theme.palette.warning
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                    }
+                }
+
                 // payment: the sending context — WHAT you're sending (the Safe's own
                 // balance, so you send from real holdings, not a blind number) and WHO
                 // you act as (surfaced here at propose time — ask-then-disclose — with
@@ -1125,6 +1196,32 @@ Item {
                         onClicked: room.composing = false
                     }
                 }
+            }
+
+            // approval feedback — an in-app Approve that didn't count says WHY, right
+            // here, instead of silently doing nothing. The common case: your key isn't
+            // a recognized signer for the intent's policy (a Safe owner / an attester).
+            LogosText {
+                objectName: "roomApproveFeedback"
+                visible: room.contributeResult && room.contributeResult.ok === false
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: {
+                    var r = room.contributeResult || ({});
+                    var reason = String(r.reason || "");
+                    if (reason === "rejected")
+                        return qsTr("⚠ Your approval didn't count — your key isn't a recognized "
+                                  + "signer for this intent's policy (a Safe owner, or an "
+                                  + "attester). Check the signing identity above.");
+                    if (reason === "not-joined")
+                        return qsTr("⚠ Not in a room — join one first.");
+                    if (reason === "unknown-intent")
+                        return qsTr("⚠ That proposal isn't in the room's log yet — give it a moment.");
+                    return qsTr("⚠ Approval didn't count — %1").arg(reason);
+                }
+                color: Theme.palette.warning
+                font.family: Theme.typography.mono
+                font.pixelSize: Theme.typography.badgeText
             }
 
             // the message row.

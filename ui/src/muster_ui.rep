@@ -210,6 +210,12 @@ class MusterUi
     // ready invoke card so running the action reports honestly.
     PROP(QString executeJson="{}" READONLY)
 
+    // The outcome of the last in-app approval (contributeInRoom): JSON
+    // {intentId, state, ok, reason}. `ok` is false when the signature didn't count —
+    // "rejected" (your key isn't a recognized signer for this policy), "not-joined",
+    // "unknown-intent" — so the UI can say WHY instead of silently doing nothing.
+    PROP(QString contributeJson="{}" READONLY)
+
     // Every joined conversation, as JSON {topic, address, lastTs, active}. The home
     // surface lists these — one row per room the module holds a session for.
     PROP(QString conversationsJson="[]" READONLY)

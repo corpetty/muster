@@ -67,10 +67,17 @@ build:
 
 # nix run resolves apps.default (the standalone runner), NOT packages.default
 # (the .lgx). Each --user-dir is one identity + wallet, so two dirs are two peers.
+# Seed this instance as anvil Safe owner 0 (like run-fleet does for alice), so YOUR
+# own in-app Approve / Attest actually counts solo — otherwise a freshly minted
+# identity isn't a Safe owner and every secp-policy signature is silently rejected.
+# Honoured only on a FRESH identity: `make clean` (or clean-peer PEER=muster) once to
+# adopt the owner key if you've already launched. Override with SEED= to opt out.
+run: SEED ?= $(ANVIL_KEY0)
 run:
 	@mkdir -p $(RUN_DIR)
 	@echo "launching muster (standalone) with user-dir $(RUN_DIR)"
-	cd $(UI) && nix run 'path:.' $(CACHE) -- --user-dir $(RUN_DIR)
+	@[ -n "$(SEED)" ] && echo "  seeding as anvil Safe owner 0 (in-app Approve/Attest counts; 'make clean' to re-mint)" || true
+	cd $(UI) && MUSTER_DEV_SECP_KEY="$(SEED)" nix run 'path:.' $(CACHE) -- --user-dir $(RUN_DIR)
 
 # Launch one peer already pointed at the Logos delivery fleet, so its transport
 # joins a network with real bootstrap peers (the bundled preset ships none — see
