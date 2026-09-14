@@ -161,6 +161,33 @@ void MusterUiBackend::loadBalances()
     setBalancesJson(b);
 }
 
+void MusterUiBackend::loadWalletAccounts()
+{
+    // Every account across chains, with a LEZ account's shareable address (the `share`
+    // field) — the addresses you hand out to be paid (Mode A request→share→send).
+    setWalletAccountsJson(modules().muster_module.wallet_accounts());
+}
+
+void MusterUiBackend::previewLezSend(const QString &fromId, const QString &to, const QString &raw)
+{
+    // Preview the rail + disclosure without committing — the honesty before you send.
+    Q_UNUSED(fromId);
+    setLezPreviewJson(modules().muster_module.wallet_estimate_fee(
+        QStringLiteral("lez:testnet"), to, QStringLiteral("LEZ"), raw));
+}
+
+void MusterUiBackend::sendLez(const QString &fromId, const QString &to, const QString &raw)
+{
+    // Send on the LEZ; the module picks the rail from (source form, destination kind)
+    // and reports what it disclosed. Never a false receipt — a rejected send is {error}.
+    const QString r = modules().muster_module.wallet_send(
+        QStringLiteral("lez:testnet"), fromId, to, QStringLiteral("LEZ"), raw);
+    qInfo() << "[muster_ui] wallet_send(lez) ->" << r;
+    setLezSendJson(r);
+    loadWalletAccounts();
+    loadBalances();
+}
+
 void MusterUiBackend::joinRoom(const QString &topic)
 {
     // coordinate_join → start/join the conversation on this topic over encrypted

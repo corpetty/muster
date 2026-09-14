@@ -49,6 +49,11 @@
     # (v0.2.0); mapped to the module name `delivery_module` below so
     # metadata.json#dependencies resolves it into the host module set.
     logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.2.0";
+    # The Logos Execution Zone wallet (P-L3): muster_module calls lez_core over lp_*
+    # (src/wallet/lez_lp.nim) to send assets on the zone. Same repo/pin the demo
+    # consumes (549cf115); mapped to the module name `lez_core` below so
+    # lp_client_create("lez_core") resolves in the standalone runner.
+    lez_core.url = "github:logos-blockchain/logos-execution-zone-module/549cf1159f20fa0c3fe8e88a5ab71de68a5aa34b";
   };
 
   outputs = inputs@{ self, logos-module-builder, ... }:
@@ -61,7 +66,7 @@
         (logos-module-builder.lib.mkLogosModule {
           src = ./.;
           configFile = ./metadata.json;
-          flakeInputs = { delivery_module = inputs.logos-delivery-module; } // inputs;
+          flakeInputs = { delivery_module = inputs.logos-delivery-module; lez_core = inputs.lez_core; } // inputs;
         }).packages.${system});
     };
 }

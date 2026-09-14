@@ -34,6 +34,9 @@ public:
     void submit() override;
     void reset() override;
     void loadBalances() override;
+    void loadWalletAccounts() override;
+    void previewLezSend(const QString &fromId, const QString &to, const QString &raw) override;
+    void sendLez(const QString &fromId, const QString &to, const QString &raw) override;
 
     // The room / conversation surface (see muster_ui.rep).
     void joinRoom(const QString &topic) override;

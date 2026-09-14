@@ -40,6 +40,9 @@ import ../src/wallet/types             # chain-agnostic wallet types
 import ../src/wallet/adapter           # ChainAdapter seam + Wallet aggregate
 import ../src/wallet/evm_adapter       # the EVM/Safe chain
 import ../src/wallet/mock_chain        # a second, non-EVM chain (proves agnosticism)
+import ../src/wallet/lez_core          # the LEZ wallet seam + FakeLezCore (P-L3 swaps in real)
+import ../src/wallet/lez_adapter       # the Logos Execution Zone chain (send assets via Logos)
+import ../src/wallet/lez_lp            # LpLezCore — the real lez_core over lp_* (P-L3)
 
 proc hexToBytes(s: string): seq[byte] =
   var h = s
@@ -982,6 +985,7 @@ proc musterCoordinateConversations(): string =
 var gWallet: Wallet = nil
 var gMock: MockChain = nil
 var gEvm: EvmAdapter = nil          ## typed handle for the EVM-specific verified path
+var gLez: LezAdapter = nil          ## the LEZ chain (fake core until P-L3 wires lez_core)
 
 proc moduleWallet(): Wallet =
   if gWallet == nil:
@@ -995,6 +999,33 @@ proc moduleWallet(): Wallet =
       if acc.form == afPublic:
         gMock.credit(acc.id, "MOCK", "5000000000")
         gMock.credit(acc.id, "MTK", "1230000")
+    # The Logos Execution Zone — send assets via Logos, public + shielded. Real
+    # (LpLezCore over lez_core, against testnet.lez.logos.co) when MUSTER_LEZ_REAL is
+    # set AND lez_core is loaded; otherwise the deterministic fake, so a runner without
+    # lez_core bundled still demonstrates the flow. Any failure to reach the real core
+    # falls back to the fake rather than breaking the wallet.
+    let lezCore: LezCore =
+      if getEnv("MUSTER_LEZ_REAL").len > 0:
+        try:
+          let dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+          LezCore(newLpLezCore(dir))
+        except CatchableError as e:
+          stderr.writeLine("MUSTER-LEZ: real lez_core unavailable, using fake — " & e.msg)
+          LezCore(newFakeLezCore())
+      else:
+        LezCore(newFakeLezCore())
+    gLez = newLezAdapter(lezCore)
+    # Fund the DEMO (fake) accounts eagerly so a send is demonstrable. For the REAL
+    # core, do NOT create/register/fund accounts here: those hit the network (and the
+    # pinata PoW) and would block this first wallet call on the module thread. The real
+    # accounts are created lazily on the first LEZ query (a bounded loading delay at
+    # panel-open), and a proving transfer already runs async — so nothing freezes.
+    if getEnv("MUSTER_LEZ_REAL").len == 0:
+      for acc in gLez.accounts(ks):
+        if acc.form == afPublic:
+          try: gLez.claimFaucet("EfQhKQAkX2FJiwNii2WFQsGndjvF1Mzd7RuVe7QdPLw7", acc)
+          except CatchableError: discard
+    gWallet.register(gLez)
   gWallet
 
 proc assetBySymbol(w: Wallet, chain, symbol: string): AssetId =
@@ -1008,16 +1039,44 @@ proc accountOn(w: Wallet, chain: string): Account =
   raise newException(WalletError, "no account on " & chain)
 
 proc musterWalletAccounts(): string =
+  ## Every account across chains. LEZ accounts also carry a `share` — the address to
+  ## hand out to BE paid (Mode A's request→share→send): a public id, or a shielded key
+  ## node "priv:npk:vpk". PER-CHAIN resilient: one chain that can't answer (e.g. the LEZ
+  ## zone unreachable, or its wallet not yet set up) contributes an {chain, error} entry
+  ## instead of emptying the whole list — so the UI can SAY why, not just show nothing.
   let w = moduleWallet()
+  let ks = moduleKeystore()
   var arr = newJArray()
-  for a in w.accounts(): arr.add %*{"chain": a.chain, "form": $a.form, "id": a.id}
+  for desc in w.chains():
+    let chain = desc.chain
+    try:
+      # the LEZ shareable addresses (best-effort; drives account creation for the real
+      # core, which is where a zone/setup failure would surface).
+      var lezShare = initTable[string, string]()
+      if chain == lez_adapter.ChainId and gLez != nil:
+        for r in gLez.receiveAddresses(ks): lezShare[r.form] = r.address
+      for a in w.adapterFor(chain).accounts(ks):
+        var o = %*{"chain": a.chain, "form": $a.form, "id": a.id}
+        if ($a.form) in lezShare: o["share"] = %lezShare[$a.form]
+        arr.add o
+    except CatchableError as e:
+      arr.add %*{"chain": chain, "error": e.msg}
   $arr
 
 proc musterWalletBalances(): string =
   ## Every account × asset, each entry a balance OR an error — never a false zero.
+  ## Per-chain resilient: a chain whose accounts can't be listed (the LEZ zone
+  ## unreachable) contributes an error entry, never empties the whole list.
   let w = moduleWallet()
+  let ks = moduleKeystore()
   var arr = newJArray()
-  for acc in w.accounts():
+  var accts: seq[Account]
+  for desc in w.chains():
+    try:
+      for a in w.adapterFor(desc.chain).accounts(ks): accts.add a
+    except CatchableError as e:
+      arr.add %*{"chain": desc.chain, "error": e.msg}
+  for acc in accts:
     for asset in w.assets():
       if asset.chain != acc.chain: continue
       # grade (F-10): "attested" — this reads the balance from the user's RPC and
@@ -1039,16 +1098,43 @@ proc musterWalletEstimateFee(chain, to, assetSymbol, raw: string): string =
   let w = moduleWallet()
   try:
     let asset = assetBySymbol(w, chain, assetSymbol)
-    let fee = w.estimateFee(chain, accountOn(w, chain), to, amount(asset, raw))
-    $(%*{"fee": fee.fee.display(), "raw": fee.fee.raw, "note": fee.note})
+    let src = accountOn(w, chain)
+    let fee = w.estimateFee(chain, src, to, amount(asset, raw))
+    var o = %*{"fee": fee.fee.display(), "raw": fee.fee.raw, "note": fee.note}
+    # LEZ preview: name the rail + what it would disclose, so the sender sees the
+    # honesty BEFORE committing (a public id names the payee; a shielded key node
+    # doesn't). Best-effort — a bad destination just omits the preview.
+    if chain == lez_adapter.ChainId and gLez != nil:
+      try:
+        let p = parseJson(gLez.prepareTransfer(src, to, amount(asset, raw)).payload)
+        o["rail"] = p{"form"}; o["discloses"] = p{"discloses"}
+      except CatchableError: discard
+    $o
   except CatchableError as e:
     $(%*{"error": e.msg})
+
+proc accountFormOf(w: Wallet, chain, id: string): AccountForm =
+  ## The real form of a source account (public vs shielded) — the LEZ rail depends on
+  ## it, so a hardcoded afPublic would send a shielded balance down the public rail.
+  for a in w.accounts():
+    if a.chain == chain and a.id == id: return a.form
+  afPublic
 
 proc musterWalletSend(chain, fromId, to, assetSymbol, raw: string): string =
   let w = moduleWallet()
   try:
     let asset = assetBySymbol(w, chain, assetSymbol)
-    let frm = Account(chain: chain, form: afPublic, id: fromId)
+    let frm = Account(chain: chain, form: accountFormOf(w, chain, id = fromId), id: fromId)
+    # LEZ: the rail (public/shield/deshield/private) and the DISCLOSURE follow from
+    # (source form, what the recipient shared). Surface both so the send reports which
+    # honesty it took — the education payoff of sending assets via Logos.
+    if chain == lez_adapter.ChainId and gLez != nil:
+      let prepared = gLez.prepareTransfer(frm, to, amount(asset, raw))
+      let p = parseJson(prepared.payload)
+      let r = gLez.submit(prepared, moduleKeystore())
+      return $(%*{"txId": r.id, "chain": r.chain,
+                  "rail": p{"form"}.getStr(), "discloses": p{"discloses"},
+                  "fee": prepared.fee.fee.display(), "note": prepared.fee.note})
     let r = w.send(chain, frm, to, amount(asset, raw))
     $(%*{"txId": r.id, "chain": r.chain})
   except CatchableError as e:
