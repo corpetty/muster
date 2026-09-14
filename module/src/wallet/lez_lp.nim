@@ -17,6 +17,7 @@
 
 import std/[json, strutils, os]
 import logos_sdk/ffi              # lp_* C-ABI (resolves at plugin link time, like delivery)
+import ../transport/inbound_queue # foreign-thread-safe result hand-off (as delivery uses)
 import ./types
 import ./lez_core
 import ./lez_encoding
@@ -29,6 +30,9 @@ type
   LpLezCore* = ref object of LezCore
     client: ptr LpClient
     origin: string
+    q: InboundQueue          ## a proving transfer's result lands here from lez_core's thread
+    inflight: bool           ## single-in-flight: one proving transfer at a time
+    lastResult: LezResult    ## the resolved result once drained (module thread)
 
 proc rawCall(c: LpLezCore, meth, argsJson: string, timeoutMs: cint): string =
   ## One lp_invoke → the method's result as a bare string ("" on failure/empty, the
@@ -65,6 +69,10 @@ proc newLpLezCore*(instancePath: string, origin = "muster_module"): LpLezCore =
   if client == nil:
     raise newException(WalletError, "lez_core: lp_client_create returned null (module not loaded?)")
   result = LpLezCore(client: client, origin: origin)
+  initInboundQueue(result.q)
+  # The async transfer callback holds `addr result.q` as C user_data; keep the object
+  # alive for its (bounded, ≤900s) lifetime, exactly as delivery GC_refs its transport.
+  GC_ref(result)
   let cfg = instancePath / "lez" / "config.json"      # absent → wallet writes the default
   let sto = instancePath / "lez" / "storage.json"
   let sta = instancePath / "lez" / "statistics.json"
@@ -112,21 +120,67 @@ method getBalanceRaw*(c: LpLezCore, accountId: string, isPublic: bool): string =
   ## get_balance(id, is_public) → a DECIMAL string; "" on an unanswerable read.
   c.rawCall("get_balance", args(%accountId, %isPublic), kReadMs)
 
+proc onTransferResult(ok: cint, json: cstring, userData: pointer) {.cdecl, gcsafe.} =
+  ## Runs on lez_core's thread when a proving transfer settles. Copies the result into
+  ## the queue (malloc/copy, no Nim GC) and returns; pollTransfer parses it later on the
+  ## module thread. An empty enqueue marks a transport-level failure (ok == 0 / no json).
+  if userData == nil: return
+  let q = cast[ptr InboundQueue](userData)
+  if json != nil: q[].enqueue(json)
+  else: q[].enqueue("")
+
+proc transferMethodArgs(form: TransferForm, frm, to, amt: string): (string, string) =
+  ## The lez_core method + positional args for a rail; amount already LE-hex.
+  case form
+  of tfPublic:   ("transfer_public",     args(%frm, %to, %amt))
+  of tfDeshield: ("transfer_deshielded", args(%frm, %to, %amt))
+  of tfShield, tfPrivate:
+    let parts = to.split(':')
+    let keys = keyNodeJson((if parts.len > 0: parts[0] else: to),
+                           (if parts.len > 1: parts[1] else: ""))
+    ((if form == tfShield: "transfer_shielded" else: "transfer_private"),
+     args(%frm, %keys, %amt))
+
 method transfer*(c: LpLezCore, form: TransferForm, frm, to, amountRaw: string): LezResult =
-  ## Map the rail onto lez_core's four transfer verbs; amount as 16-byte LE hex. A
-  ## shielded destination (`to` = "npk:vpk") becomes the to_keys_json. Proving → 900s.
-  let amt = amountLe16Hex(amountRaw)
-  let raw =
-    case form
-    of tfPublic:   c.rawCall("transfer_public",   args(%frm, %to, %amt), kProveMs)
-    of tfDeshield: c.rawCall("transfer_deshielded", args(%frm, %to, %amt), kProveMs)
-    of tfShield, tfPrivate:
-      let parts = to.split(':')
-      let keys = keyNodeJson((if parts.len > 0: parts[0] else: to),
-                             (if parts.len > 1: parts[1] else: ""))
-      let meth = (if form == tfShield: "transfer_shielded" else: "transfer_private")
-      c.rawCall(meth, args(%frm, %keys, %amt), kProveMs)
-  parseEnvelope(raw)
+  ## Fire the proving transfer in the BACKGROUND (lp_invoke_async), so the ~7-minute
+  ## proof NEVER blocks the module's dispatch thread — chat and coordination keep
+  ## running. Returns a "pending" marker at once; the adapter's finality() polls
+  ## pollTransfer() for the real result. Single-in-flight (one proof at a time).
+  if c.inflight:
+    return LezResult(success: false, error: "a LEZ transfer is already proving — wait for it")
+  let (meth, argsJson) = transferMethodArgs(form, frm, to, amountLe16Hex(amountRaw))
+  c.inflight = true
+  c.lastResult = LezResult()
+  let rc = lp_invoke_async(c.client, meth.cstring, argsJson.cstring, kProveMs,
+                           onTransferResult, addr c.q)
+  if rc != LP_OK:
+    c.inflight = false
+    return LezResult(success: false, error: "lez_core " & meth & " lp_invoke_async rc=" & $rc)
+  LezResult(success: true, txHash: "pending")     # accepted; proving in the background
+
+proc toStr(b: seq[byte]): string =
+  result = newString(b.len)
+  if b.len > 0: copyMem(addr result[0], unsafeAddr b[0], b.len)
+
+method pollTransfer*(c: LpLezCore): tuple[done: bool, result: LezResult] =
+  ## Drain lez_core's async transfer result (on the module thread) and parse it. Until
+  ## it arrives, (done: false) — the shielded proof genuinely takes minutes.
+  if not c.inflight: return (true, c.lastResult)
+  let drained = c.q.drain()
+  if drained.len == 0: return (false, LezResult())   # still proving
+  c.inflight = false
+  let raw = toStr(drained[^1])                        # single in-flight → the one result
+  if raw.len == 0:
+    c.lastResult = LezResult(success: false, error: "transfer failed (no result)")
+  else:
+    # the async result may be the bare envelope, or a JSON-string-wrapped one
+    var s = raw
+    try:
+      let j = parseJson(raw)
+      if j.kind == JString: s = j.getStr()
+    except CatchableError: discard
+    c.lastResult = parseEnvelope(s)
+  (true, c.lastResult)
 
 method sync*(c: LpLezCore): int =
   ## Scan to the tip so received private notes become discoverable. sync_to_block +

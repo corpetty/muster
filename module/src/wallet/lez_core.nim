@@ -95,6 +95,14 @@ method claimPinata*(c: LezCore, pinataId, account: string): LezResult {.base, gc
   ## and calls claim_pinata; the seam hides that. Fast (<20s); stays sync.
   raise newException(WalletError, "LezCore.claimPinata is abstract")
 
+method pollTransfer*(c: LezCore): tuple[done: bool, result: LezResult] {.base, gcsafe.} =
+  ## For an ASYNC core (LpLezCore): has the in-flight proving transfer settled yet, and
+  ## its result? A proving transfer takes minutes, so the real core fires it in the
+  ## BACKGROUND (transfer returns a "pending" marker at once, never blocking the module
+  ## thread) and this reports completion. Sync cores (the fake) return their result from
+  ## transfer directly and never mark it pending, so the default is "n/a, done".
+  (done: true, result: LezResult(success: true))
+
 # ── envelope helper ────────────────────────────────────────────────────────────
 proc parseEnvelope*(s: string): LezResult =
   ## Parse a `transfer_*` / `register_*` / `claim_*` JSON envelope. A malformed or

@@ -29,14 +29,14 @@ type
     native: AssetId
     cached: seq[Account]                 ## our public + private accounts (created once)
     keyNode: Table[string, LezAccount]   ## our private account id -> its npk/vpk
-    submitted: Table[string, tuple[priv: bool, polls: int]]  ## txId -> finality state
+    submitted: Table[string, tuple[priv: bool, polls: int, async: bool]]  ## txId -> finality state
 
 proc newLezAdapter*(core: LezCore): LezAdapter =
   LezAdapter(
     core: core,
     native: AssetId(chain: ChainId, symbol: "LEZ", kind: akNative, decimals: 9),
     keyNode: initTable[string, LezAccount](),
-    submitted: initTable[string, tuple[priv: bool, polls: int]]())
+    submitted: initTable[string, tuple[priv: bool, polls: int, async: bool]]())
 
 method describe*(a: LezAdapter): ChainDescriptor =
   ChainDescriptor(chain: ChainId, displayName: "Logos Execution Zone",
@@ -118,9 +118,11 @@ method submit*(a: LezAdapter, tx: PreparedTx, ks: Keystore): TxRef =
   if not res.success:
     raise newException(WalletError, "LEZ transfer failed: " &
                        (if res.error.len > 0: res.error else: "success=false"))
-  # A shielded landing (shield/private) settles by scan → delayed finality; a public
-  # landing (public/deshield) is immediate.
-  a.submitted[res.txHash] = (priv: form in {tfShield, tfPrivate}, polls: 0)
+  # "pending" == an ASYNC core fired the proof in the background (never blocked the
+  # module); finality() polls it. A real txHash == a sync core (the fake), which uses
+  # the modelled delay (shielded pending→final; public immediate).
+  a.submitted[res.txHash] = (priv: form in {tfShield, tfPrivate}, polls: 0,
+                             async: res.txHash == "pending")
   TxRef(chain: ChainId, id: res.txHash)
 
 method finality*(a: LezAdapter, txRef: TxRef): Finality =
@@ -131,6 +133,17 @@ method finality*(a: LezAdapter, txRef: TxRef): Finality =
   if txRef.id notin a.submitted:
     return Finality(status: fsFinal, detail: "no pending record")
   var s = a.submitted[txRef.id]
+  # Async (real core): the proof ran in the background — poll its actual completion,
+  # never an optimistic final. Until the ~7-minute proof lands it stays pending.
+  if s.async:
+    let r = a.core.pollTransfer()
+    if not r.done:
+      return Finality(status: fsPending, detail: "proving in the background…")
+    if r.result.success:
+      return Finality(status: fsFinal,
+                      detail: "settled" & (if r.result.txHash.len > 0: " · " & r.result.txHash else: ""))
+    return Finality(status: fsFailed,
+                    detail: (if r.result.error.len > 0: r.result.error else: "transfer failed"))
   if not s.priv:
     return Finality(status: fsFinal, detail: "public transfer settled")
   inc s.polls

@@ -1015,11 +1015,16 @@ proc moduleWallet(): Wallet =
       else:
         LezCore(newFakeLezCore())
     gLez = newLezAdapter(lezCore)
-    for acc in gLez.accounts(ks):
-      if acc.form == afPublic:
-        # the pinata faucet — a no-op credit in the fake; a real PoW + claim in LpLezCore.
-        try: gLez.claimFaucet("EfQhKQAkX2FJiwNii2WFQsGndjvF1Mzd7RuVe7QdPLw7", acc)
-        except CatchableError: discard
+    # Fund the DEMO (fake) accounts eagerly so a send is demonstrable. For the REAL
+    # core, do NOT create/register/fund accounts here: those hit the network (and the
+    # pinata PoW) and would block this first wallet call on the module thread. The real
+    # accounts are created lazily on the first LEZ query (a bounded loading delay at
+    # panel-open), and a proving transfer already runs async — so nothing freezes.
+    if getEnv("MUSTER_LEZ_REAL").len == 0:
+      for acc in gLez.accounts(ks):
+        if acc.form == afPublic:
+          try: gLez.claimFaucet("EfQhKQAkX2FJiwNii2WFQsGndjvF1Mzd7RuVe7QdPLw7", acc)
+          except CatchableError: discard
     gWallet.register(gLez)
   gWallet
 
