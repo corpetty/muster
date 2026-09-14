@@ -68,9 +68,11 @@ method createAccount*(c: LezCore, kind: LezAccountKind): LezAccount {.base, gcsa
 method listAccounts*(c: LezCore): seq[LezAccount] {.base, gcsafe.} =
   raise newException(WalletError, "LezCore.listAccounts is abstract")
 
-method getBalanceRaw*(c: LezCore, accountId: string): string {.base, gcsafe.} =
-  ## Raw base-units balance. The real module returns an EMPTY string on a read it
-  ## can't answer (labbook §1) — the adapter raises on "" so it's never a false zero.
+method getBalanceRaw*(c: LezCore, accountId: string, isPublic: bool): string {.base, gcsafe.} =
+  ## Raw (decimal) base-units balance. lez_core's get_balance(id, is_public) needs to
+  ## know the account form, so the seam carries it. The real module returns an EMPTY
+  ## string on a read it can't answer (labbook §1) — the adapter raises on "" so it's
+  ## never a false zero.
   raise newException(WalletError, "LezCore.getBalanceRaw is abstract")
 
 method transfer*(c: LezCore, form: TransferForm, frm, to, amountRaw: string): LezResult {.base, gcsafe.} =
@@ -87,8 +89,10 @@ method sync*(c: LezCore): int {.base, gcsafe.} =
   ## module's int convention). After this, a received note appears in listAccounts.
   raise newException(WalletError, "LezCore.sync is abstract")
 
-method claimPinata*(c: LezCore, pinataId, account: string, nonce: int): LezResult {.base, gcsafe.} =
-  ## The faucet. Fast (<20s) in the real module; stays sync there.
+method claimPinata*(c: LezCore, pinataId, account: string): LezResult {.base, gcsafe.} =
+  ## The faucet. The real module takes a pre-solved 16-byte-LE PoW `solution` — the
+  ## concrete impl reads the pinata challenge (difficulty+seed), solves it (pinataSolve),
+  ## and calls claim_pinata; the seam hides that. Fast (<20s); stays sync.
   raise newException(WalletError, "LezCore.claimPinata is abstract")
 
 # ── envelope helper ────────────────────────────────────────────────────────────
@@ -143,9 +147,10 @@ method createAccount*(c: FakeLezCore, kind: LezAccountKind): LezAccount =
 
 method listAccounts*(c: FakeLezCore): seq[LezAccount] = c.accounts
 
-method getBalanceRaw*(c: FakeLezCore, accountId: string): string =
+method getBalanceRaw*(c: FakeLezCore, accountId: string, isPublic: bool): string =
   ## Sentinel: an account the wallet doesn't hold returns "" (an unanswerable read),
-  ## which the adapter turns into a raise — never a false zero.
+  ## which the adapter turns into a raise — never a false zero. (The fake's ledger is
+  ## keyed by id, so isPublic is unused here; the real module needs it.)
   if accountId in c.balances: c.balances[accountId] else: ""
 
 proc credit(c: FakeLezCore, id, amountRaw: string) =
@@ -186,6 +191,6 @@ method sync*(c: FakeLezCore): int =
   c.pending = @[]
   0
 
-method claimPinata*(c: FakeLezCore, pinataId, account: string, nonce: int): LezResult =
+method claimPinata*(c: FakeLezCore, pinataId, account: string): LezResult =
   c.credit(account, "1000000000")   # fund with 1e9 base units
   LezResult(success: true, txHash: c.nextId("tx"))

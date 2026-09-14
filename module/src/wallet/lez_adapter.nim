@@ -61,7 +61,7 @@ method balance*(a: LezAdapter, account: Account, asset: AssetId): Amount =
   ## Raise on an unanswerable read (the LEZ returns "" — never a false zero). A
   ## received private note's balance shows against the DISCOVERED account after sync,
   ## not against a published id (receive-by-scan).
-  let raw = a.core.getBalanceRaw(account.id)
+  let raw = a.core.getBalanceRaw(account.id, account.form == afPublic)
   if raw.len == 0:
     raise newException(WalletError, "LEZ balance unavailable for " & account.id)
   amount(asset, raw)
@@ -143,9 +143,10 @@ method finality*(a: LezAdapter, txRef: TxRef): Finality =
 
 # ── funding + discovery, beyond the ChainAdapter seam ──────────────────────────
 
-proc claimFaucet*(a: LezAdapter, pinataId: string, account: Account, nonce = 0) =
-  ## Fund an account from the pinata faucet. Raises on a `success:false` envelope.
-  let res = a.core.claimPinata(pinataId, account.id, nonce)
+proc claimFaucet*(a: LezAdapter, pinataId: string, account: Account) =
+  ## Fund an account from the pinata faucet. Raises on a `success:false` envelope. The
+  ## real core solves the PoW inside claimPinata; the fake just credits.
+  let res = a.core.claimPinata(pinataId, account.id)
   if not res.success:
     raise newException(WalletError, "pinata claim failed: " & res.error)
 

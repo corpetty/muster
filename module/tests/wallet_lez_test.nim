@@ -47,7 +47,7 @@ block:
   let other = core.createAccount(lakPublic)
   let tx = a.submit(a.prepareTransfer(pub, other.id, amount(a.assets()[0], "250000000")), ks)
   doAssert a.balance(pub, a.assets()[0]).raw == "750000000", "sender debited"
-  doAssert core.getBalanceRaw(other.id) == "250000000", "recipient credited"
+  doAssert core.getBalanceRaw(other.id, true) == "250000000", "recipient credited"
   doAssert a.finality(tx).status == fsFinal, "a public transfer is final immediately"
   echo "3. public transfer — funded, debited, credited, final OK"
 
@@ -76,7 +76,7 @@ block:
   let discovered = a.syncPrivate()
   var credited = ""
   for acc in discovered:
-    if core.getBalanceRaw(acc.id) == "100000000": credited = acc.id
+    if core.getBalanceRaw(acc.id, false) == "100000000": credited = acc.id
   doAssert credited.len > 0 and credited != recipient.id,
            "the note is discovered at a fresh account, not the published id"
   echo "4. shielded transfer — proof cost, delayed finality, receive-by-scan OK"

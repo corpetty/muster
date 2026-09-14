@@ -42,6 +42,7 @@ import ../src/wallet/evm_adapter       # the EVM/Safe chain
 import ../src/wallet/mock_chain        # a second, non-EVM chain (proves agnosticism)
 import ../src/wallet/lez_core          # the LEZ wallet seam + FakeLezCore (P-L3 swaps in real)
 import ../src/wallet/lez_adapter       # the Logos Execution Zone chain (send assets via Logos)
+import ../src/wallet/lez_lp            # LpLezCore — the real lez_core over lp_* (P-L3)
 
 proc hexToBytes(s: string): seq[byte] =
   var h = s
@@ -998,12 +999,25 @@ proc moduleWallet(): Wallet =
       if acc.form == afPublic:
         gMock.credit(acc.id, "MOCK", "5000000000")
         gMock.credit(acc.id, "MTK", "1230000")
-    # The Logos Execution Zone — send assets via Logos, public + shielded. A fake core
-    # until P-L3 pins lez_core; the public account is faucet-funded so a send is
-    # demonstrable. The shielded receive side is discovered by scan (syncPrivate).
-    gLez = newLezAdapter(newFakeLezCore())
+    # The Logos Execution Zone — send assets via Logos, public + shielded. Real
+    # (LpLezCore over lez_core, against testnet.lez.logos.co) when MUSTER_LEZ_REAL is
+    # set AND lez_core is loaded; otherwise the deterministic fake, so a runner without
+    # lez_core bundled still demonstrates the flow. Any failure to reach the real core
+    # falls back to the fake rather than breaking the wallet.
+    let lezCore: LezCore =
+      if getEnv("MUSTER_LEZ_REAL").len > 0:
+        try:
+          let dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+          LezCore(newLpLezCore(dir))
+        except CatchableError as e:
+          stderr.writeLine("MUSTER-LEZ: real lez_core unavailable, using fake — " & e.msg)
+          LezCore(newFakeLezCore())
+      else:
+        LezCore(newFakeLezCore())
+    gLez = newLezAdapter(lezCore)
     for acc in gLez.accounts(ks):
       if acc.form == afPublic:
+        # the pinata faucet — a no-op credit in the fake; a real PoW + claim in LpLezCore.
         try: gLez.claimFaucet("EfQhKQAkX2FJiwNii2WFQsGndjvF1Mzd7RuVe7QdPLw7", acc)
         except CatchableError: discard
     gWallet.register(gLez)
