@@ -77,7 +77,7 @@ src/
                 signed binding, keystore seam, epoch crypto (F-14/F-16)
   transport/    Transport interface + local/delivery transports (inv 8)
   coordination/ multi-party session · intent lifecycle = reduce(log)
-  wallet/       chain-agnostic wallet: EVM + mock shielded adapters, verified reads
+  wallet/       chain-agnostic wallet: EVM + mock + real LEZ adapters (send assets via Logos), verified reads
   plugins/      plugin sandbox (inv 3)
 nim-lib/        muster_gen.nim (generated) + muster_module.nim (hosted surface)
 tools/          regen.sh (fetches the SDK's lidl-gen + regenerates muster_gen.nim) · headless-host/
@@ -94,4 +94,4 @@ tests/          lifecycle/safe/crypto/transport/coordination tests
 - Invariant tests are append-only. Extend, don't weaken.
 - The module imports nothing from `../ui/`; it reaches other modules only through logos-core.
 
-<!-- rot-check: current-phase=CLAUDE.md sha256=0b02ad1d25889749d6b69901bc86f1224e6fc32ce37396e0a07bd40407809769 -->
+<!-- rot-check: current-phase=CLAUDE.md sha256=183ba35e4743aa2679a961ab7ad7a68fff62d099e61e0eeb5c63a3a8f50bbe28 -->

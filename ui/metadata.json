@@ -29,5 +29,28 @@
       "extra_include_dirs": [],
       "extra_link_libraries": []
     }
-  }
+  },
+  "provides": [
+    {
+      "intent": "coordinate.request",
+      "params": [
+        {
+          "name": "capability",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "payload",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "room",
+          "type": "string",
+          "required": false
+        }
+      ]
+    }
+  ],
+  "uses": []
 }
