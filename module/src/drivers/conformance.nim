@@ -15,9 +15,13 @@
 ##   4. verifyContribution is a pure function of (contribution, round) (inv 6).
 ##   5. the collection converges at the declared threshold/rounds, driven only by
 ##      describe() — no hardcoded constant in the core.
+##   6. the action manifest is stable, DECLARED, consistent with describe(), and its
+##      agreement half IS describe() (exo-002.1) — a driver that does not say what it
+##      needs, touches, and discloses, or contradicts its own policy, does not ship.
 
 import ../intents/materialization
 import ./driver
+import ./manifest
 
 type
   ConformanceReport* = object
@@ -68,3 +72,11 @@ proc checkConformance*(d: Driver, effect, tampered: Effect,
     result.add("collection converges at the declared threshold (inv 6)", col.complete)
   else:
     result.add("collection convergence (sample not accepted — supply a valid one)", false)
+
+  # ── 6. the action manifest (docs/design/action-manifest.md) ─────────────────
+  let m = d.manifest(effect)
+  result.add("manifest is stable", m == d.manifest(effect))
+  result.add("manifest agreement is describe()", m.agreement == desc)
+  let fails = consistencyFailures(m)
+  result.add("manifest is declared and consistent" &
+             (if fails.len > 0: " (" & $fails & ")" else: ""), fails.len == 0)

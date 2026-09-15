@@ -43,6 +43,7 @@
 import ../crypto/curve25519
 import ../intents/materialization
 import ./driver
+import ./manifest
 
 type
   FrostDriver* = ref object of Driver
@@ -96,3 +97,10 @@ method identifyContributor*(d: FrostDriver, m: Materialization, c: Contribution)
       for b in pk: (result.add hexd[int(b shr 4)]; result.add hexd[int(b and 0x0F)])
       return
   ""
+
+method manifest*(d: FrostDriver, effect: Effect): ActionManifest =
+  ## Two rounds over a named roster; a signed group attestation like the threshold
+  ## driver — it settles nothing and alters nothing outside the room. The two-round
+  ## structure is on the agreement half (describe()), where the core reads it.
+  ActionManifest(declared: true, agreement: d.describe(),
+                 requirements: @[req(rqAuthority, "roster-member", rsContributor)])

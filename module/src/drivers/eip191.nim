@@ -19,6 +19,7 @@
 import ../hashing/keccak256
 import ../dcbor/dcbor
 import ../drivers/driver
+import ../drivers/manifest
 import ../intents/materialization
 import ../crypto/secp256k1   # Address, Signature65, ecrecover, recoversToOwner
 export secp256k1.Address, secp256k1.Signature65
@@ -95,3 +96,11 @@ method identifyContributor*(d: PersonalSignDriver, m: Materialization, c: Contri
 
 proc newPersonalSignDriver*(signers: seq[Address] = @[], threshold = 2): PersonalSignDriver =
   PersonalSignDriver(signers: signers, threshold: threshold)
+
+method manifest*(d: PersonalSignDriver, effect: Effect): ActionManifest =
+  ## An EIP-191 personal_sign attestation: a configured signer key per contributor,
+  ## no chain, no RPC, nothing written. Whoever later verifies the signatures (a
+  ## contract or service checking ecrecover) is outside this action's boundary and
+  ## sees exactly what the room chose to hand it — nothing leaves here on its own.
+  ActionManifest(declared: true, agreement: d.describe(),
+                 requirements: @[req(rqAuthority, "signer", rsContributor)])

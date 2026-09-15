@@ -9,6 +9,7 @@ import std/[strutils, json]
 import ../src/wallet/types
 import ../src/wallet/adapter
 import ../src/wallet/lez_core
+import ../src/intents/disclosure   # action-manifest rows
 import ../src/wallet/lez_adapter
 import ../src/crypto/keystore   # for the Keystore type only
 # The LEZ wallet signs internally (lez_core holds the key), so the adapter never
@@ -173,3 +174,16 @@ block:
   echo "7. receiveAddresses — public id vs shielded key node; the share sets the disclosure OK"
 
 echo "wallet_lez_test: the LEZ adapter honours the zone's shape — all OK"
+
+# ── the LEZ square as action-manifest disclosure rows (exo-002.1) ─────────────
+block:
+  doAssert disclosureOf(tfPrivate).toDisclosureRows().len == 0
+  doAssert disclosureOf(tfPublic).toDisclosureRows().visibleTo(obChainObserver) == @["amount", "payer", "payee"]
+  doAssert disclosureOf(tfShield).toDisclosureRows().visibleTo(obChainObserver) == @["amount", "payer"]
+  doAssert disclosureOf(tfDeshield).toDisclosureRows().visibleTo(obChainObserver) == @["amount", "payee"]
+  # every row a rail declares is outside the boundary; the baseline never lists the chain
+  for f in [tfPublic, tfShield, tfDeshield, tfPrivate]:
+    let rows = disclosureOf(f).toDisclosureRows()
+    doAssert rows.outsideBoundary().len == rows.len
+    doAssert baselineDisclosure().visibleTo(obChainObserver).len == 0
+  echo "lez: the four rails map onto action-manifest disclosure rows OK"

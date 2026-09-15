@@ -20,6 +20,7 @@
 import ../crypto/curve25519
 import ../intents/materialization
 import ./driver
+import ./manifest
 
 type
   InvokeDriver* = ref object of Driver
@@ -76,3 +77,18 @@ method identifyContributor*(d: InvokeDriver, m: Materialization, c: Contribution
       for b in pk: (result.add hexd[int(b shr 4)]; result.add hexd[int(b and 0x0F)])
       return
   ""
+
+method manifest*(d: InvokeDriver, effect: Effect): ActionManifest =
+  ## The action is in the EFFECT: the target module must be loaded on the instance
+  ## that executes, a roster key is needed to endorse, and the module sees the args
+  ## when the core invokes it after the threshold. Whether the module in turn puts
+  ## anything on a public record is the module's own disclosure, declared per action
+  ## by lidl-gen's driver mode (exo-002.6) — not guessed here.
+  let module = effect.fieldText("module")
+  let meth = effect.fieldText("method")
+  result = ActionManifest(declared: true, agreement: d.describe(),
+    requirements: @[req(rqAuthority, "roster-member", rsContributor)],
+    discloses: @[row("args", obTargetModule)])
+  if module.len > 0:
+    result.requirements.add req(rqModule, module)
+    result.touches.add touch("module:" & module & "." & meth, tmWrite)
