@@ -20,7 +20,7 @@ block:
   doAssert m.class == mcAuthority and m.grade == mgVerifiedLocally and m.source == msKeystore
   doAssert m.form == "secp256k1"
   doAssert m.public.startsWith("0x") and m.public.len == 42, "public = the Ethereum address"
-  doAssert m.handle == "keystore:secp"
+  doAssert m.handle == "keystore:secp:" & m.public, "the handle carries the KeyRef (K2b)"
   echo "1. keystore source: the authorization key is verified-local authority material OK"
 
 # ── 2. an adapter source enumerates its accounts as ADDRESS material (per form) ───

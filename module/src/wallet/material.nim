@@ -101,9 +101,13 @@ proc newConfiguredSafeSource*(safe: Address, chain: string): ConfiguredSafeSourc
 proc newStaticSource*(items: seq[Material]): StaticSource = StaticSource(items: items)
 
 method materials*(s: KeystoreSource): seq[Material] =
-  @[Material(class: mcAuthority, chain: "", form: "secp256k1",
-             handle: "keystore:secp", public: hexAddr(s.ks.address()),
-             grade: mgVerifiedLocally, source: msKeystore)]
+  ## Every authorization key the keystore holds becomes verified-local authority material
+  ## (K2b: the keystore is a set, not one key). The handle carries the KeyRef so a keyed
+  ## contribute / binding can select this exact key; the public face is the address.
+  for r in s.ks.keyRefs():
+    result.add Material(class: mcAuthority, chain: "", form: "secp256k1",
+                        handle: "keystore:secp:" & r, public: r,
+                        grade: mgVerifiedLocally, source: msKeystore)
 
 method materials*(s: AdapterSource): seq[Material] =
   for a in s.adapter.accounts(s.ks):

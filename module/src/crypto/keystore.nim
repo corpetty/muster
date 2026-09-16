@@ -26,8 +26,19 @@ import ./binding
 type
   KeystoreError* = object of CatchableError
 
+  KeyRef* = string
+    ## An opaque handle to ONE authorization key the keystore holds (exo-45e K2b). It is
+    ## the key's address hex ("0x…") — stable and unique — never the secret. A caller
+    ## selects a key by ref (`signWith`); the secret never leaves the keystore (a Keycard
+    ## with several slots slots behind the same seam).
+
   Keystore* = ref object of RootObj
     ## The seam. Backends override every method; none exposes a secret.
+
+proc refOf*(a: Address): KeyRef =
+  const d = "0123456789abcdef"
+  result = "0x"
+  for b in a: (result.add d[int(b shr 4)]; result.add d[int(b and 0x0F)])
 
 method address*(ks: Keystore): Address {.base.} =
   ## The module's Ethereum address — its public authorization identity.
@@ -61,6 +72,33 @@ method bindingFor*(ks: Keystore, ctx: LinkContext): LinkStatement {.base.} =
   ## ours — the authenticated join F-9 verifies.
   raise newException(KeystoreError, "Keystore.bindingFor is abstract")
 
+# ── keyed operations (exo-45e K2b) ─────────────────────────────────────────────
+# The keystore custodies a SET of authorization keys; a caller selects one by ref. The
+# single-key methods above act on the PRIMARY key (ref == address()), so every existing
+# caller is unchanged. The default keyed methods below delegate to the primary, so a
+# single-key backend needs no override; a multi-key backend overrides them to route by
+# ref. signWith on an unknown ref is a refusal, never a silent fall-through to another key.
+
+method keyRefs*(ks: Keystore): seq[KeyRef] {.base.} =
+  ## Every authorization key held. Default: the one primary key.
+  @[refOf(ks.address())]
+
+method hasKey*(ks: Keystore, r: KeyRef): bool {.base.} = r in ks.keyRefs()
+
+method signWith*(ks: Keystore, r: KeyRef, msgHash: array[32, byte]): Signature65 {.base.} =
+  ## secp-sign with the key named by `r`. Refuses an unknown ref (never signs with a
+  ## different key than the caller chose).
+  if not ks.hasKey(r): raise newException(KeystoreError, "unknown key ref: " & r)
+  ks.sign(msgHash)
+
+method edSignWith*(ks: Keystore, r: KeyRef, msg: openArray[byte]): Ed25519Sig {.base.} =
+  if not ks.hasKey(r): raise newException(KeystoreError, "unknown key ref: " & r)
+  ks.edSign(msg)
+
+method bindingForKey*(ks: Keystore, r: KeyRef, ctx: LinkContext): LinkStatement {.base.} =
+  if not ks.hasKey(r): raise newException(KeystoreError, "unknown key ref: " & r)
+  ks.bindingFor(ctx)
+
 # ── shared assembly ────────────────────────────────────────────────────────────
 
 proc makeBinding(ks: Keystore, ctx: LinkContext): LinkStatement =
@@ -77,12 +115,14 @@ const
   HeaderLen = 3 + 1 + PwSaltBytes    # magic ++ version ++ salt
 
 type
+  FileKey = tuple[secret: array[32, byte], enc: EncKeys, addr0: Address, path: string]
   FileKeystore* = ref object of Keystore
-    secret: array[32, byte]          # secp256k1 authorization secret
-    enc: EncKeys                     # Ed25519/X25519 encryption identity
+    secret: array[32, byte]          # secp256k1 authorization secret (PRIMARY key)
+    enc: EncKeys                     # Ed25519/X25519 encryption identity (PRIMARY)
     addr0: Address
     path: string
     pass: string
+    extra: seq[FileKey]              # additional keyfiles loaded into the set (K2b)
 
 proc finish(fk: FileKeystore) =
   fk.addr0 = addressOf(fk.secret)
@@ -182,16 +222,46 @@ method sealOpen*(fk: FileKeystore, sealed: seq[byte]): seq[byte] =
 method bindingFor*(fk: FileKeystore, ctx: LinkContext): LinkStatement =
   makeBinding(fk, ctx)
 
+proc loadKeyfile*(fk: FileKeystore, path, passphrase: string) =
+  ## Add another Argon2id keyfile to the set (K2b, keyfile-set-first, open Q1). Its key
+  ## becomes selectable by ref alongside the primary; the secret stays in the keystore.
+  let (secret, seed, _) = readKeyfile(path, passphrase)
+  fk.extra.add (secret: secret, enc: encFromSeed(seed), addr0: addressOf(secret), path: path)
+
+method keyRefs*(fk: FileKeystore): seq[KeyRef] =
+  result = @[refOf(fk.addr0)]
+  for k in fk.extra: result.add refOf(k.addr0)
+
+method signWith*(fk: FileKeystore, r: KeyRef, msgHash: array[32, byte]): Signature65 =
+  if r == refOf(fk.addr0): return signRecoverable(msgHash, fk.secret)
+  for k in fk.extra:
+    if r == refOf(k.addr0): return signRecoverable(msgHash, k.secret)
+  raise newException(KeystoreError, "unknown key ref: " & r)
+
+method edSignWith*(fk: FileKeystore, r: KeyRef, msg: openArray[byte]): Ed25519Sig =
+  if r == refOf(fk.addr0): return curve25519.edSign(fk.enc, msg)
+  for k in fk.extra:
+    if r == refOf(k.addr0): return curve25519.edSign(k.enc, msg)
+  raise newException(KeystoreError, "unknown key ref: " & r)
+
 # ── InMemoryKeystore — no persistence, for tests and raw-key call sites ─────────
 
 type
+  MemKey = tuple[secret: array[32, byte], enc: EncKeys, addr0: Address]
   InMemoryKeystore* = ref object of Keystore
     secret: array[32, byte]
     enc: EncKeys
     addr0: Address
+    extra: seq[MemKey]              # additional keys in the set (K2b)
 
 proc newInMemoryKeystore*(secret: array[32, byte], encSeed: array[32, byte]): InMemoryKeystore =
   InMemoryKeystore(secret: secret, enc: encFromSeed(encSeed), addr0: addressOf(secret))
+
+proc addKey*(ik: InMemoryKeystore, secret: array[32, byte], encSeed: array[32, byte]): KeyRef =
+  ## Add another authorization key to the set; returns its ref. For tests and raw-key
+  ## call sites — a multi-account instance without the file backend.
+  ik.extra.add (secret: secret, enc: encFromSeed(encSeed), addr0: addressOf(secret))
+  refOf(addressOf(secret))
 
 method address*(ik: InMemoryKeystore): Address = ik.addr0
 method sign*(ik: InMemoryKeystore, msgHash: array[32, byte]): Signature65 =
@@ -203,3 +273,19 @@ method sealOpen*(ik: InMemoryKeystore, sealed: seq[byte]): seq[byte] =
   curve25519.sealOpen(ik.enc, sealed)
 method bindingFor*(ik: InMemoryKeystore, ctx: LinkContext): LinkStatement =
   makeBinding(ik, ctx)
+
+method keyRefs*(ik: InMemoryKeystore): seq[KeyRef] =
+  result = @[refOf(ik.addr0)]
+  for k in ik.extra: result.add refOf(k.addr0)
+
+method signWith*(ik: InMemoryKeystore, r: KeyRef, msgHash: array[32, byte]): Signature65 =
+  if r == refOf(ik.addr0): return signRecoverable(msgHash, ik.secret)
+  for k in ik.extra:
+    if r == refOf(k.addr0): return signRecoverable(msgHash, k.secret)
+  raise newException(KeystoreError, "unknown key ref: " & r)
+
+method edSignWith*(ik: InMemoryKeystore, r: KeyRef, msg: openArray[byte]): Ed25519Sig =
+  if r == refOf(ik.addr0): return curve25519.edSign(ik.enc, msg)
+  for k in ik.extra:
+    if r == refOf(k.addr0): return curve25519.edSign(k.enc, msg)
+  raise newException(KeystoreError, "unknown key ref: " & r)
