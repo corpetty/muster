@@ -465,6 +465,14 @@ void MusterUiBackend::declineInRoom(const QString &intentId)
     loadIntents();
 }
 
+void MusterUiBackend::loadFlow()
+{
+    // coordinate_flow → who could see what, per action: the log × each action's
+    // manifest disclosure × the membership at that point (exo-002.5). A pure fold;
+    // no RPC — refreshed with connectivity on the slower tick.
+    setFlowJson(modules().muster_module.coordinate_flow());
+}
+
 void MusterUiBackend::setPolicy(const QString &kind)
 {
     // coordinate_set_policy → choose the room's driver (safe | threshold). The same
@@ -515,6 +523,7 @@ void MusterUiBackend::onContextReady()
                     loadIntents();
                     loadReadiness(id);
                     if (!qgetenv("MUSTER_AUTODECLINE").isEmpty()) declineInRoom(id);
+                    loadFlow();
                     qInfo() << "[muster_ui] AUTOPROPOSE intents ->" << intentsJson();
                 });
             }

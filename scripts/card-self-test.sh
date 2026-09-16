@@ -29,12 +29,15 @@ echo "── readiness (what the card renders) ──"
 grep -a 'MUSTER-LP readiness' "$D/A.log" | tail -1 | sed 's/.*MUSTER-LP readiness //' | cut -c1-1500 || ok=0
 echo "── decline → intent view ──"
 grep -a 'MUSTER-LP decline' "$D/A.log" | tail -1 | sed 's/.*MUSTER-LP decline //' || ok=0
+echo "── information flow (who can see what) ──"
+grep -a 'MUSTER-LP flow' "$D/A.log" | tail -1 | sed 's/.*MUSTER-LP flow //' | python3 -c 'import sys,json; j=json.load(sys.stdin); print("matrix:", json.dumps(j["matrix"])); print("rows:", len(j["rows"]))' 2>/dev/null || { echo "FAIL: no flow payload"; ok=0; }
+grep -a 'MUSTER-LP flow' "$D/A.log" | tail -1 | grep -q '"store-node":\["timing","topic"\]' || { echo "FAIL: flow matrix does not name the store node"; ok=0; }
 echo "── QML load ──"
 if grep -aiE 'qrc:/.*(error|TypeError|ReferenceError)|QQmlApplicationEngine failed|is not a type' "$D/A.log"; then echo "QML ERRORS ABOVE"; ok=0; else echo "no QML errors"; fi
 grep -aq '"declared":true' "$D/A.log" || { echo "FAIL: no declared readiness payload"; ok=0; }
 grep -aq '"to":"store-node"' "$D/A.log" || { echo "FAIL: disclosure does not name the store node"; ok=0; }
 grep -aq '"declines":1' "$D/A.log" || { echo "FAIL: the decline did not fold"; ok=0; }
-[ "$ok" = 1 ] && echo "SUCCESS: readiness + decline round-trip through the host; card payload honest." || echo "FAILED — see $D/A.log"
+[ "$ok" = 1 ] && echo "SUCCESS: readiness + decline + flow round-trip through the host; payloads honest." || echo "FAILED — see $D/A.log"
 pkill -9 -f "user-dir $D" 2>/dev/null; pkill -9 -f logos_host_qt 2>/dev/null
 [ "$ok" = 1 ] && rm -rf "$D"
 exit $((1-ok))

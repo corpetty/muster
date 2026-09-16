@@ -167,6 +167,11 @@ class MusterUi
     // an anonymous one. Informational: the threshold is unchanged. Lands on
     // declineJson {intentId, state, declines} or {error}; intents reload after.
     SLOT(void declineInRoom(const QString &intentId))
+    // The information-flow view (coordinate_flow, exo-002.5): who could see what,
+    // for every action — {rows:[{seq,kind,intentId,field,to,members,epoch,declared}],
+    // matrix:{observer:[fields]}}. A fold over the sealed log (no RPC), refreshed on
+    // the slower tick. Lands on flowJson.
+    SLOT(void loadFlow())
 
     PROP(QString health="unknown" READONLY)
 
@@ -240,6 +245,9 @@ class MusterUi
     // The outcome of the last decline (declineInRoom): {intentId, state, declines}
     // or {error}, so the card can say whether the decline folded.
     PROP(QString declineJson="{}" READONLY)
+    // The room's information flow (loadFlow): {rows, matrix}. The Room renders the
+    // observer matrix + per-action rows; the store node is always present (FS-9).
+    PROP(QString flowJson="{\"rows\":[],\"matrix\":{}}" READONLY)
 
     // The room's coordination policy — its driver — as JSON {policy, threshold,
     // domain, membership}. The view shows which policy governs the room and picks it.

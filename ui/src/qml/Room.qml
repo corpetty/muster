@@ -84,6 +84,11 @@ Item {
     // The room's coordination history (coordinate_activity): a plain-language
     // narrative of every state transition, in causal order, folded from the SAME
     // log the cards come from. The education seam — how the room got here.
+    // The information flow (coordinate_flow): who could see what, per action.
+    readonly property var flow: {
+        try { return JSON.parse(backend ? backend.flowJson : "{}"); }
+        catch (e) { return ({ rows: [], matrix: {} }); }
+    }
     readonly property var activity: {
         try { return JSON.parse(backend ? backend.activityJson : "[]"); }
         catch (e) { return []; }
@@ -1333,6 +1338,20 @@ Item {
                 color: Theme.palette.borderSubtle
             }
 
+            // Who can see what — the information-flow view folded from the same log
+            // (exo-002.5). The store node is always listed (FS-9).
+            FlowView {
+                objectName: "flowView"
+                Layout.fillWidth: true
+                flow: room.flow
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+                color: Theme.palette.borderSubtle
+            }
+
             ScopePanel {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -1373,6 +1392,10 @@ Item {
         interval: 5000
         running: room.joined
         repeat: true
-        onTriggered: if (room.backend) room.backend.loadConnectivity();
+        onTriggered: {
+            if (!room.backend) return;
+            room.backend.loadConnectivity();
+            room.backend.loadFlow();   // a pure fold — who could see what, refreshed with the slow tick
+        }
     }
 }
