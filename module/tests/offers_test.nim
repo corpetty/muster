@@ -5,7 +5,7 @@
 ## carries the manifest's rows for its effect field. Nothing is scored (s7). Hermetic:
 ## a hand-built manifest + a static catalogue; links secp + stint + libsodium (material).
 
-import std/strutils
+import std/[strutils, json]
 import ../src/coordination/offers
 import ../src/drivers/driver
 import ../src/drivers/manifest
@@ -100,5 +100,27 @@ block:
   let recip = recipientOffers(pm.requirements, mineWithAsset, pm)
   for o in recip: doAssert o.requirement.party in {rpContributor, rpCounterparty}
   echo "5. proposer offers = proposer slots; recipient offers = contributor + counterparty OK"
+
+# ── 6. the JSON payload the lidl surface returns (K6): public + grade + rows, no handle/score ─
+block:
+  let payload = offersPayload(recipientOffers(m.requirements, myCat, m))
+  doAssert payload["ready"].getBool() == true
+  let arr = payload["offers"]
+  doAssert arr.len == 2
+  var sawPayee = false
+  for o in arr:
+    doAssert o.hasKey("requirement") and o.hasKey("status") and o.hasKey("candidates")
+    for c in o["candidates"]:
+      doAssert c.hasKey("public") and c.hasKey("class") and c.hasKey("grade") and c.hasKey("discloses")
+      doAssert not c.hasKey("handle") and not c.hasKey("source"), "no handle/source crosses (s1)"
+      doAssert not c.hasKey("score") and not c.hasKey("rank"), "nothing scored or ranked (s7)"
+    if o["requirement"]["kind"].getStr() == "address":
+      sawPayee = true
+      doAssert o["candidates"][0]["discloses"][0]["field"].getStr() == "to"
+      doAssert o["candidates"][0]["discloses"][0]["to"].getStr() == "chain-observer"
+  doAssert sawPayee
+  # an unsatisfiable surface reports ready:false honestly.
+  doAssert offersPayload(recipientOffers(m.requirements, @[myKey], m))["ready"].getBool() == false
+  echo "6. the JSON payload: public+class+grade+rows, no handle/score; ready is honest OK"
 
 echo "offers_test: all OK"

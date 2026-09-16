@@ -74,6 +74,16 @@ Item {
         var m = room.readinessMap;
         return (m && m[String(id)]) ? m[String(id)] : null;
     }
+    // Offers per intent (coordinate_offers, exo-45e K6), keyed by id — which of MY OWN
+    // holdings fill the slots this proposal asks of me; loaded when the card opens.
+    readonly property var offersMap: {
+        try { return JSON.parse(backend ? backend.offersJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    function offersFor(id) {
+        var m = room.offersMap;
+        return (m && m[String(id)]) ? m[String(id)] : null;
+    }
     // A remedy that lives in Settings (repoint the RPC): the shell switches views.
     signal settingsRequested()
 
@@ -243,7 +253,9 @@ Item {
             declinedByMe: !!(it && it.decliners && room.myIdentity
                              && it.decliners.indexOf(room.myIdentity) >= 0),
             // the five questions + your readiness, once asked for
-            readiness: room.readinessFor(it && it.id)
+            readiness: room.readinessFor(it && it.id),
+            // "From you": which of my own holdings fill the slots this asks of me (K6)
+            offers: room.offersFor(it && it.id)
         };
     }
 
@@ -471,8 +483,17 @@ Item {
                                 if (room.backend && msg.liveIntent)
                                     room.backend.contributeInRoom(String(msg.liveIntent.id || ""), "");
                             }
-                            onNeeds: if (room.backend && msg.liveIntent) room.backend.loadReadiness(String(msg.liveIntent.id || ""))
+                            onNeeds: if (room.backend && msg.liveIntent) {
+                                room.backend.loadReadiness(String(msg.liveIntent.id || ""));
+                                room.backend.loadOffers(String(msg.liveIntent.id || ""));
+                            }
                             onDeny: if (room.backend && msg.liveIntent) room.backend.declineInRoom(String(msg.liveIntent.id || ""))
+                            // Share one of my holdings to fill a slot (the "From you" picker, K6):
+                            // the module publishes only the chosen PUBLIC face (s1).
+                            onShareMaterial: function(requirement, pub) {
+                                if (room.backend && msg.liveIntent)
+                                    room.backend.shareMaterial(String(msg.liveIntent.id || ""), requirement, pub);
+                            }
                             onOpenSettings: room.settingsRequested()
                         }
 

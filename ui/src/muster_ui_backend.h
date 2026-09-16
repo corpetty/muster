@@ -62,6 +62,8 @@ public:
     void loadConnectivity() override;
     void loadRoomAccount() override;
     void loadReadiness(const QString &intentId) override;
+    void loadOffers(const QString &intentId) override;
+    void shareMaterial(const QString &intentId, const QString &requirement, const QString &pub) override;
     void declineInRoom(const QString &intentId) override;
     void loadFlow() override;
     void setPolicy(const QString &kind) override;

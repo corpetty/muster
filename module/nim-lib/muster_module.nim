@@ -34,6 +34,8 @@ import ../src/coordination/session    # the multi-instance coordination flow
 import ../src/coordination/intents     # intent lifecycle = reduce(log) (the multi-party fold)
 import ../src/coordination/invoker     # the execute seam + allowlist/capability gate (P-D2)
 import ../src/coordination/readiness   # the action manifest + this instance's readiness (exo-002.2)
+import ../src/coordination/offers      # requirements × my catalogue → offers (exo-45e K4)
+import ../src/wallet/material          # the holdings catalogue (exo-45e K2)
 import ../src/hashing/sha256           # an unlinkable decline nonce under an anonymous driver
 import ../src/log/proof                # exportable, self-verifying log proofs (M4)
 import ../src/coordination/flow        # the information-flow view (M5)
@@ -652,6 +654,80 @@ proc musterCoordinateDecline(intentId: string): string =
     if v.id == intentId: declines = v.declines
   result = $(%*{"intentId": intentId, "state": intentState(after, driverFor, intentId), "declines": declines})
   if gLpDebug: stderr.writeLine("MUSTER-LP decline " & result)
+
+proc moduleCatalogue(): seq[Material] =
+  ## MY holdings as a local view (exo-45e K2): every authorization key (verified-local),
+  ## an EVM receive address per key on the configured chain, and the configured Safe as
+  ## declared authority (chain-verified by readiness, K3). No network here — enumerating
+  ## adapter accounts is a follow-on. It never leaves the instance; only a chosen
+  ## material's PUBLIC face is ever shared (coordinate_share_material).
+  let ks = moduleKeystore()
+  let chain = "evm:" & $gDriver.chainId
+  for r in ks.keyRefs():
+    result.add Material(class: mcAuthority, chain: "", form: "secp256k1",
+      handle: "keystore:secp:" & r, public: r, grade: mgVerifiedLocally, source: msKeystore)
+    result.add Material(class: mcAddress, chain: chain, form: "public",
+      handle: "keystore:addr:" & r, public: r, grade: mgVerifiedLocally, source: msKeystore)
+  result.add Material(class: mcAuthority, chain: chain, form: "safe-owner",
+    handle: "safe:" & toHex(gDriver.safe), public: toHex(gDriver.safe),
+    grade: mgDeclared, source: msConfigured)
+
+proc musterCoordinateOffers(intentId: string): string =
+  ## The card's "From you" section (exo-45e K4/K6): which of MY OWN holdings fill the
+  ## slots this proposal asks of me (contributor + counterparty). Graded about me only —
+  ## it reads only moduleCatalogue(), never another member's holdings (invariant 9, s3).
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  let events = gSession.log.allEvents()
+  let effectJson = effectJsonOf(events, intentId)
+  if effectJson.len == 0: return $(%*{"error": "unknown-intent", "intentId": intentId})
+  let m = driverForKind(intentPolicyOf(events, intentId)).manifest(effectFromJson(effectJson))
+  var o = offersPayload(recipientOffers(m.requirements, moduleCatalogue(), m))
+  o["intentId"] = %intentId
+  result = $o
+  if gLpDebug: stderr.writeLine("MUSTER-LP offers " & result)
+
+proc musterComposeOffers(effectJson: string): string =
+  ## The composer's account step (F-18 step three): which of my holdings fill the PROPOSER
+  ## slots of a DRAFT effect under the room's current compose policy (gCoordKind). Same
+  ## payload shape as coordinate_offers, graded about me only.
+  let effect = try: effectFromJson(effectJson)
+               except CatchableError: return $(%*{"error": "bad effect json"})
+  let m = driverForKind(gCoordKind).manifest(effect)
+  result = $offersPayload(proposerOffers(m.requirements, moduleCatalogue(), m))
+  if gLpDebug: stderr.writeLine("MUSTER-LP compose_offers " & result)
+
+proc musterCoordinateShareMaterial(intentId, requirement, publicFace: string): string =
+  ## Share one of MY holdings into a room intent to fill a slot it asks of me (exo-45e
+  ## K5/K6): only its PUBLIC face, class and form are published (never a handle, s1),
+  ## bound to the intent and the effect field the requirement lands in — the request-first
+  ## path by which a complete effect gets its counterparty material. Keyed by this member
+  ## (named / nonce per driver, invariant 9); folds once per (requirement, sharer).
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  let events = gSession.log.allEvents()
+  let effectJson = effectJsonOf(events, intentId)
+  if effectJson.len == 0: return $(%*{"error": "unknown-intent", "intentId": intentId})
+  let m = driverForKind(intentPolicyOf(events, intentId)).manifest(effectFromJson(effectJson))
+  # find the requirement this share fills → its effect field + material class.
+  var field, class = ""
+  for r in m.requirements:
+    if r.name == requirement: (field = r.needs.field; class = $r.needs.class)
+  if field.len == 0: return $(%*{"error": "no such counterparty/proposer requirement", "requirement": requirement})
+  # confirm the chosen public is one of MY holdings for that class, and read its form.
+  var form = ""
+  var mine = false
+  for mat in moduleCatalogue():
+    if $mat.class == class and mat.public == publicFace: (form = mat.form; mine = true)
+  if not mine: return $(%*{"error": "not one of your holdings for this slot", "public": publicFace})
+  let named = driverForKind(intentPolicyOf(events, intentId)).describe().membership == mmNamed
+  let who = if named: toHex(moduleKeystore().encIdentity().toBytes())
+            else:
+              let seed = toHex(moduleKeystore().encIdentity().toBytes()) & "/" & intentId & "/" & requirement & "/" & $epochTime()
+              toHex(sha256(seed.toOpenArrayByte(0, seed.high)))
+  gSession.publish(materialShareEvent(intentId, requirement, who, publicFace, form, class, field))
+  result = $(%*{"intentId": intentId, "requirement": requirement, "field": field, "public": publicFace})
+  if gLpDebug: stderr.writeLine("MUSTER-LP share_material " & result)
 
 proc musterCoordinateProvenance(): string =
   ## Provenance for EVERY action in the room (M4): the log's lineage, each entry

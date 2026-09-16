@@ -453,6 +453,32 @@ void MusterUiBackend::loadReadiness(const QString &intentId)
     setReadinessJson(QString::fromUtf8(QJsonDocument(all).toJson(QJsonDocument::Compact)));
 }
 
+void MusterUiBackend::loadOffers(const QString &intentId)
+{
+    // coordinate_offers → the card's "From you" section for ONE intent (exo-45e K6):
+    // which of MY OWN holdings fill the slots it asks of me, each candidate the PUBLIC
+    // face of a holding (never a handle, s1) + its grade + the rows choosing it discloses.
+    // Graded about me only. Kept per intent so several open cards each read their own.
+    const QString r = modules().muster_module.coordinate_offers(intentId);
+    QJsonObject all = QJsonDocument::fromJson(offersJson().toUtf8()).object();
+    const QJsonDocument one = QJsonDocument::fromJson(r.toUtf8());
+    all.insert(intentId, one.isObject() ? QJsonValue(one.object())
+                                        : QJsonValue(QJsonObject{{"error", r}}));
+    qInfo() << "[muster_ui] coordinate_offers" << intentId << "->" << r;
+    setOffersJson(QString::fromUtf8(QJsonDocument(all).toJson(QJsonDocument::Compact)));
+}
+
+void MusterUiBackend::shareMaterial(const QString &intentId, const QString &requirement, const QString &pub)
+{
+    // coordinate_share_material → publish a chosen holding's PUBLIC face into the intent
+    // to fill a slot (the request-first path for counterparty material). Reload offers so
+    // the picker reflects the filled slot, and intents so the effect updates.
+    const QString r = modules().muster_module.coordinate_share_material(intentId, requirement, pub);
+    qInfo() << "[muster_ui] coordinate_share_material" << intentId << requirement << "->" << r;
+    loadOffers(intentId);
+    loadIntents();
+}
+
 void MusterUiBackend::declineInRoom(const QString &intentId)
 {
     // coordinate_decline → decline to take part: a decline event keyed by this member

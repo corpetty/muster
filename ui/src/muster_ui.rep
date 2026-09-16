@@ -162,6 +162,15 @@ class MusterUi
     // readinessJson keyed by intent id. Probes the RPC, so the card asks on demand
     // (when its "What this needs" box opens), not on the message tick.
     SLOT(void loadReadiness(const QString &intentId))
+    // The card's "From you" section for one intent (coordinate_offers, exo-45e K6):
+    // which of MY OWN holdings can fill the slots this proposal asks of me — the
+    // contributor keys and any counterparty address/asset the effect still needs.
+    // Lands on offersJson keyed by intent id. Graded about me only (invariant 9).
+    SLOT(void loadOffers(const QString &intentId))
+    // Share one of my holdings into an intent to fill a slot (coordinate_share_material):
+    // `pub` is the PUBLIC face of a candidate from loadOffers (the handle never leaves
+    // the module, s1). Publishes a material-share event; offers reload after.
+    SLOT(void shareMaterial(const QString &intentId, const QString &requirement, const QString &pub))
     // Decline to take part in a room intent (coordinate_decline): a signed decline
     // event folded into the intent view — named under a named driver, a count under
     // an anonymous one. Informational: the threshold is unchanged. Lands on
@@ -242,6 +251,11 @@ class MusterUi
     // detail,remedy}], manifest:{agreement, requirements, discloses, touches}}}.
     // The card renders its five questions + readiness from its own entry.
     PROP(QString readinessJson="{}" READONLY)
+    // Offers per intent (loadOffers, exo-45e K6): a JSON object {<intentId>: {intentId,
+    // ready, offers:[{requirement:{kind,name,party,field}, status, candidates:[{public,
+    // class, form, grade, discloses:[{field,to}]}]}]}}. The card's "From you" picker
+    // renders its own entry; a pick calls shareMaterial with the candidate's public face.
+    PROP(QString offersJson="{}" READONLY)
     // The outcome of the last decline (declineInRoom): {intentId, state, declines}
     // or {error}, so the card can say whether the decline folded.
     PROP(QString declineJson="{}" READONLY)
