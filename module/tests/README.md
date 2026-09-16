@@ -80,6 +80,15 @@ nim r -d:release --threads:on $SECP $STINT --passL:"$SODIUM/lib/libsodium.so" \
   tests/epoch_crypto_test.nim
 ```
 
+The holdings catalogue (`material_test`, exo-45e K2) and its no-leak probe
+(`probes/probe_catalogue_no_leak.nim`, spec `derived-exo-45e` oracle s1) use the
+same `$SECP` + `$STINT` + libsodium closure (keystore + wallet types):
+
+```bash
+nim r -d:release --threads:on $SECP $STINT --passL:"$SODIUM/lib/libsodium.so" \
+  tests/material_test.nim
+```
+
 **Exception — the host-return probe needs g++ + secp256k1:**
 `probes/probe_return_marshalling_host.nim` builds the module as a Nim staticlib
 (the shape the real cdylib build produces) and links it into the C++ host harness

@@ -66,4 +66,4 @@ method manifest*(d: ThresholdDriver, effect: Effect): ActionManifest =
   ## A signed group attestation: needs a roster key to contribute, settles nothing,
   ## alters nothing outside the room. Nothing leaves the boundary beyond the baseline.
   ActionManifest(declared: true, agreement: d.describe(),
-                 requirements: @[req(rqAuthority, "roster-member", rsContributor)])
+                 requirements: @[req(rqAuthority, "roster-member", rpContributor)])

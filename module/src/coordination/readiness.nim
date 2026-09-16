@@ -59,14 +59,23 @@ proc remedyFor*(r: Requirement): string =
   of rqAuthority:   "use a key that is a recognized " & r.name & " — or take part without signing"
   of rqInfra:       "configure " & r.name & " (set_setting " & r.name & ")"
   of rqCapability:  "grant the " & r.name & " capability in the host"
+  of rqAddress:     "share a receiving address when the proposal asks (compose / share)"
+  of rqAsset:       "choose an asset and amount from your holdings (compose)"
 
 proc grade(p: ReadinessProbe, r: Requirement): Grade =
+  # address/asset are party-supplied material (proposer/counterparty), not an instance
+  # prerequisite: readiness reports them unknown and the offers surface (exo-45e K4)
+  # grades which of a participant's own holdings fill them. unknown, never a silent met.
+  if r.kind in {rqAddress, rqAsset}:
+    return (rdUnknown, $r.party & " supplies this " & $r.needs.class &
+      " material at compose/contribute — graded by offers, not instance readiness")
   let f = case r.kind
     of rqModule:      p.moduleLoaded
     of rqEnvironment: p.environmentReachable
     of rqAuthority:   p.authorityHeld
     of rqInfra:       p.infraConfigured
     of rqCapability:  p.capabilityGranted
+    of rqAddress, rqAsset: nil   # unreachable (handled above); keeps the case total
   if f == nil: return (rdUnknown, "this host cannot check a " & $r.kind & " requirement")
   try: f(r.name)
   except CatchableError as e: (rdUnknown, "probe failed: " & e.msg)
@@ -79,6 +88,13 @@ proc assessReadiness*(m: ActionManifest, p: ReadinessProbe): Readiness =
     return
   result.ready = true
   for r in m.requirements:
+    # Readiness is about THIS instance's own slots: what the client must hold or reach
+    # (instance) and whether YOUR key is a recognized signer (contributor). Proposer and
+    # counterparty material is compose-time effect content / another party's holding —
+    # surfaced by the offers surface (exo-45e K4), not gated here. The full manifest still
+    # travels in the payload, so the card can show every requirement; only the graded
+    # items and the ready verdict are the instance's own.
+    if r.party notin {rpInstance, rpContributor}: continue
     let g = grade(p, r)
     result.items.add ReadinessItem(requirement: r, status: g.status, detail: g.detail,
                                    remedy: (if g.status == rdMet: "" else: remedyFor(r)))
@@ -136,7 +152,9 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
   result.capabilityGranted = nil   # the host broker does not exist yet (exo-002.7) → unknown
 
 # ── JSON, for the hosted surface and the card ─────────────────────────────────
-proc toJson*(r: Requirement): JsonNode = %*{"kind": $r.kind, "name": r.name, "scope": $r.scope}
+proc toJson*(r: Requirement): JsonNode =
+  %*{"kind": $r.kind, "name": r.name, "party": $r.party,
+     "needs": {"class": $r.needs.class, "target": r.needs.target, "field": r.needs.field}}
 proc toJson*(d: DriverDescriptor): JsonNode =
   %*{"rounds": d.rounds, "threshold": d.threshold, "membership": $d.membership,
      "finality": $d.finality, "domain": d.serializationDomain}

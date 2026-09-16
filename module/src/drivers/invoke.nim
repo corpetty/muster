@@ -87,7 +87,7 @@ method manifest*(d: InvokeDriver, effect: Effect): ActionManifest =
   let module = effect.fieldText("module")
   let meth = effect.fieldText("method")
   result = ActionManifest(declared: true, agreement: d.describe(),
-    requirements: @[req(rqAuthority, "roster-member", rsContributor)],
+    requirements: @[req(rqAuthority, "roster-member", rpContributor)],
     discloses: @[row("args", obTargetModule)])
   if module.len > 0:
     result.requirements.add req(rqModule, module)

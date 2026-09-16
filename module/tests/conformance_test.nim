@@ -15,6 +15,7 @@ import ../src/drivers/invoke
 import ../src/drivers/eip191
 import ../src/drivers/registry
 import ../src/drivers/conformance
+import ../src/drivers/manifest
 import ../src/crypto/secp256k1
 import ../src/crypto/curve25519
 
@@ -55,7 +56,16 @@ block:
   const sig0 = "0x00278ad6c27d00993883a10909200661d6559d4eea8ca3c9ee3367e8761ba7056fe11cb9a6e87ede5aef673a0f075b220a3c6d37842743c91d9868d834edffcd1b"
   let r = checkConformance(drv, effect, tampered, Contribution(bytes: bytesOf(sig0)))
   doAssert r.allPass(), "Safe driver must conform: failed " & $r.failed()
-  echo "2. Safe driver conforms (", r.checks.len, " checks) OK"
+  # exo-45e: the Safe manifest declares the payee as counterparty ADDRESS material
+  # bound to the effect's "to" field, alongside the contributor safe-owner authority.
+  let man = drv.manifest(effect)
+  var sawPayee, sawOwner = false
+  for rq in man.requirements:
+    if rq.party == rpCounterparty and rq.needs.class == mcAddress and rq.needs.field == "to": sawPayee = true
+    if rq.kind == rqAuthority and rq.party == rpContributor and rq.name == "safe-owner": sawOwner = true
+  doAssert sawPayee, "Safe declares the payee as counterparty address material bound to 'to'"
+  doAssert sawOwner, "Safe keeps the contributor safe-owner authority requirement"
+  echo "2. Safe driver conforms (", r.checks.len, " checks) + declares a counterparty payee OK"
 
 # ── 3. the registry builds conforming drivers (selection by kind + config) ─────
 block:
