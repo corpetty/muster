@@ -73,6 +73,14 @@ proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
       # inside the boundary + the store node's metadata; the driver's outside rows wait
       # for submit — nothing has left the room yet.
       result.addRows(i, p[2], id, baselineDisclosure(), m.declared)
+    of "material":
+      # a shared material discloses its PUBLIC face to the room now (the sharer's explicit
+      # act, exo-45e K5); the field it fills reaches the OUTSIDE observers only at submit,
+      # via the manifest's declared rows — so nothing extra leaves the room here.
+      var field = p[3]
+      try: (let f = parseJson(e.value){"field"}.getStr(); (if f.len > 0: field = f))
+      except CatchableError: discard
+      result.addRows(i, "material", id, baselineDisclosure() & @[row(field, obRoomMember)], m.declared)
     of "submit", "final":
       var rows = baselineDisclosure()
       if m.declared: rows.add m.discloses

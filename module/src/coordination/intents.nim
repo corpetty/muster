@@ -158,6 +158,47 @@ proc finalEvent*(intentId: string, parents: seq[EventId] = @[]): Event =
   ## to `final` so every member's card converges on "paid", not just "submitted".
   Event(parents: parents, key: "intent/" & intentId & "/final", value: "1")
 
+proc materialShareEvent*(intentId, reqName, who, public, form, class, field: string,
+                         parents: seq[EventId] = @[]): Event =
+  ## A participant SHARES a chosen material into the room, bound to an intent
+  ## (exo-45e K5, docs/design/material-and-disclosure.md §3.4). This is how counterparty
+  ## material — a payee's receiving address, say — enters the log: only its PUBLIC face
+  ## and class travel (never a handle, s1), and only on this explicit act (rule s2). It
+  ## generalizes the address-share card into a fold-bound event: the value names which
+  ## effect `field` it fills, so the composer proposes the complete effect with it bound
+  ## in. `who` dedups one share per (requirement, member) — named under a named driver so
+  ## the room sees who shared, an unlinkable nonce under an anonymous one (invariant 9).
+  Event(parents: parents, key: "intent/" & intentId & "/material/" & reqName & "/" & who,
+        value: $(%*{"public": public, "form": form, "class": class, "field": field}))
+
+type
+  MaterialShare* = object
+    reqName*: string     ## the requirement this fills
+    who*: string         ## the sharer (named driver) or a nonce (anonymous)
+    public*: string      ## the disclosed public face — never a handle
+    form*: string
+    class*: string
+    field*: string       ## the effect field it lands in
+
+proc reduceShares*(events: seq[Event], intentId: string): seq[MaterialShare] =
+  ## The materials shared into one intent, folded from the log (idempotent under reorder
+  ## / duplication, invariant 4): one per (requirement, sharer), first write wins.
+  var seen = initHashSet[string]()
+  for e in canonicalOrder(events):
+    let p = e.key.split('/')
+    if p.len >= 5 and p[0] == "intent" and p[1] == intentId and p[2] == "material":
+      let dedup = p[3] & "/" & p[4]
+      if dedup in seen: continue
+      seen.incl dedup
+      var pub, form, class, field = ""
+      try:
+        let j = parseJson(e.value)
+        pub = j{"public"}.getStr(); form = j{"form"}.getStr()
+        class = j{"class"}.getStr(); field = j{"field"}.getStr()
+      except CatchableError: discard
+      result.add MaterialShare(reqName: p[3], who: p[4], public: pub, form: form,
+                               class: class, field: field)
+
 # ── per-intent policy: the intent is the policy boundary, not the room ─────────
 # The room is a membership/privacy boundary — who can read. WHICH driver governs a
 # decision is the INTENT's, recorded when it is proposed, so a group (one room) can
@@ -650,6 +691,17 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "decline", intentId: id,
         account: (if named: p[3] else: ""), accountable: true, what: "a decline",
         detail: "", guarantee: "sealed to the room's epoch; informational — the threshold is unchanged",
+        epoch: epoch)
+    of "material":
+      if p.len < 5: continue
+      var field = ""
+      try: field = parseJson(e.value){"field"}.getStr()
+      except CatchableError: discard
+      result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "material", intentId: id,
+        account: (if named: p[4] else: ""), accountable: true,
+        what: "shared material for '" & (if field.len > 0: field else: p[3]) & "'",
+        detail: "",
+        guarantee: "sealed to the room's epoch; the room learns the PUBLIC face the sharer chose (never a handle), not that it is theirs — only a driver-verified signature proves control (F-20)",
         epoch: epoch)
     of "submit":
       result.add LogProvItem(seq: i, cls: icExternalRead, kind: "submit", intentId: id,
