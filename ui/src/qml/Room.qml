@@ -277,8 +277,22 @@ Item {
     // which the safeTxHash commits to — so sequential settles each use the right one
     // (the Safe increments it per execTransaction). Falls back to 0 when the account
     // read is unavailable. A blank/zero amount is allowed; the recipient is required.
+    // Would this payment amount exceed the Safe's KNOWN balance? True only when the
+    // balance was actually read (never on an error/unknown — we don't block what we
+    // can't check, and never a false zero). Drives both the hard block on the propose
+    // button and the refusal in proposeFrom (exo-bf9 — can't over-send).
+    function overSends(valueStr) {
+        if (!room.roomAsset || room.roomAsset.error) return false;
+        var amt = parseFloat(valueStr || "0");
+        var avail = parseFloat(room.roomAsset.raw || "0");
+        return amt > 0 && amt > avail;
+    }
     function proposeFrom(toAddr, valueStr) {
         if (!room.backend || String(toAddr).length === 0)
+            return;
+        // Can't over-send: a value above the Safe's known balance would revert on-chain,
+        // so refuse it here rather than propose a payment that cannot settle (exo-bf9).
+        if (room.overSends(valueStr))
             return;
         var v = parseInt(valueStr, 10);
         if (isNaN(v) || v < 0) v = 0;
@@ -1091,13 +1105,8 @@ Item {
                         // on-chain — say so before the propose, not after the settle.
                         LogosText {
                             Layout.fillWidth: true
-                            visible: {
-                                if (!room.roomAsset || room.roomAsset.error) return false;
-                                var amt = parseFloat(proposeValue.text || "0");
-                                var avail = parseFloat(room.roomAsset.raw || "0");
-                                return amt > 0 && amt > avail;
-                            }
-                            text: qsTr("⚠ more than the Safe holds — this would revert on-chain")
+                            visible: room.overSends(proposeValue.text)
+                            text: qsTr("⚠ more than the Safe holds — Propose is off until the amount fits")
                             color: Theme.palette.warning
                             font.family: Theme.typography.mono
                             font.pixelSize: Theme.typography.badgeText
@@ -1229,9 +1238,11 @@ Item {
                     LogosButton {
                         objectName: "roomProposeSubmit"
                         text: qsTr("Propose")
+                        // a payment needs a recipient AND an amount within the Safe's known
+                        // balance — can't over-send (exo-bf9); the ⚠ above says why it's off.
                         enabled: room.composeType === "statement" ? proposeText.text.length > 0
                                : room.composeType === "action" ? room.chosenAction !== null
-                               : proposeTo.text.length > 0
+                               : proposeTo.text.length > 0 && !room.overSends(proposeValue.text)
                         onClicked: {
                             if (room.composeType === "statement") {
                                 room.proposeStatement(proposeText.text);
