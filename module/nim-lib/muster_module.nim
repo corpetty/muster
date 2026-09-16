@@ -33,6 +33,7 @@ import ../src/crypto/keystore         # persistent module identity (FS-4)
 import ../src/coordination/session    # the multi-instance coordination flow
 import ../src/coordination/intents     # intent lifecycle = reduce(log) (the multi-party fold)
 import ../src/coordination/invoker     # the execute seam + allowlist/capability gate (P-D2)
+import ../src/coordination/readiness   # the action manifest + this instance's readiness (exo-002.2)
 import ../src/coordination/lp_invoker  # LpInvoker — call the target module over lp_*
 import ../src/coordination/discovery   # discover coordinatable module actions (P-D3)
 import ../src/coordination/contacts    # the address book (aliases for member ids)
@@ -86,6 +87,7 @@ var gDriver = SafeDriver(newDriver("safe", %*{
 # is stamped with. Changing it never re-folds an existing decision, because each
 # intent already carries its own policy. driverFor() is the resolver the folds take.
 var gCoordKind = "safe"
+var gInvoker: Invoker = nil   ## the execute/discovery/readiness seam to other modules, created lazily
 
 proc seedOf(n: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = n)
 proc thrRosterKey(n: byte): Ed25519Pub = encFromSeed(seedOf(n)).identity().ed
@@ -628,6 +630,43 @@ proc musterCoordinateIntents(): string =
     arr.add o
   $arr
 
+proc musterCoordinateReadiness(intentId: string): string =
+  ## The proposal card's five questions for ONE room intent — what will it do (the
+  ## effect), what is needed (requirements), what will it touch, what will happen (the
+  ## full disclosure, baseline included), how we agree (the driver's policy) — plus
+  ## THIS instance's readiness to take part: every requirement graded met / missing /
+  ## unknown with the remedy the card offers (docs/design/action-manifest.md,
+  ## exo-002.2). Graded against this instance only: whether YOUR key is a recognized
+  ## signer, never who else is (invariant 9). unknown is first-class — a probe this
+  ## host cannot run reports unknown, never a silent met. The module names remedies;
+  ## the host performs them (invariant 3: nothing is installed or fetched here).
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  let events = gSession.log.allEvents()
+  let effectJson = effectJsonOf(events, intentId)
+  if effectJson.len == 0: return $(%*{"error": "unknown-intent", "intentId": intentId})
+  let policy = intentPolicyOf(events, intentId)
+  let drv = driverForKind(policy)
+  let effect = effectFromJson(effectJson)
+  let m = drv.manifest(effect)
+  # The host's facts → the probe. The Safe owner set is the driver's (it recognizes
+  # this instance too, see driverForKind); the roster is the membership fold.
+  var facts = HostFacts(rpcUrl: gRpcUrl, expectedChainId: gDriver.chainId.int,
+                        myAddress: myAddress(), myEd: moduleKeystore().encIdentity().ed,
+                        safeOwners: gDriver.owners, signers: gDriver.owners,
+                        roster: currentRoster())
+  if drv of SafeDriver: facts.safeOwners = SafeDriver(drv).owners
+  if gInvoker == nil: gInvoker = newLpInvoker("muster_module")
+  facts.invoker = gInvoker
+  let r = assessReadiness(m, probeFromFacts(facts))
+  var o = r.toJson()
+  o["intentId"] = %intentId
+  o["policy"] = %policy
+  o["manifest"] = m.toJson()
+  try: o["effect"] = parseJson(effectJson)
+  except CatchableError: o["effect"] = %effectJson
+  $o
+
 proc musterCoordinateActivity(): string =
   ## The room's coordination history as reduce(log): every state transition that
   ## moved a proposal along — proposed, each approval (running count, and who under a
@@ -814,7 +853,6 @@ proc musterCoordinateSubmit(intentId: string): string =
 # rejects an unauthorized call, surfaced as a refusal — never a false success). Start
 # CLOSED: the allowlist is empty until an operator opts actions in via
 # MUSTER_INVOKE_ALLOWLIST (JSON [{"module","method","finalityEvent"}]).
-var gInvoker: Invoker = nil
 var gInvokeAllowlist: Allowlist = @[]
 var gAllowlistLoaded = false
 

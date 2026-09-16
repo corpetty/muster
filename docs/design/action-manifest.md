@@ -1,6 +1,6 @@
 # The action manifest: provenance, permissions, disclosure, and dependencies as one object
 
-**Status:** design + plan, 2026-09-15. Epic `exo-002` (pebbles). First slice `exo-002.1` in progress.
+**Status:** design + plan, 2026-09-15. Epic `exo-002` (pebbles). M1 (`exo-002.1`) landed 2026-09-15; M2 (`exo-002.2`) landed 2026-09-16.
 **Reads with:** `driver-derivation.md` (how a module action becomes a driver), `basecamp-capability-alignment.md` (where execution and capability grants live), the PriFi intro article (the credibility axis this design grades against).
 
 ## 1. What we want, stated once
@@ -90,7 +90,7 @@ Slices are pebbles issues under epic `exo-002`. Run `pb dep tree exo-002` for li
 | Slice | Issue | Depends on | Done when |
 |---|---|---|---|
 | **M1** Manifest seam: `Driver.manifest(effect)` with agreement + requirements + disclosure + touches; conformance consistency check; all six drivers declare; LEZ `disclosureOf` maps to rows | `exo-002.1` | — | Conformance green with the manifest checks on every driver; a stub with `declared = false` fails. |
-| **M2** Readiness: `coordinate_readiness(intent)` grades each requirement for this instance with an honest `unknown` | `exo-002.2` | M1 | A Safe intent on an instance without RPC reports `infra: missing` + remedy; a non-owner reports `authority: missing`. |
+| **M2** Readiness: `coordinate_readiness(intent)` grades each requirement for this instance with an honest `unknown` — **landed** (`coordination/readiness.nim`, `readiness_test` 6/6) | `exo-002.2` | M1 | A Safe intent on an instance without RPC reports `infra: missing` + remedy; a non-owner reports `authority: missing`. |
 | **M3** Card: five questions + per-participant readiness + install / authorize / approve / deny | `exo-002.3` | M2 | A proposer sees the peer's missing dependency on the card; the peer can deny. Launch-verified in the runner. |
 | **M4** Provenance for all actions: messages/admits/drops carry an input record; epoch-scoped exportable proof | `exo-002.4` | (`exo-275`) | Proof verifies iff the log is unchanged; tamper refuses. Out-of-room proof scope decided and documented. |
 | **M5** Information-flow view: fold log × disclosure × epoch membership into a per-action observer matrix | `exo-002.5` | M1, M4 | Walkthrough's static claims and the derived matrix agree on every step for a Safe intent; the derived view names the store node. |
@@ -105,7 +105,8 @@ Relation to existing issues: `exo-1ec.4` is the driver **config** manifest (a se
 ## 7. Resuming across sessions
 
 - `pb show exo-002` then `pb ready` to find the next unblocked slice.
-- Code lives in `module/src/intents/disclosure.nim`, `module/src/drivers/manifest.nim`, and the per-driver `manifest` overrides. Tests: `module/tests/manifest_test.nim` (pure Nim), `conformance_test.nim` (needs the secp + libsodium closure, see `module/tests/README.md`).
+- Code lives in `module/src/intents/disclosure.nim`, `module/src/drivers/manifest.nim` (+ the per-driver `manifest` overrides), and `module/src/coordination/readiness.nim` (the probe + `HostFacts`; the hosted handler is `musterCoordinateReadiness` in `nim-lib/muster_module.nim`, surface method `coordinate_readiness`). Tests: `module/tests/manifest_test.nim` (pure Nim), `readiness_test.nim` + `conformance_test.nim` (need the secp + libsodium closure, see `module/tests/README.md`).
+- The `coordinate_readiness` payload is what M3's card renders: `{intentId, policy, effect, declared, ready, unknown, items:[{kind,name,scope,status,detail,remedy}], manifest:{agreement, requirements, discloses, touches}}`.
 - The conformance suite is the gate: never merge a slice with it red.
 
 ## 8. Open questions
