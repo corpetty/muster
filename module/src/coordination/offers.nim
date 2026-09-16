@@ -16,7 +16,7 @@
 ## after it. Nothing here is scored or ranked (rule s7): candidates carry a class, a
 ## grade, and their rows, in catalogue order.
 
-import std/strutils
+import std/[strutils, json]
 import ./../drivers/manifest        # Requirement, ActionManifest, MaterialClass, RequirementParty
 import ./../wallet/material         # Material, Disclosable, MaterialGrade, catalogue
 import ./../intents/disclosure      # DisclosureRow
@@ -101,3 +101,27 @@ proc satisfiable*(offers: seq[Offer]): bool =
   for o in offers:
     if o.status != osSatisfiable: return false
   true
+
+# ── JSON payload (what the lidl surface returns and the card/composer render) ────────
+proc toJson*(c: OfferCandidate): JsonNode =
+  var rows = newJArray()
+  for d in c.discloses: rows.add %*{"field": d.field, "to": $d.to}
+  # PUBLIC face + class only — never a handle (rule s1); grade shown, never a score (s7).
+  %*{"public": c.material.public, "class": $c.material.class, "form": c.material.form,
+     "grade": $c.grade, "discloses": rows}
+
+proc toJson*(o: Offer): JsonNode =
+  var cands = newJArray()
+  for c in o.candidates: cands.add c.toJson()
+  %*{"requirement": {"kind": $o.requirement.kind, "name": o.requirement.name,
+                     "party": $o.requirement.party, "field": o.requirement.needs.field},
+     "status": $o.status, "candidates": cands}
+
+proc toJson*(offers: seq[Offer]): JsonNode =
+  result = newJArray()
+  for o in offers: result.add o.toJson()
+
+proc offersPayload*(offers: seq[Offer]): JsonNode =
+  ## The full surface payload: the offers + whether every slot this surface asks of me
+  ## is fillable. `ready` is satisfiable() — an honest false when a slot is unknown.
+  %*{"offers": offers.toJson(), "ready": offers.satisfiable()}
