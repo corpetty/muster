@@ -37,6 +37,7 @@ import ../src/coordination/readiness   # the action manifest + this instance's r
 import ../src/hashing/sha256           # an unlinkable decline nonce under an anonymous driver
 import ../src/log/proof                # exportable, self-verifying log proofs (M4)
 import ../src/coordination/flow        # the information-flow view (M5)
+import ../src/intents/authorization    # muster-issued authorizations for the host hook (M7)
 import ../src/coordination/lp_invoker  # LpInvoker — call the target module over lp_*
 import ../src/coordination/discovery   # discover coordinatable module actions (P-D3)
 import ../src/coordination/contacts    # the address book (aliases for member ids)
@@ -708,6 +709,38 @@ proc musterCoordinateFlow(): string =
   let rows = reduceFlow(events, driverFor, founders)
   result = $(%*{"rows": rows.toJson(), "matrix": rows.observerMatrix()})
   if gLpDebug: stderr.writeLine("MUSTER-LP flow " & result)
+
+proc musterCoordinateAuthorization(intentId: string): string =
+  ## The grant a host hook checks before dispatch (M7). Only for an EXECUTABLE
+  ## intent: the room's agreement is the permission; nothing is authorized before it.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  let events = gSession.log.allEvents()
+  let effectJson = effectJsonOf(events, intentId)
+  if effectJson.len == 0: return $(%*{"error": "unknown-intent", "intentId": intentId})
+  let st = intentState(events, driverFor, intentId)
+  if st != "executable":
+    return $(%*{"error": "not-executable", "intentId": intentId, "state": st})
+  let policy = intentPolicyOf(events, intentId)
+  let folded = reduceIntents(events, driverFor)
+  let root = folded[intentId].materialization.bytes
+  let environment = (if policy in ["safe", "eip191"]: "chain:" & $gDriver.chainId else: "room")
+  let account = (if policy == "safe": "safe:" & toHex(gDriver.safe) else: "room")
+  let a = issueAuthorization(moduleKeystore(), intentId, capabilityOf(policy, effectJson),
+                             environment, account, root, uint64(epochTime()) + 600)
+  result = $a.toJson()
+  if gLpDebug: stderr.writeLine("MUSTER-LP authorization " & result)
+
+proc musterCoordinateCheckAuthorization(authJson: string): string =
+  ## Pure verification of a grant's own integrity (issuer recovery, slot, expiry).
+  var a: Authorization
+  try: a = authorizationFromJson(parseJson(authJson))
+  except CatchableError as e:
+    return $(%*{"ok": false, "reason": "not an authorization: " & e.msg})
+  let r = checkAuthorization(a, uint64(epochTime()))
+  $(%*{"ok": r.ok, "reason": r.reason, "issuer": (if r.ok: "0x" & toHex(r.issuer) else: ""),
+       "capability": a.capability, "materializationRoot": a.toJson()["materializationRoot"],
+       "expiry": a.context.expiry})
 
 proc musterCoordinateReadiness(intentId: string): string =
   ## The proposal card's five questions for ONE room intent — what will it do (the

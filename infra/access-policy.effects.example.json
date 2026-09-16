@@ -1,0 +1,20 @@
+{
+  "_about": "PROPOSAL (docs/design/host-effect-policy.md, exo-002.7) — not read by any host yet. Extends access-policy.json from allowed CALLERS to gated EFFECTS: a call to a listed capability must carry a muster.authorization.v1 grant for an executable room intent whose materialization root matches the call, from a trusted issuer, before expiry.",
+  "version": 2,
+  "mode": "enforce",
+  "restrictions": {
+    "muster_module": { "allowedCallers": ["muster_ui"] }
+  },
+  "gatedEffects": {
+    "lez_core.transfer_private": {
+      "requires": "muster.authorization.v1",
+      "trustedIssuers": ["*"],
+      "maxAge": 600
+    },
+    "safe.execute": {
+      "requires": "muster.authorization.v1",
+      "trustedIssuers": ["*"],
+      "maxAge": 600
+    }
+  }
+}
