@@ -1,5 +1,5 @@
 {
-  "about": "The ADR-012 claims registry: the walkthrough's four questions as structured, CI-validated data. Steps are the F-3 intent lifecycle the real client implements (driver-agnostic), not the demo's payment-specific journey. Each step's `summary` answers 'what just happened'; `protects`/`others-leak`/`gap` claims answer the other three questions. Validated by scripts/check-claims-registry.py; truth is the author's obligation under docs/00-vision.md.",
+  "about": "The ADR-012 claims registry: the walkthrough's four questions as structured, CI-validated data. Steps are the F-3 intent lifecycle the real client implements (driver-agnostic), not the demo's payment-specific journey. Each step's `summary` answers 'what just happened'; `protects`/`others-leak`/`gap` claims answer the other three questions. Validated by scripts/check-claims-registry.py; truth is the author's obligation under docs/00-vision.md. Each protects/gap claim also carries its CREDIBILITY on the PriFi axis (docs/design/action-manifest.md §2): imperative (the discretion to defect is removed structurally — every protects claim, since a test proves structure), motivational (rests on a named party not defecting — `party` names them), exposed (no binding at all — information reaches an unbound observer, `party` names who), or not-applicable (a gap that is neither, e.g. performance). Muster classifies commitments; it never scores them.",
   "steps": [
     {
       "id": "open-room",
@@ -39,7 +39,8 @@
       "title": "A later joiner cannot read earlier messages",
       "body": "Membership is epoch-based: admitting a member re-keys the room forward, so someone added mid-conversation reads from their epoch on and nothing before it. Removal rotates the epoch immediately.",
       "requirement": "F-16",
-      "test": "module/tests/probes/probe_epoch_new_member_disjoint.nim"
+      "test": "module/tests/probes/probe_epoch_new_member_disjoint.nim",
+      "credibility": "imperative"
     },
     {
       "step": "open-room",
@@ -47,7 +48,8 @@
       "title": "One identity to authorize, one to encrypt, provably the same person",
       "body": "Each member carries two keypairs — a secp256k1 authorization key (the one that signs transactions) and an Ed25519/X25519 encryption key — joined by a signed link statement the core verifies when it ingests the member, so the two cannot be silently mismatched.",
       "requirement": "F-14",
-      "test": "module/tests/binding_test.nim"
+      "test": "module/tests/binding_test.nim",
+      "credibility": "imperative"
     },
     {
       "step": "open-room",
@@ -64,7 +66,9 @@
       "body": "Content is encrypted, but a store node still sees the room's content topic and the timing of publishes and fetches — the conversation graph, pseudonymously. This surface names that limit rather than claiming to hide it (FS-9).",
       "fix": "route through the Logos transport-layer mixnet, which unlinks the subscription set and timing from the reader",
       "status": "specified",
-      "spec_stage": "raw (LOGOS-MIXNET, send-only proof-of-concept)"
+      "spec_stage": "raw (LOGOS-MIXNET, send-only proof-of-concept)",
+      "credibility": "exposed",
+      "party": "the store node operator (sees which topics a client subscribes to, and when it publishes and fetches)"
     },
     {
       "step": "propose",
@@ -72,7 +76,8 @@
       "title": "You sign what you saw, not what a screen claimed",
       "body": "The client independently re-derives the materialization from the displayed effect and refuses to sign if they disagree. The review target and the signing target are provably the same bytes; this check lives in the core and cannot be disabled.",
       "requirement": "F-4",
-      "test": "module/tests/probes/probe_materialization_mismatch_refused.nim"
+      "test": "module/tests/probes/probe_materialization_mismatch_refused.nim",
+      "credibility": "imperative"
     },
     {
       "step": "propose",
@@ -80,7 +85,8 @@
       "title": "A signature is worthless anywhere but here",
       "body": "Every signing payload commits to the execution environment, the account, the serialization slot, and an expiry — so a signature captured here cannot be replayed against another chain, account, or slot.",
       "requirement": "F-5",
-      "test": "module/tests/probes/probe_replay_binding_field_binds.nim"
+      "test": "module/tests/probes/probe_replay_binding_field_binds.nim",
+      "credibility": "imperative"
     },
     {
       "step": "propose",
@@ -88,7 +94,8 @@
       "title": "Nothing is signed whose inputs can't be accounted for",
       "body": "The signing payload commits to a provenance record naming, for every input that reached the signed bytes, its class and its position in the log. Signing is refused when any input's origin is unaccountable.",
       "requirement": "F-20",
-      "test": "module/tests/probes/probe_provenance_refusal_stepper.nim"
+      "test": "module/tests/probes/probe_provenance_refusal_stepper.nim",
+      "credibility": "imperative"
     },
     {
       "step": "propose",
@@ -105,7 +112,9 @@
       "body": "Signing-path bytes are deterministic and domain-separated (invariant 5). But which profile derives a schema's identity is still hand-assigned ids in v0; a ratified cdCDDLe schema-root profile would let a second module re-derive our schema identity without trusting our ids (ADR-009).",
       "fix": "adopt cdCDDLe schema roots in the profile field once LOGOS-MODULE-HASH-PROFILE ratifies — no format migration, the field already carries it",
       "status": "specified",
-      "spec_stage": "draft (unmerged, logos-co/logos-lips branch draft/logos-core-module-specs)"
+      "spec_stage": "draft (unmerged, logos-co/logos-lips branch draft/logos-core-module-specs)",
+      "credibility": "motivational",
+      "party": "the module authors — hand-assigned schema ids are a promise not to collide, until cdCDDLe roots replace them"
     },
     {
       "step": "collect",
@@ -113,7 +122,8 @@
       "title": "The core never interprets a contribution — the driver does",
       "body": "The core routes opaque contribution bytes and asks the driver what they mean. Rounds, serialization domain, membership model, and finality are all driver-described, never hardcoded, so a new coordination policy is a new driver, not a core change.",
       "requirement": "F-6",
-      "test": "module/tests/probes/probe_core_opaque_routing_stepper.nim"
+      "test": "module/tests/probes/probe_core_opaque_routing_stepper.nim",
+      "credibility": "imperative"
     },
     {
       "step": "collect",
@@ -121,7 +131,8 @@
       "title": "A non-owner signature never counts",
       "body": "A contribution from someone who is not an authorizer for this intent is refused, and a duplicate from the same authorizer folds only once — the threshold reflects real, distinct authorizations.",
       "requirement": "FS-2",
-      "test": "module/tests/coordination_surface_test.nim"
+      "test": "module/tests/coordination_surface_test.nim",
+      "credibility": "imperative"
     },
     {
       "step": "collect",
@@ -129,7 +140,8 @@
       "title": "Every driver passes one conformance suite",
       "body": "Stub, Safe, and threshold drivers are all graded by the same conformance suite; a driver feature does not merge with it red, so the coordination guarantees hold identically whichever driver a room runs.",
       "requirement": "S-1",
-      "test": "module/tests/conformance_test.nim"
+      "test": "module/tests/conformance_test.nim",
+      "credibility": "imperative"
     },
     {
       "step": "collect",
@@ -145,7 +157,9 @@
       "title": "The real multi-round test — FROST — is not built yet",
       "body": "The round model is exercised by a shipped Ed25519 k-of-n threshold driver, which proves the driver seam is generic. But FROST at r=2, the genuinely multi-round protocol that pressure-tests it hardest, is not yet implemented.",
       "fix": "implement the FROST r=2 threshold driver from spec against the conformance suite (P6)",
-      "status": "partial"
+      "status": "partial",
+      "credibility": "motivational",
+      "party": "the room's signers — the two-round scaffold reuses per-round Ed25519 signatures, not a threshold signature the chain would enforce"
     },
     {
       "step": "executable",
@@ -153,7 +167,8 @@
       "title": "State is re-derived, never asserted",
       "body": "'Ready' is a reduction over the signed log (state = reduce(log)), rebuilt from log plus keys on a cold start. Nothing exists that cannot be rebuilt, so no coordinator's say-so is trusted for whether the threshold is met.",
       "requirement": "R-3",
-      "test": "module/tests/probes/probe_state_cold_start_matches.nim"
+      "test": "module/tests/probes/probe_state_cold_start_matches.nim",
+      "credibility": "imperative"
     },
     {
       "step": "executable",
@@ -161,7 +176,8 @@
       "title": "Duplicated or reordered messages converge to the same state",
       "body": "Reducers are idempotent and order-insensitive up to a deterministic tiebreak, so a message delivered twice or out of order by the transport still lands every client on identical state.",
       "requirement": "R-2",
-      "test": "module/tests/probes/probe_convergence_reorder_stepper.nim"
+      "test": "module/tests/probes/probe_convergence_reorder_stepper.nim",
+      "credibility": "imperative"
     },
     {
       "step": "executable",
@@ -177,7 +193,8 @@
       "title": "Cold-start re-derivation is not yet incremental",
       "body": "Re-deriving state replays the log; until log snapshotting lands, that is linear in the log length rather than snapshot-plus-tail, so the P-2/P-5 cold-start and reduction targets are not yet met or benchmarked.",
       "fix": "log snapshotting (periodic snapshot + tail replay) to make reduction incremental after the first pass (P6)",
-      "status": "none"
+      "status": "none",
+      "credibility": "not-applicable"
     },
     {
       "step": "submit",
@@ -185,7 +202,8 @@
       "title": "The submit is a real, client-side on-chain call",
       "body": "Submit re-derives and signs the transaction locally and calls the chain directly (a real Safe execTransaction against the on-chain contract) — there is no hosted transaction service and no server-side application state in the path.",
       "requirement": "FS-1",
-      "test": "module/tests/safe_anvil_e2e.nim"
+      "test": "module/tests/safe_anvil_e2e.nim",
+      "credibility": "imperative"
     },
     {
       "step": "submit",
@@ -193,7 +211,8 @@
       "title": "The one place the ground changes is named",
       "body": "Crossing the boundary is the single moment the interface's visual ground changes, and the submitted card names what became public versus what stayed inside — the boundary is drawn, not left for the user to infer.",
       "requirement": "U-2",
-      "test": "ui/tests/muster-ui-test.mjs"
+      "test": "ui/tests/muster-ui-test.mjs",
+      "credibility": "imperative"
     },
     {
       "step": "submit",
@@ -209,7 +228,9 @@
       "title": "Keeping signers unlinkable at settlement needs an anonymous driver",
       "body": "The shipped Safe driver names its owners on-chain. The machinery for anonymous membership (count-only slots that leak no signer identity) exists and is probed, but a fully anonymous-membership driver is opt-in and not yet a shipped driver.",
       "fix": "ship an anonymous-membership driver (count-only authorization slots, FS-7 / ADR-005) whose settlement discloses a threshold proof, not addresses",
-      "status": "partial"
+      "status": "partial",
+      "credibility": "exposed",
+      "party": "anyone reading the chain — the settled transaction names the signers"
     },
     {
       "step": "settle",
@@ -217,7 +238,8 @@
       "title": "A fact about the world carries how it was checked",
       "body": "Facts the room shows (like a balance) carry a verification grade — verified-locally when the client re-checked the read itself, attested otherwise — always displayed. A read that fails raises; it never quietly renders as a zero.",
       "requirement": "F-10",
-      "test": "module/tests/wallet_verify_test.nim"
+      "test": "module/tests/wallet_verify_test.nim",
+      "credibility": "imperative"
     },
     {
       "step": "settle",
@@ -233,7 +255,9 @@
       "title": "'Verified-locally' is proof-checked, not yet trustless end-to-end",
       "body": "A verified read checks a Merkle proof against a state root the client fetches from a user-configured RPC — it trusts that root. Making the root itself trustless needs a beacon light-client sidecar, which is deferred on infrastructure.",
       "fix": "add the beacon light-client sidecar so the state root is verified against the beacon chain, not taken from the RPC (ADR-014, deferred)",
-      "status": "partial"
+      "status": "partial",
+      "credibility": "motivational",
+      "party": "the supplier of the state root — until the beacon light-client sidecar, the root the proof is checked against is attested, not derived"
     }
   ]
 }

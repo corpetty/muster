@@ -1,6 +1,6 @@
 # The action manifest: provenance, permissions, disclosure, and dependencies as one object
 
-**Status:** design + plan, 2026-09-15. Epic `exo-002` (pebbles). M1 (`exo-002.1`) landed 2026-09-15; M2 (`exo-002.2`) and M3 (`exo-002.3`) landed 2026-09-16.
+**Status:** design + plan, 2026-09-15. Epic `exo-002` (pebbles). M1 (`exo-002.1`) landed 2026-09-15; M2 (`exo-002.2`), M3 (`exo-002.3`) and M8 (`exo-002.8`) landed 2026-09-16.
 **Reads with:** `driver-derivation.md` (how a module action becomes a driver), `basecamp-capability-alignment.md` (where execution and capability grants live), the PriFi intro article (the credibility axis this design grades against).
 
 ## 1. What we want, stated once
@@ -28,6 +28,8 @@ The PriFi article distinguishes **imperative** credibility (the discretion to de
 Two facts shape everything below.
 
 **Credibility is relative to an observer at a link, not a property of the commitment.** The same signed intent is imperative against the counterparty (they cannot alter the materialization, invariant 1, or replay it elsewhere, invariant 2) and motivational against the store node, which we ask not to analyse the conversation graph (FS-9). So the honest unit is a matrix: *(lifecycle step) × (observer) → imperative | motivational | not applicable*. The observers muster can name today are the room member, the store node, the RPC provider, the chain observer, and the target module of an invoke.
+
+The registry's `credibility` field adds a fourth value beyond the article's two: **exposed**, for a gap where no binding exists at all because the information reaches an unbound observer (the article's outsider hazard), and **not-applicable** for a gap that is a limit rather than a party to trust. Both name their `party`.
 
 **Muster classifies; it never scores.** The moment a commitment is a number, the residual trust disappears from view, which is exactly the failure the article's private-order-flow example describes. The card says "four of five inputs structurally bound; residual trust: RPC provider, store node". It never says "80%".
 
@@ -96,7 +98,7 @@ Slices are pebbles issues under epic `exo-002`. Run `pb dep tree exo-002` for li
 | **M5** Information-flow view: fold log × disclosure × epoch membership into a per-action observer matrix | `exo-002.5` | M1, M4 | Walkthrough's static claims and the derived matrix agree on every step for a Safe intent; the derived view names the store node. |
 | **M6** `lidl-gen driver` emits manifest declarations as a third declared input | `exo-002.6` | M1 | Emitted manifest `nim check`s clean and passes consistency; `metadata.json` rev bumped. (SDK repo.) |
 | **M7** Host hook: allowed effects keyed on capability name; dispatch refused without a matching executable intent | `exo-002.7` | M6 | Proposal doc + policy schema drafted here; raised with Basecamp. muster's half: `coordinate_authorization(intent)`. (Upstream.) |
-| **M8** Credibility column on the claims registry + discretion holder | `exo-002.8` | — | Registry validates; QML regenerated; walkthrough renders the column. |
+| **M8** Credibility column on the claims registry + discretion holder — **landed** (`credibility` ∈ imperative / motivational / exposed / not-applicable, `party` named on the latter two; validator enforces protects ⇒ imperative; walkthrough renders the line) | `exo-002.8` | — | Registry validates; QML regenerated; walkthrough renders the column. |
 
 Order of attack: M1 → M2 → M3 delivers want 5 end to end on the existing drivers and is the visible payoff. M8 is small and can go any time. M4 and M5 make want 1 and want 3 real. M6 closes want 4. M7 is the long pole and is not ours to land alone, so it is raised early and tracked, not waited on.
 

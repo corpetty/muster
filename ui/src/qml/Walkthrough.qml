@@ -41,6 +41,30 @@ Item {
         return Theme.palette.textTertiary;
     }
 
+    // The credibility line (PriFi axis, docs/design/action-manifest.md §2): is the
+    // discretion to defect removed by structure, or does it rest on a named party —
+    // or on nobody at all, because the information simply reaches an unbound
+    // observer? Named, never scored.
+    function credibilityOf(c) {
+        if (c.credibility === "imperative")
+            return qsTr("IMPERATIVE — enforced by structure, proven by the test above");
+        if (c.credibility === "motivational")
+            return qsTr("MOTIVATIONAL — rests on %1").arg(c.party || "");
+        if (c.credibility === "exposed")
+            return qsTr("EXPOSED — no binding: visible to %1").arg(c.party || "");
+        if (c.credibility === "not-applicable")
+            return qsTr("NOT A TRUST GAP — a limit, not a party to trust");
+        return "";
+    }
+
+    function credibilityColor(c) {
+        if (c.credibility === "imperative")
+            return Theme.palette.success;
+        if (c.credibility === "motivational" || c.credibility === "exposed")
+            return Theme.palette.warning;
+        return Theme.palette.textTertiary;
+    }
+
     // The evidence line, per kind — the checkable half of the claim.
     function evidenceOf(c) {
         if (c.kind === "protects")
@@ -163,6 +187,17 @@ Item {
                                     font.family: Theme.typography.mono
                                     font.pixelSize: Theme.typography.secondaryText
                                     wrapMode: Text.WrapAnywhere
+                                }
+
+                                LogosText {
+                                    objectName: "claimCredibility"
+                                    visible: walkthrough.credibilityOf(modelData).length > 0
+                                    Layout.fillWidth: true
+                                    text: walkthrough.credibilityOf(modelData)
+                                    color: walkthrough.credibilityColor(modelData)
+                                    font.pixelSize: Theme.typography.badgeText
+                                    font.weight: Theme.typography.weightMedium
+                                    wrapMode: Text.WordWrap
                                 }
                             }
                         }
