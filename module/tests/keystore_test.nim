@@ -4,7 +4,7 @@
 ## without exposing a secret; a wrong passphrase or tampered keyfile is refused.
 ## Needs libsecp256k1 + libsodium (see tests/README.md).
 
-import std/[os, streams]
+import std/[os, streams, times]
 import ../src/crypto/keystore
 import ../src/crypto/secp256k1
 import ../src/crypto/curve25519
@@ -76,6 +76,46 @@ try: discard openFileKeystore(path, pass)
 except KeystoreError: tamperFailed = true
 doAssert tamperFailed, "a tampered keyfile is refused"
 echo "7. tampered keyfile refused"
+
+# 8. Keyed operations (exo-45e K2b): a keystore holds a SET of keys, selected by ref.
+block:
+  proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
+  let ks = newInMemoryKeystore(seed(1), seed(2))
+  let primary = refOf(ks.address())
+  doAssert ks.keyRefs() == @[primary], "one key to start; its ref is the primary address"
+  doAssert ks.hasKey(primary) and not ks.hasKey("0xdeadbeef")
+  # signWith(primary) == sign() (the single-key methods act on the primary).
+  var h: array[32, byte]
+  for i in 0 ..< 32: h[i] = byte(i)
+  doAssert ks.signWith(primary, h) == ks.sign(h)
+  # add a second key; both are now selectable, and each signs with ITS OWN key.
+  let second = ks.addKey(seed(9), seed(10))
+  doAssert ks.keyRefs().len == 2 and second in ks.keyRefs()
+  doAssert ks.signWith(second, h) != ks.signWith(primary, h), "each ref signs with its own key"
+  doAssert ks.edSignWith(second, h) != ks.edSignWith(primary, h)
+  # an unknown ref is REFUSED — never a silent fall-through to another key.
+  var refused = false
+  try: discard ks.signWith("0xnope", h)
+  except KeystoreError: refused = true
+  doAssert refused, "signWith on an unknown ref must refuse"
+  echo "8. keyed keystore: a set selected by ref; signWith refuses an unknown ref (K2b) OK"
+
+# 9. FileKeystore is a keyfile SET: loadKeyfile adds a second key, selectable by ref.
+block:
+  let d2 = getTempDir() / ("mks-set-" & $epochTime().int)
+  let p1 = d2 / "primary.mkf"
+  let p2 = d2 / "second.mkf"
+  let fk = openFileKeystore(p1, "pw1")                 # mints the primary
+  let fk2 = openFileKeystore(p2, "pw2")                 # a separate keyfile
+  let secondRef = refOf(fk2.address())
+  fk.loadKeyfile(p2, "pw2")                             # add it to fk's set
+  doAssert fk.keyRefs().len == 2 and secondRef in fk.keyRefs()
+  var h: array[32, byte]
+  for i in 0 ..< 32: h[i] = byte(0xA0 + i)
+  doAssert fk.signWith(secondRef, h) == fk2.sign(h), "the loaded key signs as itself"
+  doAssert fk.signWith(refOf(fk.address()), h) != fk.signWith(secondRef, h)
+  removeDir(d2)
+  echo "9. FileKeystore keyfile SET: loadKeyfile adds a selectable key (K2b) OK"
 
 removeDir(dir)
 echo "keystore_test: all OK"
