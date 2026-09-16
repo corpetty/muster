@@ -1,0 +1,276 @@
+{
+  "id": "derived-exo-45e",
+  "original_statement": "See docs/design/material-and-disclosure.md section 4 \u2014 the seven disclosure rules.",
+  "restatement": "A participant's holdings and the act of binding one to an action's requirement obey seven disclosure rules the client cannot break: (s1) the holdings catalogue is a local view that never crosses an outward boundary \u2014 no log event, transport payload, exported proof, information-flow view, or plugin-reachable surface ever carries a participant's catalogue bytes on any code path, including error paths; only a material a participant explicitly chose ever leaves, and only in the event that binds it. (s2) material enters the log only through an explicit disclosure act \u2014 compose, contribute, or share \u2014 so no material-binding event (an effect field, a contribution, or a material-share) ever appears in the log except immediately downstream of a corresponding explicit act; entering a room discloses the encryption identity and nothing else. (s3) offers are computed about the asking participant only: the function takes that participant's own catalogue and the room's public facts, so mutating or permuting any other member's holdings never changes the offers a participant sees, and no other member's private material ever appears in them. (s4) access is never fabricated: an authority is graded satisfiable only when the target system or the driver's declared set actually recognizes the participant's key (Safe owners read from the chain, the roster from the membership fold), the client never auto-injects the participant's own key into an owner set, and a key the target does not recognize never grades as met. (s5) unknown is preserved: a requirement whose satisfiability cannot be determined \u2014 no probe, no reachable RPC, no host broker \u2014 grades exactly unknown, never silently met and never silently missing. (s6) choosing material is choosing observers: the disclosure rows an offer shows for a candidate are the same (field, observer) rows the information-flow view records once that material is bound, so the promise shown before the choice equals the record produced after it. (s7) material is classified, never scored: an offer's candidates carry a class, a grade, and their disclosure rows, and never a numeric score, ranking, or ordering that would collapse residual trust into a single figure.",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "The holdings catalogue never crosses an outward boundary: no log event, transport payload, exported proof, flow view, or plugin-reachable surface carries catalogue bytes on any code path; only an explicitly chosen material leaves, in the event that binds it."
+    },
+    {
+      "id": "s2",
+      "text": "Material enters the log only through an explicit disclosure act (compose, contribute, or share): no material-binding event appears except immediately downstream of a corresponding act; entering a room discloses only the encryption identity."
+    },
+    {
+      "id": "s3",
+      "text": "Offers are computed about the asking participant only: mutating or permuting any other member's holdings never changes a participant's offers, and no other member's private material ever appears in them."
+    },
+    {
+      "id": "s4",
+      "text": "Access is never fabricated: an authority grades satisfiable only when the target system or the driver's declared set actually recognizes the participant's key; the client never auto-injects the participant's key into an owner set, and an unrecognized key never grades met."
+    },
+    {
+      "id": "s5",
+      "text": "Unknown is preserved: a requirement whose satisfiability cannot be determined grades exactly unknown, never silently met and never silently missing."
+    },
+    {
+      "id": "s6",
+      "text": "Choosing material is choosing observers: the disclosure rows an offer shows for a candidate equal the (field, observer) rows the flow view records once that material is bound."
+    },
+    {
+      "id": "s7",
+      "text": "Material is classified, never scored: candidates carry a class, a grade, and disclosure rows, and never a numeric score, ranking, or ordering."
+    }
+  ],
+  "goal": "The client obeys seven disclosure rules: a participant discloses only what they explicitly choose, sees only offers about themselves, is never shown fabricated access, and reads honest unknowns and classifications.",
+  "acceptance_criteria": [
+    "The holdings catalogue never crosses an outward boundary: no log event, transport payload, exported proof, flow view, or plugin-reachable surface carries catalogue bytes on any code path; only an explicitly chosen material leaves, in the event that binds it.",
+    "Material enters the log only through an explicit disclosure act (compose, contribute, or share): no material-binding event appears except immediately downstream of a corresponding act; entering a room discloses only the encryption identity.",
+    "Offers are computed about the asking participant only: mutating or permuting any other member's holdings never changes a participant's offers, and no other member's private material ever appears in them.",
+    "Access is never fabricated: an authority grades satisfiable only when the target system or the driver's declared set actually recognizes the participant's key; the client never auto-injects the participant's key into an owner set, and an unrecognized key never grades met.",
+    "Unknown is preserved: a requirement whose satisfiability cannot be determined grades exactly unknown, never silently met and never silently missing.",
+    "Choosing material is choosing observers: the disclosure rows an offer shows for a candidate equal the (field, observer) rows the flow view records once that material is bound.",
+    "Material is classified, never scored: candidates carry a class, a grade, and disclosure rows, and never a numeric score, ranking, or ordering."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The holdings catalogue never crosses an outward boundary: no log event, transport payload, exported proof, flow view, or plugin-reachable surface carries catalogue bytes on any code path; only an explicitly chosen material leaves, in the event that binds it."
+    },
+    {
+      "id": "c2",
+      "text": "Material enters the log only through an explicit disclosure act (compose, contribute, or share): no material-binding event appears except immediately downstream of a corresponding act; entering a room discloses only the encryption identity."
+    },
+    {
+      "id": "c3",
+      "text": "Offers are computed about the asking participant only: mutating or permuting any other member's holdings never changes a participant's offers, and no other member's private material ever appears in them."
+    },
+    {
+      "id": "c4",
+      "text": "Access is never fabricated: an authority grades satisfiable only when the target system or the driver's declared set actually recognizes the participant's key; the client never auto-injects the participant's key into an owner set, and an unrecognized key never grades met."
+    },
+    {
+      "id": "c5",
+      "text": "Unknown is preserved: a requirement whose satisfiability cannot be determined grades exactly unknown, never silently met and never silently missing."
+    },
+    {
+      "id": "c6",
+      "text": "Choosing material is choosing observers: the disclosure rows an offer shows for a candidate equal the (field, observer) rows the flow view records once that material is bound."
+    },
+    {
+      "id": "c7",
+      "text": "Material is classified, never scored: candidates carry a class, a grade, and disclosure rows, and never a numeric score, ranking, or ordering."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "metamorphic",
+      "restatement_clause_id": "s1",
+      "relation_class": "conservation",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_catalogue_no_leak.nim"
+      ],
+      "cwd": "module",
+      "proves": "Sentinel-tagged catalogue bytes are counted at every outward encoder \u2014 log append, transport publish, coordinate_proof, coordinate_flow, and the plugin surface \u2014 while every operation is exercised on success AND error/abort paths. Conservation holds the leaked count at zero: catalogue-origin bytes in, zero catalogue-origin bytes out. Catches an implementation that serializes a holding into any event, proof, or plugin-visible buffer, on any path (FS-4, invariant 3).",
+      "description": "The holdings catalogue never crosses an outward boundary: no log event, transport payload, exported proof, flow view, or plugin-reachable surface carries catalogue bytes on any code path; only an explicitly chosen material leaves, in the event that binds it.",
+      "clause_id": "c1"
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s2",
+      "proves": "Over random sequences of non-act operations (join, fold, reduce, list, readiness, provenance, flow) with no compose/contribute/share, no material-binding event ever enters the log; a binding event appears in the trace only immediately downstream of an explicit act atom. Catches a path that discloses material on room entry or as a side effect of a read (exo-080 kept; rule 2).",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_disclosure_requires_act.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "disclosure_only_after_act": {
+            "kind": "flag",
+            "field": "disclosure_only_after_act"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "disclosure_only_after_act"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "Material enters the log only through an explicit disclosure act (compose, contribute, or share): no material-binding event appears except immediately downstream of a corresponding act; entering a room discloses only the encryption identity.",
+      "clause_id": "c2"
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s3",
+      "proves": "For a room with random OTHER members' catalogues, a participant's offers are recomputed after arbitrary mutation and permutation of every other member's holdings and are byte-identical each time, and no other member's private handle appears in the output. Catches an offers function that reads across members or leaks another's material (invariant 9; rule 3).",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_offers_about_me_only.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "offers_independent_of_others": {
+            "kind": "flag",
+            "field": "offers_independent_of_others"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "offers_independent_of_others"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "Offers are computed about the asking participant only: mutating or permuting any other member's holdings never changes a participant's offers, and no other member's private material ever appears in them.",
+      "clause_id": "c3"
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s4",
+      "proves": "For random authority requirements against random recognized sets (chain owner sets, rosters), a key grades met iff the target set actually contains it; the participant's own key is never auto-added to an owner set, and an unrecognized key never reaches met. Catches the removed Safe owner self-injection and any regrowth of false-green access (rule 4; K3).",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_no_fabricated_access.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "access_only_when_recognized": {
+            "kind": "flag",
+            "field": "access_only_when_recognized"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "access_only_when_recognized"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "Access is never fabricated: an authority grades satisfiable only when the target system or the driver's declared set actually recognizes the participant's key; the client never auto-injects the participant's key into an owner set, and an unrecognized key never grades met.",
+      "clause_id": "c4"
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s5",
+      "proves": "For requirements whose probe cannot answer (nil probe, unreachable RPC, absent broker), the grade is exactly unknown \u2014 never coerced to met and never to missing. Catches a null-ladder collapse that would show a green a participant has not earned or a red that hides an unknown (rule 5).",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_unknown_preserved.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "unknown_never_collapses": {
+            "kind": "flag",
+            "field": "unknown_never_collapses"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "unknown_never_collapses"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "Unknown is preserved: a requirement whose satisfiability cannot be determined grades exactly unknown, never silently met and never silently missing.",
+      "clause_id": "c5"
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s6",
+      "proves": "For a randomly chosen candidate, the disclosure rows the offer promised equal, as a set of (field, observer) pairs, the rows coordinate_flow records after that material is bound. Catches a card that under- or over-states what a choice discloses relative to what the log then reveals (rule 6; M5 flow).",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_offer_rows_match_flow.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "promise_equals_record": {
+            "kind": "flag",
+            "field": "promise_equals_record"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "promise_equals_record"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "Choosing material is choosing observers: the disclosure rows an offer shows for a candidate equal the (field, observer) rows the flow view records once that material is bound.",
+      "clause_id": "c6"
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s7",
+      "proves": "Over any offers output, every candidate carries a class, a grade, and disclosure rows and NO numeric score, rank, percentage, or imposed ordering; the candidate order is input-stable. Catches a regression that ranks or scores candidates, collapsing residual trust into one figure (rule 7).",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_no_score.nim"
+      ],
+      "trace_invariant": {
+        "atoms": {
+          "classify_not_score": {
+            "kind": "flag",
+            "field": "classify_not_score"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "classify_not_score"
+            }
+          ]
+        }
+      },
+      "cwd": "module",
+      "description": "Material is classified, never scored: candidates carry a class, a grade, and disclosure rows, and never a numeric score, ranking, or ordering.",
+      "clause_id": "c7"
+    }
+  ],
+  "criticality": "catastrophic",
+  "declared_new_entrypoints": [
+    "tests/probes/probe_catalogue_no_leak.nim"
+  ]
+}
