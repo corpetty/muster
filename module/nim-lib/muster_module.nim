@@ -10,7 +10,7 @@
 
 include muster_gen
 
-import std/[json, tables, strutils, os, algorithm, times]
+import std/[json, tables, strutils, os, algorithm, times, sets]
 import ../src/dcbor/dcbor
 import ../src/drivers/driver
 import ../src/drivers/safe
@@ -35,6 +35,8 @@ import ../src/coordination/intents     # intent lifecycle = reduce(log) (the mul
 import ../src/coordination/invoker     # the execute seam + allowlist/capability gate (P-D2)
 import ../src/coordination/readiness   # the action manifest + this instance's readiness (exo-002.2)
 import ../src/hashing/sha256           # an unlinkable decline nonce under an anonymous driver
+import ../src/log/proof                # exportable, self-verifying log proofs (M4)
+import ../src/coordination/flow        # the information-flow view (M5)
 import ../src/coordination/lp_invoker  # LpInvoker — call the target module over lp_*
 import ../src/coordination/discovery   # discover coordinatable module actions (P-D3)
 import ../src/coordination/contacts    # the address book (aliases for member ids)
@@ -655,6 +657,57 @@ proc musterCoordinateDecline(intentId: string): string =
     if v.id == intentId: declines = v.declines
   result = $(%*{"intentId": intentId, "state": intentState(after, driverFor, intentId), "declines": declines})
   if gLpDebug: stderr.writeLine("MUSTER-LP decline " & result)
+
+proc musterCoordinateProvenance(): string =
+  ## Provenance for EVERY action in the room (M4): the log's lineage, each entry
+  ## classed by the F-20 vocabulary and graded by the guarantee the code enforces.
+  if gSession == nil: return "[]"
+  gSession.poll()
+  var arr = newJArray()
+  for it in logProvenance(gSession.log.allEvents(), driverFor):
+    let alias = (if it.account.len > 0: contactBook().aliasOf(it.account) else: "")
+    arr.add %*{"seq": it.seq, "class": $it.cls, "kind": it.kind, "intentId": it.intentId,
+               "account": it.account, "alias": alias, "accountable": it.accountable,
+               "what": it.what, "detail": it.detail, "guarantee": it.guarantee, "epoch": it.epoch}
+  $arr
+
+proc musterCoordinateProof(): string =
+  ## An exportable, self-verifying proof of the room's log (M4). Epoch-scoped: the
+  ## range is the founding epoch to the current one; only holders can read it.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  var epochTo = 0
+  try: epochTo = gSession.epoch()
+  except CatchableError: discard
+  $buildProof(gSession.log.allEvents(), 0, epochTo).toJson()
+
+proc musterCoordinateVerifyProof(proofJson: string): string =
+  ## Refuse-on-mismatch verification of a log proof — pure, reads only the proof.
+  var p: LogProof
+  try: p = proofFromJson(parseJson(proofJson))
+  except CatchableError as e:
+    return $(%*{"ok": false, "reason": "not a proof: " & e.msg})
+  let (ok, reason) = verifyProof(p)
+  $(%*{"ok": ok, "reason": reason, "proofDigest": (if ok: p.proofDigest() else: ""),
+       "events": p.events.len})
+
+proc musterCoordinateFlow(): string =
+  ## Who could see what, per action (M5). Founders = the current roster minus every
+  ## joiner the log admits — the log names admits, not the founding set.
+  if gSession == nil: return $(%*{"rows": [], "matrix": {}})
+  gSession.poll()
+  let events = gSession.log.allEvents()
+  var admitted = initHashSet[string]()
+  for e in events:
+    let p = e.key.split('/')
+    if p.len >= 4 and p[0] == "membership" and p[2] == "admit": admitted.incl p[3]
+  var founders: seq[string]
+  for mem in gSession.members():
+    let hexId = toHex(mem.toBytes())
+    if hexId notin admitted: founders.add hexId
+  let rows = reduceFlow(events, driverFor, founders)
+  result = $(%*{"rows": rows.toJson(), "matrix": rows.observerMatrix()})
+  if gLpDebug: stderr.writeLine("MUSTER-LP flow " & result)
 
 proc musterCoordinateReadiness(intentId: string): string =
   ## The proposal card's five questions for ONE room intent — what will it do (the

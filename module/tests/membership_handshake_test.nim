@@ -79,3 +79,17 @@ for e in bob.log.allEvents():
 echo "6. F-16 holds across the handshake OK"
 
 echo "membership_handshake_test: all OK"
+
+# ── the admit is IN the log (exo-275 / M4): both members fold it; Bob sees his own
+# admission and nothing from before his seam ─────────────────────────────────────
+block:
+  var aliceAdmits, bobAdmits = 0
+  for e in alice.log.allEvents(): (if e.key.startsWith("membership/"): inc aliceAdmits)
+  for e in bob.log.allEvents(): (if e.key.startsWith("membership/"): inc bobAdmits)
+  doAssert aliceAdmits >= 1 and bobAdmits >= 1, "the admit is a log event on both sides"
+  var aliceKeys: seq[string]
+  for e in alice.log.allEvents(): aliceKeys.add e.key
+  for e in bob.log.allEvents():
+    doAssert e.key in aliceKeys, "everything Bob holds, Alice holds"
+  doAssert bob.log.allEvents().len < alice.log.allEvents().len, "Bob cannot read the pre-seam history (F-16)"
+  echo "admit recorded in the log; Bob's view starts at his own admission (F-16) OK"

@@ -408,7 +408,7 @@ type
   ActivityEntry* = object
     seq*: int            ## canonical log index — the stable ordering key (inv 4)
     order*: int          ## tiebreak within one index (a derived line after its trigger)
-    kind*: string        ## "propose" | "approve" | "decline" | "ready" | "submit" | "settled"
+    kind*: string        ## "propose" | "approve" | "decline" | "ready" | "submit" | "settled" | "admit"
     intentId*: string    ## the intent this concerns
     account*: string     ## the contributor, named only where the driver is mmNamed, else ""
     title*: string       ## the plain-language headline
@@ -446,6 +446,12 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
   var lastSig = initTable[string, int]()                 # id -> index of its last sig
   for i in 0 ..< ordered.len:
     let p = ordered[i].key.split('/')
+    if p.len >= 4 and p[0] == "membership" and p[2] == "admit":
+      # a membership transition, from the log itself (exo-275 / M4)
+      result.add ActivityEntry(seq: i, order: 0, kind: "admit", intentId: "",
+        account: p[3], title: "A member was admitted — room re-keyed to epoch " & p[1],
+        detail: "they read from here on, nothing before (F-16)")
+      continue
     if p.len < 3 or p[0] != "intent": continue
     let id = p[1]
     let op = p[2]
@@ -558,3 +564,101 @@ proc intentProvenance*(events: seq[Event], driverFor: DriverFor, intentId: strin
                           accountable: true, what: "an approval",
                           detail: (if round != "1": "round " & round else: ""),
                           guarantee: "the driver verified this recovers to a configured member — a non-member never reaches the fold")
+
+# ── provenance for EVERY action (M4, exo-002.4): the room-wide lineage ──────────
+# intentProvenance answers "how did THIS decision get in front of me"; this answers
+# it for every entry in the log — messages, proposals, signatures, declines,
+# policy declarations, submits/finals (external reads: the chain's answer as the
+# room observed it), and membership transitions — each classed by the F-20
+# vocabulary and graded by the guarantee the code actually enforces. Honest about
+# attribution: a message's author is what its sender wrote inside a room-sealed
+# envelope (any epoch holder could have written it); only a driver-verified
+# signature proves WHO. Named accounts follow the driver's membership model.
+
+type LogProvItem* = object
+  seq*: int               ## canonical log position
+  cls*: InputClass
+  kind*: string           ## message · propose · sig · decline · policy · submit · final · admit
+  intentId*: string       ## "" for a message / membership entry
+  account*: string        ## named only where the guarantee lets us name it
+  accountable*: bool
+  what*: string
+  detail*: string
+  guarantee*: string
+  epoch*: int             ## the membership epoch the entry belongs to (0 = the founding epoch)
+
+proc membershipEvent*(epoch: int, joinerHex: string, parents: seq[EventId] = @[]): Event =
+  ## Recorded by the admitting member right after re-keying (exo-275): sealed under
+  ## the NEW epoch, so the joiner reads its own admission and nothing before it (F-16).
+  Event(parents: parents, key: "membership/" & $epoch & "/admit/" & joinerHex, value: "1")
+
+proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] =
+  let ordered = canonicalOrder(events)
+  var epoch = 0
+  var seenSig = initHashSet[string]()
+  var seenDecline = initHashSet[string]()
+  for i in 0 ..< ordered.len:
+    let e = ordered[i]
+    let p = e.key.split('/')
+    if p.len >= 4 and p[0] == "membership" and p[2] == "admit":
+      try: epoch = max(epoch, parseInt(p[1]))
+      except ValueError: discard
+      result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "admit", account: p[3],
+        accountable: true, what: "a member was admitted",
+        detail: "room re-keyed to epoch " & p[1],
+        guarantee: "sealed under the new epoch by the admitting member — the joiner reads from here on, nothing before (F-16)",
+        epoch: epoch)
+      continue
+    if p.len >= 2 and p[0] == "message":
+      var author = ""
+      try:
+        let j = parseJson(e.value)
+        if j.kind == JObject: author = j{"author"}.getStr()
+      except CatchableError: discard
+      result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "message", account: author,
+        accountable: true, what: "a message",
+        detail: "",
+        guarantee: "sealed to the room's epoch — a member placed it; the author is what the sender wrote, not a verified signature",
+        epoch: epoch)
+      continue
+    if p.len < 3 or p[0] != "intent": continue
+    let id = p[1]
+    let desc = driverFor(intentPolicyOf(events, id)).describe()
+    let named = desc.membership == mmNamed
+    case p[2]
+    of "propose":
+      result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "propose", intentId: id,
+        accountable: true, what: "a proposal", detail: summarizeEffect(e.value),
+        guarantee: "sealed to the room's epoch — only a member could have placed it; the materialization is re-derived by every client (F-4)",
+        epoch: epoch)
+    of "policy":
+      result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "policy", intentId: id,
+        accountable: true, what: "the policy this intent runs under", detail: e.value,
+        guarantee: "sealed to the room's epoch; every member folds the identical driver (invariant 6)",
+        epoch: epoch)
+    of "sig":
+      if p.len < 4 or (id & "/" & p[3]) in seenSig: continue
+      seenSig.incl(id & "/" & p[3])
+      result.add LogProvItem(seq: i, cls: icContribution, kind: "sig", intentId: id,
+        account: (if named: p[3] else: ""), accountable: true, what: "an approval",
+        detail: (if p.len >= 5 and p[4] != "1": "round " & p[4] else: ""),
+        guarantee: "the driver verified this recovers to a configured member — a non-member never reaches the fold",
+        epoch: epoch)
+    of "decline":
+      if p.len < 4 or (id & "/" & p[3]) in seenDecline: continue
+      seenDecline.incl(id & "/" & p[3])
+      result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "decline", intentId: id,
+        account: (if named: p[3] else: ""), accountable: true, what: "a decline",
+        detail: "", guarantee: "sealed to the room's epoch; informational — the threshold is unchanged",
+        epoch: epoch)
+    of "submit":
+      result.add LogProvItem(seq: i, cls: icExternalRead, kind: "submit", intentId: id,
+        accountable: true, what: "submitted outside the room",
+        detail: "", guarantee: "an external read: the submitting member's report of what it sent — the chain's answer arrives as final",
+        epoch: epoch)
+    of "final":
+      result.add LogProvItem(seq: i, cls: icExternalRead, kind: "final", intentId: id,
+        accountable: true, what: "settled outside the room",
+        detail: "", guarantee: "an external read: observed from the chain (R-8), never asserted; graded attested unless proof-checked (F-10)",
+        epoch: epoch)
+    else: discard

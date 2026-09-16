@@ -17,6 +17,7 @@ import ../transport/transport
 import ../crypto/conversation
 import ../crypto/binding
 import ../log/log
+import ./intents   # membershipEvent (the admit as a log entry)
 export log, binding
 
 type
@@ -36,6 +37,9 @@ const
 
 proc toBytes(s: string): seq[byte] = (for c in s: result.add byte(c))
 proc toStr(b: openArray[byte]): string = (for x in b: result.add char(x))
+proc hexOf(b: openArray[byte]): string =
+  const d = "0123456789abcdef"
+  for x in b: result.add d[int(x shr 4)]; result.add d[int(x and 0x0f)]
 
 proc encodeEvent(e: Event): seq[byte] =
   ## Wire form of an event, inside the sealed envelope. JSON is fine here — the
@@ -97,6 +101,8 @@ proc requestJoin*(s: CoordinationSession, binding: LinkStatement) =
   discard s.transport.publish(s.topic, @[FrameJoinRequest] & encodeLink(binding))
 
 proc members*(s: CoordinationSession): seq[Member] = s.crypto.members()
+proc epoch*(s: CoordinationSession): int = s.crypto.epoch()
+  ## The current membership epoch (monotonic; bumps on every admit/removal).
   ## The ADMITTED roster of the current epoch (recipients of the epoch key) —
   ## distinct from `pendingBindings` (join-requests not yet admitted).
 
@@ -120,6 +126,10 @@ proc admit*(s: CoordinationSession, joiner: Member) =
   for frame in s.crypto.admit(joiner):
     discard s.transport.publish(s.topic, @[FrameControl] & frame)
   s.pending = s.pending.filterIt(it.enc != joiner)
+  # Record the transition IN the log (exo-275 / M4): sealed under the NEW epoch, so
+  # the joiner reads its own admission and nothing before it (F-16), and every
+  # member's history + provenance fold shows the re-key from the same log.
+  s.publish(membershipEvent(s.crypto.epoch(), hexOf(toBytes(joiner))))
 
 proc catchUp*(s: CoordinationSession) =
   ## Offline catchup (F-15): pull the store's retained envelopes for the topic and

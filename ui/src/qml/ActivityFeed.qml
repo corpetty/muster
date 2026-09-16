@@ -11,9 +11,10 @@ import Logos.Controls
 // state of its own. Entries arrive parsed through `entries` (coordinate_activity),
 // in causal order, oldest first; the newest is at the bottom, chat-style.
 //
-// Pure-render: the only input is `entries`; there are no signals out. Membership
-// changes (join/admit/re-key) are transport control frames, not log events, so they
-// do not appear here yet — a documented follow-up.
+// Pure-render: the only input is `entries`; there are no signals out. Admits are log
+// events too (the admitting member records the re-key, sealed under the new epoch),
+// so a membership change reads here like any other transition; join-requests carry
+// no authority and stay transport-only.
 //
 // NB (ADR-011): nix build does not evaluate QML; a stray type or Theme key blanks
 // the view. Restricted to Theme keys + the Logos.Controls types Room.qml proves.
@@ -32,6 +33,8 @@ Item {
              : kind === "ready" ? Theme.palette.success
              : kind === "propose" ? Theme.palette.text
              : kind === "submit" ? Theme.palette.textSecondary
+             : kind === "decline" ? Theme.palette.warning
+             : kind === "admit" ? Theme.palette.text
              : Theme.palette.textSecondary;   // approve, and anything new
     }
 
