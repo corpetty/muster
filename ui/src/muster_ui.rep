@@ -155,6 +155,23 @@ class MusterUi
     // act as (your owner address + whether it's a real Safe owner). Lands on
     // roomAccountJson. Ask-then-disclose: called when the composer opens, not on entry.
     SLOT(void loadRoomAccount())
+    // The proposal card's five questions + THIS instance's readiness for one room
+    // intent (coordinate_readiness, exo-002.3): what it will do, what is needed (each
+    // requirement met / missing / unknown with a remedy), what it touches, what will
+    // happen (the full disclosure, store node included), how we agree. Lands on
+    // readinessJson keyed by intent id. Probes the RPC, so the card asks on demand
+    // (when its "What this needs" box opens), not on the message tick.
+    SLOT(void loadReadiness(const QString &intentId))
+    // Decline to take part in a room intent (coordinate_decline): a signed decline
+    // event folded into the intent view — named under a named driver, a count under
+    // an anonymous one. Informational: the threshold is unchanged. Lands on
+    // declineJson {intentId, state, declines} or {error}; intents reload after.
+    SLOT(void declineInRoom(const QString &intentId))
+    // The information-flow view (coordinate_flow, exo-002.5): who could see what,
+    // for every action — {rows:[{seq,kind,intentId,field,to,members,epoch,declared}],
+    // matrix:{observer:[fields]}}. A fold over the sealed log (no RPC), refreshed on
+    // the slower tick. Lands on flowJson.
+    SLOT(void loadFlow())
 
     PROP(QString health="unknown" READONLY)
 
@@ -220,6 +237,17 @@ class MusterUi
     // {state, onchain, txHash} on success, or {error, ...}. The room shows it on the
     // ready card so settling on-chain reports honestly (never a false "landed").
     PROP(QString roomSubmitJson="{}" READONLY)
+    // Readiness per intent (loadReadiness): a JSON object {<intentId>: {intentId,
+    // policy, effect, declared, ready, unknown, items:[{kind,name,scope,status,
+    // detail,remedy}], manifest:{agreement, requirements, discloses, touches}}}.
+    // The card renders its five questions + readiness from its own entry.
+    PROP(QString readinessJson="{}" READONLY)
+    // The outcome of the last decline (declineInRoom): {intentId, state, declines}
+    // or {error}, so the card can say whether the decline folded.
+    PROP(QString declineJson="{}" READONLY)
+    // The room's information flow (loadFlow): {rows, matrix}. The Room renders the
+    // observer matrix + per-action rows; the store node is always present (FS-9).
+    PROP(QString flowJson="{\"rows\":[],\"matrix\":{}}" READONLY)
 
     // The room's coordination policy — its driver — as JSON {policy, threshold,
     // domain, membership}. The view shows which policy governs the room and picks it.

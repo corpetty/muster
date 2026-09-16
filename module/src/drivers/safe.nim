@@ -15,6 +15,7 @@
 import ../hashing/keccak256
 import ../dcbor/dcbor
 import ../drivers/driver
+import ../drivers/manifest
 import ../intents/materialization
 import ../crypto/secp256k1   # Address, Signature65, recoversToOwner
 export secp256k1.Address, secp256k1.Signature65   # part of the Safe API surface
@@ -147,3 +148,28 @@ method identifyContributor*(d: SafeDriver, m: Materialization, c: Contribution):
   const hexd = "0123456789abcdef"
   result = "0x"
   for b in ecrecover(h, sig): (result.add hexd[int(b shr 4)]; result.add hexd[int(b and 0x0F)])
+
+proc addrHex(a: Address): string =
+  const digits = "0123456789abcdef"
+  result = "0x"
+  for b in a:
+    result.add digits[int(b shr 4)]
+    result.add digits[int(b and 0x0f)]
+
+method manifest*(d: SafeDriver, effect: Effect): ActionManifest =
+  ## A Safe execTransaction: needs the chain reachable and an RPC to submit through
+  ## (instance), and a Safe-owner key to contribute (each contributor). It writes the
+  ## Safe's state (nonce + the transfer). What leaves the room: the whole transaction
+  ## (to / value / data) becomes public on-chain, and the signed tx reaches the RPC
+  ## provider BEFORE the mempool — the "named intermediary" the PriFi article warns
+  ## about, named here rather than hidden.
+  let safeId = "safe:" & addrHex(d.safe)
+  ActionManifest(declared: true, agreement: d.describe(),
+    requirements: @[req(rqEnvironment, "chain:" & $d.chainId),
+                    req(rqInfra, "rpc"),
+                    req(rqAuthority, "safe-owner", rsContributor)],
+    discloses: @[row("to", obChainObserver), row("value", obChainObserver),
+                 row("data", obChainObserver), row("payer", obChainObserver),
+                 row("signed-tx", obRpcProvider)],
+    touches: @[touch(safeId, tmWrite), touch(safeId & ":nonce", tmWrite),
+               touch("chain:" & $d.chainId, tmWrite)])

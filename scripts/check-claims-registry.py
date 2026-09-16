@@ -19,6 +19,12 @@ honesty rules in docs/00-vision.md. It can check that the evidence resolves.
   FAIL  an `others-leak` claim does not name both a system and an observer
   FAIL  a `gap` claim has no fix, or a status outside the closed set
   FAIL  a `gap` with status=specified does not carry the spec's lifecycle stage
+  FAIL  a protects/gap claim has no `credibility`, or one outside the closed set
+  FAIL  a protects claim is not `imperative` (a test proves structure, so a
+        protection with a test IS imperative; if it is not, it is a gap)
+  FAIL  a `motivational` or `exposed` claim does not name its `party` (who we
+        rely on not to defect / who can see it) — residual trust must be named,
+        never a score (docs/design/action-manifest.md §2)
   FAIL  a claim references a step that the registry does not define
   FAIL  a lifecycle step carries no claims at all
   WARN  a step is missing a `protects` or a `gap` claim (the two the four
@@ -45,6 +51,7 @@ FURPS = REPO_ROOT / "docs" / "01-furps.md"
 
 KINDS = {"protects", "others-leak", "gap"}
 STATUSES = {"shipped", "specified", "partial", "none"}
+CREDIBILITY = {"imperative", "motivational", "exposed", "not-applicable"}
 
 # FURPS namespaces, longest-prefix first so "FS" wins over "F".
 REQ_ID_RE = re.compile(r"\b(?:FS|F|U|R|P|S)-\d+\b")
@@ -102,6 +109,24 @@ def check(registry: dict, ids: set[str]) -> tuple[list[str], list[str]]:
             failures.append(f"{where}: kind={kind!r} is not one of {sorted(KINDS)}")
         if not claim.get("title") or not claim.get("body"):
             failures.append(f"{where}: every claim needs a title and a body")
+
+        if kind in ("protects", "gap"):
+            cred = claim.get("credibility")
+            if cred not in CREDIBILITY:
+                failures.append(
+                    f"{where}: credibility={cred!r} is not one of {sorted(CREDIBILITY)} "
+                    f"— classify the commitment, never score it"
+                )
+            elif kind == "protects" and cred != "imperative":
+                failures.append(
+                    f"{where}: a protects claim (requirement + test) is imperative by "
+                    f"construction — if it rests on someone's conduct it is a gap"
+                )
+            elif cred in ("motivational", "exposed") and not claim.get("party"):
+                failures.append(
+                    f"{where}: a {cred} claim must name its party — who we rely on "
+                    f"(motivational) or who can see it (exposed)"
+                )
 
         if kind == "protects":
             req = claim.get("requirement")

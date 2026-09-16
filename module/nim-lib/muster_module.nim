@@ -10,7 +10,7 @@
 
 include muster_gen
 
-import std/[json, tables, strutils, os, algorithm, times]
+import std/[json, tables, strutils, os, algorithm, times, sets]
 import ../src/dcbor/dcbor
 import ../src/drivers/driver
 import ../src/drivers/safe
@@ -33,6 +33,11 @@ import ../src/crypto/keystore         # persistent module identity (FS-4)
 import ../src/coordination/session    # the multi-instance coordination flow
 import ../src/coordination/intents     # intent lifecycle = reduce(log) (the multi-party fold)
 import ../src/coordination/invoker     # the execute seam + allowlist/capability gate (P-D2)
+import ../src/coordination/readiness   # the action manifest + this instance's readiness (exo-002.2)
+import ../src/hashing/sha256           # an unlinkable decline nonce under an anonymous driver
+import ../src/log/proof                # exportable, self-verifying log proofs (M4)
+import ../src/coordination/flow        # the information-flow view (M5)
+import ../src/intents/authorization    # muster-issued authorizations for the host hook (M7)
 import ../src/coordination/lp_invoker  # LpInvoker — call the target module over lp_*
 import ../src/coordination/discovery   # discover coordinatable module actions (P-D3)
 import ../src/coordination/contacts    # the address book (aliases for member ids)
@@ -86,6 +91,7 @@ var gDriver = SafeDriver(newDriver("safe", %*{
 # is stamped with. Changing it never re-folds an existing decision, because each
 # intent already carries its own policy. driverFor() is the resolver the folds take.
 var gCoordKind = "safe"
+var gInvoker: Invoker = nil   ## the execute/discovery/readiness seam to other modules, created lazily
 
 proc seedOf(n: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = n)
 proc thrRosterKey(n: byte): Ed25519Pub = encFromSeed(seedOf(n)).identity().ed
@@ -591,7 +597,9 @@ proc musterCoordinateIntents(): string =
                # multi-round (FROST): the round being collected, the total, and the
                # distinct approvals THIS round — so a card shows "round R of N, M of k
                # this round". For single-round drivers rounds == 1 and the UI ignores it.
-               "round": v.round, "rounds": v.rounds, "roundApprovals": v.roundApprovals}
+               "round": v.round, "rounds": v.rounds, "roundApprovals": v.roundApprovals,
+               # who declined to take part (named driver only; a count otherwise, inv 9)
+               "declines": v.declines, "decliners": v.decliners}
     # n = how many could sign (owners / roster), so the card reads "M of N" honestly
     # (e.g. 2 of 3), not "threshold of threshold".
     if drv of SafeDriver: o["n"] = %SafeDriver(drv).owners.len
@@ -627,6 +635,150 @@ proc musterCoordinateIntents(): string =
     o["provenance"] = prov
     arr.add o
   $arr
+
+proc musterCoordinateDecline(intentId: string): string =
+  ## Decline to take part (the card's Deny). Keyed by THIS member so it folds once:
+  ## the encryption identity under a named driver (the same author id messages carry),
+  ## an unlinkable per-event nonce under an anonymous one (invariant 9). Informational —
+  ## the threshold is untouched; dropping is driver policy, not core policy.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  let events = gSession.log.allEvents()
+  if effectJsonOf(events, intentId).len == 0:
+    return $(%*{"error": "unknown-intent", "intentId": intentId})
+  let named = driverForKind(intentPolicyOf(events, intentId)).describe().membership == mmNamed
+  let who = if named: toHex(moduleKeystore().encIdentity().toBytes())
+            else:
+              let seed = toHex(moduleKeystore().encIdentity().toBytes()) & "/" & intentId & "/" & $epochTime()
+              toHex(sha256(seed.toOpenArrayByte(0, seed.high)))
+  gSession.publish(declineEvent(intentId, who))
+  let after = gSession.log.allEvents()
+  var declines = 0
+  for v in reduceIntentViews(after, driverFor):
+    if v.id == intentId: declines = v.declines
+  result = $(%*{"intentId": intentId, "state": intentState(after, driverFor, intentId), "declines": declines})
+  if gLpDebug: stderr.writeLine("MUSTER-LP decline " & result)
+
+proc musterCoordinateProvenance(): string =
+  ## Provenance for EVERY action in the room (M4): the log's lineage, each entry
+  ## classed by the F-20 vocabulary and graded by the guarantee the code enforces.
+  if gSession == nil: return "[]"
+  gSession.poll()
+  var arr = newJArray()
+  for it in logProvenance(gSession.log.allEvents(), driverFor):
+    let alias = (if it.account.len > 0: contactBook().aliasOf(it.account) else: "")
+    arr.add %*{"seq": it.seq, "class": $it.cls, "kind": it.kind, "intentId": it.intentId,
+               "account": it.account, "alias": alias, "accountable": it.accountable,
+               "what": it.what, "detail": it.detail, "guarantee": it.guarantee, "epoch": it.epoch}
+  $arr
+
+proc musterCoordinateProof(): string =
+  ## An exportable, self-verifying proof of the room's log (M4). Epoch-scoped: the
+  ## range is the founding epoch to the current one; only holders can read it.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  var epochTo = 0
+  try: epochTo = gSession.epoch()
+  except CatchableError: discard
+  $buildProof(gSession.log.allEvents(), 0, epochTo).toJson()
+
+proc musterCoordinateVerifyProof(proofJson: string): string =
+  ## Refuse-on-mismatch verification of a log proof — pure, reads only the proof.
+  var p: LogProof
+  try: p = proofFromJson(parseJson(proofJson))
+  except CatchableError as e:
+    return $(%*{"ok": false, "reason": "not a proof: " & e.msg})
+  let (ok, reason) = verifyProof(p)
+  $(%*{"ok": ok, "reason": reason, "proofDigest": (if ok: p.proofDigest() else: ""),
+       "events": p.events.len})
+
+proc musterCoordinateFlow(): string =
+  ## Who could see what, per action (M5). Founders = the current roster minus every
+  ## joiner the log admits — the log names admits, not the founding set.
+  if gSession == nil: return $(%*{"rows": [], "matrix": {}})
+  gSession.poll()
+  let events = gSession.log.allEvents()
+  var admitted = initHashSet[string]()
+  for e in events:
+    let p = e.key.split('/')
+    if p.len >= 4 and p[0] == "membership" and p[2] == "admit": admitted.incl p[3]
+  var founders: seq[string]
+  for mem in gSession.members():
+    let hexId = toHex(mem.toBytes())
+    if hexId notin admitted: founders.add hexId
+  let rows = reduceFlow(events, driverFor, founders)
+  result = $(%*{"rows": rows.toJson(), "matrix": rows.observerMatrix()})
+  if gLpDebug: stderr.writeLine("MUSTER-LP flow " & result)
+
+proc musterCoordinateAuthorization(intentId: string): string =
+  ## The grant a host hook checks before dispatch (M7). Only for an EXECUTABLE
+  ## intent: the room's agreement is the permission; nothing is authorized before it.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  let events = gSession.log.allEvents()
+  let effectJson = effectJsonOf(events, intentId)
+  if effectJson.len == 0: return $(%*{"error": "unknown-intent", "intentId": intentId})
+  let st = intentState(events, driverFor, intentId)
+  if st != "executable":
+    return $(%*{"error": "not-executable", "intentId": intentId, "state": st})
+  let policy = intentPolicyOf(events, intentId)
+  let folded = reduceIntents(events, driverFor)
+  let root = folded[intentId].materialization.bytes
+  let environment = (if policy in ["safe", "eip191"]: "chain:" & $gDriver.chainId else: "room")
+  let account = (if policy == "safe": "safe:" & toHex(gDriver.safe) else: "room")
+  let a = issueAuthorization(moduleKeystore(), intentId, capabilityOf(policy, effectJson),
+                             environment, account, root, uint64(epochTime()) + 600)
+  result = $a.toJson()
+  if gLpDebug: stderr.writeLine("MUSTER-LP authorization " & result)
+
+proc musterCoordinateCheckAuthorization(authJson: string): string =
+  ## Pure verification of a grant's own integrity (issuer recovery, slot, expiry).
+  var a: Authorization
+  try: a = authorizationFromJson(parseJson(authJson))
+  except CatchableError as e:
+    return $(%*{"ok": false, "reason": "not an authorization: " & e.msg})
+  let r = checkAuthorization(a, uint64(epochTime()))
+  $(%*{"ok": r.ok, "reason": r.reason, "issuer": (if r.ok: "0x" & toHex(r.issuer) else: ""),
+       "capability": a.capability, "materializationRoot": a.toJson()["materializationRoot"],
+       "expiry": a.context.expiry})
+
+proc musterCoordinateReadiness(intentId: string): string =
+  ## The proposal card's five questions for ONE room intent — what will it do (the
+  ## effect), what is needed (requirements), what will it touch, what will happen (the
+  ## full disclosure, baseline included), how we agree (the driver's policy) — plus
+  ## THIS instance's readiness to take part: every requirement graded met / missing /
+  ## unknown with the remedy the card offers (docs/design/action-manifest.md,
+  ## exo-002.2). Graded against this instance only: whether YOUR key is a recognized
+  ## signer, never who else is (invariant 9). unknown is first-class — a probe this
+  ## host cannot run reports unknown, never a silent met. The module names remedies;
+  ## the host performs them (invariant 3: nothing is installed or fetched here).
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  let events = gSession.log.allEvents()
+  let effectJson = effectJsonOf(events, intentId)
+  if effectJson.len == 0: return $(%*{"error": "unknown-intent", "intentId": intentId})
+  let policy = intentPolicyOf(events, intentId)
+  let drv = driverForKind(policy)
+  let effect = effectFromJson(effectJson)
+  let m = drv.manifest(effect)
+  # The host's facts → the probe. The Safe owner set is the driver's (it recognizes
+  # this instance too, see driverForKind); the roster is the membership fold.
+  var facts = HostFacts(rpcUrl: gRpcUrl, expectedChainId: gDriver.chainId.int,
+                        myAddress: myAddress(), myEd: moduleKeystore().encIdentity().ed,
+                        safeOwners: gDriver.owners, signers: gDriver.owners,
+                        roster: currentRoster())
+  if drv of SafeDriver: facts.safeOwners = SafeDriver(drv).owners
+  if gInvoker == nil: gInvoker = newLpInvoker("muster_module")
+  facts.invoker = gInvoker
+  let r = assessReadiness(m, probeFromFacts(facts))
+  var o = r.toJson()
+  o["intentId"] = %intentId
+  o["policy"] = %policy
+  o["manifest"] = m.toJson()
+  try: o["effect"] = parseJson(effectJson)
+  except CatchableError: o["effect"] = %effectJson
+  result = $o
+  if gLpDebug: stderr.writeLine("MUSTER-LP readiness " & result)
 
 proc musterCoordinateActivity(): string =
   ## The room's coordination history as reduce(log): every state transition that
@@ -814,7 +966,6 @@ proc musterCoordinateSubmit(intentId: string): string =
 # rejects an unauthorized call, surfaced as a refusal — never a false success). Start
 # CLOSED: the allowlist is empty until an operator opts actions in via
 # MUSTER_INVOKE_ALLOWLIST (JSON [{"module","method","finalityEvent"}]).
-var gInvoker: Invoker = nil
 var gInvokeAllowlist: Allowlist = @[]
 var gAllowlistLoaded = false
 

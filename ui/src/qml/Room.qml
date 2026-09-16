@@ -50,12 +50,33 @@ Item {
         try { return JSON.parse(backend ? backend.membersJson : "[]"); }
         catch (e) { return []; }
     }
+    // This instance's own encryption identity (the roster row flagged self) — the id
+    // a decline is keyed by under a named driver, so the card knows "you declined".
+    readonly property string myIdentity: {
+        var arr = room.members;
+        for (var i = 0; i < arr.length; ++i)
+            if (arr[i] && arr[i].self) return String(arr[i].identity || "");
+        return "";
+    }
     // Join-requests not yet admitted: [{ identity, bindsOwner }]. The scope panel
     // lists these with an Admit action (the membership handshake).
     readonly property var pending: {
         try { return JSON.parse(backend ? backend.pendingJson : "[]"); }
         catch (e) { return []; }
     }
+    // Readiness per intent (coordinate_readiness), keyed by id — loaded on demand when
+    // a card's "What this needs" box opens (exo-002.3).
+    readonly property var readinessMap: {
+        try { return JSON.parse(backend ? backend.readinessJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    function readinessFor(id) {
+        var m = room.readinessMap;
+        return (m && m[String(id)]) ? m[String(id)] : null;
+    }
+    // A remedy that lives in Settings (repoint the RPC): the shell switches views.
+    signal settingsRequested()
+
     readonly property var intents: {
         try { return JSON.parse(backend ? backend.intentsJson : "[]"); }
         catch (e) { return []; }
@@ -63,6 +84,11 @@ Item {
     // The room's coordination history (coordinate_activity): a plain-language
     // narrative of every state transition, in causal order, folded from the SAME
     // log the cards come from. The education seam — how the room got here.
+    // The information flow (coordinate_flow): who could see what, per action.
+    readonly property var flow: {
+        try { return JSON.parse(backend ? backend.flowJson : "{}"); }
+        catch (e) { return ({ rows: [], matrix: {} }); }
+    }
     readonly property var activity: {
         try { return JSON.parse(backend ? backend.activityJson : "[]"); }
         catch (e) { return []; }
@@ -210,7 +236,14 @@ Item {
             rounds: Number((it && it.rounds) || 1),
             round: Number((it && it.round) || 1),
             roundApprovals: Number((it && it.roundApprovals) || 0),
-            policy: (it && it.policy) ? String(it.policy) : ""
+            policy: (it && it.policy) ? String(it.policy) : "",
+            // who declined to take part (names only under a named driver, inv 9)
+            declines: Number((it && it.declines) || 0),
+            decliners: (it && it.decliners) ? it.decliners : [],
+            declinedByMe: !!(it && it.decliners && room.myIdentity
+                             && it.decliners.indexOf(room.myIdentity) >= 0),
+            // the five questions + your readiness, once asked for
+            readiness: room.readinessFor(it && it.id)
         };
     }
 
@@ -438,6 +471,9 @@ Item {
                                 if (room.backend && msg.liveIntent)
                                     room.backend.contributeInRoom(String(msg.liveIntent.id || ""), "");
                             }
+                            onNeeds: if (room.backend && msg.liveIntent) room.backend.loadReadiness(String(msg.liveIntent.id || ""))
+                            onDeny: if (room.backend && msg.liveIntent) room.backend.declineInRoom(String(msg.liveIntent.id || ""))
+                            onOpenSettings: room.settingsRequested()
                         }
 
                         // Advanced: paste a signature produced elsewhere (a Safe owner on
@@ -1302,6 +1338,20 @@ Item {
                 color: Theme.palette.borderSubtle
             }
 
+            // Who can see what — the information-flow view folded from the same log
+            // (exo-002.5). The store node is always listed (FS-9).
+            FlowView {
+                objectName: "flowView"
+                Layout.fillWidth: true
+                flow: room.flow
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+                color: Theme.palette.borderSubtle
+            }
+
             ScopePanel {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -1342,6 +1392,10 @@ Item {
         interval: 5000
         running: room.joined
         repeat: true
-        onTriggered: if (room.backend) room.backend.loadConnectivity();
+        onTriggered: {
+            if (!room.backend) return;
+            room.backend.loadConnectivity();
+            room.backend.loadFlow();   // a pure fold — who could see what, refreshed with the slow tick
+        }
     }
 }

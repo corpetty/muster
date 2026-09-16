@@ -13,6 +13,7 @@
 import ../crypto/curve25519
 import ../intents/materialization
 import ./driver
+import ./manifest
 
 type
   ThresholdDriver* = ref object of Driver
@@ -60,3 +61,9 @@ method identifyContributor*(d: ThresholdDriver, m: Materialization, c: Contribut
       for b in pk: (result.add hexd[int(b shr 4)]; result.add hexd[int(b and 0x0F)])
       return
   ""
+
+method manifest*(d: ThresholdDriver, effect: Effect): ActionManifest =
+  ## A signed group attestation: needs a roster key to contribute, settles nothing,
+  ## alters nothing outside the room. Nothing leaves the boundary beyond the baseline.
+  ActionManifest(declared: true, agreement: d.describe(),
+                 requirements: @[req(rqAuthority, "roster-member", rsContributor)])

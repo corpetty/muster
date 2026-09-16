@@ -17,6 +17,7 @@
 ##     note is discoverable only after `sync`.
 
 import std/[json, tables, strutils]
+import ../intents/disclosure   # the action-manifest rows (exo-002.1)
 import ./types
 
 type
@@ -61,6 +62,15 @@ proc disclosureOf*(f: TransferForm): Disclosure =
   of tfShield:   Disclosure(amount: true,  payer: true,  payee: false)
   of tfDeshield: Disclosure(amount: true,  payer: false, payee: true)
   of tfPrivate:  Disclosure(amount: false, payer: false, payee: false)
+
+proc toDisclosureRows*(d: Disclosure): seq[DisclosureRow] =
+  ## The LEZ square as action-manifest rows (docs/design/action-manifest.md): each
+  ## field this rail puts on the public record is a row to the chain observer. The
+  ## first real per-action disclosure — a room-coordinated LEZ transfer (Mode B)
+  ## declares exactly these beyond the baseline.
+  if d.amount: result.add row("amount", obChainObserver)
+  if d.payer:  result.add row("payer",  obChainObserver)
+  if d.payee:  result.add row("payee",  obChainObserver)
 
 method createAccount*(c: LezCore, kind: LezAccountKind): LezAccount {.base, gcsafe.} =
   raise newException(WalletError, "LezCore.createAccount is abstract")

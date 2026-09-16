@@ -1,7 +1,8 @@
 # module/tests
 
 Most probes/tests run with bare `nim r -d:release tests/<name>.nim` (pure Nim,
-no external deps) — this is how the exophial spec oracles under `tests/probes/`
+no external deps; `manifest_test` and `log_proof_test` too). `decline_test` / `provenance_all_test` / `flow_test` are pure Nim but link libsodium
+(its import closure reaches curve25519) — run it with the `$SODIUM` flag below — this is how the exophial spec oracles under `tests/probes/`
 are graded.
 
 **Exception — the wallet tests need the stint closure on the Nim path** (the same
@@ -56,7 +57,7 @@ nim r -d:release --threads:on $W3 $SECP $STINT --path:$D/nim-eth tests/wallet_rp
 **Exception — anything importing `src/crypto/secp256k1.nim` or `src/drivers/safe.nim`
 uses `nim-secp256k1` on the path** (`secp256k1_test`, `safe_test`, `safe_collect_test`,
 `binding_test`, `conformance_test` — the driver conformance suite run against stub +
-Safe — and the crypto/coordination tests). We no longer link a system
+Safe — `readiness_test` (the action-manifest readiness probe against a real SafeDriver, exo-002.2), `authorization_test` (muster-issued grants, exo-002.7) and the crypto/coordination tests). We no longer link a system
 libsecp256k1 — `nim-secp256k1` vendors and compiles its own C (clone with
 `--recurse-submodules`). Its own deps are stew + results + nimcrypto:
 

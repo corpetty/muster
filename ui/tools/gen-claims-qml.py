@@ -34,10 +34,11 @@ OUT = REPO_ROOT / "ui" / "src" / "qml" / "ClaimsRegistry.qml"
 
 # User-facing prose is wrapped in qsTr() for i18n (matching demo/muster-ui's
 # VisibilityClaims.qml); identifiers and evidence pointers are plain strings.
-TRANSLATED = {"title", "summary", "body", "fix"}
+TRANSLATED = {"title", "summary", "body", "fix", "party"}
 # Field emission order, so the generated file is stable across runs.
 CLAIM_FIELDS = ["step", "kind", "title", "body", "requirement", "test",
-                "system", "observer", "fix", "status", "spec_stage"]
+                "system", "observer", "fix", "status", "spec_stage",
+                "credibility", "party"]
 
 HEADER = """\
 // GENERATED — do not edit. Source: contracts/claims/registry.json
@@ -46,7 +47,9 @@ HEADER = """\
 // The ADR-012 claims registry as a QML value object: the walkthrough's four
 // questions as data, not prose in a delegate. `kind` is closed
 // (protects | others-leak | gap); a gap's `status` is closed
-// (shipped | specified | partial | none). Every field here was resolved against
+// (shipped | specified | partial | none); a protects/gap claim's `credibility`
+// is closed (imperative | motivational | exposed | not-applicable) and names its
+// `party` when someone's conduct — or view — is what remains. Every field here was resolved against
 // a real requirement and a real test by scripts/check-claims-registry.py before
 // it reached this file — an empty field would have failed that gate, where prose
 // in a view would have read fine and been wrong.

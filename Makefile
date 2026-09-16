@@ -62,7 +62,11 @@ build:
 	@# path), so a lock from an earlier session goes stale as the module evolves and
 	@# `make run` silently launches an OLD build. Relock the local muster_module to the
 	@# repo's current state first, so `make run` always reflects your module edits.
-	cd $(UI) && nix flake update muster_module $(CACHE) 2>/dev/null || true
+	@# The relock is REFUSED while the git tree is dirty (a git+file input cannot be
+	@# locked from uncommitted state) — say so instead of silently building the
+	@# previously locked module rev, which makes `make run` launch stale module code.
+	@cd $(UI) && nix flake update muster_module $(CACHE) 2>&1 | grep -q "not writing lock file" \
+	  && echo "WARN: muster_module NOT relocked (uncommitted changes in the git tree) — the runner builds the last COMMITTED module rev; commit first to pick up module edits" || true
 	cd $(UI) && nix build 'path:.#runner' $(CACHE) --out-link $(CURDIR)/.run/runner
 
 # nix run resolves apps.default (the standalone runner), NOT packages.default
