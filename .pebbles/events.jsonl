@@ -835,3 +835,5 @@
 {"type":"rename","timestamp":"2026-09-16T16:54:12.14099711Z","issue_id":"exo-5be","payload":{"new_id":"exo-45e.9"}}
 {"type":"dep_add","timestamp":"2026-09-16T16:54:12.14099711Z","issue_id":"exo-45e.9","payload":{"dep_type":"parent-child","depends_on":"exo-45e"}}
 {"type":"status_update","timestamp":"2026-09-16T16:54:12.17900734Z","issue_id":"exo-45e.9","payload":{"status":"in_progress"}}
+{"type":"comment","timestamp":"2026-09-16T16:57:14.528216915Z","issue_id":"exo-5be","payload":{"body":"Core LANDED + build-verified (PR opened). invoke.manifest declares a counterparty rqAddress slot bound to the effect's named counterparty field; generic (module-blind), opt-in per effect. lez_modeb_test 3/3 (manifest slot; plain invoke has none; offers fills from a shielded LEZ key-node, s1); conformance 9/9; module .lgx builds. Remaining (separate follow-on, K6 UI): the request-first composer for a lez transfer + the live shielded settle."}}
+{"type":"close","timestamp":"2026-09-16T16:57:14.567099174Z","issue_id":"exo-45e.9","payload":{}}
