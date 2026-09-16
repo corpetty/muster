@@ -436,6 +436,34 @@ void MusterUiBackend::loadRoomAccount()
     setRoomAccountJson(modules().muster_module.coordinate_account());
 }
 
+void MusterUiBackend::loadReadiness(const QString &intentId)
+{
+    // coordinate_readiness → the card's five questions for ONE intent plus this
+    // instance's readiness (docs/design/action-manifest.md, exo-002.3): every manifest
+    // requirement graded met / missing / unknown with a remedy, the full disclosure
+    // (baseline store-node rows included), touches, and the agreement policy. Kept
+    // per intent in a JSON object so several open cards each read their own entry.
+    // The module names remedies; performing them (install, configure) is the host's.
+    const QString r = modules().muster_module.coordinate_readiness(intentId);
+    QJsonObject all = QJsonDocument::fromJson(readinessJson().toUtf8()).object();
+    const QJsonDocument one = QJsonDocument::fromJson(r.toUtf8());
+    all.insert(intentId, one.isObject() ? QJsonValue(one.object())
+                                        : QJsonValue(QJsonObject{{"error", r}}));
+    setReadinessJson(QString::fromUtf8(QJsonDocument(all).toJson(QJsonDocument::Compact)));
+}
+
+void MusterUiBackend::declineInRoom(const QString &intentId)
+{
+    // coordinate_decline → decline to take part: a decline event keyed by this member
+    // folds into the intent view (named under a named driver, a count otherwise).
+    // Informational — the threshold is unchanged. Re-read the intents so the room
+    // converges on the decline count.
+    const QString r = modules().muster_module.coordinate_decline(intentId);
+    qInfo() << "[muster_ui] coordinate_decline" << intentId << "->" << r;
+    setDeclineJson(r);
+    loadIntents();
+}
+
 void MusterUiBackend::setPolicy(const QString &kind)
 {
     // coordinate_set_policy → choose the room's driver (safe | threshold). The same

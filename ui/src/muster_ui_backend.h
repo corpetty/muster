@@ -61,6 +61,8 @@ public:
     void executeInRoom(const QString &intentId) override;
     void loadConnectivity() override;
     void loadRoomAccount() override;
+    void loadReadiness(const QString &intentId) override;
+    void declineInRoom(const QString &intentId) override;
     void setPolicy(const QString &kind) override;
     void loadPolicy() override;
 

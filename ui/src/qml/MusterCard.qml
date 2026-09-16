@@ -116,6 +116,60 @@ Rectangle {
     // Actions belong to the reader, and the thread decides what each does. The
     // card only says which button was pressed.
     signal approve()
+    // "What this needs" (exo-002.3): the card asks the room to load this intent's
+    // readiness on first open (it probes the RPC, so it is on-demand, never on the tick).
+    signal needs()
+    // Decline to take part — informational, the threshold is unchanged.
+    signal deny()
+    // A remedy that lives in Settings (an RPC to configure / repoint).
+    signal openSettings()
+    property bool needsOpen: false
+    readonly property var readiness: (cardRoot.card && cardRoot.card.readiness) ? cardRoot.card.readiness : null
+    readonly property int declines: cardRoot.card ? Number(cardRoot.card.declines || 0) : 0
+    readonly property var decliners: (cardRoot.card && cardRoot.card.decliners) ? cardRoot.card.decliners : []
+    readonly property bool declinedByMe: !!(cardRoot.card && cardRoot.card.declinedByMe)
+
+    // The disclosure rows grouped by observer class, in a fixed honest order — the
+    // room first, then everything OUTSIDE the boundary (store node, RPC, chain, module).
+    function disclosureGroups() {
+        var r = cardRoot.readiness;
+        if (!r || !r.manifest || !r.manifest.discloses) return [];
+        var order = ["room-member", "store-node", "rpc-provider", "chain-observer", "target-module"];
+        var label = { "room-member": qsTr("the room"), "store-node": qsTr("the store node"),
+                      "rpc-provider": qsTr("your RPC provider"), "chain-observer": qsTr("anyone reading the chain"),
+                      "target-module": qsTr("the module it calls") };
+        var groups = {};
+        for (var i = 0; i < r.manifest.discloses.length; ++i) {
+            var d = r.manifest.discloses[i];
+            (groups[d.to] = groups[d.to] || []).push(String(d.field));
+        }
+        var out = [];
+        for (var k = 0; k < order.length; ++k)
+            if (groups[order[k]]) out.push({ to: order[k], label: label[order[k]] || order[k], fields: groups[order[k]].join(", ") });
+        return out;
+    }
+    function agreementLine() {
+        var r = cardRoot.readiness;
+        if (!r || !r.manifest || !r.manifest.agreement) return "";
+        var a = r.manifest.agreement;
+        var s = qsTr("%1 of the %2 signers").arg(a.threshold).arg(a.membership === "named" ? qsTr("named") : qsTr("anonymous"));
+        if (Number(a.rounds || 1) > 1) s += qsTr(", over %1 rounds").arg(a.rounds);
+        s += a.finality === "external" ? qsTr(" · settles outside the room") : qsTr(" · final in the room");
+        return s;
+    }
+    function readinessSummary() {
+        var r = cardRoot.readiness;
+        if (!r) return "";
+        if (r.error) return qsTr("could not check: %1").arg(String(r.error));
+        if (!r.declared) return qsTr("this policy has not declared what it needs — nothing is guessed");
+        if (r.ready) return qsTr("✓ you have everything this needs");
+        var missing = 0;
+        for (var i = 0; i < (r.items || []).length; ++i) if (r.items[i].status === "missing") ++missing;
+        var parts = [];
+        if (missing > 0) parts.push(qsTr("%1 missing").arg(missing));
+        if (Number(r.unknown || 0) > 0) parts.push(qsTr("%1 unknown").arg(r.unknown));
+        return parts.join(" · ");
+    }
     signal shareAddress()
 
     readonly property string kind: cardRoot.card ? String(cardRoot.card.kind || "") : ""
@@ -864,6 +918,177 @@ Rectangle {
             }
         }
 
+        // ── what this needs: the five questions + YOUR readiness (exo-002.3) ──
+        // What will it do (the card above), what is needed (each requirement met /
+        // missing / unknown, with the remedy), what will it touch, what will happen
+        // (the full disclosure — the store node included, FS-9), how we agree. All
+        // from coordinate_readiness; unknown and undeclared are shown as such.
+        LogosText {
+            objectName: "cardDeclined"
+            visible: cardRoot.kind === "intent-propose" && cardRoot.declines > 0
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: cardRoot.decliners.length > 0
+                ? qsTr("%1 declined: %2").arg(cardRoot.declines).arg(cardRoot.decliners.map(function (d) {
+                      var x = String(d); return x.length > 12 ? x.slice(0, 6) + "…" + x.slice(-4) : x; }).join(", "))
+                : qsTr("%1 declined to take part").arg(cardRoot.declines)
+            color: Theme.palette.warning
+            font.pixelSize: Theme.typography.badgeText
+        }
+
+        Rectangle {
+            objectName: "needsBox"
+            visible: cardRoot.kind === "intent-propose"
+            Layout.fillWidth: true
+            Layout.topMargin: Theme.spacing.tiny
+            implicitHeight: needsCol.implicitHeight + 2 * Theme.spacing.small
+            radius: Theme.spacing.radiusSmall
+            color: Theme.palette.surfaceRecessed
+            border.width: 1
+            border.color: (cardRoot.readiness && cardRoot.readiness.ready) ? Theme.palette.success
+                        : (cardRoot.readiness && cardRoot.readiness.declared === false) ? Theme.palette.warning
+                        : Theme.palette.borderSubtle
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    cardRoot.needsOpen = !cardRoot.needsOpen;
+                    if (cardRoot.needsOpen && !cardRoot.readiness) cardRoot.needs();
+                }
+            }
+
+            ColumnLayout {
+                id: needsCol
+                anchors.fill: parent
+                anchors.margins: Theme.spacing.small
+                spacing: Theme.spacing.tiny
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+                    LogosText {
+                        objectName: "needsHeader"
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: cardRoot.readiness ? qsTr("What this needs — %1").arg(cardRoot.readinessSummary())
+                                                 : qsTr("What this needs")
+                        color: (cardRoot.readiness && cardRoot.readiness.ready) ? Theme.palette.success : Theme.palette.textSecondary
+                        font.pixelSize: Theme.typography.secondaryText
+                        font.weight: Theme.typography.weightMedium
+                    }
+                    LogosText {
+                        text: cardRoot.needsOpen ? "−" : "+"
+                        color: Theme.palette.textSecondary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.secondaryText
+                    }
+                }
+
+                LogosText {
+                    visible: cardRoot.needsOpen && !cardRoot.readiness
+                    text: qsTr("checking with the module…")
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: Theme.typography.badgeText
+                }
+
+                // needs: one row per requirement — status, what, detail, remedy.
+                Repeater {
+                    model: (cardRoot.needsOpen && cardRoot.readiness && cardRoot.readiness.items) ? cardRoot.readiness.items : []
+                    delegate: ColumnLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: 0
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Theme.spacing.small
+                            LogosText {
+                                objectName: "needStatus_" + String(modelData.kind) + "_" + String(modelData.name)
+                                text: modelData.status === "met" ? "✓" : modelData.status === "missing" ? "✗" : "?"
+                                color: modelData.status === "met" ? Theme.palette.success
+                                     : modelData.status === "missing" ? Theme.palette.warning : Theme.palette.textTertiary
+                                font.family: Theme.typography.mono
+                                font.pixelSize: Theme.typography.secondaryText
+                            }
+                            LogosText {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: String(modelData.kind) + ": " + String(modelData.name)
+                                    + (modelData.scope === "contributor" ? qsTr(" (each signer)") : "")
+                                    + (modelData.detail ? " — " + String(modelData.detail) : "")
+                                color: Theme.palette.text
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+                        }
+                        RowLayout {
+                            visible: !!modelData.remedy
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Theme.spacing.medium
+                            spacing: Theme.spacing.small
+                            LogosText {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: (modelData.kind === "module" ? qsTr("Install: ") : qsTr("To fix: ")) + String(modelData.remedy || "")
+                                color: Theme.palette.textSecondary
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+                            LogosButton {
+                                objectName: "needRemedy_" + String(modelData.kind)
+                                visible: modelData.kind === "infra" || modelData.kind === "environment"
+                                text: qsTr("Open settings")
+                                variant: LogosButton.Variant.Secondary
+                                onClicked: cardRoot.openSettings()
+                            }
+                        }
+                    }
+                }
+
+                // touches
+                LogosText {
+                    visible: cardRoot.needsOpen && cardRoot.readiness && cardRoot.readiness.manifest
+                             && cardRoot.readiness.manifest.touches && cardRoot.readiness.manifest.touches.length > 0
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: visible ? qsTr("Touches: ") + cardRoot.readiness.manifest.touches.map(function (t) {
+                              return String(t.target) + " (" + String(t.mode) + ")"; }).join(", ") : ""
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: Theme.typography.badgeText
+                }
+
+                // what will happen: the disclosure, grouped by observer, outside-the-room included
+                LogosText {
+                    visible: cardRoot.needsOpen && cardRoot.readiness && cardRoot.readiness.declared !== false
+                    text: qsTr("Who will see what:")
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: Theme.typography.badgeText
+                    font.weight: Theme.typography.weightMedium
+                }
+                Repeater {
+                    model: cardRoot.needsOpen ? cardRoot.disclosureGroups() : []
+                    delegate: LogosText {
+                        required property var modelData
+                        objectName: "disclose_" + String(modelData.to)
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Theme.spacing.medium
+                        wrapMode: Text.WordWrap
+                        text: String(modelData.label) + ": " + String(modelData.fields)
+                        color: modelData.to === "room-member" ? Theme.palette.textSecondary : Theme.palette.warning
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                }
+
+                // how we agree
+                LogosText {
+                    visible: cardRoot.needsOpen && cardRoot.agreementLine().length > 0
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: qsTr("Agreement: ") + cardRoot.agreementLine()
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: Theme.typography.badgeText
+                }
+            }
+        }
+
         // ── actions ────────────────────────────────────────────────────────
         // address-request: the reader answers with an address.
         LogosButton {
@@ -888,6 +1113,21 @@ Rectangle {
             Layout.fillWidth: true
             text: qsTr("Approve")
             onClicked: cardRoot.approve()
+        }
+
+        // Deny: decline to take part while it still needs signers. Informational —
+        // the threshold is unchanged; the room sees who is out (named driver) or how
+        // many (anonymous). One per member; folds once.
+        LogosButton {
+            objectName: "cardDeny"
+            visible: cardRoot.kind === "intent-propose"
+                && !(cardRoot.card && cardRoot.card.approvedByMe)
+                && !cardRoot.declinedByMe
+                && !cardRoot.ready
+            Layout.fillWidth: true
+            text: qsTr("Deny")
+            variant: LogosButton.Variant.Secondary
+            onClicked: cardRoot.deny()
         }
     }
 }

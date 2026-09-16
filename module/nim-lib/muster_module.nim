@@ -34,6 +34,7 @@ import ../src/coordination/session    # the multi-instance coordination flow
 import ../src/coordination/intents     # intent lifecycle = reduce(log) (the multi-party fold)
 import ../src/coordination/invoker     # the execute seam + allowlist/capability gate (P-D2)
 import ../src/coordination/readiness   # the action manifest + this instance's readiness (exo-002.2)
+import ../src/hashing/sha256           # an unlinkable decline nonce under an anonymous driver
 import ../src/coordination/lp_invoker  # LpInvoker — call the target module over lp_*
 import ../src/coordination/discovery   # discover coordinatable module actions (P-D3)
 import ../src/coordination/contacts    # the address book (aliases for member ids)
@@ -593,7 +594,9 @@ proc musterCoordinateIntents(): string =
                # multi-round (FROST): the round being collected, the total, and the
                # distinct approvals THIS round — so a card shows "round R of N, M of k
                # this round". For single-round drivers rounds == 1 and the UI ignores it.
-               "round": v.round, "rounds": v.rounds, "roundApprovals": v.roundApprovals}
+               "round": v.round, "rounds": v.rounds, "roundApprovals": v.roundApprovals,
+               # who declined to take part (named driver only; a count otherwise, inv 9)
+               "declines": v.declines, "decliners": v.decliners}
     # n = how many could sign (owners / roster), so the card reads "M of N" honestly
     # (e.g. 2 of 3), not "threshold of threshold".
     if drv of SafeDriver: o["n"] = %SafeDriver(drv).owners.len
@@ -629,6 +632,28 @@ proc musterCoordinateIntents(): string =
     o["provenance"] = prov
     arr.add o
   $arr
+
+proc musterCoordinateDecline(intentId: string): string =
+  ## Decline to take part (the card's Deny). Keyed by THIS member so it folds once:
+  ## the encryption identity under a named driver (the same author id messages carry),
+  ## an unlinkable per-event nonce under an anonymous one (invariant 9). Informational —
+  ## the threshold is untouched; dropping is driver policy, not core policy.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  let events = gSession.log.allEvents()
+  if effectJsonOf(events, intentId).len == 0:
+    return $(%*{"error": "unknown-intent", "intentId": intentId})
+  let named = driverForKind(intentPolicyOf(events, intentId)).describe().membership == mmNamed
+  let who = if named: toHex(moduleKeystore().encIdentity().toBytes())
+            else:
+              let seed = toHex(moduleKeystore().encIdentity().toBytes()) & "/" & intentId & "/" & $epochTime()
+              toHex(sha256(seed.toOpenArrayByte(0, seed.high)))
+  gSession.publish(declineEvent(intentId, who))
+  let after = gSession.log.allEvents()
+  var declines = 0
+  for v in reduceIntentViews(after, driverFor):
+    if v.id == intentId: declines = v.declines
+  $(%*{"intentId": intentId, "state": intentState(after, driverFor, intentId), "declines": declines})
 
 proc musterCoordinateReadiness(intentId: string): string =
   ## The proposal card's five questions for ONE room intent — what will it do (the

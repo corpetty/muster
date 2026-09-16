@@ -145,6 +145,14 @@ proc contributeEvent*(intentId, contributor, signatureHex: string,
 proc submitEvent*(intentId: string, parents: seq[EventId] = @[]): Event =
   Event(parents: parents, key: "intent/" & intentId & "/submit", value: "1")
 
+proc declineEvent*(intentId, who: string, parents: seq[EventId] = @[]): Event =
+  ## A member declines to take part in an intent (the card's Deny, exo-002.3). It is
+  ## informational: it never blocks the driver's threshold — whether a decline by a
+  ## required signer should DROP the intent is driver policy, not core policy. `who`
+  ## dedups one decline per member; under a named driver the view names it, under an
+  ## anonymous one the caller passes an unlinkable nonce and the view only counts.
+  Event(parents: parents, key: "intent/" & intentId & "/decline/" & who, value: "1")
+
 proc finalEvent*(intentId: string, parents: seq[EventId] = @[]): Event =
   ## Published once the on-chain execution is observed final (R-8) — folds the intent
   ## to `final` so every member's card converges on "paid", not just "submitted".
@@ -346,6 +354,8 @@ type IntentView* = object
   roundApprovals*: int    ## distinct contributors folded in THE CURRENT round — the honest
                           ## "M of N this round" for a multi-round driver; equals `approvals`
                           ## when rounds == 1
+  declines*: int          ## distinct members who declined to take part (informational)
+  decliners*: seq[string] ## who declined — ONLY under a named driver; empty under anonymous (inv 9)
 
 proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentView] =
   ## Deterministic (sorted by id), so two instances render the identical list from
@@ -355,23 +365,33 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
   let intents = reduceIntents(events, driverFor)
   var approvals = initTable[string, HashSet[string]]()            # <id> -> distinct contributors (any round)
   var roundApp = initTable[string, HashSet[string]]()            # "<id>/<round>" -> contributors that round
+  var declined = initTable[string, HashSet[string]]()            # <id> -> distinct decliners
   for e in events:
     let p = e.key.split('/')
     if p.len >= 4 and p[0] == "intent" and p[2] == "sig":
       approvals.mgetOrPut(p[1], initHashSet[string]()).incl(p[3])
       let rnd = (if p.len >= 5: p[4] else: "1")
       roundApp.mgetOrPut(p[1] & "/" & rnd, initHashSet[string]()).incl(p[3])
+    elif p.len >= 4 and p[0] == "intent" and p[2] == "decline":
+      declined.mgetOrPut(p[1], initHashSet[string]()).incl(p[3])
   for id, it in intents:
     let pol = intentPolicyOf(events, id)
+    let desc = driverFor(pol).describe()
     let curRound = it.collection.round
+    var decliners: seq[string]
+    if desc.membership == mmNamed:
+      for w in declined.getOrDefault(id, initHashSet[string]()): decliners.add w
+      decliners.sort()
     result.add IntentView(id: id, state: $it.state,
                           effectJson: effectJsonOf(events, id),
                           approvals: approvals.getOrDefault(id).len,
                           txhash: bytesHex(it.materialization.bytes),
                           policy: pol,
                           round: curRound,
-                          rounds: driverFor(pol).describe().rounds,
-                          roundApprovals: roundApp.getOrDefault(id & "/" & $curRound, initHashSet[string]()).len)
+                          rounds: desc.rounds,
+                          roundApprovals: roundApp.getOrDefault(id & "/" & $curRound, initHashSet[string]()).len,
+                          declines: declined.getOrDefault(id, initHashSet[string]()).len,
+                          decliners: decliners)
   result.sort(proc (a, b: IntentView): int = cmp(a.id, b.id))
 
 # ── activity: how the room reached its state (the education seam) ──────────────
@@ -388,7 +408,7 @@ type
   ActivityEntry* = object
     seq*: int            ## canonical log index — the stable ordering key (inv 4)
     order*: int          ## tiebreak within one index (a derived line after its trigger)
-    kind*: string        ## "propose" | "approve" | "ready" | "submit" | "settled"
+    kind*: string        ## "propose" | "approve" | "decline" | "ready" | "submit" | "settled"
     intentId*: string    ## the intent this concerns
     account*: string     ## the contributor, named only where the driver is mmNamed, else ""
     title*: string       ## the plain-language headline
@@ -453,6 +473,12 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
         title: (if named: "Approved by " & shortId(who) else: "An owner approved"),
         detail: $distinctWho.len & " of " & $desc.threshold & " needed" &
                 (if desc.rounds > 1: "  ·  round " & rnd & " of " & $desc.rounds else: ""))
+    of "decline":
+      if p.len < 4: continue
+      result.add ActivityEntry(seq: i, order: 0, kind: "decline", intentId: id,
+        account: (if named: p[3] else: ""),
+        title: (if named: "Declined by " & shortId(p[3]) else: "A member declined"),
+        detail: "chose not to take part — the threshold is unchanged")
     of "submit":
       result.add ActivityEntry(seq: i, order: 0, kind: "submit", intentId: id,
         account: "", title: "Submitted on-chain",

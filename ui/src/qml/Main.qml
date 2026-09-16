@@ -298,6 +298,11 @@ Item {
 
     // The conversation surface. Reads its state from the module through the backend.
     Room {
+        // A card remedy that lives in Settings (repoint the RPC): hop to the view.
+        onSettingsRequested: {
+            root.view = "settings";
+            if (root.backend) root.backend.loadSettings();
+        }
         objectName: "roomSurface"
         anchors.top: navBar.bottom
         anchors.left: parent.left
