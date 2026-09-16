@@ -495,7 +495,7 @@ Item {
                             // driver where you are a member; secp for a Safe you own).
                             onApprove: {
                                 if (room.backend && msg.liveIntent)
-                                    room.backend.contributeInRoom(String(msg.liveIntent.id || ""), "");
+                                    room.backend.contributeInRoom(String(msg.liveIntent.id || ""), "", "");
                             }
                             onNeeds: if (room.backend && msg.liveIntent) {
                                 room.backend.loadReadiness(String(msg.liveIntent.id || ""));
@@ -556,7 +556,7 @@ Item {
                                     target: sigField.textInput
                                     function onAccepted() {
                                         if (sigField.text.length > 0 && room.backend && msg.liveIntent)
-                                            room.backend.contributeInRoom(String(msg.liveIntent.id || ""), sigField.text);
+                                            room.backend.contributeInRoom(String(msg.liveIntent.id || ""), sigField.text, "");
                                         sigField.text = "";
                                         msg.approving = false;
                                     }
@@ -568,7 +568,7 @@ Item {
                                     enabled: sigField.text.length > 0
                                     onClicked: {
                                         if (room.backend && msg.liveIntent)
-                                            room.backend.contributeInRoom(String(msg.liveIntent.id || ""), sigField.text);
+                                            room.backend.contributeInRoom(String(msg.liveIntent.id || ""), sigField.text, "");
                                         sigField.text = "";
                                         msg.approving = false;
                                     }

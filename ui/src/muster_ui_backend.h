@@ -52,7 +52,7 @@ public:
     void setContactAlias(const QString &identityHex, const QString &alias) override;
     void removeContact(const QString &identityHex) override;
     void proposeInRoom(const QString &effectJson) override;
-    void contributeInRoom(const QString &intentId, const QString &signatureHex) override;
+    void contributeInRoom(const QString &intentId, const QString &signatureHex, const QString &keyRef) override;
     void loadIntents() override;
     void loadActivity() override;
     void submitInRoom(const QString &intentId) override;

@@ -100,7 +100,7 @@ class MusterUi
     // and read the folded intent list (coordinate_intents) into intentsJson — the
     // room's proposals as reduce(log), interleaved with messages by the view.
     SLOT(void proposeInRoom(const QString &effectJson))
-    SLOT(void contributeInRoom(const QString &intentId, const QString &signatureHex))
+    SLOT(void contributeInRoom(const QString &intentId, const QString &signatureHex, const QString &keyRef))
     SLOT(void loadIntents())
 
     // The room's coordination history (coordinate_activity): a plain-language
