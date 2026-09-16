@@ -109,12 +109,17 @@ type
     expectedChainId*: int          ## what the environment requirement "chain:<id>" must match
     myAddress*: Address            ## this instance's secp authorization identity
     myEd*: Ed25519Pub              ## this instance's Ed25519 encryption identity
-    safeOwners*: seq[Address]      ## the recognized Safe owner set ("safe-owner")
     signers*: seq[Address]         ## the eip191 signer set ("signer")
     roster*: seq[Ed25519Pub]       ## the room roster ("roster-member")
     invoker*: Invoker              ## nil = cannot ask the host which modules are loaded
+    safe*: Address                 ## the Safe whose owner set "safe-owner" is graded against
     rpcProbe*: proc(url: string): tuple[ok: bool, chainId: int, detail: string] {.gcsafe.}
                                    ## nil = use the real probeRpc
+    ownersProbe*: proc(url: string, safe: Address): tuple[known: bool, owners: seq[Address], detail: string] {.gcsafe.}
+                                   ## nil = use the real getOwners. The Safe owner set is
+                                   ## read FROM THE CHAIN (F-10), never the configured set:
+                                   ## without a chain read we do not KNOW the real owners, so
+                                   ## the grade is unknown, never a fabricated met (rule s4/s5).
 
 proc probeFromFacts*(f: HostFacts): ReadinessProbe =
   let facts = f
@@ -134,8 +139,16 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
   result.authorityHeld = proc(name: string): Grade =
     case name
     of "safe-owner":
-      if facts.myAddress in facts.safeOwners: (rdMet, "your key is a Safe owner")
-      else: (rdMissing, "your key is not a configured Safe owner — your signature would not count")
+      # Read the owner set FROM THE CHAIN (F-10), never a configured/self-injected set.
+      # No RPC, or a read that fails, is unknown — never a fabricated met (rule s4/s5).
+      if facts.rpcUrl.len == 0:
+        (rdUnknown, "no RPC to read the Safe owner set — cannot confirm you are an owner")
+      else:
+        let probe = if facts.ownersProbe != nil: facts.ownersProbe else: getOwners
+        let (known, owners, detail) = probe(facts.rpcUrl, facts.safe)
+        if not known: (rdUnknown, "could not read the Safe owner set: " & detail)
+        elif facts.myAddress in owners: (rdMet, "your key is a Safe owner (read from chain)")
+        else: (rdMissing, "your key is not a Safe owner on-chain — your signature would not count")
     of "signer":
       if facts.myAddress in facts.signers: (rdMet, "your key is a configured signer")
       else: (rdMissing, "your key is not a configured signer")

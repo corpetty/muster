@@ -129,19 +129,13 @@ proc driverForKind(kind: string): Driver =
     # policy whose 2-of-3 is a real on-chain requirement that genuinely needs the group.
     newPersonalSignDriver(signers = gDriver.owners, threshold = 1)
   of "safe":
-    # The room's Safe recognizes THIS instance's account as an owner too, so you
-    # approve a Safe intent IN-APP (no paste for YOUR own signature) — completing the
-    # in-app-signing pattern the room-native drivers already have. The configured
-    # owners remain for the Safe's other owners. The safeTxHash does NOT commit to the
-    # owner set, so re-derivation (F-4) and the materialization are unchanged; only
-    # WHO the fold recognizes grows. (On-chain settlement still needs the folded
-    # signers to be REAL on-chain owners — that is the anvil-seeded remainder, exo-001;
-    # in-app APPROVAL to executable is what this enables.)
-    var owners = gDriver.owners
-    let mine = myAddress()
-    if mine notin owners: owners.add mine
-    newSafeDriver(chainId = gDriver.chainId, safe = gDriver.safe,
-                  owners = owners, threshold = gDriver.threshold)
+    # The fold recognizes exactly the REAL owner set — never this instance's own key
+    # injected in (exo-45e K3, rule s4). An in-app approval counts only if YOUR key is a
+    # configured Safe owner (seed it with MUSTER_DEV_SECP_KEY / scripts/demo-peer.sh so it
+    # recovers to a real on-chain owner, exo-001); a non-owner's signature is refused,
+    # exactly as the chain would refuse it at settlement. The safeTxHash never commits to
+    # the owner set, so re-derivation (F-4) and the materialization are unchanged.
+    gDriver
   else: gDriver
 
 let driverFor: DriverFor = proc(kind: string): Driver = driverForKind(kind)
@@ -765,9 +759,11 @@ proc musterCoordinateReadiness(intentId: string): string =
   # this instance too, see driverForKind); the roster is the membership fold.
   var facts = HostFacts(rpcUrl: gRpcUrl, expectedChainId: gDriver.chainId.int,
                         myAddress: myAddress(), myEd: moduleKeystore().encIdentity().ed,
-                        safeOwners: gDriver.owners, signers: gDriver.owners,
-                        roster: currentRoster())
-  if drv of SafeDriver: facts.safeOwners = SafeDriver(drv).owners
+                        signers: gDriver.owners, roster: currentRoster(),
+                        safe: gDriver.safe)
+  # The Safe owner set is read FROM THE CHAIN (getOwners, F-10), never a configured or
+  # self-injected set: without a chain read the authority grade is unknown, and a key the
+  # chain does not recognize grades missing (rule s4, contracts/specs/derived-exo-45e, K3).
   if gInvoker == nil: gInvoker = newLpInvoker("muster_module")
   facts.invoker = gInvoker
   let r = assessReadiness(m, probeFromFacts(facts))

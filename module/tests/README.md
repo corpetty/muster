@@ -56,7 +56,7 @@ nim r -d:release --threads:on $W3 $SECP $STINT --path:$D/nim-eth tests/wallet_rp
 
 **Exception — anything importing `src/crypto/secp256k1.nim` or `src/drivers/safe.nim`
 uses `nim-secp256k1` on the path** (`secp256k1_test`, `safe_test`, `safe_collect_test`,
-`binding_test`, `conformance_test` — the driver conformance suite run against stub +
+`binding_test`, `safe_owners_test` (the exo-45e K3 getOwners() ABI decode), `conformance_test` — the driver conformance suite run against stub +
 Safe — `readiness_test` (the action-manifest readiness probe against a real SafeDriver, exo-002.2), `authorization_test` (muster-issued grants, exo-002.7) and the crypto/coordination tests). We no longer link a system
 libsecp256k1 — `nim-secp256k1` vendors and compiles its own C (clone with
 `--recurse-submodules`). Its own deps are stew + results + nimcrypto:
