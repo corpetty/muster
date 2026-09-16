@@ -530,12 +530,14 @@ proc musterCoordinatePropose(effectJson: string): string =
   gSession.publish(ev)
   id
 
-proc musterCoordinateContribute(intentId: string, signatureHex: string): string =
+proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: string): string =
   ## Add a contribution to a proposed intent. If `signatureHex` is EMPTY, sign in-app
   ## with THIS instance's own keystore identity — no paste: the room-native drivers
   ## (threshold/frost) endorse with the Ed25519 encryption key (which is in the room's
   ## roster, so it counts), Safe signs the safeTxHash with the secp key (counts only if
-  ## our address is a Safe owner). The secret never leaves the keystore.
+  ## our address is a Safe owner). `keyRef` (exo-45e K2b/K5) selects WHICH held key
+  ## signs — so an instance holding several owner keys contributes as each; an empty ref
+  ## uses the primary key. The secret never leaves the keystore.
   if gSession == nil: return "not-joined"
   gSession.poll()
   let events = gSession.log.allEvents()
@@ -546,15 +548,18 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string): string 
   if sig.len == 0:
     let mat = canonicalize(drv, effectFromJson(effectJson))
     let ks = moduleKeystore()
+    # An unknown ref is refused — never a silent fall-through to a different key than
+    # the caller chose (K2b). An empty ref means the primary key.
+    if keyRef.len > 0 and not ks.hasKey(keyRef): return "unknown-key"
     if drv of SafeDriver or drv of PersonalSignDriver:
       # Both sign a 32-byte digest with the secp key: Safe the EIP-712 safeTxHash,
       # eip191 the EIP-191 personal_sign digest. The keystore signs; the driver
       # verifies the signature recovers to a configured owner/signer.
       var h: array[32, byte]
       for i in 0 ..< min(32, mat.bytes.len): h[i] = mat.bytes[i]
-      sig = toHex(ks.sign(h))                 # secp Signature65 over the digest
+      sig = toHex(if keyRef.len > 0: ks.signWith(keyRef, h) else: ks.sign(h))
     else:
-      sig = toHex(ks.edSign(mat.bytes))       # Ed25519 endorsement over the materialization
+      sig = toHex(if keyRef.len > 0: ks.edSignWith(keyRef, mat.bytes) else: ks.edSign(mat.bytes))
   # The intent's policy verifies the contribution: a Safe owner's secp signature, or a
   # roster member's Ed25519 endorsement — "" iff it isn't a valid one (e.g. our own
   # identity is not a signer for this intent's policy).

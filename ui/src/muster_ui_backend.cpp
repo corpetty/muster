@@ -342,15 +342,16 @@ void MusterUiBackend::proposeInRoom(const QString &effectJson)
     loadMessages();
 }
 
-void MusterUiBackend::contributeInRoom(const QString &intentId, const QString &signatureHex)
+void MusterUiBackend::contributeInRoom(const QString &intentId, const QString &signatureHex, const QString &keyRef)
 {
     // coordinate_contribute → add an owner signature; the module verifies it
     // recovers to a configured owner before it counts (a non-owner is rejected).
-    const QString st = modules().muster_module.coordinate_contribute(intentId, signatureHex);
-    qInfo() << "[muster_ui] coordinate_contribute" << intentId << "->" << st;
+    // keyRef (exo-45e K2b/K5) selects WHICH held key signs in-app — empty = the primary.
+    const QString st = modules().muster_module.coordinate_contribute(intentId, signatureHex, keyRef);
+    qInfo() << "[muster_ui] coordinate_contribute" << intentId << keyRef << "->" << st;
     // Surface the outcome: an approval that didn't count (your key isn't a recognized
     // signer for this policy) must SAY so, not vanish. ok iff st is a lifecycle state.
-    const bool ok = (st != "rejected" && st != "not-joined" && st != "unknown-intent");
+    const bool ok = (st != "rejected" && st != "not-joined" && st != "unknown-intent" && st != "unknown-key");
     QJsonObject r;
     r.insert("intentId", intentId);
     r.insert("state", st);
