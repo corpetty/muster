@@ -25,8 +25,11 @@ Item {
     id: composer
 
     // Fired when the user confirms. The host opens the room from these — and sets it
-    // to coordinate under `policy` (the driver the intent runs on).
-    signal createRoom(string verb, string peer, string topic, string policy)
+    // to coordinate under `policy` (the driver the intent runs on). `draftJson` is the
+    // first intent to propose once the room opens (the F-18 third step: account + asset
+    // + destination), or "" when there is nothing to draft (decide / talk, or a pay with
+    // an empty amount) — exo-45e K6/exo-fa1.
+    signal createRoom(string verb, string peer, string topic, string policy, string draftJson)
 
     // "" until an action is picked. Drives the progressive reveal.
     property string pickedVerb: ""
@@ -34,6 +37,48 @@ Item {
     // The address book (from the host): [{identity, alias, address}] — so "who with"
     // can be a tap on a name rather than a pasted id.
     property var contacts: []
+
+    // The backend (from Main), so the third step can ask compose_offers which of my
+    // holdings fill the proposer slots — the asset+amount I can send (exo-45e K6). Null
+    // in isolation: the third step then just shows the fields, no candidate list.
+    property var backend: null
+    // The F-18 third step's picks (for the "pay" verb): the asset, the amount, and the
+    // destination — or "ask the room" for the destination (the counterparty request path).
+    property string pickedAsset: ""
+    property string destination: ""
+    property bool askRoom: false
+    readonly property string amount: amountField ? amountField.text.trim() : ""
+
+    // compose_offers for the current draft: {ready, offers:[{requirement, status,
+    // candidates:[{public, class, form, grade, discloses}]}]} — the proposer slots and
+    // which of my holdings fill them. Refreshed when the third step opens.
+    readonly property var composeOffers: {
+        try { return JSON.parse(composer.backend ? composer.backend.composeOffersJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    // The asset candidates (an asset-class proposer slot's candidates), for the picker.
+    function assetCandidates() {
+        var o = composer.composeOffers;
+        if (!o || !o.offers) return [];
+        for (var i = 0; i < o.offers.length; ++i)
+            if (o.offers[i].requirement && o.offers[i].requirement.kind === "asset")
+                return o.offers[i].candidates || [];
+        return [];
+    }
+    // Ask the module which of my holdings fill a draft payment's proposer slots.
+    function refreshComposeOffers() {
+        if (!composer.backend) return;
+        var draft = { to: composer.destination, value: Number(composer.amount) || 0, nonce: 0 };
+        composer.backend.loadComposeOffers(JSON.stringify(draft));
+    }
+    // The draft first intent, or "" when there is nothing to propose on open.
+    function draftJson() {
+        if (composer.pickedVerb !== "pay") return "";
+        if (composer.amount.length === 0) return "";           // no amount → open empty, compose in-room
+        if (composer.askRoom) return "";                        // destination requested → the room fills it
+        if (composer.destination.length === 0) return "";
+        return JSON.stringify({ to: composer.destination, value: Number(composer.amount) || 0, nonce: 0 });
+    }
 
     // The things a room can do together. Each carries the driver it runs on, so the
     // user picks an ACTION, not a policy — the coordination mechanism follows from
@@ -97,7 +142,8 @@ Item {
         // (which passes its stored topic), never here, so this only affects creation.
         var uniq = Date.now().toString(36) + Math.floor(Math.random() * 46656).toString(36);
         composer.createRoom(composer.pickedVerb, composer.peer,
-                            composer.derivedTopic() + "." + uniq, composer.pickedPolicy);
+                            composer.derivedTopic() + "." + uniq, composer.pickedPolicy,
+                            composer.draftJson());
     }
 
     Flickable {
@@ -267,6 +313,79 @@ Item {
                     color: Theme.palette.textTertiary
                     font.pixelSize: Theme.typography.secondaryText
                     wrapMode: Text.WordWrap
+                }
+            }
+
+            // ── 3. account + asset/amount + destination (F-18 third step, "pay" only) ──
+            // The account is the room's shared Safe; the asset+amount come from MY holdings
+            // (compose_offers); the destination I type, or ask the room to fill (the
+            // counterparty request path). Everything is optional — leave it blank to open
+            // the room and compose the first payment inside it.
+            ColumnLayout {
+                visible: composer.pickedVerb === "pay"
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                onVisibleChanged: if (visible) composer.refreshComposeOffers()
+
+                LogosText {
+                    text: qsTr("What to send (optional)")
+                    color: Theme.palette.text
+                    font.family: Theme.typography.publicSans
+                    font.pixelSize: Theme.typography.primaryText
+                    font.weight: Theme.typography.weightMedium
+                }
+                LogosText {
+                    Layout.fillWidth: true
+                    text: qsTr("From the room's shared account, signed off together. Pick what you hold; leave it blank to sort it out in the room.")
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: Theme.typography.secondaryText
+                    wrapMode: Text.WordWrap
+                }
+
+                // the asset picker — my holdings (compose_offers); nothing scored, grade shown.
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+                    Repeater {
+                        model: composer.assetCandidates()
+                        delegate: LogosButton {
+                            required property var modelData
+                            objectName: "assetCandidate"
+                            text: String(modelData.public) + " (" + String(modelData.grade) + ")"
+                            variant: composer.pickedAsset === String(modelData.public)
+                                     ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                            onClicked: composer.pickedAsset = String(modelData.public)
+                        }
+                    }
+                }
+                LogosText {
+                    visible: composer.assetCandidates().length === 0
+                    text: qsTr("(no holdings to send from this account yet)")
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: Theme.typography.badgeText
+                }
+
+                LogosTextField {
+                    id: amountField
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("amount (in base units)")
+                    onTextChanged: composer.refreshComposeOffers()
+                }
+
+                // the destination — typed, or asked of the room (the counterparty request).
+                LogosTextField {
+                    Layout.fillWidth: true
+                    enabled: !composer.askRoom
+                    placeholderText: composer.askRoom ? qsTr("the room will ask them for it")
+                                                      : qsTr("send to (address)")
+                    onTextChanged: composer.destination = text
+                }
+                LogosButton {
+                    objectName: "askRoomToggle"
+                    text: composer.askRoom ? qsTr("✓ ask the room for the address")
+                                           : qsTr("ask the room for the address instead")
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: composer.askRoom = !composer.askRoom
                 }
             }
 

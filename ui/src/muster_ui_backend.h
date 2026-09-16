@@ -63,6 +63,7 @@ public:
     void loadRoomAccount() override;
     void loadReadiness(const QString &intentId) override;
     void loadOffers(const QString &intentId) override;
+    void loadComposeOffers(const QString &effectJson) override;
     void shareMaterial(const QString &intentId, const QString &requirement, const QString &pub) override;
     void declineInRoom(const QString &intentId) override;
     void loadFlow() override;

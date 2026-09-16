@@ -468,6 +468,16 @@ void MusterUiBackend::loadOffers(const QString &intentId)
     setOffersJson(QString::fromUtf8(QJsonDocument(all).toJson(QJsonDocument::Compact)));
 }
 
+void MusterUiBackend::loadComposeOffers(const QString &effectJson)
+{
+    // compose_offers → the composer's third step: for a DRAFT effect under the room's
+    // compose policy, which of my holdings fill the proposer slots (the asset+amount).
+    // Graded about me only. Not keyed — the composer holds one draft at a time.
+    const QString r = modules().muster_module.compose_offers(effectJson);
+    qInfo() << "[muster_ui] compose_offers" << effectJson << "->" << r;
+    setComposeOffersJson(r);
+}
+
 void MusterUiBackend::shareMaterial(const QString &intentId, const QString &requirement, const QString &pub)
 {
     // coordinate_share_material → publish a chosen holding's PUBLIC face into the intent

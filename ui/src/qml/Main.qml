@@ -52,7 +52,7 @@ Item {
     // exchange, so the room opens with an address-request naming the intent; whoever
     // holds the needed address answers it with address-share (the card's button).
     // "talk" primes nothing. Re-opening an existing room passes no verb → no priming.
-    function enterRoom(topic, verb, policy) {
+    function enterRoom(topic, verb, policy, draftJson) {
         if (!root.backend || !topic)
             return;
         root.backend.joinRoom(topic);
@@ -69,6 +69,13 @@ Item {
             root.backend.postMessage(JSON.stringify({
                 kind: "address-request", intent: v, purpose: purpose
             }));
+        // The composer's third step (F-18, exo-45e K6): if it composed a first payment
+        // (account + asset + destination), propose it into the freshly opened room. An
+        // empty draft (nothing picked, or the destination was requested from the room)
+        // opens the room to compose in-place instead.
+        var d = String(draftJson || "");
+        if (d.length > 0)
+            root.backend.proposeInRoom(d);
     }
 
     // Backend PROPs, aliased so bindings read cleanly. The backend is the only
@@ -293,7 +300,8 @@ Item {
             try { return JSON.parse(root.backend ? root.backend.contactsJson : "[]"); }
             catch (e) { return []; }
         }
-        onCreateRoom: root.enterRoom(topic, verb, policy)
+        backend: root.backend
+        onCreateRoom: root.enterRoom(topic, verb, policy, draftJson)
     }
 
     // The conversation surface. Reads its state from the module through the backend.
