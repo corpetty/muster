@@ -181,6 +181,8 @@ This is why the disclosure square (§adapter) lives at the seam and not behind a
 threshold: the rail is decided by the pair (Alice's source form, the form Bob shared),
 and the room shows the honesty before Alice commits.
 
+**Mode B — the room agrees (opt-in). [core landed 2026-09-16, exo-5be]** The generic piece is done: when an invoke effect names a `counterparty` field, `invoke.manifest` declares a COUNTERPARTY address slot bound to that arg, so the room asks the recipient to share their LEZ key-node (`coordinate_share_material`, K5/K6) and the offers machinery fills it from a shielded receive address (`lez_modeb_test`). The k-of-n endorsement + `coordinate_execute` path already exist. Remaining: the composer UI (request-first: propose a lez transfer with an open recipient) and the live shielded settle. Original design below.
+
 **Mode B — the room agrees (opt-in).** When the room genuinely wants joint control over
 the funds, a LEZ transfer becomes a coordinated intent like any other:
 - **As a module action** (reusing epic exo-fa4): `{effect:"invoke", module:"lez_core",
