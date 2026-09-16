@@ -92,3 +92,15 @@ method manifest*(d: InvokeDriver, effect: Effect): ActionManifest =
   if module.len > 0:
     result.requirements.add req(rqModule, module)
     result.touches.add touch("module:" & module & "." & meth, tmWrite)
+  # LEZ Mode B (and any coordinated transfer, docs/design/lez-adapter.md §6): when the
+  # effect names a `counterparty` field — the effect field that holds the recipient's
+  # address (a LEZ key-node, an EVM address) — declare a COUNTERPARTY address slot bound
+  # to it. The room then asks the recipient to share it (coordinate_share_material, K5/K6)
+  # rather than the proposer guessing it. Generic: the invoke driver stays module-blind;
+  # WHICH arg is the recipient is named by the effect, not hardcoded here. What the rail
+  # then puts on the public record is the target module's own disclosure (exo-002.6).
+  let cpField = effect.fieldText("counterparty")
+  if cpField.len > 0:
+    result.requirements.add req(rqAddress, "payee", rpCounterparty,
+                               need(mcAddress, effect.fieldText("chain"), cpField))
+    result.discloses.add row(cpField, obTargetModule)
