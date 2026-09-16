@@ -764,3 +764,5 @@
 {"type":"close","timestamp":"2026-09-16T07:22:45.98291361Z","issue_id":"exo-002.4","payload":{}}
 {"type":"comment","timestamp":"2026-09-16T07:22:46.024052147Z","issue_id":"exo-275","payload":{"body":"Closed by exo-002.4: session.admit publishes membershipEvent(epoch, joinerHex) sealed under the new epoch; reduceActivity + logProvenance + the flow fold all show it; ActivityFeed colours it."}}
 {"type":"close","timestamp":"2026-09-16T07:22:46.060380896Z","issue_id":"exo-275","payload":{}}
+{"type":"comment","timestamp":"2026-09-16T07:30:38.946117515Z","issue_id":"exo-002.5","payload":{"body":"Landed (ffc53cf module, 570a5b4 UI): reduceFlow/observerMatrix + coordinate_flow; FlowView.qml under the room history; flow_test 4/4; offscreen card-self-test SUCCESS — flow matrix {room-member:[contributions,effect], store-node:[timing,topic], chain-observer:[] (not yet submitted)}, 16 rows, no QML errors. Trap found: the runner's module relock is refused on a dirty tree and the Makefile swallowed it — now warns."}}
+{"type":"close","timestamp":"2026-09-16T07:30:38.98364669Z","issue_id":"exo-002.5","payload":{}}
