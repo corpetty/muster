@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Muster Action Manifest</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+</head><body>
+<style>
+:root{
+  --paper:#F2F4F6; --paper-2:#E9ECF0; --paper-3:#DFE3E8; --ink:#1C2530; --ink-2:#4A5563; --ink-3:#7C8794;
+  --line:#C9CFD6; --imp:#1F7A5A; --mot:#B8741A; --exp:#B23A3A; --na:#7C8794; --acc:#2F5FA8; --acc-soft:#DCE6F5;
+  --imp-soft:#DDEFE7; --mot-soft:#F5E9D3; --exp-soft:#F4DCDC; --room:#2F5FA8; --code:#EEF1F4;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#14181D; --paper-2:#1B2129; --paper-3:#232B35; --ink:#E6EAEE; --ink-2:#B4BCC6; --ink-3:#7F8A96;
+    --line:#333C47; --imp:#5FC79B; --mot:#E0A64A; --exp:#E36F6F; --na:#8B96A3; --acc:#7FA6E8; --acc-soft:#1E2E48;
+    --imp-soft:#173328; --mot-soft:#3A2B12; --exp-soft:#3D1B1B; --room:#7FA6E8; --code:#0F1317;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#14181D; --paper-2:#1B2129; --paper-3:#232B35; --ink:#E6EAEE; --ink-2:#B4BCC6; --ink-3:#7F8A96;
+  --line:#333C47; --imp:#5FC79B; --mot:#E0A64A; --exp:#E36F6F; --na:#8B96A3; --acc:#7FA6E8; --acc-soft:#1E2E48;
+  --imp-soft:#173328; --mot-soft:#3A2B12; --exp-soft:#3D1B1B; --room:#7FA6E8; --code:#0F1317;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:16px;line-height:1.55;padding-block:0 64px;padding-inline:20px}
+h1,h2,h3{font-family:"IBM Plex Serif",Georgia,serif;font-weight:600;text-wrap:balance;margin:0}
+h1{font-size:2.1rem;line-height:1.15;letter-spacing:-0.01em}
+h2{font-size:1.45rem;margin-top:8px}
+h3{font-size:1.05rem;margin-top:22px;margin-bottom:6px}
+p{margin:10px 0;max-width:68ch}
+code,pre,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+code{font-size:.9em;background:var(--code);padding:1px 5px;border-radius:3px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:4px;padding:12px 14px;font-size:.8rem;line-height:1.45;overflow-x:auto;margin:10px 0}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.wrap{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:200px minmax(0,1fr);gap:40px}
+@media (max-width:820px){.wrap{grid-template-columns:1fr;gap:0}.rail{position:static !important;display:flex;flex-wrap:wrap;gap:6px 14px;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:8px}}
+.rail{position:sticky;top:20px;align-self:start;padding-top:44px;display:flex;flex-direction:column;gap:6px}
+.rail a{color:var(--ink-2);text-decoration:none;font-size:.86rem;padding:2px 0;border-left:2px solid transparent;padding-left:10px}
+.rail a:hover,.rail a:focus-visible{color:var(--ink);border-left-color:var(--acc);outline:none}
+header{padding-block:44px 8px;border-bottom:1px solid var(--line);margin-bottom:8px}
+header p.lede{font-size:1.08rem;color:var(--ink-2);max-width:62ch}
+section{padding-block:34px 10px;border-bottom:1px solid var(--line)}
+section:last-of-type{border-bottom:none}
+figure{margin:18px 0;max-width:100%}
+figure svg{max-width:100%;height:auto;display:block;color:var(--ink)}
+figcaption{font-size:.84rem;color:var(--ink-2);margin-top:8px;max-width:70ch}
+.wide{max-width:960px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:.82rem;color:var(--ink-2);margin:6px 0}
+.sw{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:-1px;margin-right:6px}
+.pill{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.72rem;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--ink-2);letter-spacing:.02em}
+.pill.imp{background:var(--imp-soft);color:var(--imp);border-color:transparent}
+.pill.mot{background:var(--mot-soft);color:var(--mot);border-color:transparent}
+.pill.exp{background:var(--exp-soft);color:var(--exp);border-color:transparent}
+.pill.na{background:var(--paper-3);color:var(--na);border-color:transparent}
+.pill.acc{background:var(--acc-soft);color:var(--acc);border-color:transparent}
+/* five wants */
+.wants{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:14px 0}
+.want{border:1px solid var(--line);border-radius:4px;padding:12px 14px;background:var(--paper-2);cursor:pointer;transition:border-color .15s}
+.want:hover,.want:focus-visible{border-color:var(--acc);outline:none}
+.want.on{border-color:var(--acc);background:var(--acc-soft)}
+.want .n{font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--ink-3);letter-spacing:.06em}
+.want .t{font-weight:600;margin:4px 0 2px;font-size:.95rem}
+.want .s{font-size:.82rem;color:var(--ink-2)}
+.object{border:1px solid var(--line);border-radius:4px;padding:14px 16px;background:var(--paper-2);margin:12px 0}
+.object .row{display:grid;grid-template-columns:150px 1fr;gap:10px;padding:7px 0;border-top:1px dashed var(--line);font-size:.9rem;transition:background .15s}
+.object .row:first-child{border-top:none}
+.object .row.lit{background:var(--acc-soft);margin-inline:-8px;padding-inline:8px;border-radius:3px}
+.object .k{font-family:"IBM Plex Mono",monospace;font-size:.8rem;color:var(--ink-2);padding-top:2px}
+.object .v{color:var(--ink)}
+.object .v small{display:block;color:var(--ink-3);font-size:.8rem}
+/* matrix */
+.matrix{border-collapse:separate;border-spacing:4px;font-size:.82rem;width:100%;max-width:960px}
+.matrix th{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:.72rem;letter-spacing:.04em;color:var(--ink-2);text-align:left;padding:4px 6px}
+.matrix th.obs{text-align:center}
+.matrix td{padding:0}
+.matrix button{width:100%;min-height:44px;border:1px solid transparent;border-radius:3px;background:var(--paper-3);color:var(--ink-2);font:inherit;font-size:.78rem;cursor:pointer;padding:6px 4px;text-align:center}
+.matrix button.imp{background:var(--imp-soft);color:var(--imp)}
+.matrix button.mot{background:var(--mot-soft);color:var(--mot)}
+.matrix button.exp{background:var(--exp-soft);color:var(--exp)}
+.matrix button.na{background:var(--paper-2);color:var(--ink-3)}
+.matrix button.on,.matrix button:focus-visible{border-color:var(--acc);outline:none;box-shadow:0 0 0 2px var(--acc-soft)}
+.matrix td.step{font-weight:600;color:var(--ink);padding:0 8px 0 4px;white-space:nowrap;font-family:"IBM Plex Sans",sans-serif;font-size:.86rem}
+.explain{border-left:3px solid var(--acc);background:var(--paper-2);padding:10px 14px;margin:12px 0;font-size:.9rem;min-height:64px;max-width:820px}
+.explain .h{font-weight:600;margin-bottom:4px}
+.explain .h .pill{margin-left:8px;vertical-align:1px}
+/* stepper */
+.stepper{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:14px 0 8px;max-width:960px}
+.stepper button{border:1px solid var(--line);background:var(--paper-2);color:var(--ink-2);font:inherit;font-size:.78rem;padding:8px 4px;border-radius:3px;cursor:pointer;line-height:1.2}
+.stepper button .k{display:block;font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--ink-3);letter-spacing:.06em;margin-bottom:3px}
+.stepper button.on{background:var(--acc-soft);border-color:var(--acc);color:var(--ink)}
+.stepper button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+@media (max-width:820px){.stepper{grid-template-columns:repeat(4,1fr)}}
+.panel{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;max-width:960px}
+@media (max-width:820px){.panel{grid-template-columns:1fr}}
+.panel .txt{font-size:.92rem}
+.panel .txt p{max-width:none}
+.panel pre{margin:0;max-height:360px;overflow:auto}
+.guard{font-size:.8rem;color:var(--ink-2);border-top:1px dashed var(--line);margin-top:10px;padding-top:8px}
+/* flow */
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;margin:12px 0;font-size:.86rem}
+.controls label{display:flex;align-items:center;gap:8px}
+input[type=range]{accent-color:var(--acc);width:180px}
+.flowgrid{display:grid;grid-template-columns:130px repeat(5,1fr);gap:4px;font-size:.78rem;max-width:960px;margin-top:6px}
+.flowgrid .h{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.04em;color:var(--ink-2);padding:4px 6px;text-align:center}
+.flowgrid .h:first-child{text-align:left}
+.flowgrid .act{font-weight:600;padding:8px 6px;background:var(--paper-2);border-radius:3px;white-space:nowrap;display:flex;flex-direction:column;justify-content:center}
+.flowgrid .act small{font-weight:400;color:var(--ink-3);font-family:"IBM Plex Mono",monospace;font-size:.66rem}
+.flowgrid .c{background:var(--paper-3);border-radius:3px;padding:6px;min-height:40px;color:var(--ink-3);display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.25;font-family:"IBM Plex Mono",monospace;font-size:.7rem}
+.flowgrid .c.room{background:var(--acc-soft);color:var(--acc)}
+.flowgrid .c.out{background:var(--mot-soft);color:var(--mot)}
+.flowgrid .c.chain{background:var(--exp-soft);color:var(--exp)}
+.flowgrid .c.dim{opacity:.35}
+@media (max-width:820px){.flowgrid{grid-template-columns:110px repeat(5,minmax(70px,1fr));overflow-x:auto}}
+.members{font-size:.84rem;color:var(--ink-2);margin:8px 0}
+.members .m{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.74rem;border:1px solid var(--line);border-radius:3px;padding:1px 7px;margin-right:6px}
+.members .m.new{border-color:var(--acc);color:var(--acc)}
+/* proof */
+.chain{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0;align-items:stretch}
+.ev{border:1px solid var(--line);border-radius:4px;background:var(--paper-2);padding:8px 10px;min-width:180px;flex:1 1 180px;font-size:.8rem;position:relative}
+.ev .id{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--ink-3);word-break:break-all}
+.ev .key{font-family:"IBM Plex Mono",monospace;font-size:.76rem;color:var(--ink);margin:4px 0 2px}
+.ev input{width:100%;font:inherit;font-family:"IBM Plex Mono",monospace;font-size:.76rem;padding:4px 6px;border:1px solid var(--line);border-radius:3px;background:var(--paper);color:var(--ink)}
+.ev.bad{border-color:var(--exp)}
+.ev .par{font-size:.68rem;color:var(--ink-3);font-family:"IBM Plex Mono",monospace;margin-top:4px}
+.verdict{border-radius:4px;padding:10px 14px;font-size:.9rem;font-family:"IBM Plex Mono",monospace;margin:10px 0;border:1px solid var(--line);max-width:960px}
+.verdict.ok{background:var(--imp-soft);color:var(--imp);border-color:transparent}
+.verdict.bad{background:var(--exp-soft);color:var(--exp);border-color:transparent}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.btn{font:inherit;font-size:.82rem;padding:6px 12px;border:1px solid var(--line);background:var(--paper-2);color:var(--ink);border-radius:3px;cursor:pointer}
+.btn:hover,.btn:focus-visible{border-color:var(--acc);outline:none}
+/* compare */
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:960px;margin:14px 0}
+@media (max-width:820px){.compare{grid-template-columns:1fr}}
+.opt{border:1px solid var(--line);border-radius:4px;padding:12px 14px;background:var(--paper-2)}
+.opt.lean{border-color:var(--acc)}
+.opt h3{margin-top:0}
+.opt ul{padding-left:18px;margin:6px 0;font-size:.88rem}
+.opt li{margin:4px 0}
+/* status */
+.status{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;max-width:960px;margin:12px 0}
+.st{border:1px solid var(--line);border-radius:4px;padding:10px 12px;background:var(--paper-2);font-size:.86rem}
+.st .t{font-weight:600;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.st .d{color:var(--ink-2);font-size:.82rem;margin-top:4px}
+.tabs{display:flex;gap:4px;margin:10px 0}
+.tabs button{font:inherit;font-size:.8rem;padding:5px 12px;border:1px solid var(--line);background:var(--paper-2);color:var(--ink-2);border-radius:3px;cursor:pointer}
+.tabs button.on{background:var(--acc-soft);border-color:var(--acc);color:var(--ink)}
+.tabs button:focus-visible{outline:2px solid var(--acc)}
+.note{font-size:.84rem;color:var(--ink-2);border:1px dashed var(--line);border-radius:4px;padding:8px 12px;max-width:68ch;margin:12px 0}
+@media (prefers-reduced-motion: reduce){*{transition:none !important}}
+</style>
+
+<div class="wrap">
+<nav class="rail" aria-label="Sections">
+  <a href="#one">1 · One object</a>
+  <a href="#axis">2 · Credibility axis</a>
+  <a href="#pipe">3 · Proposal → permission</a>
+  <a href="#flow">4 · Who sees what</a>
+  <a href="#proof">5 · Proof of the log</a>
+  <a href="#host">6 · Where the host comes in</a>
+  <a href="#draft">7 · What the draft says</a>
+</nav>
+
+<main>
+<header>
+  <div class="eyebrow">muster · epic exo-002 · 2026-09-16</div>
+  <h1>The action manifest, and how it becomes a permission</h1>
+  <p class="lede">Seven mechanisms, in the order they depend on each other: one object per action, a way to grade it, the path from a proposal to something the host may refuse, what leaves the room and to whom, a proof of the log, the host-side hook, and where the platform draft actually stands. Payloads shown are the real ones from the offscreen runs.</p>
+</header>
+
+<!-- 1 -->
+<section id="one">
+  <div class="eyebrow">1</div>
+  <h2>Five wants are one object</h2>
+  <p>Click a want. The rows of the manifest it is served by light up. Everything else in the epic is a view of, or a check over, this one record.</p>
+  <div class="wants" id="wants">
+    <div class="want" tabindex="0" data-rows="prov"><div class="n">WANT 1</div><div class="t">Provenance proofs for every action</div><div class="s">Not just the signing path.</div></div>
+    <div class="want" tabindex="0" data-rows="agree,req"><div class="n">WANT 2</div><div class="t">Permissions protocol</div><div class="s">What am I allowing, before it is allowed?</div></div>
+    <div class="want" tabindex="0" data-rows="disc"><div class="n">WANT 3</div><div class="t">Information-flow view</div><div class="s">Who sees what, per action.</div></div>
+    <div class="want" tabindex="0" data-rows="effect,agree,req,disc,touch"><div class="n">WANT 4</div><div class="t">Deterministic from the contract</div><div class="s">Generated, never hand-written.</div></div>
+    <div class="want" tabindex="0" data-rows="effect,req,touch,disc,agree"><div class="n">WANT 5</div><div class="t">A card that explains itself</div><div class="s">Install · authorize · approve · deny.</div></div>
+  </div>
+  <div class="object" id="object">
+    <div class="row" data-row="effect"><div class="k">effect</div><div class="v">What will it do<small>the proposal itself; its schema id is the domain tag every signed byte commits to</small></div></div>
+    <div class="row" data-row="req"><div class="k">requirements</div><div class="v">What is needed<small>module · environment · authority · infra · capability — each instance- or contributor-scoped</small></div></div>
+    <div class="row" data-row="touch"><div class="k">touches</div><div class="v">What it will alter<small>targets read or written: <code>safe:0x5fbd…</code>, <code>chain:31337</code>, <code>module:lez_core.transfer_private</code></small></div></div>
+    <div class="row" data-row="disc"><div class="k">discloses</div><div class="v">What will happen<small>field → observer class; the store node's rows are added by the core and can never be omitted (FS-9)</small></div></div>
+    <div class="row" data-row="agree"><div class="k">agreement</div><div class="v">How we agree<small>the driver's descriptor: rounds · threshold · membership model · finality</small></div></div>
+    <div class="row" data-row="prov"><div class="k">provenance</div><div class="v">Where every input came from<small>a reduction over the log, not a field on the manifest — class + log position + epoch for every entry</small></div></div>
+  </div>
+  <figure class="wide">
+    <svg viewBox="0 0 940 250" role="img" aria-label="The manifest sits between a driver plus effect and three consumers: the readiness probe, the card, and the flow fold.">
+      <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <g font-family="IBM Plex Mono, monospace" font-size="12" fill="currentColor">
+        <rect x="20" y="40" width="150" height="46" rx="3" fill="none" stroke="currentColor"/><text x="95" y="60" text-anchor="middle">driver</text><text x="95" y="76" text-anchor="middle" font-size="10" opacity=".7">describe · verify</text>
+        <rect x="20" y="150" width="150" height="46" rx="3" fill="none" stroke="currentColor"/><text x="95" y="170" text-anchor="middle">effect</text><text x="95" y="186" text-anchor="middle" font-size="10" opacity=".7">the proposal</text>
+        <line x1="170" y1="63" x2="300" y2="110" stroke="currentColor" marker-end="url(#a1)"/><line x1="170" y1="173" x2="300" y2="126" stroke="currentColor" marker-end="url(#a1)"/>
+        <text x="235" y="80" font-size="10" opacity=".8">manifest(driver, effect)</text>
+        <rect x="305" y="88" width="170" height="60" rx="3" fill="#2F5FA8" fill-opacity=".12" stroke="#2F5FA8" stroke-width="1.5"/><text x="390" y="112" text-anchor="middle" font-weight="600">ActionManifest</text><text x="390" y="130" text-anchor="middle" font-size="10" opacity=".8">declared · agreement · req · disc · touch</text>
+        <line x1="475" y1="105" x2="600" y2="60" stroke="currentColor" marker-end="url(#a1)"/><text x="520" y="72" font-size="10" opacity=".8">× host facts</text>
+        <line x1="475" y1="118" x2="600" y2="118" stroke="currentColor" marker-end="url(#a1)"/><text x="512" y="112" font-size="10" opacity=".8">render</text>
+        <line x1="475" y1="131" x2="600" y2="176" stroke="currentColor" marker-end="url(#a1)"/><text x="505" y="165" font-size="10" opacity=".8">× log × epochs</text>
+        <rect x="605" y="36" width="150" height="46" rx="3" fill="none" stroke="currentColor"/><text x="680" y="56" text-anchor="middle">readiness</text><text x="680" y="72" text-anchor="middle" font-size="10" opacity=".7">met · missing · unknown</text>
+        <rect x="605" y="95" width="150" height="46" rx="3" fill="none" stroke="currentColor"/><text x="680" y="115" text-anchor="middle">the card</text><text x="680" y="131" text-anchor="middle" font-size="10" opacity=".7">five questions + deny</text>
+        <rect x="605" y="154" width="150" height="46" rx="3" fill="none" stroke="currentColor"/><text x="680" y="174" text-anchor="middle">flow view</text><text x="680" y="190" text-anchor="middle" font-size="10" opacity=".7">who saw what, when</text>
+        <line x1="755" y1="59" x2="860" y2="59" stroke="currentColor" marker-end="url(#a1)"/><text x="905" y="63" text-anchor="middle" font-size="11">M2</text>
+        <line x1="755" y1="118" x2="860" y2="118" stroke="currentColor" marker-end="url(#a1)"/><text x="905" y="122" text-anchor="middle" font-size="11">M3</text>
+        <line x1="755" y1="177" x2="860" y2="177" stroke="currentColor" marker-end="url(#a1)"/><text x="905" y="181" text-anchor="middle" font-size="11">M5</text>
+        <text x="390" y="230" text-anchor="middle" font-size="10" opacity=".7">conformance refuses an undeclared or self-contradicting manifest (M1)</text>
+      </g>
+    </svg>
+    <figcaption>The manifest is a function of driver and effect, not driver alone: the generic invoke driver carries no module, the effect does. Three consumers read it. Conformance grades it before any driver ships.</figcaption>
+  </figure>
+</section>
+
+<!-- 2 -->
+<section id="axis">
+  <div class="eyebrow">2</div>
+  <h2>The credibility axis is a matrix, not a score</h2>
+  <p>The PriFi article splits commitments into <em>imperative</em> (the discretion to defect is removed structurally) and <em>motivational</em> (the party could defect but has a reason not to). Muster's data forced two more values: <em>exposed</em>, where no binding exists because information reaches an unbound observer, and <em>not applicable</em>. The unit is a lifecycle step crossed with an observer. Click any cell.</p>
+  <div class="legend"><span><i class="sw" style="background:var(--imp)"></i>imperative</span><span><i class="sw" style="background:var(--mot)"></i>motivational</span><span><i class="sw" style="background:var(--exp)"></i>exposed</span><span><i class="sw" style="background:var(--na)"></i>not applicable</span></div>
+  <div style="overflow-x:auto"><table class="matrix" id="matrix" aria-label="Credibility per lifecycle step and observer"></table></div>
+  <div class="explain" id="explain"><div class="h">Pick a cell</div><div>Each cell names the mechanism, the requirement it rests on, and the test or gap that backs the claim.</div></div>
+  <p>The submit cell against the RPC provider is the article's private-order-flow example exactly: the user-configured endpoint sees the signed transaction before the mempool does. Muster relocated that discretion, it did not remove it, and the registry now says so with a named party.</p>
+</section>
+
+<!-- 3 -->
+<section id="pipe">
+  <div class="eyebrow">3</div>
+  <h2>From a proposal to something the host may refuse</h2>
+  <p>Step through one Safe intent. The left side says what happens and which invariant holds it; the right side is the payload the module actually returned in the offscreen run with no anvil running, so the environment requirement is honestly <em>missing</em>.</p>
+  <div class="stepper" id="stepper" role="tablist"></div>
+  <div class="panel"><div class="txt" id="stepTxt"></div><pre id="stepJson" aria-live="polite"></pre></div>
+</section>
+
+<!-- 4 -->
+<section id="flow">
+  <div class="eyebrow">4</div>
+  <h2>Who can see what, and when it leaves the room</h2>
+  <p>The flow fold places each disclosure row at the entry where the information actually leaves. Inside rows name whoever held the epoch key at that position. The store node's metadata rows are on every entry. A driver's outside rows appear only at submit and final. Drag the slider to watch Carol's admission change who could read what, then toggle whether the intent was ever submitted.</p>
+  <div class="controls">
+    <label>Log position <input type="range" id="pos" min="0" max="6" value="6" aria-label="Log position"> <span class="mono" id="posLabel"></span></label>
+    <label><input type="checkbox" id="submitted" checked> intent submitted and settled</label>
+  </div>
+  <div class="members" id="members"></div>
+  <div class="flowgrid" id="flowgrid" aria-label="Disclosure rows per action and observer"></div>
+  <p class="note">Honest limits, in the data: a message's author is what the sender wrote inside a room-sealed envelope, not a verified signature; only a driver-verified signature proves who. Even the structure of the log, which events exist and when, is metadata, so what a proof carries out of the room is a disclosure decision, not a free upgrade.</p>
+</section>
+
+<!-- 5 -->
+<section id="proof">
+  <div class="eyebrow">5</div>
+  <h2>A proof of the log refuses on any tamper</h2>
+  <p>Every event is content-addressed: its id is the digest of its parents, key, and value. A proof is the canonical slice plus the claimed ids, parent-closed, reaching a state digest. Edit any value below and the recomputed id stops matching; the verifier names the first discrepancy. This demo hashes with SHA-256 over a simplified record. The real record is a domain-separated dCBOR hash-input, but the property is the same.</p>
+  <div class="chain" id="chain"></div>
+  <div class="btnrow"><button class="btn" id="resetChain">Restore the original events</button><button class="btn" id="dropMiddle">Drop the middle event</button></div>
+  <div class="verdict ok" id="verdict">checking…</div>
+  <figure class="wide">
+    <svg viewBox="0 0 940 150" role="img" aria-label="Three rungs of what a proof establishes: the log is unchanged, who could read it, and what it does not prove.">
+      <g font-family="IBM Plex Mono, monospace" font-size="12" fill="currentColor">
+        <rect x="20" y="30" width="280" height="90" rx="3" fill="#1F7A5A" fill-opacity=".12" stroke="#1F7A5A"/><text x="160" y="56" text-anchor="middle" font-weight="600">proves the log</text><text x="160" y="76" text-anchor="middle" font-size="10">ids · parents · order · digest</text><text x="160" y="94" text-anchor="middle" font-size="10">tamper → refuse, reason named</text>
+        <rect x="330" y="30" width="280" height="90" rx="3" fill="#2F5FA8" fill-opacity=".12" stroke="#2F5FA8"/><text x="470" y="56" text-anchor="middle" font-weight="600">scoped by epoch</text><text x="470" y="76" text-anchor="middle" font-size="10">only key holders can read it</text><text x="470" y="94" text-anchor="middle" font-size="10">a joiner sees from their admission on</text>
+        <rect x="640" y="30" width="280" height="90" rx="3" fill="#B8741A" fill-opacity=".12" stroke="#B8741A"/><text x="780" y="56" text-anchor="middle" font-weight="600">does not prove the world</text><text x="780" y="76" text-anchor="middle" font-size="10">submit / final stay external reads</text><text x="780" y="94" text-anchor="middle" font-size="10">a message author is asserted, not signed</text>
+      </g>
+    </svg>
+    <figcaption>What <code>coordinate_proof</code> establishes, and the two things it deliberately does not claim. Both limits are stated in the provenance guarantee text the card shows.</figcaption>
+  </figure>
+</section>
+
+<!-- 6 -->
+<section id="host">
+  <div class="eyebrow">6</div>
+  <h2>Where the host comes in</h2>
+  <p>Today the host's policy answers <em>who may call whom</em>. Muster answers <em>what was agreed</em>. M7 is the seam between them. The muster side exists: a grant issued only for an executable intent, replay-bound and signed, with a pure checker. The upstream side is where the draft specs changed the shape of the ask.</p>
+  <figure class="wide">
+    <svg viewBox="0 0 940 300" role="img" aria-label="Two paths for a gated call: the bespoke hook proposed first, and the Capability Authority contract the draft specs define, with the argument-binding gap marked.">
+      <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <g font-family="IBM Plex Mono, monospace" font-size="12" fill="currentColor">
+        <rect x="20" y="110" width="140" height="70" rx="3" fill="none" stroke="currentColor"/><text x="90" y="138" text-anchor="middle">room</text><text x="90" y="156" text-anchor="middle" font-size="10" opacity=".7">intent → executable</text>
+        <line x1="160" y1="145" x2="250" y2="145" stroke="currentColor" marker-end="url(#a2)"/><text x="205" y="138" text-anchor="middle" font-size="10">issues</text>
+        <rect x="255" y="110" width="170" height="70" rx="3" fill="#2F5FA8" fill-opacity=".12" stroke="#2F5FA8" stroke-width="1.5"/><text x="340" y="134" text-anchor="middle" font-weight="600">authorization</text><text x="340" y="150" text-anchor="middle" font-size="10">capability · root · expiry</text><text x="340" y="166" text-anchor="middle" font-size="10">signed by the instance</text>
+        <line x1="425" y1="130" x2="540" y2="70" stroke="currentColor" stroke-dasharray="5 4" marker-end="url(#a2)"/><text x="470" y="88" font-size="10" opacity=".85">A · interim</text>
+        <rect x="545" y="30" width="200" height="76" rx="3" fill="none" stroke="currentColor" stroke-dasharray="5 4"/><text x="645" y="52" text-anchor="middle">broker check</text><text x="645" y="68" text-anchor="middle" font-size="10">format + issuers policy</text><text x="645" y="84" text-anchor="middle" font-size="10">recompute root, compare</text><text x="645" y="99" text-anchor="middle" font-size="10" opacity=".7">needs muster's encoder</text>
+        <line x1="425" y1="160" x2="540" y2="220" stroke="currentColor" marker-end="url(#a2)"/><text x="450" y="205" font-size="10" opacity=".85">B · spec 312</text>
+        <rect x="545" y="190" width="200" height="76" rx="3" fill="#1F7A5A" fill-opacity=".12" stroke="#1F7A5A" stroke-width="1.5"/><text x="645" y="212" text-anchor="middle" font-weight="600">issue_grant</text><text x="645" y="228" text-anchor="middle" font-size="10">Capability Authority</text><text x="645" y="244" text-anchor="middle" font-size="10">scope: contract · method · route</text><text x="645" y="259" text-anchor="middle" font-size="10">expires_at · revocable</text>
+        <line x1="745" y1="68" x2="840" y2="130" stroke="currentColor" stroke-dasharray="5 4" marker-end="url(#a2)"/>
+        <line x1="745" y1="228" x2="840" y2="160" stroke="currentColor" marker-end="url(#a2)"/><text x="792" y="205" font-size="10">Runtime enforces</text>
+        <rect x="845" y="115" width="80" height="60" rx="3" fill="none" stroke="currentColor"/><text x="885" y="141" text-anchor="middle">target</text><text x="885" y="157" text-anchor="middle" font-size="10" opacity=".7">module</text>
+        <text x="645" y="292" text-anchor="middle" font-size="10" fill="#B23A3A">gap: a 312 scope binds method + route, not argument values → the root lands in audit unless the scope gains an expected request root</text>
+      </g>
+    </svg>
+    <figcaption>Path A is the bespoke hook proposed first and still usable by a broker that has not implemented the draft. Path B is the shape the draft already defines: muster becomes a consumer that policy permits to issue grants; Runtime enforces with no muster-specific code. The gap is the one spec extension to ask for.</figcaption>
+  </figure>
+  <div class="compare">
+    <div class="opt"><h3>A · Bespoke hook (interim)</h3><ul><li>Policy names an authorization <em>format</em> and trusted <em>issuers</em>, never a module.</li><li>Broker recomputes the call's root and compares to the grant's. Argument-level prevention, today.</li><li>Cost: the broker carries muster's encoder, or asks muster, which puts muster on the dispatch path.</li><li>Nothing changes for an unlisted capability.</li></ul></div>
+    <div class="opt lean"><h3>B · Capability Authority, slug 312</h3><ul><li>Runtime obtains an allow decision per call naming the one method checked. Grants are policy state: contract, method, route, expiry, revocation.</li><li>Muster calls <code>issue_grant</code> when a room folds to executable. Zero muster-specific enforcement code; caching, revocation, audit for free.</li><li>Scopes cannot bind args: request roots "normally do not exist when an allow decision is made". Binding lands in audit via <code>retain-root</code>.</li><li>Ask: an optional expected request value root on <code>provider_access_scope</code>.</li></ul></div>
+  </div>
+</section>
+
+<!-- 7 -->
+<section id="draft">
+  <div class="eyebrow">7</div>
+  <h2>What the platform draft says, and what is ratified</h2>
+  <p>Checked at <code>logos-co/logos-lips</code> branch <code>draft/logos-core-module-specs</code>, head <code>e50463f</code> of 2026-09-13, on open PR #317. Every LOGOS-MODULE-* spec on it is Status: raw. Four findings, and a hash-suite gap that is easy to miss.</p>
+  <figure class="wide">
+    <svg viewBox="0 0 940 210" role="img" aria-label="Two hash paths: muster commits under SHA-256 to its own encoding; the platform computes mandatory payload commitments under BLAKE3-256 over a canonical semantic value tree. Equal roots require muster to implement the platform profile.">
+      <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <g font-family="IBM Plex Mono, monospace" font-size="12" fill="currentColor">
+        <text x="20" y="30" font-weight="600">muster today</text>
+        <rect x="20" y="42" width="140" height="44" rx="3" fill="none" stroke="currentColor"/><text x="90" y="60" text-anchor="middle" font-size="11">effect</text><text x="90" y="76" text-anchor="middle" font-size="10" opacity=".7">{module, method, args}</text>
+        <line x1="160" y1="64" x2="250" y2="64" stroke="currentColor" marker-end="url(#a3)"/><text x="205" y="57" text-anchor="middle" font-size="10">dCBOR CDE</text>
+        <rect x="255" y="42" width="150" height="44" rx="3" fill="none" stroke="currentColor"/><text x="330" y="60" text-anchor="middle" font-size="11">hash-input record</text><text x="330" y="76" text-anchor="middle" font-size="10" opacity=".7">muster.invoke.*.v1</text>
+        <line x1="405" y1="64" x2="495" y2="64" stroke="currentColor" marker-end="url(#a3)"/><text x="450" y="57" text-anchor="middle" font-size="10">SHA-256</text>
+        <rect x="500" y="42" width="120" height="44" rx="3" fill="#2F5FA8" fill-opacity=".12" stroke="#2F5FA8"/><text x="560" y="68" text-anchor="middle" font-size="11">grant root</text>
+        <text x="20" y="130" font-weight="600">platform draft</text>
+        <rect x="20" y="142" width="140" height="44" rx="3" fill="none" stroke="currentColor"/><text x="90" y="160" text-anchor="middle" font-size="11">call payload</text><text x="90" y="176" text-anchor="middle" font-size="10" opacity=".7">under a schema root</text>
+        <line x1="160" y1="164" x2="250" y2="164" stroke="currentColor" marker-end="url(#a3)"/><text x="205" y="157" text-anchor="middle" font-size="10">semantic tree</text>
+        <rect x="255" y="142" width="150" height="44" rx="3" fill="none" stroke="currentColor"/><text x="330" y="160" text-anchor="middle" font-size="11">canonical value tree</text><text x="330" y="176" text-anchor="middle" font-size="10" opacity=".7">commitment model 302</text>
+        <line x1="405" y1="164" x2="495" y2="164" stroke="currentColor" marker-end="url(#a3)"/><text x="450" y="157" text-anchor="middle" font-size="10">BLAKE3-256</text>
+        <rect x="500" y="142" width="120" height="44" rx="3" fill="#1F7A5A" fill-opacity=".12" stroke="#1F7A5A"/><text x="560" y="160" text-anchor="middle" font-size="11">value root</text><text x="560" y="176" text-anchor="middle" font-size="10" opacity=".7">mandatory, per call</text>
+        <line x1="620" y1="164" x2="700" y2="164" stroke="currentColor" marker-end="url(#a3)"/>
+        <rect x="705" y="142" width="215" height="44" rx="3" fill="none" stroke="currentColor"/><text x="812" y="160" text-anchor="middle" font-size="11">verified views</text><text x="812" y="176" text-anchor="middle" font-size="10" opacity=".7">Merkle inclusion / absence, raw</text>
+        <line x1="560" y1="86" x2="560" y2="142" stroke="#B23A3A" stroke-dasharray="4 4"/><text x="575" y="118" font-size="10" fill="#B23A3A">≠ today: different suite, different tree</text>
+      </g>
+    </svg>
+    <figcaption>The transport rejects any suite other than BLAKE3-256 with no negotiation. For a grant root to equal the platform's call root, muster must implement the hash profile and commitment model. That is a separate prerequisite epic, not a flag.</figcaption>
+  </figure>
+  <h3>Status board</h3>
+  <div class="tabs" id="tabs"><button class="on" data-f="all">all</button><button data-f="ship">shipped in muster</button><button data-f="ask">ask of Basecamp</button><button data-f="raw">raw in the draft</button><button data-f="next">separate epic</button></div>
+  <div class="status" id="status"></div>
+  <h3>The four questions to ask</h3>
+  <p>1. Is Basecamp implementing LOGOS-MODULE-CAPABILITY-AUTHORITY, and when? If yes, the ask is policy that lets <code>muster_module</code> issue grants narrowed to a method, route, and expiry. If no, path A is the fallback.</p>
+  <p>2. Would the editors accept an optional expected request value root on <code>provider_access_scope</code>, so enforcement can refuse a call whose args differ from what was agreed rather than only retaining the root for audit?</p>
+  <p>3. Who is the issuer of record for a room's grant: the muster instance, named, or for anonymous rooms a threshold signature the room produces? The spec's consumer is an authenticated instance address either way, so anonymity has to live in the room, not the grant.</p>
+  <p>4. Hash-suite timeline. Commitments are BLAKE3-256 under the draft; muster signs under SHA-256 and keccak. When the profile ratifies, muster implements it and grant roots become the platform's call roots.</p>
+</section>
+</main>
+</div>
+
+<script>
+(function(){
+// ── 1. wants → rows
+const wants=document.querySelectorAll('.want');const rows=document.querySelectorAll('#object .row');
+function litRows(list){rows.forEach(r=>r.classList.toggle('lit',list.includes(r.dataset.row)));}
+wants.forEach(w=>{const on=()=>{wants.forEach(x=>x.classList.toggle('on',x===w));litRows(w.dataset.rows.split(','));};
+  w.addEventListener('click',on);w.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();on();}});});
+wants[4].click();
+
+// ── 2. matrix
+const steps=['open room','propose','collect','executable','submit','settle'];
+const obs=['counterparty','store node','RPC provider','chain observer'];
+const M={
+ 'open room':{'counterparty':['imp','Encrypted to the member set; a later joiner cannot read earlier epochs (F-16). Admits are now log events sealed under the new epoch.','probe_epoch_new_member_disjoint'],
+  'store node':['exp','Content is sealed, but the store node sees which topics a client subscribes to and when it publishes and fetches. The conversation graph is metadata it holds; a mixnet, not an app change, would close it (FS-9).','gap: party = the store node operator'],
+  'RPC provider':['na','No RPC is involved in opening a room.',''],'chain observer':['na','Nothing reaches the chain.','']},
+ 'propose':{'counterparty':['imp','The client re-derives the materialization from the reviewed effect and refuses on mismatch (F-4). This is the structural fix for the Bybit-shaped failure: signing what was intended, not what an interface showed.','conformance: tampered effect refused'],
+  'store node':['exp','Timing and topic of the propose envelope; not its content.','baseline disclosure rows'],
+  'RPC provider':['na','Nothing leaves the room at propose.',''],'chain observer':['na','Nothing leaves the room at propose.','']},
+ 'collect':{'counterparty':['imp','Each contribution is verified by the driver to recover to a configured signer; a non-owner never reaches the fold. Under an anonymous driver no signer is named (inv 9).','coordination_surface: non-owner refused'],
+  'store node':['exp','Timing and topic per signature envelope.','baseline'],'RPC provider':['na','',''],'chain observer':['na','','']},
+ 'executable':{'counterparty':['imp','Ready is not a flag anyone set; it is re-derived from the signed log by every client, so the room agrees without a coordinator (inv 4). The authorization grant is issued only from this state.','threshold_fold_test · authorization_test'],
+  'store node':['exp','Metadata only.',''],'RPC provider':['na','',''],'chain observer':['na','','']},
+ 'submit':{'counterparty':['imp','The assembled transaction is built from the exact signatures folded on the log; the safeTxHash matches the contract\'s on-chain getTxHash.','coordinate_submit_anvil'],
+  'store node':['exp','Metadata only.',''],
+  'RPC provider':['mot','The user-configured RPC sees the signed transaction before the mempool does. This is the article\'s private-order-flow case: discretion relocated to a named intermediary, not removed. The manifest names it: signed-tx → rpc-provider.','manifest: row("signed-tx", obRpcProvider)'],
+  'chain observer':['exp','to, value, data and the payer become public on-chain; signer linkability at settlement needs an anonymous driver, which does not exist yet.','gap: party = anyone reading the chain']},
+ 'settle':{'counterparty':['imp','Finality is observed from the receipt, never asserted (R-8).','wallet_finality'],'store node':['exp','Metadata only.',''],
+  'RPC provider':['mot','A balance read is attested unless proof-checked: verified-locally needs a state root the client trusts, and until the beacon light-client sidecar exists that root is supplied, not derived (F-10).','gap: party = the supplier of the state root'],
+  'chain observer':['imp','A proof-checked read (eth_getProof against a trusted root) is imperative against the provider: an inconsistent provider is refused.','wallet_verify_test']}
+};
+const labels={imp:'imperative',mot:'motivational',exp:'exposed',na:'not applicable'};
+const tbl=document.getElementById('matrix');let h='<tr><th></th>'+obs.map(o=>'<th class="obs">'+o+'</th>').join('')+'</tr>';
+steps.forEach(s=>{h+='<tr><td class="step">'+s+'</td>'+obs.map(o=>{const c=M[s][o];return '<td><button class="'+c[0]+'" data-s="'+s+'" data-o="'+o+'" aria-label="'+s+' vs '+o+': '+labels[c[0]]+'">'+labels[c[0]]+'</button></td>';}).join('')+'</tr>';});
+tbl.innerHTML=h;
+const ex=document.getElementById('explain');
+tbl.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;tbl.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+  const c=M[b.dataset.s][b.dataset.o];ex.innerHTML='<div class="h">'+b.dataset.s+' · '+b.dataset.o+'<span class="pill '+c[0]+'">'+labels[c[0]]+'</span></div><div>'+(c[1]||'Nothing crosses to this observer at this step.')+'</div>'+(c[2]?'<div class="mono" style="font-size:.74rem;color:var(--ink-3);margin-top:6px">'+c[2]+'</div>':'');});
+tbl.querySelector('button[data-s="submit"][data-o="RPC provider"]').click();
+
+// ── 3. stepper (real payloads)
+const readiness={declared:true,ready:false,unknown:0,items:[{kind:"environment",name:"chain:31337",scope:"instance",status:"missing",detail:"RPC unreachable: Connection refused",remedy:"point the RPC setting at chain:31337 (set_setting rpc)"},{kind:"infra",name:"rpc",scope:"instance",status:"met",detail:"rpc = http://127.0.0.1:8545",remedy:""},{kind:"authority",name:"safe-owner",scope:"contributor",status:"met",detail:"your key is a Safe owner",remedy:""}],intentId:"0x1f2342d05684eb56",policy:"safe"};
+const manifest={declared:true,agreement:{rounds:1,threshold:2,membership:"named",finality:"external",domain:"eip712.safe.v1.4.1"},requirements:[{kind:"environment",name:"chain:31337",scope:"instance"},{kind:"infra",name:"rpc",scope:"instance"},{kind:"authority",name:"safe-owner",scope:"contributor"}],discloses:[{field:"effect",to:"room-member"},{field:"contributions",to:"room-member"},{field:"timing",to:"store-node"},{field:"topic",to:"store-node"},{field:"to",to:"chain-observer"},{field:"value",to:"chain-observer"},{field:"data",to:"chain-observer"},{field:"payer",to:"chain-observer"},{field:"signed-tx",to:"rpc-provider"}],touches:[{target:"safe:0x5fbdb2315678afecb367f032d93f642f64180aa3",mode:"write"},{target:"safe:0x5fbdb2315678afecb367f032d93f642f64180aa3:nonce",mode:"write"},{target:"chain:31337",mode:"write"}]};
+const S=[
+ {k:'PROPOSE',t:'Propose',txt:'<p>A member proposes an effect. The id is content-addressed from the effect, so every participant derives the same one without a round trip. The client canonicalizes the effect into the exact bytes an owner would sign and shows both.</p>',g:'inv 1 · effects are reviewed, materializations are signed; re-derive-or-refuse',j:{effect:{to:"0x70997970C51812dc3A010C7d01b50e0d17dc79C8",value:1,nonce:0},intentId:"0x1f2342d05684eb56",policy:"safe",txhash:"the driver's re-derived safeTxHash (EIP-712, chainId 31337)"}},
+ {k:'MANIFEST',t:'Manifest',txt:'<p>The driver, given this effect, declares what it needs, touches, and discloses. The core adds the two store-node rows. Conformance checked this manifest against describe(): external finality, so it must name an environment, a chain-observer disclosure, and a write.</p>',g:'inv 6 · driver-described, never hardcoded in the core',j:manifest},
+ {k:'READINESS',t:'Readiness',txt:'<p>The same manifest crossed with this instance\'s facts. No anvil was running, so the environment requirement reports <em>missing</em> with the remedy, while infra and authority are met. Unknown is a first-class answer; nothing is silently met.</p>',g:'inv 9 · authority is graded about your key only, never who else holds it',j:readiness},
+ {k:'CARD',t:'The card',txt:'<p>The five questions rendered from the two payloads, with per-requirement remedies: infra and environment hop to Settings, a module requirement names the host install path, and the plugin itself installs nothing. Approve or Deny sit beside each other.</p>',g:'inv 3 · plugins never sign, hold keys, or touch the network',j:{card:{does:"pay 1 to 0x7099…79C8",needs:"environment ✗ · rpc ✓ · safe-owner ✓",touches:"safe, its nonce, chain 31337",happens:"room: effect, contributions · store node: timing, topic · chain: to, value, data, payer · RPC: signed-tx",agree:"2 of the named signers · settles outside the room"},actions:["Approve","Deny","Open settings"]}},
+ {k:'DENY',t:'Deny',txt:'<p>A decline is a signed log event keyed by the member, folded into the intent view and the history. Named under a named driver, only counted under an anonymous one. It never moves the threshold; whether a required signer\'s decline should drop the intent is driver policy.</p>',g:'inv 4 · state = reduce(log); reorder and duplication converge',j:{intentId:"0x1f2342d05684eb56",state:"proposed",declines:1}},
+ {k:'EXECUTABLE',t:'Executable',txt:'<p>When the threshold of verified contributions folds in, every client re-derives <em>executable</em> from the log. This is the only state from which an authorization can be issued.</p>',g:'inv 10 · signing refused when any input\'s origin is unaccountable',j:{id:"0x1f2342d05684eb56",state:"executable",threshold:2,approvals:2,n:3,provenance:[{class:"peer-message",logPos:1,what:"the proposal"},{class:"driver-contribution",logPos:2,account:"0xf39f…2266",what:"an approval"},{class:"driver-contribution",logPos:3,account:"0x7099…79C8",what:"an approval"}]}},
+ {k:'AUTHORIZE',t:'Authorization',txt:'<p>The grant a host hook checks: the capability name, the exact materialization root, and a replay-bound context, signed with the instance\'s secp key. The checker is pure and refuses an expired, mismatched, or untrusted grant with a reason.</p>',g:'inv 2 · every signing payload commits to environment, account, slot, expiry',j:{format:"muster.authorization.v1",intentId:"0x1f2342d05684eb56",capability:"safe.execute",materializationRoot:"0x…the agreed safeTxHash",environment:"chain:31337",account:"safe:0x5fbd…0aa3",slot:"0x1f2342d05684eb56",expiry:1789544400,issuer:"0x…this instance",signature:"0x…65 bytes"}}
+];
+const st=document.getElementById('stepper'),stT=document.getElementById('stepTxt'),stJ=document.getElementById('stepJson');
+S.forEach((s,i)=>{const b=document.createElement('button');b.setAttribute('role','tab');b.innerHTML='<span class="k">'+s.k+'</span>'+s.t;b.addEventListener('click',()=>show(i));st.appendChild(b);});
+function show(i){st.querySelectorAll('button').forEach((b,j)=>b.classList.toggle('on',i===j));stT.innerHTML='<h3 style="margin-top:0">'+S[i].t+'</h3>'+S[i].txt+'<div class="guard">'+S[i].g+'</div>';stJ.textContent=JSON.stringify(S[i].j,null,2);}
+show(2);
+
+// ── 4. flow
+const log=[{kind:'message',who:'alice',d:'"hi" (author asserted)'},{kind:'propose',id:'0x1f23…',d:'pay 1 → 0x7099…'},{kind:'sig',who:'alice',d:'approval'},{kind:'admit',who:'carol',d:'re-key → epoch 1'},{kind:'sig',who:'bob',d:'approval'},{kind:'submit',d:'sent through the RPC'},{kind:'final',d:'settled on-chain'}];
+const OBS=['room-member','store-node','rpc-provider','chain-observer','target-module'];
+const base={'room-member':'effect, contributions','store-node':'timing, topic'};
+const outside={'rpc-provider':'signed-tx','chain-observer':'to, value, data, payer'};
+const posEl=document.getElementById('pos'),posL=document.getElementById('posLabel'),sub=document.getElementById('submitted'),grid=document.getElementById('flowgrid'),mem=document.getElementById('members');
+function renderFlow(){const p=+posEl.value;posL.textContent='#'+p+' · '+log[p].kind;let members=['alice','bob'];let epoch=0;let h='<div class="h">action</div>'+OBS.map(o=>'<div class="h">'+o+'</div>').join('');
+  log.forEach((e,i)=>{const on=i<=p;if(e.kind==='admit'&&on){members=['alice','bob','carol'];epoch=1;}
+    if(!sub.checked&&(e.kind==='submit'||e.kind==='final'))return;
+    const cur=e.kind==='admit'?['alice','bob','carol']:members.slice();
+    h+='<div class="act'+(on?'':' dim')+'">#'+i+' '+e.kind+(e.who?' · '+e.who:'')+'<small>'+e.d+'</small></div>';
+    OBS.forEach(o=>{let txt='',cls='';
+      if(o==='room-member'){txt=(e.kind==='admit'?'membership':base[o])+'<br>('+cur.join(', ')+')';cls='room';}
+      else if(o==='store-node'){txt=base[o];cls='out';}
+      else if((e.kind==='submit'||e.kind==='final')&&outside[o]){txt=outside[o];cls=o==='chain-observer'?'chain':'out';}
+      else txt='—';
+      h+='<div class="c '+cls+(on?'':' dim')+'">'+txt+'</div>';});});
+  grid.innerHTML=h;mem.innerHTML='Epoch '+epoch+' key holders at #'+p+': '+members.map(m=>'<span class="m'+(m==='carol'?' new':'')+'">'+m+'</span>').join('')+(epoch===0?' <span style="color:var(--ink-3)">· Carol cannot read anything before her admission</span>':'');}
+posEl.addEventListener('input',renderFlow);sub.addEventListener('change',renderFlow);renderFlow();
+
+// ── 5. proof (SHA-256 via SubtleCrypto over a simplified record)
+const orig=[{key:'intent/0x1f23/propose',value:'{"to":"0x7099","value":1}',parents:[]},{key:'intent/0x1f23/sig/alice/1',value:'sig-alice',parents:[0]},{key:'intent/0x1f23/sig/bob/1',value:'sig-bob',parents:[1]},{key:'membership/1/admit/carol',value:'1',parents:[2]}];
+let ev=JSON.parse(JSON.stringify(orig));let claimed=[];
+async function sha(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
+async function idOf(e,ids){const ps=e.parents.map(i=>ids[i]||'?').sort();return (await sha('muster.event.v1|'+JSON.stringify(ps)+'|'+e.key+'|'+e.value)).slice(0,16);}
+async function compute(list){const ids=[];for(let i=0;i<list.length;i++){ids.push(await idOf(list[i],ids));}return ids;}
+const chainEl=document.getElementById('chain'),ver=document.getElementById('verdict');
+async function renderChain(){const ids=await compute(ev);if(!claimed.length)claimed=ids.slice();
+  chainEl.innerHTML=ev.map((e,i)=>'<div class="ev'+(ids[i]!==claimed[i]?' bad':'')+'"><div class="key">'+e.key+'</div><input id="ev'+i+'" data-i="'+i+'" value="'+e.value.replace(/"/g,'&quot;')+'" aria-label="value of event '+i+'"><div class="par">parents: '+(e.parents.length?e.parents.map(p=>'#'+p).join(', '):'none')+'</div><div class="id">id '+ids[i]+'</div><div class="id">claimed '+(claimed[i]||'—')+'</div></div>').join('');
+  let bad='';for(let i=0;i<ev.length;i++){if(ids[i]!==claimed[i]){bad='event '+i+' content does not match its claimed id';break;}}
+  if(!bad&&ev.length<claimed.length)bad='event '+(ev.length-1)+' names a parent outside the proof — the slice is not parent-closed';
+  ver.className='verdict '+(bad?'bad':'ok');ver.textContent=bad?'REFUSED — '+bad:'verifies — '+ev.length+' events, every id recomputed, parent-closed, canonical';}
+chainEl.addEventListener('input',e=>{const i=+e.target.dataset.i;if(Number.isFinite(i)){ev[i].value=e.target.value;renderChain();}});
+document.getElementById('resetChain').addEventListener('click',()=>{ev=JSON.parse(JSON.stringify(orig));renderChain();});
+document.getElementById('dropMiddle').addEventListener('click',()=>{if(ev.length===4){ev.splice(1,1);ev[1].parents=[0];ev[2].parents=[1];renderChain();}});
+renderChain();
+
+// ── 7. status board
+const ST=[
+ {f:'ship',t:'M1 manifest seam',d:'Driver.manifest(effect); conformance refuses an undeclared or self-contradicting manifest.',p:'imp',l:'shipped'},
+ {f:'ship',t:'M2 readiness',d:'coordinate_readiness: met / missing / unknown with remedies, graded about your key only.',p:'imp',l:'shipped'},
+ {f:'ship',t:'M3 the card + Deny',d:'What this needs · touches · who will see what · agreement; decline folds once.',p:'imp',l:'shipped'},
+ {f:'ship',t:'M4 provenance + proofs',d:'Every log entry classed; admits are log events; whole-slice proofs refuse on tamper.',p:'imp',l:'shipped'},
+ {f:'ship',t:'M5 flow view',d:'Who saw what, per action, with the store node on every entry.',p:'imp',l:'shipped'},
+ {f:'ship',t:'M6 lidl-gen declarations',d:'SDK #3: manifest per action from declarations.json; unknown vocabulary raises.',p:'imp',l:'shipped'},
+ {f:'ship',t:'M8 credibility column',d:'imperative · motivational · exposed · not-applicable, party named; validator enforces.',p:'imp',l:'shipped'},
+ {f:'ship',t:'M7 muster half',d:'coordinate_authorization only from executable; pure checker; interim path A.',p:'imp',l:'shipped'},
+ {f:'ask',t:'Policy: let muster issue_grant',d:'Slug 312 lets a consumer issue grants when policy allows. The ask is policy, not code.',p:'mot',l:'ask'},
+ {f:'ask',t:'Spec ext: expected request root',d:'One optional field on provider_access_scope for argument-level prevention.',p:'mot',l:'ask'},
+ {f:'raw',t:'312 Capability Authority',d:'Decisions, grants, revocation, audit. Raw, on PR #317.',p:'na',l:'raw'},
+ {f:'raw',t:'302 commitment model · 303 hash profile · 300 cdCDDLe',d:'Canonical value tree, BLAKE3-256 mandatory suite, verified views as Merkle proofs. Raw.',p:'na',l:'raw'},
+ {f:'next',t:'Hash-profile implementation',d:'BLAKE3-256 semantic value tree so grant roots equal platform call roots. Separate epic.',p:'exp',l:'not started'},
+ {f:'next',t:'Verified module inputs',d:'Upgrade attested external reads to verified-locally once views ratify (F-10).',p:'exp',l:'blocked on ratification'}
+];
+const stEl=document.getElementById('status'),tabs=document.getElementById('tabs');
+function renderStatus(f){stEl.innerHTML=ST.filter(s=>f==='all'||s.f===f).map(s=>'<div class="st"><div class="t"><span>'+s.t+'</span><span class="pill '+s.p+'">'+s.l+'</span></div><div class="d">'+s.d+'</div></div>').join('');}
+tabs.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;tabs.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));renderStatus(b.dataset.f);});
+renderStatus('all');
+})();
+</script>
+</body></html>
