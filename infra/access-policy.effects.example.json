@@ -1,19 +1,36 @@
 {
-  "_about": "PROPOSAL (docs/design/host-effect-policy.md, exo-002.7) — not read by any host yet. Extends access-policy.json from allowed CALLERS to gated EFFECTS: a call to a listed capability must carry a muster.authorization.v1 grant for an executable room intent whose materialization root matches the call, from a trusted issuer, before expiry.",
+  "_about": "PROPOSAL (docs/design/host-effect-policy.md, exo-002.7) \u2014 not read by any host yet. Extends access-policy.json from allowed CALLERS to gated EFFECTS: a call to a listed capability must carry an authorization of the declared FORMAT, from a trusted ISSUER, for an executable room intent whose materialization root matches the call, before expiry. The policy names a format and issuers, never a module: muster is one provider of muster.authorization.v1 (today the only one).",
   "version": 2,
   "mode": "enforce",
   "restrictions": {
-    "muster_module": { "allowedCallers": ["muster_ui"] }
+    "muster_module": {
+      "allowedCallers": [
+        "muster_ui"
+      ]
+    }
+  },
+  "authorizationFormats": {
+    "muster.authorization.v1": {
+      "digest": "muster.authorization.v1 hash-input record (dCBOR, domain-separated)",
+      "signature": "secp256k1 recoverable, 65 bytes, over the digest",
+      "providers": [
+        "muster_module"
+      ]
+    }
   },
   "gatedEffects": {
     "lez_core.transfer_private": {
-      "requires": "muster.authorization.v1",
-      "trustedIssuers": ["*"],
+      "format": "muster.authorization.v1",
+      "issuers": [
+        "*"
+      ],
       "maxAge": 600
     },
     "safe.execute": {
-      "requires": "muster.authorization.v1",
-      "trustedIssuers": ["*"],
+      "format": "muster.authorization.v1",
+      "issuers": [
+        "*"
+      ],
       "maxAge": 600
     }
   }
