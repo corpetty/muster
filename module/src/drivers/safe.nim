@@ -167,7 +167,13 @@ method manifest*(d: SafeDriver, effect: Effect): ActionManifest =
   ActionManifest(declared: true, agreement: d.describe(),
     requirements: @[req(rqEnvironment, "chain:" & $d.chainId),
                     req(rqInfra, "rpc"),
-                    req(rqAuthority, "safe-owner", rsContributor)],
+                    req(rqAuthority, "safe-owner", rpContributor),
+                    # the payee's receiving address is counterparty material: in the
+                    # request-first flow (docs/design/material-and-disclosure.md §3.4)
+                    # the recipient shares it before the effect completes; the proposer
+                    # may also supply it directly. It lands in the effect's "to" field.
+                    req(rqAddress, "payee", rpCounterparty,
+                        need(mcAddress, "chain:" & $d.chainId, "to"))],
     discloses: @[row("to", obChainObserver), row("value", obChainObserver),
                  row("data", obChainObserver), row("payer", obChainObserver),
                  row("signed-tx", obRpcProvider)],

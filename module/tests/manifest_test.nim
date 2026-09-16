@@ -51,14 +51,37 @@ block:
   doAssert "external finality but no environment requirement" in f
   doAssert "external finality but nothing disclosed to the chain observer" in f
   doAssert "external finality but no write touch" in f
-  doAssert "named membership but no contributor-scoped authority requirement" in f
-  m.requirements = @[req(rqEnvironment, "chain:1"), req(rqAuthority, "owner", rsContributor)]
+  doAssert "named membership but no contributor authority requirement" in f
+  m.requirements = @[req(rqEnvironment, "chain:1"), req(rqAuthority, "owner", rpContributor)]
   m.discloses = @[row("amount", obChainObserver)]
   m.touches = @[touch("chain:1", tmWrite)]
   doAssert m.consistent(), $consistencyFailures(m)
   m.requirements.add req(rqInfra, "")
   doAssert not m.consistent()
   echo "4. a manifest that contradicts its describe() (or names nothing) FAILS OK"
+
+# ── 4b. the exo-45e party + material rules (docs/design/material-and-disclosure.md) ─
+block:
+  let desc = newStubDriver(finality = finImmediate, membership = mmAnonymous).describe()
+  # a proposer/counterparty requirement must NAME an effect field.
+  var m = ActionManifest(declared: true, agreement: desc,
+    requirements: @[req(rqAddress, "payee", rpCounterparty)])   # default needs → no field
+  doAssert not m.consistent(), "a counterparty requirement with no effect field must fail"
+  doAssert consistencyFailures(m)[0].contains("names no effect field")
+
+  # with a field declared but ABSENT from the effect, it still fails (nowhere to land).
+  m.requirements = @[req(rqAddress, "payee", rpCounterparty, need(mcAddress, "chain:1", "to"))]
+  let noTo = Effect(schemaId: "x", fields: @[("value", cbUint(1'u64))])
+  doAssert not m.consistent(noTo), "binding an effect field the effect lacks must fail"
+  # and passes once the effect carries the field.
+  let withTo = Effect(schemaId: "x", fields: @[("to", cbText("0xabc")), ("value", cbUint(1'u64))])
+  doAssert m.consistent(withTo), $consistencyFailures(m, withTo)
+
+  # kind and declared material class must not drift for a participant requirement.
+  m.requirements = @[req(rqAuthority, "owner", rpContributor, need(mcAddress, "safe:0x"))]
+  doAssert not m.consistent(), "an authority requirement declaring class address must fail"
+  doAssert consistencyFailures(m)[0].contains("expected authority")
+  echo "4b. party + material vocabulary: proposer/counterparty field + class alignment OK"
 
 # ── 5. fieldText reads the effect (the invoke driver's module/method live there) ──
 block:

@@ -810,3 +810,6 @@
 {"type":"dep_add","timestamp":"2026-09-16T13:39:44.857806777Z","issue_id":"exo-446","payload":{"dep_type":"blocks","depends_on":"exo-aa7"}}
 {"type":"close","timestamp":"2026-09-16T13:39:44.896750023Z","issue_id":"exo-45e.1","payload":{}}
 {"type":"close","timestamp":"2026-09-16T13:39:44.896750023Z","issue_id":"exo-45e.8","payload":{}}
+{"type":"status_update","timestamp":"2026-09-16T13:42:40.492677449Z","issue_id":"exo-45e.2","payload":{"status":"in_progress"}}
+{"type":"close","timestamp":"2026-09-16T13:55:56.381254618Z","issue_id":"exo-45e.2","payload":{}}
+{"type":"comment","timestamp":"2026-09-16T13:55:56.419356235Z","issue_id":"exo-45e.2","payload":{"body":"Landed. party+needs+rqAddress/rqAsset in manifest.nim; consistency checks (class↔kind, proposer/counterparty must name an effect field the effect carries); Safe declares counterparty payee bound to 'to'; readiness scoped to instance+contributor (counterparty deferred to offers K4). Green: manifest_test, conformance_test (9/9), readiness_test, flow_test, decline_test."}}

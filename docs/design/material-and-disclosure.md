@@ -62,7 +62,9 @@ The catalogue holds handles and public material only. Signing stays behind the `
 
 ```
 Requirement
-  kind      module | environment | authority | infra | capability   (as today)
+  kind      module | environment | authority | infra | capability | address | asset
+            (address + asset added in K1 so participant-supplied material is first-class;
+             the closed vocabulary grows by slice, never ad hoc)
   name      "safe-owner" | "chain:31337" | "rpc" | …               (as today)
   party     instance | proposer | contributor | counterparty         (was scope: instance | contributor)
   needs     MaterialClass + constraint  e.g. authority on safe:0x…, address on lez:* any form, asset ETH ≥ effect.value
@@ -131,7 +133,7 @@ These are the invariant-shaped claims a typed spec should carry (a `derived-exo-
 |---|---|
 | `module/src/crypto/keystore.nim` | `KeyRef`; `accounts()`, `sign(ref, …)`, `edSign(ref, …)`, `bindingFor(ref, ctx)`; `FileKeystore` becomes a keyfile set; the in-memory backend takes several. Keycard: several slots behind the same methods. |
 | `module/src/wallet/material.nim` (new) | `Material`, `MaterialSource` seam, `catalogue()`. Sources: keystore, each `ChainAdapter` (`accounts` already exists; add `form`-aware public material), configured Safes, host (stub returning `unknown` until ADR-013's shell is reachable). |
-| `module/src/drivers/manifest.nim` | `Requirement.party` (replaces `scope`), `Requirement.needs`; conformance checks in `conformance.nim`; the six drivers declare their parties and classes. |
+| `module/src/drivers/manifest.nim` | **Landed (K1):** `Requirement.party` (replaced `scope`), `Requirement.needs` (`MaterialClass` + target + effect field), `rqAddress`/`rqAsset` kinds; `consistencyFailures(m, effect)` checks class↔kind alignment + that proposer/counterparty material names an effect field the effect carries; the drivers declare parties + classes; Safe declares the payee as counterparty address bound to `to`. `manifest_test` + `conformance_test` + `readiness_test` green. |
 | `module/src/drivers/safe_rpc.nim` | `getOwners` read; `SafeDriver` owners graded F-10 (`attested` from RPC; `verified-locally` when a state root is supplied, as `wallet_verified_balance` does). Remove the owner self-injection in `nim-lib/muster_module.nim`. |
 | `module/src/coordination/offers.nim` (new) | `offers(requirements, catalogue, manifest)`, pure; disclosure rows per candidate from the manifest vocabulary. `readiness.nim` calls it for authority instead of the hard-coded name switch. |
 | `module/src/coordination/intents.nim` | `material-share` event kind; fold binds it to a request or an intent; provenance classes it `peer-message` with its position; `reduceFlow` adds the rows it disclosed. |
@@ -150,7 +152,7 @@ Slices are pebbles issues under the epic. Order: K1 and K2 are independent; K3 i
 | Slice | Done when |
 |---|---|
 | **K0 — landed 2026-09-16** Typed spec for §4 with acceptance oracles, via `discuss-issue` (`contracts/specs/derived-exo-45e.spec.json`, intake `exo-a8e`) | Done: 7 span-bound oracles (s1 metamorphic/conservation, s2–s7 trace property_tests), criticality `catastrophic`, passes `validate_spec` + the entrypoint-provenance gate. Each rule → a probe a K1–K6 test implements. |
-| **K1** Requirement vocabulary: `party` + `needs`; conformance checks; six drivers declare | Conformance green with the new checks; a driver declaring a `proposer` requirement with no effect field fails; the LEZ and Safe drivers declare a `counterparty` address. |
+| **K1 — landed 2026-09-16** Requirement vocabulary: `party` + `needs`; conformance checks; drivers declare | Done: `party` (instance/proposer/contributor/counterparty) + `needs` (material class + target + effect field), `rqAddress`/`rqAsset`; a proposer/counterparty requirement naming no (or an absent) effect field fails, and class↔kind drift fails; the Safe driver declares a counterparty payee address bound to `to`; readiness grades only the instance's own slots (proposer/counterparty deferred to offers). `conformance_test` 9/9 green. The LEZ counterparty is deferred to K6 (Mode B); it is a wallet adapter, not a coordination `Driver`, so it declares no `Driver.manifest`. |
 | **K2** Holdings catalogue + keyed keystore | `catalogue()` lists keystore, adapter, and configured material with grades; `FileKeystore` holds a set; `sign(ref, …)` refuses an unknown ref; a test asserts no catalogue bytes reach any log encoder. |
 | **K3** Verified authority: Safe owners from chain; self-injection removed | `readiness` reports `safe-owner: missing` for a non-owner key against live anvil and `unknown` with no RPC; `safe_anvil_e2e` still green with anvil-seeded owners; the in-app approval path proves it only counts for real owners. |
 | **K4** Offers: `compose_offers` + `coordinate_offers` | A two-account instance is offered "send from Safe X" only for the owner account; the LEZ send offers public and shielded with different rows; an unreadable owner set yields `unknown`; a member's offers never mention another member (probe). |

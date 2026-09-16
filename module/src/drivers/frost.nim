@@ -103,4 +103,4 @@ method manifest*(d: FrostDriver, effect: Effect): ActionManifest =
   ## driver — it settles nothing and alters nothing outside the room. The two-round
   ## structure is on the agreement half (describe()), where the core reads it.
   ActionManifest(declared: true, agreement: d.describe(),
-                 requirements: @[req(rqAuthority, "roster-member", rsContributor)])
+                 requirements: @[req(rqAuthority, "roster-member", rpContributor)])

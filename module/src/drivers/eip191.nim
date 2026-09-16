@@ -103,4 +103,4 @@ method manifest*(d: PersonalSignDriver, effect: Effect): ActionManifest =
   ## contract or service checking ecrecover) is outside this action's boundary and
   ## sees exactly what the room chose to hand it — nothing leaves here on its own.
   ActionManifest(declared: true, agreement: d.describe(),
-                 requirements: @[req(rqAuthority, "signer", rsContributor)])
+                 requirements: @[req(rqAuthority, "signer", rpContributor)])

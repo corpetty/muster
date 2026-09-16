@@ -77,6 +77,6 @@ proc checkConformance*(d: Driver, effect, tampered: Effect,
   let m = d.manifest(effect)
   result.add("manifest is stable", m == d.manifest(effect))
   result.add("manifest agreement is describe()", m.agreement == desc)
-  let fails = consistencyFailures(m)
+  let fails = consistencyFailures(m, effect)
   result.add("manifest is declared and consistent" &
              (if fails.len > 0: " (" & $fails & ")" else: ""), fails.len == 0)
