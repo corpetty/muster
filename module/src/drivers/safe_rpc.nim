@@ -93,6 +93,39 @@ proc safeNonce*(url: string, safe: Address): uint64 =
   if r.isNil or r.kind == JNull: return 0
   hexToU64(r.getStr("0x0"))
 
+proc decodeAddressArray*(hex: string): seq[Address] =
+  ## Decode an ABI `address[]` return: [offset:32][len:32][word:32]*len, each word a
+  ## right-aligned 20-byte address. Returns @[] for an empty/short/odd payload.
+  var s = hex
+  if s.len >= 2 and s[0] == '0' and (s[1] in {'x', 'X'}): s = s[2 .. ^1]
+  if s.len < 128: return @[]                     # need at least offset + length words
+  let n = int(hexToU64(s[64 ..< 128]))           # the length word (word #2)
+  for i in 0 ..< n:
+    let base = 128 + i * 64                        # word #(3+i)
+    if base + 64 > s.len: break
+    let word = s[base ..< base + 64]
+    var a: Address
+    for j in 0 ..< 20:                             # last 20 bytes of the 32-byte word
+      let off = 24 + j * 2
+      a[j] = byte(hexToU64(word[off ..< off + 2]))
+    result.add a
+
+proc getOwners*(url: string, safe: Address): tuple[known: bool, owners: seq[Address], detail: string] =
+  ## The Safe's owner set, read from the chain via `eth_call getOwners()` (F-10:
+  ## attested by the user's RPC; supply a state root elsewhere for verified-locally).
+  ## `known` is false when the read fails or the RPC is unreachable — the caller must
+  ## report unknown, never a fabricated owner set (rule s4, contracts/specs/derived-exo-45e).
+  ## Never raises: a failed read is a real answer (not known), not an exception.
+  let sel = keccak256(strBytes("getOwners()"))
+  let data = @[sel[0], sel[1], sel[2], sel[3]]
+  try:
+    let r = rpc(url, "eth_call", %*[{"to": toHex0x(safe), "data": toHex0x(data)}, "latest"])
+    if r.isNil or r.kind == JNull or r.getStr("").len == 0:
+      return (false, @[], "getOwners() returned no data")
+    (true, decodeAddressArray(r.getStr()), "read from chain")
+  except CatchableError as e:
+    (false, @[], "RPC unreachable: " & e.msg)
+
 proc probeRpc*(url: string): tuple[ok: bool, chainId: int, detail: string] =
   ## A cheap liveness probe of the user's RPC endpoint (invariant 8: untrusted,
   ## user-chosen infra, so its reachability must be *visible*, never assumed).

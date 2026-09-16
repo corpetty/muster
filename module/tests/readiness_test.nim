@@ -29,30 +29,59 @@ let owners = @[mkAddr(1), mkAddr(2), mkAddr(3)]
 let safeDrv = newSafeDriver(chainId = 31337, safe = mkAddr(9), owners = owners, threshold = 2)
 let m = safeDrv.manifest(effect)
 
-# ── 1. no RPC + a non-owner: infra missing (with remedy), authority missing, env unknown ──
+proc chainProbe(id: int): proc(url: string): tuple[ok: bool, chainId: int, detail: string] {.gcsafe.} =
+  (proc(url: string): tuple[ok: bool, chainId: int, detail: string] = (true, id, "chain " & $id))
+proc ownersOnChain(os: seq[Address]): proc(url: string, safe: Address): tuple[known: bool, owners: seq[Address], detail: string] {.gcsafe.} =
+  (proc(url: string, safe: Address): tuple[known: bool, owners: seq[Address], detail: string] = (true, os, "read from chain"))
+let ownersUnreadable = proc(url: string, safe: Address): tuple[known: bool, owners: seq[Address], detail: string] {.gcsafe.} =
+  (false, @[], "eth_call reverted")
+
+# ── 1. no RPC: infra missing (with remedy), AUTHORITY UNKNOWN (no chain read), env unknown ─
 block:
-  let f = HostFacts(rpcUrl: "", expectedChainId: 31337, myAddress: mkAddr(7), safeOwners: owners)
+  let f = HostFacts(rpcUrl: "", expectedChainId: 31337, myAddress: mkAddr(7), safe: mkAddr(9))
   let r = assessReadiness(m, probeFromFacts(f))
   doAssert r.declared and not r.ready
   doAssert r.item(rqInfra).status == rdMissing and "set_setting rpc" in r.item(rqInfra).remedy
-  doAssert r.item(rqAuthority).status == rdMissing and "Safe owner" in r.item(rqAuthority).detail
+  doAssert r.item(rqAuthority).status == rdUnknown, "no chain read → cannot confirm you are an owner → unknown, never a fabricated met (s4/s5)"
   doAssert r.item(rqEnvironment).status == rdUnknown, "no RPC → the chain cannot be probed → unknown, not met"
-  doAssert r.unknown == 1
-  echo "1. no RPC + non-owner: infra missing (remedy names set_setting rpc), authority missing, env UNKNOWN OK"
+  doAssert r.unknown == 2   # environment + authority
+  echo "1. no RPC: infra missing, authority + env UNKNOWN (no fabricated access) OK"
 
-# ── 2. an owner with an RPC serving the right chain: ready ────────────────────────
+# ── 2. an owner read FROM THE CHAIN, RPC on the right chain: ready ────────────────
 block:
-  var f = HostFacts(rpcUrl: "http://rpc", expectedChainId: 31337, myAddress: mkAddr(2), safeOwners: owners)
-  f.rpcProbe = proc(url: string): tuple[ok: bool, chainId: int, detail: string] = (true, 31337, "chain 31337")
+  var f = HostFacts(rpcUrl: "http://rpc", expectedChainId: 31337, myAddress: mkAddr(2), safe: mkAddr(9))
+  f.rpcProbe = chainProbe(31337)
+  f.ownersProbe = ownersOnChain(owners)   # the chain says mkAddr(2) is an owner
   let r = assessReadiness(m, probeFromFacts(f))
   doAssert r.ready and r.unknown == 0, $r.toJson()
+  doAssert "read from chain" in r.item(rqAuthority).detail
   for it in r.items: doAssert it.remedy.len == 0
-  echo "2. owner + RPC on the expected chain: ready, no remedies OK"
+  echo "2. owner read from chain + RPC on the expected chain: ready, no remedies OK"
+
+# ── 2b. a NON-owner on-chain: authority MISSING (the false-green fix, s4) ──────────
+block:
+  var f = HostFacts(rpcUrl: "http://rpc", expectedChainId: 31337, myAddress: mkAddr(7), safe: mkAddr(9))
+  f.rpcProbe = chainProbe(31337)
+  f.ownersProbe = ownersOnChain(owners)   # mkAddr(7) is NOT in the chain owner set
+  let r = assessReadiness(m, probeFromFacts(f))
+  doAssert not r.ready
+  doAssert r.item(rqAuthority).status == rdMissing and "not a Safe owner on-chain" in r.item(rqAuthority).detail
+  echo "2b. non-owner on-chain: authority MISSING — no key injected into the owner set OK"
+
+# ── 2c. RPC up but getOwners fails: authority UNKNOWN (never a guess) ──────────────
+block:
+  var f = HostFacts(rpcUrl: "http://rpc", expectedChainId: 31337, myAddress: mkAddr(2), safe: mkAddr(9))
+  f.rpcProbe = chainProbe(31337)
+  f.ownersProbe = ownersUnreadable
+  let r = assessReadiness(m, probeFromFacts(f))
+  doAssert r.item(rqAuthority).status == rdUnknown and "could not read" in r.item(rqAuthority).detail
+  echo "2c. RPC up but owner read fails: authority UNKNOWN OK"
 
 # ── 3. the RPC serves the WRONG chain: environment missing, named in the detail ─────
 block:
-  var f = HostFacts(rpcUrl: "http://rpc", expectedChainId: 31337, myAddress: mkAddr(2), safeOwners: owners)
-  f.rpcProbe = proc(url: string): tuple[ok: bool, chainId: int, detail: string] = (true, 1, "mainnet")
+  var f = HostFacts(rpcUrl: "http://rpc", expectedChainId: 31337, myAddress: mkAddr(2), safe: mkAddr(9))
+  f.rpcProbe = chainProbe(1)
+  f.ownersProbe = ownersOnChain(owners)
   let r = assessReadiness(m, probeFromFacts(f))
   doAssert not r.ready
   doAssert r.item(rqEnvironment).status == rdMissing and "chain:31337" in r.item(rqEnvironment).detail
