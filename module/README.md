@@ -94,4 +94,4 @@ tests/          lifecycle/safe/crypto/transport/coordination tests
 - Invariant tests are append-only. Extend, don't weaken.
 - The module imports nothing from `../ui/`; it reaches other modules only through logos-core.
 
-<!-- rot-check: current-phase=CLAUDE.md sha256=6ba9dd5384f60522697811ff5d62294c9af5312ccd10560fc0edfa3808e3d6de -->
+<!-- rot-check: current-phase=CLAUDE.md sha256=6fbcaf353b691ab43449b403e21a118bdf64af831e2130bc71d3f2f09c8cbe1e -->

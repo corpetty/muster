@@ -1,7 +1,8 @@
 # module/tests
 
 Most probes/tests run with bare `nim r -d:release tests/<name>.nim` (pure Nim,
-no external deps) — this is how the exophial spec oracles under `tests/probes/`
+no external deps; `manifest_test` too). `decline_test` is pure Nim but links libsodium
+(its import closure reaches curve25519) — run it with the `$SODIUM` flag below — this is how the exophial spec oracles under `tests/probes/`
 are graded.
 
 **Exception — the wallet tests need the stint closure on the Nim path** (the same

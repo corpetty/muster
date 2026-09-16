@@ -653,7 +653,8 @@ proc musterCoordinateDecline(intentId: string): string =
   var declines = 0
   for v in reduceIntentViews(after, driverFor):
     if v.id == intentId: declines = v.declines
-  $(%*{"intentId": intentId, "state": intentState(after, driverFor, intentId), "declines": declines})
+  result = $(%*{"intentId": intentId, "state": intentState(after, driverFor, intentId), "declines": declines})
+  if gLpDebug: stderr.writeLine("MUSTER-LP decline " & result)
 
 proc musterCoordinateReadiness(intentId: string): string =
   ## The proposal card's five questions for ONE room intent — what will it do (the
@@ -690,7 +691,8 @@ proc musterCoordinateReadiness(intentId: string): string =
   o["manifest"] = m.toJson()
   try: o["effect"] = parseJson(effectJson)
   except CatchableError: o["effect"] = %effectJson
-  $o
+  result = $o
+  if gLpDebug: stderr.writeLine("MUSTER-LP readiness " & result)
 
 proc musterCoordinateActivity(): string =
   ## The room's coordination history as reduce(log): every state transition that

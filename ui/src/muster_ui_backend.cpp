@@ -449,6 +449,7 @@ void MusterUiBackend::loadReadiness(const QString &intentId)
     const QJsonDocument one = QJsonDocument::fromJson(r.toUtf8());
     all.insert(intentId, one.isObject() ? QJsonValue(one.object())
                                         : QJsonValue(QJsonObject{{"error", r}}));
+    qInfo() << "[muster_ui] coordinate_readiness" << intentId << "->" << r;
     setReadinessJson(QString::fromUtf8(QJsonDocument(all).toJson(QJsonDocument::Compact)));
 }
 
@@ -501,6 +502,22 @@ void MusterUiBackend::onContextReady()
             qInfo() << "[muster_ui] AUTOJOIN ->" << topic;
             joinRoom(topic);
             QTimer::singleShot(3000, this, [this]() { requestJoin(); });
+            // Card self-test (exo-002.3): MUSTER_AUTOPROPOSE=<effect json> proposes it
+            // once joined, then asks the module for that intent's readiness (the card's
+            // "What this needs" round trip) and, with MUSTER_AUTODECLINE set, declines
+            // it — each result logged, so an offscreen run proves the host round trips.
+            const QByteArray autopropose = qgetenv("MUSTER_AUTOPROPOSE");
+            if (!autopropose.isEmpty()) {
+                const QString effect = QString::fromUtf8(autopropose);
+                QTimer::singleShot(4000, this, [this, effect]() {
+                    const QString id = modules().muster_module.coordinate_propose(effect);
+                    qInfo() << "[muster_ui] AUTOPROPOSE ->" << id;
+                    loadIntents();
+                    loadReadiness(id);
+                    if (!qgetenv("MUSTER_AUTODECLINE").isEmpty()) declineInRoom(id);
+                    qInfo() << "[muster_ui] AUTOPROPOSE intents ->" << intentsJson();
+                });
+            }
             // Poll pending/members so a two-instance self-test shows cross-host
             // delivery (another peer's join-request arriving) in the console.
             const bool founder = !qgetenv("MUSTER_AUTOADMIT").isEmpty();
