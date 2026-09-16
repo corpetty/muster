@@ -671,6 +671,11 @@ proc moduleCatalogue(): seq[Material] =
   result.add Material(class: mcAuthority, chain: chain, form: "safe-owner",
     handle: "safe:" & toHex(gDriver.safe), public: toHex(gDriver.safe),
     grade: mgDeclared, source: msConfigured)
+  # the native asset you can send on this chain — so compose_offers returns an amount
+  # candidate for the proposer to pick (the balance-bounded amount is exo-bf9). Declared
+  # (attested by config, not a live balance read here); a failed read is never a zero.
+  result.add Material(class: mcAsset, chain: chain, form: "native",
+    handle: "asset:" & chain & ":ETH", public: "ETH", grade: mgDeclared, source: msConfigured)
 
 proc musterCoordinateOffers(intentId: string): string =
   ## The card's "From you" section (exo-45e K4/K6): which of MY OWN holdings fill the

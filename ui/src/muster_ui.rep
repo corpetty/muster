@@ -167,6 +167,10 @@ class MusterUi
     // contributor keys and any counterparty address/asset the effect still needs.
     // Lands on offersJson keyed by intent id. Graded about me only (invariant 9).
     SLOT(void loadOffers(const QString &intentId))
+    // The composer's third step (compose_offers, exo-45e K6/exo-fa1): for a DRAFT effect
+    // under the room's compose policy, which of my holdings fill the PROPOSER slots — the
+    // asset+amount to send. Lands on composeOffersJson. Graded about me only.
+    SLOT(void loadComposeOffers(const QString &effectJson))
     // Share one of my holdings into an intent to fill a slot (coordinate_share_material):
     // `pub` is the PUBLIC face of a candidate from loadOffers (the handle never leaves
     // the module, s1). Publishes a material-share event; offers reload after.
@@ -256,6 +260,10 @@ class MusterUi
     // class, form, grade, discloses:[{field,to}]}]}]}}. The card's "From you" picker
     // renders its own entry; a pick calls shareMaterial with the candidate's public face.
     PROP(QString offersJson="{}" READONLY)
+    // The composer's proposer offers for a draft effect (loadComposeOffers): {ready,
+    // offers:[{requirement, status, candidates:[{public, class, form, grade, discloses}]}]}.
+    // The composer's third step renders the asset/amount picker from its own entry.
+    PROP(QString composeOffersJson="{}" READONLY)
     // The outcome of the last decline (declineInRoom): {intentId, state, declines}
     // or {error}, so the card can say whether the decline folded.
     PROP(QString declineJson="{}" READONLY)

@@ -173,7 +173,12 @@ method manifest*(d: SafeDriver, effect: Effect): ActionManifest =
                     # the recipient shares it before the effect completes; the proposer
                     # may also supply it directly. It lands in the effect's "to" field.
                     req(rqAddress, "payee", rpCounterparty,
-                        need(mcAddress, "chain:" & $d.chainId, "to"))],
+                        need(mcAddress, "chain:" & $d.chainId, "to")),
+                    # the amount is PROPOSER material bound to the effect's "value" — the
+                    # composer picks the asset + amount from real holdings (exo-45e K6 step
+                    # three / exo-bf9). It is disclosed on-chain (the row below).
+                    req(rqAsset, "amount", rpProposer,
+                        need(mcAsset, "chain:" & $d.chainId, "value"))],
     discloses: @[row("to", obChainObserver), row("value", obChainObserver),
                  row("data", obChainObserver), row("payer", obChainObserver),
                  row("signed-tx", obRpcProvider)],
