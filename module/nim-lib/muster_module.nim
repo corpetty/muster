@@ -697,7 +697,7 @@ proc musterComposeOffers(effectJson: string): string =
   result = $offersPayload(proposerOffers(m.requirements, moduleCatalogue(), m))
   if gLpDebug: stderr.writeLine("MUSTER-LP compose_offers " & result)
 
-proc musterCoordinateShareMaterial(intentId, requirement, public: string): string =
+proc musterCoordinateShareMaterial(intentId, requirement, publicFace: string): string =
   ## Share one of MY holdings into a room intent to fill a slot it asks of me (exo-45e
   ## K5/K6): only its PUBLIC face, class and form are published (never a handle, s1),
   ## bound to the intent and the effect field the requirement lands in — the request-first
@@ -718,15 +718,15 @@ proc musterCoordinateShareMaterial(intentId, requirement, public: string): strin
   var form = ""
   var mine = false
   for mat in moduleCatalogue():
-    if $mat.class == class and mat.public == public: (form = mat.form; mine = true)
-  if not mine: return $(%*{"error": "not one of your holdings for this slot", "public": public})
+    if $mat.class == class and mat.public == publicFace: (form = mat.form; mine = true)
+  if not mine: return $(%*{"error": "not one of your holdings for this slot", "public": publicFace})
   let named = driverForKind(intentPolicyOf(events, intentId)).describe().membership == mmNamed
   let who = if named: toHex(moduleKeystore().encIdentity().toBytes())
             else:
               let seed = toHex(moduleKeystore().encIdentity().toBytes()) & "/" & intentId & "/" & requirement & "/" & $epochTime()
               toHex(sha256(seed.toOpenArrayByte(0, seed.high)))
-  gSession.publish(materialShareEvent(intentId, requirement, who, public, form, class, field))
-  result = $(%*{"intentId": intentId, "requirement": requirement, "field": field, "public": public})
+  gSession.publish(materialShareEvent(intentId, requirement, who, publicFace, form, class, field))
+  result = $(%*{"intentId": intentId, "requirement": requirement, "field": field, "public": publicFace})
   if gLpDebug: stderr.writeLine("MUSTER-LP share_material " & result)
 
 proc musterCoordinateProvenance(): string =

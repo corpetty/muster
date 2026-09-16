@@ -121,10 +121,15 @@ Rectangle {
     signal needs()
     // Decline to take part — informational, the threshold is unchanged.
     signal deny()
+    // Share one of MY holdings to fill a slot this proposal asks of me (the "From you"
+    // picker, exo-45e K6): (requirement name, the chosen candidate's PUBLIC face).
+    signal shareMaterial(string requirement, string pub)
     // A remedy that lives in Settings (an RPC to configure / repoint).
     signal openSettings()
     property bool needsOpen: false
     readonly property var readiness: (cardRoot.card && cardRoot.card.readiness) ? cardRoot.card.readiness : null
+    // "From you" (exo-45e K6): which of my own holdings fill the slots this asks of me.
+    readonly property var offers: (cardRoot.card && cardRoot.card.offers) ? cardRoot.card.offers : null
     readonly property int declines: cardRoot.card ? Number(cardRoot.card.declines || 0) : 0
     readonly property var decliners: (cardRoot.card && cardRoot.card.decliners) ? cardRoot.card.decliners : []
     readonly property bool declinedByMe: !!(cardRoot.card && cardRoot.card.declinedByMe)
@@ -1038,6 +1043,70 @@ Rectangle {
                                 text: qsTr("Open settings")
                                 variant: LogosButton.Variant.Secondary
                                 onClicked: cardRoot.openSettings()
+                            }
+                        }
+                    }
+                }
+
+                // ── From you (exo-45e K6): which of MY holdings fill the slots this asks
+                // of me — graded about me only. Each candidate shows its public face, its
+                // F-10 grade, and what choosing it discloses; a pick shares the PUBLIC face.
+                LogosText {
+                    visible: cardRoot.needsOpen && cardRoot.offers && cardRoot.offers.offers
+                             && cardRoot.offers.offers.length > 0
+                    text: qsTr("From you:")
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: Theme.typography.badgeText
+                    font.weight: Theme.typography.weightMedium
+                }
+                Repeater {
+                    model: (cardRoot.needsOpen && cardRoot.offers && cardRoot.offers.offers) ? cardRoot.offers.offers : []
+                    delegate: ColumnLayout {
+                        id: offerSlot
+                        required property var modelData
+                        readonly property string reqName: (modelData.requirement && modelData.requirement.name)
+                                                          ? String(modelData.requirement.name) : ""
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Theme.spacing.medium
+                        spacing: 0
+                        LogosText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: {
+                                var r = offerSlot.modelData.requirement || ({});
+                                var what = String(r.field || r.name || "");
+                                if (offerSlot.modelData.status === "unsatisfiable") return "✗ " + what + qsTr(" — nothing you hold fits this");
+                                if (offerSlot.modelData.status === "unknown") return "? " + what + qsTr(" — can't tell yet");
+                                return what + qsTr(" — pick what to share:");
+                            }
+                            color: offerSlot.modelData.status === "satisfiable" ? Theme.palette.text : Theme.palette.warning
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        Repeater {
+                            model: offerSlot.modelData.candidates || []
+                            delegate: RowLayout {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                Layout.leftMargin: Theme.spacing.medium
+                                spacing: Theme.spacing.small
+                                LogosText {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    text: {
+                                        var d = (modelData.discloses || []).map(function (x) {
+                                            return String(x.field) + "→" + String(x.to); }).join(", ");
+                                        return String(modelData.public) + "  (" + String(modelData.grade) + ")"
+                                             + (d.length > 0 ? "  ·  " + qsTr("discloses ") + d : "");
+                                    }
+                                    color: Theme.palette.textSecondary
+                                    font.pixelSize: Theme.typography.badgeText
+                                }
+                                LogosButton {
+                                    objectName: "shareCandidate"
+                                    text: qsTr("Share")
+                                    variant: LogosButton.Variant.Secondary
+                                    onClicked: cardRoot.shareMaterial(offerSlot.reqName, String(modelData.public))
+                                }
                             }
                         }
                     }
