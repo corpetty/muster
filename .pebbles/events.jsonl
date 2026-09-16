@@ -845,3 +845,5 @@
 {"type":"close","timestamp":"2026-09-16T17:18:09.331995282Z","issue_id":"exo-45e.10","payload":{}}
 {"type":"status_update","timestamp":"2026-09-16T17:21:43.045900441Z","issue_id":"exo-bf9","payload":{"status":"open"}}
 {"type":"status_update","timestamp":"2026-09-16T17:21:43.088220377Z","issue_id":"exo-bf9","payload":{"status":"in_progress"}}
+{"type":"comment","timestamp":"2026-09-16T17:25:09.915781244Z","issue_id":"exo-bf9","payload":{"body":"Can't-over-send HARD BLOCK landed + build-verified. Room.overSends(valueStr): true only when the Safe balance was actually read (never on error/unknown — no false zero); gates the Propose button enabled + refuses in proposeFrom, so an amount above the Safe's known balance can't be proposed. The soft ⚠ now says Propose is off until it fits. The balance display + honest 'unavailable' were already there (exo-bf9 prior). Scope: the in-room composer; the pre-room composer draft can't be balance-checked (no balance until join). UI .lgx builds; offscreen startup zero QML errors."}}
+{"type":"close","timestamp":"2026-09-16T17:25:09.954086497Z","issue_id":"exo-bf9","payload":{}}
