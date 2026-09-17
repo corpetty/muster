@@ -57,7 +57,9 @@ proc remedyFor*(r: Requirement): string =
   of rqModule:      "install the " & r.name & " module (host install path)"
   of rqEnvironment: "point the RPC setting at " & r.name & " (set_setting rpc)"
   of rqAuthority:   "use a key that is a recognized " & r.name & " — or take part without signing"
-  of rqInfra:       "configure " & r.name & " (set_setting " & r.name & ")"
+  of rqInfra:
+    if r.name == "lez-account": "set up a funded LEZ account in the LEZ Wallet App"
+    else: "configure " & r.name & " (set_setting " & r.name & ")"
   of rqCapability:  "grant the " & r.name & " capability in the host"
   of rqAddress:     "share a receiving address when the proposal asks (compose / share)"
   of rqAsset:       "choose an asset and amount from your holdings (compose)"
@@ -115,6 +117,13 @@ type
     safe*: Address                 ## the Safe whose owner set "safe-owner" is graded against
     rpcProbe*: proc(url: string): tuple[ok: bool, chainId: int, detail: string] {.gcsafe.}
                                    ## nil = use the real probeRpc
+    lezReady*: proc(): Grade {.gcsafe.}
+                                   ## grade a "lez-account" infra requirement — does this
+                                   ## instance have a set-up, funded LEZ account? The host
+                                   ## bakes wallet/lez_readiness.lezAccountStatus (+ the
+                                   ## required amount) into this closure; nil = unknown.
+                                   ## Muster only DETECTS; setup is the LEZ Wallet App's
+                                   ## job (exo-44b), which the remedy names.
     ownersProbe*: proc(url: string, safe: Address): tuple[known: bool, owners: seq[Address], detail: string] {.gcsafe.}
                                    ## nil = use the real getOwners. The Safe owner set is
                                    ## read FROM THE CHAIN (F-10), never the configured set:
@@ -127,6 +136,11 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
     if name == "rpc":
       if facts.rpcUrl.len > 0: (rdMet, "rpc = " & facts.rpcUrl)
       else: (rdMissing, "no RPC endpoint configured")
+    elif name == "lez-account":
+      # A set-up, funded LEZ account. DETECTED here (via the host's lezReady closure over
+      # lez_core); PROVISIONED in the LEZ Wallet App (exo-44b) — the remedy names it.
+      if facts.lezReady != nil: facts.lezReady()
+      else: (rdUnknown, "cannot check the LEZ account — no zone probe")
     else: (rdUnknown, "unrecognized infra requirement: " & name)
   result.environmentReachable = proc(name: string): Grade =
     if facts.rpcUrl.len == 0:
