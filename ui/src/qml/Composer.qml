@@ -351,10 +351,10 @@ Item {
                         delegate: LogosButton {
                             required property var modelData
                             objectName: "assetCandidate"
-                            text: String(modelData.public) + " (" + String(modelData.grade) + ")"
-                            variant: composer.pickedAsset === String(modelData.public)
+                            text: String(modelData["public"]) + " (" + String(modelData.grade) + ")"
+                            variant: composer.pickedAsset === String(modelData["public"])
                                      ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                            onClicked: composer.pickedAsset = String(modelData.public)
+                            onClicked: composer.pickedAsset = String(modelData["public"])
                         }
                     }
                 }

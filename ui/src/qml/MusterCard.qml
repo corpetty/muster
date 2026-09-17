@@ -1109,7 +1109,7 @@ Rectangle {
                                     text: {
                                         var d = (modelData.discloses || []).map(function (x) {
                                             return String(x.field) + "→" + String(x.to); }).join(", ");
-                                        return String(modelData.public) + "  (" + String(modelData.grade) + ")"
+                                        return String(modelData["public"]) + "  (" + String(modelData.grade) + ")"
                                              + (d.length > 0 ? "  ·  " + qsTr("discloses ") + d : "");
                                     }
                                     color: Theme.palette.textSecondary
@@ -1119,7 +1119,7 @@ Rectangle {
                                     objectName: "shareCandidate"
                                     text: qsTr("Share")
                                     variant: LogosButton.Variant.Secondary
-                                    onClicked: cardRoot.shareMaterial(offerSlot.reqName, String(modelData.public))
+                                    onClicked: cardRoot.shareMaterial(offerSlot.reqName, String(modelData["public"]))
                                 }
                             }
                         }
