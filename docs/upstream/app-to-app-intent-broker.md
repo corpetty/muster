@@ -2,7 +2,9 @@
 
 **To:** the Basecamp / logos-core team (`logos-co/logos-basecamp`, the shell).
 **From:** the Muster team (`corpetty/muster`).
-**Date:** 2026-09-17. **Status:** request for comment.
+**Date:** 2026-09-17. **Status:** request for comment — **this is the one upstream dependency muster has no fallback for.**
+
+> **Why this one matters most (2026-09-17):** muster has muster-side fallbacks for every other piece of cross-app delegation — it drives backends directly core-to-core, and can ship its own `ui_qml` provider shim for a capability no one else declares. The single thing muster *cannot* substitute is the shell **dispatching** `logos.request` between apps. Without it, no provider (first-party, community, or muster's own shim) is reachable as a capability, and muster's declared `provides: coordinate.request` is inert. This is the ask that turns declarations into flows.
 **Reads with:** `docs/design/basecamp-capability-alignment.md` (our analysis of the two comms layers), `docs/design/host-effect-policy.md` (the *separate* effect-authorization ask, below).
 
 ## One line

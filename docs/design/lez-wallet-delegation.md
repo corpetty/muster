@@ -66,6 +66,23 @@ Muster consumes **no secret** back: the "result" is just that provisioning happe
 
 So the honest staging: **detect + prompt now; automatic hand-off when the broker lands.** The prompt is not a stopgap that gets thrown away — it is the same readiness remedy, later given a live target.
 
+## 4b. Two blockers, not one — and muster's fallbacks (2026-09-17)
+
+The automatic hand-off (L4) needs **two** independent things, and muster is only truly blocked on one of them:
+
+- **Blocker A — no app declares the capability.** Confirmed: `lez_wallet_ui` (the LEZ Wallet App) declares no `provides`, so there is no capability to `logos.request`. **muster can fix this itself with a shim** — a thin `ui_qml` app that depends on `lez_core`, declares `provides: ["lez.wallet.setup"]`, and drives `lez_core`'s `create_account` / `register` / `claim_pinata` / `transfer_shielded` (all headless `lp_*` calls) in its handler. We do not have to wait on the wallet app; we (or a responsive community maintainer) can ship the provider.
+- **Blocker B — the shell does not dispatch `logos.request`.** A shim does **not** fix this: if the Basecamp app-to-app broker is not routing intents, *no* provider — official, community, or our own shim — is reachable through `logos.request`. This one is the shell's, and the sharp upstream ask (`docs/upstream/app-to-app-intent-broker.md`).
+
+**The de-risking move: muster can provision LEZ directly over `lez_core`, no broker, no wallet app.** Account creation, activation, and the pinata faucet are the *same kind* of `lp_*` call muster already makes for the transfer. `LezAdapter.provision(ks, pinataId)` + `wallet_lez_setup` ensure a public account and (with a faucet challenge id) fund it, core-to-core (the sanctioned pattern, §6.4). This is the **fallback**, not the default — delegating to the wallet app stays preferred for UX and for keeping keys in one home — but it means muster is **not hard-blocked** on either upstream piece for a working LEZ flow.
+
+| Situation | muster's path |
+|---|---|
+| broker dispatches **and** a provider declares the capability | **delegate** — best UX, keys in the wallet app |
+| broker dispatches, no provider yet | **ship a `ui_qml` shim over `lez_core`** — don't wait on `lez_wallet_ui` |
+| broker does not dispatch | **provision via `lez_core` directly** (`wallet_lez_setup`, headless faucet/activate) |
+
+Only the shell's dispatch has no muster-side fallback. Everything else muster can do itself.
+
 ## 5. What this is NOT
 
 - **Not a faucet/shield/activation UI in muster.** Those stay in the LEZ Wallet App (§1).
@@ -79,7 +96,8 @@ So the honest staging: **detect + prompt now; automatic hand-off when the broker
 | **L1 — readiness for a LEZ account** | a `lez-account` requirement + a `probeFromFacts` probe over `listAccounts`/`getBalanceRaw`; `met/missing/unknown` with the LEZ-Wallet-App remedy. | unit-testable with `FakeLezCore` (an unprovisioned core → missing; a funded one → met; an unreachable one → unknown) |
 | **L2 — the prompt (works today)** | the wallet tab + the LEZ action card render the readiness item; a "Set up in LEZ Wallet" affordance (informational until the broker). | build-verified (module + UI `.lgx`, offscreen) |
 | **L3 — declare the capability wiring — done/blocked 2026-09-17** | `muster_ui` already `provides coordinate.request` and `infra/access-policy.json` names the `muster_ui → muster_module` edge (both pre-existing). The `uses` for the LEZ Wallet App is **blocked upstream**: `lez_wallet_ui` declares no `provides` (Q1), so there is no capability to name. Filed as an upstream ask. | the declarable parts validate; the `uses` entry waits on the wallet app |
-| **L4 — automatic hand-off** | the remedy fires `logos.request`; consume the return by re-reading readiness. | **needs the Basecamp broker** — upstream, tracked with M7 |
+| **L4 — automatic hand-off** | the remedy fires `logos.request`; consume the return by re-reading readiness. | **needs the Basecamp broker (Blocker B)** — the one hard external dependency; upstream. |
+| **L5 — provisioning fallback — landed 2026-09-17** | `LezAdapter.provision` + `wallet_lez_setup`: ensure an account + faucet-fund it directly over `lez_core`, core-to-core, so muster is not hard-blocked when the hand-off is unavailable. | `lez_provision_test` (create+activate; faucet-fund; idempotent; raise-on-failure); module + UI `.lgx` build. |
 
 Order: L1 (the model) → L2 (the visible prompt) → L3 (the honest declaration) → L4 (rides the broker).
 
