@@ -822,6 +822,19 @@ proc musterCoordinateCheckAuthorization(authJson: string): string =
        "capability": a.capability, "materializationRoot": a.toJson()["materializationRoot"],
        "expiry": a.context.expiry})
 
+var gLez: LezAdapter = nil          ## the LEZ chain (fake core until P-L3 wires lez_core); set lazily by the wallet init below
+
+proc lezReadyClosure(adapter: LezAdapter, minRaw: string): proc(): Grade {.gcsafe.} =
+  ## Wrap the LEZ adapter's account status (wallet/lez_readiness) into a readiness Grade
+  ## closure (exo-44b L2). The adapter is a PARAM (not the captured global) so the closure
+  ## is gcsafe. Detect only — the remedy names the LEZ Wallet App.
+  (proc(): Grade {.gcsafe.} =
+    let (s, d) = adapter.lezStatusOf(minRaw)
+    case s
+    of "met": (rdMet, d)
+    of "missing": (rdMissing, d)
+    else: (rdUnknown, d))
+
 proc musterCoordinateReadiness(intentId: string): string =
   ## The proposal card's five questions for ONE room intent — what will it do (the
   ## effect), what is needed (requirements), what will it touch, what will happen (the
@@ -852,6 +865,12 @@ proc musterCoordinateReadiness(intentId: string): string =
   # chain does not recognize grades missing (rule s4, contracts/specs/derived-exo-45e, K3).
   if gInvoker == nil: gInvoker = newLpInvoker("muster_module")
   facts.invoker = gInvoker
+  # A LEZ action's `lez-account` requirement is graded against the live zone (exo-44b L2):
+  # detect only — the remedy names the LEZ Wallet App. `gLez` may be nil (LEZ not yet
+  # initialized) → the closure stays nil → the requirement grades unknown, never a false
+  # met. The adapter is a PARAM (not the captured global) so the closure is gcsafe.
+  if gLez != nil:
+    facts.lezReady = lezReadyClosure(gLez, "1")   # "1" = a funded account (any spendable balance)
   let r = assessReadiness(m, probeFromFacts(facts))
   var o = r.toJson()
   o["intentId"] = %intentId
@@ -1218,7 +1237,7 @@ proc musterCoordinateConversations(): string =
 var gWallet: Wallet = nil
 var gMock: MockChain = nil
 var gEvm: EvmAdapter = nil          ## typed handle for the EVM-specific verified path
-var gLez: LezAdapter = nil          ## the LEZ chain (fake core until P-L3 wires lez_core)
+# gLez is declared before musterCoordinateReadiness (exo-44b L2); set lazily below.
 
 proc moduleWallet(): Wallet =
   if gWallet == nil:
