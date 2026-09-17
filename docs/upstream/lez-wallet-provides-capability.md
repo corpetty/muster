@@ -2,7 +2,9 @@
 
 **To:** the LEZ Wallet App team (`lez_wallet_ui`, `logos-blockchain/logos-execution-zone-wallet-ui`).
 **From:** the Muster team (`corpetty/muster`).
-**Date:** 2026-09-17. **Status:** request for comment — nothing here is built on your side; this is to start the conversation.
+**Date:** 2026-09-17. **Status:** request for comment — a *nice-to-have*, not a blocker for us.
+
+> **Priority note (2026-09-17):** since drafting this we confirmed muster is **not blocked** on it. Muster can provision a LEZ account itself, headless, directly over `lez_core` (`wallet_lez_setup`: create/activate + pinata faucet), and can ship its own thin `ui_qml` shim that declares this capability if a broker exists. So this ask is about **UX and single-home-for-keys** — your app is the better place for a user to fund and manage a LEZ account — not about unblocking us. Take it if it fits your roadmap.
 **Contact / details:** `docs/design/lez-wallet-delegation.md` in the Muster repo.
 
 ## One line

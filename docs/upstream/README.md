@@ -4,14 +4,16 @@ Shareable request-for-comment documents to point external teams at. Each is writ
 to be sent as-is to start a conversation; nothing in them is built on the other team's
 side.
 
-- [`lez-wallet-provides-capability.md`](lez-wallet-provides-capability.md) — asks the
+- [`lez-wallet-provides-capability.md`](lez-wallet-provides-capability.md) — **nice-to-have, not a blocker.** Asks the
   **LEZ Wallet App** team (`lez_wallet_ui`) to declare a `provides` provisioning
-  capability, so Muster can delegate LEZ account setup/funding to it instead of
-  re-implementing the wallet. Blocks Muster epic `exo-44b` L4.
-- [`app-to-app-intent-broker.md`](app-to-app-intent-broker.md) — asks the **Basecamp /
-  logos-core** team about the status of app-to-app intent dispatch (`logos.request`),
-  and states what Muster needs as both a provider (`coordinate.request`) and a consumer
-  (a wallet capability). Blocks `exo-44b` L4 and the `coordinate.request` handler.
+  capability. Muster is not blocked on it: it can provision LEZ directly over `lez_core`
+  (`wallet_lez_setup`) or ship its own shim. This ask is about UX + keeping keys in one
+  home, for `exo-44b` L4's *preferred* path.
+- [`app-to-app-intent-broker.md`](app-to-app-intent-broker.md) — **the one upstream
+  dependency muster has no fallback for.** Asks the **Basecamp / logos-core** team about
+  the status of app-to-app intent dispatch (`logos.request`). Muster can shim any missing
+  *provider*, but only the shell can *dispatch*; without it `provides: coordinate.request`
+  is inert. Blocks `exo-44b` L4 and the `coordinate.request` handler.
 
 Related, in-repo proposal (not an external ask, but reads with the broker one):
 [`../design/host-effect-policy.md`](../design/host-effect-policy.md) — the *effect

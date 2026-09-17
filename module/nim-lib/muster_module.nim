@@ -1392,6 +1392,21 @@ proc musterWalletSend(chain, fromId, to, assetSymbol, raw: string): string =
   except CatchableError as e:
     $(%*{"error": e.msg})
 
+proc musterWalletLezSetup(pinataId: string): string =
+  ## Headless LEZ provisioning FALLBACK (exo-44b, the no-broker path): ensure a public
+  ## LEZ account exists and — with a pinata challenge id — fund it from the faucet,
+  ## directly over lez_core (core-to-core). Preferred path stays the LEZ Wallet App
+  ## hand-off when the broker is available; this is what keeps muster from being
+  ## hard-blocked when it is not. A faucet failure raises, never a false receipt.
+  discard moduleWallet()                 # ensures the wallet + gLez are initialized
+  if gLez == nil: return $(%*{"error": "LEZ chain unavailable"})
+  try:
+    let (account, state, detail) = gLez.provision(moduleKeystore(), pinataId)
+    result = $(%*{"account": account, "state": state, "detail": detail})
+  except CatchableError as e:
+    result = $(%*{"error": e.msg})
+  if gLpDebug: stderr.writeLine("MUSTER-LP wallet_lez_setup " & result)
+
 proc musterWalletFinality(chain, txId: string): string =
   let w = moduleWallet()
   try:

@@ -193,3 +193,20 @@ proc lezStatusOf*(a: LezAdapter, minRaw = "0"): tuple[state, detail: string] {.g
   ## for the readiness `lez-account` requirement. Keeps `core` private; the host wraps
   ## this into a Grade closure. Detects only — provisioning is the LEZ Wallet App.
   lezAccountStatus(a.core, minRaw)
+
+proc provision*(a: LezAdapter, ks: Keystore, pinataId = ""): tuple[account, state, detail: string] =
+  ## Headless LEZ provisioning FALLBACK (exo-44b, the no-broker path). Ensure this
+  ## instance has a public LEZ account (create + activate via createAccount), and — when
+  ## a pinata challenge id is given — claim the faucet to fund it. The account keys stay
+  ## in lez_core; muster drives lez_core directly (the sanctioned core-to-core pattern),
+  ## so this needs neither the app-to-app broker nor the LEZ Wallet App. It is the
+  ## FALLBACK, not the default: delegating to the LEZ Wallet App stays preferred for UX
+  ## and for keeping keys in one home. Raises (never a false receipt) on a faucet failure.
+  let accs = a.accounts(ks)                 # creates public + shielded on first call
+  var pub: Account
+  for acc in accs:
+    if acc.form == afPublic: pub = acc
+  if pinataId.len > 0:
+    a.claimFaucet(pinataId, pub)            # raises on a success:false envelope
+  let (s, d) = a.lezStatusOf(if pinataId.len > 0: "1" else: "0")
+  (pub.id, s, d)
