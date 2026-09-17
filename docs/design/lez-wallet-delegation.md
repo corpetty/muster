@@ -1,6 +1,6 @@
 # LEZ wallet setup: readiness in muster, provisioning in the LEZ Wallet App
 
-**Status:** design assessment, 2026-09-17 (epic `exo-45e` follow-on; pebble `exo-44b`).
+**Status:** design assessment, 2026-09-17. Upstream asks written up in `docs/upstream/` (LEZ Wallet App + Basecamp broker) (epic `exo-45e` follow-on; pebble `exo-44b`).
 **Reads with:** `basecamp-capability-alignment.md` (§4 musters compose above app-to-app intents; §6.4 the solo-send decision), `lez-adapter.md` (the rails + the `LpLezCore` seam), `material-and-disclosure.md` (the readiness + remedy model this extends), the LEZ CLI get-started flow (`docs.logos.co/lez/get-started/run-lez-wallet-via-cli`).
 
 ## 1. The question, and the honest answer
