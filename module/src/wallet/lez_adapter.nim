@@ -19,6 +19,7 @@ import std/[json, tables, strutils]
 import ./types
 import ./adapter
 import ./lez_core
+import ./lez_readiness
 import ../crypto/keystore
 
 const ChainId* = "lez:testnet"
@@ -186,3 +187,9 @@ proc syncPrivate*(a: LezAdapter): seq[Account] =
   for la in a.core.listAccounts():
     if la.kind == lakPrivate:
       result.add Account(chain: ChainId, form: afShielded, id: la.id)
+
+proc lezStatusOf*(a: LezAdapter, minRaw = "0"): tuple[state, detail: string] {.gcsafe.} =
+  ## LEZ account readiness for THIS adapter's zone (exo-44b L2): met/missing/unknown,
+  ## for the readiness `lez-account` requirement. Keeps `core` private; the host wraps
+  ## this into a Grade closure. Detects only — provisioning is the LEZ Wallet App.
+  lezAccountStatus(a.core, minRaw)

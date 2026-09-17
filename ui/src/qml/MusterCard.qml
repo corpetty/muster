@@ -1037,9 +1037,23 @@ Rectangle {
                                 color: Theme.palette.textSecondary
                                 font.pixelSize: Theme.typography.badgeText
                             }
+                            // A LEZ account is provisioned in the LEZ Wallet App, not
+                            // Settings (exo-44b). Muster only detects + points; the
+                            // automatic hand-off (logos.request) rides the app-to-app
+                            // broker (L4), so today this is an honest prompt, not a button
+                            // that would open the wrong place.
+                            LogosText {
+                                visible: modelData.kind === "infra" && modelData.name === "lez-account"
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: qsTr("↳ Open the LEZ Wallet App to set up a funded account, then reopen this.")
+                                color: Theme.palette.textTertiary
+                                font.pixelSize: Theme.typography.badgeText
+                            }
                             LogosButton {
                                 objectName: "needRemedy_" + String(modelData.kind)
-                                visible: modelData.kind === "infra" || modelData.kind === "environment"
+                                visible: (modelData.kind === "infra" && modelData.name !== "lez-account")
+                                         || modelData.kind === "environment"
                                 text: qsTr("Open settings")
                                 variant: LogosButton.Variant.Secondary
                                 onClicked: cardRoot.openSettings()

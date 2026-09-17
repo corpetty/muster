@@ -38,12 +38,15 @@ block:
   doAssert found, "a coordinated transfer declares the recipient as a counterparty address"
   doAssert payee.needs.class == mcAddress and payee.needs.field == "to"
   # the roster-member authority + the target module are still there.
-  var sawAuth, sawModule = false
+  var sawAuth, sawModule, sawLezAccount = false
   for r in m.requirements:
     if r.kind == rqAuthority and r.party == rpContributor: sawAuth = true
     if r.kind == rqModule and r.name == "lez_core": sawModule = true
+    # exo-44b L2: a LEZ chain effect declares the proposer's funded-account requirement.
+    if r.kind == rqInfra and r.name == "lez-account" and r.party == rpInstance: sawLezAccount = true
   doAssert sawAuth and sawModule
-  echo "1. invoke manifest: a counterparty payee bound to 'to', + roster auth + lez_core module OK"
+  doAssert sawLezAccount, "a LEZ (lez:*) action declares the proposer's lez-account requirement"
+  echo "1. invoke manifest: counterparty payee + roster auth + lez_core module + lez-account OK"
 
 # ── 2. a plain invoke (no counterparty field) declares NO counterparty slot ────────
 block:

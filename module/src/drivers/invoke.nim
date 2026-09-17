@@ -17,6 +17,7 @@
 ## The CORE invokes the method after the threshold is met (P-D2's execution path),
 ## exactly as coordinate_submit does for the Safe driver (invariant 3).
 
+import std/strutils
 import ../crypto/curve25519
 import ../intents/materialization
 import ./driver
@@ -104,3 +105,10 @@ method manifest*(d: InvokeDriver, effect: Effect): ActionManifest =
     result.requirements.add req(rqAddress, "payee", rpCounterparty,
                                need(mcAddress, effect.fieldText("chain"), cpField))
     result.discloses.add row(cpField, obTargetModule)
+  # A LEZ action needs the PROPOSER to have a set-up, funded LEZ account (exo-44b L2).
+  # It is an INSTANCE infra requirement, detected by readiness against the zone and
+  # remedied in the LEZ Wallet App — muster never provisions. Keyed off the effect's
+  # declared chain (generic: any lez:* chain), so the invoke driver stays module-blind.
+  let chain = effect.fieldText("chain")
+  if chain.len > 0 and chain.startsWith("lez"):
+    result.requirements.add req(rqInfra, "lez-account", rpInstance)
