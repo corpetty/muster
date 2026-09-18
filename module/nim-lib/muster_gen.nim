@@ -207,7 +207,15 @@ proc logos_module_dispatch(meth: cstring, argsJson: cstring): cstring {.exportc,
       if parsed.kind == JArray: args = parsed
       else: return nil
     except CatchableError: return nil
-  let res = dispatch($meth, args)
+  let res =
+    try:
+      dispatch($meth, args)
+    except CatchableError as e:
+      # A handler raised. Never let it escape this C-ABI boundary: an unhandled Nim
+      # exception here crashes the whole module process, taking down every OTHER call
+      # with it (e.g. describe(), so the UI blanks with no explanation). Return the
+      # message as a structured error the caller can surface instead.
+      %*{"error": e.msg}
   if res == nil or res.isNil: return nil
   allocCString($res)
 
