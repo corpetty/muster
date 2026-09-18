@@ -75,6 +75,15 @@ if [ "$ISOLATE" = "1" ]; then
   echo "→ $ROLE : isolated HOME=$HOME"
 fi
 
+# Private AppImage extraction dir. APPIMAGE_EXTRACT_AND_RUN unpacks to
+# $TMPDIR/appimage_extracted_<hash> under a FIXED name; sharing the global /tmp meant a
+# partial extraction left by a killed launch (or another user's run) blocked the next
+# with "fopen error: Permission denied / Failed to extract AppImage". Give each peer its
+# own dir under $HOME so they never collide — and --isolate --fresh wipes it clean with
+# the rest of the identity.
+export TMPDIR="$HOME/.cache/muster-appimage-tmp"
+mkdir -p "$TMPDIR"
+
 # The seed (MUSTER_DEV_SECP_KEY) is honoured ONLY when minting a fresh keyfile. If one
 # already exists for this $HOME, this peer keeps its OLD identity — so it won't be the
 # anvil owner (the Safe on-chain settle then can't work), and if that keyfile was minted
