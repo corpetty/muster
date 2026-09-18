@@ -47,11 +47,22 @@ case "$ROLE" in
   *) echo "usage: $0 <alice|bob|carol> [--isolate] [--fresh] [--appimage PATH]" >&2; exit 2 ;;
 esac
 
-if [ ! -f "$APPIMAGE" ]; then
+# Fall back to a stable release-named copy if the repo out-link isn't there (a fresh
+# clone, or the nix result-* link was cleaned): whichever exists and is current works.
+if [ ! -e "$APPIMAGE" ] && [ -f "$HOME/Downloads/Muster-demo-linux-x86_64.AppImage" ]; then
+  APPIMAGE="$HOME/Downloads/Muster-demo-linux-x86_64.AppImage"
+fi
+if [ ! -e "$APPIMAGE" ]; then
   echo "AppImage not found: $APPIMAGE" >&2
-  echo "build it first:  cd $REPO && make appimage   (or pass --appimage PATH)" >&2
+  echo "build it first (bounded so it can't exhaust RAM — plain 'make appimage' can freeze):" >&2
+  echo "  cd $HOME/Github/logos-co/logos-basecamp && nix build '.#bin-appimage' --accept-flake-config \\" >&2
+  echo "    --extra-substituters https://cache.nix.logos.co/public \\" >&2
+  echo "    --extra-trusted-public-keys public:l4HrXgL4nw246+LBh2SOJyhz64BoGegOYLheT/iIAPU= \\" >&2
+  echo "    --max-jobs 1 --cores 1 --out-link $REPO/result-appimage" >&2
+  echo "…or pass --appimage PATH." >&2
   exit 1
 fi
+echo "→ AppImage: $(readlink -f "$APPIMAGE")"
 
 export MUSTER_DEV_SECP_KEY="$KEY"
 export MUSTER_KEY_PASSPHRASE="muster-demo"      # stable dev passphrase for the keyfile
@@ -62,6 +73,19 @@ if [ "$ISOLATE" = "1" ]; then
   [ "$FRESH" = "1" ] && rm -rf "$HOME"
   mkdir -p "$HOME"
   echo "→ $ROLE : isolated HOME=$HOME"
+fi
+
+# The seed (MUSTER_DEV_SECP_KEY) is honoured ONLY when minting a fresh keyfile. If one
+# already exists for this $HOME, this peer keeps its OLD identity — so it won't be the
+# anvil owner (the Safe on-chain settle then can't work), and if that keyfile was minted
+# with a different passphrase it won't even open ("account not loaded" in the Account
+# view). Warn loudly and point at the fix rather than let the demo dead-end.
+ksdir="$HOME/.local/share/Logos/LogosBasecamp/module_data/muster_module"
+if [ "$FRESH" != "1" ] && compgen -G "$ksdir/*/identity.mks" >/dev/null 2>&1; then
+  echo "⚠ existing keystore under $ksdir — the anvil-owner seed will NOT apply to it." >&2
+  echo "  This peer keeps its previous identity; if that keyfile's passphrase differs you'll" >&2
+  echo "  see 'account not loaded'. For a clean seeded run:  re-run with  --isolate --fresh" >&2
+  echo "  (or: rm -rf \"$ksdir\" and relaunch)." >&2
 fi
 
 echo "→ $ROLE : seeded as anvil owner (MUSTER_DEV_SECP_KEY set), launching AppImage"
