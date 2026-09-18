@@ -67,6 +67,11 @@ echo "→ AppImage: $(readlink -f "$APPIMAGE")"
 export MUSTER_DEV_SECP_KEY="$KEY"
 export MUSTER_KEY_PASSPHRASE="muster-demo"      # stable dev passphrase for the keyfile
 export APPIMAGE_EXTRACT_AND_RUN=1
+# Scale the whole UI up so text is legible in a screen recording. muster sizes text in
+# font.pixelSize (from the Logos theme), which QT_SCALE_FACTOR scales (unlike QT_FONT_DPI,
+# which only affects point sizes). Override with MUSTER_SCALE=1.0 to disable, or a bigger
+# number for a tighter crop. Applies to the whole process tree incl. the ui-host view.
+export QT_SCALE_FACTOR="${MUSTER_SCALE:-1.4}"
 
 if [ "$ISOLATE" = "1" ]; then
   export HOME="${XDG_CACHE_HOME:-$HOME/.cache}/muster-demo/$ROLE"
