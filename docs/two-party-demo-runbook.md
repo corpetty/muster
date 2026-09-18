@@ -76,6 +76,16 @@ one machine); `--fresh` wipes that peer's prior identity so the seed key takes (
 is honored only when minting a new keyfile). On first launch each basecamp installs its
 bundled modules — that's normal.
 
+> **Contacts are pre-seeded — no "add contact" step on camera.** A seeded demo peer gets a
+> *deterministic* chat identity (derived from its anvil key), so every role's
+> room-membership id is known ahead of time. On first launch each peer's address book is
+> filled with the OTHER roles (Alice ⇄ Bob ⇄ Carol) by name + address, so the roster, the
+> join prompt, and the composer show **Alice/Bob**, not 64-byte hex — with nothing to type.
+> This only holds when both peers are **freshly minted with this build** (`--fresh` above);
+> a peer carried over from an older keyfile has a random chat id that the pre-seeded contact
+> can't match. It's demo-only (gated behind the seed); a normal install seeds nothing and
+> keeps random chat identities.
+
 **3. In BOTH windows, open Muster and join the same room.** Click **Muster**, create /
 join a room with the **same name** in both (e.g. `demo`). Give it a few seconds — the two
 peers meet over the fleet and the roster shows **2 members** (ScopePanel). This is the

@@ -902,3 +902,9 @@
 {"type":"rename","timestamp":"2026-09-18T19:19:09.244171486Z","issue_id":"exo-461","payload":{"new_id":"exo-1fc.3"}}
 {"type":"dep_add","timestamp":"2026-09-18T19:19:09.244171486Z","issue_id":"exo-1fc.3","payload":{"dep_type":"parent-child","depends_on":"exo-1fc"}}
 {"type":"status_update","timestamp":"2026-09-18T19:19:09.284023607Z","issue_id":"exo-1fc.3","payload":{"status":"in_progress"}}
+{"type":"create","timestamp":"2026-09-18T19:27:42.725085899Z","issue_id":"exo-585","payload":{"description":"Demo peers get a deterministic encryption identity (demoEncSeed from the anvil secp seed, honoured by the keystore on mint), so every role's chat id is known ahead of time; the module derives the OTHER roles' ids on the fly and seeds the address book (Alice/Bob/Carol) — no on-camera add-contact step. Golden-vector test pins the ids. exo-1fc.","priority":"1","title":"Pre-seed Alice/Bob as contacts (deterministic demo chat ids)","type":"task"}}
+{"type":"rename","timestamp":"2026-09-18T19:27:42.768279629Z","issue_id":"exo-585","payload":{"new_id":"exo-1fc.4"}}
+{"type":"dep_add","timestamp":"2026-09-18T19:27:42.768279629Z","issue_id":"exo-1fc.4","payload":{"dep_type":"parent-child","depends_on":"exo-1fc"}}
+{"type":"close","timestamp":"2026-09-18T19:27:42.806099204Z","issue_id":"exo-1fc.4","payload":{}}
+{"type":"close","timestamp":"2026-09-18T19:27:42.845662955Z","issue_id":"exo-1fc.1","payload":{}}
+{"type":"close","timestamp":"2026-09-18T19:27:42.845662955Z","issue_id":"exo-1fc.3","payload":{}}
