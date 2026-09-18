@@ -9,7 +9,13 @@ and they need different setup:
 | **Safe** (on-chain 2-of-3) | An Ethereum multisig settling on chain — every owner's signature is disclosed on the public ledger | **Yes** (the MiniSafe fixture) | **Yes** — each peer must BE a real Safe owner |
 | **threshold / FROST** (k-of-n Ed25519) | The same coordination reaching finality with a roster endorsement — the disclosure contrast (one aggregated key, not every signer) | No | No — any two peers who join the room *are* the roster |
 
-The teaching beat is the contrast: **run the same payment under Safe, then under FROST, and point at what each one put on the wire.**
+The teaching beat is the contrast: **the room reaches the same decision two ways — settle
+it on-chain as a Safe payment, or endorse it off-chain as a FROST statement — and you point
+at what each one put on the wire.** (A payment *is* the on-chain settle, so it only goes
+through the Safe; FROST doesn't touch Ethereum, so its version is the decision itself — a
+statement the roster endorses. The composer enforces this: pick the **kind** and it offers
+only the policies that fit it, so "an ethereum payment via FROST" — which never meant
+anything — can't be built.)
 
 Everything below uses the **public AppImage** (`result-appimage/logos-basecamp.AppImage`,
 built with `make appimage`). Nothing here needs the nix build toolchain, so a colleague
@@ -142,19 +148,27 @@ Running the same payment under each policy and opening that box side by side *is
 
 ### FROST / threshold track
 
-1. In the room, the **"Next proposal" policy row** has **Safe · Threshold · FROST**
-   buttons (FROST isn't offered on the room-*creation* screen — pick it here, inside the
-   room). Click **FROST**. (Threshold is the single-round variant; FROST is the 2-round
-   one.)
-2. **Propose** a payment (amount + recipient). A proposal card appears inline in the
-   thread, showing **round 1 of 2**.
+FROST endorses a **statement** — a decision the roster ratifies — not an on-chain payment
+(it never touches Ethereum). So the FROST version of "pay 0.1 ETH to X" is the *decision*
+to do so, phrased as a statement. That's the honest contrast with the Safe track's on-chain
+settle.
+
+1. Open the composer with **+**. For **Kind**, click **Statement**. The **"Endorse with"**
+   row now offers only the roster policies — **Threshold · FROST · Attest · Unanimous** (no
+   Safe: a statement settles nothing on chain). Click **FROST**. (Threshold is the
+   single-round variant; FROST is the 2-round one.)
+2. In **"what the room ratifies…"**, type the decision — e.g. `pay 0.1 ETH to 0x…70997970…
+   from the group fund`. Click **Propose**. A proposal card appears inline in the thread,
+   showing **round 1 of 2**.
 3. **Both peers click Approve** on the card. No pasting — Approve auto-signs with each
    peer's own key. When both have approved, round 1 closes and the card advances to
    **round 2 of 2**.
 4. **Both peers click Approve again** (round 2). The card reaches **complete**.
-   → *Talking point:* this reached finality with a k-of-n **Ed25519 roster endorsement** —
-   the coordination structure of a threshold Schnorr/FROST signature. Contrast with Safe:
-   no per-owner secp signatures, no chain transaction, nothing on a public ledger.
+   → *Talking point:* the room reached the same decision as the Safe track, but finality
+   here is a k-of-n **Ed25519 roster endorsement** — the coordination structure of a
+   threshold Schnorr/FROST signature. Contrast with Safe: no per-owner secp signatures, no
+   chain transaction, nothing on a public ledger. Same decision; one leaks every signer to
+   the chain, the other leaks nothing.
 
    *(4 Approve clicks total for 2 members — once each per round. The card's
    "round R of N (M of 2 this round)" tells you where you are.)*
