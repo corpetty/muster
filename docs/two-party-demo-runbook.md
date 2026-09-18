@@ -175,13 +175,24 @@ settle.
 
 ### Safe track (on-chain 2-of-3)
 
-1. In the composer policy row, click **Safe**.
-2. **Propose** the payment. The card shows the re-derived `safeTxHash` (F-4 — your client
-   re-derived it, it wasn't handed to you) and 0/2 approvals.
-3. **Both peers click Approve.** Each auto-signs the `safeTxHash` with its seeded owner
+1. Open the composer with **+**. **Kind** is **Payment** (the default); the **"Settles via"**
+   row shows only **Safe** — a payment settles on-chain, so there's nothing else to pick.
+2. **Ask for the recipient instead of typing it.** Click **Ask the room** beside the
+   recipient field. An *address-request* card lands in the thread — this is the room asking
+   whoever holds the destination to disclose it.
+   - **On the counterparty's screen** (Bob), that card shows **Share an address**. Bob
+     clicks it; his own address is disclosed into the thread as an *address-share* card.
+     → *Talking point:* the recipient wasn't pre-known or pasted from a side channel — Bob
+     **disclosed** it in the room, on the record, when asked (ask-then-disclose).
+   - **Back on the proposer's screen** (Alice), Bob's address-share card has a **Use as
+     recipient** button. Click it — the recipient field fills with the address Bob just
+     shared. (You can still type one directly if you prefer.)
+3. Fill the amount and **Propose**. The card shows the re-derived `safeTxHash` (F-4 — your
+   client re-derived it, it wasn't handed to you) and 0/2 approvals.
+4. **Both peers click Approve.** Each auto-signs the `safeTxHash` with its seeded owner
    key; the driver verifies each recovers to a real owner. At 2/2 the card goes
    **executable**.
-4. Click **Submit** (the on-chain step). The module assembles `execTransaction` from the
+5. Click **Submit** (the on-chain step). The module assembles `execTransaction` from the
    two owner signatures and sends it through the RPC; it watches the receipt and the card
    advances **submitted → paid**.
    → *Talking point:* that transaction is now on the public chain, and it disclosed **both

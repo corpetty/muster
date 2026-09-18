@@ -176,6 +176,10 @@ Rectangle {
         return parts.join(" · ");
     }
     signal shareAddress()
+    // Use a disclosed public address as the recipient of a payment being composed —
+    // closes the ask→disclose→use loop so the proposer never retypes what a peer just
+    // shared into the room (the counterparty's address for the Safe txn).
+    signal useAddress(string address)
 
     readonly property string kind: cardRoot.card ? String(cardRoot.card.kind || "") : ""
 
@@ -328,6 +332,20 @@ Rectangle {
                 text: qsTr("Anyone reading the zone can see what lands here.")
                 color: Theme.palette.textTertiary
                 font.pixelSize: Theme.typography.badgeText
+            }
+
+            // Close the loop: use the address the counterparty just disclosed as the
+            // recipient of the payment being composed, instead of retyping it. Only for
+            // a public account (form 1) that carries an address.
+            LogosButton {
+                objectName: "cardUseAddress"
+                visible: cardRoot.card && Number(cardRoot.card.form || 0) === 1
+                    && String((cardRoot.card && cardRoot.card.address) || "").replace(/\s+/g, "").length > 0
+                Layout.fillWidth: true
+                text: qsTr("Use as recipient")
+                variant: LogosButton.Variant.Secondary
+                onClicked: cardRoot.useAddress(
+                    String(cardRoot.card.address).replace(/\s+/g, ""))
             }
         }
 

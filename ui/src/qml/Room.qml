@@ -799,6 +799,14 @@ Item {
                                         form: 1
                                     }));
                             }
+                            // A peer disclosed an address in answer to the ask — drop it
+                            // straight into the payment recipient and open the composer, so
+                            // it's used as shared, never retyped.
+                            onUseAddress: function(addr) {
+                                room.composeType = "payment";
+                                room.composing = true;
+                                proposeTo.text = addr;
+                            }
                         }
 
                         // ── plain chat text ────────────────────────────────────────
@@ -1240,14 +1248,40 @@ Item {
                     }
                 }
 
-                // payment: recipient (+ amount below).
-                LogosTextField {
-                    id: proposeTo
-                    objectName: "roomProposeTo"
+                // payment: recipient (+ amount below). You can type it, or ask the room —
+                // the counterparty answers with their own address (ask-then-disclose), so
+                // the demo shows the Safe's recipient being DISCLOSED, not pre-known.
+                RowLayout {
                     visible: room.composeType === "payment"
                     Layout.fillWidth: true
-                    placeholderText: qsTr("recipient (0x…)")
-                    font.family: Theme.typography.mono
+                    spacing: Theme.spacing.small
+
+                    LogosTextField {
+                        id: proposeTo
+                        objectName: "roomProposeTo"
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("recipient (0x…)")
+                        font.family: Theme.typography.mono
+                    }
+
+                    // Post an address-request card into the thread. A room member (the
+                    // counterparty) answers it with "Share an address", disclosing their
+                    // own address; "Use as recipient" on that card fills this field.
+                    LogosButton {
+                        objectName: "roomAskAddress"
+                        text: qsTr("Ask the room")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: {
+                            if (!room.backend) return;
+                            room.backend.postMessage(JSON.stringify({
+                                kind: "address-request",
+                                intent: "pay",
+                                purpose: proposeValue.text.length > 0
+                                    ? qsTr("Pay %1 wei").arg(proposeValue.text)
+                                    : qsTr("Pay someone from the room")
+                            }));
+                        }
+                    }
                 }
 
                 // statement: the text the room ratifies.

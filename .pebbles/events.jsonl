@@ -898,3 +898,7 @@
 {"type":"rename","timestamp":"2026-09-18T19:15:54.793133567Z","issue_id":"exo-d482","payload":{"new_id":"exo-1fc.2"}}
 {"type":"dep_add","timestamp":"2026-09-18T19:15:54.793133567Z","issue_id":"exo-1fc.2","payload":{"dep_type":"parent-child","depends_on":"exo-1fc"}}
 {"type":"close","timestamp":"2026-09-18T19:15:54.830732231Z","issue_id":"exo-1fc.2","payload":{}}
+{"type":"create","timestamp":"2026-09-18T19:19:09.197252679Z","issue_id":"exo-461","payload":{"description":"Room.qml payment composer gains 'Ask the room' → posts an address-request card; counterparty answers with 'Share an address' (existing); the disclosed address-share card gains 'Use as recipient' (new useAddress signal) to fill the recipient. Runbook Safe track shows the ask→disclose→use beat. Fixes 'Bob is never asked to disclose anything'.","priority":"1","title":"Counterparty disclosure: ask the room for an address in-room","type":"task"}}
+{"type":"rename","timestamp":"2026-09-18T19:19:09.244171486Z","issue_id":"exo-461","payload":{"new_id":"exo-1fc.3"}}
+{"type":"dep_add","timestamp":"2026-09-18T19:19:09.244171486Z","issue_id":"exo-1fc.3","payload":{"dep_type":"parent-child","depends_on":"exo-1fc"}}
+{"type":"status_update","timestamp":"2026-09-18T19:19:09.284023607Z","issue_id":"exo-1fc.3","payload":{"status":"in_progress"}}
