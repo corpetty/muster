@@ -131,8 +131,9 @@ Item {
 
     // Load the sending context the moment the composer opens, and again if the policy
     // changes while it's open (the acting-as owner check is Safe-specific). Not on
-    // entry — ask-then-disclose.
-    onComposingChanged: if (composing) refreshRoomAccount()
+    // entry — ask-then-disclose. Also snap the policy to the current kind on open (it
+    // may have been left on another kind's policy from a previous compose).
+    onComposingChanged: if (composing) { refreshRoomAccount(); room.coherePolicy(); }
     onPolicyKindChanged: if (composing) refreshRoomAccount()
     // The outcome of the last room-side submit (coordinate_submit): {id, state,
     // onchain, txHash} or {id, error, ...}. Matched to a card by its intent id.
@@ -205,9 +206,6 @@ Item {
             room.backend.loadAvailableActions();
         room.coherePolicy();
     }
-    // When the composer opens, snap the policy to the current kind (it may have been
-    // left on another kind's policy from a previous compose).
-    onComposingChanged: if (composing) room.coherePolicy();
 
     // The COMPOSE DEFAULT policy (driver) for the next thing you propose here, from
     // coordinate_policy. Policy is a property of each intent, not the room — the room
