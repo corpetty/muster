@@ -148,6 +148,33 @@ Item {
     }
     function hasDriver(k) { return (room.drivers || []).indexOf(k) >= 0; }
 
+    // Which policies COHERE with a proposal kind. The policy is HOW the room agrees;
+    // the kind is WHAT it agrees to — and not every pairing means anything. An
+    // ethereum payment settles on chain, so it can only go through the Safe; a
+    // statement is a group endorsement, so it takes the roster policies (threshold /
+    // FROST / attest / unanimous) and never the Safe (which settles a transfer, not a
+    // claim); an action carries its own driver (invoke), so it shows no policy row.
+    // The composer offers ONLY these for the current kind, so "payment via FROST" —
+    // which meant nothing — can't be built.
+    function policiesForKind(k) {
+        if (k === "payment") return ["safe"];
+        if (k === "action")  return ["invoke"];
+        return ["threshold", "frost", "eip191", "unanimous"];   // statement
+    }
+    function policyValidForKind(p) {
+        return room.policiesForKind(room.composeType).indexOf(p) >= 0;
+    }
+    // Snap the compose policy to one the current kind allows, so the "Next proposal"
+    // selection is never left on a policy that doesn't fit the kind (e.g. after
+    // switching payment→statement, or reopening the composer). No-op when it already
+    // fits. Action manages its own policy in proposeAction, so it's left alone.
+    function coherePolicy() {
+        if (!room.backend || room.composeType === "action") return;
+        var valid = room.policiesForKind(room.composeType);
+        if (valid.indexOf(room.policyKind) < 0)
+            room.backend.setPolicy(valid[0]);
+    }
+
     // The coordinatable module actions available to the room (loadAvailableActions):
     // [{module, method, signature, params, allowed}]. The action composer lists these;
     // picking one composes an invoke intent. Loaded when the action composer opens.
@@ -171,8 +198,16 @@ Item {
     }
     // Refresh the action menu when the action composer opens — the module queries each
     // candidate module's methods (never a blind scan), so not on the message tick.
-    onComposeTypeChanged: if (composing && composeType === "action" && room.backend)
-                              room.backend.loadAvailableActions();
+    // Also keep the policy coherent with the kind (payment→Safe, statement→endorsement),
+    // so the composer can never hold a nonsense pairing.
+    onComposeTypeChanged: {
+        if (composing && composeType === "action" && room.backend)
+            room.backend.loadAvailableActions();
+        room.coherePolicy();
+    }
+    // When the composer opens, snap the policy to the current kind (it may have been
+    // left on another kind's policy from a previous compose).
+    onComposingChanged: if (composing) room.coherePolicy();
 
     // The COMPOSE DEFAULT policy (driver) for the next thing you propose here, from
     // coordinate_policy. Policy is a property of each intent, not the room — the room
@@ -764,6 +799,14 @@ Item {
                                         form: 1
                                     }));
                             }
+                            // A peer disclosed an address in answer to the ask — drop it
+                            // straight into the payment recipient and open the composer, so
+                            // it's used as shared, never retyped.
+                            onUseAddress: function(addr) {
+                                room.composeType = "payment";
+                                room.composing = true;
+                                proposeTo.text = addr;
+                            }
                         }
 
                         // ── plain chat text ────────────────────────────────────────
@@ -869,11 +912,14 @@ Item {
                 // own. The same propose/contribute/fold runs under either. Safe =
                 // EIP-712 / secp owners; Threshold = k-of-n Ed25519 endorsement.
                 RowLayout {
+                    // an action carries its own driver (invoke) — no policy choice to make.
+                    visible: room.composeType !== "action"
                     Layout.fillWidth: true
                     spacing: Theme.spacing.small
 
                     LogosText {
-                        text: qsTr("Next proposal")
+                        text: room.composeType === "payment" ? qsTr("Settles via")
+                                                             : qsTr("Endorse with")
                         color: Theme.palette.textTertiary
                         font.family: Theme.typography.mono
                         font.pixelSize: Theme.typography.badgeText
@@ -882,6 +928,7 @@ Item {
 
                     LogosButton {
                         objectName: "roomPolicySafe"
+                        visible: room.policyValidForKind("safe")
                         Layout.preferredWidth: 90
                         text: qsTr("Safe")
                         variant: room.policyKind === "safe"
@@ -891,6 +938,7 @@ Item {
 
                     LogosButton {
                         objectName: "roomPolicyThreshold"
+                        visible: room.policyValidForKind("threshold")
                         Layout.preferredWidth: 130
                         text: qsTr("Threshold")
                         variant: room.policyKind === "threshold"
@@ -903,6 +951,7 @@ Item {
                     // card shows "round R of 2" as it collects.
                     LogosButton {
                         objectName: "roomPolicyFrost"
+                        visible: room.policyValidForKind("frost")
                         Layout.preferredWidth: 90
                         text: qsTr("FROST")
                         variant: room.policyKind === "frost"
@@ -916,6 +965,7 @@ Item {
                     // policy (which settles) and from the Ed25519 threshold endorsement.
                     LogosButton {
                         objectName: "roomPolicyEip191"
+                        visible: room.policyValidForKind("eip191")
                         Layout.preferredWidth: 90
                         text: qsTr("Attest")
                         variant: room.policyKind === "eip191"
@@ -929,6 +979,7 @@ Item {
                     // PROPOSES adding it — a governance intent the group must approve.
                     LogosButton {
                         objectName: "roomPolicyUnanimous"
+                        visible: room.policyValidForKind("unanimous")
                         Layout.preferredWidth: 150
                         text: room.hasDriver("unanimous") ? qsTr("Unanimous")
                                                           : qsTr("＋ Propose unanimous")
@@ -1197,14 +1248,40 @@ Item {
                     }
                 }
 
-                // payment: recipient (+ amount below).
-                LogosTextField {
-                    id: proposeTo
-                    objectName: "roomProposeTo"
+                // payment: recipient (+ amount below). You can type it, or ask the room —
+                // the counterparty answers with their own address (ask-then-disclose), so
+                // the demo shows the Safe's recipient being DISCLOSED, not pre-known.
+                RowLayout {
                     visible: room.composeType === "payment"
                     Layout.fillWidth: true
-                    placeholderText: qsTr("recipient (0x…)")
-                    font.family: Theme.typography.mono
+                    spacing: Theme.spacing.small
+
+                    LogosTextField {
+                        id: proposeTo
+                        objectName: "roomProposeTo"
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("recipient (0x…)")
+                        font.family: Theme.typography.mono
+                    }
+
+                    // Post an address-request card into the thread. A room member (the
+                    // counterparty) answers it with "Share an address", disclosing their
+                    // own address; "Use as recipient" on that card fills this field.
+                    LogosButton {
+                        objectName: "roomAskAddress"
+                        text: qsTr("Ask the room")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: {
+                            if (!room.backend) return;
+                            room.backend.postMessage(JSON.stringify({
+                                kind: "address-request",
+                                intent: "pay",
+                                purpose: proposeValue.text.length > 0
+                                    ? qsTr("Pay %1 wei").arg(proposeValue.text)
+                                    : qsTr("Pay someone from the room")
+                            }));
+                        }
+                    }
                 }
 
                 // statement: the text the room ratifies.

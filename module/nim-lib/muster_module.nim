@@ -230,6 +230,45 @@ proc musterHealth(): string = "ok"
 # removes when it slots behind this same seam.
 var gKeystore: Keystore = nil
 
+# ── demo pre-seeded identities + contacts (exo-1fc) ─────────────────────────────
+# For the recorded two-party demo the peers should already know each other by name —
+# no on-camera "add contact" step. The demo peers are the three anvil owner keys
+# (scripts/demo-peer.sh); their ENCRYPTION (chat) identity is derived deterministically
+# from that key, so every role's room-membership id is known ahead of time. That is what
+# lets a seeded peer derive the OTHER roles' chat ids on the fly — from public test keys —
+# and drop them into the address book with their names. Demo-only: everything here is
+# gated behind MUSTER_DEV_SECP_KEY; the real path derives and seeds nothing.
+const DemoRoles = [
+  ("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", "Alice"),
+  ("59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d", "Bob"),
+  ("5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a", "Carol"),
+]
+
+proc hexSeed32(hexIn: string): seq[byte] =
+  ## A 0x-optional hex string → its bytes (the anvil secp seeds; the demo secp seed too).
+  var h = hexIn.strip()
+  if h.len >= 2 and h[0] == '0' and (h[1] == 'x' or h[1] == 'X'): h = h[2 .. ^1]
+  for i in 0 ..< h.len div 2:
+    try: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
+    except CatchableError: discard
+
+proc demoEncSeed(secpSeed: openArray[byte]): array[32, byte] =
+  ## The deterministic encryption seed for a demo role — a domain-separated hash of its
+  ## secp seed, so the chat id is a fixed function of the (public) anvil key. BOTH the
+  ## keystore mint (this instance's own chat id) and the contact derivation (a peer's chat
+  ## id) use this, so the two agree.
+  var buf = newSeq[byte]()
+  for c in "muster-demo-enc-v1": buf.add byte(c)
+  for b in secpSeed: buf.add b
+  sha256(buf)
+
+proc toArr32(s: seq[byte]): array[32, byte] =
+  for i in 0 ..< min(32, s.len): result[i] = s[i]
+
+proc demoChatIdOf(secpSeed: seq[byte]): string =
+  ## A demo role's room-membership id (ed25519 ++ x25519 hex, as members speak it).
+  toHex(encFromSeed(demoEncSeed(secpSeed)).identity().toBytes())
+
 proc moduleKeystore(): Keystore =
   if gKeystore == nil:
     var dir = context().instancePersistencePath
@@ -242,14 +281,16 @@ proc moduleKeystore(): Keystore =
     var seed: seq[byte] = @[]
     let devKey = getEnv("MUSTER_DEV_SECP_KEY")
     if devKey.len > 0:
-      var h = devKey
-      if h.len >= 2 and h[0] == '0' and (h[1] == 'x' or h[1] == 'X'): h = h[2 .. ^1]
-      for i in 0 ..< h.len div 2:
-        try: seed.add byte(parseHexInt(h[2*i .. 2*i+1]))
-        except CatchableError: discard
+      seed = hexSeed32(devKey)
+    # Demo peers also get a DETERMINISTIC encryption (chat) identity, derived from the
+    # secp seed — so their room-membership id is known ahead of time and peers can be
+    # pre-seeded as contacts (exo-1fc). Empty on the real path ⇒ a fresh random chat key.
+    var encSeed: seq[byte] = @[]
+    if seed.len == 32:
+      encSeed = @(demoEncSeed(seed))
     let path = dir / "identity.mks"
     try:
-      gKeystore = openFileKeystore(path, pass, seed)
+      gKeystore = openFileKeystore(path, pass, seed, encSeed)
     except KeystoreError as e:
       # A wrong MUSTER_KEY_PASSPHRASE (or a corrupt/foreign keyfile) can't be
       # decrypted. Re-raise with an actionable message instead of leaking the raw
@@ -277,11 +318,30 @@ proc myAddress(): Address = moduleKeystore().address()
 # provenance show names, not raw hex. Beside the keystore, so it survives restarts
 # (contacts.nim). Defined here — before the intent projection that resolves aliases.
 var gContacts: ContactBook = nil
+
+proc seedDemoContacts(book: ContactBook) =
+  ## Pre-seed the OTHER demo roles as named contacts (alias + secp address), so the
+  ## recorded demo needs no on-camera "add contact" step (exo-1fc). Only when this
+  ## instance is itself a seeded demo peer (MUSTER_DEV_SECP_KEY set); never clobbers a
+  ## contact the user has already named. Each id is derived on the fly from a public
+  ## anvil key, so nothing needs precomputing and it works across machines.
+  let devKey = getEnv("MUSTER_DEV_SECP_KEY")
+  if devKey.len == 0: return
+  let mine = normId(devKey)
+  for r in DemoRoles:
+    if normId(r[0]) == mine: continue           # not myself
+    let ss = hexSeed32(r[0])
+    if ss.len != 32: continue
+    let chatId = demoChatIdOf(ss)
+    if book.aliasOf(chatId).len > 0: continue    # the user already named this id — keep it
+    book.add(chatId, r[1], toHex(addressOf(toArr32(ss))))
+
 proc contactBook(): ContactBook =
   if gContacts == nil:
     var dir = context().instancePersistencePath
     if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
     gContacts = newContactBook(dir / "contacts.json")
+    seedDemoContacts(gContacts)
   gContacts
 
 proc musterIdentity(): string =

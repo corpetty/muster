@@ -9,7 +9,13 @@ and they need different setup:
 | **Safe** (on-chain 2-of-3) | An Ethereum multisig settling on chain — every owner's signature is disclosed on the public ledger | **Yes** (the MiniSafe fixture) | **Yes** — each peer must BE a real Safe owner |
 | **threshold / FROST** (k-of-n Ed25519) | The same coordination reaching finality with a roster endorsement — the disclosure contrast (one aggregated key, not every signer) | No | No — any two peers who join the room *are* the roster |
 
-The teaching beat is the contrast: **run the same payment under Safe, then under FROST, and point at what each one put on the wire.**
+The teaching beat is the contrast: **the room reaches the same decision two ways — settle
+it on-chain as a Safe payment, or endorse it off-chain as a FROST statement — and you point
+at what each one put on the wire.** (A payment *is* the on-chain settle, so it only goes
+through the Safe; FROST doesn't touch Ethereum, so its version is the decision itself — a
+statement the roster endorses. The composer enforces this: pick the **kind** and it offers
+only the policies that fit it, so "an ethereum payment via FROST" — which never meant
+anything — can't be built.)
 
 Everything below uses the **public AppImage** (`result-appimage/logos-basecamp.AppImage`,
 built with `make appimage`). Nothing here needs the nix build toolchain, so a colleague
@@ -69,6 +75,16 @@ scripts/demo-peer.sh bob --isolate --fresh
 one machine); `--fresh` wipes that peer's prior identity so the seed key takes (the seed
 is honored only when minting a new keyfile). On first launch each basecamp installs its
 bundled modules — that's normal.
+
+> **Contacts are pre-seeded — no "add contact" step on camera.** A seeded demo peer gets a
+> *deterministic* chat identity (derived from its anvil key), so every role's
+> room-membership id is known ahead of time. On first launch each peer's address book is
+> filled with the OTHER roles (Alice ⇄ Bob ⇄ Carol) by name + address, so the roster, the
+> join prompt, and the composer show **Alice/Bob**, not 64-byte hex — with nothing to type.
+> This only holds when both peers are **freshly minted with this build** (`--fresh` above);
+> a peer carried over from an older keyfile has a random chat id that the pre-seeded contact
+> can't match. It's demo-only (gated behind the seed); a normal install seeds nothing and
+> keeps random chat identities.
 
 **3. In BOTH windows, open Muster and join the same room.** Click **Muster**, create /
 join a room with the **same name** in both (e.g. `demo`). Give it a few seconds — the two
@@ -142,32 +158,51 @@ Running the same payment under each policy and opening that box side by side *is
 
 ### FROST / threshold track
 
-1. In the room, the **"Next proposal" policy row** has **Safe · Threshold · FROST**
-   buttons (FROST isn't offered on the room-*creation* screen — pick it here, inside the
-   room). Click **FROST**. (Threshold is the single-round variant; FROST is the 2-round
-   one.)
-2. **Propose** a payment (amount + recipient). A proposal card appears inline in the
-   thread, showing **round 1 of 2**.
+FROST endorses a **statement** — a decision the roster ratifies — not an on-chain payment
+(it never touches Ethereum). So the FROST version of "pay 0.1 ETH to X" is the *decision*
+to do so, phrased as a statement. That's the honest contrast with the Safe track's on-chain
+settle.
+
+1. Open the composer with **+**. For **Kind**, click **Statement**. The **"Endorse with"**
+   row now offers only the roster policies — **Threshold · FROST · Attest · Unanimous** (no
+   Safe: a statement settles nothing on chain). Click **FROST**. (Threshold is the
+   single-round variant; FROST is the 2-round one.)
+2. In **"what the room ratifies…"**, type the decision — e.g. `pay 0.1 ETH to 0x…70997970…
+   from the group fund`. Click **Propose**. A proposal card appears inline in the thread,
+   showing **round 1 of 2**.
 3. **Both peers click Approve** on the card. No pasting — Approve auto-signs with each
    peer's own key. When both have approved, round 1 closes and the card advances to
    **round 2 of 2**.
 4. **Both peers click Approve again** (round 2). The card reaches **complete**.
-   → *Talking point:* this reached finality with a k-of-n **Ed25519 roster endorsement** —
-   the coordination structure of a threshold Schnorr/FROST signature. Contrast with Safe:
-   no per-owner secp signatures, no chain transaction, nothing on a public ledger.
+   → *Talking point:* the room reached the same decision as the Safe track, but finality
+   here is a k-of-n **Ed25519 roster endorsement** — the coordination structure of a
+   threshold Schnorr/FROST signature. Contrast with Safe: no per-owner secp signatures, no
+   chain transaction, nothing on a public ledger. Same decision; one leaks every signer to
+   the chain, the other leaks nothing.
 
    *(4 Approve clicks total for 2 members — once each per round. The card's
    "round R of N (M of 2 this round)" tells you where you are.)*
 
 ### Safe track (on-chain 2-of-3)
 
-1. In the composer policy row, click **Safe**.
-2. **Propose** the payment. The card shows the re-derived `safeTxHash` (F-4 — your client
-   re-derived it, it wasn't handed to you) and 0/2 approvals.
-3. **Both peers click Approve.** Each auto-signs the `safeTxHash` with its seeded owner
+1. Open the composer with **+**. **Kind** is **Payment** (the default); the **"Settles via"**
+   row shows only **Safe** — a payment settles on-chain, so there's nothing else to pick.
+2. **Ask for the recipient instead of typing it.** Click **Ask the room** beside the
+   recipient field. An *address-request* card lands in the thread — this is the room asking
+   whoever holds the destination to disclose it.
+   - **On the counterparty's screen** (Bob), that card shows **Share an address**. Bob
+     clicks it; his own address is disclosed into the thread as an *address-share* card.
+     → *Talking point:* the recipient wasn't pre-known or pasted from a side channel — Bob
+     **disclosed** it in the room, on the record, when asked (ask-then-disclose).
+   - **Back on the proposer's screen** (Alice), Bob's address-share card has a **Use as
+     recipient** button. Click it — the recipient field fills with the address Bob just
+     shared. (You can still type one directly if you prefer.)
+3. Fill the amount and **Propose**. The card shows the re-derived `safeTxHash` (F-4 — your
+   client re-derived it, it wasn't handed to you) and 0/2 approvals.
+4. **Both peers click Approve.** Each auto-signs the `safeTxHash` with its seeded owner
    key; the driver verifies each recovers to a real owner. At 2/2 the card goes
    **executable**.
-4. Click **Submit** (the on-chain step). The module assembles `execTransaction` from the
+5. Click **Submit** (the on-chain step). The module assembles `execTransaction` from the
    two owner signatures and sends it through the RPC; it watches the receipt and the card
    advances **submitted → paid**.
    → *Talking point:* that transaction is now on the public chain, and it disclosed **both

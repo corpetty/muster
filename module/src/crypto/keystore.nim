@@ -184,7 +184,8 @@ proc readKeyfile(path, passphrase: string): (array[32, byte], array[32, byte], b
   for i in 0 ..< 32: encSeed[i] = opened[32 + i]
   (secret, encSeed, false)
 
-proc openFileKeystore*(path, passphrase: string, secpSeed: seq[byte] = @[]): FileKeystore =
+proc openFileKeystore*(path, passphrase: string, secpSeed: seq[byte] = @[],
+                       encSeedIn: seq[byte] = @[]): FileKeystore =
   ## Load both identities at `path`, or mint fresh ones and persist them if none
   ## exists. A v1 keyfile (secp only) is upgraded in place to add the encryption
   ## identity, preserving the address.
@@ -194,6 +195,11 @@ proc openFileKeystore*(path, passphrase: string, secpSeed: seq[byte] = @[]): Fil
   ## Safe owner key, and thus sign Safe intents in-app AS a real on-chain owner
   ## (exo-001). It is honoured only on first mint; an existing keyfile keeps its
   ## identity. Empty ⇒ a fresh random key, the normal path.
+  ##
+  ## `encSeedIn` (32 bytes) does the same for the ENCRYPTION (chat) identity — so a
+  ## demo peer's room-membership id is deterministic and known ahead of time, which is
+  ## what lets peers be pre-seeded as each other's contacts (exo-1fc). Demo-only; on
+  ## the normal path it is empty and the encryption identity is a fresh random key.
   result = FileKeystore(path: path, pass: passphrase)
   var encSeed: array[32, byte]
   if fileExists(path):
@@ -206,7 +212,10 @@ proc openFileKeystore*(path, passphrase: string, secpSeed: seq[byte] = @[]): Fil
       for i in 0 ..< 32: result.secret[i] = secpSeed[i]
     else:
       result.secret = randomKey()
-    encSeed = randomKey()
+    if encSeedIn.len == 32:
+      for i in 0 ..< 32: encSeed[i] = encSeedIn[i]
+    else:
+      encSeed = randomKey()
     writeKeyfile(path, result.secret, encSeed, passphrase)
   result.enc = encFromSeed(encSeed)
   result.finish()
