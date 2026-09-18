@@ -247,7 +247,23 @@ proc moduleKeystore(): Keystore =
       for i in 0 ..< h.len div 2:
         try: seed.add byte(parseHexInt(h[2*i .. 2*i+1]))
         except CatchableError: discard
-    gKeystore = openFileKeystore(dir / "identity.mks", pass, seed)
+    let path = dir / "identity.mks"
+    try:
+      gKeystore = openFileKeystore(path, pass, seed)
+    except KeystoreError as e:
+      # A wrong MUSTER_KEY_PASSPHRASE (or a corrupt/foreign keyfile) can't be
+      # decrypted. Re-raise with an actionable message instead of leaking the raw
+      # "wrong passphrase or corrupt keyfile" — and, crucially, DON'T let it blank
+      # the account silently: describe() never touches the keystore, so the Safe
+      # still shows; only keystore-dependent calls (wallet, identity, signing) fail,
+      # each surfacing this line (the module dispatch turns a handler raise into a
+      # {"error": …} response now, so one bad keyfile no longer crashes the module).
+      raise newException(KeystoreError,
+        "keystore locked (" & path & "): " & e.msg & ". The passphrase " &
+        "MUSTER_KEY_PASSPHRASE=\"" & pass & "\" does not match this keyfile. " &
+        "For a dev/demo peer, delete the file to re-mint a fresh identity " &
+        "(scripts/demo-peer.sh … --isolate --fresh does this for you); otherwise " &
+        "set the passphrase this keyfile was created with.")
     loadSettingsFile()      # infra settings live beside the identity — load them once
   gKeystore
 

@@ -108,6 +108,36 @@ Discovery is the public fleet, so **the FROST track works with zero shared infra
 
 ---
 
+## The transaction pipeline — what you're watching
+
+Both tracks drive the **same lifecycle**. Knowing the states makes the demo legible: you
+can say exactly where you are and what each step put on the wire.
+
+**Before the room — check the account.** Open **Muster → Account**. The **SAFE ACCOUNT**
+card should show the 2-of-3 Safe you're coordinating (`0x5FbDB…0aa3`) and your own owner
+address. If it says **"account not loaded"**, your keystore didn't open — fix that first
+(see Troubleshooting), because nothing downstream will settle.
+
+Then, inside the room, every proposal moves through these states — the proposal card shows
+the current one on its status rail:
+
+| State | What it means | On screen | Your move |
+|---|---|---|---|
+| **draft** | Composing a payment (amount + recipient), not yet shared | the composer / "Propose" form | fill it, click **Propose** |
+| **proposed** | The effect is shared; your client **re-derived** the bytes to sign (the `safeTxHash` for Safe) | a card in the thread, `0/N` approvals, the re-derived hash | read the hash aloud — *your* client derived it, it wasn't handed to you (F-4) |
+| **collecting** | Approvals are coming in | `k/N` approvals tick up as peers approve | **each peer clicks Approve** — auto-signs with its own key, no pasting |
+| **executable** | Threshold met — enough valid signatures to act | the card flips to *executable*; **Submit** appears (Safe track) | Safe: click **Submit**. FROST: the round advances / the card completes |
+| **submitted** | The on-chain `execTransaction` was sent (Safe only) | *submitted*, watching the receipt | wait ~1–2s |
+| **final / paid** | Settled — Safe: receipt confirmed on chain; FROST: the k-of-n roster endorsement completed | *paid* / *complete* | narrate the disclosure contrast |
+
+**Watch the disclosure, not just the state.** The card's **"What this needs / who will see
+what"** box (open it with **Needs**) is the teaching surface: under **Safe** it names the
+chain plus **both owner addresses and both signatures** as disclosed to the public ledger;
+under **FROST** it's a single roster endorsement with **nothing on a public chain**.
+Running the same payment under each policy and opening that box side by side *is* the demo.
+
+---
+
 ## Running the tracks (same in both scenarios, once 2 members are in the room)
 
 ### FROST / threshold track
@@ -148,6 +178,15 @@ Discovery is the public fleet, so **the FROST track works with zero shared infra
 
 ## Troubleshooting
 
+- **Account view says "account not loaded" (Safe/wallet do nothing).** The module's
+  keystore couldn't open — almost always a **stale keyfile from an earlier run** whose
+  passphrase doesn't match `demo-peer.sh`'s (`muster-demo`). And a keyfile that *does*
+  exist makes the seed a no-op anyway (`MUSTER_DEV_SECP_KEY` is honored only on a fresh
+  mint), so even if it opened you wouldn't be the anvil owner. Fix by launching with a
+  fresh identity: `scripts/demo-peer.sh <role> --isolate --fresh`, or delete
+  `~/.local/share/Logos/LogosBasecamp/module_data/muster_module/*/identity.mks` and
+  relaunch. The module now reports this as a clear `keystore locked (…): … passphrase …
+  does not match` line in the terminal instead of silently blanking the account.
 - **Peers never reach 2 members.** They must use the **same room name** and both be on the
   same delivery config (default `logos.test` — leave it). Cross-host receive rides store
   catchup (~1s), so allow a few seconds. Check Settings → Infrastructure shows the same
