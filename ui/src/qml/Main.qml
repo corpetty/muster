@@ -62,6 +62,14 @@ Item {
         if (p.length > 0)
             root.backend.setPolicy(p);
         var v = String(verb || "");
+        // Auto-ask to join UNLESS this is a fresh composer creation (a verb): a joiner
+        // entering a room someone else already founded can't see them (their epoch is
+        // sealed), so without this they'd have no idea they must ask. Requesting is
+        // harmless if the room is empty or we're already admitted — the retry loop
+        // stops as soon as the roster grows past just us (or after a bounded wait).
+        // The founder (verb present) doesn't ask itself in; it admits the joiner.
+        if (v.length === 0)
+            root.backend.requestJoin();
         var purpose = v === "pay" ? qsTr("Pay someone")
                     : v === "request" ? qsTr("Ask to be paid")
                     : v === "split" ? qsTr("Split a cost") : "";
@@ -281,11 +289,25 @@ Item {
         anchors.bottom: parent.bottom
         visible: root.view === "home"
         actions: root.homeActions
+        invites: {
+            try { return JSON.parse(root.backend ? root.backend.invitesJson : "[]"); }
+            catch (e) { return []; }
+        }
         onActivated: root.enterRoom(topic)
+        onJoinInvite: function(topic) { root.enterRoom(topic); }   // joiner path → auto-asks to join
         onNewActivity: {
             root.view = "compose";
             if (root.backend) root.backend.loadContacts();   // so "who with" can pick a name
         }
+    }
+
+    // Poll the inbox for room invites while on Home, so an invite that arrives (over the
+    // store, ~1s) shows up without a manual refresh. Cheap: one module read per tick.
+    Timer {
+        interval: 2000
+        running: root.view === "home" && root.backend !== null
+        repeat: true
+        onTriggered: if (root.backend) root.backend.loadInvites()
     }
 
     // Compose: create a room from an action (what → who). "who" can be a tap on an
@@ -301,7 +323,16 @@ Item {
             catch (e) { return []; }
         }
         backend: root.backend
-        onCreateRoom: root.enterRoom(topic, verb, policy, draftJson)
+        onCreateRoom: {
+            root.enterRoom(topic, verb, policy, draftJson);
+            // If a specific person was chosen (their 64-byte chat id, 128 hex chars), invite
+            // them: seal this room's topic to their inbox so it appears on their instance —
+            // no telling them a name out-of-band. Pass the RAW topic; both sides normalize it
+            // to the same content topic on join. A pasted address (not a chat id) is skipped.
+            var p = String(peer || "").replace(/^0x/i, "");
+            if (root.backend && p.length >= 128)
+                root.backend.sendInvite(peer, topic, verb);
+        }
     }
 
     // The conversation surface. Reads its state from the module through the backend.

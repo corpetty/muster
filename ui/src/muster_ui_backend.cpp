@@ -268,6 +268,31 @@ void MusterUiBackend::removeContact(const QString &identityHex)
     setContactsJson(modules().muster_module.contacts());
 }
 
+void MusterUiBackend::startInbox()
+{
+    // coordinate_start_inbox → begin listening on THIS identity's inbox topic so room
+    // invites arrive even before any room is joined. Idempotent; called once at startup.
+    const QString r = modules().muster_module.coordinate_start_inbox();
+    qInfo() << "[muster_ui] coordinate_start_inbox ->" << r;
+    loadInvites();
+}
+
+void MusterUiBackend::sendInvite(const QString &peerChatId, const QString &roomTopic,
+                                 const QString &note)
+{
+    // coordinate_invite → seal the room topic to the peer's chat id and drop it on their
+    // inbox. This is how "Start something with someone" actually notifies them.
+    const QString r = modules().muster_module.coordinate_invite(peerChatId, roomTopic, note);
+    qInfo() << "[muster_ui] coordinate_invite(" << roomTopic << ") ->" << r;
+}
+
+void MusterUiBackend::loadInvites()
+{
+    // coordinate_invites → the invites received on our inbox, [{topic, from, fromAlias,
+    // note, ts}]. The home surface lists them with a Join action.
+    setInvitesJson(modules().muster_module.coordinate_invites());
+}
+
 void MusterUiBackend::requestJoin()
 {
     // coordinate_request_join → announce our encryption key on the topic. Carries no
@@ -284,6 +309,7 @@ void MusterUiBackend::requestJoin()
     // roster grows past just itself), then stop.
     if (!m_joinRetrying) {
         m_joinRetrying = true;
+        m_joinAttempts = 0;
         scheduleJoinRetry();
     }
 }
@@ -299,6 +325,13 @@ void MusterUiBackend::scheduleJoinRetry()
         const QJsonDocument d = QJsonDocument::fromJson(membersJson().toUtf8());
         const int members = d.isArray() ? d.array().size() : 0;
         if (members > 1 || roomTopic().isEmpty()) {   // admitted, or left the room
+            m_joinRetrying = false;
+            return;
+        }
+        // Bound the auto re-announce: after ~1min alone, an occupied room would have
+        // admitted us by now, so stop rather than announce into an empty room forever.
+        // The user can re-issue with the "Ask to join" button (which resets this).
+        if (++m_joinAttempts >= 20) {
             m_joinRetrying = false;
             return;
         }
@@ -534,6 +567,9 @@ void MusterUiBackend::onContextReady()
     loadAccount();
     loadBalances();
     loadSettings();
+    // Begin listening on this identity's inbox so room invites (from "Start something
+    // with someone") arrive even before any room is opened. Idempotent; safe on launch.
+    startInbox();
 
     // Diagnostic/headless self-test hook: if MUSTER_AUTOJOIN_TOPIC is set, join that
     // room a few seconds after startup — no GUI click needed. Runs on the ui-host's

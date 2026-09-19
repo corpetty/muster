@@ -27,6 +27,7 @@ type
     topic: string
     log*: Log
     pending: seq[LinkStatement]  ## join-requests seen but not yet admitted (each carries a binding; no authority)
+    invites: seq[seq[byte]]      ## invite frames seen on this (inbox) topic — opaque, sealed to the owner; the module opens them
 
 # Every frame on the topic carries a 1-byte kind, so the membership handshake
 # shares the topic with data without either misreading the other.
@@ -34,6 +35,7 @@ const
   FrameData = 0x00'u8          ## body = epoch-sealed event envelope
   FrameJoinRequest = 0x01'u8   ## body = the requester's 33-byte member key (no authority)
   FrameControl = 0x02'u8       ## body = an opaque membership control frame (a grant)
+  FrameInvite = 0x03'u8        ## body = a sealed-box invite to THIS topic's owner (an inbox drop). Not epoch-sealed, so it needs no shared membership — anyone may drop, only the owner opens (sealed to their X25519).
 
 proc toBytes(s: string): seq[byte] = (for c in s: result.add byte(c))
 proc toStr(b: openArray[byte]): string = (for x in b: result.add char(x))
@@ -74,6 +76,8 @@ proc ingestEnvelope(s: CoordinationSession, env: IncomingMessage) =
         s.pending.add st
     of FrameControl:
       discard s.crypto.ingestControl(body)     # a grant; ours to open or not
+    of FrameInvite:
+      s.invites.add body                       # opaque here; the module sealOpens it with its keystore
     else: discard
   except CatchableError:
     discard
@@ -92,6 +96,16 @@ proc publish*(s: CoordinationSession, e: Event) =
   discard s.transport.publish(s.topic, @[FrameData] & s.crypto.seal(encodeEvent(e)))
 
 # ── membership handshake ───────────────────────────────────────────────────────
+
+proc sendInvite*(s: CoordinationSession, sealed: seq[byte]) =
+  ## Drop a sealed invite into this (inbox) topic. The bytes are already sealed to the
+  ## inbox owner's X25519 by the caller, so no shared epoch is needed — this is a
+  ## broadcast drop-box, not a room. The store retains it so an offline owner catches up.
+  discard s.transport.publish(s.topic, @[FrameInvite] & sealed)
+
+proc receivedInvites*(s: CoordinationSession): seq[seq[byte]] = s.invites
+  ## The raw sealed invite frames seen on this topic — the module opens them with its
+  ## keystore (only the owner can); malformed / not-for-us ones simply won't open.
 
 proc requestJoin*(s: CoordinationSession, binding: LinkStatement) =
   ## Announce our binding on the topic, asking to be admitted. The binding lets a
