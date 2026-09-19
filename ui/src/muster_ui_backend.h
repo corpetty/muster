@@ -51,6 +51,9 @@ public:
     void addContact(const QString &identityHex, const QString &alias) override;
     void setContactAlias(const QString &identityHex, const QString &alias) override;
     void removeContact(const QString &identityHex) override;
+    void startInbox() override;
+    void sendInvite(const QString &peerChatId, const QString &roomTopic, const QString &note) override;
+    void loadInvites() override;
     void proposeInRoom(const QString &effectJson) override;
     void contributeInRoom(const QString &intentId, const QString &signatureHex, const QString &keyRef) override;
     void loadIntents() override;
@@ -77,4 +80,5 @@ private:
     // the fleet). Guarded so only one retry chain runs at a time.
     void scheduleJoinRetry();
     bool m_joinRetrying = false;
+    int  m_joinAttempts = 0;   // bounds the re-announce so an empty room doesn't loop forever
 };

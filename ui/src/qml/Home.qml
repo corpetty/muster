@@ -30,10 +30,17 @@ Item {
     // never faces undefined.
     property var actions: []
 
+    // Room invites received on this identity's inbox: [{topic, from, fromAlias, note, ts}].
+    // Someone opened a room WITH you and it reached your instance — shown at the top so
+    // you can join without being told a name out-of-band. Defaults to [] for the delegate.
+    property var invites: []
+
     // A row was clicked → open that room.
     signal activated(string topic)
     // "Start something" pressed → begin a new coordination.
     signal newActivity()
+    // A received invite's Join was clicked → open (and ask to join) that room.
+    signal joinInvite(string topic)
 
     // How many rows are waiting on the user — the number worth a heading.
     readonly property int needsCount: {
@@ -78,6 +85,64 @@ Item {
             objectName: "startSomethingButton"
             text: qsTr("Start something")
             onClicked: home.newActivity()
+        }
+
+        // ── invitations ───────────────────────────────────────────────────
+        // Someone opened a room with you; it arrived on your inbox. Join opens it
+        // (and auto-asks to join). Shown only when there are any.
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: (home.invites || []).length > 0
+            spacing: Theme.spacing.tiny
+
+            LogosText {
+                text: qsTr("Invitations")
+                color: Theme.palette.text
+                font.family: Theme.typography.publicSans
+                font.pixelSize: Theme.typography.secondaryText
+                font.weight: Theme.typography.weightBold
+            }
+
+            Repeater {
+                model: home.invites || []
+                delegate: Rectangle {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    implicitHeight: inviteBody.implicitHeight + 2 * Theme.spacing.medium
+                    radius: Theme.spacing.radiusSmall
+                    color: Theme.palette.surfaceRaised
+                    border.width: 1
+                    border.color: Theme.palette.warning
+
+                    RowLayout {
+                        id: inviteBody
+                        anchors.fill: parent
+                        anchors.margins: Theme.spacing.medium
+                        spacing: Theme.spacing.small
+
+                        LogosText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: {
+                                var who = String(modelData.fromAlias || "").length > 0
+                                    ? String(modelData.fromAlias)
+                                    : String(modelData.from || "someone").substring(0, 10) + "…";
+                                var n = String(modelData.note || "");
+                                return who + qsTr(" invited you to a room")
+                                     + (n.length > 0 ? "  ·  " + n : "");
+                            }
+                            color: Theme.palette.text
+                            font.pixelSize: Theme.typography.secondaryText
+                        }
+
+                        LogosButton {
+                            objectName: "joinInviteButton"
+                            text: qsTr("Join")
+                            onClicked: home.joinInvite(String(modelData.topic || ""))
+                        }
+                    }
+                }
+            }
         }
 
         // ── the action list (or the empty state) ──────────────────────────

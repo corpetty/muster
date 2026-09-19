@@ -190,6 +190,21 @@ Item {
                 onClicked: scope.requestJoin()
             }
 
+            // When you're the only one on the roster, you can't tell whether the room
+            // is empty or someone's already here (their epoch is sealed to them until
+            // they admit you). Entering already sends a join request for you — so say
+            // so, and that a member here will admit you, rather than leave you guessing.
+            LogosText {
+                visible: scope.roster.length <= 1
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("Only you are here so far. If someone already has this room open, "
+                         + "they'll see your request and can let you in — you don't need to "
+                         + "do anything else. (Asking again above re-sends the request.)")
+                color: Theme.palette.textTertiary
+                font.pixelSize: Theme.typography.badgeText
+            }
+
             // Pending join-requests: whoever has announced their key but is not yet
             // admitted. Admitting re-keys the room forward (F-16) and hands them the
             // new epoch key — they read from here on, never the log before.
@@ -214,7 +229,12 @@ Item {
                     LogosText {
                         Layout.fillWidth: true
                         readonly property string ident: modelData && modelData.identity ? String(modelData.identity) : ""
-                        text: (ident.length > 14 ? ident.substring(0, 10) + "…" + ident.substring(ident.length - 4) : ident)
+                        readonly property string alias: modelData && modelData.alias ? String(modelData.alias) : ""
+                        // A named contact reads by name ("Bob wants in"); an unknown asker
+                        // still shows a clipped id so the admit decision isn't blind.
+                        text: (alias.length > 0
+                                 ? alias
+                                 : (ident.length > 14 ? ident.substring(0, 10) + "…" + ident.substring(ident.length - 4) : ident))
                               + ((modelData && modelData.bindsOwner) ? qsTr("  · owner") : "")
                         color: Theme.palette.textSecondary
                         font.pixelSize: Theme.typography.badgeText

@@ -491,6 +491,16 @@ Item {
                     readonly property var liveIntent:
                         msg.isIntentRef ? room.intentById(msg.parsedCard.intentId) : null
 
+                    // Who authored this line, by name: "you" for our own, the contact
+                    // alias when we've named them, else a short id — never raw 64-byte
+                    // hex in the timeline (the module resolves alias/self on each message).
+                    readonly property string authorName: {
+                        if (modelData.self) return qsTr("you");
+                        var a = String(modelData.alias || "");
+                        if (a.length > 0) return a;
+                        return String(modelData.author || "?").substring(0, 10);
+                    }
+
                     // True when an EARLIER message already referenced this intent —
                     // so only the first ref to an intent renders its card.
                     readonly property bool isDupRef: {
@@ -814,7 +824,7 @@ Item {
                             spacing: 2
 
                             LogosText {
-                                text: String(modelData.author || "?").substring(0, 10)
+                                text: msg.authorName
                                       + (modelData.ts ? "  ·  " + modelData.ts : "")
                                 color: Theme.palette.textTertiary
                                 font.family: Theme.typography.mono

@@ -549,6 +549,101 @@ proc musterCoordinateJoin(topic: string): string =
   # picked for the next thing they propose here.
   $(%*{"address": toHex(ks.address()), "topic": ctopic})
 
+# ── the identity inbox: room invites without prior coordination (exo-3f0/A) ──────
+# A room topic is undiscoverable to someone who wasn't told it — so "Start something
+# with Bob" used to reach Bob only if he independently joined the same name. The inbox
+# fixes that: each identity has a deterministic topic derived from its chat id that it
+# listens on always. An invite is a small payload (the real room topic + who sent it)
+# SEALED to the recipient's X25519 (a sealed box, no shared epoch needed) and dropped
+# there; the owner opens it with its keystore. Anyone may drop; only the owner reads.
+var gInbox: CoordinationSession = nil          ## this instance's own inbox session
+var gInboxTopics = initHashSet[string]()       ## content topics that are inboxes (kept out of the room list)
+
+proc inboxTopicFor(chatIdHex: string): string =
+  ## A per-identity inbox content topic, derived from the chat id — deterministic, so a
+  ## sender reaches a recipient's inbox with no prior contact. Domain-separated hash so
+  ## it isn't the chat id in the clear on the wire.
+  let id = normId(chatIdHex)
+  var buf: seq[byte] = @[]
+  for c in "muster-inbox-v1": buf.add byte(c)
+  for c in id: buf.add byte(c)
+  let h = sha256(buf)
+  const d = "0123456789abcdef"
+  var hx = ""
+  for i in 0 ..< 8: (hx.add d[int(h[i] shr 4)]; hx.add d[int(h[i] and 0x0f)])
+  toContentTopic("muster.inbox." & hx)
+
+proc inboxSessionFor(ctopic: string): CoordinationSession =
+  ## Get/create a session on an inbox topic. Tracked in gSessions (so it shares the one
+  ## delivery node) but flagged an inbox, so coordinate_conversations never lists it as
+  ## a room. Epoch crypto rides along unused — invites are sealed to a pubkey, not the epoch.
+  gInboxTopics.incl ctopic
+  if ctopic in gSessions: return gSessions[ctopic]
+  let s = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(moduleKeystore()), ctopic)
+  gSessions[ctopic] = s
+  s
+
+proc musterCoordinateStartInbox(): string =
+  ## Begin listening on THIS identity's inbox so invites arrive even before any room is
+  ## joined. Idempotent; the UI calls it once at startup. Pulls any invites left while away.
+  let ks = moduleKeystore()
+  let myChat = toHex(ks.encIdentity().toBytes())
+  let ctopic = inboxTopicFor(myChat)
+  gInbox = inboxSessionFor(ctopic)
+  try: gInbox.catchUp()
+  except CatchableError: discard
+  $(%*{"inbox": ctopic})
+
+proc musterCoordinateInvite(peerChatIdHex, roomTopic, note: string): string =
+  ## Invite a peer (by their 64-byte chat id) to a room: seal {topic, from, note, ts} to
+  ## their X25519 and drop it on their inbox topic. They need not be online — the store
+  ## retains it. Returns {ok, inbox} or {error}. This is the ONLY new authority-free
+  ## reach-out; it discloses only the room topic, and only to the named recipient.
+  let ks = moduleKeystore()
+  let peerId = normId(peerChatIdHex)
+  let peerBytes = hexToBytes(peerId)
+  if peerBytes.len != 64: return $(%*{"error": "bad peer chat id (need 64-byte ed25519++x25519 hex)"})
+  let peerEnc = encIdentityFromBytes(peerBytes)
+  let myChat = toHex(ks.encIdentity().toBytes())
+  let payload = $(%*{"topic": roomTopic, "from": myChat, "note": note, "ts": int64(epochTime())})
+  var pt: seq[byte] = @[]
+  for c in payload: pt.add byte(c)
+  let sealed = sealTo(peerEnc.x, pt)
+  let ctopic = inboxTopicFor(peerChatIdHex)
+  let s = inboxSessionFor(ctopic)
+  s.sendInvite(sealed)
+  $(%*{"ok": true, "inbox": ctopic})
+
+proc musterCoordinateInvites(): string =
+  ## The room invites this identity has received, newest-first, as [{topic, from,
+  ## fromAlias, note, ts}]. Each is sealed to us; ones we can't open (not ours, or
+  ## malformed) are skipped. Deduped by (from, topic). Empty until start_inbox is called.
+  if gInbox == nil: return "[]"
+  gInbox.poll()
+  let ks = moduleKeystore()
+  var seen = initHashSet[string]()
+  var items: seq[JsonNode] = @[]
+  for raw in gInbox.receivedInvites():
+    try:
+      let opened = ks.sealOpen(raw)
+      var s = ""
+      for b in opened: s.add char(b)
+      let j = parseJson(s)
+      let topic = j{"topic"}.getStr()
+      let frm = j{"from"}.getStr()
+      if topic.len == 0 or frm.len == 0: continue
+      let key = normId(frm) & "|" & topic
+      if key in seen: continue
+      seen.incl key
+      items.add %*{"topic": topic, "from": frm,
+                   "fromAlias": contactBook().aliasOf(frm),
+                   "note": j{"note"}.getStr(), "ts": j{"ts"}.getBiggestInt(0)}
+    except CatchableError: discard      # not for us / malformed — not an invite we hold
+  items.reverse()                        # newest first
+  var arr = newJArray()
+  for n in items: arr.add n
+  $arr
+
 proc policyJson(): JsonNode =
   let d = driverForKind(gCoordKind).describe()
   %*{"policy": gCoordKind, "threshold": d.threshold,
@@ -1270,12 +1365,17 @@ proc musterCoordinatePostMessage(body: string): string =
   id
 
 proc musterCoordinateMessages(): string =
-  ## The room's authored messages, oldest-first, folded from the shared log.
+  ## The room's authored messages, oldest-first, folded from the shared log. Each
+  ## carries its author's contact alias (so the chat log reads "Alice", not raw hex —
+  ## the same resolution the roster/pending use) and a `self` flag for our own lines.
   if gSession == nil: return "[]"
   gSession.poll()
+  let meHex = toHex(gSession.selfIdentity().toBytes())
   var arr = newJArray()
   for m in reduceMessages(gSession.log.allEvents()):
-    arr.add %*{"id": m.id, "author": m.author, "ts": m.ts, "body": m.body}
+    arr.add %*{"id": m.id, "author": m.author, "ts": m.ts, "body": m.body,
+               "alias": contactBook().aliasOf(m.author),
+               "self": (normId(m.author) == normId(meHex))}
   $arr
 
 proc musterCoordinateMembers(): string =
@@ -1298,6 +1398,7 @@ proc musterCoordinateConversations(): string =
   var arr = newJArray()
   let myAddr = toHex(moduleKeystore().address())
   for topic, s in gSessions:
+    if topic in gInboxTopics: continue      # an inbox is a drop-box, not a room to list
     s.poll()
     let msgs = reduceMessages(s.log.allEvents())
     let lastTs = if msgs.len > 0: msgs[^1].ts else: 0'i64

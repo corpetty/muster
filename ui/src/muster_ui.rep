@@ -95,6 +95,18 @@ class MusterUi
     SLOT(void setContactAlias(const QString &identityHex, const QString &alias))
     SLOT(void removeContact(const QString &identityHex))
 
+    // ── room invites (the identity inbox) ────────────────────────────────────
+    // A room topic is undiscoverable to someone who wasn't told it, so inviting used
+    // to mean telling the other person a name out-of-band. startInbox begins listening
+    // on THIS identity's inbox topic (coordinate_start_inbox) at launch, so invites
+    // arrive before any room is joined. sendInvite (coordinate_invite) seals a room
+    // topic to a peer's chat id and drops it on their inbox — "Start something with
+    // Bob" calls it so Bob is actually notified. loadInvites (coordinate_invites)
+    // reads received invites into invitesJson; the home surface lists them with a Join.
+    SLOT(void startInbox())
+    SLOT(void sendInvite(const QString &peerChatId, const QString &roomTopic, const QString &note))
+    SLOT(void loadInvites())
+
     // Room intents (the multi-party path). Propose an effect into the joined room
     // (coordinate_propose), contribute an owner signature (coordinate_contribute),
     // and read the folded intent list (coordinate_intents) into intentsJson — the
@@ -230,6 +242,11 @@ class MusterUi
     PROP(QString membersJson="[]" READONLY)
     PROP(QString contactsJson="[]" READONLY)
     PROP(QString intentsJson="[]" READONLY)
+
+    // Room invites received on this identity's inbox (loadInvites), as a JSON array of
+    // {topic, from, fromAlias, note, ts}, newest-first. The home surface renders each as
+    // "X invited you to a room" with a Join action that opens the topic.
+    PROP(QString invitesJson="[]" READONLY)
 
     // The room's coordination history (coordinate_activity), as a JSON array of
     // {seq, kind, intentId, account, title, detail} in causal order. The room
