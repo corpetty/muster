@@ -115,6 +115,9 @@ class MusterUi
     SLOT(void proposeInRoom(const QString &effectJson))
     SLOT(void contributeInRoom(const QString &intentId, const QString &signatureHex, const QString &keyRef))
     SLOT(void loadIntents())
+    // Re-publish every open intent into the current epoch (coordinate_reannounce), so a
+    // member just admitted sees proposals made before they joined (F-16). Called on admit.
+    SLOT(void reannounce())
 
     // The room's coordination history (coordinate_activity): a plain-language
     // narrative of every state transition — proposed, approved (M of N), ready,

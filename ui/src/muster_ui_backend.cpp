@@ -412,6 +412,17 @@ void MusterUiBackend::loadIntents()
     loadActivity();
 }
 
+void MusterUiBackend::reannounce()
+{
+    // coordinate_reannounce → re-publish open intents into the current epoch so a
+    // just-admitted member sees proposals made before they joined (F-16). Refresh
+    // the thread + intents after, so the re-announced cards appear.
+    const QString r = modules().muster_module.coordinate_reannounce();
+    qInfo() << "[muster_ui] coordinate_reannounce ->" << r;
+    loadMessages();
+    loadIntents();
+}
+
 void MusterUiBackend::loadActivity()
 {
     // coordinate_activity → the room's coordination history (proposed / approved /

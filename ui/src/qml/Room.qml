@@ -1510,11 +1510,13 @@ Item {
                 onAdmit: function(identityHex) {
                     if (!room.backend) return;
                     room.backend.admit(identityHex);
-                    // The admit re-keyed the room to a new epoch the joiner now shares. If
-                    // there's an unanswered address request in the thread, re-send it into
-                    // this new epoch — otherwise the just-admitted member can't read the
-                    // earlier one (F-16) and would never be asked to disclose.
+                    // The admit re-keyed the room to a new epoch the joiner now shares.
+                    // Anything from before their epoch is unreadable to them (F-16), so
+                    // re-send it into the new epoch: an unanswered address request, and any
+                    // open proposal (its card) — otherwise a payment proposed before they
+                    // joined never reaches them to approve.
                     room.resendOutstandingAsk();
+                    room.backend.reannounce();
                 }
             }
         }
