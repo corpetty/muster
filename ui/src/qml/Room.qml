@@ -37,6 +37,15 @@ Item {
     property bool composing: false
     property string composeType: "payment"
 
+    // The chat id "Start something" named for this room (the person the room is FOR).
+    // When their join-request arrives we admit them automatically — you already chose
+    // them, so you shouldn't have to click Admit, and they shouldn't have to ask. The
+    // binding is still verified on admit (F-9); this only removes the manual step.
+    property string expectedMember: ""
+    // ids we've already auto-admitted, so a pending entry lingering one extra tick
+    // (before the re-key propagates) doesn't trigger a second admit.
+    property var autoAdmitted: ({})
+
     // When composeType is "action" (a generic module action, P-D4), which action the
     // picker has selected — {module, method, signature, params, allowed} — or null.
     property var chosenAction: null
@@ -326,6 +335,40 @@ Item {
     // balance was actually read (never on an error/unknown — we don't block what we
     // can't check, and never a false zero). Drives both the hard block on the propose
     // button and the refusal in proposeFrom (exo-bf9 — can't over-send).
+    // Pre-fill the payment composer from the "Start something" draft instead of
+    // proposing it straight away: a proposal must wait until the room has the people to
+    // act on it (see the Propose gate), so we carry the amount/recipient into the
+    // composer and let you submit once they've joined — never into an empty room.
+    function prefillPayment(toAddr, valStr) {
+        room.composeType = "payment";
+        room.composing = true;
+        proposeTo.text = String(toAddr || "");
+        proposeValue.text = String(valStr || "");
+    }
+
+    // Admit the person "Start something" named the moment their join-request lands —
+    // you already chose them, so the room keys to them without a manual Admit (or a
+    // manual "ask to join" on their side, which is already automatic). The module still
+    // verifies their binding on admit (F-9); this just removes the click. Runs on every
+    // pending refresh; the autoAdmitted guard stops a double-admit.
+    function autoAdmitExpected() {
+        if (!room.backend || room.expectedMember.length === 0) return;
+        var want = room.expectedMember.replace(/^0x/i, "").toLowerCase();
+        var p = room.pending;
+        for (var i = 0; i < p.length; ++i) {
+            var raw = String((p[i] && p[i].identity) || "");
+            var id = raw.replace(/^0x/i, "").toLowerCase();
+            if (id === want && !room.autoAdmitted[id]) {
+                room.autoAdmitted[id] = true;
+                room.backend.admit(raw);
+                room.resendOutstandingAsk();
+                room.backend.reannounce();
+                return;
+            }
+        }
+    }
+    onPendingChanged: room.autoAdmitExpected()
+
     // Re-send an UNANSWERED address request into the current epoch, so a just-admitted
     // member is actually asked to disclose — they can't read a request posted before
     // they joined (F-16 re-keys on admit). Called from onAdmit. Scans the thread: if the

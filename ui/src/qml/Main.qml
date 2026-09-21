@@ -55,6 +55,11 @@ Item {
     function enterRoom(topic, verb, policy, draftJson) {
         if (!root.backend || !topic)
             return;
+        // Reset per-room auto-admit state on every entry; onCreateRoom re-sets the
+        // expected member right after when a person was named. A plain Home re-open
+        // (no verb) leaves it cleared, so it never auto-admits into the wrong room.
+        roomSurface.expectedMember = "";
+        roomSurface.autoAdmitted = ({});
         root.backend.joinRoom(topic);
         root.view = "room";
         // Set the room to coordinate under the intent's chosen policy (its driver).
@@ -89,16 +94,21 @@ Item {
                 kind: "address-request", intent: v, purpose: purpose
             }));
         // The composer's third step (F-18, exo-45e K6): if it composed a first payment
-        // (account + asset + destination), propose it into the freshly opened room. An
-        // empty draft (nothing picked, or the destination was requested from the room)
-        // opens the in-room composer to the right kind instead, so a pay/decide room
-        // lands ready to propose the thing rather than on an empty chat. Talk just opens
-        // the conversation (no proposal composer).
+        // (account + asset + destination), PRE-FILL the in-room composer with it — never
+        // propose it straight away, because a proposal must wait until the room has the
+        // people to act on it (the Propose gate); proposing into an empty room strands
+        // the card where a later joiner can't read it (F-16). An empty draft just opens
+        // the composer to the right kind. Talk opens the conversation (no composer).
         var d = String(draftJson || "");
-        if (d.length > 0)
-            root.backend.proposeInRoom(d);
-        else if (v === "pay" || v === "decide")
+        if (d.length > 0) {
+            try {
+                var o = JSON.parse(d);
+                roomSurface.prefillPayment(String(o.to || ""),
+                                           (o.value !== undefined ? String(o.value) : ""));
+            } catch (e) { roomSurface.composing = true; }
+        } else if (v === "pay" || v === "decide") {
             roomSurface.composing = true;
+        }
     }
 
     // Backend PROPs, aliased so bindings read cleanly. The backend is the only
@@ -346,8 +356,14 @@ Item {
             // no telling them a name out-of-band. Pass the RAW topic; both sides normalize it
             // to the same content topic on join. A pasted address (not a chat id) is skipped.
             var p = String(peer || "").replace(/^0x/i, "");
-            if (root.backend && p.length >= 128)
+            if (root.backend && p.length >= 128) {
                 root.backend.sendInvite(peer, topic, verb);
+                // Key the room to them: when their join-request arrives, admit it
+                // automatically — you named them, so no manual Admit / ask-to-join.
+                roomSurface.expectedMember = String(peer);
+            } else {
+                roomSurface.expectedMember = "";
+            }
         }
     }
 
