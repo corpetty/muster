@@ -79,4 +79,26 @@ block:
   doAssert reduceActivity(ev2, fold).len == a.len, "a duplicate signature folds once"
   echo "4. deterministic + duplicate folds once OK"
 
+# ── 5. the whole lifecycle reads in order, not by content hash ────────────────
+# The events carry no parent links, so canonicalOrder among them is smallest-id-first
+# — which could sort an approval (or even 'settled') before the propose. The activity
+# fold orders by intent-lifecycle instead: propose → approvals → ready → submitted →
+# settled. Add submit + final and assert that reading order.
+block:
+  var evl = ev
+  evl.add submitEvent(id)
+  evl.add finalEvent(id)
+  let a = reduceActivity(evl, fold)
+  let kinds = a.mapIt(it.kind)
+  proc idxOf(k: string): int =
+    for i in 0 ..< a.len:
+      if a[i].kind == k: return i
+    -1
+  doAssert a[0].kind == "propose", "the proposal leads the history, got " & $kinds
+  doAssert idxOf("propose") < idxOf("approve"), "propose before its approvals: " & $kinds
+  doAssert idxOf("approve") < idxOf("ready"), "approvals before ready: " & $kinds
+  doAssert idxOf("ready") < idxOf("submit"), "ready before submitted: " & $kinds
+  doAssert idxOf("submit") < idxOf("settled"), "submitted before settled: " & $kinds
+  echo "5. full lifecycle reads propose→approve→ready→submit→settled OK"
+
 echo "activity_test: all OK"
