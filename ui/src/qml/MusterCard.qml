@@ -127,6 +127,13 @@ Rectangle {
     // A remedy that lives in Settings (an RPC to configure / repoint).
     signal openSettings()
     property bool needsOpen: false
+    // The "From you" material-share picker (exo-45e K6) is for a counterparty-address /
+    // holdings flow; on a Safe payment its offers are degenerate (it lists the Safe
+    // address as a "safe-owner", your own address as the "to") and a Safe reaches
+    // threshold by SIGNING (Approve), not by sharing material — so the Share buttons do
+    // nothing visible. Hidden until the offers are meaningful per policy (follow-up
+    // exo-ec7); the rest of "What this needs" (needs / touches / who-sees-what) stays.
+    readonly property bool showFromYou: false
     readonly property var readiness: (cardRoot.card && cardRoot.card.readiness) ? cardRoot.card.readiness : null
     // "From you" (exo-45e K6): which of my own holdings fill the slots this asks of me.
     readonly property var offers: (cardRoot.card && cardRoot.card.offers) ? cardRoot.card.offers : null
@@ -1084,7 +1091,7 @@ Rectangle {
                 // of me — graded about me only. Each candidate shows its public face, its
                 // F-10 grade, and what choosing it discloses; a pick shares the PUBLIC face.
                 LogosText {
-                    visible: cardRoot.needsOpen && cardRoot.offers && cardRoot.offers.offers
+                    visible: cardRoot.showFromYou && cardRoot.needsOpen && cardRoot.offers && cardRoot.offers.offers
                              && cardRoot.offers.offers.length > 0
                     text: qsTr("From you:")
                     color: Theme.palette.textSecondary
@@ -1092,7 +1099,7 @@ Rectangle {
                     font.weight: Theme.typography.weightMedium
                 }
                 Repeater {
-                    model: (cardRoot.needsOpen && cardRoot.offers && cardRoot.offers.offers) ? cardRoot.offers.offers : []
+                    model: (cardRoot.showFromYou && cardRoot.needsOpen && cardRoot.offers && cardRoot.offers.offers) ? cardRoot.offers.offers : []
                     delegate: ColumnLayout {
                         id: offerSlot
                         required property var modelData

@@ -54,6 +54,7 @@ public:
     void startInbox() override;
     void sendInvite(const QString &peerChatId, const QString &roomTopic, const QString &note) override;
     void loadInvites() override;
+    void dismissInvite(const QString &roomTopic) override;
     void proposeInRoom(const QString &effectJson) override;
     void contributeInRoom(const QString &intentId, const QString &signatureHex, const QString &keyRef) override;
     void loadIntents() override;
