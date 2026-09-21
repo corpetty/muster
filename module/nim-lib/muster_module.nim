@@ -535,6 +535,19 @@ proc toContentTopic(t: string): string =
 # ── cleared invites (dismissed OR joined) — persisted so they don't re-appear ───
 var gDismissedInvites = initHashSet[string]()  ## invite room-topics (normalized content topic) never to re-show
 var gDismissedLoaded = false
+var gInvitesSince = -1'i64                      ## MUSTER_INVITES_SINCE: hide invites older than this epoch-sec (demo --fresh)
+
+proc invitesSince(): int64 =
+  ## An optional age floor for shown invites (epoch seconds), from MUSTER_INVITES_SINCE.
+  ## demo-peer.sh --fresh sets it so a wiped peer doesn't re-surface the invite pile the
+  ## store retains from earlier test runs (--fresh clears the local dismissed set, and
+  ## the store keeps every invite). Unset / 0 ⇒ no age filter (the normal path).
+  if gInvitesSince == -1:
+    gInvitesSince = 0
+    let e = getEnv("MUSTER_INVITES_SINCE")
+    if e.len > 0:
+      try: gInvitesSince = parseBiggestInt(e) except CatchableError: gInvitesSince = 0
+  gInvitesSince
 
 proc dismissedInvitesPath(): string =
   var dir = context().instancePersistencePath
@@ -671,16 +684,20 @@ proc musterCoordinateInvites(): string =
       let frm = j{"from"}.getStr()
       if topic.len == 0 or frm.len == 0: continue
       let ctopic = toContentTopic(topic)
-      # Drop invites the user has cleared, and ones for a room we've already joined
-      # (you're in it — no reason to keep nagging). Both keep the list from piling up.
+      let ts = j{"ts"}.getBiggestInt(0)
+      # Drop invites the user has cleared, ones for a room we've already joined (you're
+      # in it), and — on a --fresh demo peer — ones older than the age floor (the store
+      # re-delivers the whole pile every launch; this is how --fresh "wipes" them).
       if ctopic in gDismissedInvites: continue
       if ctopic in gSessions and ctopic notin gInboxTopics: continue
+      let since = invitesSince()
+      if since > 0 and ts > 0 and ts < since: continue
       let key = normId(frm) & "|" & topic
       if key in seen: continue
       seen.incl key
       items.add %*{"topic": topic, "from": frm,
                    "fromAlias": contactBook().aliasOf(frm),
-                   "note": j{"note"}.getStr(), "ts": j{"ts"}.getBiggestInt(0)}
+                   "note": j{"note"}.getStr(), "ts": ts}
     except CatchableError: discard      # not for us / malformed — not an invite we hold
   items.reverse()                        # newest first
   var arr = newJArray()
