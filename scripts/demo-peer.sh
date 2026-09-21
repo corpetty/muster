@@ -80,6 +80,16 @@ if [ "$ISOLATE" = "1" ]; then
   echo "→ $ROLE : isolated HOME=$HOME"
 fi
 
+# --fresh wipes this peer's HOME (identity, contacts, dismissed-invite list). But the
+# invites themselves live in the Waku store keyed to this peer's (deterministic) inbox,
+# so the store re-delivers every invite from earlier test runs on the next launch —
+# and --fresh just cleared the local record of dismissing them. So on --fresh, tell the
+# module to ignore invites older than ~10 min: the pile from prior runs disappears,
+# while an invite sent during THIS session still shows. (No effect without --fresh.)
+if [ "$FRESH" = "1" ]; then
+  export MUSTER_INVITES_SINCE="$(( $(date +%s) - 600 ))"
+fi
+
 # Private AppImage extraction dir. APPIMAGE_EXTRACT_AND_RUN unpacks to
 # $TMPDIR/appimage_extracted_<hash> under a FIXED name; sharing the global /tmp meant a
 # partial extraction left by a killed launch (or another user's run) blocked the next
