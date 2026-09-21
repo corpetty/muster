@@ -106,6 +106,7 @@ class MusterUi
     SLOT(void startInbox())
     SLOT(void sendInvite(const QString &peerChatId, const QString &roomTopic, const QString &note))
     SLOT(void loadInvites())
+    SLOT(void dismissInvite(const QString &roomTopic))
 
     // Room intents (the multi-party path). Propose an effect into the joined room
     // (coordinate_propose), contribute an owner signature (coordinate_contribute),

@@ -17,6 +17,10 @@ Item {
     id: flowView
     property var flow: ({ rows: [], matrix: {} })
     property bool rowsOpen: false
+    // Collapsed by default: the observer matrix is several wrapping rows that otherwise
+    // crowd the roster/history in the side column. The heading (with the action count)
+    // stays; click it to reveal "who can see what".
+    property bool collapsed: true
     readonly property var rows: (flowView.flow && flowView.flow.rows) ? flowView.flow.rows : []
     readonly property var matrix: (flowView.flow && flowView.flow.matrix) ? flowView.flow.matrix : ({})
 
@@ -52,6 +56,11 @@ Item {
             Layout.fillWidth: true
             spacing: Theme.spacing.small
             LogosText {
+                text: flowView.collapsed ? "▸" : "▾"
+                color: Theme.palette.textTertiary
+                font.pixelSize: Theme.typography.badgeText
+            }
+            LogosText {
                 Layout.fillWidth: true
                 text: qsTr("Who can see what")
                 color: Theme.palette.text
@@ -64,11 +73,16 @@ Item {
                 color: Theme.palette.textTertiary
                 font.pixelSize: Theme.typography.badgeText
             }
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: flowView.collapsed = !flowView.collapsed
+            }
         }
 
         // ── the observer matrix ──────────────────────────────────────────
         Repeater {
-            model: flowView.matrixEntries()
+            model: flowView.collapsed ? [] : flowView.matrixEntries()
             delegate: RowLayout {
                 required property var modelData
                 Layout.fillWidth: true
@@ -96,13 +110,13 @@ Item {
         // ── per-action rows, on demand ───────────────────────────────────
         LogosButton {
             objectName: "flowRowsToggle"
-            visible: flowView.rows.length > 0
+            visible: !flowView.collapsed && flowView.rows.length > 0
             text: flowView.rowsOpen ? qsTr("Hide per-action rows") : qsTr("Show per-action rows")
             variant: LogosButton.Variant.Secondary
             onClicked: flowView.rowsOpen = !flowView.rowsOpen
         }
         Repeater {
-            model: flowView.rowsOpen ? flowView.rows : []
+            model: (!flowView.collapsed && flowView.rowsOpen) ? flowView.rows : []
             delegate: LogosText {
                 required property var modelData
                 Layout.fillWidth: true

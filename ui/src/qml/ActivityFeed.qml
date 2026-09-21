@@ -26,6 +26,10 @@ Item {
     property var entries: []
     readonly property var list: feed.entries ? feed.entries : []
 
+    // Collapsed hides the timeline (keeping the heading + count), so an extensive
+    // history can be gotten out of the way — it otherwise crowds the roster below.
+    property bool collapsed: false
+
     // A dot colour per transition kind — settled/ready read as success, a proposal
     // as the strong text colour, the in-between steps as muted secondary.
     function dotColor(kind) {
@@ -42,11 +46,17 @@ Item {
         anchors.fill: parent
         spacing: Theme.spacing.small
 
-        // ── heading ───────────────────────────────────────────────────────
+        // ── heading (click to collapse/expand) ─────────────────────────────
         RowLayout {
             Layout.fillWidth: true
             spacing: Theme.spacing.small
 
+            // Chevron marks the collapse state; the whole row is the hit target.
+            LogosText {
+                text: feed.collapsed ? "▸" : "▾"
+                color: Theme.palette.textTertiary
+                font.pixelSize: Theme.typography.badgeText
+            }
             LogosText {
                 Layout.fillWidth: true
                 text: qsTr("Room history")
@@ -63,9 +73,16 @@ Item {
                 font.pixelSize: Theme.typography.badgeText
                 font.weight: Theme.typography.weightMedium
             }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: feed.collapsed = !feed.collapsed
+            }
         }
 
         LogosText {
+            visible: !feed.collapsed
             Layout.fillWidth: true
             text: qsTr("How this room reached its state — folded from the shared log, as it happens.")
             color: Theme.palette.textTertiary
@@ -75,7 +92,7 @@ Item {
 
         // ── empty state ─────────────────────────────────────────────────────
         LogosText {
-            visible: feed.list.length === 0
+            visible: !feed.collapsed && feed.list.length === 0
             Layout.fillWidth: true
             Layout.topMargin: Theme.spacing.small
             text: qsTr("No activity yet. Proposals, approvals, and settlements will appear here as they happen.")
@@ -85,19 +102,25 @@ Item {
         }
 
         // ── the timeline ────────────────────────────────────────────────────
-        // Oldest first, newest at the bottom. Auto-scrolled to the bottom as
-        // entries arrive, so the latest update is always in view.
+        // Oldest first, newest at the bottom. Auto-scrolls to the bottom as entries
+        // arrive ONLY while you're already at the bottom — so scrolling up to read
+        // earlier history isn't yanked back down on the next 1s refresh (`stick`).
         Flickable {
             id: flick
-            visible: feed.list.length > 0
+            visible: !feed.collapsed && feed.list.length > 0
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.minimumHeight: 60
             contentWidth: width
             contentHeight: col.implicitHeight
             clip: true
             boundsBehavior: Flickable.StopAtBounds
 
-            onContentHeightChanged: if (contentHeight > height) contentY = contentHeight - height
+            // Are we pinned to the bottom? True at rest at the end; a manual scroll up
+            // clears it, returning to the end restores it. Guards the auto-scroll.
+            property bool stick: true
+            onMovementEnded: stick = atYEnd
+            onContentHeightChanged: if (stick && contentHeight > height) contentY = contentHeight - height
 
             ColumnLayout {
                 id: col

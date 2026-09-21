@@ -558,6 +558,7 @@ proc musterCoordinateJoin(topic: string): string =
 # there; the owner opens it with its keystore. Anyone may drop; only the owner reads.
 var gInbox: CoordinationSession = nil          ## this instance's own inbox session
 var gInboxTopics = initHashSet[string]()       ## content topics that are inboxes (kept out of the room list)
+var gDismissedInvites = initHashSet[string]()  ## invite room-topics (normalized) the user cleared, so they don't re-appear
 
 proc inboxTopicFor(chatIdHex: string): string =
   ## A per-identity inbox content topic, derived from the chat id — deterministic, so a
@@ -632,6 +633,11 @@ proc musterCoordinateInvites(): string =
       let topic = j{"topic"}.getStr()
       let frm = j{"from"}.getStr()
       if topic.len == 0 or frm.len == 0: continue
+      let ctopic = toContentTopic(topic)
+      # Drop invites the user has cleared, and ones for a room we've already joined
+      # (you're in it — no reason to keep nagging). Both keep the list from piling up.
+      if ctopic in gDismissedInvites: continue
+      if ctopic in gSessions and ctopic notin gInboxTopics: continue
       let key = normId(frm) & "|" & topic
       if key in seen: continue
       seen.incl key
@@ -643,6 +649,13 @@ proc musterCoordinateInvites(): string =
   var arr = newJArray()
   for n in items: arr.add n
   $arr
+
+proc musterCoordinateDismissInvite(roomTopic: string): string =
+  ## Clear a received invite so it stops showing (the user isn't joining that room).
+  ## Keyed by the normalized content topic, so it matches however the topic was phrased.
+  ## In-memory for the session; joining a room also drops its invite automatically.
+  gDismissedInvites.incl toContentTopic(roomTopic)
+  "ok"
 
 proc policyJson(): JsonNode =
   let d = driverForKind(gCoordKind).describe()

@@ -41,6 +41,8 @@ Item {
     signal newActivity()
     // A received invite's Join was clicked → open (and ask to join) that room.
     signal joinInvite(string topic)
+    // A received invite's Dismiss was clicked → clear it so it stops showing.
+    signal dismissInvite(string topic)
 
     // How many rows are waiting on the user — the number worth a heading.
     readonly property int needsCount: {
@@ -139,6 +141,13 @@ Item {
                             objectName: "joinInviteButton"
                             text: qsTr("Join")
                             onClicked: home.joinInvite(String(modelData.topic || ""))
+                        }
+
+                        LogosButton {
+                            objectName: "dismissInviteButton"
+                            text: qsTr("Dismiss")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: home.dismissInvite(String(modelData.topic || ""))
                         }
                     }
                 }

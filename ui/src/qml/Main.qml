@@ -295,6 +295,7 @@ Item {
         }
         onActivated: root.enterRoom(topic)
         onJoinInvite: function(topic) { root.enterRoom(topic); }   // joiner path → auto-asks to join
+        onDismissInvite: function(topic) { if (root.backend) root.backend.dismissInvite(topic); }
         onNewActivity: {
             root.view = "compose";
             if (root.backend) root.backend.loadContacts();   // so "who with" can pick a name

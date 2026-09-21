@@ -215,6 +215,8 @@ Item {
                     }
                     RowLayout {
                         Layout.fillWidth: true
+                        Layout.maximumWidth: 460       // keep the input a tidy width, not full-bleed
+                        Layout.alignment: Qt.AlignLeft
                         spacing: Theme.spacing.small
                         LogosTextField {
                             id: rpcField
@@ -245,6 +247,8 @@ Item {
                     }
                     RowLayout {
                         Layout.fillWidth: true
+                        Layout.maximumWidth: 460       // keep the input a tidy width, not full-bleed
+                        Layout.alignment: Qt.AlignLeft
                         spacing: Theme.spacing.small
                         LogosTextField {
                             id: deliveryField

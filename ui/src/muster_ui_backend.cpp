@@ -289,8 +289,15 @@ void MusterUiBackend::sendInvite(const QString &peerChatId, const QString &roomT
 void MusterUiBackend::loadInvites()
 {
     // coordinate_invites → the invites received on our inbox, [{topic, from, fromAlias,
-    // note, ts}]. The home surface lists them with a Join action.
+    // note, ts}]. The home surface lists them with Join / Dismiss.
     setInvitesJson(modules().muster_module.coordinate_invites());
+}
+
+void MusterUiBackend::dismissInvite(const QString &roomTopic)
+{
+    // coordinate_dismiss_invite → clear one invite so it stops showing; refresh the list.
+    modules().muster_module.coordinate_dismiss_invite(roomTopic);
+    loadInvites();
 }
 
 void MusterUiBackend::requestJoin()
