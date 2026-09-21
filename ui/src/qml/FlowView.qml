@@ -80,57 +80,78 @@ Item {
             }
         }
 
-        // ── the observer matrix ──────────────────────────────────────────
-        Repeater {
-            model: flowView.collapsed ? [] : flowView.matrixEntries()
-            delegate: RowLayout {
-                required property var modelData
-                Layout.fillWidth: true
-                spacing: Theme.spacing.small
-                LogosText {
-                    objectName: "flowObserver_" + String(modelData.to)
-                    Layout.preferredWidth: 150
-                    Layout.alignment: Qt.AlignTop
-                    text: modelData.label
-                    color: modelData.to === "room-member" ? Theme.palette.textSecondary : Theme.palette.warning
-                    font.pixelSize: Theme.typography.badgeText
-                    font.weight: Theme.typography.weightMedium
-                }
-                LogosText {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: modelData.fields
-                    color: Theme.palette.text
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
-                }
-            }
-        }
+        // ── the expandable body, bounded + scrollable ─────────────────────
+        // The observer matrix and (on demand) the per-action rows can run to many
+        // lines; kept inside a height-capped Flickable so a long flow scrolls in
+        // place instead of ballooning the whole side column off the screen.
+        Flickable {
+            id: bodyFlick
+            visible: !flowView.collapsed
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.min(body.implicitHeight, 300)
+            contentWidth: width
+            contentHeight: body.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
 
-        // ── per-action rows, on demand ───────────────────────────────────
-        LogosButton {
-            objectName: "flowRowsToggle"
-            visible: !flowView.collapsed && flowView.rows.length > 0
-            text: flowView.rowsOpen ? qsTr("Hide per-action rows") : qsTr("Show per-action rows")
-            variant: LogosButton.Variant.Secondary
-            onClicked: flowView.rowsOpen = !flowView.rowsOpen
-        }
-        Repeater {
-            model: (!flowView.collapsed && flowView.rowsOpen) ? flowView.rows : []
-            delegate: LogosText {
-                required property var modelData
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: "#" + String(modelData.seq) + " " + String(modelData.kind)
-                    + (modelData.intentId ? " " + flowView.shortId(modelData.intentId) : "")
-                    + " · " + String(modelData.field) + " → " + flowView.observerLabel(modelData.to)
-                    + (modelData.to === "room-member" && modelData.members && modelData.members.length > 0
-                         ? " (" + modelData.members.map(flowView.shortId).join(", ") + ")" : "")
-                    + " · epoch " + String(modelData.epoch)
-                    + (modelData.declared === false ? qsTr("  ⚠ undeclared") : "")
-                color: modelData.to === "room-member" ? Theme.palette.textSecondary : Theme.palette.warning
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.badgeText
+            ColumnLayout {
+                id: body
+                width: bodyFlick.width
+                spacing: Theme.spacing.tiny
+
+                // observer matrix
+                Repeater {
+                    model: flowView.collapsed ? [] : flowView.matrixEntries()
+                    delegate: RowLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        LogosText {
+                            objectName: "flowObserver_" + String(modelData.to)
+                            Layout.preferredWidth: 150
+                            Layout.alignment: Qt.AlignTop
+                            text: modelData.label
+                            color: modelData.to === "room-member" ? Theme.palette.textSecondary : Theme.palette.warning
+                            font.pixelSize: Theme.typography.badgeText
+                            font.weight: Theme.typography.weightMedium
+                        }
+                        LogosText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: modelData.fields
+                            color: Theme.palette.text
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                    }
+                }
+
+                // per-action rows, on demand
+                LogosButton {
+                    objectName: "flowRowsToggle"
+                    visible: !flowView.collapsed && flowView.rows.length > 0
+                    text: flowView.rowsOpen ? qsTr("Hide per-action rows") : qsTr("Show per-action rows")
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: flowView.rowsOpen = !flowView.rowsOpen
+                }
+                Repeater {
+                    model: (!flowView.collapsed && flowView.rowsOpen) ? flowView.rows : []
+                    delegate: LogosText {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: "#" + String(modelData.seq) + " " + String(modelData.kind)
+                            + (modelData.intentId ? " " + flowView.shortId(modelData.intentId) : "")
+                            + " · " + String(modelData.field) + " → " + flowView.observerLabel(modelData.to)
+                            + (modelData.to === "room-member" && modelData.members && modelData.members.length > 0
+                                 ? " (" + modelData.members.map(flowView.shortId).join(", ") + ")" : "")
+                            + " · epoch " + String(modelData.epoch)
+                            + (modelData.declared === false ? qsTr("  ⚠ undeclared") : "")
+                        color: modelData.to === "room-member" ? Theme.palette.textSecondary : Theme.palette.warning
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                }
             }
         }
     }

@@ -485,6 +485,7 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
   let folded = reduceIntents(events, driverFor)
   var approvers = initTable[string, HashSet[string]]()   # id -> {who/round} seen
   var lastSig = initTable[string, int]()                 # id -> index of its last sig
+  var proposeSeq = initTable[string, int]()              # id -> index of its propose (groups the intent's lines together, in the order intents were proposed)
   for i in 0 ..< ordered.len:
     let p = ordered[i].key.split('/')
     if p.len >= 4 and p[0] == "membership" and p[2] == "admit":
@@ -501,6 +502,7 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
     let named = desc.membership == mmNamed
     case op
     of "propose":
+      proposeSeq[id] = i
       result.add ActivityEntry(seq: i, order: 0, kind: "propose", intentId: id,
         account: "", title: "Proposed " & activityEffectLabel(events, id),
         detail: "under the " & intentPolicyOf(events, id) & " policy")
@@ -542,8 +544,34 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
     if $it.state in ["executable", "submitted", "settling", "final"]:
       result.add ActivityEntry(seq: lastSig[id], order: 1, kind: "ready", intentId: id,
         account: "", title: "Ready — the approvals are collected", detail: "")
+  # Order for reading, not by content hash. canonicalOrder among these events is
+  # smallest-id-first (they carry no parent links), which scrambles a proposal's
+  # lifecycle — an approval could sort before its propose. Instead: group every line
+  # of one intent together (by where the intent was proposed), and within the group
+  # walk the lifecycle — proposed → approvals → ready → submitted → settled. A
+  # membership admit has no intent, so it sits at its own position. Deterministic (a
+  # pure function of the event set, invariant 4) and chronological for the common
+  # single-intent flow; interleaved multi-intent timing without an authored clock is
+  # a known limit (the log carries no wall-clock on coordination events).
+  proc lifecycleRank(kind: string): int =
+    case kind
+    of "propose": 0
+    of "approve", "decline": 1
+    of "ready": 2
+    of "submit": 3
+    of "settled": 4
+    else: 0                       # admit / anything else: no intra-intent phase
+  proc groupOrder(e: ActivityEntry): int =
+    if e.intentId.len > 0 and e.intentId in proposeSeq: proposeSeq[e.intentId] else: e.seq
   result.sort(proc (a, b: ActivityEntry): int =
-    if a.seq != b.seq: cmp(a.seq, b.seq) else: cmp(a.order, b.order))
+    let ga = groupOrder(a)
+    let gb = groupOrder(b)
+    if ga != gb: return cmp(ga, gb)
+    let ra = lifecycleRank(a.kind)
+    let rb = lifecycleRank(b.kind)
+    if ra != rb: return cmp(ra, rb)
+    if a.seq != b.seq: return cmp(a.seq, b.seq)
+    cmp(a.order, b.order))
 
 # ── provenance: how this decision's data got in front of you (invariant 10) ────
 
