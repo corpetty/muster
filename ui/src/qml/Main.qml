@@ -62,6 +62,17 @@ Item {
         if (p.length > 0)
             root.backend.setPolicy(p);
         var v = String(verb || "");
+        // Seed the room to the ACTIVITY chosen in the composer, so each verb opens a
+        // genuinely different room rather than all landing on the same chat:
+        //   • pay    → the payment composer (amount + recipient), Safe policy;
+        //   • decide → the statement composer (what the room ratifies), threshold policy;
+        //   • talk   → just the conversation, no proposal composer.
+        // Without this the room always defaulted to the payment kind, and coherePolicy
+        // then even snapped a decision's threshold policy back to Safe.
+        if (v === "pay")
+            roomSurface.composeType = "payment";
+        else if (v === "decide")
+            roomSurface.composeType = "statement";
         // Auto-ask to join UNLESS this is a fresh composer creation (a verb): a joiner
         // entering a room someone else already founded can't see them (their epoch is
         // sealed), so without this they'd have no idea they must ask. Requesting is
@@ -80,10 +91,14 @@ Item {
         // The composer's third step (F-18, exo-45e K6): if it composed a first payment
         // (account + asset + destination), propose it into the freshly opened room. An
         // empty draft (nothing picked, or the destination was requested from the room)
-        // opens the room to compose in-place instead.
+        // opens the in-room composer to the right kind instead, so a pay/decide room
+        // lands ready to propose the thing rather than on an empty chat. Talk just opens
+        // the conversation (no proposal composer).
         var d = String(draftJson || "");
         if (d.length > 0)
             root.backend.proposeInRoom(d);
+        else if (v === "pay" || v === "decide")
+            roomSurface.composing = true;
     }
 
     // Backend PROPs, aliased so bindings read cleanly. The backend is the only
@@ -338,6 +353,7 @@ Item {
 
     // The conversation surface. Reads its state from the module through the backend.
     Room {
+        id: roomSurface
         // A card remedy that lives in Settings (repoint the RPC): hop to the view.
         onSettingsRequested: {
             root.view = "settings";
