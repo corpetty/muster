@@ -768,6 +768,33 @@ proc musterCoordinatePropose(effectJson: string): string =
   gSession.publish(ev)
   id
 
+proc musterCoordinateReannounce(): string =
+  ## Re-publish every still-OPEN intent — its policy declaration, its propose, and its
+  ## thread card — into the CURRENT epoch. A member admitted after a proposal was made
+  ## can't read anything from before their epoch (F-16), so without this they'd never
+  ## fold the intent or see its card. The events are content-addressed, so re-publishing
+  ## is idempotent (same ids) — it only re-seals them under the new epoch for the joiner.
+  ## Called right after an admit; a finished intent (submitted/settled) is skipped.
+  if gSession == nil: return "not-joined"
+  gSession.poll()
+  let events = gSession.log.allEvents()
+  let folded = reduceIntents(events, driverFor)
+  let author = toHex(moduleKeystore().encIdentity().toBytes())
+  var n = 0
+  for id, it in folded:
+    if $it.state in ["final", "submitted", "settling"]: continue
+    let effect = effectJsonOf(events, id)
+    if effect.len == 0: continue
+    let policy = intentPolicyOf(events, id)
+    gSession.publish(policyDeclEvent(id, policy))
+    gSession.publish(proposeEvent(id, effect))
+    inc gMsgSeq
+    let refBody = $(%*{"kind": "intent-ref", "intentId": id})
+    let (_, ev) = newMessageEvent(author, int64(epochTime()), refBody, gMsgSeq)
+    gSession.publish(ev)
+    inc n
+  $(%*{"reannounced": n})
+
 proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: string): string =
   ## Add a contribution to a proposed intent. If `signatureHex` is EMPTY, sign in-app
   ## with THIS instance's own keystore identity — no paste: the room-native drivers
