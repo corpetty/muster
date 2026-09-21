@@ -532,6 +532,40 @@ proc toContentTopic(t: string): string =
   if name.len == 0: name = "room"
   "/muster/1/" & name & "/proto"
 
+# ── cleared invites (dismissed OR joined) — persisted so they don't re-appear ───
+var gDismissedInvites = initHashSet[string]()  ## invite room-topics (normalized content topic) never to re-show
+var gDismissedLoaded = false
+
+proc dismissedInvitesPath(): string =
+  var dir = context().instancePersistencePath
+  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  dir / "dismissed_invites.json"
+
+proc loadDismissedInvites() =
+  ## Load the cleared-invite set from disk once, so a dismissal (or a join) sticks across
+  ## restarts — otherwise the store re-delivers the same invite on every launch.
+  if gDismissedLoaded: return
+  gDismissedLoaded = true
+  try:
+    let p = dismissedInvitesPath()
+    if fileExists(p):
+      let j = parseJson(readFile(p))
+      if j.kind == JArray:
+        for x in j: gDismissedInvites.incl x.getStr()
+  except CatchableError: discard
+
+proc clearInvite(ctopic: string) =
+  ## Mark a room's invite handled (dismissed or joined) and persist beside the keystore.
+  loadDismissedInvites()
+  gDismissedInvites.incl ctopic
+  try:
+    let p = dismissedInvitesPath()
+    createDir(parentDir(p))
+    var arr = newJArray()
+    for t in gDismissedInvites: arr.add %t
+    writeFile(p, $arr)
+  except CatchableError: discard
+
 proc musterCoordinateJoin(topic: string): string =
   let ks = moduleKeystore()
   # Normalize to a valid Waku content topic so the room actually shards + routes over
@@ -544,6 +578,9 @@ proc musterCoordinateJoin(topic: string): string =
     gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(ks), ctopic)
     gSessions[ctopic] = gSession
   gTopic = ctopic
+  # Joining a room clears any invite to it, permanently (persisted): you're in it now,
+  # so it should never show as a pending invitation again, this session or after a restart.
+  clearInvite(ctopic)
   # Policy is per-intent now, declared in the log at propose time — so join no longer
   # overrides this instance's compose default. It keeps whatever policy the user last
   # picked for the next thing they propose here.
@@ -558,7 +595,6 @@ proc musterCoordinateJoin(topic: string): string =
 # there; the owner opens it with its keystore. Anyone may drop; only the owner reads.
 var gInbox: CoordinationSession = nil          ## this instance's own inbox session
 var gInboxTopics = initHashSet[string]()       ## content topics that are inboxes (kept out of the room list)
-var gDismissedInvites = initHashSet[string]()  ## invite room-topics (normalized) the user cleared, so they don't re-appear
 
 proc inboxTopicFor(chatIdHex: string): string =
   ## A per-identity inbox content topic, derived from the chat id — deterministic, so a
@@ -621,6 +657,7 @@ proc musterCoordinateInvites(): string =
   ## malformed) are skipped. Deduped by (from, topic). Empty until start_inbox is called.
   if gInbox == nil: return "[]"
   gInbox.poll()
+  loadDismissedInvites()
   let ks = moduleKeystore()
   var seen = initHashSet[string]()
   var items: seq[JsonNode] = @[]
@@ -653,8 +690,8 @@ proc musterCoordinateInvites(): string =
 proc musterCoordinateDismissInvite(roomTopic: string): string =
   ## Clear a received invite so it stops showing (the user isn't joining that room).
   ## Keyed by the normalized content topic, so it matches however the topic was phrased.
-  ## In-memory for the session; joining a room also drops its invite automatically.
-  gDismissedInvites.incl toContentTopic(roomTopic)
+  ## Persisted beside the keystore, so a dismissal sticks across restarts.
+  clearInvite(toContentTopic(roomTopic))
   "ok"
 
 proc policyJson(): JsonNode =

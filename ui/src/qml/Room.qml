@@ -314,6 +314,29 @@ Item {
     // balance was actually read (never on an error/unknown — we don't block what we
     // can't check, and never a false zero). Drives both the hard block on the propose
     // button and the refusal in proposeFrom (exo-bf9 — can't over-send).
+    // Re-send an UNANSWERED address request into the current epoch, so a just-admitted
+    // member is actually asked to disclose — they can't read a request posted before
+    // they joined (F-16 re-keys on admit). Called from onAdmit. Scans the thread: if the
+    // most recent address-request has no address-share after it, post a fresh one.
+    function resendOutstandingAsk() {
+        if (!room.backend) return;
+        var msgs = room.messages;
+        var pending = false;
+        for (var i = 0; i < msgs.length; ++i) {
+            var o = null;
+            try { o = JSON.parse(msgs[i].body); } catch (e) { o = null; }
+            if (!o) continue;
+            var k = String(o.kind || "");
+            if (k === "address-request") pending = true;
+            else if (k === "address-share") pending = false;
+        }
+        if (pending)
+            room.backend.postMessage(JSON.stringify({
+                kind: "address-request", intent: "pay",
+                purpose: qsTr("Pay someone from the room")
+            }));
+    }
+
     function overSends(valueStr) {
         if (!room.roomAsset || room.roomAsset.error) return false;
         var amt = parseFloat(valueStr || "0");
@@ -1277,7 +1300,14 @@ Item {
                     // own address; "Use as recipient" on that card fills this field.
                     LogosButton {
                         objectName: "roomAskAddress"
-                        text: qsTr("Ask the room")
+                        // No one to ask until someone else is in the room — and a request
+                        // posted while you're alone can't reach a later joiner anyway (the
+                        // room re-keys when they're admitted, F-16), so it's disabled until
+                        // the roster has someone else. Admitting a member re-sends any
+                        // outstanding ask into their epoch (see onAdmit below).
+                        enabled: room.members.length >= 2
+                        text: room.members.length >= 2 ? qsTr("Ask the room")
+                                                       : qsTr("Ask the room (no one else yet)")
                         variant: LogosButton.Variant.Secondary
                         onClicked: {
                             if (!room.backend) return;
@@ -1477,7 +1507,15 @@ Item {
                 pending: room.pending
                 topic: room.topic
                 onRequestJoin: if (room.backend) room.backend.requestJoin()
-                onAdmit: function(identityHex) { if (room.backend) room.backend.admit(identityHex); }
+                onAdmit: function(identityHex) {
+                    if (!room.backend) return;
+                    room.backend.admit(identityHex);
+                    // The admit re-keyed the room to a new epoch the joiner now shares. If
+                    // there's an unanswered address request in the thread, re-send it into
+                    // this new epoch — otherwise the just-admitted member can't read the
+                    // earlier one (F-16) and would never be asked to disclose.
+                    room.resendOutstandingAsk();
+                }
             }
         }
     }
