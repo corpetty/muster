@@ -218,6 +218,18 @@ Item {
     readonly property string policyKind:
         (room.policy && room.policy.policy) ? String(room.policy.policy) : "safe"
 
+    // How many people must be in the room before a proposal can be submitted. A
+    // proposal is something the room acts on together — it needs enough of the people
+    // it takes to agree (the policy's threshold) present FIRST, so it lands in an epoch
+    // they all share rather than one sealed to you alone (F-16). From coordinate_policy;
+    // falls back to needing one other person (2) when the threshold isn't known yet.
+    readonly property int requiredToPropose: {
+        var t = (room.policy && room.policy.threshold !== undefined)
+                ? Number(room.policy.threshold) : 0;
+        return t >= 1 ? t : 2;
+    }
+    readonly property bool enoughToPropose: room.members.length >= room.requiredToPropose
+
     // This account's own address (from settings/identity) — what an address-share
     // answers a priming request with, so it's YOUR address, not a demo one.
     readonly property string myAddress: {
@@ -1331,6 +1343,22 @@ Item {
                     placeholderText: qsTr("what the room ratifies…")
                 }
 
+                // Not enough people to act on a proposal yet — say so, and that Propose
+                // is off until the room fills. You compose it now; you submit it once the
+                // people it takes to agree are here (so it isn't sealed away from them).
+                LogosText {
+                    objectName: "roomProposeGate"
+                    visible: !room.enoughToPropose
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: qsTr("Waiting for the room to fill — a proposal needs at least %1 "
+                             + "people here to act on it. Invite someone and admit them, "
+                             + "then Propose. (%2 here now.)")
+                          .arg(room.requiredToPropose).arg(room.members.length)
+                    color: Theme.palette.warning
+                    font.pixelSize: Theme.typography.badgeText
+                }
+
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: Theme.spacing.small
@@ -1355,9 +1383,12 @@ Item {
                         text: qsTr("Propose")
                         // a payment needs a recipient AND an amount within the Safe's known
                         // balance — can't over-send (exo-bf9); the ⚠ above says why it's off.
-                        enabled: room.composeType === "statement" ? proposeText.text.length > 0
+                        // AND the room must have enough people to act on it (see the hint):
+                        // don't submit a proposal into a room that can't yet agree to it.
+                        enabled: room.enoughToPropose && (
+                                 room.composeType === "statement" ? proposeText.text.length > 0
                                : room.composeType === "action" ? room.chosenAction !== null
-                               : proposeTo.text.length > 0 && !room.overSends(proposeValue.text)
+                               : proposeTo.text.length > 0 && !room.overSends(proposeValue.text))
                         onClicked: {
                             if (room.composeType === "statement") {
                                 room.proposeStatement(proposeText.text);
