@@ -171,6 +171,18 @@ proc materialShareEvent*(intentId, reqName, who, public, form, class, field: str
   Event(parents: parents, key: "intent/" & intentId & "/material/" & reqName & "/" & who,
         value: $(%*{"public": public, "form": form, "class": class, "field": field}))
 
+proc keyBindingEvent*(intentId, contributor, linkHex: string,
+                      parents: seq[EventId] = @[]): Event =
+  ## Published alongside a keyed contribution (exo-45e K5): the F-14 binding statement
+  ## for the authorization key that signed, proving *that* key belongs to the same party
+  ## as the contributor's admitted encryption identity (F-14/F-9). Without it the room
+  ## sees only that a valid owner signed; with it the room can check the owner is bound to
+  ## an admitted member. `contributor` (the recovered signer) dedups one binding per
+  ## (intent, key); `linkHex` is `encodeLink(statement)` hex — the binding is epoch-scoped
+  ## via its own LinkContext, so a later joiner cannot lift it (invariant 7 holds here too).
+  Event(parents: parents, key: "intent/" & intentId & "/binding/" & contributor,
+        value: linkHex)
+
 type
   MaterialShare* = object
     reqName*: string     ## the requirement this fills
@@ -198,6 +210,24 @@ proc reduceShares*(events: seq[Event], intentId: string): seq[MaterialShare] =
       except CatchableError: discard
       result.add MaterialShare(reqName: p[3], who: p[4], public: pub, form: form,
                                class: class, field: field)
+
+type
+  KeyBinding* = object
+    contributor*: string   ## the recovered signer (an owner address) this binding vouches for
+    linkHex*: string       ## encodeLink(statement) hex — the F-14 link statement, verifiable
+
+proc reduceBindings*(events: seq[Event], intentId: string): seq[KeyBinding] =
+  ## The per-key F-14 bindings published for one intent's contributions, folded from the
+  ## log (idempotent under reorder / duplication, invariant 4): one per (intent, key),
+  ## first write wins. A card can pair each approval with its binding to show the signer
+  ## is an admitted member (F-9), not merely a valid owner.
+  var seen = initHashSet[string]()
+  for e in canonicalOrder(events):
+    let p = e.key.split('/')
+    if p.len >= 4 and p[0] == "intent" and p[1] == intentId and p[2] == "binding":
+      if p[3] in seen: continue
+      seen.incl p[3]
+      result.add KeyBinding(contributor: p[3], linkHex: e.value)
 
 # ── per-intent policy: the intent is the policy boundary, not the room ─────────
 # The room is a membership/privacy boundary — who can read. WHICH driver governs a
@@ -730,6 +760,14 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
         what: "shared material for '" & (if field.len > 0: field else: p[3]) & "'",
         detail: "",
         guarantee: "sealed to the room's epoch; the room learns the PUBLIC face the sharer chose (never a handle), not that it is theirs — only a driver-verified signature proves control (F-20)",
+        epoch: epoch)
+    of "binding":
+      if p.len < 4: continue
+      result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "binding", intentId: id,
+        account: (if named: p[3] else: ""), accountable: true,
+        what: "a key-binding for an approval",
+        detail: "",
+        guarantee: "the authorization key that signed is bound by a secp signature to the member's admitted encryption identity — the room can check the approval came from an admitted member, not merely a valid owner (F-14, F-9); scoped to this epoch (invariant 7)",
         epoch: epoch)
     of "submit":
       result.add LogProvItem(seq: i, cls: icExternalRead, kind: "submit", intentId: id,

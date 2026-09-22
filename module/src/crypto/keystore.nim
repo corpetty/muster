@@ -96,8 +96,15 @@ method edSignWith*(ks: Keystore, r: KeyRef, msg: openArray[byte]): Ed25519Sig {.
   ks.edSign(msg)
 
 method bindingForKey*(ks: Keystore, r: KeyRef, ctx: LinkContext): LinkStatement {.base.} =
+  ## Bind our encryption identity to the AUTHORIZATION key named by `r`: sign the enc
+  ## identity with THAT key via the keyed sign op (signWith is virtual, so a multi-key
+  ## backend routes to the chosen secret; an unknown ref is refused; the secret never
+  ## leaves). The binding's recoverable signer is therefore r's address, so it proves
+  ## *this* key belongs to the same party as the admitted encryption identity (F-14/F-9)
+  ## — not merely that some primary key does. The primary-key binding stays `bindingFor`.
   if not ks.hasKey(r): raise newException(KeystoreError, "unknown key ref: " & r)
-  ks.bindingFor(ctx)
+  issueBinding((proc(h: array[32, byte]): Signature65 = ks.signWith(r, h)),
+               ks.encIdentity(), ctx)
 
 # ── shared assembly ────────────────────────────────────────────────────────────
 

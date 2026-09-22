@@ -795,6 +795,12 @@ proc musterCoordinateReannounce(): string =
     inc n
   $(%*{"reannounced": n})
 
+proc roomContext(): LinkContext =
+  ## The context our binding is scoped to — this Safe, valid for a day. Wall-clock
+  ## expiry is fine here: a binding is an admission-time credential, not a signing-
+  ## path artifact (so it never touches the deterministic log).
+  LinkContext(account: SAFE_ADDR, slot: "0", expiry: uint64(epochTime()) + 86_400)
+
 proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: string): string =
   ## Add a contribution to a proposed intent. If `signatureHex` is EMPTY, sign in-app
   ## with THIS instance's own keystore identity — no paste: the room-native drivers
@@ -810,6 +816,7 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return "unknown-intent"
   var sig = signatureHex
+  var inAppSecpRef = ""   # nonempty iff we secp-signed IN-APP: publish that key's F-14 binding
   if sig.len == 0:
     let mat = canonicalize(drv, effectFromJson(effectJson))
     let ks = moduleKeystore()
@@ -823,6 +830,7 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
       var h: array[32, byte]
       for i in 0 ..< min(32, mat.bytes.len): h[i] = mat.bytes[i]
       sig = toHex(if keyRef.len > 0: ks.signWith(keyRef, h) else: ks.sign(h))
+      inAppSecpRef = (if keyRef.len > 0: keyRef else: refOf(ks.address()))
     else:
       sig = toHex(if keyRef.len > 0: ks.edSignWith(keyRef, mat.bytes) else: ks.edSign(mat.bytes))
   # The intent's policy verifies the contribution: a Safe owner's secp signature, or a
@@ -836,6 +844,14 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
   let folded = reduceIntents(events, driverFor)
   let curRound = (if intentId in folded: folded[intentId].collection.round else: 1)
   gSession.publish(contributeEvent(intentId, who, sig, round = curRound))
+  # F-14/K5: when we secp-signed IN-APP with a chosen owner key, publish that key's
+  # binding so the room can check the approval came from an admitted member — the
+  # authorization key is bound by a signature to our (admitted) encryption identity, not
+  # merely a valid owner. Epoch-scoped via roomContext; folds once per (intent, key). A
+  # PASTED signature gets none: we do not hold that key, so we cannot vouch for it.
+  if inAppSecpRef.len > 0:
+    let st = moduleKeystore().bindingForKey(inAppSecpRef, roomContext())
+    gSession.publish(keyBindingEvent(intentId, who, toHex(encodeLink(st))))
   intentState(gSession.log.allEvents(), driverFor, intentId)
 
 proc musterCoordinateIntents(): string =
@@ -1396,12 +1412,6 @@ proc musterCoordinateAvailableActions(): string =
     if t.len > 0 and t notin modules: modules.add t
   if gInvoker == nil: gInvoker = newLpInvoker("muster_module")
   $discoverAcross(gInvoker, modules, allow)
-
-proc roomContext(): LinkContext =
-  ## The context our binding is scoped to — this Safe, valid for a day. Wall-clock
-  ## expiry is fine here: a binding is an admission-time credential, not a signing-
-  ## path artifact (so it never touches the deterministic log).
-  LinkContext(account: SAFE_ADDR, slot: "0", expiry: uint64(epochTime()) + 86_400)
 
 proc musterCoordinateRequestJoin(): string =
   if gSession == nil: return "not-joined"

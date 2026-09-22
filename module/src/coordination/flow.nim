@@ -81,6 +81,11 @@ proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
       try: (let f = parseJson(e.value){"field"}.getStr(); (if f.len > 0: field = f))
       except CatchableError: discard
       result.addRows(i, "material", id, baselineDisclosure() & @[row(field, obRoomMember)], m.declared)
+    of "binding":
+      # a key-binding discloses to the room the link between the signing authorization
+      # key and the member's encryption identity (F-14/F-9, exo-45e K5). Like the sig
+      # itself it stays inside the room — nothing leaves until submit.
+      result.addRows(i, "binding", id, baselineDisclosure() & @[row("key-binding", obRoomMember)], m.declared)
     of "submit", "final":
       var rows = baselineDisclosure()
       if m.declared: rows.add m.discloses
