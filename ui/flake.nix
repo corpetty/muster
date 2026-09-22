@@ -10,7 +10,10 @@
     # copies untracked build symlinks/scratch, which changes muster_module's
     # derivation and breaks its Nim build (pkg/results). Tracked tree == what
     # `cd module && nix build` uses. Commit module changes for them to be seen.
-    muster_module.url = "git+file:///home/petty/Github/corpetty/muster?dir=module";
+    # RELATIVE (`../` = the repo root from ui/), so it resolves from any clone —
+    # not a machine-local absolute path (exo-1ec.2). `make build` relocks this
+    # input to the repo's current committed state before every build.
+    muster_module.url = "git+file:../?dir=module";
     # ADR-013: build the UI on a basecamp-COHERENT builder instead of following
     # muster_module's Nim-cdylib builder, so the generated client + QtRO view-glue
     # compile against basecamp's own cpp-sdk/qt-sdk/protocol and ABI-match its
