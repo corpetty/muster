@@ -105,6 +105,36 @@ proc effectFromJson*(effectJson: string): Effect =
   except CatchableError: discard
   Effect(schemaId: "muster.effect.transfer.v1", fields: @[])
 
+proc effectSchema*(effectJson: string): tuple[id: string, known: bool] =
+  ## The declared schema id of an activity, and whether muster RECOGNIZES it (exo-1ec.3).
+  ## An activity renders only from a declared, versioned schema; an unrecognized one must
+  ## get a NAMED "schema unknown" failure, never a silent fallback that renders it as
+  ## something it is not. v0 uses hand-assigned ids (ADR-009), so "known" means the id is
+  ## in the v0 vocabulary — not a parsed CDDL root; this is the rendering gate, and does
+  ## not touch the signing/fold path (effectFromJson still canonicalizes for the driver).
+  ## A malformed effect, or an `effect` value we don't have a schema for, is `known:false`
+  ## and the id names what was declared so the failure can say exactly what it saw.
+  try:
+    let j = parseJson(effectJson)
+    if j.kind != JObject: return ("muster.effect.unknown.v0", false)
+    if not j.hasKey("effect"): return ("muster.effect.transfer.v1", true)  # legacy plain {to,value,nonce}
+    let kind = j["effect"].getStr()
+    case kind
+    of "transfer": return ("muster.effect.transfer.v1", true)
+    of "statement": return ("muster.effect.statement.v1", true)
+    of "add-driver": return ("muster.effect.governance.add-driver.v1", true)
+    of "invoke":
+      let m = j{"module"}.getStr()
+      let meth = j{"method"}.getStr()
+      # the invoke FAMILY is a declared schema; a missing module/method is malformed → named.
+      if m.len > 0 and meth.len > 0: return (invokeDomain(m, meth), true)
+      return ("muster.invoke.?.?.v1", false)
+    else:
+      # an `effect` value muster has no schema for — name it, do not coerce it to a transfer.
+      return ("muster.effect." & (if kind.len > 0: kind else: "?") & ".v?", false)
+  except CatchableError:
+    return ("muster.effect.unknown.v0", false)
+
 proc hexToBytes(s: string): seq[byte] =
   var h = s
   if h.len >= 2 and h[0] == '0' and (h[1] == 'x' or h[1] == 'X'): h = h[2 .. ^1]
@@ -448,6 +478,9 @@ type IntentView* = object
                           ## when rounds == 1
   declines*: int          ## distinct members who declined to take part (informational)
   decliners*: seq[string] ## who declined — ONLY under a named driver; empty under anonymous (inv 9)
+  schemaId*: string       ## the effect's declared schema id (v0 vocabulary, ADR-009)
+  schemaKnown*: bool      ## whether muster recognizes that schema — false ⇒ the card renders a
+                          ## NAMED "schema unknown" failure, never the effect body (exo-1ec.3)
 
 proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentView] =
   ## Deterministic (sorted by id), so two instances render the identical list from
@@ -474,8 +507,10 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
     if desc.membership == mmNamed:
       for w in declined.getOrDefault(id, initHashSet[string]()): decliners.add w
       decliners.sort()
+    let ej = effectJsonOf(events, id)
+    let sch = effectSchema(ej)
     result.add IntentView(id: id, state: $it.state,
-                          effectJson: effectJsonOf(events, id),
+                          effectJson: ej,
                           approvals: approvals.getOrDefault(id).len,
                           txhash: bytesHex(it.materialization.bytes),
                           policy: pol,
@@ -483,7 +518,9 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
                           rounds: desc.rounds,
                           roundApprovals: roundApp.getOrDefault(id & "/" & $curRound, initHashSet[string]()).len,
                           declines: declined.getOrDefault(id, initHashSet[string]()).len,
-                          decliners: decliners)
+                          decliners: decliners,
+                          schemaId: sch.id,
+                          schemaKnown: sch.known)
   result.sort(proc (a, b: IntentView): int = cmp(a.id, b.id))
 
 # ── activity: how the room reached its state (the education seam) ──────────────

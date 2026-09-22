@@ -881,7 +881,10 @@ proc musterCoordinateIntents(): string =
                # this round". For single-round drivers rounds == 1 and the UI ignores it.
                "round": v.round, "rounds": v.rounds, "roundApprovals": v.roundApprovals,
                # who declined to take part (named driver only; a count otherwise, inv 9)
-               "declines": v.declines, "decliners": v.decliners}
+               "declines": v.declines, "decliners": v.decliners,
+               # the declared schema id + whether muster recognizes it. false ⇒ the card
+               # renders a NAMED "schema unknown" failure, never the effect body (exo-1ec.3).
+               "schemaId": v.schemaId, "schemaKnown": v.schemaKnown}
     # n = how many could sign (owners / roster), so the card reads "M of N" honestly
     # (e.g. 2 of 3), not "threshold of threshold".
     if drv of SafeDriver: o["n"] = %SafeDriver(drv).owners.len
