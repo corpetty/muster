@@ -13,6 +13,7 @@ import ../src/drivers/manifest
 import ../src/drivers/invoke
 import ../src/crypto/curve25519
 import ../src/coordination/offers
+import ../src/coordination/intents
 import ../src/wallet/material
 
 proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
@@ -78,5 +79,30 @@ block:
   # only the public face (the key-node) leaves — never a handle (s1).
   doAssert not ($payeeOffer.candidates[0]).contains("adapter:lez")
   echo "3. offers: my shielded LEZ key-node fills the coordinated-transfer recipient slot (s1) OK"
+
+# ── 4. a Mode B effect folded THROUGH effectFromJson (the propose/log path) ────────
+block:
+  # what the UI publishes as a proposal: an invoke effect naming the counterparty arg and
+  # the chain. Folding it from JSON (as reduceIntents does) must yield an effect the invoke
+  # manifest recognizes as a coordinated transfer — the driver test above builds the Effect
+  # directly, this proves the JSON path (Room propose → log → fold) carries the same fields.
+  let json = """{"effect":"invoke","module":"lez_core","method":"transfer_private",
+                 "counterparty":"to","chain":"lez:testnet","args":{"to":"","amount":5}}"""
+  let folded = effectFromJson(json)
+  doAssert folded.fieldText("counterparty") == "to", "effectFromJson carries the counterparty arg name"
+  doAssert folded.fieldText("chain") == "lez:testnet", "effectFromJson carries the chain"
+  let m = drv.manifest(folded)
+  doAssert m.consistent(folded), $consistencyFailures(m, folded)
+  var sawPayee, sawLezAccount = false
+  for r in m.requirements:
+    if r.party == rpCounterparty and r.kind == rqAddress and r.needs.field == "to": sawPayee = true
+    if r.kind == rqInfra and r.name == "lez-account" and r.party == rpInstance: sawLezAccount = true
+  doAssert sawPayee, "the folded-from-JSON effect declares the counterparty payee slot (was dropped before)"
+  doAssert sawLezAccount, "the folded-from-JSON effect declares the proposer's lez-account requirement"
+  # a plain invoke JSON (no counterparty) still declares no counterparty slot.
+  let plain = effectFromJson("""{"effect":"invoke","module":"lez_core","method":"version"}""")
+  for r in drv.manifest(plain).requirements:
+    doAssert r.party != rpCounterparty, "no counterparty slot unless the JSON names one"
+  echo "4. a Mode B effect folded through effectFromJson declares the counterparty slot + lez-account OK"
 
 echo "lez_modeb_test: all OK"

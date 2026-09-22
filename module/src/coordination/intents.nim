@@ -74,6 +74,27 @@ proc effectFromJson*(effectJson: string): Effect =
         fields.add ("module", cbText(module))
         fields.add ("method", cbText(meth))
         if j.hasKey("args"): fields.add ("args", cbText($j["args"]))
+        # LEZ Mode B / any coordinated transfer (exo-45e, drivers/invoke.nim §manifest):
+        # carry the `counterparty` field name (which arg holds the recipient) and the
+        # `chain`, so the folded effect declares the counterparty address slot the room
+        # asks the recipient to fill, plus the proposer's lez-account requirement for a
+        # lez:* chain. Committed to the signed bytes (invariant 5) — the recipient the
+        # room agreed on is part of what is endorsed, not a post-hoc substitution.
+        let cp = j{"counterparty"}.getStr()
+        if cp.len > 0:
+          fields.add ("counterparty", cbText(cp))
+          # The bound recipient arg becomes a FIRST-CLASS effect field, not just an entry in
+          # the args blob: the manifest's counterparty slot binds this field (consistency
+          # requires the effect to carry it), and — the point — the recipient the room agreed
+          # on is committed to the signed bytes (invariant 5), never a post-hoc substitution.
+          # Its value comes from args if the proposer already knows it, else empty — the room
+          # fills it via coordinate_share_material (K5) before the intent is endorsed.
+          var cpVal = ""
+          if j.hasKey("args") and j["args"].kind == JObject and j["args"].hasKey(cp):
+            cpVal = j["args"][cp].getStr()
+          fields.add (cp, cbText(cpVal))
+        let chain = j{"chain"}.getStr()
+        if chain.len > 0: fields.add ("chain", cbText(chain))
         return Effect(schemaId: invokeDomain(module, meth), fields: fields)
       else:
         var fields: seq[(string, CborValue)]
