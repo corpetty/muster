@@ -137,7 +137,8 @@ block:
     doAssert it.accountable, "every input in a live fold is accountable"
     if it.cls == icPeerMessage:
       inc proposes
-      doAssert it.what == "the proposed effect", "the effect entered as a peer message"
+      doAssert it.what == "the proposal", "the effect entered as a peer message"
+      doAssert it.detail.len > 0, "the propose carries the effect summary in detail"
     elif it.cls == icContribution:
       doAssert it.account.len > 0, "Safe is mmNamed, so the owner account is named"
       contributors.add it.account
