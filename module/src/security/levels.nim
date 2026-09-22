@@ -1,0 +1,87 @@
+## The null ladder (exo-1ec.5, docs/design/null-ladder.md).
+##
+## The status quo is a null cipher: the system is built with the null in place, and the
+## nulls are replaced one at a time — each real level the LIMITING CASE of the null at the
+## SAME seam (the correspondence principle), never a different code path. An unencrypted
+## channel is an encrypted channel with a transparent key; a local transport is a delivery
+## node with no distance. So the level is a TYPED ATTRIBUTE a seam declares and a consumer
+## READS — never inferred by branching on a concrete type — and the null carries the same
+## metadata envelope as the real thing (a consumer reads a level, never a field's presence).
+##
+## Three INDEPENDENT axes. A level on one says nothing about another: a signed artifact is
+## not a private one; an encrypted channel to an unknown peer is not an authenticated one.
+## They do not substitute — keep them separate.
+##
+## The hazard this is designed against: TLS shipped NULL and export-grade cipher suites and
+## got downgrade attacks (FREAK, Logjam). The lesson is in the type here, not just the
+## surface: an upgrade that cannot be satisfied REFUSES (`require` raises `DowngradeRefused`)
+## — it never silently proceeds at the null. The null is an explicit, displayed level, never
+## a fallback the code slips to when the real option fails.
+##
+## Invariant guards:
+##   9  — an anonymous driver stays anonymous, so the AUTHENTICATION null is a legitimate
+##        TERMINAL state, not a rung to climb off. No path force-upgrades authentication;
+##        a `require(axAuthentication, rungReal)` belongs only to an already-named context.
+##   10 — signing is already refused when an input's origin is unaccountable. The PROVENANCE
+##        rung EXTENDS that refusal into a typed level; it does not duplicate the check.
+
+type
+  SecurityAxis* = enum
+    axAuthentication  = "authentication"   ## who is speaking now
+    axProvenance      = "provenance"       ## where this came from, what path it took
+    axConfidentiality = "confidentiality"  ## who can read it
+
+  Rung* = enum
+    ## The ladder is ORDERED, and consumers compare with `>=`, never `== rungReal` — so a
+    ## richer rung can be inserted between these two later without touching a call site.
+    rungNull = 0     ## the transparent limiting case — explicit, displayed, legitimate
+    rungReal = 1     ## the attested / bound / encrypted real thing
+
+  AxisLevel* = object
+    rung*: Rung
+    mechanism*: string   ## the concrete mechanism at this rung, NAMED for display — so the
+                         ## UI shows "anonymous" / "bound secp256k1 identity" / "plaintext" /
+                         ## "ECIES epoch", not a bare "null" / "real" the reader can't act on
+
+  SecurityLevel* = object
+    ## The metadata envelope every seam carries — the null carries it too, same shape as the
+    ## real thing. There is no "absent" state: an axis a seam does not itself provide is
+    ## `rungNull` with a mechanism that says so, never a missing field.
+    axes*: array[SecurityAxis, AxisLevel]
+
+  DowngradeRefused* = object of CatchableError
+    ## Raised when a consumer requires a rung the seam cannot meet. It is REFUSAL, not a
+    ## signal to retry at the null — there is deliberately no `orNull` variant of `require`.
+
+proc axisLevel*(rung: Rung, mechanism: string): AxisLevel =
+  AxisLevel(rung: rung, mechanism: mechanism)
+
+proc securityLevel*(auth, prov, conf: AxisLevel): SecurityLevel =
+  ## Build an envelope from its three axes. All three are always present (the null too).
+  SecurityLevel(axes: [auth, prov, conf])
+
+proc rungOf*(l: SecurityLevel, axis: SecurityAxis): Rung = l.axes[axis].rung
+proc mechanismOf*(l: SecurityLevel, axis: SecurityAxis): string = l.axes[axis].mechanism
+
+proc atLeast*(l: SecurityLevel, axis: SecurityAxis, want: Rung): bool =
+  ## Does the seam meet `want` on `axis`? A pure predicate — the caller decides what to do.
+  l.axes[axis].rung >= want
+
+proc require*(l: SecurityLevel, axis: SecurityAxis, want: Rung) =
+  ## The anti-downgrade gate. A consumer that NEEDS `want` on `axis` calls this; if the seam
+  ## cannot meet it, this REFUSES (raises) — it never returns, never falls back to the null.
+  ## Negotiation is not a silent downgrade (the honesty rule, in the type). Do NOT call this
+  ## with `(axAuthentication, rungReal)` from an anonymous context: the authentication null
+  ## is a legitimate terminal (invariant 9), and forcing it off would be the bug, not a fix.
+  if l.axes[axis].rung < want:
+    raise newException(DowngradeRefused,
+      "downgrade refused: " & $axis & " is at '" & l.axes[axis].mechanism &
+      "' (" & $l.axes[axis].rung & "), the caller requires " & $want &
+      " — the real level is unavailable, so this refuses rather than proceed at the null")
+
+proc `$`*(l: SecurityLevel): string =
+  ## A one-line rendering of the whole envelope, for logs and the UI seam.
+  result = ""
+  for a in SecurityAxis:
+    if result.len > 0: result.add "  ·  "
+    result.add $a & "=" & l.axes[a].mechanism & " (" & (if l.axes[a].rung == rungReal: "real" else: "null") & ")"
