@@ -316,7 +316,14 @@ Item {
             // the five questions + your readiness, once asked for
             readiness: room.readinessFor(it && it.id),
             // "From you": which of my own holdings fill the slots this asks of me (K6)
-            offers: room.offersFor(it && it.id)
+            offers: room.offersFor(it && it.id),
+            // the declared schema + whether muster recognizes it (exo-1ec.3). When it does
+            // not, the card renders a NAMED "schema unknown" failure instead of the body
+            // below — an activity renders only from a declared, versioned schema.
+            schemaId: (it && it.schemaId) ? String(it.schemaId) : "",
+            // default TRUE so an older payload (no field) still renders as before, never a
+            // spurious failure; only an explicit false gates the render.
+            schemaKnown: (it && it.schemaKnown !== undefined) ? !!it.schemaKnown : true
         };
     }
 

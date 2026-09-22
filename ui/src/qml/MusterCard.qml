@@ -222,6 +222,15 @@ Rectangle {
         || cardRoot.kind === "intent-approve"
         || cardRoot.kind === "send-receipt"
 
+    // Schema-driven rendering (exo-1ec.3): an activity renders ONLY from a declared,
+    // versioned schema. schemaKnown defaults TRUE (an older payload with no field renders
+    // as before); an explicit false means muster has no schema for this effect, so the
+    // card draws a NAMED "schema unknown" failure instead of the body — never a silent
+    // fallback that shows it as a payment it is not, and never a blank pane.
+    readonly property bool schemaKnown:
+        !(cardRoot.card && cardRoot.card.schemaKnown === false)
+    readonly property string schemaId: cardRoot.card ? String(cardRoot.card.schemaId || "") : ""
+
     // ── intent-propose reading ────────────────────────────────────────────
     // The terms come off the card; the live counts do too, since this build
     // has no fold to consult — so guard each one and never invent a default
@@ -392,13 +401,46 @@ Rectangle {
             font.pixelSize: Theme.typography.primaryText
         }
 
+        // ── schema unknown (exo-1ec.3) ─────────────────────────────────────
+        // A proposal whose effect declares a schema muster does not recognize. We
+        // render a NAMED failure — what was declared, and why nothing is shown from it
+        // — rather than coercing it to a payment or leaving a blank pane. There is no
+        // Approve here: you cannot endorse bytes the app cannot re-derive (F-4).
+        ColumnLayout {
+            objectName: "cardSchemaUnknown"
+            visible: cardRoot.kind === "intent-propose" && !cardRoot.schemaKnown
+            Layout.fillWidth: true
+            spacing: Theme.spacing.tiny
+
+            LogosText {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("⚠ Schema unknown")
+                color: Theme.palette.warning
+                font.family: Theme.typography.publicSans
+                font.pixelSize: Theme.typography.primaryText
+                font.weight: Theme.typography.weightBold
+            }
+            LogosText {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("This activity declares “%1”, a schema this app does not recognize. "
+                         + "Nothing is rendered from it — an activity is shown only from a "
+                         + "declared, versioned schema, so it is never displayed as something "
+                         + "it is not.").arg(cardRoot.schemaId.length > 0 ? cardRoot.schemaId
+                                                                          : qsTr("an unknown effect"))
+                color: Theme.palette.textSecondary
+                font.pixelSize: Theme.typography.badgeText
+            }
+        }
+
         // ── intent-propose (the heart) ─────────────────────────────────────
         // The room deciding something before anyone acts on it. The effect
         // leads (amount → destination), a status rail shows how far it has
         // got, and approvals are drawn as filled slots — because "who is still
         // to weigh in" is the question people actually have.
         ColumnLayout {
-            visible: cardRoot.kind === "intent-propose"
+            visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
             Layout.fillWidth: true
             spacing: Theme.spacing.tiny
 
@@ -978,7 +1020,7 @@ Rectangle {
         // from coordinate_readiness; unknown and undeclared are shown as such.
         LogosText {
             objectName: "cardDeclined"
-            visible: cardRoot.kind === "intent-propose" && cardRoot.declines > 0
+            visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown && cardRoot.declines > 0
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             text: cardRoot.decliners.length > 0
@@ -991,7 +1033,7 @@ Rectangle {
 
         Rectangle {
             objectName: "needsBox"
-            visible: cardRoot.kind === "intent-propose"
+            visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
             Layout.fillWidth: true
             Layout.topMargin: Theme.spacing.tiny
             implicitHeight: needsCol.implicitHeight + 2 * Theme.spacing.small
@@ -1237,7 +1279,7 @@ Rectangle {
         // signals nothing listened to; removed rather than leave dead controls.
         LogosButton {
             objectName: "cardApprove"
-            visible: cardRoot.kind === "intent-propose"
+            visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
                 && !(cardRoot.card && cardRoot.card.approvedByMe)
                 && !cardRoot.ready
             Layout.fillWidth: true
@@ -1250,7 +1292,7 @@ Rectangle {
         // many (anonymous). One per member; folds once.
         LogosButton {
             objectName: "cardDeny"
-            visible: cardRoot.kind === "intent-propose"
+            visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
                 && !(cardRoot.card && cardRoot.card.approvedByMe)
                 && !cardRoot.declinedByMe
                 && !cardRoot.ready
