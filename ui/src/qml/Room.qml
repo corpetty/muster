@@ -50,6 +50,12 @@ Item {
     // picker has selected — {module, method, signature, params, allowed} — or null.
     property var chosenAction: null
 
+    // Mode B (exo-45e): the chosen action is a COORDINATED TRANSFER — the recipient
+    // supplies their own address (a counterparty slot), rather than the proposer guessing
+    // it. Reset whenever the chosen action changes (and when the panel closes, below).
+    property bool modeB: false
+    onChosenActionChanged: modeB = false
+
     // Parsed folds. A parse failure yields [] (absent), never fiction.
     readonly property var messages: {
         try { return JSON.parse(backend ? backend.messagesJson : "[]"); }
@@ -142,7 +148,8 @@ Item {
     // changes while it's open (the acting-as owner check is Safe-specific). Not on
     // entry — ask-then-disclose. Also snap the policy to the current kind on open (it
     // may have been left on another kind's policy from a previous compose).
-    onComposingChanged: if (composing) { refreshRoomAccount(); room.coherePolicy(); }
+    onComposingChanged: { if (!composing) room.modeB = false;
+                          if (composing) { refreshRoomAccount(); room.coherePolicy(); } }
     onPolicyKindChanged: if (composing) refreshRoomAccount()
     // The outcome of the last room-side submit (coordinate_submit): {id, state,
     // onchain, txHash} or {id, error, ...}. Matched to a card by its intent id.
@@ -434,7 +441,7 @@ Item {
     // coordinates it, and coordinate_execute runs it once the room endorses it. argsText
     // is a JSON array; a blank or unparseable value falls back to []. Idempotent id:
     // the same call composes the same content-addressed intent.
-    function proposeAction(action, argsText) {
+    function proposeAction(action, argsText, counterparty, chain) {
         if (!room.backend || !action) return;
         var args = [];
         var raw = String(argsText || "").trim();
@@ -446,12 +453,23 @@ Item {
         }
         // the invoke driver governs this proposal; each card keeps its own policy.
         room.backend.setPolicy("invoke");
-        room.backend.proposeInRoom(JSON.stringify({
+        var effect = {
             effect: "invoke",
             module: String(action.module || ""),
             method: String(action.method || ""),
             args: args
-        }));
+        };
+        // Mode B — a coordinated transfer (exo-45e): naming which arg holds the recipient
+        // (counterparty) and the chain makes the invoke manifest declare a counterparty
+        // address slot the room asks the recipient to fill (coordinate_share_material), plus
+        // the proposer's lez-account requirement for a lez:* chain. Omitted → a plain invoke.
+        var cp = String(counterparty || "").trim();
+        if (cp.length > 0) {
+            effect.counterparty = cp;
+            var ch = String(chain || "").trim();
+            if (ch.length > 0) effect.chain = ch;
+        }
+        room.backend.proposeInRoom(JSON.stringify(effect));
         room.chosenAction = null;
         room.composing = false;
     }
@@ -1332,6 +1350,47 @@ Item {
                         placeholderText: qsTr("args as a JSON array, e.g. [\"/room\",\"hello\"]")
                         font.family: Theme.typography.mono
                     }
+
+                    // Mode B (exo-45e): mark this action as a COORDINATED TRANSFER, where the
+                    // recipient supplies their own address rather than the proposer guessing
+                    // it. Naming which arg is the recipient (+ the chain) makes the proposal
+                    // declare a counterparty slot the room asks the recipient to fill; for a
+                    // lez:* chain it also declares the proposer's LEZ-account requirement. Left
+                    // off, the action proposes as a plain invoke — nothing changes.
+                    LogosButton {
+                        objectName: "roomModeBToggle"
+                        visible: room.chosenAction !== null
+                        Layout.fillWidth: true
+                        text: room.modeB
+                            ? qsTr("✓ Coordinated transfer — recipient shares their address")
+                            : qsTr("Make it a coordinated transfer (ask the recipient)")
+                        variant: room.modeB ? LogosButton.Variant.Secondary
+                                            : LogosButton.Variant.Tertiary
+                        onClicked: room.modeB = !room.modeB
+                    }
+                    ColumnLayout {
+                        visible: room.chosenAction !== null && room.modeB
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+
+                        LogosTextField {
+                            id: proposeCounterparty
+                            objectName: "roomProposeCounterparty"
+                            Layout.fillWidth: true
+                            // which arg name holds the recipient — the effect field the shared
+                            // address lands in (e.g. "to"). The room then asks the recipient.
+                            placeholderText: qsTr("recipient arg name (e.g. to)")
+                            text: "to"
+                            font.family: Theme.typography.mono
+                        }
+                        LogosTextField {
+                            id: proposeChain
+                            objectName: "roomProposeChain"
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("chain (e.g. lez:testnet)")
+                            font.family: Theme.typography.mono
+                        }
+                    }
                 }
 
                 // payment: recipient (+ amount below). You can type it, or ask the room —
@@ -1437,8 +1496,13 @@ Item {
                                 room.proposeStatement(proposeText.text);
                                 proposeText.text = "";
                             } else if (room.composeType === "action") {
-                                room.proposeAction(room.chosenAction, proposeArgs.text);
+                                // Mode B passes the counterparty arg + chain (exo-45e); off,
+                                // they're empty and it proposes as a plain invoke.
+                                room.proposeAction(room.chosenAction, proposeArgs.text,
+                                    room.modeB ? proposeCounterparty.text : "",
+                                    room.modeB ? proposeChain.text : "");
                                 proposeArgs.text = "";
+                                proposeChain.text = "";
                             } else {
                                 room.proposeFrom(proposeTo.text, proposeValue.text);
                                 proposeTo.text = "";
