@@ -30,6 +30,17 @@ settle over the live wire (seeding now ships in `scripts/demo-peer.sh`). See
 detail and [`../docs/two-instance-fleet-runbook.md`](../docs/two-instance-fleet-runbook.md)
 for the operator flow.
 
+**Landed beyond the phase plan:** a chain-agnostic wallet (EVM + mock + a real LEZ
+adapter — send assets via Logos on the zone's four rails); a driver standard (registry,
+conformance suite, a threshold k-of-n driver, and a generic **invoke** driver that
+coordinates any Logos module action); the **action manifest** — one per-action object
+answering what an action does / needs / touches / discloses / how the room agrees, with
+per-instance readiness, an information-flow view, exportable provenance, and a
+self-explaining card; and the **material** layer — a local holdings catalogue, offers
+(requirements × my holdings with per-choice disclosure), keyed contribution, and a
+per-key F-14 binding published in-room, including a room-coordinated LEZ transfer (Mode B)
+where the recipient supplies their own address.
+
 ## Build
 
 The flake pins `logos-module-builder` as a local path-input on its
@@ -71,12 +82,14 @@ src/
   dcbor/        deterministic CDE encoder (inv 5)
   hashing/      sha256 · keccak256 · domain-separated hash-input records (inv 5)
   log/          signed hash-linked log, reduce(log) (inv 4)
-  intents/      lifecycle (F-3) · materialization · signing_payload · provenance
-  drivers/      driver interface (inv 6) · safe · threshold · conformance suite
+  intents/      lifecycle (F-3) · materialization · signing_payload · provenance · disclosure
+  drivers/      driver interface (inv 6) · manifest (per-action provenance/permissions/
+                disclosure) · safe · threshold · frost · invoke (any module action) · conformance
   crypto/       two bound identities (secp256k1 auth + Ed25519/X25519 enc),
                 signed binding, keystore seam, epoch crypto (F-14/F-16)
   transport/    Transport interface + local/delivery transports (inv 8)
-  coordination/ multi-party session · intent lifecycle = reduce(log)
+  coordination/ multi-party session · intent lifecycle = reduce(log) · readiness ·
+                information-flow view · offers/material folds
   wallet/       chain-agnostic wallet: EVM + mock + real LEZ adapters (send assets via Logos), verified reads
   plugins/      plugin sandbox (inv 3)
 nim-lib/        muster_gen.nim (generated) + muster_module.nim (hosted surface)
