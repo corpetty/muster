@@ -61,6 +61,15 @@ method describe*(m: MockChain): ChainDescriptor =
                   nativeAsset: m.native, accountForms: @[afPublic, afShielded],
                   finality: finDelayed)
 
+method securityLevel*(m: MockChain): SecurityLevel =
+  ## The shielded chain is the REAL confidentiality level at the same seam the transparent
+  ## EVM adapter fills with the null (exo-1ec.5): amounts and parties are hidden on the
+  ## shielded rail. A consumer reads this rung; it never branches on `m of MockChain`.
+  securityLevel(
+    axisLevel(rungNull, "chain does not authenticate the room member"),
+    axisLevel(rungNull, "reads from untrusted RPC (invariant 8)"),
+    axisLevel(rungReal, "shielded accounts — amounts and parties hidden"))
+
 method accounts*(m: MockChain, ks: Keystore): seq[Account] =
   ## Two forms from one identity: a public id off the secp address, and a shielded
   ## key-set off the encryption identity (which does not appear on any public rail).

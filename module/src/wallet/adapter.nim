@@ -18,7 +18,8 @@
 import std/tables
 import ./types
 import ../crypto/keystore
-export types
+import ../security/levels
+export types, levels
 
 type
   ChainAdapter* = ref object of RootObj
@@ -26,6 +27,18 @@ type
 
 method describe*(a: ChainAdapter): ChainDescriptor {.base.} =
   raise newException(WalletError, "ChainAdapter.describe is abstract")
+
+method securityLevel*(a: ChainAdapter): SecurityLevel {.base.} =
+  ## The null-ladder level this adapter provides (exo-1ec.5), as a TYPED attribute a
+  ## consumer reads — never inferred by branching on the concrete adapter type. The axis a
+  ## chain seam governs is CONFIDENTIALITY (a transparent chain is the null, a shielded one
+  ## the real thing at the same seam). It does not authenticate the room member (the room
+  ## does) and reads from untrusted RPC (invariant 8), so the base declares both of those
+  ## null with an honest mechanism; a shielded adapter overrides confidentiality to real.
+  securityLevel(
+    axisLevel(rungNull, "chain does not authenticate the room member"),
+    axisLevel(rungNull, "reads from untrusted RPC (invariant 8)"),
+    axisLevel(rungNull, "transparent — amounts and parties public"))
 
 method accounts*(a: ChainAdapter, ks: Keystore): seq[Account] {.base.} =
   ## Derive this chain's account(s) from the module identity — an EVM address, a

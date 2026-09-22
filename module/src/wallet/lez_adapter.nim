@@ -44,6 +44,16 @@ method describe*(a: LezAdapter): ChainDescriptor =
                   nativeAsset: a.native, accountForms: @[afPublic, afShielded],
                   finality: finDelayed)
 
+method securityLevel*(a: LezAdapter): SecurityLevel =
+  ## The real LEZ offers the real confidentiality level (exo-1ec.5): a shielded rail where
+  ## the amount is public only if a party is public (the education square, docs/design/
+  ## lez-adapter.md). The adapter declares `real` here; WHICH rail a given transfer takes,
+  ## and its per-rail disclosure, is the manifest's job — this is the seam's capability.
+  securityLevel(
+    axisLevel(rungNull, "chain does not authenticate the room member"),
+    axisLevel(rungNull, "reads from untrusted RPC (invariant 8)"),
+    axisLevel(rungReal, "shielded rail — private/shield/deshield hide amount and parties"))
+
 method accounts*(a: LezAdapter, ks: Keystore): seq[Account] =
   ## One public + one private account from this identity. Created once and cached —
   ## the LEZ wallet persists them; re-creating per call would mint new ids each time.
