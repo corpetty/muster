@@ -127,16 +127,39 @@ Rectangle {
     // A remedy that lives in Settings (an RPC to configure / repoint).
     signal openSettings()
     property bool needsOpen: false
-    // The "From you" material-share picker (exo-45e K6) is for a counterparty-address /
-    // holdings flow; on a Safe payment its offers are degenerate (it lists the Safe
-    // address as a "safe-owner", your own address as the "to") and a Safe reaches
-    // threshold by SIGNING (Approve), not by sharing material — so the Share buttons do
-    // nothing visible. Hidden until the offers are meaningful per policy (follow-up
-    // exo-ec7); the rest of "What this needs" (needs / touches / who-sees-what) stays.
-    readonly property bool showFromYou: false
     readonly property var readiness: (cardRoot.card && cardRoot.card.readiness) ? cardRoot.card.readiness : null
     // "From you" (exo-45e K6): which of my own holdings fill the slots this asks of me.
     readonly property var offers: (cardRoot.card && cardRoot.card.offers) ? cardRoot.card.offers : null
+    // The policy this intent runs under (from readiness), used to gate the picker below.
+    readonly property string policy: (cardRoot.readiness && cardRoot.readiness.policy)
+                                     ? String(cardRoot.readiness.policy) : ""
+    // The slots I fill by DISCLOSING material — an address or asset the effect needs
+    // before it completes. Authority slots are excluded on purpose: those are filled by
+    // SIGNING (the Approve button), never by sharing, so they don't belong in this picker.
+    readonly property var shareableOffers: {
+        var out = [];
+        var offs = (cardRoot.offers && cardRoot.offers.offers) ? cardRoot.offers.offers : [];
+        for (var i = 0; i < offs.length; ++i) {
+            var k = (offs[i].requirement && offs[i].requirement.kind)
+                    ? String(offs[i].requirement.kind) : "";
+            if (k === "address" || k === "asset") out.push(offs[i]);
+        }
+        return out;
+    }
+    // The "From you" material-share picker (exo-45e K6/exo-647c) shows only when a driver
+    // that CONSUMES shared material (invoke / Mode B, the coordinated transfer) asks me
+    // for a slot I actually hold something for. Hidden for the Safe policy: its payee is
+    // filled by the ask-then-disclose address card and it reaches threshold by SIGNING, so
+    // a shared material folds into nothing the card shows (the old degenerate case). The
+    // rest of "What this needs" (needs / touches / who-sees-what) shows regardless.
+    readonly property bool showFromYou: {
+        if (cardRoot.policy === "safe") return false;
+        var offs = cardRoot.shareableOffers;
+        for (var i = 0; i < offs.length; ++i)
+            if (offs[i].status === "satisfiable" && offs[i].candidates
+                && offs[i].candidates.length > 0) return true;
+        return false;
+    }
     readonly property int declines: cardRoot.card ? Number(cardRoot.card.declines || 0) : 0
     readonly property var decliners: (cardRoot.card && cardRoot.card.decliners) ? cardRoot.card.decliners : []
     readonly property bool declinedByMe: !!(cardRoot.card && cardRoot.card.declinedByMe)
@@ -1091,15 +1114,14 @@ Rectangle {
                 // of me — graded about me only. Each candidate shows its public face, its
                 // F-10 grade, and what choosing it discloses; a pick shares the PUBLIC face.
                 LogosText {
-                    visible: cardRoot.showFromYou && cardRoot.needsOpen && cardRoot.offers && cardRoot.offers.offers
-                             && cardRoot.offers.offers.length > 0
+                    visible: cardRoot.showFromYou && cardRoot.needsOpen && cardRoot.shareableOffers.length > 0
                     text: qsTr("From you:")
                     color: Theme.palette.textSecondary
                     font.pixelSize: Theme.typography.badgeText
                     font.weight: Theme.typography.weightMedium
                 }
                 Repeater {
-                    model: (cardRoot.showFromYou && cardRoot.needsOpen && cardRoot.offers && cardRoot.offers.offers) ? cardRoot.offers.offers : []
+                    model: (cardRoot.showFromYou && cardRoot.needsOpen) ? cardRoot.shareableOffers : []
                     delegate: ColumnLayout {
                         id: offerSlot
                         required property var modelData
