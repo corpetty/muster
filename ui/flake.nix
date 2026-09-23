@@ -11,8 +11,12 @@
     # derivation and breaks its Nim build (pkg/results). Tracked tree == what
     # `cd module && nix build` uses. Commit module changes for them to be seen.
     # RELATIVE (`../` = the repo root from ui/), so it resolves from any clone —
-    # not a machine-local absolute path (exo-1ec.2). `make build` relocks this
-    # input to the repo's current committed state before every build.
+    # not a machine-local absolute path (exo-1ec.2). A plain `nix build` here uses this
+    # pin directly. NOTE (exo-fb7): nix re-fetches a relative git input at eval time
+    # ("file:../ not supported") and that fetch + the eval cache can go stale, so
+    # `make build` does NOT rely on this ref — it OVERRIDES muster_module with an absolute
+    # git+file path derived from $(CURDIR) (portable, computed at build time) and disables
+    # the eval cache, making .run/runner a deterministic function of the committed tree.
     muster_module.url = "git+file:../?dir=module";
     # ADR-013: build the UI on a basecamp-COHERENT builder instead of following
     # muster_module's Nim-cdylib builder, so the generated client + QtRO view-glue
