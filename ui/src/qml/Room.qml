@@ -129,10 +129,11 @@ Item {
         try { return JSON.parse(backend ? backend.activityJson : "[]"); }
         catch (e) { return []; }
     }
-    // Liveness of the infrastructure the room relies on (connectivity):
-    // {rpc:{name,level,endpoint,detail}, delivery:{name,level,detail}}. Invariant 8
-    // — the store nodes and RPC are untrusted, user-chosen infra, so their status
-    // is shown, never assumed.
+    // Liveness of the infrastructure the room relies on (connectivity): {rows:[…]} —
+    // the delivery node, plus whatever the room's proposals' drivers introduced (the
+    // RPC appears only once a Safe proposal is on the log, exo-428). Invariant 8 — the
+    // store nodes and RPC are untrusted, user-chosen infra, so their status is shown,
+    // never assumed.
     readonly property var connectivity: {
         try { return JSON.parse(backend ? backend.connectivityJson : "{}"); }
         catch (e) { return ({}); }
@@ -1713,9 +1714,10 @@ Item {
         }
     }
 
-    // Connectivity on a slower cadence than the message tick: the RPC probe makes a
-    // blocking eth_chainId call (short timeout), so probing it every second would
-    // stutter the room. Every 5s is plenty to keep the indicators honest.
+    // Connectivity on a slower cadence than the message tick: once a Safe proposal has
+    // introduced the RPC, its probe makes a blocking eth_chainId call (short timeout),
+    // so probing it every second would stutter the room. Every 5s is plenty to keep the
+    // indicators honest. A room without such a proposal never probes the RPC at all.
     Timer {
         interval: 5000
         running: room.joined

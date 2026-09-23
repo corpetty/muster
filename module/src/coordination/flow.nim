@@ -101,13 +101,18 @@ proc toJson*(rows: seq[FlowRow]): JsonNode =
     result.add %*{"seq": r.seq, "kind": r.kind, "intentId": r.intentId, "field": r.field,
                   "to": $r.to, "members": ms, "epoch": r.epoch, "declared": r.declared}
 
-proc observerMatrix*(rows: seq[FlowRow]): JsonNode =
+proc observerMatrix*(rows: seq[FlowRow], introduced: seq[Observer] = @[]): JsonNode =
   ## The summary the view leads with: per observer class, the distinct fields it
-  ## could see across the whole log — the "who sees what" square.
+  ## could see across the whole log — the "who sees what" square. The room and the
+  ## store node are always observers (the conversation's own baseline, FS-9); an
+  ## outside observer (RPC provider, chain, target module) is listed only once a
+  ## proposal INTRODUCES it — `introduced` (room_infra.introducedObservers) — or a row
+  ## already names it. A room that only talks never lists an RPC provider (exo-428).
   var byObs = initOrderedTable[string, HashSet[string]]()
   for o in [obRoomMember, obStoreNode, obRpcProvider, obChainObserver, obTargetModule]:
-    byObs[$o] = initHashSet[string]()
-  for r in rows: byObs[$r.to].incl r.field
+    if o in {obRoomMember, obStoreNode} or o in introduced:
+      byObs[$o] = initHashSet[string]()
+  for r in rows: byObs.mgetOrPut($r.to, initHashSet[string]()).incl r.field
   result = newJObject()
   for o, fs in byObs:
     var arr: seq[string]
