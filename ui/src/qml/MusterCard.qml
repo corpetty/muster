@@ -68,6 +68,10 @@ Rectangle {
                 : cls === "plugin-block" ? qsTr("emitted by a plugin") : "";
         var parts = [];
         if (who.length > 0) parts.push(who);
+        // an approval's grade (exo-ef1): whether it commits to its inputs
+        var grade = String((item && item.attestation) || "");
+        if (grade === "committed") parts.push(qsTr("committed — attested in muster"));
+        else if (grade === "unattested") parts.push(qsTr("unattested — pasted from outside muster"));
         if (why.length > 0) parts.push(why);
         if (pos !== "") parts.push(qsTr("log #%1").arg(pos));
         return parts.join("  ·  ");
@@ -247,6 +251,9 @@ Rectangle {
     readonly property int signerCount: cardRoot.card
         ? Number(cardRoot.card.n || cardRoot.card.threshold || 0) : 0
     readonly property int approvals: cardRoot.card ? Number(cardRoot.card.approvals || 0) : 0
+    // exo-ef1: approvals signed in muster commit to their inputs (attested); ones signed
+    // elsewhere and pasted in count, but commit to nothing beyond the transaction.
+    readonly property int unattested: cardRoot.card ? Number(cardRoot.card.unattested || 0) : 0
     // Multi-round (FROST): how many rounds the driver runs, which round is collecting,
     // and the distinct approvals THIS round. rounds == 1 for single-round drivers, and
     // the round chrome then stays hidden.
@@ -608,6 +615,10 @@ Rectangle {
                         // Filled up to the approvals so far; initials come from
                         // the approvers array when it is long enough.
                         readonly property bool filled: slot.index < cardRoot.approvals
+                        // committed approvals fill first; the last `unattested` filled
+                        // slots are the pasted ones, drawn as a ring, not a solid dot.
+                        readonly property bool pasted: slot.filled
+                            && slot.index >= cardRoot.approvals - cardRoot.unattested
                         readonly property var who: cardRoot.card && cardRoot.card.approvers
                             && slot.index < cardRoot.card.approvers.length
                             ? cardRoot.card.approvers[slot.index] : null
@@ -615,16 +626,16 @@ Rectangle {
                         implicitWidth: 22
                         implicitHeight: 22
                         radius: 11
-                        color: slot.filled ? Theme.palette.success : "transparent"
-                        border.width: slot.filled ? 0 : 1
-                        border.color: Theme.palette.borderDefault
+                        color: slot.filled && !slot.pasted ? Theme.palette.success : "transparent"
+                        border.width: slot.pasted ? 2 : (slot.filled ? 0 : 1)
+                        border.color: slot.pasted ? Theme.palette.warning : Theme.palette.borderDefault
 
                         LogosText {
                             anchors.centerIn: parent
                             visible: slot.filled
                             text: slot.who && slot.who.initials
                                 ? String(slot.who.initials) : ""
-                            color: Theme.palette.background
+                            color: slot.pasted ? Theme.palette.warning : Theme.palette.background
                             font.pixelSize: Theme.typography.badgeText
                             font.weight: Theme.typography.weightMedium
                         }
@@ -642,6 +653,22 @@ Rectangle {
                     font.pixelSize: Theme.typography.badgeText
                     font.weight: Theme.typography.weightMedium
                 }
+            }
+
+            // Committed vs unattested, in words — only when something was pasted in, so a
+            // card whose approvals were all signed in muster stays quiet.
+            LogosText {
+                objectName: "cardUnattested"
+                visible: cardRoot.unattested > 0
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: (cardRoot.approvals - cardRoot.unattested > 0
+                        ? qsTr("%1 signed in muster — committed to where every input came from. ")
+                              .arg(cardRoot.approvals - cardRoot.unattested)
+                        : "")
+                    + qsTr("%n signed outside muster and pasted in (ringed) — counted, but committed to nothing beyond the transaction itself.", "", cardRoot.unattested)
+                color: Theme.palette.warning
+                font.pixelSize: Theme.typography.badgeText
             }
 
             // trace these: each filled slot is a driver-contribution the driver

@@ -835,7 +835,9 @@ proc musterCoordinateIntents(): string =
       prov.add %*{"class": $item.cls, "logPos": item.logPos,
                   "account": item.account, "alias": alias,
                   "accountable": item.accountable, "what": item.what,
-                  "detail": item.detail, "guarantee": item.guarantee}
+                  "detail": item.detail, "guarantee": item.guarantee,
+                  # an approval's grade (exo-ef1): committed | unattested; "" otherwise
+                  "attestation": item.attestation}
     o["provenance"] = prov
     arr.add o
   $arr

@@ -313,6 +313,11 @@ Item {
             threshold: Number((it && it.threshold) || 0),
             n: Number((it && it.n) || 0),
             approvals: Number((it && it.approvals) || 0),
+            // how many approvals commit to their inputs (signed in muster, attested) vs
+            // were signed outside muster and pasted in (exo-ef1). Older payloads carry
+            // neither: treat every approval as committed-unknown by leaving both 0.
+            committed: Number((it && it.committed) || 0),
+            unattested: Number((it && it.unattested) || 0),
             state: cardState,
             // the verify view: the re-derived safeTxHash and the domain it binds to
             txhash: (it && it.txhash) ? String(it.txhash) : "",
