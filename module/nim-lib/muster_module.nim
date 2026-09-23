@@ -10,7 +10,7 @@
 
 include muster_gen
 
-import std/[json, tables, strutils, os, algorithm, times, sets]
+import std/[json, tables, strutils, os, algorithm, times, sets, sequtils]
 import ../src/dcbor/dcbor
 import ../src/drivers/driver
 import ../src/drivers/safe
@@ -41,6 +41,7 @@ import ../src/hashing/sha256
 import ../src/log/proof                # exportable, self-verifying log proofs (M4)
 import ../src/coordination/audit       # the signature-audit file (exo-403)
 import ../src/coordination/flow        # the information-flow view (M5)
+import ../src/coordination/room_infra  # the infrastructure the room's proposals introduce (exo-428)
 import ../src/intents/authorization    # muster-issued authorizations for the host hook (M7)
 import ../src/coordination/lp_invoker  # LpInvoker — call the target module over lp_*
 import ../src/coordination/discovery   # discover coordinatable module actions (P-D3)
@@ -1020,7 +1021,8 @@ proc musterCoordinateFlow(): string =
     let hexId = toHex(mem.toBytes())
     if hexId notin admitted: founders.add hexId
   let rows = reduceFlow(events, driverFor, founders)
-  result = $(%*{"rows": rows.toJson(), "matrix": rows.observerMatrix()})
+  result = $(%*{"rows": rows.toJson(),
+                 "matrix": rows.observerMatrix(introducedObservers(events, driverFor))})
   if gLpDebug: stderr.writeLine("MUSTER-LP flow " & result)
 
 proc musterCoordinateAuthorization(intentId: string): string =
@@ -1068,6 +1070,26 @@ proc lezReadyClosure(adapter: LezAdapter, minRaw: string): proc(): Grade {.gcsaf
     of "missing": (rdMissing, d)
     else: (rdUnknown, d))
 
+proc hostFacts(): HostFacts =
+  ## The host's facts → the readiness probe. The Safe owner set is the driver's (it
+  ## recognizes this instance too, see driverForKind); the roster is the membership fold.
+  var facts = HostFacts(rpcUrl: gRpcUrl, expectedChainId: gDriver.chainId.int,
+                        myAddress: myAddress(), myEd: moduleKeystore().encIdentity().ed,
+                        signers: gDriver.owners, roster: currentRoster(),
+                        safe: gDriver.safe)
+  # The Safe owner set is read FROM THE CHAIN (getOwners, F-10), never a configured or
+  # self-injected set: without a chain read the authority grade is unknown, and a key the
+  # chain does not recognize grades missing (rule s4, contracts/specs/derived-exo-45e, K3).
+  if gInvoker == nil: gInvoker = newLpInvoker("muster_module")
+  facts.invoker = gInvoker
+  # A LEZ action's `lez-account` requirement is graded against the live zone (exo-44b L2):
+  # detect only — the remedy names the LEZ Wallet App. `gLez` may be nil (LEZ not yet
+  # initialized) → the closure stays nil → the requirement grades unknown, never a false
+  # met. The adapter is a PARAM (not the captured global) so the closure is gcsafe.
+  if gLez != nil:
+    facts.lezReady = lezReadyClosure(gLez, "1")   # "1" = a funded account (any spendable balance)
+  facts
+
 proc musterCoordinateReadiness(intentId: string): string =
   ## The proposal card's five questions for ONE room intent — what will it do (the
   ## effect), what is needed (requirements), what will it touch, what will happen (the
@@ -1087,24 +1109,7 @@ proc musterCoordinateReadiness(intentId: string): string =
   let drv = driverForKind(policy)
   let effect = effectFromJson(effectJson)
   let m = drv.manifest(effect)
-  # The host's facts → the probe. The Safe owner set is the driver's (it recognizes
-  # this instance too, see driverForKind); the roster is the membership fold.
-  var facts = HostFacts(rpcUrl: gRpcUrl, expectedChainId: gDriver.chainId.int,
-                        myAddress: myAddress(), myEd: moduleKeystore().encIdentity().ed,
-                        signers: gDriver.owners, roster: currentRoster(),
-                        safe: gDriver.safe)
-  # The Safe owner set is read FROM THE CHAIN (getOwners, F-10), never a configured or
-  # self-injected set: without a chain read the authority grade is unknown, and a key the
-  # chain does not recognize grades missing (rule s4, contracts/specs/derived-exo-45e, K3).
-  if gInvoker == nil: gInvoker = newLpInvoker("muster_module")
-  facts.invoker = gInvoker
-  # A LEZ action's `lez-account` requirement is graded against the live zone (exo-44b L2):
-  # detect only — the remedy names the LEZ Wallet App. `gLez` may be nil (LEZ not yet
-  # initialized) → the closure stays nil → the requirement grades unknown, never a false
-  # met. The adapter is a PARAM (not the captured global) so the closure is gcsafe.
-  if gLez != nil:
-    facts.lezReady = lezReadyClosure(gLez, "1")   # "1" = a funded account (any spendable balance)
-  let r = assessReadiness(m, probeFromFacts(facts))
+  let r = assessReadiness(m, probeFromFacts(hostFacts()))
   var o = r.toJson()
   o["intentId"] = %intentId
   o["policy"] = %policy
@@ -1130,22 +1135,25 @@ proc musterCoordinateActivity(): string =
                "account": a.account, "title": a.title, "detail": a.detail}
   $arr
 
+proc introducersJson(who: seq[Introducer]): JsonNode =
+  result = newJArray()
+  for w in who: result.add %*{"intentId": w.intentId, "policy": w.policy}
+
 proc musterConnectivity(): string =
   ## Liveness of the infrastructure the room relies on (invariant 8: store nodes and
   ## RPC are untrusted, user-chosen infra — so their reachability must be *visible*,
-  ## never assumed). The RPC endpoint the wallet/Safe path reads, and the delivery
-  ## node the room rides. Probed live; never a false green. Levels: "ok" (up and the
-  ## expected chain / node running), "warn" (reachable but not what we expect), "down"
-  ## (unreachable / no node). Returns {rpc:{name,level,endpoint,detail},
-  ## delivery:{name,level,detail}}.
-  let (rpcOk, rpcChain, rpcDetail) = probeRpc(gRpcUrl)
-  let rpcLevel = if not rpcOk: "down"
-                 elif rpcChain == gDriver.chainId.int: "ok"
-                 else: "warn"
-  let rpc = %*{"name": "RPC", "level": rpcLevel, "endpoint": gRpcUrl,
-               "detail": (if rpcOk and rpcChain != gDriver.chainId.int:
-                            rpcDetail & " (the Safe expects chain " & $gDriver.chainId.int & ")"
-                          else: rpcDetail)}
+  ## never assumed) — and ONLY the infrastructure it relies on (exo-428). The room's
+  ## own baseline is the delivery node its encrypted transport rides. Everything else
+  ## is dictated by the drivers: a proposal whose manifest declares an instance-party
+  ## infra/environment requirement INTRODUCES it (room_infra.roomInfraNeeds, a pure fold
+  ## over the log), and the row names the proposals that brought it in. A room that
+  ## only decides or talks never probes an RPC; the first Safe proposal brings the RPC
+  ## and the chain it must serve into view. An undeclared driver shows as unknown
+  ## infrastructure, never guessed. Probed live; never a false green. Levels: "ok",
+  ## "warn" (reachable but not what the proposal needs), "down", "unknown".
+  ## Returns {rows:[{key,name,level,detail,source,endpoint?,remedy?,introducedBy:[{intentId,policy}]}]}.
+  var rows = newJArray()
+  # ── the room's baseline: the delivery node (source "room") ──────────────────
   var delLevel = "down"
   var delDetail = "no node — join a room to start it"
   if gSession != nil:
@@ -1163,8 +1171,71 @@ proc musterConnectivity(): string =
       except CatchableError: discard
     else:
       delLevel = "warn"; delDetail = "joined; node info unavailable"
-  let delivery = %*{"name": "Delivery", "level": delLevel, "detail": delDetail}
-  $(%*{"rpc": rpc, "delivery": delivery})
+  rows.add %*{"key": "delivery", "name": "Delivery", "level": delLevel, "detail": delDetail,
+              "source": "room", "introducedBy": []}
+  if gSession == nil:
+    result = $(%*{"rows": rows})
+    if gLpDebug: stderr.writeLine("MUSTER-LP connectivity " & result)
+    return
+  gSession.poll()
+  let needs = roomInfraNeeds(gSession.log.allEvents(), driverFor)
+  # ── the RPC: one endpoint serves both an `infra:rpc` need and every `environment:
+  # chain:<id>` need, so they fold into ONE row, probed once (eth_chainId) against the
+  # chain(s) the introducing proposals need.
+  var rpcWho: seq[Introducer]
+  var chains: seq[int]
+  for n in needs:
+    if not n.declared: continue
+    let r = n.requirement
+    if (r.kind == rqInfra and r.name == "rpc") or
+       (r.kind == rqEnvironment and r.name.startsWith("chain:")):
+      for w in n.introducedBy: (if w notin rpcWho: rpcWho.add w)
+      if r.kind == rqEnvironment:
+        try: (let c = parseInt(r.name[6 .. ^1]); (if c notin chains: chains.add c))
+        except ValueError: discard
+  if rpcWho.len > 0:
+    var level, detail: string
+    if gRpcUrl.len == 0:
+      level = "down"; detail = "no RPC endpoint configured"
+    else:
+      let (ok, chain, d) = probeRpc(gRpcUrl)
+      if not ok: (level = "down"; detail = d)
+      elif chains.len == 0 or chain in chains: (level = "ok"; detail = d)
+      else:
+        level = "warn"
+        detail = d & " (the proposal needs chain " & chains.mapIt($it).join(" / ") & ")"
+    rows.add %*{"key": "rpc", "name": "RPC", "level": level, "detail": detail,
+                "endpoint": gRpcUrl, "source": "proposal",
+                "remedy": (if level == "ok": "" else: "point the RPC setting at a node for chain " &
+                            chains.mapIt($it).join(" / ") & " (Settings)"),
+                "introducedBy": introducersJson(rpcWho)}
+  # ── every other declared need, graded by the SAME readiness probe the card uses ──
+  var probe: ReadinessProbe
+  var probed = false
+  for n in needs:
+    if not n.declared:
+      rows.add %*{"key": "undeclared", "name": "Undeclared driver", "level": "unknown",
+                  "detail": "a proposal's driver has not declared what it needs — its infrastructure is unknown",
+                  "source": "proposal", "introducedBy": introducersJson(n.introducedBy)}
+      continue
+    let r = n.requirement
+    if (r.kind == rqInfra and r.name == "rpc") or
+       (r.kind == rqEnvironment and r.name.startsWith("chain:")): continue
+    if not probed: (probe = probeFromFacts(hostFacts()); probed = true)
+    let f = if r.kind == rqInfra: probe.infraConfigured else: probe.environmentReachable
+    var g: Grade = (rdUnknown, "this host cannot check " & r.name)
+    if f != nil:
+      try: g = f(r.name)
+      except CatchableError as e: g = (rdUnknown, "probe failed: " & e.msg)
+    let level = case g.status
+                of rdMet: "ok"
+                of rdMissing: "down"
+                of rdUnknown: "unknown"
+    rows.add %*{"key": $r.kind & ":" & r.name, "name": r.name, "level": level, "detail": g.detail,
+                "source": "proposal", "remedy": (if g.status == rdMet: "" else: remedyFor(r)),
+                "introducedBy": introducersJson(n.introducedBy)}
+  result = $(%*{"rows": rows})
+  if gLpDebug: stderr.writeLine("MUSTER-LP connectivity " & result)
 
 proc musterCoordinateAccount(): string =
   ## The room's sending context for the composer — WHAT an intent proposed here would

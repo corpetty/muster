@@ -161,9 +161,10 @@ class MusterUi
     // {error}) lands on executeJson; intents reload. The driver never invokes (inv 3).
     SLOT(void executeInRoom(const QString &intentId))
 
-    // Liveness of the infrastructure the room relies on (connectivity): probes the
-    // RPC endpoint and the delivery node, landing {rpc, delivery} on connectivityJson.
-    // Refreshed on a slower cadence than the message tick (the RPC probe blocks).
+    // Liveness of the infrastructure the room relies on (connectivity): the delivery
+    // node, plus whatever the room's proposals' drivers introduced (the RPC only once a
+    // Safe proposal is on the log, exo-428), landing {rows} on connectivityJson.
+    // Refreshed on a slower cadence than the message tick (an RPC probe blocks).
     SLOT(void loadConnectivity())
 
     // The room's active null-ladder level on the three axes (security_levels, exo-1ec.5):
@@ -267,8 +268,9 @@ class MusterUi
     PROP(QString activityJson="[]" READONLY)
 
     // Liveness of the room's infrastructure (connectivity), as JSON
-    // {rpc:{name,level,endpoint,detail}, delivery:{name,level,detail}}. level is
-    // ok/warn/down; the room renders each as a status indicator (invariant 8).
+    // {rows:[{key,name,level,detail,source,endpoint?,remedy?,introducedBy}]}. level is
+    // ok/warn/down/unknown; source is "room" (delivery) or "proposal" (driver-introduced);
+    // the room renders each as a status indicator naming why it is there (invariant 8).
     PROP(QString connectivityJson="{}" READONLY)
     PROP(QString securityLevelsJson="{}" READONLY)
 

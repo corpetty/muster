@@ -10,7 +10,9 @@ import Logos.Controls
 // matrix (per observer class, every field it could see across the log), then the
 // per-action rows on demand. The store node is always present: a view that taught
 // "who can see what" and omitted the observer who sees the most would be marketing
-// (docs/00-vision.md, FS-9).
+// (docs/00-vision.md, FS-9). Outside observers (your RPC provider, the chain, a
+// target module) are listed only once the module's matrix carries them — i.e. once a
+// proposal's driver names them (exo-428); a room that only talks lists none.
 //
 // Pure-render: the only input is `flow` ({rows, matrix}); no signals out.
 Item {
@@ -36,6 +38,7 @@ Item {
         var out = [];
         for (var i = 0; i < flowView.observerOrder.length; ++i) {
             var o = flowView.observerOrder[i];
+            if (!(o in flowView.matrix)) continue;   // not introduced by any proposal
             var fields = flowView.matrix[o] || [];
             out.push({ to: o, label: flowView.observerLabel(o),
                        fields: fields.length > 0 ? fields.join(", ") : qsTr("nothing yet") });

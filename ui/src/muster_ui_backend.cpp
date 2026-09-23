@@ -208,7 +208,7 @@ void MusterUiBackend::joinRoom(const QString &topic)
     loadMessages();
     loadMembers();
     loadIntents();
-    loadConnectivity();    // probe RPC + the freshly-booted delivery node
+    loadConnectivity();    // the delivery node + whatever this room's proposals introduced
     loadConversations();   // the room list — this join may have added a room
     loadDrivers();         // the room's admitted policy set (driver-as-proposal)
     loadPending();         // anyone already asking to join this topic
@@ -477,7 +477,8 @@ void MusterUiBackend::executeInRoom(const QString &intentId)
 
 void MusterUiBackend::loadConnectivity()
 {
-    // connectivity → liveness of the RPC endpoint + delivery node the room relies on
+    // connectivity → liveness of the infra the room relies on: its delivery node, plus
+    // what its proposals' drivers introduced (the RPC only once a Safe proposal exists)
     // (invariant 8). The RPC probe blocks briefly, so the view calls this on a slower
     // cadence than the 1s message tick.
     setConnectivityJson(modules().muster_module.connectivity());
@@ -632,10 +633,11 @@ void MusterUiBackend::loadPolicy()
 void MusterUiBackend::onContextReady()
 {
     // Fires once ui-host hands the plugin its wired modules(); read liveness, the
-    // account context, and the wallet balances so the view opens on real values.
+    // account context, and the settings so the view opens on real values. NOT the
+    // wallet balances: those read the RPC, and nothing has introduced an RPC yet
+    // (exo-428) — the Account tab and the LEZ send panel load them when opened.
     checkHealth();
     loadAccount();
-    loadBalances();
     loadSettings();
     // Begin listening on this identity's inbox so room invites (from "Start something
     // with someone") arrive even before any room is opened. Idempotent; safe on launch.
@@ -674,6 +676,7 @@ void MusterUiBackend::onContextReady()
                     loadReadiness(id);
                     if (!qgetenv("MUSTER_AUTODECLINE").isEmpty()) declineInRoom(id);
                     loadFlow();
+                    loadConnectivity();   // the proposal may have introduced infra (exo-428)
                     qInfo() << "[muster_ui] AUTOPROPOSE intents ->" << intentsJson();
                 });
             }
