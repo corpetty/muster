@@ -483,7 +483,7 @@ void MusterUiBackend::loadConnectivity()
 void MusterUiBackend::loadSecurityLevels()
 {
     // security_levels → the room's active null-ladder level on the three axes (exo-1ec.5),
-    // {axes:[{axis,rung,real,mechanism}]}. A pure fold (driver membership + the log +
+    // {axes:[{axis,rung,real,mechanism}]}. A pure fold (the driver + the log +
     // the room crypto), so it rides the slow tick beside connectivity/flow.
     setSecurityLevelsJson(modules().muster_module.security_levels());
 }
@@ -552,7 +552,7 @@ void MusterUiBackend::shareMaterial(const QString &intentId, const QString &requ
 void MusterUiBackend::declineInRoom(const QString &intentId)
 {
     // coordinate_decline → decline to take part: a decline event keyed by this member
-    // folds into the intent view (named under a named driver, a count otherwise).
+    // folds into the intent view, naming who declined.
     // Informational — the threshold is unchanged. Re-read the intents so the room
     // converges on the decline count.
     const QString r = modules().muster_module.coordinate_decline(intentId);
@@ -573,7 +573,7 @@ void MusterUiBackend::setPolicy(const QString &kind)
 {
     // coordinate_set_policy → choose the room's driver (safe | threshold). The same
     // propose/contribute/fold path runs under whichever; the policy is a driver, not
-    // hardcoded. Result is {policy, threshold, domain, membership}.
+    // hardcoded. Result is {policy, threshold, domain}.
     const QString r = modules().muster_module.coordinate_set_policy(kind);
     qInfo() << "[muster_ui] coordinate_set_policy(" << kind << ") ->" << r;
     setPolicyJson(r);

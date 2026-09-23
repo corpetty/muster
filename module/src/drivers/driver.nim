@@ -2,11 +2,12 @@
 ## contracts/specs/derived-exo-2dc.spec.json, invariant 6).
 ##
 ## The core never interprets contribution bytes — drivers do. Rounds, the
-## serialization domain, the membership model, and finality are all
-## *driver-described* via describe(), never hardcoded in the core. The core
-## treats a contribution as an opaque blob: it asks the driver to verify it and
-## routes on the boolean result plus the descriptor, so a different driver
-## (different round count / membership / finality) needs no core change.
+## serialization domain, the threshold, and finality are all *driver-described*
+## via describe(), never hardcoded in the core. The core treats a contribution as
+## an opaque blob: it asks the driver to verify it and routes on the boolean result
+## plus the descriptor, so a different driver (different round count / threshold /
+## finality) needs no core change. Every driver is NAMED — contributions are bound
+## to the member who made them (anonymous membership was retired, ADR-015).
 ##
 ## A stub driver lives here for the conformance probes; real drivers (Safe at
 ## P2, threshold at P6) implement the same interface.
@@ -15,10 +16,6 @@ import ../security/levels
 export levels
 
 type
-  MembershipModel* = enum
-    mmAnonymous = "anonymous"
-    mmNamed = "named"
-
   FinalityType* = enum
     finImmediate = "immediate"
     finProbabilistic = "probabilistic"
@@ -27,7 +24,6 @@ type
   DriverDescriptor* = object
     rounds*: int                 ## e.g. Safe r=1, FROST r=2 — never assumed
     serializationDomain*: string ## domain tag for contribution bytes
-    membership*: MembershipModel
     finality*: FinalityType
     threshold*: int              ## accepted contributions needed to close a round
 
@@ -37,15 +33,12 @@ type
   Driver* = ref object of RootObj
 
 proc securityLevel*(desc: DriverDescriptor): SecurityLevel =
-  ## The null-ladder AUTHENTICATION level a driver's membership model provides (exo-1ec.5).
-  ## A named driver binds each contribution to an identity (real); an anonymous driver is the
-  ## null — and that null is a LEGITIMATE TERMINAL (invariant 9), not a rung to climb off, so
-  ## nothing here forces it up. A driver governs neither confidentiality (the epoch layer) nor
-  ## provenance (the log), so those axes stay null.
-  let named = desc.membership == mmNamed
+  ## The null-ladder AUTHENTICATION level a driver provides (exo-1ec.5): every driver
+  ## binds each contribution to the member who made it, so authentication is real. A
+  ## driver governs neither confidentiality (the epoch layer) nor provenance (the log),
+  ## so those axes stay null.
   securityLevel(
-    axisLevel((if named: rungReal else: rungNull),
-              (if named: "bound identity (named driver)" else: "anonymous (legitimate terminal, inv 9)")),
+    axisLevel(rungReal, "bound identity (the driver verifies who contributed)"),
     axisLevel(rungNull, "provenance is the log's, not the driver's"),
     axisLevel(rungNull, "confidentiality is the epoch layer's, not the driver's"))
 
@@ -87,7 +80,6 @@ proc submit*(col: var Collection, driver: Driver, c: Contribution) =
 
 # Core-observable policy, always sourced from the descriptor (never hardcoded).
 proc roundCount*(col: Collection): int = col.descriptor.rounds
-proc membershipDispatch*(col: Collection): MembershipModel = col.descriptor.membership
 proc finalityHandling*(col: Collection): FinalityType = col.descriptor.finality
 
 # ── Stub driver: a configurable descriptor + a byte-independent verify result ──
@@ -103,10 +95,10 @@ method verifyContribution*(d: StubDriver, c: Contribution, round: int): bool =
   d.verifyResult
 
 proc newStubDriver*(rounds = 1, threshold = 2, domain = "muster.stub.v1",
-                    membership = mmAnonymous, finality = finImmediate,
+                    finality = finImmediate,
                     verifyResult = true): StubDriver =
   StubDriver(
     descriptor: DriverDescriptor(
       rounds: rounds, serializationDomain: domain,
-      membership: membership, finality: finality, threshold: threshold),
+      finality: finality, threshold: threshold),
     verifyResult: verifyResult)

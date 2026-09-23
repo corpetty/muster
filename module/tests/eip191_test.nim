@@ -39,7 +39,6 @@ block:
   let d = newPersonalSignDriver(signers = @[signer0], threshold = 1)
   let desc = d.describe()
   doAssert desc.rounds == 1
-  doAssert desc.membership == mmNamed
   doAssert desc.finality == finImmediate, "an attestation settles nothing on-chain"
   doAssert desc.serializationDomain == EIP191_DOMAIN
   echo "1. describe() — named, immediate-finality personal-sign attestation OK"

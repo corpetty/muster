@@ -4,18 +4,15 @@
 ## Every signature carries, and structurally commits to, an account of where each
 ## input that reached the signed bytes came from — by class (plugin block,
 ## driver-interpreted contribution, external read, peer message) and log position.
-## Signing is refused when any input's origin cannot be accounted for. Whether the
-## record also names the contributing account follows the driver's declared
-## membership model: silent under anonymous, named otherwise. The record is a
+## Signing is refused when any input's origin cannot be accounted for. The record
+## names the account that actually contributed each input. The record is a
 ## reduction over the log (rebuildable from log + keys, no side-car) and is scoped
 ## to the membership epoch of the entries it describes, so a keyless or later-
-## joining actor cannot reconstruct earlier lineage.
+## joining actor cannot reconstruct earlier lineage — the boundary is the room.
 
 import ../dcbor/dcbor
 import ../hashing/hash_input
-import ../drivers/driver     # MembershipModel
 import ../crypto/epochs      # epoch scoping (Group, canDerive)
-export driver
 
 type
   InputClass* = enum
@@ -27,7 +24,7 @@ type
   SignedInput* = object
     class*: InputClass
     logPos*: int          ## log position the input reached the signed bytes from
-    account*: string      ## contributing account (used only under a named model)
+    account*: string      ## the account that contributed this input
     accountable*: bool    ## can this input's origin be accounted for?
     epoch*: int           ## membership epoch the input belongs to
     valueBytes*: seq[byte] ## the input's actual value bytes
@@ -35,18 +32,16 @@ type
   ProvenanceEntry* = object
     class*: InputClass
     logPos*: int
-    account*: string      ## "" under anonymous membership
+    account*: string      ## the account that contributed this input
 
   ProvenanceRecord* = object
     entries*: seq[ProvenanceEntry]
 
-proc buildProvenance*(inputs: seq[SignedInput], membership: MembershipModel): ProvenanceRecord =
-  ## One entry per contributing input; the account is recorded only under a named
-  ## membership model, absent (not merely unshown) under an anonymous one.
+proc buildProvenance*(inputs: seq[SignedInput]): ProvenanceRecord =
+  ## One entry per contributing input, naming its class, position, and account.
   for inp in inputs:
     result.entries.add ProvenanceEntry(
-      class: inp.class, logPos: inp.logPos,
-      account: (if membership == mmNamed: inp.account else: ""))
+      class: inp.class, logPos: inp.logPos, account: inp.account)
 
 proc encodeProvenance*(rec: ProvenanceRecord): seq[byte] =
   var arr: seq[CborValue]
@@ -63,13 +58,12 @@ proc signedBytes*(materialization: seq[byte], rec: ProvenanceRecord): seq[byte] 
 
 type SignDecision* = enum sdRefused, sdSigned
 
-proc trySign*(materialization: seq[byte], inputs: seq[SignedInput],
-              membership: MembershipModel): SignDecision =
+proc trySign*(materialization: seq[byte], inputs: seq[SignedInput]): SignDecision =
   ## Refuse to sign when ANY input's origin cannot be accounted for; complete when
   ## every input can be.
   for inp in inputs:
     if not inp.accountable: return sdRefused
-  discard signedBytes(materialization, buildProvenance(inputs, membership))
+  discard signedBytes(materialization, buildProvenance(inputs))
   sdSigned
 
 proc coverageTwoWay*(inputs: seq[SignedInput], rec: ProvenanceRecord): bool =

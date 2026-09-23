@@ -28,7 +28,7 @@ For an intent the room has folded to **executable**, and only then, `coordinate_
 
 Properties the host can rely on:
 
-- **Nothing is authorized before agreement.** A non-executable intent yields `{error: not-executable}`. The room's threshold, rounds, and membership model came from the driver (invariant 6); the host does not re-implement any of it.
+- **Nothing is authorized before agreement.** A non-executable intent yields `{error: not-executable}`. The room's threshold, rounds, and finality came from the driver (invariant 6); the host does not re-implement any of it.
 - **Bound to one call.** The root is the materialization the room reviewed and every client re-derived (invariant 1); the context is environment + account + slot + expiry (invariant 2). A grant for one call is worthless for any other.
 - **Checkable without muster.** `checkAuthorization` is pure: recover the issuer from the signature over the digest, require `slot == intentId`, `now <= expiry`, and, supplied by the host, the root of the call about to be dispatched and the issuers the policy trusts. Refuse-on-mismatch with a named reason. The digest is a domain-separated dCBOR hash-input record (invariant 5), so any language can recompute it.
 - **The plugin dispatches nothing** (invariant 3). It says what the room decided in a form the host can check.
@@ -110,10 +110,10 @@ Revised after reading the draft (the earlier four questions are answered or refr
 
 1. **Is Basecamp implementing LOGOS-MODULE-CAPABILITY-AUTHORITY (312), and on what timeline?** If yes, the hook exists and the ask is policy: authorize `muster_module` to `issue_grant` for `provider_access` scopes narrowed to a method + route + expiry on the targets a room coordinates. If no, the interim path is this doc's `format` + `issuers` check in the broker.
 2. **Would the editors accept an optional *expected request value root* on `provider_access_scope`** so the enforcement boundary can refuse a call whose args differ from what was agreed, rather than only retaining the root for audit? This is the one spec change muster needs for argument-level prevention.
-3. **Who is the issuer of record** for a room's grant: the muster instance (named), or — for anonymous rooms — a threshold signature the room produces? The spec's `consumer` is an authenticated module-instance address, which names the instance either way; anonymity would need to live in the room, not the grant.
+3. **Who is the issuer of record** for a room's grant: the muster instance that submits, or a threshold signature the room produces over the same digest? The spec's `consumer` is an authenticated module-instance address, which names the instance either way; every muster driver is named (ADR-015), so that names nothing the room does not already know.
 4. **Hash-suite timeline.** Commitments are BLAKE3-256 under the draft; muster signs under SHA-256/keccak. When the profile ratifies, muster implements it and grant roots become the platform's call roots; until then roots are compared muster-side or in audit.
 
 ## Open, muster-side
 
-- Issuer set semantics under an **anonymous** driver: the grant is signed by *an* instance, which names it. For an anonymous room the grant should be a threshold signature over the same digest, which the FROST driver would produce once it is a real threshold scheme (see the claims registry's FROST gap).
+- Issuer set semantics: the grant is signed by *an* instance, which names it (fine inside a named room, ADR-015). A grant that speaks for the room as one signer would be a threshold signature over the same digest, which the FROST driver would produce once it is a real threshold scheme (see the claims registry's FROST gap).
 - `expiry` is fixed at 600s. It should come from the driver descriptor once finality types carry a settlement horizon.

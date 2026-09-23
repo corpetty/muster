@@ -61,14 +61,12 @@ block:
   doAssert cc.securityLevel().rungOf(axProvenance) == rungNull
   echo "4. ConversationCrypto: the epoch layer is the confidentiality real, null base OK"
 
-# ── 5. driver membership is the AUTHENTICATION axis (named real / anon null terminal) ─
+# ── 5. a driver is the AUTHENTICATION real: every driver binds the speaker ─────────
 block:
-  let named = newStubDriver(rounds = 1, threshold = 1, membership = mmNamed).describe().securityLevel()
-  let anon  = newStubDriver(rounds = 1, threshold = 1, membership = mmAnonymous).describe().securityLevel()
-  doAssert named.rungOf(axAuthentication) == rungReal, "a named driver binds the speaker"
-  doAssert anon.rungOf(axAuthentication) == rungNull, "an anonymous driver is the auth null"
-  doAssert anon.mechanismOf(axAuthentication).contains("terminal"), "the anon null is a legitimate terminal (inv 9)"
-  echo "5. driver membership maps to the authentication axis (named real / anon terminal null) OK"
+  let named = newStubDriver(rounds = 1, threshold = 1).describe().securityLevel()
+  doAssert named.rungOf(axAuthentication) == rungReal, "a driver binds the speaker"
+  doAssert named.mechanismOf(axAuthentication).len > 0, "the mechanism is named"
+  echo "5. a driver is the authentication real (it binds the speaker) OK"
 
 # ── 6. Transport declares NO security level (opaque byte carrier — no overclaim) ────
 block:
@@ -87,23 +85,21 @@ block:
                               axisLevel(rungNull, "-"))
   let seed2 = proc(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
   let cc = newEpochCrypto(newInMemoryKeystore(seed2(3), seed2(4)))
-  let drv = newStubDriver(rounds = 1, threshold = 1, membership = mmNamed).describe().securityLevel()
+  let drv = newStubDriver(rounds = 1, threshold = 1).describe().securityLevel()
   let active = combine(drv, cc.securityLevel(), logProv)
   doAssert active.rungOf(axAuthentication) == rungReal, "auth from the named driver"
   doAssert active.rungOf(axConfidentiality) == rungReal, "confidentiality from the epoch layer"
   doAssert active.rungOf(axProvenance) == rungReal, "provenance from the log"
-  # an ANONYMOUS room keeps auth at the null — combine does not invent a level.
-  let anonActive = combine(
-    newStubDriver(rounds = 1, threshold = 1, membership = mmAnonymous).describe().securityLevel(),
-    cc.securityLevel(), logProv)
-  doAssert anonActive.rungOf(axAuthentication) == rungNull, "an anonymous room stays at the auth null"
+  # without a driver, combine does not invent an authentication level.
+  doAssert combine(cc.securityLevel(), logProv).rungOf(axAuthentication) == rungNull,
+           "no driver → the auth null; combine invents nothing"
   echo "7. combine: the active room level is the strongest per axis, one envelope OK"
 
 # ── 8. toJson: the shape the security_levels surface returns / the UI renders ──────
 block:
   let seed3 = proc(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
   let active = combine(
-    newStubDriver(rounds = 1, threshold = 1, membership = mmNamed).describe().securityLevel(),
+    newStubDriver(rounds = 1, threshold = 1).describe().securityLevel(),
     securityLevel(axisLevel(rungNull, "-"), axisLevel(rungReal, "signed hash-linked log"), axisLevel(rungNull, "-")),
     newEpochCrypto(newInMemoryKeystore(seed3(5), seed3(6))).securityLevel())
   let j = active.toJson()

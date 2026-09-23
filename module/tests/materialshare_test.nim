@@ -2,8 +2,7 @@
 ## material enters the log ONLY through an explicit share act (rule s2), carrying its
 ## PUBLIC face and class but never a handle (rule s1). It folds once per (requirement,
 ## sharer), is idempotent under reorder/duplication (invariant 4), is classed peer-message
-## in provenance (F-20) — named under a named driver, a nonce under an anonymous one
-## (invariant 9) — and discloses its public face to the room in the flow view (rule s6),
+## in provenance (F-20) naming the sharer, and discloses its public face to the room in the flow view (rule s6),
 ## the outside rows waiting for submit. Pure Nim (stub driver).
 
 import std/[strutils, algorithm]
@@ -14,9 +13,7 @@ import ../src/coordination/flow
 let effectJson = """{"to":"0xabc","value":5}"""
 let id = intentIdFor(effectJson)
 let named: DriverFor = proc(kind: string): Driver =
-  newStubDriver(rounds = 1, threshold = 2, membership = mmNamed, verifyResult = true)
-let anon: DriverFor = proc(kind: string): Driver =
-  newStubDriver(rounds = 1, threshold = 2, membership = mmAnonymous, verifyResult = true)
+  newStubDriver(rounds = 1, threshold = 2, verifyResult = true)
 
 # ── 1. a share folds once per (requirement, sharer); reorder + duplicate are idempotent ─
 block:
@@ -52,16 +49,7 @@ block:
   doAssert found, "the material share appears in provenance"
   echo "2. provenance: a share is peer-message, named, guarantee is honest about control OK"
 
-# ── 3. anonymous driver: the share names nobody (invariant 9) ─────────────────────
-block:
-  let events = @[proposeEvent(id, effectJson),
-                 materialShareEvent(id, "payee", "nonce-xyz", "0xADDR", "public", "address", "to")]
-  for it in logProvenance(events, anon):
-    if it.kind == "material":
-      doAssert it.account == "", "anonymous driver: the share names nobody"
-  echo "3. anonymous driver: a share names nobody (inv 9) OK"
-
-# ── 4. flow: a share discloses its public face to the ROOM; outside rows wait for submit ─
+# ── 3. flow: a share discloses its public face to the ROOM; outside rows wait for submit ─
 block:
   let events = @[policyDeclEvent(id, "stub"), proposeEvent(id, effectJson),
                  materialShareEvent(id, "payee", "bob", "0xBOBADDR", "public", "address", "to")]
@@ -72,6 +60,6 @@ block:
     if r.kind == "material" and r.to == obChainObserver: sawOutsideAtShare = true
   doAssert sawRoomTo, "the shared 'to' value is disclosed to the room at the share"
   doAssert not sawOutsideAtShare, "nothing leaves the room at the share — outside rows wait for submit"
-  echo "4. flow: a share discloses its public face to the room; outside rows wait for submit OK"
+  echo "3. flow: a share discloses its public face to the room; outside rows wait for submit OK"
 
 echo "materialshare_test: all OK"

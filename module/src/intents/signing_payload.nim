@@ -18,7 +18,7 @@ import ../hashing/hash_input
 type
   SigningContext* = object
     environment*: string   ## environment id (chain / network)
-    account*: string       ## account or membership commitment
+    account*: string       ## the account (or, for a room-native decision, the room)
     slot*: string          ## serialization slot
     expiry*: uint64        ## unix-time expiry (payload invalid at/after now > expiry)
 

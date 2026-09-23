@@ -15,7 +15,7 @@ import ../../src/drivers/manifest
 import ../../src/wallet/material
 import ../../src/intents/disclosure
 
-let desc = DriverDescriptor(rounds: 1, threshold: 2, membership: mmNamed,
+let desc = DriverDescriptor(rounds: 1, threshold: 2,
                             finality: finExternal, serializationDomain: "eip712.safe.v1.4.1")
 let m = ActionManifest(declared: true, agreement: desc,
   requirements: @[req(rqAuthority, "safe-owner", rpContributor),

@@ -25,7 +25,7 @@ proc decisionCorrect(unattributable: int): bool =
         let unacc = (mask and (1 shl k)) != 0
         inputs.add SignedInput(class: classes[k mod 4], logPos: k, account: "a",
                                accountable: not unacc, epoch: 0)
-      let refused = trySign(@[1'u8, 2, 3], inputs, mmNamed) == sdRefused
+      let refused = trySign(@[1'u8, 2, 3], inputs) == sdRefused
       if refused != (unattributable > 0): return false
   true
 

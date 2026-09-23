@@ -5,7 +5,7 @@ import Logos.Theme
 import Logos.Controls
 
 // The room's scope panel: who is in the room, and the boundary line that says
-// how far what you type reaches. U-1/U-9 — the membership roster and the scope
+// how far what you type reaches. U-1 — the membership roster and the scope
 // are drawn on the same surface, because they are the same question asked twice:
 // "who can see this" is just "who is in the room" read from the reader's side.
 //
@@ -106,8 +106,7 @@ Item {
                         spacing: Theme.spacing.small
 
                         // rung dot: green when the real level is active, dim when the null
-                        // is still in place (a null is shown, not alarmed — it can be a
-                        // legitimate terminal, e.g. an anonymous room's authentication).
+                        // is still in place (a null is shown, not alarmed).
                         Rectangle {
                             Layout.alignment: Qt.AlignTop
                             Layout.topMargin: Theme.spacing.tiny

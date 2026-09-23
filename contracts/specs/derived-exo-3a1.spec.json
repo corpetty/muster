@@ -1,7 +1,7 @@
 {
   "id": "derived-exo-3a1",
   "original_statement": "Every time you sign something, save an audit trail of where that data came from.",
-  "restatement": "Every signature must carry, and structurally commit to, an account of where each input that reached the signed bytes came from, and must not be produced at all when any input cannot be accounted for: (s1) the encoded signing bytes change when the provenance of any input changes, holding the input values themselves byte-identical, so provenance is committed to rather than attached alongside; (s2) every input that reached the signed bytes has an entry in the provenance record naming its class (plugin block, driver-interpreted contribution, external read, peer message) and its log position, and every entry corresponds to an input that actually contributed; (s3) signing is refused whenever any input's origin cannot be accounted for, and completes when every input can be; (s4) where the driver declares an anonymous membership model the record contains no signer identity for any input class, and where it does not the record names the account that actually contributed; (s5) the provenance record is rebuildable from log plus keys alone, with no side-car audit store that could disagree with the log; (s6) the provenance record is confined to the conversation and scoped to the membership epoch of the entries it describes, and cannot be reconstructed without that epoch's keys.",
+  "restatement": "Every signature must carry, and structurally commit to, an account of where each input that reached the signed bytes came from, and must not be produced at all when any input cannot be accounted for: (s1) the encoded signing bytes change when the provenance of any input changes, holding the input values themselves byte-identical, so provenance is committed to rather than attached alongside; (s2) every input that reached the signed bytes has an entry in the provenance record naming its class (plugin block, driver-interpreted contribution, external read, peer message) and its log position, and every entry corresponds to an input that actually contributed; (s3) signing is refused whenever any input's origin cannot be accounted for, and completes when every input can be; (s4) the record names the account that actually contributed each input; (s5) the provenance record is rebuildable from log plus keys alone, with no side-car audit store that could disagree with the log; (s6) the provenance record is confined to the conversation and scoped to the membership epoch of the entries it describes, and cannot be reconstructed without that epoch's keys.",
   "restatement_clauses": [
     {
       "id": "s1",
@@ -17,7 +17,7 @@
     },
     {
       "id": "s4",
-      "text": "Where the driver declares an anonymous membership model the provenance record contains no signer identity for any input class; where it does not, the record names the account that actually contributed."
+      "text": "The provenance record names the account that actually contributed each input."
     },
     {
       "id": "s5",
@@ -28,12 +28,12 @@
       "text": "The provenance record is confined to the conversation and scoped to the membership epoch of the entries it describes, and cannot be reconstructed without that epoch's keys."
     }
   ],
-  "goal": "Every signature is accompanied by a provenance record, committed to by the signing payload, accounting for the origin of every input that reached the signed bytes \u2014 plugin block, driver-interpreted contribution, external read, peer message \u2014 by class and log position; the client refuses to sign when any input's origin cannot be accounted for; whether the record also names the contributing account follows the driver's declared membership model, staying silent under an anonymous one; and the record is readable only inside the conversation, scoped to the membership epoch of the entries it describes.",
+  "goal": "Every signature is accompanied by a provenance record, committed to by the signing payload, accounting for the origin of every input that reached the signed bytes \u2014 plugin block, driver-interpreted contribution, external read, peer message \u2014 by class and log position; the client refuses to sign when any input's origin cannot be accounted for; the record names the account that contributed each input; and the record is readable only inside the conversation, scoped to the membership epoch of the entries it describes.",
   "acceptance_criteria": [
     "The encoded signing bytes change when the provenance of any input changes, holding the input values themselves byte-identical.",
     "Every input that reached the signed bytes has an entry in the provenance record naming its class and its log position, and every entry corresponds to an input that actually contributed.",
     "Signing is refused whenever any input's origin cannot be accounted for, and completes when every input can be.",
-    "Where the driver declares an anonymous membership model the provenance record contains no signer identity for any input class; where it does not, the record names the account that actually contributed.",
+    "The provenance record names the account that actually contributed each input.",
     "The provenance record is rebuildable from log plus keys alone, with no side-car audit store.",
     "The provenance record is confined to the conversation and scoped to the membership epoch of the entries it describes, and cannot be reconstructed without that epoch's keys."
   ],
@@ -52,7 +52,7 @@
     },
     {
       "id": "c4",
-      "text": "Where the driver declares an anonymous membership model the provenance record contains no signer identity for any input class; where it does not, the record names the account that actually contributed."
+      "text": "The provenance record names the account that actually contributed each input."
     },
     {
       "id": "c5",
@@ -150,7 +150,7 @@
       "type": "model_check",
       "restatement_clause_id": "s4",
       "clause_id": "c4",
-      "proves": "The stepper enumerates the driver's declared membership model crossed with signer-to-input assignments, and asserts a DIFFERENT thing in each branch, which is what keeps the named branch from passing vacuously. Anonymous model: the record is byte-identical at every reachable assignment, so an identity that reached it \u2014 including one a view merely declines to render \u2014 diverges under some permutation and this pins 'absent' rather than 'unshown'. Named model: the record covaries exactly with the assignment, so the recorded account is the one that actually contributed rather than an arbitrary or stale value. Catches identity leaking through an anonymous driver, and a named driver recording a contributor it did not verify. Scoped per FS-7, which is itself conditional on the declared model \u2014 an unconditional no-identity rule would over-apply derived-exo-f60 beyond its own scope and strip the trail of its answering power in a named conversation, where every participant can disclose who signed regardless.",
+      "proves": "The stepper enumerates every signer-to-input assignment (by transposition from the identity) and requires the record to covary exactly with it: each entry names the account that actually contributed that input. Catches a record naming an arbitrary, stale, or swapped contributor. Amended by ADR-015 (2026-09-23): anonymous membership is retired, so there is no silent branch \u2014 the record always names, and s6 keeps it confined to the room's epoch.",
       "run": [
         "nim",
         "r",
@@ -160,7 +160,6 @@
       "cwd": "module",
       "initial": [
         {
-          "membership_model": "anonymous",
           "assignment": "identity",
           "identity_disclosure_correct": true
         }
@@ -171,7 +170,7 @@
         "value": true
       },
       "max_states": 60,
-      "description": "Where the driver declares an anonymous membership model the provenance record contains no signer identity for any input class; where it does not, the record names the account that actually contributed."
+      "description": "The provenance record names the account that actually contributed each input."
     },
     {
       "type": "property_test",

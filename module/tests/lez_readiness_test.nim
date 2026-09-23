@@ -62,7 +62,7 @@ block:
 
 # ── 5. readiness grades a lez-account requirement through the host closure ─────────
 block:
-  let desc = newStubDriver(finality = finImmediate, membership = mmAnonymous).describe()
+  let desc = newStubDriver(finality = finImmediate).describe()
   let m = ActionManifest(declared: true, agreement: desc,
                          requirements: @[req(rqInfra, "lez-account")])
   # unprovisioned → the item is missing, and the remedy names the LEZ Wallet App.

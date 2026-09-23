@@ -1,7 +1,7 @@
 {
   "id": "derived-exo-2dc",
-  "original_statement": "The core never interprets contribution bytes; drivers do. Rounds, serialization domain, membership model, and finality are driver-described, never hardcoded.",
-  "restatement": "The core must stay generic across coordination protocols, treating contribution bytes as opaque and driving purely from driver-declared policy: (s1) the core's own routing behavior is unaffected by what contribution bytes actually contain; (s2) the core's round count, membership-model dispatch, and finality handling always match exactly what the driver's describe() returns, never a hardcoded default; (s3) swapping in a different driver requires no core code changes \u2014 the core adapts purely from describe().",
+  "original_statement": "The core never interprets contribution bytes; drivers do. Rounds, serialization domain, threshold, and finality are driver-described, never hardcoded.",
+  "restatement": "The core must stay generic across coordination protocols, treating contribution bytes as opaque and driving purely from driver-declared policy: (s1) the core's own routing behavior is unaffected by what contribution bytes actually contain; (s2) the core's round count and finality handling always match exactly what the driver's describe() returns, never a hardcoded default; (s3) swapping in a different driver requires no core code changes \u2014 the core adapts purely from describe().",
   "restatement_clauses": [
     {
       "id": "s1",
@@ -9,18 +9,18 @@
     },
     {
       "id": "s2",
-      "text": "The core's round count, membership-model dispatch, and finality handling always match exactly what the driver's describe() returns, never a hardcoded default."
+      "text": "The core's round count and finality handling always match exactly what the driver's describe() returns, never a hardcoded default."
     },
     {
       "id": "s3",
-      "text": "Swapping in a different driver (different round count, membership model, finality type) requires no core code changes \u2014 the core adapts purely from describe()."
+      "text": "Swapping in a different driver (different round count, finality type) requires no core code changes \u2014 the core adapts purely from describe()."
     }
   ],
   "goal": "The core treats contribution bytes as opaque and routes purely on what the driver's describe() reports \u2014 never on hardcoded assumptions or by inspecting the bytes itself.",
   "acceptance_criteria": [
     "The core's own routing behavior is unaffected by what contribution bytes actually contain \u2014 it never parses or interprets their content.",
-    "The core's round count, membership-model dispatch, and finality handling always match exactly what the driver's describe() returns, never a hardcoded default.",
-    "Swapping in a different driver (different round count, membership model, finality type) requires no core code changes \u2014 the core adapts purely from describe()."
+    "The core's round count and finality handling always match exactly what the driver's describe() returns, never a hardcoded default.",
+    "Swapping in a different driver (different round count, finality type) requires no core code changes \u2014 the core adapts purely from describe()."
   ],
   "request_clauses": [
     {
@@ -29,11 +29,11 @@
     },
     {
       "id": "c2",
-      "text": "The core's round count, membership-model dispatch, and finality handling always match exactly what the driver's describe() returns, never a hardcoded default."
+      "text": "The core's round count and finality handling always match exactly what the driver's describe() returns, never a hardcoded default."
     },
     {
       "id": "c3",
-      "text": "Swapping in a different driver (different round count, membership model, finality type) requires no core code changes \u2014 the core adapts purely from describe()."
+      "text": "Swapping in a different driver (different round count, finality type) requires no core code changes \u2014 the core adapts purely from describe()."
     }
   ],
   "acceptance_tests": [
@@ -66,7 +66,7 @@
     {
       "type": "property_test",
       "restatement_clause_id": "s2",
-      "proves": "For randomized driver describe() outputs (round count, membership model, finality type), the core's dispatch always matches exactly what was declared \u2014 never falling back to a hardcoded assumption.",
+      "proves": "For randomized driver describe() outputs (round count, finality type), the core's dispatch always matches exactly what was declared \u2014 never falling back to a hardcoded assumption.",
       "trace": [
         "nim",
         "r",
@@ -90,7 +90,7 @@
         }
       },
       "cwd": "module",
-      "description": "The core's round count, membership-model dispatch, and finality handling always match exactly what the driver's describe() returns, never a hardcoded default.",
+      "description": "The core's round count and finality handling always match exactly what the driver's describe() returns, never a hardcoded default.",
       "clause_id": "c2"
     },
     {
@@ -116,7 +116,7 @@
       },
       "max_states": 30,
       "cwd": "module",
-      "description": "Swapping in a different driver (different round count, membership model, finality type) requires no core code changes \u2014 the core adapts purely from describe().",
+      "description": "Swapping in a different driver (different round count, finality type) requires no core code changes \u2014 the core adapts purely from describe().",
       "clause_id": "c3"
     }
   ],

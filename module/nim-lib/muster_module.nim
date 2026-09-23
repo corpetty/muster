@@ -36,7 +36,7 @@ import ../src/coordination/invoker     # the execute seam + allowlist/capability
 import ../src/coordination/readiness   # the action manifest + this instance's readiness (exo-002.2)
 import ../src/coordination/offers      # requirements × my catalogue → offers (exo-45e K4)
 import ../src/wallet/material          # the holdings catalogue (exo-45e K2)
-import ../src/hashing/sha256           # an unlinkable decline nonce under an anonymous driver
+import ../src/hashing/sha256
 import ../src/log/proof                # exportable, self-verifying log proofs (M4)
 import ../src/coordination/flow        # the information-flow view (M5)
 import ../src/intents/authorization    # muster-issued authorizations for the host hook (M7)
@@ -714,7 +714,7 @@ proc musterCoordinateDismissInvite(roomTopic: string): string =
 proc policyJson(): JsonNode =
   let d = driverForKind(gCoordKind).describe()
   %*{"policy": gCoordKind, "threshold": d.threshold,
-     "domain": d.serializationDomain, "membership": $d.membership}
+     "domain": d.serializationDomain}
 
 proc roomKinds(): seq[string] =
   ## The driver kinds the joined room may use (driver-as-proposal). Folded from the
@@ -744,7 +744,7 @@ proc musterCoordinateSetPolicy(kind: string): string =
   $policyJson()
 
 proc musterCoordinatePolicy(): string =
-  ## This instance's compose default — {policy, threshold, domain, membership}.
+  ## This instance's compose default — {policy, threshold, domain}.
   $policyJson()
 
 proc musterCoordinatePropose(effectJson: string): string =
@@ -880,7 +880,7 @@ proc musterCoordinateIntents(): string =
                # distinct approvals THIS round — so a card shows "round R of N, M of k
                # this round". For single-round drivers rounds == 1 and the UI ignores it.
                "round": v.round, "rounds": v.rounds, "roundApprovals": v.roundApprovals,
-               # who declined to take part (named driver only; a count otherwise, inv 9)
+               # who declined to take part
                "declines": v.declines, "decliners": v.decliners,
                # the declared schema id + whether muster recognizes it. false ⇒ the card
                # renders a NAMED "schema unknown" failure, never the effect body (exo-1ec.3).
@@ -922,20 +922,15 @@ proc musterCoordinateIntents(): string =
   $arr
 
 proc musterCoordinateDecline(intentId: string): string =
-  ## Decline to take part (the card's Deny). Keyed by THIS member so it folds once:
-  ## the encryption identity under a named driver (the same author id messages carry),
-  ## an unlinkable per-event nonce under an anonymous one (invariant 9). Informational —
-  ## the threshold is untouched; dropping is driver policy, not core policy.
+  ## Decline to take part (the card's Deny). Keyed by THIS member's encryption identity
+  ## (the same author id messages carry) so it folds once. Informational — the
+  ## threshold is untouched; dropping is driver policy, not core policy.
   if gSession == nil: return $(%*{"error": "not-joined"})
   gSession.poll()
   let events = gSession.log.allEvents()
   if effectJsonOf(events, intentId).len == 0:
     return $(%*{"error": "unknown-intent", "intentId": intentId})
-  let named = driverForKind(intentPolicyOf(events, intentId)).describe().membership == mmNamed
-  let who = if named: toHex(moduleKeystore().encIdentity().toBytes())
-            else:
-              let seed = toHex(moduleKeystore().encIdentity().toBytes()) & "/" & intentId & "/" & $epochTime()
-              toHex(sha256(seed.toOpenArrayByte(0, seed.high)))
+  let who = toHex(moduleKeystore().encIdentity().toBytes())
   gSession.publish(declineEvent(intentId, who))
   let after = gSession.log.allEvents()
   var declines = 0
@@ -996,7 +991,7 @@ proc musterCoordinateShareMaterial(intentId, requirement, publicFace: string): s
   ## K5/K6): only its PUBLIC face, class and form are published (never a handle, s1),
   ## bound to the intent and the effect field the requirement lands in — the request-first
   ## path by which a complete effect gets its counterparty material. Keyed by this member
-  ## (named / nonce per driver, invariant 9); folds once per (requirement, sharer).
+  ## (its encryption identity); folds once per (requirement, sharer).
   if gSession == nil: return $(%*{"error": "not-joined"})
   gSession.poll()
   let events = gSession.log.allEvents()
@@ -1014,11 +1009,7 @@ proc musterCoordinateShareMaterial(intentId, requirement, publicFace: string): s
   for mat in moduleCatalogue():
     if $mat.class == class and mat.public == publicFace: (form = mat.form; mine = true)
   if not mine: return $(%*{"error": "not one of your holdings for this slot", "public": publicFace})
-  let named = driverForKind(intentPolicyOf(events, intentId)).describe().membership == mmNamed
-  let who = if named: toHex(moduleKeystore().encIdentity().toBytes())
-            else:
-              let seed = toHex(moduleKeystore().encIdentity().toBytes()) & "/" & intentId & "/" & requirement & "/" & $epochTime()
-              toHex(sha256(seed.toOpenArrayByte(0, seed.high)))
+  let who = toHex(moduleKeystore().encIdentity().toBytes())
   gSession.publish(materialShareEvent(intentId, requirement, who, publicFace, form, class, field))
   result = $(%*{"intentId": intentId, "requirement": requirement, "field": field, "public": publicFace})
   if gLpDebug: stderr.writeLine("MUSTER-LP share_material " & result)
@@ -1516,8 +1507,8 @@ proc musterCoordinateConversations(): string =
 proc musterSecurityLevels(): string =
   ## The joined room's ACTIVE null-ladder level on the three axes (exo-1ec.5): the strongest
   ## guarantee each GOVERNING seam provides, combined into one envelope — authentication from
-  ## the compose-default driver's membership (a named driver binds the speaker; an anonymous
-  ## one is the null terminal, inv 9), provenance from the signed hash-linked log, and
+  ## the compose-default driver (every driver binds the speaker), provenance from the signed
+  ## hash-linked log, and
   ## confidentiality from the room's crypto seam (the real epoch layer, or the null). The
   ## level is never a silent fallback — a consumer that requires the real level and cannot
   ## get it refuses (DowngradeRefused), which is why this reports honestly rather than assumes.

@@ -200,8 +200,7 @@ proc declineEvent*(intentId, who: string, parents: seq[EventId] = @[]): Event =
   ## A member declines to take part in an intent (the card's Deny, exo-002.3). It is
   ## informational: it never blocks the driver's threshold — whether a decline by a
   ## required signer should DROP the intent is driver policy, not core policy. `who`
-  ## dedups one decline per member; under a named driver the view names it, under an
-  ## anonymous one the caller passes an unlinkable nonce and the view only counts.
+  ## dedups one decline per member, and the view names who declined.
   Event(parents: parents, key: "intent/" & intentId & "/decline/" & who, value: "1")
 
 proc finalEvent*(intentId: string, parents: seq[EventId] = @[]): Event =
@@ -217,8 +216,8 @@ proc materialShareEvent*(intentId, reqName, who, public, form, class, field: str
   ## and class travel (never a handle, s1), and only on this explicit act (rule s2). It
   ## generalizes the address-share card into a fold-bound event: the value names which
   ## effect `field` it fills, so the composer proposes the complete effect with it bound
-  ## in. `who` dedups one share per (requirement, member) — named under a named driver so
-  ## the room sees who shared, an unlinkable nonce under an anonymous one (invariant 9).
+  ## in. `who` dedups one share per (requirement, member) and names the sharer, so the
+  ## room sees who shared.
   Event(parents: parents, key: "intent/" & intentId & "/material/" & reqName & "/" & who,
         value: $(%*{"public": public, "form": form, "class": class, "field": field}))
 
@@ -237,7 +236,7 @@ proc keyBindingEvent*(intentId, contributor, linkHex: string,
 type
   MaterialShare* = object
     reqName*: string     ## the requirement this fills
-    who*: string         ## the sharer (named driver) or a nonce (anonymous)
+    who*: string         ## the sharer
     public*: string      ## the disclosed public face — never a handle
     form*: string
     class*: string
@@ -477,7 +476,7 @@ type IntentView* = object
                           ## "M of N this round" for a multi-round driver; equals `approvals`
                           ## when rounds == 1
   declines*: int          ## distinct members who declined to take part (informational)
-  decliners*: seq[string] ## who declined — ONLY under a named driver; empty under anonymous (inv 9)
+  decliners*: seq[string] ## who declined, sorted
   schemaId*: string       ## the effect's declared schema id (v0 vocabulary, ADR-009)
   schemaKnown*: bool      ## whether muster recognizes that schema — false ⇒ the card renders a
                           ## NAMED "schema unknown" failure, never the effect body (exo-1ec.3)
@@ -504,9 +503,8 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
     let desc = driverFor(pol).describe()
     let curRound = it.collection.round
     var decliners: seq[string]
-    if desc.membership == mmNamed:
-      for w in declined.getOrDefault(id, initHashSet[string]()): decliners.add w
-      decliners.sort()
+    for w in declined.getOrDefault(id, initHashSet[string]()): decliners.add w
+    decliners.sort()
     let ej = effectJsonOf(events, id)
     let sch = effectSchema(ej)
     result.add IntentView(id: id, state: $it.state,
@@ -525,8 +523,8 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
 
 # ── activity: how the room reached its state (the education seam) ──────────────
 # A human-readable narrative of every state transition on the coordination log, in
-# canonical (causal) order — proposed, each approval (running count, and who under a
-# named driver), threshold reached, submitted on-chain, settled. This is not a new
+# canonical (causal) order — proposed, each approval (running count, and who),
+# threshold reached, submitted on-chain, settled. This is not a new
 # source of truth: it is the SAME reduce(log) the cards are drawn from, retold as a
 # timeline, so a member can see how the room got where it is and watch it change as
 # it happens. Deterministic and idempotent (invariant 4): two members fold the
@@ -539,7 +537,7 @@ type
     order*: int          ## tiebreak within one index (a derived line after its trigger)
     kind*: string        ## "propose" | "approve" | "decline" | "ready" | "submit" | "settled" | "admit"
     intentId*: string    ## the intent this concerns
-    account*: string     ## the contributor, named only where the driver is mmNamed, else ""
+    account*: string     ## the contributor (approve / decline), else ""
     title*: string       ## the plain-language headline
     detail*: string      ## a supporting line (may be "")
 
@@ -587,7 +585,6 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
     let op = p[2]
     if op == "policy": continue        # the policy decl rides with the propose line
     let desc = driverFor(intentPolicyOf(events, id)).describe()
-    let named = desc.membership == mmNamed
     case op
     of "propose":
       proposeSeq[id] = i
@@ -606,15 +603,15 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
       var distinctWho = initHashSet[string]()
       for k in approvers[id]: distinctWho.incl k.split('/')[0]
       result.add ActivityEntry(seq: i, order: 0, kind: "approve", intentId: id,
-        account: (if named: who else: ""),
-        title: (if named: "Approved by " & shortId(who) else: "An owner approved"),
+        account: who,
+        title: "Approved by " & shortId(who),
         detail: $distinctWho.len & " of " & $desc.threshold & " needed" &
                 (if desc.rounds > 1: "  ·  round " & rnd & " of " & $desc.rounds else: ""))
     of "decline":
       if p.len < 4: continue
       result.add ActivityEntry(seq: i, order: 0, kind: "decline", intentId: id,
-        account: (if named: p[3] else: ""),
-        title: (if named: "Declined by " & shortId(p[3]) else: "A member declined"),
+        account: p[3],
+        title: "Declined by " & shortId(p[3]),
         detail: "chose not to take part — the threshold is unchanged")
     of "submit":
       result.add ActivityEntry(seq: i, order: 0, kind: "submit", intentId: id,
@@ -668,7 +665,7 @@ type ProvItem* = object
   ## of the reader, named by the spec's accountability vocabulary (InputClass).
   cls*: InputClass      ## peer-message (the proposal) · driver-contribution (a signature)
   logPos*: int          ## position in the canonical log order the input came from
-  account*: string      ## the contributing account — named under mmNamed, "" under mmAnonymous
+  account*: string      ## the contributing account ("" for the proposal)
   accountable*: bool    ## can this input's origin be accounted for? (always true in a live fold)
   what*: string         ## a plain-language label for the reader
   detail*: string       ## the concrete content — the effect summary for a proposal, the round for a signature
@@ -695,13 +692,11 @@ proc intentProvenance*(events: seq[Event], driverFor: DriverFor, intentId: strin
   ## intent, in canonical order. The propose carried the effect — a peer message,
   ## sealed to the room's epoch, so only a member could have placed it; each
   ## signature is a driver-contribution the driver verified recovers to a configured
-  ## member (a non-owner never reaches the fold). Whether an entry names its account
-  ## follows the driver's membership model (6): named for Safe (mmNamed), silent for
-  ## an anonymous driver, so the trail never leaks an identity the room wouldn't.
+  ## member (a non-owner never reaches the fold), and names that member — the trail
+  ## stays inside the room's epoch, which is the boundary (invariant 7).
   ## Everything here is accountable by construction — an input whose origin could not
   ## be accounted for would have been refused before signing (invariant 10), so it
   ## would never appear. A duplicate owner signature folds once, exactly as it counts.
-  let named = driverFor(intentPolicyOf(events, intentId)).describe().membership == mmNamed
   let ordered = canonicalOrder(events)
   var seenSig = initHashSet[string]()
   for i in 0 ..< ordered.len:
@@ -717,7 +712,7 @@ proc intentProvenance*(events: seq[Event], driverFor: DriverFor, intentId: strin
       seenSig.incl p[3]
       let round = (if p.len >= 5: p[4] else: "1")
       result.add ProvItem(cls: icContribution, logPos: i,
-                          account: (if named: p[3] else: ""),
+                          account: p[3],
                           accountable: true, what: "an approval",
                           detail: (if round != "1": "round " & round else: ""),
                           guarantee: "the driver verified this recovers to a configured member — a non-member never reaches the fold")
@@ -730,14 +725,14 @@ proc intentProvenance*(events: seq[Event], driverFor: DriverFor, intentId: strin
 # vocabulary and graded by the guarantee the code actually enforces. Honest about
 # attribution: a message's author is what its sender wrote inside a room-sealed
 # envelope (any epoch holder could have written it); only a driver-verified
-# signature proves WHO. Named accounts follow the driver's membership model.
+# signature proves WHO.
 
 type LogProvItem* = object
   seq*: int               ## canonical log position
   cls*: InputClass
   kind*: string           ## message · propose · sig · decline · policy · submit · final · admit
   intentId*: string       ## "" for a message / membership entry
-  account*: string        ## named only where the guarantee lets us name it
+  account*: string        ## who: a verified signer, or the author/sharer a sealed entry claims
   accountable*: bool
   what*: string
   detail*: string
@@ -780,8 +775,6 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
       continue
     if p.len < 3 or p[0] != "intent": continue
     let id = p[1]
-    let desc = driverFor(intentPolicyOf(events, id)).describe()
-    let named = desc.membership == mmNamed
     case p[2]
     of "propose":
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "propose", intentId: id,
@@ -797,7 +790,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
       if p.len < 4 or (id & "/" & p[3]) in seenSig: continue
       seenSig.incl(id & "/" & p[3])
       result.add LogProvItem(seq: i, cls: icContribution, kind: "sig", intentId: id,
-        account: (if named: p[3] else: ""), accountable: true, what: "an approval",
+        account: p[3], accountable: true, what: "an approval",
         detail: (if p.len >= 5 and p[4] != "1": "round " & p[4] else: ""),
         guarantee: "the driver verified this recovers to a configured member — a non-member never reaches the fold",
         epoch: epoch)
@@ -805,7 +798,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
       if p.len < 4 or (id & "/" & p[3]) in seenDecline: continue
       seenDecline.incl(id & "/" & p[3])
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "decline", intentId: id,
-        account: (if named: p[3] else: ""), accountable: true, what: "a decline",
+        account: p[3], accountable: true, what: "a decline",
         detail: "", guarantee: "sealed to the room's epoch; informational — the threshold is unchanged",
         epoch: epoch)
     of "material":
@@ -814,7 +807,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
       try: field = parseJson(e.value){"field"}.getStr()
       except CatchableError: discard
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "material", intentId: id,
-        account: (if named: p[4] else: ""), accountable: true,
+        account: p[4], accountable: true,
         what: "shared material for '" & (if field.len > 0: field else: p[3]) & "'",
         detail: "",
         guarantee: "sealed to the room's epoch; the room learns the PUBLIC face the sharer chose (never a handle), not that it is theirs — only a driver-verified signature proves control (F-20)",
@@ -822,7 +815,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
     of "binding":
       if p.len < 4: continue
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "binding", intentId: id,
-        account: (if named: p[3] else: ""), accountable: true,
+        account: p[3], accountable: true,
         what: "a key-binding for an approval",
         detail: "",
         guarantee: "the authorization key that signed is bound by a secp signature to the member's admitted encryption identity — the room can check the approval came from an admitted member, not merely a valid owner (F-14, F-9); scoped to this epoch (invariant 7)",

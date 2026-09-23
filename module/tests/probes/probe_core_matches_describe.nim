@@ -1,5 +1,5 @@
-## derived-exo-2dc s2/c2: the core's round count, membership dispatch, and
-## finality handling always match exactly what the driver's describe() returns —
+## derived-exo-2dc s2/c2: the core's round count and finality handling always
+## match exactly what the driver's describe() returns —
 ## never a hardcoded default.
 ##
 ## Randomized descriptors; for each, the core's observable policy must echo
@@ -18,15 +18,12 @@ var allMatch = true
 for trial in 0 ..< 200:
   let rounds = r.rand(1 .. 4)
   let threshold = r.rand(1 .. 3)
-  let membership = [mmAnonymous, mmNamed][r.rand(0 .. 1)]
   let finality = [finImmediate, finProbabilistic, finExternal][r.rand(0 .. 2)]
   let drv = newStubDriver(rounds = rounds, threshold = threshold,
-                          membership = membership, finality = finality)
+                          finality = finality)
   var col = startCollection(drv)
 
-  var ok = col.roundCount == rounds and
-           col.membershipDispatch == membership and
-           col.finalityHandling == finality
+  var ok = col.roundCount == rounds and col.finalityHandling == finality
 
   # Behavioral: exactly `threshold` accepted per round, `rounds` rounds to close.
   for rnd in 1 .. rounds:

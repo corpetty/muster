@@ -70,7 +70,7 @@ proc safeTxHash*(tx: SafeTx, chainId: uint64, safe: Address): seq[byte] =
   ## EIP-712: keccak256(0x19 ++ 0x01 ++ domainSeparator ++ structHash).
   kdigest(@[0x19'u8, 0x01'u8], domainSeparator(chainId, safe), safeTxStructHash(tx))
 
-# ── The Safe driver: a 1-round, named-membership, external-finality driver whose
+# ── The Safe driver: a 1-round, external-finality driver whose
 # canonicalize produces the safeTxHash as the materialization. ─────────────────
 type SafeDriver* = ref object of Driver
   chainId*: uint64
@@ -81,7 +81,7 @@ type SafeDriver* = ref object of Driver
 
 method describe*(d: SafeDriver): DriverDescriptor =
   DriverDescriptor(rounds: 1, serializationDomain: "eip712.safe.v1.4.1",
-                   membership: mmNamed, finality: finExternal, threshold: d.threshold)
+                   finality: finExternal, threshold: d.threshold)
 
 method verifyContribution*(d: SafeDriver, c: Contribution, round: int): bool =
   ## A contribution is a 65-byte owner ECDSA signature over the pending safeTxHash.

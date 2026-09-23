@@ -20,13 +20,13 @@ var allBind = true
 for trial in 0 ..< 200:
   let mat = @[byte(r.rand(0 .. 255)), byte(r.rand(0 .. 255))]
   let inputs = randInputs(r, r.rand(1 .. 4))
-  let base = signedBytes(mat, buildProvenance(inputs, mmNamed))
+  let base = signedBytes(mat, buildProvenance(inputs))
   # Change ONE input's provenance (log position or class); its value is untouched.
   var mut = inputs
   let i = r.rand(0 ..< mut.len)
   if r.rand(0 .. 1) == 0: mut[i].logPos = mut[i].logPos + 100
   else: mut[i].class = classes[(ord(mut[i].class) + 1) mod 4]
-  let binds = signedBytes(mat, buildProvenance(mut, mmNamed)) != base
+  let binds = signedBytes(mat, buildProvenance(mut)) != base
   if not binds: allBind = false
   obs.add flag("provenance_binds", binds)
 

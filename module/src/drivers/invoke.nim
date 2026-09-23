@@ -43,7 +43,7 @@ method describe*(d: InvokeDriver): DriverDescriptor =
   ## generic "muster.invoke.v1"; the per-action separation is in the effect's schemaId
   ## (see invokeDomain), which the base canonicalize folds into the signed bytes.
   DriverDescriptor(rounds: 1, serializationDomain: "muster.invoke.v1",
-                   membership: mmNamed, finality: finImmediate, threshold: d.k)
+                   finality: finImmediate, threshold: d.k)
 
 # canonicalize is NOT overridden — the base dCBOR serialization of the effect (which
 # encodes the effect's schemaId = invokeDomain(module, method)) is the materialization.

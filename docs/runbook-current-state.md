@@ -60,7 +60,7 @@ nim r -d:release tests/lifecycle_test.nim
 **Expect:** every probe prints its oracle fields and exits 0; no `FAILED:` line.
 These cover invariants 1–10: deterministic CDE encoding, domain-separated hash inputs,
 `reduce(log)` convergence under reorder/dup, re-derive-or-refuse materialization,
-replay-bound signing payloads, anonymity, membership epochs, provenance, the plugin
+replay-bound signing payloads, disclosure-only member facts, membership epochs, provenance, the plugin
 sandbox, and no-server/no-telemetry.
 
 > The two probes that are **not** pure Nim (`probe_return_marshalling_host.nim` needs g++

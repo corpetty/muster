@@ -42,7 +42,7 @@ The Bybit failure is the clean example of a link flipping columns: settlement wa
 ```
 ActionManifest
   declared      bool              false = the driver has not declared; the card says so, never guesses
-  agreement     DriverDescriptor  how agreement is made: rounds, threshold, membership model, finality (from describe())
+  agreement     DriverDescriptor  how agreement is made: rounds, threshold, finality (from describe())
   requirements  seq[Requirement]  what is needed: {kind: module|environment|authority|infra|capability, name, scope: instance|contributor}
   discloses     seq[DisclosureRow] what leaves the room beyond the baseline: {field, to: Observer}
   touches       seq[Touch]        what it reads and alters: {target, mode: read|write}
@@ -64,7 +64,7 @@ The manifest is a function of **driver + effect**, not driver alone. The generic
 
 **Readiness** is the manifest crossed with one instance: for each requirement, `met | missing | unknown` with a remedy. `unknown` is a first-class answer, never silently `met` (the null-ladder rule, `exo-1ec.5`). The plugin never installs anything and never touches the network beyond the existing seams (invariant 3); it surfaces the requirement and the host's install path.
 
-**Deny** is a signed decline event folded into the intent view, so the room sees who is out. Under an anonymous driver it names nobody (invariant 9).
+**Deny** is a signed decline event folded into the intent view, so the room sees who is out: every driver is named (ADR-015), so a deny names the member's room identity.
 
 ## 4. How each want is served, and by what
 
@@ -81,7 +81,7 @@ The manifest is a function of **driver + effect**, not driver alone. The generic
 
 - **Invariant 3.** A manifest is a description, never a capability grant. "Install" is a pointer to the host's install path; the plugin does not fetch, load, or execute anything.
 - **Invariant 6.** Requirements, disclosure, and touches are driver-described per action. The core adds only the baseline disclosure and checks consistency; it never interprets contribution bytes to derive them.
-- **Invariant 9.** Under an anonymous driver, readiness never reveals *which* member holds authority, a deny names nobody, and a provenance proof names no account.
+- **Invariant 9.** What the client says about a member is only what that member disclosed: readiness grades *your* key, never reveals *which* other member holds authority.
 - **Invariant 10.** Provenance for non-signing actions *extends* F-20's record; it does not create a second lineage store. The record stays a reduction over the log (invariant 4).
 - **Honesty rules (00-vision).** `declared: false` and `unknown` are shown as such. A driver that lies in its manifest fails conformance (M1 consistency check), so a card can never render a truthfulness the code does not have.
 
@@ -108,7 +108,7 @@ Relation to existing issues: `exo-1ec.4` is the driver **config** manifest (a se
 
 - `pb show exo-002` then `pb ready` to find the next unblocked slice.
 - Code lives in `module/src/intents/disclosure.nim`, `module/src/drivers/manifest.nim` (+ the per-driver `manifest` overrides), and `module/src/coordination/readiness.nim` (the probe + `HostFacts`; the hosted handler is `musterCoordinateReadiness` in `nim-lib/muster_module.nim`, surface method `coordinate_readiness`). Tests: `module/tests/manifest_test.nim` (pure Nim), `readiness_test.nim` + `conformance_test.nim` (need the secp + libsodium closure, see `module/tests/README.md`).
-- **Deny** is `coordinate_decline(intent_id)`: a `decline/<who>` log event, folded into `IntentView.declines/decliners` (names only under a named driver) and the activity feed. Informational: the threshold is untouched (open question 3 stands — dropping is driver policy).
+- **Deny** is `coordinate_decline(intent_id)`: a `decline/<who>` log event, folded into `IntentView.declines/decliners` (always naming the member) and the activity feed. Informational: the threshold is untouched (open question 3 stands — dropping is driver policy).
 - The card's "What this needs" box (`MusterCard.qml`, objectName `needsBox`) opens on tap, asks the room for readiness once (`loadReadiness` → `readinessJson`, a per-intent map), and renders needs ✓/✗/? + remedy (infra/environment → Settings; module → the install pointer), Touches, "Who will see what" grouped by observer (store node always present), and the Agreement line. `cardDeny` sits beside `cardApprove`.
 - **Provenance for everything** is `coordinate_provenance()` (`logProvenance` in `coordination/intents.nim`): every log entry classed by the F-20 vocabulary with the guarantee the code enforces and the epoch it belongs to. Admits are now log events (`membershipEvent`, sealed under the new epoch, so a joiner reads its own admission and nothing before). Proofs: `module/src/log/proof.nim`, `log_proof_test`.
 - **The flow view** is `coordinate_flow()` (`reduceFlow` in `coordination/flow.nim`): per action, one row per (field, observer); inside rows name the epoch-key holders at that position (founders = current roster minus admitted joiners, derived by the handler); the store node's metadata rows on every entry; a driver's outside rows only at submit/final, when the information actually leaves; an undeclared driver yields an `undeclared` row. `FlowView.qml` renders the observer matrix + per-action rows under the room's history.
@@ -119,5 +119,5 @@ Relation to existing issues: `exo-1ec.4` is the driver **config** manifest (a se
 
 1. **Out-of-room proofs (M4) — settled.** `coordinate_proof` exports a self-verifying slice (events + content ids + state digest + epoch range); `coordinate_verify_proof` is pure and refuses on any tamper. Whoever holds the epoch keys can check it; sharing one outside the room is the member's own selective disclosure, never the client's. What a proof does *not* do: prove the world (submit/final stay external reads) or prove a message's author (a message's author is what the sender wrote inside a room-sealed envelope; only a driver-verified signature proves who). Both limits are stated in the provenance `guarantee` text.
 2. **Requirement scope granularity (M2).** `instance` vs `contributor` is enough for Safe and threshold. A future driver may need "at least k contributors", which is the agreement's threshold applied to an authority requirement; decide whether that is derived or declared.
-3. **Deny semantics (M3).** A deny is informational until a driver says otherwise: it does not block the threshold unless the driver's membership model treats the roster as closed. Whether a deny by a required signer should *drop* the intent is driver-described, not core policy.
+3. **Deny semantics (M3).** A deny is informational until a driver says otherwise: it does not block the threshold. Whether a deny by a required signer should *drop* the intent is driver-described, not core policy.
 4. **Capability address (M6/M7).** The driver manifest already carries a Basecamp capability name (SDK #2). The host hook keys on it; the single question to confirm with the Basecamp side is whether the broker can consult a grant before dispatch at all — the proposal, the grant format, and the policy shape are in `host-effect-policy.md`.

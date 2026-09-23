@@ -187,7 +187,7 @@ Rectangle {
         var r = cardRoot.readiness;
         if (!r || !r.manifest || !r.manifest.agreement) return "";
         var a = r.manifest.agreement;
-        var s = qsTr("%1 of the %2 signers").arg(a.threshold).arg(a.membership === "named" ? qsTr("named") : qsTr("anonymous"));
+        var s = qsTr("%1 of the signers").arg(a.threshold);
         if (Number(a.rounds || 1) > 1) s += qsTr(", over %1 rounds").arg(a.rounds);
         s += a.finality === "external" ? qsTr(" · settles outside the room") : qsTr(" · final in the room");
         return s;
@@ -1023,10 +1023,8 @@ Rectangle {
             visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown && cardRoot.declines > 0
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: cardRoot.decliners.length > 0
-                ? qsTr("%1 declined: %2").arg(cardRoot.declines).arg(cardRoot.decliners.map(function (d) {
+            text: qsTr("%1 declined: %2").arg(cardRoot.declines).arg(cardRoot.decliners.map(function (d) {
                       var x = String(d); return x.length > 12 ? x.slice(0, 6) + "…" + x.slice(-4) : x; }).join(", "))
-                : qsTr("%1 declined to take part").arg(cardRoot.declines)
             color: Theme.palette.warning
             font.pixelSize: Theme.typography.badgeText
         }
@@ -1288,8 +1286,7 @@ Rectangle {
         }
 
         // Deny: decline to take part while it still needs signers. Informational —
-        // the threshold is unchanged; the room sees who is out (named driver) or how
-        // many (anonymous). One per member; folds once.
+        // the threshold is unchanged; the room sees who is out. One per member; folds once.
         LogosButton {
             objectName: "cardDeny"
             visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown

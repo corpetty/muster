@@ -4,15 +4,15 @@
 ##   what is needed        → requirements  (module / environment / authority / infra / capability / address / asset)
 ##   what will it touch    → touches       (targets read or written)
 ##   what will happen      → disclosure    (which fields reach which observer class)
-##   how do we agree       → agreement     (the driver's describe(): rounds, threshold, membership, finality)
+##   how do we agree       → agreement     (the driver's describe(): rounds, threshold, finality)
 ##
 ## It is a function of driver + EFFECT, not driver alone: the generic invoke driver
 ## carries no module — the module/method live in the effect — so the manifest is
 ## computed per proposal. The default is UNDECLARED, which the card shows as such;
 ## a manifest is never guessed. consistencyFailures() is the conformance rule: a
 ## driver whose manifest contradicts its own describe() (settles externally but
-## names no environment or public disclosure; requires named members but names no
-## authority) fails the suite. Invariant 3: a manifest describes — it grants nothing.
+## names no environment or public disclosure; names no authority a contributor must
+## hold) fails the suite. Invariant 3: a manifest describes — it grants nothing.
 ##
 ## exo-45e (material + disclosure): every requirement carries a PARTY — who supplies
 ## it — and a NEEDS — the class of material that satisfies it and, for proposer /
@@ -166,18 +166,19 @@ proc consistencyFailures*(m: ActionManifest, effect = Effect()): seq[string] =
     if not hasEnv: result.add "external finality but no environment requirement"
     if not hasChainRow: result.add "external finality but nothing disclosed to the chain observer"
     if not hasWrite: result.add "external finality but no write touch"
-  if m.agreement.membership == mmNamed:
-    var hasAuth = false
-    for r in m.requirements:
-      if r.kind == rqAuthority and r.party == rpContributor: hasAuth = true
-    if not hasAuth: result.add "named membership but no contributor authority requirement"
+  # Every driver is named (ADR-015): a contribution is bound to the member who made
+  # it, so the manifest must say what authority a contributor holds.
+  var hasAuth = false
+  for r in m.requirements:
+    if r.kind == rqAuthority and r.party == rpContributor: hasAuth = true
+  if not hasAuth: result.add "no contributor authority requirement"
 
 proc consistent*(m: ActionManifest, effect = Effect()): bool =
   consistencyFailures(m, effect).len == 0
 
 # ── The stub declares too, so the conformance probes grade it like a real driver ──
 method manifest*(d: StubDriver, effect: Effect): ActionManifest =
-  ## A stub is configurable (probes randomize finality/membership), so its manifest
+  ## A stub is configurable (probes randomize finality), so its manifest
   ## follows its own descriptor: whatever describe() claims, the manifest is
   ## consistent with it. It touches and needs nothing real.
   result = ActionManifest(declared: true, agreement: d.descriptor)
@@ -185,5 +186,4 @@ method manifest*(d: StubDriver, effect: Effect): ActionManifest =
     result.requirements.add req(rqEnvironment, "stub-env")
     result.discloses.add row("effect", obChainObserver)
     result.touches.add touch("stub:state", tmWrite)
-  if d.descriptor.membership == mmNamed:
-    result.requirements.add req(rqAuthority, "stub-member", rpContributor)
+  result.requirements.add req(rqAuthority, "stub-member", rpContributor)
