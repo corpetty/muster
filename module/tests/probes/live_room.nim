@@ -90,8 +90,8 @@ proc effectFor*(policy: string, n: int, extra = ""): string =
 proc propose*(r: var Room, policy, effectJson: string, nowSec = Now,
               ttl = Ttl): string =
   inc r.seqNo
-  liveProposeIntent(r.alice, aliceKs, policy, effectJson, int64(nowSec), r.seqNo,
-                    account = r.accountFor(policy), ttlSec = ttl)
+  liveProposeIntent(r.alice, aliceKs, liveDriverFor, policy, effectJson, int64(nowSec),
+                    r.seqNo, account = r.accountFor(policy), ttlSec = ttl)
 
 proc approveAs*(r: Room, who: string, id: string, nowSec = Now): string =
   ## An IN-APP approval (empty signature → the keystore signs), as alice or bob.

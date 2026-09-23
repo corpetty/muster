@@ -753,8 +753,15 @@ proc musterCoordinatePropose(effectJson: string): string =
   ## driven in-process; this is plumbing over the module's session + keystore.
   if gSession == nil: return "not-joined"
   inc gMsgSeq
-  liveProposeIntent(gSession, moduleKeystore(), gCoordKind, effectJson,
-                    int64(epochTime()), gMsgSeq)
+  # The context every approval binds to (invariant 2, exo-ef1): a Safe intent is bound
+  # to the Safe; a room-native decision to this room. MUSTER_INTENT_TTL_S overrides
+  # how long the proposal stays signable (default a week).
+  let account = (if gCoordKind == "safe": toHex(gDriver.safe) else: gTopic)
+  var ttl = DefaultIntentTtl
+  try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
+  except ValueError: discard
+  liveProposeIntent(gSession, moduleKeystore(), driverFor, gCoordKind, effectJson,
+                    int64(epochTime()), gMsgSeq, account = account, ttlSec = ttl)
 
 proc musterCoordinateReannounce(): string =
   ## Re-publish every still-OPEN intent — its policy declaration, its propose, and its
@@ -776,6 +783,11 @@ proc musterCoordinateReannounce(): string =
     let policy = intentPolicyOf(events, id)
     gSession.publish(policyDeclEvent(id, policy))
     gSession.publish(proposeEvent(id, effect))
+    # its signing context and any recorded reads too: without them a joiner can fold
+    # the intent but not attest to it (exo-ef1). Same events, same ids — idempotent.
+    for e in events:
+      if e.key == "intent/" & id & "/context" or e.key.startsWith("intent/" & id & "/read/"):
+        gSession.publish(e)
     inc gMsgSeq
     let refBody = $(%*{"kind": "intent-ref", "intentId": id})
     let (_, ev) = newMessageEvent(author, int64(epochTime()), refBody, gMsgSeq)
@@ -795,7 +807,7 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
   ## in-process; this is plumbing over the module's session + keystore.
   if gSession == nil: return "not-joined"
   liveContribute(gSession, moduleKeystore(), driverFor, intentId, signatureHex, keyRef,
-                 roomContext())
+                 roomContext(), uint64(epochTime()))
 
 proc musterCoordinateIntents(): string =
   ## The room's proposals, folded from the shared log and projected to what a card
@@ -1210,6 +1222,9 @@ proc musterCoordinateSubmit(intentId: string): string =
   let st = intentState(events, driverFor, intentId)
   if st != "executable":
     return $(%*{"id": intentId, "error": "not-executable", "state": st})
+  # invariant 2 at submit time: past the intent's declared expiry nothing settles.
+  let pre = liveSubmitPrecheck(gSession, driverFor, intentId, uint64(epochTime()))
+  if pre.len > 0: return $(%*{"id": intentId, "error": pre})
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return $(%*{"error": "unknown-intent"})
   let effect = effectFromJson(effectJson)

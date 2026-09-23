@@ -29,6 +29,8 @@ export provenance.InputClass    # so consumers can name a lineage entry's class
 
 import ./intent_events
 export intent_events
+import ./attest                   # live attestations: the fold's gate + every surface's grade (exo-ef1)
+export attest
 
 proc hexToBytes(s: string): seq[byte] =
   var h = s
@@ -94,10 +96,30 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
     sigs.add (id: id, who: who, value: e.value, round: r, ord: i)
   sigs.sort(proc (a, b: auto): int =
     (if a.round != b.round: cmp(a.round, b.round) else: cmp(a.ord, b.ord)))
+  # The attestation gate (invariant 10 on the live path, exo-ef1): an approval that
+  # carries muster attestations counts only if one of them verifies against the P this
+  # fold re-derives from the log — a forged, mismatched, cross-intent or cross-room
+  # attestation leaves the approval uncounted. An approval with NO attestation was
+  # signed outside muster (pasted): it counts, and every surface grades it unattested.
+  var payloads = initTable[string, seq[byte]]()
+  proc payloadOf(id: string): seq[byte] =
+    if id notin payloads: payloads[id] = attestationPayload(events, driverFor, id)
+    payloads[id]
+  var attests = initTable[string, seq[string]]()        # "<id>/<who>/<round>" -> attestation hex
+  for e in ordered:
+    let p = e.key.split('/')
+    if p.len >= 5 and p[0] == "intent" and p[2] == "attest":
+      attests.mgetOrPut(p[1] & "/" & p[3] & "/" & p[4], @[]).add e.value
   for s in sigs:
     let dedup = s.id & "/" & $s.round & "/" & s.who      # one contribution per (contributor, round)
     if dedup in seenSig: continue
     seenSig.incl dedup
+    let ak = s.id & "/" & s.who & "/" & $s.round
+    if ak in attests:
+      var ok = false
+      for a in attests[ak]:
+        if verifyAttestation(s.who, payloadOf(s.id), a): ok = true
+      if not ok: continue                                # rejected: attested, but not over P
     inc now
     let driver = driverOf(s.id)
     driver.expectMaterialization(result[s.id].materialization)   # verify against THIS intent (full bytes)
@@ -184,16 +206,10 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
   ## same dedup the fold applies — so a re-submitted owner signature never inflates
   ## the "M of N" a card shows. Each view carries the intent's own policy.
   let intents = reduceIntents(events, driverFor)
-  var approvals = initTable[string, HashSet[string]]()            # <id> -> distinct contributors (any round)
-  var roundApp = initTable[string, HashSet[string]]()            # "<id>/<round>" -> contributors that round
   var declined = initTable[string, HashSet[string]]()            # <id> -> distinct decliners
   for e in events:
     let p = e.key.split('/')
-    if p.len >= 4 and p[0] == "intent" and p[2] == "sig":
-      approvals.mgetOrPut(p[1], initHashSet[string]()).incl(p[3])
-      let rnd = (if p.len >= 5: p[4] else: "1")
-      roundApp.mgetOrPut(p[1] & "/" & rnd, initHashSet[string]()).incl(p[3])
-    elif p.len >= 4 and p[0] == "intent" and p[2] == "decline":
+    if p.len >= 4 and p[0] == "intent" and p[2] == "decline":
       declined.mgetOrPut(p[1], initHashSet[string]()).incl(p[3])
   for id, it in intents:
     let pol = intentPolicyOf(events, id)
@@ -204,14 +220,25 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
     decliners.sort()
     let ej = effectJsonOf(events, id)
     let sch = effectSchema(ej)
+    # Approvals come from the grades, so a rejected (mis-attested) approval never
+    # inflates the "M of N" — the card counts what the fold counts.
+    var approvers, roundApprovers: HashSet[string]
+    var committed, unattested = 0
+    for g in approvalGrades(events, driverFor, id):
+      if g.grade == agRejected: continue
+      approvers.incl g.who
+      if g.round == curRound: roundApprovers.incl g.who
+      if g.grade == agCommitted: inc committed else: inc unattested
     result.add IntentView(id: id, state: $it.state,
                           effectJson: ej,
-                          approvals: approvals.getOrDefault(id).len,
+                          approvals: approvers.len,
+                          committed: committed,
+                          unattested: unattested,
                           txhash: bytesHex(it.materialization.bytes),
                           policy: pol,
                           round: curRound,
                           rounds: desc.rounds,
-                          roundApprovals: roundApp.getOrDefault(id & "/" & $curRound, initHashSet[string]()).len,
+                          roundApprovals: roundApprovers.len,
                           declines: declined.getOrDefault(id, initHashSet[string]()).len,
                           decliners: decliners,
                           schemaId: sch.id,
@@ -233,7 +260,10 @@ proc intentViewJson*(v: IntentView, desc: DriverDescriptor): JsonNode =
      "declines": v.declines, "decliners": v.decliners,
      # the declared schema id + whether muster recognizes it. false ⇒ the card renders
      # a NAMED "schema unknown" failure, never the effect body (exo-1ec.3).
-     "schemaId": v.schemaId, "schemaKnown": v.schemaKnown}
+     "schemaId": v.schemaId, "schemaKnown": v.schemaKnown,
+     # how many approvals commit to their inputs (a verified muster attestation) vs
+     # were signed outside muster and pasted in (exo-ef1) — never shown as committed.
+     "committed": v.committed, "unattested": v.unattested}
 
 # ── activity: how the room reached its state (the education seam) ──────────────
 # A human-readable narrative of every state transition on the coordination log, in
@@ -280,10 +310,21 @@ proc activityEffectLabel(events: seq[Event], id: string): string =
   except CatchableError:
     return "a proposal"
 
+proc gradeLookup(events: seq[Event], driverFor: DriverFor): proc (id, who, round: string): string =
+  ## Memoized per-intent approval grades, keyed "<who>/<round>" (exo-ef1).
+  var cache = initTable[string, Table[string, string]]()
+  result = proc (id, who, round: string): string =
+    if id notin cache:
+      var t = initTable[string, string]()
+      for g in approvalGrades(events, driverFor, id): t[g.who & "/" & $g.round] = $g.grade
+      cache[id] = t
+    cache[id].getOrDefault(who & "/" & round, "")
+
 proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntry] =
   ## The room's coordination history as reduce(log). See the section note above.
   let ordered = canonicalOrder(events)
   let folded = reduceIntents(events, driverFor)
+  let gradeOf = gradeLookup(events, driverFor)
   var approvers = initTable[string, HashSet[string]]()   # id -> {who/round} seen
   var lastSig = initTable[string, int]()                 # id -> index of its last sig
   var proposeSeq = initTable[string, int]()              # id -> index of its propose (groups the intent's lines together, in the order intents were proposed)
@@ -313,12 +354,14 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
       if id notin approvers: approvers[id] = initHashSet[string]()
       let dkey = who & "/" & rnd
       if dkey in approvers[id]: continue     # one contribution per (contributor, round)
+      let grade = gradeOf(id, who, rnd)
+      if grade == $agRejected: continue      # the fold didn't count it; neither does the story
       approvers[id].incl dkey
       lastSig[id] = i
       var distinctWho = initHashSet[string]()
       for k in approvers[id]: distinctWho.incl k.split('/')[0]
       result.add ActivityEntry(seq: i, order: 0, kind: "approve", intentId: id,
-        account: who,
+        account: who, attestation: grade,
         title: "Approved by " & shortId(who),
         detail: $distinctWho.len & " of " & $desc.threshold & " needed" &
                 (if desc.rounds > 1: "  ·  round " & rnd & " of " & $desc.rounds else: ""))
@@ -414,6 +457,7 @@ proc intentProvenance*(events: seq[Event], driverFor: DriverFor, intentId: strin
   ## be accounted for would have been refused before signing (invariant 10), so it
   ## would never appear. A duplicate owner signature folds once, exactly as it counts.
   let ordered = canonicalOrder(events)
+  let gradeOf = gradeLookup(events, driverFor)
   var seenSig = initHashSet[string]()
   for i in 0 ..< ordered.len:
     let p = ordered[i].key.split('/')
@@ -425,10 +469,12 @@ proc intentProvenance*(events: seq[Event], driverFor: DriverFor, intentId: strin
                           guarantee: "sealed to the room's epoch — only a member could have placed it")
     elif p[2] == "sig" and p.len >= 4:
       if p[3] in seenSig: continue
-      seenSig.incl p[3]
       let round = (if p.len >= 5: p[4] else: "1")
+      let grade = gradeOf(intentId, p[3], round)
+      if grade == $agRejected: continue      # attested, but not over P: it never reached the decision
+      seenSig.incl p[3]
       result.add ProvItem(cls: icContribution, logPos: i,
-                          account: p[3],
+                          account: p[3], attestation: grade,
                           accountable: true, what: "an approval",
                           detail: (if round != "1": "round " & round else: ""),
                           guarantee: "the driver verified this recovers to a configured member — a non-member never reaches the fold")
@@ -463,6 +509,7 @@ proc membershipEvent*(epoch: int, joinerHex: string, parents: seq[EventId] = @[]
 
 proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] =
   let ordered = canonicalOrder(events)
+  let gradeOf = gradeLookup(events, driverFor)
   var epoch = 0
   var seenSig = initHashSet[string]()
   var seenDecline = initHashSet[string]()
@@ -508,6 +555,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
       seenSig.incl(id & "/" & p[3])
       result.add LogProvItem(seq: i, cls: icContribution, kind: "sig", intentId: id,
         account: p[3], accountable: true, what: "an approval",
+        attestation: gradeOf(id, p[3], (if p.len >= 5: p[4] else: "1")),
         detail: (if p.len >= 5 and p[4] != "1": "round " & p[4] else: ""),
         guarantee: "the driver verified this recovers to a configured member — a non-member never reaches the fold",
         epoch: epoch)
@@ -536,6 +584,24 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
         what: "a key-binding for an approval",
         detail: "",
         guarantee: "the authorization key that signed is bound by a secp signature to the member's admitted encryption identity — the room can check the approval came from an admitted member, not merely a valid owner (F-14, F-9); scoped to this epoch (invariant 7)",
+        epoch: epoch)
+    of "context":
+      result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "context", intentId: id,
+        accountable: true, what: "the context approvals bind to", detail: e.value,
+        guarantee: "sealed to the room's epoch by the proposer; every attestation commits to it, so an approval is worthless in any other environment, account, slot, or after expiry (invariant 2)",
+        epoch: epoch)
+    of "read":
+      result.add LogProvItem(seq: i, cls: icExternalRead, kind: "read", intentId: id,
+        accountable: true, what: "an outside read that reached the proposal",
+        detail: (if p.len >= 4: p[3] else: ""),
+        guarantee: "an external read: what the proposer's source reported, recorded so its origin is accountable — not proof the world agrees (F-10)",
+        epoch: epoch)
+    of "attest":
+      if p.len < 5: continue
+      result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "attest", intentId: id,
+        account: p[3], accountable: true, what: "a member's commitment to an approval's inputs",
+        attestation: gradeOf(id, p[3], p[4]),
+        detail: "", guarantee: "signed by the approving key over the context, the materialization, and the provenance of every input (invariants 2 and 10); every member re-derives what it must cover",
         epoch: epoch)
     of "submit":
       result.add LogProvItem(seq: i, cls: icExternalRead, kind: "submit", intentId: id,

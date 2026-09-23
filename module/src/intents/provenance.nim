@@ -48,8 +48,12 @@ proc buildProvenance*(inputs: seq[SignedInput]): ProvenanceRecord =
 proc encodeProvenance*(rec: ProvenanceRecord): seq[byte] =
   var arr: seq[CborValue]
   for e in rec.entries:
-    arr.add cbArray(@[cbText($e.class), cbUint(uint64(e.logPos)), cbText(e.account),
-                      cbText(e.logRef)])
+    # The position an entry cites: its source event's CONTENT ID when it has one — a
+    # canonical index shifts whenever an earlier-sorting event arrives, which would
+    # change P under every signature already made (exo-ef1). Only the pre-log model
+    # (no content id) falls back to the index.
+    let pos = (if e.logRef.len > 0: cbText(e.logRef) else: cbUint(uint64(e.logPos)))
+    arr.add cbArray(@[cbText($e.class), pos, cbText(e.account)])
   encodeHashInput(hashInput("muster.provenance.v1", @[("entries", cbArray(arr))]))
 
 proc signedBytes*(materialization: seq[byte], rec: ProvenanceRecord): seq[byte] =
