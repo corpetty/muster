@@ -1,7 +1,7 @@
 {
   "id": "derived-exo-403",
   "original_statement": "I can't download the audit trail behind a signature \u2014 one file that describes the whole thing, from where its inputs came from through to how it settled.",
-  "restatement": "A member can export, for any intent in a room they hold, one audit file covering the intent's whole lifecycle \u2014 every signature and exactly what each committed to, where each input came from, and how it settled \u2014 that verifies itself, is deterministic, and can reveal no more than the exporter could already read: (s1) for an intent, the export is one canonical-CBOR file containing the effect and its re-derived materialization, every signature on the intent with its full signing payload (profile, schema-id, environment, account, slot, expiry) and committed provenance record, the parent-closed log entries those records name, and the driver's manifest with its disclosure rows; every provenance-named log position resolves inside the file, and every entry in the file is named by a provenance record or is an ancestor of one that is; (s2) a pure verifier given only the file re-derives the materialization from the effect, recomputes every signing payload and verifies each signature against it, recomputes every entry's content id and parent-closure, and checks each provenance record against the included entries; an untouched file is accepted and any single-byte change is refused with the first discrepancy named; (s3) the file's bytes are a pure function of the room's log and keys: reordering or duplicating the log it is built from yields the byte-identical file, exporting twice yields the same digest, and producing it writes nothing to any store; (s4) under an anonymous driver neither the canonical file nor the readable report contains any signer identity; under a named driver the names are exactly the accounts that contributed; (s5) the file contains only entries from membership epochs the exporter holds keys for; if the intent's lineage reaches an epoch the exporter cannot open, the export is refused with that reason and never silently truncated; (s6) when the intent was submitted or finalized, those entries are included and graded as external reads with their chain reference, and the verifier never reports them as verified against the chain; the file states the lifecycle stage reached, so an unsettled intent is labelled as such; (s7) the human-readable report is a pure function of the canonical file and carries its digest: rendering is deterministic, every fact in it traces to a field of the file, and the report is never authoritative \u2014 editing it changes nothing the verifier says; (s8) the intent card offers a Download audit trail action that saves both the canonical file and the readable report; an offscreen self-test clicks it, runs the standalone verifier on the saved file, and gets accepted.",
+  "restatement": "A member can export, for any intent in a room they hold, one audit file covering the intent's whole lifecycle \u2014 every signature and exactly what each committed to, where each input came from, and how it settled \u2014 that verifies itself, is deterministic, and can reveal no more than the exporter could already read: (s1) for an intent, the export is one canonical-CBOR file containing the effect and its re-derived materialization, every signature on the intent with its full signing payload (profile, schema-id, environment, account, slot, expiry) and committed provenance record, the parent-closed log entries those records name, and the driver's manifest with its disclosure rows; every provenance-named log position resolves inside the file, and every entry in the file is named by a provenance record or is an ancestor of one that is; (s2) a pure verifier given only the file re-derives the materialization from the effect, recomputes every signing payload and verifies each signature against it, recomputes every entry's content id and parent-closure, and checks each provenance record against the included entries; an untouched file is accepted and any single-byte change is refused with the first discrepancy named; (s3) the file's bytes are a pure function of the room's log and keys: reordering or duplicating the log it is built from yields the byte-identical file, exporting twice yields the same digest, and producing it writes nothing to any store; (s4) the names in both the canonical file and the readable report are exactly the accounts that contributed \u2014 no missing, extra, or swapped signer; (s5) the file contains only entries from membership epochs the exporter holds keys for; if the intent's lineage reaches an epoch the exporter cannot open, the export is refused with that reason and never silently truncated; (s6) when the intent was submitted or finalized, those entries are included and graded as external reads with their chain reference, and the verifier never reports them as verified against the chain; the file states the lifecycle stage reached, so an unsettled intent is labelled as such; (s7) the human-readable report is a pure function of the canonical file and carries its digest: rendering is deterministic, every fact in it traces to a field of the file, and the report is never authoritative \u2014 editing it changes nothing the verifier says; (s8) the intent card offers a Download audit trail action that saves both the canonical file and the readable report; an offscreen self-test clicks it, runs the standalone verifier on the saved file, and gets accepted.",
   "restatement_clauses": [
     {
       "id": "s1",
@@ -17,7 +17,7 @@
     },
     {
       "id": "s4",
-      "text": "Under an anonymous driver neither the canonical file nor the readable report contains any signer identity; under a named driver the names are exactly the accounts that contributed."
+      "text": "The names in both the canonical file and the readable report are exactly the accounts that contributed \u2014 no missing, extra, or swapped signer."
     },
     {
       "id": "s5",
@@ -36,12 +36,12 @@
       "text": "The intent card offers a Download audit trail action that saves both the canonical file and the readable report; an offscreen self-test clicks it, runs the standalone verifier on the saved file, and gets accepted."
     }
   ],
-  "goal": "For any intent a member holds, one downloadable, self-verifying audit file (canonical CBOR, with a derived human-readable report) describes the whole intent \u2014 every signature and its committed payload and provenance, the lineage slice those records name, the driver's disclosure, and its settlement graded honestly \u2014 deterministic, adding no store, silent on signers under anonymous drivers, and scoped to the epochs the exporter can read.",
+  "goal": "For any intent a member holds, one downloadable, self-verifying audit file (canonical CBOR, with a derived human-readable report) describes the whole intent \u2014 every signature and its committed payload and provenance, the lineage slice those records name, the driver's disclosure, and its settlement graded honestly \u2014 deterministic, adding no store, and scoped to the epochs the exporter can read.",
   "acceptance_criteria": [
     "For an intent, the export is one canonical-CBOR file containing the effect and its re-derived materialization, every signature on the intent with its full signing payload (profile, schema-id, environment, account, slot, expiry) and committed provenance record, the parent-closed log entries those records name, and the driver's manifest with its disclosure rows; every provenance-named log position resolves inside the file, and every entry in the file is named by a provenance record or is an ancestor of one that is.",
     "A pure verifier given only the file re-derives the materialization from the effect, recomputes every signing payload and verifies each signature against it, recomputes every entry's content id and parent-closure, and checks each provenance record against the included entries; an untouched file is accepted and any single-byte change is refused with the first discrepancy named.",
     "The file's bytes are a pure function of the room's log and keys: reordering or duplicating the log it is built from yields the byte-identical file, exporting twice yields the same digest, and producing it writes nothing to any store.",
-    "Under an anonymous driver neither the canonical file nor the readable report contains any signer identity; under a named driver the names are exactly the accounts that contributed.",
+    "The names in both the canonical file and the readable report are exactly the accounts that contributed \u2014 no missing, extra, or swapped signer.",
     "The file contains only entries from membership epochs the exporter holds keys for; if the intent's lineage reaches an epoch the exporter cannot open, the export is refused with that reason and never silently truncated.",
     "When the intent was submitted or finalized, those entries are included and graded as external reads with their chain reference, and the verifier never reports them as verified against the chain; the file states the lifecycle stage reached, so an unsettled intent is labelled as such.",
     "The human-readable report is a pure function of the canonical file and carries its digest: rendering is deterministic, every fact in it traces to a field of the file, and the report is never authoritative \u2014 editing it changes nothing the verifier says.",
@@ -62,7 +62,7 @@
     },
     {
       "id": "c4",
-      "text": "Under an anonymous driver neither the canonical file nor the readable report contains any signer identity; under a named driver the names are exactly the accounts that contributed."
+      "text": "The names in both the canonical file and the readable report are exactly the accounts that contributed \u2014 no missing, extra, or swapped signer."
     },
     {
       "id": "c5",
@@ -168,28 +168,27 @@
     {
       "type": "model_check",
       "restatement_clause_id": "s4",
-      "proves": "The stepper enumerates the declared membership model crossed with signer-to-input assignments. Anonymous: the canonical file AND the rendered report are byte-identical under every assignment, pinning signer identity as absent rather than unshown. Named: the names covary exactly with the assignment. Catches identity leaking through the report or the file's structure, and a named export recording a contributor the driver did not verify.",
+      "proves": "The stepper enumerates every signer-to-approval assignment (by transposition from the identity) and requires the canonical file AND the rendered report to name exactly the accounts that contributed, covarying with the assignment. Catches a file or report that drops, invents, or swaps a signer. Amended 2026-09-23 by ADR-015: anonymous membership is retired, so there is no silent branch.",
       "run": [
         "nim",
         "r",
         "-d:release",
-        "tests/probes/probe_audit_anonymity_stepper.nim"
+        "tests/probes/probe_audit_signer_names_stepper.nim"
       ],
       "cwd": "module",
       "initial": [
         {
-          "membership_model": "anonymous",
           "assignment": "identity",
-          "identity_disclosure_correct": true
+          "names_correct": true
         }
       ],
       "invariant": {
-        "field": "identity_disclosure_correct",
+        "field": "names_correct",
         "op": "eq",
         "value": true
       },
       "max_states": 80,
-      "description": "Under an anonymous driver neither the canonical file nor the readable report contains any signer identity; under a named driver the names are exactly the accounts that contributed.",
+      "description": "The names in both the canonical file and the readable report are exactly the accounts that contributed \u2014 no missing, extra, or swapped signer.",
       "clause_id": "c4"
     },
     {
@@ -309,7 +308,7 @@
     "tests/probes/probe_audit_completeness_stepper.nim",
     "tests/probes/probe_audit_tamper_stepper.nim",
     "tests/probes/probe_audit_deterministic.nim",
-    "tests/probes/probe_audit_anonymity_stepper.nim",
+    "tests/probes/probe_audit_signer_names_stepper.nim",
     "tests/probes/probe_audit_epoch_scope_stepper.nim",
     "tests/probes/probe_audit_settlement_stepper.nim",
     "tests/probes/probe_audit_report_derived.nim",
