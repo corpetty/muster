@@ -79,6 +79,10 @@ type SafeDriver* = ref object of Driver
   owners*: seq[Address]              ## the Safe's owner set
   pendingHash*: array[32, byte]      ## the safeTxHash currently being collected on
 
+method environment*(d: SafeDriver): string =
+  ## A Safe settles on one EVM chain: its signatures are bound to that chain id.
+  "eip155:" & $d.chainId
+
 method describe*(d: SafeDriver): DriverDescriptor =
   DriverDescriptor(rounds: 1, serializationDomain: "eip712.safe.v1.4.1",
                    finality: finExternal, threshold: d.threshold)

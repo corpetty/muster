@@ -32,6 +32,7 @@ import ../src/crypto/epoch_crypto     # EpochCrypto (ECIES-secp256k1 + libsodium
 import ../src/crypto/keystore         # persistent module identity (FS-4)
 import ../src/coordination/session    # the multi-instance coordination flow
 import ../src/coordination/intents     # intent lifecycle = reduce(log) (the multi-party fold)
+import ../src/coordination/live        # the live propose/contribute path, driveable in-process (exo-ef1)
 import ../src/coordination/invoker     # the execute seam + allowlist/capability gate (P-D2)
 import ../src/coordination/readiness   # the action manifest + this instance's readiness (exo-002.2)
 import ../src/coordination/offers      # requirements × my catalogue → offers (exo-45e K4)
@@ -748,25 +749,19 @@ proc musterCoordinatePolicy(): string =
   $policyJson()
 
 proc musterCoordinatePropose(effectJson: string): string =
+  ## The live propose path lives in coordination/live.nim (exo-ef1) so it can be
+  ## driven in-process; this is plumbing over the module's session + keystore.
   if gSession == nil: return "not-joined"
-  # The intent id commits to its policy, so the SAME effect under two policies is two
-  # distinct intents (an intent is a policy boundary). The policy is declared in the
-  # log keyed by that id, so every member folds this intent under the same driver.
-  let id = intentIdFor(effectJson, gCoordKind)
-  gSession.publish(policyDeclEvent(id, gCoordKind))
-  gSession.publish(proposeEvent(id, effectJson))
-  # Announce the proposal INTO the conversation: a reference card, authored and
-  # timestamped like any message, so the proposal appears inline in the thread
-  # among the chat (the conversation is the substrate — a proposal is a card in it,
-  # not a side panel). The author attributes who proposed. Its live state, verify,
-  # and provenance still come from the verified intent fold keyed by this id — the
-  # card is a positional reference, never the source of truth.
-  let author = toHex(moduleKeystore().encIdentity().toBytes())
   inc gMsgSeq
-  let refBody = $(%*{"kind": "intent-ref", "intentId": id})
-  let (_, ev) = newMessageEvent(author, int64(epochTime()), refBody, gMsgSeq)
-  gSession.publish(ev)
-  id
+  # The context every approval binds to (invariant 2, exo-ef1): a Safe intent is bound
+  # to the Safe; a room-native decision to this room. MUSTER_INTENT_TTL_S overrides
+  # how long the proposal stays signable (default a week).
+  let account = (if gCoordKind == "safe": toHex(gDriver.safe) else: gTopic)
+  var ttl = DefaultIntentTtl
+  try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
+  except ValueError: discard
+  liveProposeIntent(gSession, moduleKeystore(), driverFor, gCoordKind, effectJson,
+                    int64(epochTime()), gMsgSeq, account = account, ttlSec = ttl)
 
 proc musterCoordinateReannounce(): string =
   ## Re-publish every still-OPEN intent — its policy declaration, its propose, and its
@@ -788,6 +783,11 @@ proc musterCoordinateReannounce(): string =
     let policy = intentPolicyOf(events, id)
     gSession.publish(policyDeclEvent(id, policy))
     gSession.publish(proposeEvent(id, effect))
+    # its signing context and any recorded reads too: without them a joiner can fold
+    # the intent but not attest to it (exo-ef1). Same events, same ids — idempotent.
+    for e in events:
+      if e.key == "intent/" & id & "/context" or e.key.startsWith("intent/" & id & "/read/"):
+        gSession.publish(e)
     inc gMsgSeq
     let refBody = $(%*{"kind": "intent-ref", "intentId": id})
     let (_, ev) = newMessageEvent(author, int64(epochTime()), refBody, gMsgSeq)
@@ -802,57 +802,12 @@ proc roomContext(): LinkContext =
   LinkContext(account: SAFE_ADDR, slot: "0", expiry: uint64(epochTime()) + 86_400)
 
 proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: string): string =
-  ## Add a contribution to a proposed intent. If `signatureHex` is EMPTY, sign in-app
-  ## with THIS instance's own keystore identity — no paste: the room-native drivers
-  ## (threshold/frost) endorse with the Ed25519 encryption key (which is in the room's
-  ## roster, so it counts), Safe signs the safeTxHash with the secp key (counts only if
-  ## our address is a Safe owner). `keyRef` (exo-45e K2b/K5) selects WHICH held key
-  ## signs — so an instance holding several owner keys contributes as each; an empty ref
-  ## uses the primary key. The secret never leaves the keystore.
+  ## Add a contribution (in-app signed when `signatureHex` is empty, else pasted). The
+  ## live contribute path lives in coordination/live.nim (exo-ef1) so it can be driven
+  ## in-process; this is plumbing over the module's session + keystore.
   if gSession == nil: return "not-joined"
-  gSession.poll()
-  let events = gSession.log.allEvents()
-  let drv = driverForKind(intentPolicyOf(events, intentId))   # THIS intent's own policy
-  let effectJson = effectJsonOf(events, intentId)
-  if effectJson.len == 0: return "unknown-intent"
-  var sig = signatureHex
-  var inAppSecpRef = ""   # nonempty iff we secp-signed IN-APP: publish that key's F-14 binding
-  if sig.len == 0:
-    let mat = canonicalize(drv, effectFromJson(effectJson))
-    let ks = moduleKeystore()
-    # An unknown ref is refused — never a silent fall-through to a different key than
-    # the caller chose (K2b). An empty ref means the primary key.
-    if keyRef.len > 0 and not ks.hasKey(keyRef): return "unknown-key"
-    if drv of SafeDriver or drv of PersonalSignDriver:
-      # Both sign a 32-byte digest with the secp key: Safe the EIP-712 safeTxHash,
-      # eip191 the EIP-191 personal_sign digest. The keystore signs; the driver
-      # verifies the signature recovers to a configured owner/signer.
-      var h: array[32, byte]
-      for i in 0 ..< min(32, mat.bytes.len): h[i] = mat.bytes[i]
-      sig = toHex(if keyRef.len > 0: ks.signWith(keyRef, h) else: ks.sign(h))
-      inAppSecpRef = (if keyRef.len > 0: keyRef else: refOf(ks.address()))
-    else:
-      sig = toHex(if keyRef.len > 0: ks.edSignWith(keyRef, mat.bytes) else: ks.edSign(mat.bytes))
-  # The intent's policy verifies the contribution: a Safe owner's secp signature, or a
-  # roster member's Ed25519 endorsement — "" iff it isn't a valid one (e.g. our own
-  # identity is not a signer for this intent's policy).
-  let who = contributorOf(drv, effectJson, sig)
-  if who.len == 0: return "rejected"
-  # Tag the contribution with the round this intent is currently collecting, so a
-  # multi-round driver (FROST) can have the same member contribute once per round and
-  # the fold dedups per (contributor, round). Single-round drivers stay at round 1.
-  let folded = reduceIntents(events, driverFor)
-  let curRound = (if intentId in folded: folded[intentId].collection.round else: 1)
-  gSession.publish(contributeEvent(intentId, who, sig, round = curRound))
-  # F-14/K5: when we secp-signed IN-APP with a chosen owner key, publish that key's
-  # binding so the room can check the approval came from an admitted member — the
-  # authorization key is bound by a signature to our (admitted) encryption identity, not
-  # merely a valid owner. Epoch-scoped via roomContext; folds once per (intent, key). A
-  # PASTED signature gets none: we do not hold that key, so we cannot vouch for it.
-  if inAppSecpRef.len > 0:
-    let st = moduleKeystore().bindingForKey(inAppSecpRef, roomContext())
-    gSession.publish(keyBindingEvent(intentId, who, toHex(encodeLink(st))))
-  intentState(gSession.log.allEvents(), driverFor, intentId)
+  liveContribute(gSession, moduleKeystore(), driverFor, intentId, signatureHex, keyRef,
+                 roomContext(), uint64(epochTime()))
 
 proc musterCoordinateIntents(): string =
   ## The room's proposals, folded from the shared log and projected to what a card
@@ -872,19 +827,7 @@ proc musterCoordinateIntents(): string =
     # dCBOR materialization); threshold + domain come from describe(), never hardcoded.
     let drv = driverForKind(v.policy)
     let desc = drv.describe()
-    var o = %*{"id": v.id, "state": v.state,
-               "threshold": desc.threshold, "approvals": v.approvals,
-               "policy": v.policy, "domain": desc.serializationDomain,
-               "txhash": v.txhash,
-               # multi-round (FROST): the round being collected, the total, and the
-               # distinct approvals THIS round — so a card shows "round R of N, M of k
-               # this round". For single-round drivers rounds == 1 and the UI ignores it.
-               "round": v.round, "rounds": v.rounds, "roundApprovals": v.roundApprovals,
-               # who declined to take part
-               "declines": v.declines, "decliners": v.decliners,
-               # the declared schema id + whether muster recognizes it. false ⇒ the card
-               # renders a NAMED "schema unknown" failure, never the effect body (exo-1ec.3).
-               "schemaId": v.schemaId, "schemaKnown": v.schemaKnown}
+    var o = intentViewJson(v, desc)
     # n = how many could sign (owners / roster), so the card reads "M of N" honestly
     # (e.g. 2 of 3), not "threshold of threshold".
     if drv of SafeDriver: o["n"] = %SafeDriver(drv).owners.len
@@ -1279,6 +1222,9 @@ proc musterCoordinateSubmit(intentId: string): string =
   let st = intentState(events, driverFor, intentId)
   if st != "executable":
     return $(%*{"id": intentId, "error": "not-executable", "state": st})
+  # invariant 2 at submit time: past the intent's declared expiry nothing settles.
+  let pre = liveSubmitPrecheck(gSession, driverFor, intentId, uint64(epochTime()))
+  if pre.len > 0: return $(%*{"id": intentId, "error": pre})
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return $(%*{"error": "unknown-intent"})
   let effect = effectFromJson(effectJson)

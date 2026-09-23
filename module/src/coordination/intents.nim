@@ -24,116 +24,13 @@ import ../intents/materialization
 import ../intents/signing_payload
 import ../intents/provenance     # InputClass — the spec's accountability vocabulary (inv 10)
 import ../drivers/driver
-import ../drivers/invoke          # invokeDomain — the invoke effect's schema id
-import ../dcbor/dcbor
-import ../hashing/keccak256
 export lifecycle.Intent, lifecycle.LifecycleState
 export provenance.InputClass    # so consumers can name a lineage entry's class
 
-proc effectFromJson*(effectJson: string): Effect =
-  ## Build a typed effect from JSON. The `effect` field selects the schema (default
-  ## "transfer"); each schema binds its own fields, and the schemaId travels into the
-  ## materialization, so a signature under one effect can never be reinterpreted as
-  ## another (F-5 / invariant 5b). The ACTION is open: a new effect type is a new
-  ## case here (eventually a plugin-emitted typed block, invariant 3), never a change
-  ## to the fold — the core still doesn't read the bytes, the driver canonicalizes them.
-  try:
-    let j = parseJson(effectJson)
-    if j.kind == JObject:
-      let kind = if j.hasKey("effect"): j["effect"].getStr() else: "transfer"
-      case kind
-      of "statement":
-        # A statement the room ratifies — a decision that produces a signed group
-        # endorsement, not a payment. Canonicalizes under any driver whose
-        # materialization is the base serialization (e.g. the threshold driver).
-        var fields: seq[(string, CborValue)]
-        if j.hasKey("text"): fields.add ("text", cbText(j["text"].getStr()))
-        return Effect(schemaId: "muster.effect.statement.v1", fields: fields)
-      of "add-driver":
-        # GOVERNANCE — driver-as-proposal: a proposal that INTRODUCES a driver kind
-        # into the room's capability set. What a group can do evolves by proposal, not
-        # a fixed compile-time list (invariant 6). Like a statement it produces a signed
-        # group decision, not an on-chain effect; it canonicalizes under the base
-        # serialization, and once the room approves it the kind is admitted (see
-        # roomDriverKinds). Schema-bound, so an add-driver signature can never be
-        # reinterpreted as a payment (F-5).
-        var fields: seq[(string, CborValue)]
-        if j.hasKey("kind"): fields.add ("kind", cbText(j["kind"].getStr()))
-        return Effect(schemaId: "muster.effect.governance.add-driver.v1", fields: fields)
-      of "invoke":
-        # A generic module-action intent: call module.method(args). The schemaId is
-        # invokeDomain(module, method), so the signed bytes commit to the specific
-        # action (invariant 5 — different method → different schemaId → different
-        # bytes). The core executes it after the room endorses it (P-D2). args are
-        # stored as their verbatim JSON text: every member folds the SAME propose
-        # event, so the materialization is identical across the room, and the
-        # execution path reparses the text into the positional lp_invoke args.
-        let module = j{"module"}.getStr()
-        let meth = j{"method"}.getStr()
-        var fields: seq[(string, CborValue)]
-        fields.add ("module", cbText(module))
-        fields.add ("method", cbText(meth))
-        if j.hasKey("args"): fields.add ("args", cbText($j["args"]))
-        # LEZ Mode B / any coordinated transfer (exo-45e, drivers/invoke.nim §manifest):
-        # carry the `counterparty` field name (which arg holds the recipient) and the
-        # `chain`, so the folded effect declares the counterparty address slot the room
-        # asks the recipient to fill, plus the proposer's lez-account requirement for a
-        # lez:* chain. Committed to the signed bytes (invariant 5) — the recipient the
-        # room agreed on is part of what is endorsed, not a post-hoc substitution.
-        let cp = j{"counterparty"}.getStr()
-        if cp.len > 0:
-          fields.add ("counterparty", cbText(cp))
-          # The bound recipient arg becomes a FIRST-CLASS effect field, not just an entry in
-          # the args blob: the manifest's counterparty slot binds this field (consistency
-          # requires the effect to carry it), and — the point — the recipient the room agreed
-          # on is committed to the signed bytes (invariant 5), never a post-hoc substitution.
-          # Its value comes from args if the proposer already knows it, else empty — the room
-          # fills it via coordinate_share_material (K5) before the intent is endorsed.
-          var cpVal = ""
-          if j.hasKey("args") and j["args"].kind == JObject and j["args"].hasKey(cp):
-            cpVal = j["args"][cp].getStr()
-          fields.add (cp, cbText(cpVal))
-        let chain = j{"chain"}.getStr()
-        if chain.len > 0: fields.add ("chain", cbText(chain))
-        return Effect(schemaId: invokeDomain(module, meth), fields: fields)
-      else:
-        var fields: seq[(string, CborValue)]
-        if j.hasKey("to"): fields.add ("to", cbText(j["to"].getStr()))
-        if j.hasKey("value"): fields.add ("value", cbUint(uint64(j["value"].getInt())))
-        if j.hasKey("nonce"): fields.add ("nonce", cbUint(uint64(j["nonce"].getInt())))
-        return Effect(schemaId: "muster.effect.transfer.v1", fields: fields)
-  except CatchableError: discard
-  Effect(schemaId: "muster.effect.transfer.v1", fields: @[])
-
-proc effectSchema*(effectJson: string): tuple[id: string, known: bool] =
-  ## The declared schema id of an activity, and whether muster RECOGNIZES it (exo-1ec.3).
-  ## An activity renders only from a declared, versioned schema; an unrecognized one must
-  ## get a NAMED "schema unknown" failure, never a silent fallback that renders it as
-  ## something it is not. v0 uses hand-assigned ids (ADR-009), so "known" means the id is
-  ## in the v0 vocabulary — not a parsed CDDL root; this is the rendering gate, and does
-  ## not touch the signing/fold path (effectFromJson still canonicalizes for the driver).
-  ## A malformed effect, or an `effect` value we don't have a schema for, is `known:false`
-  ## and the id names what was declared so the failure can say exactly what it saw.
-  try:
-    let j = parseJson(effectJson)
-    if j.kind != JObject: return ("muster.effect.unknown.v0", false)
-    if not j.hasKey("effect"): return ("muster.effect.transfer.v1", true)  # legacy plain {to,value,nonce}
-    let kind = j["effect"].getStr()
-    case kind
-    of "transfer": return ("muster.effect.transfer.v1", true)
-    of "statement": return ("muster.effect.statement.v1", true)
-    of "add-driver": return ("muster.effect.governance.add-driver.v1", true)
-    of "invoke":
-      let m = j{"module"}.getStr()
-      let meth = j{"method"}.getStr()
-      # the invoke FAMILY is a declared schema; a missing module/method is malformed → named.
-      if m.len > 0 and meth.len > 0: return (invokeDomain(m, meth), true)
-      return ("muster.invoke.?.?.v1", false)
-    else:
-      # an `effect` value muster has no schema for — name it, do not coerce it to a transfer.
-      return ("muster.effect." & (if kind.len > 0: kind else: "?") & ".v?", false)
-  except CatchableError:
-    return ("muster.effect.unknown.v0", false)
+import ./intent_events
+export intent_events
+import ./attest                   # live attestations: the fold's gate + every surface's grade (exo-ef1)
+export attest
 
 proc hexToBytes(s: string): seq[byte] =
   var h = s
@@ -147,208 +44,8 @@ proc bytesHex(b: openArray[byte]): string =
   result = "0x"
   for x in b: (result.add d[int(x shr 4)]; result.add d[int(x and 0x0F)])
 
-# ── surface helpers (the hosted coordination methods are thin glue over these) ──
-
-proc intentIdFor*(effectJson: string, policyKind = ""): string =
-  ## A content-addressed intent id, so independent hosts derive the SAME id for the
-  ## same (effect, policy) without a round-trip. The POLICY is part of the identity
-  ## because an intent is a policy boundary: the same effect under two policies is two
-  ## distinct decisions, so it must be two intents (no collision). First 8 bytes of
-  ## keccak256(effect ++ "|" ++ policy). Re-proposing the same effect+policy folds once.
-  var b: seq[byte]
-  for c in effectJson: b.add byte(c)
-  if policyKind.len > 0:
-    b.add byte('|')
-    for c in policyKind: b.add byte(c)
-  bytesHex(keccak256(b)[0 ..< 8])
-
-proc effectJsonOf*(events: seq[Event], intentId: string): string =
-  ## The effect a proposal carried, recovered from the log — a contributor needs it
-  ## to recompute the safeTxHash their signature must cover. "" if not proposed here.
-  for e in events:
-    if e.key == "intent/" & intentId & "/propose": return e.value
-  ""
-
-proc contributorOf*(driver: Driver, effectJson, signatureHex: string): string =
-  ## The id of whoever produced this contribution (for Safe: the owner address that
-  ## signed the safeTxHash), or "" if it is not a legitimate contribution. A
-  ## contribution is keyed by this, so a duplicate folds once and a non-participant
-  ## never counts — driver-described (identifyContributor), so the fold is generic.
-  let m = canonicalize(driver, effectFromJson(effectJson))
-  identifyContributor(driver, m, Contribution(bytes: hexToBytes(signatureHex)))
-
-# ── event constructors (what a participant publishes) ─────────────────────────
-
-proc proposeEvent*(intentId, effectJson: string): Event =
-  Event(key: "intent/" & intentId & "/propose", value: effectJson)
-
-proc contributeEvent*(intentId, contributor, signatureHex: string,
-                      round = 1, parents: seq[EventId] = @[]): Event =
-  ## `round` is the collection round this contribution belongs to. It is part of the
-  ## dedup key (one contribution per contributor PER ROUND), so a multi-round driver
-  ## (FROST, rounds > 1) can have the same member contribute in each round without the
-  ## fold collapsing them into one. Single-round drivers always pass round 1, so the
-  ## key is `…/sig/<contributor>/1` and behaviour is unchanged. The signed bytes are
-  ## the materialization, never this key, so this does not touch the signing path.
-  Event(parents: parents, key: "intent/" & intentId & "/sig/" & contributor & "/" & $round,
-        value: signatureHex)
-
-proc submitEvent*(intentId: string, parents: seq[EventId] = @[]): Event =
-  Event(parents: parents, key: "intent/" & intentId & "/submit", value: "1")
-
-proc declineEvent*(intentId, who: string, parents: seq[EventId] = @[]): Event =
-  ## A member declines to take part in an intent (the card's Deny, exo-002.3). It is
-  ## informational: it never blocks the driver's threshold — whether a decline by a
-  ## required signer should DROP the intent is driver policy, not core policy. `who`
-  ## dedups one decline per member, and the view names who declined.
-  Event(parents: parents, key: "intent/" & intentId & "/decline/" & who, value: "1")
-
-proc finalEvent*(intentId: string, parents: seq[EventId] = @[]): Event =
-  ## Published once the on-chain execution is observed final (R-8) — folds the intent
-  ## to `final` so every member's card converges on "paid", not just "submitted".
-  Event(parents: parents, key: "intent/" & intentId & "/final", value: "1")
-
-proc materialShareEvent*(intentId, reqName, who, public, form, class, field: string,
-                         parents: seq[EventId] = @[]): Event =
-  ## A participant SHARES a chosen material into the room, bound to an intent
-  ## (exo-45e K5, docs/design/material-and-disclosure.md §3.4). This is how counterparty
-  ## material — a payee's receiving address, say — enters the log: only its PUBLIC face
-  ## and class travel (never a handle, s1), and only on this explicit act (rule s2). It
-  ## generalizes the address-share card into a fold-bound event: the value names which
-  ## effect `field` it fills, so the composer proposes the complete effect with it bound
-  ## in. `who` dedups one share per (requirement, member) and names the sharer, so the
-  ## room sees who shared.
-  Event(parents: parents, key: "intent/" & intentId & "/material/" & reqName & "/" & who,
-        value: $(%*{"public": public, "form": form, "class": class, "field": field}))
-
-proc keyBindingEvent*(intentId, contributor, linkHex: string,
-                      parents: seq[EventId] = @[]): Event =
-  ## Published alongside a keyed contribution (exo-45e K5): the F-14 binding statement
-  ## for the authorization key that signed, proving *that* key belongs to the same party
-  ## as the contributor's admitted encryption identity (F-14/F-9). Without it the room
-  ## sees only that a valid owner signed; with it the room can check the owner is bound to
-  ## an admitted member. `contributor` (the recovered signer) dedups one binding per
-  ## (intent, key); `linkHex` is `encodeLink(statement)` hex — the binding is epoch-scoped
-  ## via its own LinkContext, so a later joiner cannot lift it (invariant 7 holds here too).
-  Event(parents: parents, key: "intent/" & intentId & "/binding/" & contributor,
-        value: linkHex)
-
-type
-  MaterialShare* = object
-    reqName*: string     ## the requirement this fills
-    who*: string         ## the sharer
-    public*: string      ## the disclosed public face — never a handle
-    form*: string
-    class*: string
-    field*: string       ## the effect field it lands in
-
-proc reduceShares*(events: seq[Event], intentId: string): seq[MaterialShare] =
-  ## The materials shared into one intent, folded from the log (idempotent under reorder
-  ## / duplication, invariant 4): one per (requirement, sharer), first write wins.
-  var seen = initHashSet[string]()
-  for e in canonicalOrder(events):
-    let p = e.key.split('/')
-    if p.len >= 5 and p[0] == "intent" and p[1] == intentId and p[2] == "material":
-      let dedup = p[3] & "/" & p[4]
-      if dedup in seen: continue
-      seen.incl dedup
-      var pub, form, class, field = ""
-      try:
-        let j = parseJson(e.value)
-        pub = j{"public"}.getStr(); form = j{"form"}.getStr()
-        class = j{"class"}.getStr(); field = j{"field"}.getStr()
-      except CatchableError: discard
-      result.add MaterialShare(reqName: p[3], who: p[4], public: pub, form: form,
-                               class: class, field: field)
-
-type
-  KeyBinding* = object
-    contributor*: string   ## the recovered signer (an owner address) this binding vouches for
-    linkHex*: string       ## encodeLink(statement) hex — the F-14 link statement, verifiable
-
-proc reduceBindings*(events: seq[Event], intentId: string): seq[KeyBinding] =
-  ## The per-key F-14 bindings published for one intent's contributions, folded from the
-  ## log (idempotent under reorder / duplication, invariant 4): one per (intent, key),
-  ## first write wins. A card can pair each approval with its binding to show the signer
-  ## is an admitted member (F-9), not merely a valid owner.
-  var seen = initHashSet[string]()
-  for e in canonicalOrder(events):
-    let p = e.key.split('/')
-    if p.len >= 4 and p[0] == "intent" and p[1] == intentId and p[2] == "binding":
-      if p[3] in seen: continue
-      seen.incl p[3]
-      result.add KeyBinding(contributor: p[3], linkHex: e.value)
-
-# ── per-intent policy: the intent is the policy boundary, not the room ─────────
-# The room is a membership/privacy boundary — who can read. WHICH driver governs a
-# decision is the INTENT's, recorded when it is proposed, so a group (one room) can
-# run many things at once, each under its own driver, and changing what you compose
-# next never re-folds a decision already made. Keyed per intent ("intent/<id>/policy").
-
-proc policyDeclEvent*(intentId, kind: string): Event =
-  Event(key: "intent/" & intentId & "/policy", value: kind)
-
-proc intentPolicyOf*(events: seq[Event], intentId: string, default = "safe"): string =
-  ## The policy an intent was proposed under, recovered from the log — the driver that
-  ## governs THIS decision. `default` if none recorded (a legacy propose).
-  for e in events:
-    if e.key == "intent/" & intentId & "/policy": return e.value
-  default
-
-# ── messages: authored chat events folded from the SAME log ───────────────────
-# A message is an authored event on the coordination log — plain chat text or a
-# typed card as JSON, opaque to the core. It is NOT an intent: it never touches
-# the lifecycle engine, it is simply recorded and read back in timestamp order.
-# Each message is its own log entry keyed by a unique content address
-# ("message/<id>"), so the last-write-wins reducer preserves every one of them
-# (append-only), and the same message ingested twice folds once. The id travels
-# in the key inside the sealed envelope, so every participant reads the author's
-# id verbatim — it needn't be re-derivable by a reader, only unique for the author.
-
-type Message* = object
-  id*: string
-  author*: string       ## the author's 64-byte enc identity (ed25519 ++ x25519) hex
-  ts*: int64            ## authoring wall-clock (seconds); the sort key
-  body*: string         ## opaque: plain text OR a typed card as JSON
-
-proc newMessageEvent*(author: string, ts: int64, body: string,
-                      nonce: uint64): (string, Event) =
-  ## Build an authored message event and its message id. The id is
-  ## keccak256(author ++ body ++ ts ++ nonce)[:12]; the nonce (a per-author
-  ## monotonic counter) keeps two identical bodies in the same second distinct.
-  let value = $(%*{"author": author, "ts": ts, "body": body})
-  var b: seq[byte]
-  for c in author: b.add byte(c)
-  for c in body: b.add byte(c)
-  var t = cast[uint64](ts)
-  for _ in 0 ..< 8: (b.add byte(t and 0xff'u64); t = t shr 8)
-  var n = nonce
-  for _ in 0 ..< 8: (b.add byte(n and 0xff'u64); n = n shr 8)
-  let id = bytesHex(keccak256(b)[0 ..< 12])
-  (id, Event(key: "message/" & id, value: value))
-
-proc reduceMessages*(events: seq[Event]): seq[Message] =
-  ## Fold the authored messages out of the shared log, oldest-first. Ordered by
-  ## timestamp with the message id as a deterministic tiebreak, so two instances
-  ## with the same event set produce the identical ordering (invariant 4).
-  const prefix = "message/"
-  for e in canonicalOrder(events):
-    if not e.key.startsWith(prefix): continue
-    try:
-      let j = parseJson(e.value)
-      result.add Message(id: e.key[prefix.len .. ^1],
-                         author: j["author"].getStr(),
-                         ts: j["ts"].getBiggestInt(),
-                         body: j["body"].getStr())
-    except CatchableError: continue
-  result.sort(proc (a, b: Message): int =
-    if a.ts != b.ts: (if a.ts < b.ts: -1 else: 1) else: cmp(a.id, b.id))
-
 # ── the fold: intent lifecycle = reduce(log) ──────────────────────────────────
 
-type DriverFor* = proc(kind: string): Driver
-  ## Resolve a policy kind to its driver. Each intent folds under the driver of the
-  ## policy it was proposed with — the intent is the policy boundary.
 
 proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Intent] =
   ## Deterministic: proposes, then contributions, then submits, each in canonical
@@ -399,10 +96,30 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
     sigs.add (id: id, who: who, value: e.value, round: r, ord: i)
   sigs.sort(proc (a, b: auto): int =
     (if a.round != b.round: cmp(a.round, b.round) else: cmp(a.ord, b.ord)))
+  # The attestation gate (invariant 10 on the live path, exo-ef1): an approval that
+  # carries muster attestations counts only if one of them verifies against the P this
+  # fold re-derives from the log — a forged, mismatched, cross-intent or cross-room
+  # attestation leaves the approval uncounted. An approval with NO attestation was
+  # signed outside muster (pasted): it counts, and every surface grades it unattested.
+  var payloads = initTable[string, seq[byte]]()
+  proc payloadOf(id: string): seq[byte] =
+    if id notin payloads: payloads[id] = attestationPayload(events, driverFor, id)
+    payloads[id]
+  var attests = initTable[string, seq[string]]()        # "<id>/<who>/<round>" -> attestation hex
+  for e in ordered:
+    let p = e.key.split('/')
+    if p.len >= 5 and p[0] == "intent" and p[2] == "attest":
+      attests.mgetOrPut(p[1] & "/" & p[3] & "/" & p[4], @[]).add e.value
   for s in sigs:
     let dedup = s.id & "/" & $s.round & "/" & s.who      # one contribution per (contributor, round)
     if dedup in seenSig: continue
     seenSig.incl dedup
+    let ak = s.id & "/" & s.who & "/" & $s.round
+    if ak in attests:
+      var ok = false
+      for a in attests[ak]:
+        if verifyAttestation(s.who, payloadOf(s.id), a): ok = true
+      if not ok: continue                                # rejected: attested, but not over P
     inc now
     let driver = driverOf(s.id)
     driver.expectMaterialization(result[s.id].materialization)   # verify against THIS intent (full bytes)
@@ -478,6 +195,8 @@ type IntentView* = object
   declines*: int          ## distinct members who declined to take part (informational)
   decliners*: seq[string] ## who declined, sorted
   schemaId*: string       ## the effect's declared schema id (v0 vocabulary, ADR-009)
+  committed*: int         ## approvals whose muster attestation verifies over the re-derived P (exo-ef1)
+  unattested*: int        ## approvals pasted from outside muster — counted, never shown as committed
   schemaKnown*: bool      ## whether muster recognizes that schema — false ⇒ the card renders a
                           ## NAMED "schema unknown" failure, never the effect body (exo-1ec.3)
 
@@ -487,16 +206,10 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
   ## same dedup the fold applies — so a re-submitted owner signature never inflates
   ## the "M of N" a card shows. Each view carries the intent's own policy.
   let intents = reduceIntents(events, driverFor)
-  var approvals = initTable[string, HashSet[string]]()            # <id> -> distinct contributors (any round)
-  var roundApp = initTable[string, HashSet[string]]()            # "<id>/<round>" -> contributors that round
   var declined = initTable[string, HashSet[string]]()            # <id> -> distinct decliners
   for e in events:
     let p = e.key.split('/')
-    if p.len >= 4 and p[0] == "intent" and p[2] == "sig":
-      approvals.mgetOrPut(p[1], initHashSet[string]()).incl(p[3])
-      let rnd = (if p.len >= 5: p[4] else: "1")
-      roundApp.mgetOrPut(p[1] & "/" & rnd, initHashSet[string]()).incl(p[3])
-    elif p.len >= 4 and p[0] == "intent" and p[2] == "decline":
+    if p.len >= 4 and p[0] == "intent" and p[2] == "decline":
       declined.mgetOrPut(p[1], initHashSet[string]()).incl(p[3])
   for id, it in intents:
     let pol = intentPolicyOf(events, id)
@@ -507,19 +220,50 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
     decliners.sort()
     let ej = effectJsonOf(events, id)
     let sch = effectSchema(ej)
+    # Approvals come from the grades, so a rejected (mis-attested) approval never
+    # inflates the "M of N" — the card counts what the fold counts.
+    var approvers, roundApprovers: HashSet[string]
+    var committed, unattested = 0
+    for g in approvalGrades(events, driverFor, id):
+      if g.grade == agRejected: continue
+      approvers.incl g.who
+      if g.round == curRound: roundApprovers.incl g.who
+      if g.grade == agCommitted: inc committed else: inc unattested
     result.add IntentView(id: id, state: $it.state,
                           effectJson: ej,
-                          approvals: approvals.getOrDefault(id).len,
+                          approvals: approvers.len,
+                          committed: committed,
+                          unattested: unattested,
                           txhash: bytesHex(it.materialization.bytes),
                           policy: pol,
                           round: curRound,
                           rounds: desc.rounds,
-                          roundApprovals: roundApp.getOrDefault(id & "/" & $curRound, initHashSet[string]()).len,
+                          roundApprovals: roundApprovers.len,
                           declines: declined.getOrDefault(id, initHashSet[string]()).len,
                           decliners: decliners,
                           schemaId: sch.id,
                           schemaKnown: sch.known)
   result.sort(proc (a, b: IntentView): int = cmp(a.id, b.id))
+
+proc intentViewJson*(v: IntentView, desc: DriverDescriptor): JsonNode =
+  ## The driver-generic part of a card's JSON (coordinate_intents): what every intent
+  ## renders regardless of rail. The glue adds the rail-specific extras (n, chain id,
+  ## Safe address). Lifted out of the glue so the card's payload is probeable (exo-ef1).
+  %*{"id": v.id, "state": v.state,
+     "threshold": desc.threshold, "approvals": v.approvals,
+     "policy": v.policy, "domain": desc.serializationDomain,
+     "txhash": v.txhash,
+     # multi-round (FROST): the round being collected, the total, and the distinct
+     # approvals THIS round. For single-round drivers rounds == 1 and the UI ignores it.
+     "round": v.round, "rounds": v.rounds, "roundApprovals": v.roundApprovals,
+     # who declined to take part
+     "declines": v.declines, "decliners": v.decliners,
+     # the declared schema id + whether muster recognizes it. false ⇒ the card renders
+     # a NAMED "schema unknown" failure, never the effect body (exo-1ec.3).
+     "schemaId": v.schemaId, "schemaKnown": v.schemaKnown,
+     # how many approvals commit to their inputs (a verified muster attestation) vs
+     # were signed outside muster and pasted in (exo-ef1) — never shown as committed.
+     "committed": v.committed, "unattested": v.unattested}
 
 # ── activity: how the room reached its state (the education seam) ──────────────
 # A human-readable narrative of every state transition on the coordination log, in
@@ -540,6 +284,7 @@ type
     account*: string     ## the contributor (approve / decline), else ""
     title*: string       ## the plain-language headline
     detail*: string      ## a supporting line (may be "")
+    attestation*: string ## approve entries: "committed" | "unattested" (exo-ef1); "" otherwise
 
 proc shortId(s: string): string =
   ## A short, stable handle for a long hex id (an owner address / identity).
@@ -565,10 +310,21 @@ proc activityEffectLabel(events: seq[Event], id: string): string =
   except CatchableError:
     return "a proposal"
 
+proc gradeLookup(events: seq[Event], driverFor: DriverFor): proc (id, who, round: string): string =
+  ## Memoized per-intent approval grades, keyed "<who>/<round>" (exo-ef1).
+  var cache = initTable[string, Table[string, string]]()
+  result = proc (id, who, round: string): string =
+    if id notin cache:
+      var t = initTable[string, string]()
+      for g in approvalGrades(events, driverFor, id): t[g.who & "/" & $g.round] = $g.grade
+      cache[id] = t
+    cache[id].getOrDefault(who & "/" & round, "")
+
 proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntry] =
   ## The room's coordination history as reduce(log). See the section note above.
   let ordered = canonicalOrder(events)
   let folded = reduceIntents(events, driverFor)
+  let gradeOf = gradeLookup(events, driverFor)
   var approvers = initTable[string, HashSet[string]]()   # id -> {who/round} seen
   var lastSig = initTable[string, int]()                 # id -> index of its last sig
   var proposeSeq = initTable[string, int]()              # id -> index of its propose (groups the intent's lines together, in the order intents were proposed)
@@ -598,12 +354,14 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
       if id notin approvers: approvers[id] = initHashSet[string]()
       let dkey = who & "/" & rnd
       if dkey in approvers[id]: continue     # one contribution per (contributor, round)
+      let grade = gradeOf(id, who, rnd)
+      if grade == $agRejected: continue      # the fold didn't count it; neither does the story
       approvers[id].incl dkey
       lastSig[id] = i
       var distinctWho = initHashSet[string]()
       for k in approvers[id]: distinctWho.incl k.split('/')[0]
       result.add ActivityEntry(seq: i, order: 0, kind: "approve", intentId: id,
-        account: who,
+        account: who, attestation: grade,
         title: "Approved by " & shortId(who),
         detail: $distinctWho.len & " of " & $desc.threshold & " needed" &
                 (if desc.rounds > 1: "  ·  round " & rnd & " of " & $desc.rounds else: ""))
@@ -670,6 +428,7 @@ type ProvItem* = object
   what*: string         ## a plain-language label for the reader
   detail*: string       ## the concrete content — the effect summary for a proposal, the round for a signature
   guarantee*: string    ## WHY this input can be trusted, by class — the guarantee the code enforces
+  attestation*: string    ## sig entries: "committed" | "unattested" | "rejected" (exo-ef1); "" otherwise
 
 proc summarizeEffect*(effectJson: string): string =
   ## A one-line, human summary of what a proposal would do — so its provenance entry
@@ -698,6 +457,7 @@ proc intentProvenance*(events: seq[Event], driverFor: DriverFor, intentId: strin
   ## be accounted for would have been refused before signing (invariant 10), so it
   ## would never appear. A duplicate owner signature folds once, exactly as it counts.
   let ordered = canonicalOrder(events)
+  let gradeOf = gradeLookup(events, driverFor)
   var seenSig = initHashSet[string]()
   for i in 0 ..< ordered.len:
     let p = ordered[i].key.split('/')
@@ -709,10 +469,12 @@ proc intentProvenance*(events: seq[Event], driverFor: DriverFor, intentId: strin
                           guarantee: "sealed to the room's epoch — only a member could have placed it")
     elif p[2] == "sig" and p.len >= 4:
       if p[3] in seenSig: continue
-      seenSig.incl p[3]
       let round = (if p.len >= 5: p[4] else: "1")
+      let grade = gradeOf(intentId, p[3], round)
+      if grade == $agRejected: continue      # attested, but not over P: it never reached the decision
+      seenSig.incl p[3]
       result.add ProvItem(cls: icContribution, logPos: i,
-                          account: p[3],
+                          account: p[3], attestation: grade,
                           accountable: true, what: "an approval",
                           detail: (if round != "1": "round " & round else: ""),
                           guarantee: "the driver verified this recovers to a configured member — a non-member never reaches the fold")
@@ -738,6 +500,7 @@ type LogProvItem* = object
   detail*: string
   guarantee*: string
   epoch*: int             ## the membership epoch the entry belongs to (0 = the founding epoch)
+  attestation*: string    ## sig entries: "committed" | "unattested" | "rejected" (exo-ef1); "" otherwise
 
 proc membershipEvent*(epoch: int, joinerHex: string, parents: seq[EventId] = @[]): Event =
   ## Recorded by the admitting member right after re-keying (exo-275): sealed under
@@ -746,6 +509,7 @@ proc membershipEvent*(epoch: int, joinerHex: string, parents: seq[EventId] = @[]
 
 proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] =
   let ordered = canonicalOrder(events)
+  let gradeOf = gradeLookup(events, driverFor)
   var epoch = 0
   var seenSig = initHashSet[string]()
   var seenDecline = initHashSet[string]()
@@ -791,6 +555,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
       seenSig.incl(id & "/" & p[3])
       result.add LogProvItem(seq: i, cls: icContribution, kind: "sig", intentId: id,
         account: p[3], accountable: true, what: "an approval",
+        attestation: gradeOf(id, p[3], (if p.len >= 5: p[4] else: "1")),
         detail: (if p.len >= 5 and p[4] != "1": "round " & p[4] else: ""),
         guarantee: "the driver verified this recovers to a configured member — a non-member never reaches the fold",
         epoch: epoch)
@@ -819,6 +584,24 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
         what: "a key-binding for an approval",
         detail: "",
         guarantee: "the authorization key that signed is bound by a secp signature to the member's admitted encryption identity — the room can check the approval came from an admitted member, not merely a valid owner (F-14, F-9); scoped to this epoch (invariant 7)",
+        epoch: epoch)
+    of "context":
+      result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "context", intentId: id,
+        accountable: true, what: "the context approvals bind to", detail: e.value,
+        guarantee: "sealed to the room's epoch by the proposer; every attestation commits to it, so an approval is worthless in any other environment, account, slot, or after expiry (invariant 2)",
+        epoch: epoch)
+    of "read":
+      result.add LogProvItem(seq: i, cls: icExternalRead, kind: "read", intentId: id,
+        accountable: true, what: "an outside read that reached the proposal",
+        detail: (if p.len >= 4: p[3] else: ""),
+        guarantee: "an external read: what the proposer's source reported, recorded so its origin is accountable — not proof the world agrees (F-10)",
+        epoch: epoch)
+    of "attest":
+      if p.len < 5: continue
+      result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "attest", intentId: id,
+        account: p[3], accountable: true, what: "a member's commitment to an approval's inputs",
+        attestation: gradeOf(id, p[3], p[4]),
+        detail: "", guarantee: "signed by the approving key over the context, the materialization, and the provenance of every input (invariants 2 and 10); every member re-derives what it must cover",
         epoch: epoch)
     of "submit":
       result.add LogProvItem(seq: i, cls: icExternalRead, kind: "submit", intentId: id,
