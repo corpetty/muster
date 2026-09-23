@@ -1,0 +1,315 @@
+{
+  "id": "derived-exo-ef1",
+  "original_statement": "Invariant 10 isn't wired into the live room path \u2014 approvals commit to no provenance record and sign under a placeholder context.",
+  "restatement": "Every approval that reaches a room's threshold must either commit, through a muster attestation from the approving key, to a real replay-bound context and to the provenance of every input that reached its bytes \u2014 with the live contribute path refusing to sign when any input is unaccountable \u2014 or be visibly graded unattested because it was signed outside muster: (s1) every approval muster produces in-app, under any driver, is published with a muster attestation from the same key over P = (context, materialization root, provenance record), and changing any input's provenance while holding its bytes identical changes P \u2014 asserted through the hosted coordinate_contribute path, not the isolated model; (s2) coordinate_contribute refuses to sign and publishes nothing when any input that reached the materialization cannot be accounted for, and signs when every input can be; (s3) the record committed in P is reduced from the log with one entry per input that reached the bytes \u2014 the proposal, bound material shares, the policy declaration, and baked-in external reads such as the Safe's live nonce \u2014 each naming its class and the event's content id, with two-way coverage; (s4) p's context is real: environment is the driver's chain or network, account is the Safe address or room id, slot is the intent id, and expiry is the proposal's declared expiry; the placeholder context never reaches a payload, an attestation verifies under exactly that context and no other, signing and submitting are refused after expiry, and the fold never consults the clock; (s5) an in-app approval counts only if its attestation verifies against the P the fold itself re-derives from the log and names the same signer as the driver signature; a forged, mismatched, or cross-intent attestation is not counted; (s6) a driver-valid signature with no attestation counts toward the threshold but is graded unattested in the intent view, provenance, activity, and card, never shown as committed; muster itself never produces an unattested approval; (s7) a driver declaring anonymous membership must supply an attestation that names no signer or it fails conformance; under a named driver the attestation names the contributor; (s8) attestations are log events: two instances with the same event set, in any order and with duplicates, reach identical counts and grades, with no side-car store.",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "Every approval muster produces in-app, under any driver, is published with a muster attestation from the same key over P = (context, materialization root, provenance record), and changing any input's provenance while holding its bytes identical changes P \u2014 asserted through the hosted coordinate_contribute path, not the isolated model."
+    },
+    {
+      "id": "s2",
+      "text": "coordinate_contribute refuses to sign and publishes nothing when any input that reached the materialization cannot be accounted for, and signs when every input can be."
+    },
+    {
+      "id": "s3",
+      "text": "The record committed in P is reduced from the log with one entry per input that reached the bytes \u2014 the proposal, bound material shares, the policy declaration, and baked-in external reads such as the Safe's live nonce \u2014 each naming its class and the event's content id, with two-way coverage."
+    },
+    {
+      "id": "s4",
+      "text": "P's context is real: environment is the driver's chain or network, account is the Safe address or room id, slot is the intent id, and expiry is the proposal's declared expiry; the placeholder context never reaches a payload, an attestation verifies under exactly that context and no other, signing and submitting are refused after expiry, and the fold never consults the clock."
+    },
+    {
+      "id": "s5",
+      "text": "An in-app approval counts only if its attestation verifies against the P the fold itself re-derives from the log and names the same signer as the driver signature; a forged, mismatched, or cross-intent attestation is not counted."
+    },
+    {
+      "id": "s6",
+      "text": "A driver-valid signature with no attestation counts toward the threshold but is graded unattested in the intent view, provenance, activity, and card, never shown as committed; muster itself never produces an unattested approval."
+    },
+    {
+      "id": "s7",
+      "text": "A driver declaring anonymous membership must supply an attestation that names no signer or it fails conformance; under a named driver the attestation names the contributor."
+    },
+    {
+      "id": "s8",
+      "text": "Attestations are log events: two instances with the same event set, in any order and with duplicates, reach identical counts and grades, with no side-car store."
+    }
+  ],
+  "goal": "Invariant 10 (and 2) hold on the live room signing path, not only in the model: every in-app approval carries a same-key muster attestation over a real replay-bound context, the materialization root, and a log-derived provenance record citing content ids; the live contribute path refuses when any input is unaccountable; the fold counts an approval only with a verifying re-derived attestation, and grades a pasted, unattested signature as such everywhere; anonymous drivers stay anonymous.",
+  "acceptance_criteria": [
+    "Every approval muster produces in-app, under any driver, is published with a muster attestation from the same key over P = (context, materialization root, provenance record), and changing any input's provenance while holding its bytes identical changes P \u2014 asserted through the hosted coordinate_contribute path, not the isolated model.",
+    "coordinate_contribute refuses to sign and publishes nothing when any input that reached the materialization cannot be accounted for, and signs when every input can be.",
+    "The record committed in P is reduced from the log with one entry per input that reached the bytes \u2014 the proposal, bound material shares, the policy declaration, and baked-in external reads such as the Safe's live nonce \u2014 each naming its class and the event's content id, with two-way coverage.",
+    "P's context is real: environment is the driver's chain or network, account is the Safe address or room id, slot is the intent id, and expiry is the proposal's declared expiry; the placeholder context never reaches a payload, an attestation verifies under exactly that context and no other, signing and submitting are refused after expiry, and the fold never consults the clock.",
+    "An in-app approval counts only if its attestation verifies against the P the fold itself re-derives from the log and names the same signer as the driver signature; a forged, mismatched, or cross-intent attestation is not counted.",
+    "A driver-valid signature with no attestation counts toward the threshold but is graded unattested in the intent view, provenance, activity, and card, never shown as committed; muster itself never produces an unattested approval.",
+    "A driver declaring anonymous membership must supply an attestation that names no signer or it fails conformance; under a named driver the attestation names the contributor.",
+    "Attestations are log events: two instances with the same event set, in any order and with duplicates, reach identical counts and grades, with no side-car store."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Every approval muster produces in-app, under any driver, is published with a muster attestation from the same key over P = (context, materialization root, provenance record), and changing any input's provenance while holding its bytes identical changes P \u2014 asserted through the hosted coordinate_contribute path, not the isolated model."
+    },
+    {
+      "id": "c2",
+      "text": "coordinate_contribute refuses to sign and publishes nothing when any input that reached the materialization cannot be accounted for, and signs when every input can be."
+    },
+    {
+      "id": "c3",
+      "text": "The record committed in P is reduced from the log with one entry per input that reached the bytes \u2014 the proposal, bound material shares, the policy declaration, and baked-in external reads such as the Safe's live nonce \u2014 each naming its class and the event's content id, with two-way coverage."
+    },
+    {
+      "id": "c4",
+      "text": "P's context is real: environment is the driver's chain or network, account is the Safe address or room id, slot is the intent id, and expiry is the proposal's declared expiry; the placeholder context never reaches a payload, an attestation verifies under exactly that context and no other, signing and submitting are refused after expiry, and the fold never consults the clock."
+    },
+    {
+      "id": "c5",
+      "text": "An in-app approval counts only if its attestation verifies against the P the fold itself re-derives from the log and names the same signer as the driver signature; a forged, mismatched, or cross-intent attestation is not counted."
+    },
+    {
+      "id": "c6",
+      "text": "A driver-valid signature with no attestation counts toward the threshold but is graded unattested in the intent view, provenance, activity, and card, never shown as committed; muster itself never produces an unattested approval."
+    },
+    {
+      "id": "c7",
+      "text": "A driver declaring anonymous membership must supply an attestation that names no signer or it fails conformance; under a named driver the attestation names the contributor."
+    },
+    {
+      "id": "c8",
+      "text": "Attestations are log events: two instances with the same event set, in any order and with duplicates, reach identical counts and grades, with no side-car store."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s1",
+      "proves": "Over randomized rooms driven through the hosted coordinate_contribute path (stub + Safe drivers over LocalTransport), every in-app approval publishes an attestation event verifying over P, and re-routing one input through a different log event while the effect bytes stay identical changes P. Catches an attestation over the materialization alone, and provenance kept beside P rather than inside it \u2014 the exact gap that let exo-3a1's model-only probes pass.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_live_attestation_binds.nim"
+      ],
+      "cwd": "module",
+      "trace_invariant": {
+        "atoms": {
+          "attestation_binds": {
+            "kind": "flag",
+            "field": "attestation_binds"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "attestation_binds"
+            }
+          ]
+        }
+      },
+      "description": "Every approval muster produces in-app, under any driver, is published with a muster attestation from the same key over P = (context, materialization root, provenance record), and changing any input's provenance while holding its bytes identical changes P \u2014 asserted through the hosted coordinate_contribute path, not the isolated model.",
+      "clause_id": "c1"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s2",
+      "proves": "The stepper enumerates how many inputs are unaccountable on the live path (a material share or external read whose event is absent from the log); contribute publishes nothing exactly when that count is non-zero and publishes when it is zero. Catches the refusal living only in the model, and a refuse-everything implementation.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_live_refusal_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "unaccountable_count": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 80,
+      "description": "coordinate_contribute refuses to sign and publishes nothing when any input that reached the materialization cannot be accounted for, and signs when every input can be.",
+      "clause_id": "c2"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s3",
+      "proves": "The stepper enumerates proposal shapes \u2014 plain, 0..2 bound material shares, with and without a policy declaration, with a baked-in external read \u2014 and requires the committed record to match the inputs that reached the bytes in both directions, verified by perturbing each input, with every cited content id resolving in the log. Catches silent omission, 'unknown' padding, and stale index positions.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_live_coverage_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "shape": "plain",
+          "coverage_two_way": true
+        }
+      ],
+      "invariant": {
+        "field": "coverage_two_way",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 80,
+      "description": "The record committed in P is reduced from the log with one entry per input that reached the bytes \u2014 the proposal, bound material shares, the policy declaration, and baked-in external reads such as the Safe's live nonce \u2014 each naming its class and the event's content id, with two-way coverage.",
+      "clause_id": "c3"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s4",
+      "proves": "For every live driver no field of P's context equals the placeholder and each matches its derivation rule; the attestation verifies under its own context and fails under every single-field change; sign and submit are refused after expiry and allowed before; and the fold's output is identical under two different injected clocks. Catches a surviving placeholder, an unbound context field, and expiry checked inside the fold.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_live_context_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "driver": "stub",
+          "context_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "context_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 80,
+      "description": "P's context is real: environment is the driver's chain or network, account is the Safe address or room id, slot is the intent id, and expiry is the proposal's declared expiry; the placeholder context never reaches a payload, an attestation verifies under exactly that context and no other, signing and submitting are refused after expiry, and the fold never consults the clock.",
+      "clause_id": "c4"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s5",
+      "proves": "With the driver signature always valid, the stepper enumerates the attestation paired with it \u2014 valid, wrong signer, P from another intent, tampered provenance, tampered context, replayed from another room \u2014 and the approval counts only with the valid one. Catches a fold that checks for presence without verifying, or verifies against the attestation's own claimed P instead of re-deriving it.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_live_attestation_count_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "variant": "valid",
+          "count_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "count_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 80,
+      "description": "An in-app approval counts only if its attestation verifies against the P the fold itself re-derives from the log and names the same signer as the driver signature; a forged, mismatched, or cross-intent attestation is not counted.",
+      "clause_id": "c5"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s6",
+      "proves": "The stepper enumerates mixes of attested and pasted approvals up to the threshold: counts include both, every surface (intent view, provenance, activity, card JSON) grades pasted as unattested and attested as committed, and across every driver in-app contribute never emits an approval without an attestation. Catches unattested approvals presented as committed and an in-app path that skips attesting.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_live_unattested_grade_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "attested": 0,
+          "pasted": 0,
+          "grade_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "grade_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 80,
+      "description": "A driver-valid signature with no attestation counts toward the threshold but is graded unattested in the intent view, provenance, activity, and card, never shown as committed; muster itself never produces an unattested approval.",
+      "clause_id": "c6"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s7",
+      "proves": "The stepper enumerates membership model \u00d7 signer assignment: under anonymous, attestation events are byte-identical under signer permutation; a driver declaring anonymous without an anonymous attestation turns checkConformance red; under named, the attestation names the contributor. Catches the companion attestation deanonymizing a future anonymous driver.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_live_anonymous_attestation_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "membership_model": "anonymous",
+          "assignment": "identity",
+          "anonymity_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "anonymity_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 80,
+      "description": "A driver declaring anonymous membership must supply an attestation that names no signer or it fails conformance; under a named driver the attestation names the contributor.",
+      "clause_id": "c7"
+    },
+    {
+      "type": "property_test",
+      "restatement_clause_id": "s8",
+      "proves": "On randomized orderings and duplications of mixed attested, pasted, and forged event sets, two instances reach identical counts and grades, and cold-start replay matches incremental state. Catches attestation state held outside the log and order-dependent grading.",
+      "trace": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_live_convergence.nim"
+      ],
+      "cwd": "module",
+      "trace_invariant": {
+        "atoms": {
+          "converges": {
+            "kind": "flag",
+            "field": "converges"
+          }
+        },
+        "formula": {
+          "op": "always",
+          "args": [
+            {
+              "atom": "converges"
+            }
+          ]
+        }
+      },
+      "description": "Attestations are log events: two instances with the same event set, in any order and with duplicates, reach identical counts and grades, with no side-car store.",
+      "clause_id": "c8"
+    }
+  ],
+  "criticality": "catastrophic",
+  "declared_new_entrypoints": [
+    "tests/probes/probe_live_attestation_binds.nim",
+    "tests/probes/probe_live_refusal_stepper.nim",
+    "tests/probes/probe_live_coverage_stepper.nim",
+    "tests/probes/probe_live_context_stepper.nim",
+    "tests/probes/probe_live_attestation_count_stepper.nim",
+    "tests/probes/probe_live_unattested_grade_stepper.nim",
+    "tests/probes/probe_live_anonymous_attestation_stepper.nim",
+    "tests/probes/probe_live_convergence.nim"
+  ]
+}
