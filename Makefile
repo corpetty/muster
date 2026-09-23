@@ -58,16 +58,22 @@ help:
 # under .run/ so 'make clean' keeps it (delete .run/runner to release it).
 build:
 	@mkdir -p $(CURDIR)/.run
-	@# ui/flake.lock is machine-local + gitignored (it pins muster_module by absolute
-	@# path), so a lock from an earlier session goes stale as the module evolves and
-	@# `make run` silently launches an OLD build. Relock the local muster_module to the
-	@# repo's current state first, so `make run` always reflects your module edits.
-	@# The relock is REFUSED while the git tree is dirty (a git+file input cannot be
-	@# locked from uncommitted state) — say so instead of silently building the
-	@# previously locked module rev, which makes `make run` launch stale module code.
+	@# ui/flake.lock is machine-local + gitignored. muster_module is pinned in ui/flake.nix
+	@# by a RELATIVE ref (git+file:../?dir=module, portable across clones, exo-1ec.2/#116) —
+	@# but nix re-fetches a relative git input at eval time ("file:../ not supported"), and
+	@# that fetch + the eval cache can go stale between a relock and the build, so `make build`
+	@# would leave .run/runner pointing at an OLD runner even after a successful relock (exo-fb7).
+	@# Fix: build with muster_module OVERRIDDEN to an ABSOLUTE git+file path derived from
+	@# $(CURDIR) at build time (portable — it is wherever THIS clone is, never hardcoded) and
+	@# with the eval cache off, so the runner is a deterministic function of the committed tree.
+	@# The relock still runs first to keep ui/flake.lock current for a direct `nix build`, and
+	@# to surface the dirty-tree WARN (a git+file input cannot lock from uncommitted state —
+	@# commit first, or the build uses the last COMMITTED tree).
 	@cd $(UI) && nix flake update muster_module $(CACHE) 2>&1 | grep -q "not writing lock file" \
 	  && echo "WARN: muster_module NOT relocked (uncommitted changes in the git tree) — the runner builds the last COMMITTED module rev; commit first to pick up module edits" || true
-	cd $(UI) && nix build 'path:.#runner' $(CACHE) --out-link $(CURDIR)/.run/runner
+	cd $(UI) && nix build 'path:.#runner' $(CACHE) --no-eval-cache \
+	  --override-input muster_module "git+file://$(CURDIR)?dir=module" \
+	  --out-link $(CURDIR)/.run/runner
 
 # nix run resolves apps.default (the standalone runner), NOT packages.default
 # (the .lgx). Each --user-dir is one identity + wallet, so two dirs are two peers.
