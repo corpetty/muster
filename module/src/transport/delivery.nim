@@ -161,6 +161,17 @@ proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000): DeliveryTra
   result.sub = lp_subscribe(result.client, "messageReceived",
                             onMessageReceived, cast[pointer](result))
 
+method securityLevel*(t: DeliveryTransport): SecurityLevel =
+  ## The real network transport still provides no security level of its own (exo-1ec.5) — it
+  ## carries the epoch-sealed payload opaquely. Its rung stays null; the override exists only
+  ## to name honestly what the real path DOES expose: a store node on the fleet sees the
+  ## topic and timing of every message (metadata, FS-9), even though it cannot read the
+  ## payload. That is a reason to prefer the mixnet, not a security the transport adds.
+  securityLevel(
+    axisLevel(rungNull, "not authenticated here — the driver binds the speaker"),
+    axisLevel(rungNull, "not attested here — the log attests provenance"),
+    axisLevel(rungNull, "payload opaque (epoch-sealed); but topic + timing are visible to the store node (FS-9)"))
+
 method publish*(t: DeliveryTransport, contentTopic: string, payload: seq[byte]): string =
   var args = newJArray()
   args.add %contentTopic

@@ -11,6 +11,9 @@
 ## A stub driver lives here for the conformance probes; real drivers (Safe at
 ## P2, threshold at P6) implement the same interface.
 
+import ../security/levels
+export levels
+
 type
   MembershipModel* = enum
     mmAnonymous = "anonymous"
@@ -32,6 +35,19 @@ type
     bytes*: seq[byte]            ## OPAQUE to the core; only the driver reads it
 
   Driver* = ref object of RootObj
+
+proc securityLevel*(desc: DriverDescriptor): SecurityLevel =
+  ## The null-ladder AUTHENTICATION level a driver's membership model provides (exo-1ec.5).
+  ## A named driver binds each contribution to an identity (real); an anonymous driver is the
+  ## null — and that null is a LEGITIMATE TERMINAL (invariant 9), not a rung to climb off, so
+  ## nothing here forces it up. A driver governs neither confidentiality (the epoch layer) nor
+  ## provenance (the log), so those axes stay null.
+  let named = desc.membership == mmNamed
+  securityLevel(
+    axisLevel((if named: rungReal else: rungNull),
+              (if named: "bound identity (named driver)" else: "anonymous (legitimate terminal, inv 9)")),
+    axisLevel(rungNull, "provenance is the log's, not the driver's"),
+    axisLevel(rungNull, "confidentiality is the epoch layer's, not the driver's"))
 
 method describe*(d: Driver): DriverDescriptor {.base, gcsafe.} =
   raise newException(CatchableError, "Driver.describe is abstract")

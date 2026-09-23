@@ -44,10 +44,17 @@ TLS shipped NULL and export-grade cipher suites, and the result was **downgrade 
 
 ## What is done, and what is next
 
-**Done (this pass):** the pattern is named here; the level is a typed attribute on the `ChainAdapter` seam (two rungs, read not branched); the refuse-on-failed-upgrade discipline lives in the type with a pure probe proving a failed upgrade refuses rather than falls back, that the authentication null is a legitimate terminal, and that the null carries the full envelope.
+**Done:**
+
+- The pattern is named here, and the refuse-on-failed-upgrade discipline lives in the type: `require` raises `DowngradeRefused` with no `orNull` fallback, proven by the pure probe (a failed upgrade refuses; the authentication null is a legitimate terminal; the null carries the full envelope; rungs are ordered).
+- **All four seams that map to the three axes are typed**, each declaring a `securityLevel()` a consumer reads (never branching on the concrete type):
+  - `ChainAdapter` → **confidentiality** (transparent EVM = null, shielded mock/LEZ = real).
+  - `ConversationCrypto` → **confidentiality** of room data (`EpochCrypto` = real, ECIES/F-16; base = null).
+  - the driver membership model → **authentication** (`securityLevel(DriverDescriptor)`: named = real, anonymous = null terminal).
+  - `Transport` → **none**, honestly: it carries opaque bytes, so all axes are null with mechanisms naming where the real level lives (the `DeliveryTransport` override names the store-node metadata exposure, FS-9).
+- **`combine()`** composes the active room envelope — per axis, the strongest rung any active seam provides — the data source for the UI's "active level on all three axes".
 
 **Next (tracked on exo-1ec.5):**
 
-- **Type the remaining seams** the same way — `Transport` (confidentiality/provenance of the path), `ConversationCrypto` (the epoch layer is the confidentiality real; a null-crypto seam is the null), and the driver membership model (anonymous vs named is the authentication axis). Each is a `securityLevel()` the aggregate reads.
-- **The provenance ladder as a first-class rung** wired to the invariant-10 accountability record, rather than expressed only through the log's existence.
-- **UI visibility (the second DONE-WHEN half):** the active level on all three axes shown in the UI — the room's current authentication / provenance / confidentiality, each with its named mechanism, so a participant can see which nulls are still in place. This is render-bound (ADR-013 harness) and follows once the aggregate `security_levels()` surface exists.
+- **UI visibility (the second DONE-WHEN half):** surface `combine()` over the room's live seams as a module method and render the three axes in the UI, each with its named mechanism, so a participant can see which nulls are still in place. Render-bound (ADR-013 harness).
+- **The provenance ladder as a first-class rung** wired directly to the invariant-10 accountability record, rather than stood in by the signed log's existence.

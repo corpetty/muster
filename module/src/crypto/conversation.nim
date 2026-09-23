@@ -17,7 +17,9 @@
 ## never reads, and this layer seals bytes it never interprets.
 
 import ./curve25519   # a member's room identity is their encryption identity (F-14, two-identity model)
+import ../security/levels
 export curve25519     # callers manipulate Member (= EncIdentity) and its wire form
+export levels
 
 type
   Member* = EncIdentity   ## Ed25519 (bound to the secp Safe key) + X25519 (grants wrap to this)
@@ -25,6 +27,17 @@ type
   ConversationCrypto* = ref object of RootObj
     ## The seam. Concrete impls (EpochCrypto stopgap now; a chat-module-backed one
     ## later) override every method.
+
+method securityLevel*(cc: ConversationCrypto): SecurityLevel {.base.} =
+  ## The null-ladder level for the CONFIDENTIALITY of room data (exo-1ec.5). The base is
+  ## the null — no conversation crypto configured means the payload is plaintext to whoever
+  ## carries it; a real impl (EpochCrypto) overrides to `real`. It does not authenticate the
+  ## speaker (the driver/binding does) nor attest provenance (the log does), so those axes
+  ## are null here.
+  securityLevel(
+    axisLevel(rungNull, "speaker not authenticated by the crypto seam"),
+    axisLevel(rungNull, "no attestation from the crypto seam"),
+    axisLevel(rungNull, "plaintext — no conversation crypto configured"))
 
 method seal*(cc: ConversationCrypto, plaintext: seq[byte]): seq[byte] {.base.} =
   ## Encrypt a payload to the room's current member set at the current epoch. The

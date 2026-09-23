@@ -18,6 +18,8 @@
 
 import std/[tables, sets]
 import ../hashing/sha256
+import ../security/levels
+export levels
 
 type
   IncomingMessage* = object
@@ -31,6 +33,19 @@ type
   Transport* = ref object of RootObj
     ## The abstract seam. Concrete transports (LocalTransport here, a
     ## delivery-backed one next) override every method.
+
+method securityLevel*(t: Transport): SecurityLevel {.base, gcsafe.} =
+  ## Transport provides NO security level, honestly (exo-1ec.5): it carries opaque bytes on
+  ## a topic and says when they arrived — it does not read them. Confidentiality is the epoch
+  ## layer's (F-16), provenance the log's, authentication the driver's. So all three axes are
+  ## null here, with mechanisms that say where the real level lives — the anti-overclaim that
+  ## keeps a reader from mistaking "the real network transport" for "more secure". The real
+  ## delivery transport overrides only the confidentiality mechanism, to name the metadata a
+  ## store node sees (FS-9) — its rung is still null, because it protects nothing itself.
+  securityLevel(
+    axisLevel(rungNull, "not authenticated here — the driver binds the speaker"),
+    axisLevel(rungNull, "not attested here — the log attests provenance"),
+    axisLevel(rungNull, "payload opaque; confidentiality is the epoch layer's (F-16)"))
 
 method publish*(t: Transport, contentTopic: string, payload: seq[byte]): string
     {.base, gcsafe.} =
