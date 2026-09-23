@@ -8,7 +8,7 @@
 ## glue does on propose / contribute is here, parameterized by the session, the
 ## keystore, and the driver resolver; the glue is thin plumbing over it.
 
-import std/[json, tables]
+import std/[json, tables, strutils]
 import ../log/log
 import ../crypto/keystore
 import ../crypto/binding
@@ -117,8 +117,18 @@ proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
   # A muster attestation that doesn't verify as the recovered contributor would be
   # rejected by every member's fold — refuse it here rather than publish it.
   if inApp and not verifyAttestation(who, p, attestHex): return "attestation-mismatch"
-  s.publish(contributeEvent(intentId, who, sig, round = curRound))
-  if inApp: s.publish(attestEvent(intentId, who, curRound, attestHex))
+  # Link the approval to the proposal and to every approval its signer has seen
+  # (exo-403): a member who later reads this approval but not those can tell its
+  # history reaches events it cannot read, instead of mistaking a partial view for
+  # the whole one. Content-addressed, so the fold still dedups by (who, round).
+  var parents: seq[EventId]
+  for e in events:
+    if e.key == "intent/" & intentId & "/propose" or
+       e.key.startsWith("intent/" & intentId & "/sig/"):
+      parents.add eventId(e)
+  let sigEv = contributeEvent(intentId, who, sig, round = curRound, parents = parents)
+  s.publish(sigEv)
+  if inApp: s.publish(attestEvent(intentId, who, curRound, attestHex, parents = @[eventId(sigEv)]))
   # F-14/K5: when we secp-signed IN-APP with a chosen owner key, publish that key's
   # binding so the room can check the approval came from an admitted member. A PASTED
   # signature gets none: we do not hold that key, so we cannot vouch for it.
@@ -140,3 +150,31 @@ proc liveSubmitPrecheck*(s: CoordinationSession, driverFor: DriverFor,
   if ctx.isPlaceholder: return "no-context"
   if ctx.expired(nowSec): return "expired"
   ""
+
+proc liveReannounce*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
+                     nowSec: int64, msgSeq: var uint64): int =
+  ## Re-publish every still-OPEN intent — its policy declaration, its propose, its
+  ## signing context and recorded reads, and its thread card — into the CURRENT epoch.
+  ## A member admitted after a proposal was made can't read anything from before their
+  ## epoch (F-16), so without this they could neither fold the intent nor attest to it.
+  ## Content-addressed, so re-publishing is idempotent (same ids) — it only re-seals the
+  ## events under the new epoch. Approvals are NOT re-shared: what members signed
+  ## before the joiner arrived stays in its epoch. Returns how many were re-announced.
+  s.poll()
+  let events = s.log.allEvents()
+  let folded = reduceIntents(events, driverFor)
+  let author = hex0x(ks.encIdentity().toBytes())
+  for id, it in folded:
+    if $it.state in ["final", "submitted", "settling"]: continue
+    let effect = effectJsonOf(events, id)
+    if effect.len == 0: continue
+    s.publish(policyDeclEvent(id, intentPolicyOf(events, id)))
+    s.publish(proposeEvent(id, effect))
+    for e in events:
+      if e.key == "intent/" & id & "/context" or e.key.startsWith("intent/" & id & "/read/"):
+        s.publish(e)
+    inc msgSeq
+    let refBody = $(%*{"kind": "intent-ref", "intentId": id})
+    let (_, ev) = newMessageEvent(author, nowSec, refBody, msgSeq)
+    s.publish(ev)
+    inc result

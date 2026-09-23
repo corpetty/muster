@@ -764,35 +764,10 @@ proc musterCoordinatePropose(effectJson: string): string =
                     int64(epochTime()), gMsgSeq, account = account, ttlSec = ttl)
 
 proc musterCoordinateReannounce(): string =
-  ## Re-publish every still-OPEN intent — its policy declaration, its propose, and its
-  ## thread card — into the CURRENT epoch. A member admitted after a proposal was made
-  ## can't read anything from before their epoch (F-16), so without this they'd never
-  ## fold the intent or see its card. The events are content-addressed, so re-publishing
-  ## is idempotent (same ids) — it only re-seals them under the new epoch for the joiner.
-  ## Called right after an admit; a finished intent (submitted/settled) is skipped.
+  ## Re-publish every still-open intent into the CURRENT epoch for a just-admitted
+  ## member — the live path lives in coordination/live.nim (exo-ef1/exo-403).
   if gSession == nil: return "not-joined"
-  gSession.poll()
-  let events = gSession.log.allEvents()
-  let folded = reduceIntents(events, driverFor)
-  let author = toHex(moduleKeystore().encIdentity().toBytes())
-  var n = 0
-  for id, it in folded:
-    if $it.state in ["final", "submitted", "settling"]: continue
-    let effect = effectJsonOf(events, id)
-    if effect.len == 0: continue
-    let policy = intentPolicyOf(events, id)
-    gSession.publish(policyDeclEvent(id, policy))
-    gSession.publish(proposeEvent(id, effect))
-    # its signing context and any recorded reads too: without them a joiner can fold
-    # the intent but not attest to it (exo-ef1). Same events, same ids — idempotent.
-    for e in events:
-      if e.key == "intent/" & id & "/context" or e.key.startsWith("intent/" & id & "/read/"):
-        gSession.publish(e)
-    inc gMsgSeq
-    let refBody = $(%*{"kind": "intent-ref", "intentId": id})
-    let (_, ev) = newMessageEvent(author, int64(epochTime()), refBody, gMsgSeq)
-    gSession.publish(ev)
-    inc n
+  let n = liveReannounce(gSession, moduleKeystore(), driverFor, int64(epochTime()), gMsgSeq)
   $(%*{"reannounced": n})
 
 proc roomContext(): LinkContext =
@@ -1264,7 +1239,7 @@ proc musterCoordinateSubmit(intentId: string): string =
   except CatchableError as e:
     return $(%*{"id": intentId, "error": "rpc-unreachable", "detail": e.msg})
   # Fold the room forward: submit event → every member converges on "submitted".
-  gSession.publish(submitEvent(intentId))
+  gSession.publish(submitEvent(intentId, chainRef = txHash))
   # Observe finality from the chain (never asserted). Bounded poll (~4s) so a slow or
   # unreachable node reports "pending" rather than freezing the UI; anvil auto-mines,
   # so a healthy receipt returns on the first tick.
@@ -1275,7 +1250,7 @@ proc musterCoordinateSubmit(intentId: string): string =
     sleep(200)
   # On a real on-chain success, fold the intent to `final` so every member's card
   # advances to "paid" — not just the submitted state the submit event set.
-  if status == 1: gSession.publish(finalEvent(intentId))
+  if status == 1: gSession.publish(finalEvent(intentId, chainRef = txHash))
   let onchain = (if status == 1: "final" elif status == 0: "failed" else: "pending")
   $(%*{"id": intentId,
        "state": intentState(gSession.log.allEvents(), driverFor, intentId),

@@ -25,7 +25,8 @@ import ../../src/coordination/session
 import ../../src/coordination/intents
 import ../../src/coordination/live
 import ../../src/coordination/attest
-export log, keystore, driver, signing_payload, session, intents, live, attest, tables, strutils
+export log, keystore, driver, signing_payload, session, intents, live, attest, tables, strutils,
+       transport, epoch_crypto, binding
 
 proc key(hex: string): array[32, byte] =
   var h = hex
@@ -61,6 +62,7 @@ const LivePolicies* = ["safe", "threshold"]
 
 type Room* = object
   topic*: string
+  net*: LocalNetwork
   alice*, bob*: CoordinationSession
   seqNo*: uint64
 
@@ -69,7 +71,7 @@ proc newRoom*(topic = "/muster/1/ef1-probe/proto"): Room =
   let aliceCrypto = newEpochCrypto(aliceKs, @[bobKs.encIdentity()])
   let bobCrypto = newEpochJoiner(bobKs)
   bobCrypto.ingestGrant(aliceCrypto.grantFor(0, bobKs.encIdentity()))
-  Room(topic: topic,
+  Room(topic: topic, net: net,
        alice: newCoordinationSession(newLocalTransport(net), aliceCrypto, topic),
        bob: newCoordinationSession(newLocalTransport(net), bobCrypto, topic))
 

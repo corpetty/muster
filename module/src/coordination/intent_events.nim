@@ -178,8 +178,11 @@ proc contributeEvent*(intentId, contributor, signatureHex: string,
   Event(parents: parents, key: "intent/" & intentId & "/sig/" & contributor & "/" & $round,
         value: signatureHex)
 
-proc submitEvent*(intentId: string, parents: seq[EventId] = @[]): Event =
-  Event(parents: parents, key: "intent/" & intentId & "/submit", value: "1")
+proc submitEvent*(intentId: string, parents: seq[EventId] = @[], chainRef = ""): Event =
+  ## `chainRef` is what the settlement can be looked up by outside the room (the tx
+  ## hash). Older events carry "1": the chain reference is then unknown (exo-403).
+  Event(parents: parents, key: "intent/" & intentId & "/submit",
+        value: (if chainRef.len > 0: chainRef else: "1"))
 
 proc declineEvent*(intentId, who: string, parents: seq[EventId] = @[]): Event =
   ## A member declines to take part in an intent (the card's Deny, exo-002.3). It is
@@ -188,10 +191,11 @@ proc declineEvent*(intentId, who: string, parents: seq[EventId] = @[]): Event =
   ## dedups one decline per member, and the view names who declined.
   Event(parents: parents, key: "intent/" & intentId & "/decline/" & who, value: "1")
 
-proc finalEvent*(intentId: string, parents: seq[EventId] = @[]): Event =
+proc finalEvent*(intentId: string, parents: seq[EventId] = @[], chainRef = ""): Event =
   ## Published once the on-chain execution is observed final (R-8) — folds the intent
   ## to `final` so every member's card converges on "paid", not just "submitted".
-  Event(parents: parents, key: "intent/" & intentId & "/final", value: "1")
+  Event(parents: parents, key: "intent/" & intentId & "/final",
+        value: (if chainRef.len > 0: chainRef else: "1"))
 
 proc materialShareEvent*(intentId, reqName, who, public, form, class, field: string,
                          parents: seq[EventId] = @[]): Event =
