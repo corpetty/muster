@@ -126,6 +126,13 @@ Item {
         try { return JSON.parse(backend ? backend.connectivityJson : "{}"); }
         catch (e) { return ({}); }
     }
+    // The room's ACTIVE null-ladder level on the three axes (security_levels, exo-1ec.5):
+    // {axes:[{axis,rung,real,mechanism}]}. Which nulls are still in place — shown, never
+    // assumed; a level is never a silent fallback (the module refuses a failed upgrade).
+    readonly property var securityLevels: {
+        try { return JSON.parse(backend ? backend.securityLevelsJson : "{}"); }
+        catch (e) { return ({}); }
+    }
     // The composer's sending context (coordinate_account): what an intent here would
     // move (the Safe's live balance — what's available to send) and who you act as
     // (your owner address + whether it's a real Safe owner). Ask-then-disclose: this
@@ -1651,6 +1658,7 @@ Item {
                 members: room.members
                 pending: room.pending
                 topic: room.topic
+                securityLevels: room.securityLevels
                 onRequestJoin: if (room.backend) room.backend.requestJoin()
                 onAdmit: function(identityHex) {
                     if (!room.backend) return;
@@ -1698,6 +1706,7 @@ Item {
             if (!room.backend) return;
             room.backend.loadConnectivity();
             room.backend.loadFlow();   // a pure fold — who could see what, refreshed with the slow tick
+            room.backend.loadSecurityLevels();   // the active null-ladder level (exo-1ec.5), a pure fold
         }
     }
 }

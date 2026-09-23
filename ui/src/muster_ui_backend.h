@@ -65,6 +65,7 @@ public:
     void loadAvailableActions() override;
     void executeInRoom(const QString &intentId) override;
     void loadConnectivity() override;
+    void loadSecurityLevels() override;
     void loadRoomAccount() override;
     void loadReadiness(const QString &intentId) override;
     void loadOffers(const QString &intentId) override;

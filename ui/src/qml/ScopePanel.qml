@@ -47,6 +47,12 @@ Item {
     // re-keys the room forward, so the joiner reads from its epoch on (F-16).
     signal admit(string identityHex)
 
+    // The room's active null-ladder level on the three axes (exo-1ec.5): the parsed
+    // {axes:[{axis,rung,real,mechanism}]}. Guarded to an array so the Repeater is safe.
+    property var securityLevels: ({})
+    readonly property var securityAxes: (scope.securityLevels && scope.securityLevels.axes)
+                                        ? scope.securityLevels.axes : []
+
     // The roster, guarded to an array so length and the Repeater are always safe.
     readonly property var roster: scope.members ? scope.members : []
 
@@ -67,6 +73,78 @@ Item {
             y: Theme.spacing.large
             width: flick.width - 2 * Theme.spacing.large
             spacing: Theme.spacing.large
+
+            // ── Security level (the null ladder, exo-1ec.5) ────────────────────
+            // The room's active level on three axes — who is speaking (authentication),
+            // where it came from (provenance), who can read it (confidentiality). Each
+            // shows its rung (a green dot = the real level, a dim dot = the null still in
+            // place) and the named mechanism. A level is never a silent fallback; the
+            // module refuses a failed upgrade. Hidden until the room reports one.
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                visible: scope.securityAxes.length > 0
+
+                LogosText {
+                    Layout.fillWidth: true
+                    text: qsTr("Security level")
+                    color: Theme.palette.text
+                    font.family: Theme.typography.publicSans
+                    font.pixelSize: Theme.typography.subtitleText
+                    font.weight: Theme.typography.weightBold
+                    elide: Text.ElideRight
+                }
+
+                Repeater {
+                    model: scope.securityAxes
+
+                    delegate: RowLayout {
+                        id: axisRow
+                        required property var modelData
+                        readonly property bool isReal: !!(axisRow.modelData && axisRow.modelData.real)
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+
+                        // rung dot: green when the real level is active, dim when the null
+                        // is still in place (a null is shown, not alarmed — it can be a
+                        // legitimate terminal, e.g. an anonymous room's authentication).
+                        Rectangle {
+                            Layout.alignment: Qt.AlignTop
+                            Layout.topMargin: Theme.spacing.tiny
+                            width: Theme.spacing.small
+                            height: Theme.spacing.small
+                            radius: width / 2
+                            color: axisRow.isReal ? Theme.palette.success : Theme.palette.textTertiary
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+
+                            LogosText {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: {
+                                    var axis = String((axisRow.modelData && axisRow.modelData.axis) || "");
+                                    var rung = axisRow.isReal ? qsTr("real") : qsTr("null");
+                                    return axis + "  ·  " + rung;
+                                }
+                                color: Theme.palette.text
+                                font.family: Theme.typography.mono
+                                font.pixelSize: Theme.typography.badgeText
+                                font.weight: Theme.typography.weightMedium
+                            }
+                            LogosText {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: String((axisRow.modelData && axisRow.modelData.mechanism) || "")
+                                color: Theme.palette.textTertiary
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+                        }
+                    }
+                }
+            }
 
             // ── In the room ───────────────────────────────────────────────────
             RowLayout {
