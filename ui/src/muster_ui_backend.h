@@ -72,6 +72,7 @@ public:
     void loadComposeOffers(const QString &effectJson) override;
     void shareMaterial(const QString &intentId, const QString &requirement, const QString &pub) override;
     void declineInRoom(const QString &intentId) override;
+    void downloadAudit(const QString &intentId) override;
     void loadFlow() override;
     void setPolicy(const QString &kind) override;
     void loadPolicy() override;

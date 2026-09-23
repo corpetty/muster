@@ -121,6 +121,10 @@ Rectangle {
     signal needs()
     // Decline to take part — informational, the threshold is unchanged.
     signal deny()
+    // Save this intent's signature-audit file + report (exo-403).
+    signal downloadAudit()
+    // The outcome of the last download for THIS intent, set by the room ("" = none yet).
+    property string auditStatus: ""
     // Share one of MY holdings to fill a slot this proposal asks of me (the "From you"
     // picker, exo-45e K6): (requirement name, the chosen candidate's PUBLIC face).
     signal shareMaterial(string requirement, string pub)
@@ -1297,6 +1301,26 @@ Rectangle {
             text: qsTr("Deny")
             variant: LogosButton.Variant.Secondary
             onClicked: cardRoot.deny()
+        }
+
+        // Download audit trail (exo-403): one self-verifying file of everything this
+        // intent's approvals cover, plus a readable report generated from it.
+        LogosButton {
+            objectName: "cardDownloadAudit"
+            visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
+            Layout.fillWidth: true
+            text: qsTr("Download audit trail")
+            variant: LogosButton.Variant.Secondary
+            onClicked: cardRoot.downloadAudit()
+        }
+        LogosText {
+            objectName: "cardAuditStatus"
+            visible: cardRoot.auditStatus.length > 0
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: cardRoot.auditStatus
+            color: Theme.palette.textSecondary
+            font.pixelSize: Theme.typography.badgeText
         }
     }
 }

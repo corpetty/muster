@@ -3,9 +3,9 @@
 ##
 ## STEPPER: state = who approved: "identity" (alice), "bob", or "both" — each covering
 ## committed and pasted approvals. Under every live policy the file's approvals must
-## name exactly the contributors the fold recognises, and the report must name each of
-## them while naming no member who did not approve. Catches a file or report that
-## drops, invents, or swaps a signer.
+## name exactly the contributors the fold recognises, and the report's Approvals
+## section must name each of them while naming no member who did not approve.
+## Catches a file or report that drops, invents, or swaps a signer.
 ## Build: see live_room.nim.
 
 import std/sets
@@ -37,7 +37,13 @@ proc namesCorrect(assignment: string): bool =
       for who in approvers: want.incl idOf(policy, who)
       for (w, _) in res.fileOf().approvalGradesOf: got.incl w.toLowerAscii
       if got != want: return false
-      let report = renderAuditReport(res.bytes).toLowerAscii
+      # the report's signers are its Approvals section (it also names its exporter,
+      # which is not a claim about who signed)
+      let full = renderAuditReport(res.bytes).toLowerAscii
+      let i0 = full.find("## approvals")
+      if i0 < 0: return false
+      let i1 = full.find("\n## ", i0 + 3)
+      let report = full[i0 ..< (if i1 < 0: full.len else: i1)]
       for who in ["alice", "bob"]:
         let named = idOf(policy, who) in report
         if named != (who in approvers): return false

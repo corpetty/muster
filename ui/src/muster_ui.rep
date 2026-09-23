@@ -200,6 +200,11 @@ class MusterUi
     // event folded into the intent view, naming who declined. Informational: the threshold is unchanged. Lands on
     // declineJson {intentId, state, declines} or {error}; intents reload after.
     SLOT(void declineInRoom(const QString &intentId))
+    // Download the intent's signature-audit file (coordinate_audit, exo-403): writes the
+    // canonical file (.cbor) and the readable report (.md) to MUSTER_AUDIT_DIR, else the
+    // Downloads folder. Lands on auditJson {ok, intentId, cbor, report, digest} or
+    // {ok:false, reason} — a refusal (e.g. history this member cannot read) is shown.
+    SLOT(void downloadAudit(const QString &intentId))
     // The information-flow view (coordinate_flow, exo-002.5): who could see what,
     // for every action — {rows:[{seq,kind,intentId,field,to,members,epoch,declared}],
     // matrix:{observer:[fields]}}. A fold over the sealed log (no RPC), refreshed on
@@ -293,6 +298,8 @@ class MusterUi
     // The outcome of the last decline (declineInRoom): {intentId, state, declines}
     // or {error}, so the card can say whether the decline folded.
     PROP(QString declineJson="{}" READONLY)
+    // The outcome of the last audit download (downloadAudit).
+    PROP(QString auditJson="{}" READONLY)
     // The room's information flow (loadFlow): {rows, matrix}. The Room renders the
     // observer matrix + per-action rows; the store node is always present (FS-9).
     PROP(QString flowJson="{\"rows\":[],\"matrix\":{}}" READONLY)

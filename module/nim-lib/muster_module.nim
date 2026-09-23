@@ -39,6 +39,7 @@ import ../src/coordination/offers      # requirements × my catalogue → offers
 import ../src/wallet/material          # the holdings catalogue (exo-45e K2)
 import ../src/hashing/sha256
 import ../src/log/proof                # exportable, self-verifying log proofs (M4)
+import ../src/coordination/audit       # the signature-audit file (exo-403)
 import ../src/coordination/flow        # the information-flow view (M5)
 import ../src/intents/authorization    # muster-issued authorizations for the host hook (M7)
 import ../src/coordination/lp_invoker  # LpInvoker — call the target module over lp_*
@@ -964,6 +965,43 @@ proc musterCoordinateVerifyProof(proofJson: string): string =
   let (ok, reason) = verifyProof(p)
   $(%*{"ok": ok, "reason": reason, "proofDigest": (if ok: p.proofDigest() else: ""),
        "events": p.events.len})
+
+proc auditHex(b: seq[byte]): string =
+  const d = "0123456789abcdef"
+  for x in b: (result.add d[int(x shr 4)]; result.add d[int(x and 0x0F)])
+
+proc musterCoordinateAudit(intentId: string): string =
+  ## The signature-audit file for one room intent (exo-403): the canonical bytes as hex,
+  ## the readable report rendered from them, and their digest — or the refusal.
+  if gSession == nil: return $(%*{"ok": false, "reason": "not-joined"})
+  gSession.poll()
+  let res = exportAudit(gSession.log.allEvents(), driverFor, intentId, moduleKeystore())
+  if not res.ok:
+    result = $(%*{"ok": false, "reason": res.reason, "intentId": intentId})
+  else:
+    result = $(%*{"ok": true, "intentId": intentId, "file": auditHex(res.bytes),
+                  "report": renderAuditReport(res.bytes), "digest": auditDigest(res.bytes)})
+  if gLpDebug:
+    stderr.writeLine("MUSTER-LP audit " & $(%*{"ok": res.ok, "reason": res.reason,
+      "digest": (if res.ok: auditDigest(res.bytes) else: ""), "bytes": res.bytes.len}))
+
+proc musterCoordinateVerifyAudit(fileHex: string): string =
+  ## Refuse-on-mismatch verification of an audit file — pure, reads only the file.
+  var b: seq[byte]
+  var h = fileHex
+  if h.startsWith("0x"): h = h[2 .. ^1]
+  try:
+    for i in 0 ..< h.len div 2: b.add byte(parseHexInt(h[2*i .. 2*i+1]))
+  except CatchableError:
+    return $(%*{"ok": false, "reason": "not hex"})
+  let v = verifyAudit(b)
+  var apps = newJArray()
+  for a in v.approvals: apps.add %*{"who": a.who, "round": a.round, "grade": a.grade}
+  var st = newJArray()
+  for x in v.settlement: st.add %*{"kind": x.kind, "chainRef": x.chainRef, "grade": x.grade}
+  $(%*{"ok": v.ok, "reason": v.reason, "intentId": v.intentId, "stage": v.stage,
+       "issuer": v.issuer, "digest": v.digest, "firstEpoch": v.firstEpoch,
+       "approvals": apps, "settlement": st})
 
 proc musterCoordinateFlow(): string =
   ## Who could see what, per action (M5). Founders = the current roster minus every
