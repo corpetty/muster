@@ -79,6 +79,22 @@ proc require*(l: SecurityLevel, axis: SecurityAxis, want: Rung) =
       "' (" & $l.axes[axis].rung & "), the caller requires " & $want &
       " — the real level is unavailable, so this refuses rather than proceed at the null")
 
+proc combine*(levels: varargs[SecurityLevel]): SecurityLevel =
+  ## The ACTIVE level across several seams: per axis, the STRONGEST rung any of them
+  ## provides, carrying that seam's mechanism. The seams govern DIFFERENT axes (a driver
+  ## the authentication axis, the epoch layer confidentiality, the log provenance), so in
+  ## practice one seam is non-null per axis and this just gathers them into one envelope —
+  ## the "active level on all three axes" a UI shows. When two seams touch one axis, the
+  ## stronger wins (this reports the capability present, not a weakest-link security claim;
+  ## per-scope caveats — e.g. metadata visible to the store node, FS-9 — live in the
+  ## mechanism strings, which is why the null still carries a mechanism). No input ⇒ all null.
+  var best: array[SecurityAxis, AxisLevel]
+  for a in SecurityAxis: best[a] = axisLevel(rungNull, "unset")
+  for l in levels:
+    for a in SecurityAxis:
+      if l.axes[a].rung >= best[a].rung: best[a] = l.axes[a]
+  SecurityLevel(axes: best)
+
 proc `$`*(l: SecurityLevel): string =
   ## A one-line rendering of the whole envelope, for logs and the UI seam.
   result = ""

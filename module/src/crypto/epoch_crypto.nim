@@ -57,6 +57,16 @@ proc eciesUnwrapVia(ks: Keystore, wrapped: seq[byte]): array[32, byte] =
 
 # ── EpochCrypto ───────────────────────────────────────────────────────────────
 
+method securityLevel*(cc: EpochCrypto): SecurityLevel =
+  ## The epoch layer is the REAL confidentiality level for room data (exo-1ec.5): payloads
+  ## are sealed to the current member set (ECIES over X25519 sealed boxes), and re-keying on
+  ## every membership change means a later joiner cannot open an earlier epoch (F-16). It
+  ## still does not authenticate the speaker or attest provenance — those axes stay null.
+  securityLevel(
+    axisLevel(rungNull, "speaker not authenticated by the crypto seam"),
+    axisLevel(rungNull, "no attestation from the crypto seam"),
+    axisLevel(rungReal, "ECIES epoch (sealed box over X25519), forward-secret across epochs (F-16)"))
+
 proc newEpochCrypto*(ks: Keystore, others: seq[Member] = @[]): EpochCrypto =
   ## Found a conversation: epoch 0 with a fresh key I hold, members = me + others.
   ## Identity comes from the keystore; our secret never enters this layer.

@@ -8,6 +8,10 @@ import std/strutils
 import ../src/wallet/adapter
 import ../src/wallet/mock_chain
 import ../src/security/levels
+import ../src/crypto/epoch_crypto
+import ../src/crypto/keystore
+import ../src/drivers/driver
+import ../src/transport/transport
 
 # A consumer decides purely from the level — the SAME code for either adapter. No `of`
 # pattern-match on the concrete type: that is the whole point of typing the seam.
@@ -42,5 +46,57 @@ block:
     doAssert a.securityLevel().rungOf(axAuthentication) == rungNull
     doAssert a.securityLevel().rungOf(axProvenance) == rungNull
   echo "3. an adapter declares null on the axes it does not govern (no overclaim) OK"
+
+# ── 4. ConversationCrypto: the epoch layer is the CONFIDENTIALITY real ─────────────
+block:
+  proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
+  let ks = newInMemoryKeystore(seed(1), seed(2))
+  let cc = newEpochCrypto(ks)
+  doAssert cc.securityLevel().rungOf(axConfidentiality) == rungReal, "the epoch layer seals room data"
+  doAssert cc.securityLevel().mechanismOf(axConfidentiality).contains("ECIES")
+  # the base (no crypto configured) is the null at the same seam.
+  doAssert ConversationCrypto().securityLevel().rungOf(axConfidentiality) == rungNull
+  # it does not claim to authenticate or attest — those are other seams' axes.
+  doAssert cc.securityLevel().rungOf(axAuthentication) == rungNull
+  doAssert cc.securityLevel().rungOf(axProvenance) == rungNull
+  echo "4. ConversationCrypto: the epoch layer is the confidentiality real, null base OK"
+
+# ── 5. driver membership is the AUTHENTICATION axis (named real / anon null terminal) ─
+block:
+  let named = newStubDriver(rounds = 1, threshold = 1, membership = mmNamed).describe().securityLevel()
+  let anon  = newStubDriver(rounds = 1, threshold = 1, membership = mmAnonymous).describe().securityLevel()
+  doAssert named.rungOf(axAuthentication) == rungReal, "a named driver binds the speaker"
+  doAssert anon.rungOf(axAuthentication) == rungNull, "an anonymous driver is the auth null"
+  doAssert anon.mechanismOf(axAuthentication).contains("terminal"), "the anon null is a legitimate terminal (inv 9)"
+  echo "5. driver membership maps to the authentication axis (named real / anon terminal null) OK"
+
+# ── 6. Transport declares NO security level (opaque byte carrier — no overclaim) ────
+block:
+  let t = newLocalTransport(newLocalNetwork())
+  for ax in SecurityAxis:
+    doAssert t.securityLevel().rungOf(ax) == rungNull, "transport provides no level on " & $ax
+  # the mechanisms say where the real level actually lives, so a reader is not misled.
+  doAssert t.securityLevel().mechanismOf(axConfidentiality).contains("epoch layer")
+  echo "6. Transport declares no security level, naming where the real one lives OK"
+
+# ── 7. combine: the ACTIVE room level is the strongest per axis, one envelope ───────
+block:
+  # a room running a NAMED driver + the epoch layer + a provenance-real seam (the signed
+  # log, stood in here) has all three axes real — each from the seam that governs it.
+  let logProv = securityLevel(axisLevel(rungNull, "-"), axisLevel(rungReal, "signed hash-linked log"),
+                              axisLevel(rungNull, "-"))
+  let seed2 = proc(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
+  let cc = newEpochCrypto(newInMemoryKeystore(seed2(3), seed2(4)))
+  let drv = newStubDriver(rounds = 1, threshold = 1, membership = mmNamed).describe().securityLevel()
+  let active = combine(drv, cc.securityLevel(), logProv)
+  doAssert active.rungOf(axAuthentication) == rungReal, "auth from the named driver"
+  doAssert active.rungOf(axConfidentiality) == rungReal, "confidentiality from the epoch layer"
+  doAssert active.rungOf(axProvenance) == rungReal, "provenance from the log"
+  # an ANONYMOUS room keeps auth at the null — combine does not invent a level.
+  let anonActive = combine(
+    newStubDriver(rounds = 1, threshold = 1, membership = mmAnonymous).describe().securityLevel(),
+    cc.securityLevel(), logProv)
+  doAssert anonActive.rungOf(axAuthentication) == rungNull, "an anonymous room stays at the auth null"
+  echo "7. combine: the active room level is the strongest per axis, one envelope OK"
 
 echo "null_ladder_test: all OK"
