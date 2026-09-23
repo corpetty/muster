@@ -24,6 +24,7 @@ type
   SignedInput* = object
     class*: InputClass
     logPos*: int          ## log position the input reached the signed bytes from
+    logRef*: string       ## the source event's content id — stable under reordering (exo-ef1)
     account*: string      ## the account that contributed this input
     accountable*: bool    ## can this input's origin be accounted for?
     epoch*: int           ## membership epoch the input belongs to
@@ -32,6 +33,7 @@ type
   ProvenanceEntry* = object
     class*: InputClass
     logPos*: int
+    logRef*: string       ## the source event's content id ("" in the pre-ef1 model)
     account*: string      ## the account that contributed this input
 
   ProvenanceRecord* = object
@@ -41,12 +43,13 @@ proc buildProvenance*(inputs: seq[SignedInput]): ProvenanceRecord =
   ## One entry per contributing input, naming its class, position, and account.
   for inp in inputs:
     result.entries.add ProvenanceEntry(
-      class: inp.class, logPos: inp.logPos, account: inp.account)
+      class: inp.class, logPos: inp.logPos, logRef: inp.logRef, account: inp.account)
 
 proc encodeProvenance*(rec: ProvenanceRecord): seq[byte] =
   var arr: seq[CborValue]
   for e in rec.entries:
-    arr.add cbArray(@[cbText($e.class), cbUint(uint64(e.logPos)), cbText(e.account)])
+    arr.add cbArray(@[cbText($e.class), cbUint(uint64(e.logPos)), cbText(e.account),
+                      cbText(e.logRef)])
   encodeHashInput(hashInput("muster.provenance.v1", @[("entries", cbArray(arr))]))
 
 proc signedBytes*(materialization: seq[byte], rec: ProvenanceRecord): seq[byte] =

@@ -48,6 +48,13 @@ method describe*(d: Driver): DriverDescriptor {.base, gcsafe.} =
 method verifyContribution*(d: Driver, c: Contribution, round: int): bool {.base, gcsafe.} =
   raise newException(CatchableError, "Driver.verifyContribution is abstract")
 
+method environment*(d: Driver): string {.base, gcsafe.} =
+  ## The environment a signature under this driver is bound to (invariant 2's first
+  ## field) — driver-described, never hardcoded in the core (invariant 6). A driver
+  ## that settles on a chain names it (Safe: "eip155:<chainId>"); a room-native
+  ## driver's decisions live in the room, so the default is "room".
+  "room"
+
 # ── The driver-generic core: a round-based collection driven only by describe() ─
 type Collection* = object
   descriptor*: DriverDescriptor
