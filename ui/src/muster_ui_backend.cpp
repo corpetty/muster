@@ -5,6 +5,9 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QDir>
+#include <QFile>
+#include <QStandardPaths>
 
 // Generated umbrella: LogosModules (behind modules()) built from
 // metadata.json#dependencies — the typed muster_module client the UI calls
@@ -561,6 +564,47 @@ void MusterUiBackend::declineInRoom(const QString &intentId)
     loadIntents();
 }
 
+void MusterUiBackend::downloadAudit(const QString &intentId)
+{
+    // coordinate_audit → the intent's signature-audit file (exo-403). The module
+    // builds it (pure, from the log); the UI only saves it: the canonical bytes as
+    // .cbor — what verifies — and the report rendered from them as .md.
+    const QString r = modules().muster_module.coordinate_audit(intentId);
+    const QJsonObject o = QJsonDocument::fromJson(r.toUtf8()).object();
+    QJsonObject out;
+    out["intentId"] = intentId;
+    if (!o.value("ok").toBool()) {
+        out["ok"] = false;
+        out["reason"] = o.value("reason").toString(r);
+    } else {
+        QString dir = QString::fromUtf8(qgetenv("MUSTER_AUDIT_DIR"));
+        if (dir.isEmpty()) dir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+        if (dir.isEmpty()) dir = QDir::homePath();
+        QDir().mkpath(dir);
+        QString stem = intentId;
+        stem.remove(QStringLiteral("0x"));
+        const QString cborPath = QDir(dir).filePath(QStringLiteral("muster-audit-%1.cbor").arg(stem));
+        const QString mdPath = QDir(dir).filePath(QStringLiteral("muster-audit-%1.md").arg(stem));
+        QFile cbor(cborPath), md(mdPath);
+        const bool wrote = cbor.open(QIODevice::WriteOnly) &&
+            cbor.write(QByteArray::fromHex(o.value("file").toString().toUtf8())) >= 0 &&
+            md.open(QIODevice::WriteOnly) &&
+            md.write(o.value("report").toString().toUtf8()) >= 0;
+        cbor.close(); md.close();
+        out["ok"] = wrote;
+        if (wrote) {
+            out["cbor"] = cborPath;
+            out["report"] = mdPath;
+            out["digest"] = o.value("digest").toString();
+        } else {
+            out["reason"] = QStringLiteral("could not write to %1").arg(dir);
+        }
+    }
+    const QString j = QString::fromUtf8(QJsonDocument(out).toJson(QJsonDocument::Compact));
+    qInfo() << "[muster_ui] downloadAudit" << intentId << "->" << j;
+    setAuditJson(j);
+}
+
 void MusterUiBackend::loadFlow()
 {
     // coordinate_flow → who could see what, per action: the log × each action's
@@ -617,8 +661,15 @@ void MusterUiBackend::onContextReady()
             if (!autopropose.isEmpty()) {
                 const QString effect = QString::fromUtf8(autopropose);
                 QTimer::singleShot(4000, this, [this, effect]() {
+                    // Audit self-test (exo-403): MUSTER_AUTOPOLICY picks the driver first,
+                    // MUSTER_AUTOAPPROVE approves in-app, MUSTER_AUTOAUDIT then calls the
+                    // SAME slot the card's "Download audit trail" button calls.
+                    const QByteArray autopolicy = qgetenv("MUSTER_AUTOPOLICY");
+                    if (!autopolicy.isEmpty()) setPolicy(QString::fromUtf8(autopolicy));
                     const QString id = modules().muster_module.coordinate_propose(effect);
                     qInfo() << "[muster_ui] AUTOPROPOSE ->" << id;
+                    if (!qgetenv("MUSTER_AUTOAPPROVE").isEmpty()) contributeInRoom(id, QString(), QString());
+                    if (!qgetenv("MUSTER_AUTOAUDIT").isEmpty()) downloadAudit(id);
                     loadIntents();
                     loadReadiness(id);
                     if (!qgetenv("MUSTER_AUTODECLINE").isEmpty()) declineInRoom(id);

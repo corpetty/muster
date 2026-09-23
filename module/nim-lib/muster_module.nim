@@ -39,6 +39,7 @@ import ../src/coordination/offers      # requirements × my catalogue → offers
 import ../src/wallet/material          # the holdings catalogue (exo-45e K2)
 import ../src/hashing/sha256
 import ../src/log/proof                # exportable, self-verifying log proofs (M4)
+import ../src/coordination/audit       # the signature-audit file (exo-403)
 import ../src/coordination/flow        # the information-flow view (M5)
 import ../src/intents/authorization    # muster-issued authorizations for the host hook (M7)
 import ../src/coordination/lp_invoker  # LpInvoker — call the target module over lp_*
@@ -764,35 +765,10 @@ proc musterCoordinatePropose(effectJson: string): string =
                     int64(epochTime()), gMsgSeq, account = account, ttlSec = ttl)
 
 proc musterCoordinateReannounce(): string =
-  ## Re-publish every still-OPEN intent — its policy declaration, its propose, and its
-  ## thread card — into the CURRENT epoch. A member admitted after a proposal was made
-  ## can't read anything from before their epoch (F-16), so without this they'd never
-  ## fold the intent or see its card. The events are content-addressed, so re-publishing
-  ## is idempotent (same ids) — it only re-seals them under the new epoch for the joiner.
-  ## Called right after an admit; a finished intent (submitted/settled) is skipped.
+  ## Re-publish every still-open intent into the CURRENT epoch for a just-admitted
+  ## member — the live path lives in coordination/live.nim (exo-ef1/exo-403).
   if gSession == nil: return "not-joined"
-  gSession.poll()
-  let events = gSession.log.allEvents()
-  let folded = reduceIntents(events, driverFor)
-  let author = toHex(moduleKeystore().encIdentity().toBytes())
-  var n = 0
-  for id, it in folded:
-    if $it.state in ["final", "submitted", "settling"]: continue
-    let effect = effectJsonOf(events, id)
-    if effect.len == 0: continue
-    let policy = intentPolicyOf(events, id)
-    gSession.publish(policyDeclEvent(id, policy))
-    gSession.publish(proposeEvent(id, effect))
-    # its signing context and any recorded reads too: without them a joiner can fold
-    # the intent but not attest to it (exo-ef1). Same events, same ids — idempotent.
-    for e in events:
-      if e.key == "intent/" & id & "/context" or e.key.startsWith("intent/" & id & "/read/"):
-        gSession.publish(e)
-    inc gMsgSeq
-    let refBody = $(%*{"kind": "intent-ref", "intentId": id})
-    let (_, ev) = newMessageEvent(author, int64(epochTime()), refBody, gMsgSeq)
-    gSession.publish(ev)
-    inc n
+  let n = liveReannounce(gSession, moduleKeystore(), driverFor, int64(epochTime()), gMsgSeq)
   $(%*{"reannounced": n})
 
 proc roomContext(): LinkContext =
@@ -859,7 +835,9 @@ proc musterCoordinateIntents(): string =
       prov.add %*{"class": $item.cls, "logPos": item.logPos,
                   "account": item.account, "alias": alias,
                   "accountable": item.accountable, "what": item.what,
-                  "detail": item.detail, "guarantee": item.guarantee}
+                  "detail": item.detail, "guarantee": item.guarantee,
+                  # an approval's grade (exo-ef1): committed | unattested; "" otherwise
+                  "attestation": item.attestation}
     o["provenance"] = prov
     arr.add o
   $arr
@@ -989,6 +967,43 @@ proc musterCoordinateVerifyProof(proofJson: string): string =
   let (ok, reason) = verifyProof(p)
   $(%*{"ok": ok, "reason": reason, "proofDigest": (if ok: p.proofDigest() else: ""),
        "events": p.events.len})
+
+proc auditHex(b: seq[byte]): string =
+  const d = "0123456789abcdef"
+  for x in b: (result.add d[int(x shr 4)]; result.add d[int(x and 0x0F)])
+
+proc musterCoordinateAudit(intentId: string): string =
+  ## The signature-audit file for one room intent (exo-403): the canonical bytes as hex,
+  ## the readable report rendered from them, and their digest — or the refusal.
+  if gSession == nil: return $(%*{"ok": false, "reason": "not-joined"})
+  gSession.poll()
+  let res = exportAudit(gSession.log.allEvents(), driverFor, intentId, moduleKeystore())
+  if not res.ok:
+    result = $(%*{"ok": false, "reason": res.reason, "intentId": intentId})
+  else:
+    result = $(%*{"ok": true, "intentId": intentId, "file": auditHex(res.bytes),
+                  "report": renderAuditReport(res.bytes), "digest": auditDigest(res.bytes)})
+  if gLpDebug:
+    stderr.writeLine("MUSTER-LP audit " & $(%*{"ok": res.ok, "reason": res.reason,
+      "digest": (if res.ok: auditDigest(res.bytes) else: ""), "bytes": res.bytes.len}))
+
+proc musterCoordinateVerifyAudit(fileHex: string): string =
+  ## Refuse-on-mismatch verification of an audit file — pure, reads only the file.
+  var b: seq[byte]
+  var h = fileHex
+  if h.startsWith("0x"): h = h[2 .. ^1]
+  try:
+    for i in 0 ..< h.len div 2: b.add byte(parseHexInt(h[2*i .. 2*i+1]))
+  except CatchableError:
+    return $(%*{"ok": false, "reason": "not hex"})
+  let v = verifyAudit(b)
+  var apps = newJArray()
+  for a in v.approvals: apps.add %*{"who": a.who, "round": a.round, "grade": a.grade}
+  var st = newJArray()
+  for x in v.settlement: st.add %*{"kind": x.kind, "chainRef": x.chainRef, "grade": x.grade}
+  $(%*{"ok": v.ok, "reason": v.reason, "intentId": v.intentId, "stage": v.stage,
+       "issuer": v.issuer, "digest": v.digest, "firstEpoch": v.firstEpoch,
+       "approvals": apps, "settlement": st})
 
 proc musterCoordinateFlow(): string =
   ## Who could see what, per action (M5). Founders = the current roster minus every
@@ -1264,7 +1279,7 @@ proc musterCoordinateSubmit(intentId: string): string =
   except CatchableError as e:
     return $(%*{"id": intentId, "error": "rpc-unreachable", "detail": e.msg})
   # Fold the room forward: submit event → every member converges on "submitted".
-  gSession.publish(submitEvent(intentId))
+  gSession.publish(submitEvent(intentId, chainRef = txHash))
   # Observe finality from the chain (never asserted). Bounded poll (~4s) so a slow or
   # unreachable node reports "pending" rather than freezing the UI; anvil auto-mines,
   # so a healthy receipt returns on the first tick.
@@ -1275,7 +1290,7 @@ proc musterCoordinateSubmit(intentId: string): string =
     sleep(200)
   # On a real on-chain success, fold the intent to `final` so every member's card
   # advances to "paid" — not just the submitted state the submit event set.
-  if status == 1: gSession.publish(finalEvent(intentId))
+  if status == 1: gSession.publish(finalEvent(intentId, chainRef = txHash))
   let onchain = (if status == 1: "final" elif status == 0: "failed" else: "pending")
   $(%*{"id": intentId,
        "state": intentState(gSession.log.allEvents(), driverFor, intentId),

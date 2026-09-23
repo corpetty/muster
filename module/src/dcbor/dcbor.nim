@@ -130,3 +130,73 @@ proc toHex*(bytes: seq[byte]): string =
   for b in bytes:
     result.add digits[int(b shr 4)]
     result.add digits[int(b and 0x0F)]
+
+# ── Decode (strict: only the canonical encoding of a value decodes) ───────────
+# Used where muster must READ back bytes it (or another member) produced — the
+# signature-audit file (exo-403). Anything outside the signing-path value space
+# (floats, indefinite lengths, tags, undefined) is refused, and a byte sequence
+# decodes only if re-encoding the result reproduces it exactly: non-shortest
+# integers, unsorted or duplicate map keys, and trailing bytes are all refused, so
+# a value has exactly one accepted encoding (invariant 5).
+
+proc decodeAt(b: openArray[byte], pos: var int, depth: int): CborValue =
+  if depth > 64: raise newException(CborError, "nesting too deep")
+  if pos >= b.len: raise newException(CborError, "truncated")
+  let ib = b[pos]; inc pos
+  let major = ib shr 5
+  let ai = ib and 0x1F
+  var arg: uint64
+  case ai
+  of 0'u8 .. 23'u8: arg = uint64(ai)
+  of 24'u8, 25'u8, 26'u8, 27'u8:
+    let n = 1 shl int(ai - 24)
+    if pos + n > b.len: raise newException(CborError, "truncated")
+    for i in 0 ..< n: arg = (arg shl 8) or uint64(b[pos + i])
+    pos += n
+  else: raise newException(CborError, "indefinite-length or reserved head")
+  case major
+  of 0: result = cbUint(arg)
+  of 1: result = CborValue(kind: ckNint, n: arg)
+  of 2, 3:
+    if arg > uint64(b.len - pos): raise newException(CborError, "truncated")
+    let n = int(arg)
+    if major == 2:
+      result = cbBytes(@(b[pos ..< pos + n]))
+    else:
+      var t = newString(n)
+      for i in 0 ..< n: t[i] = char(b[pos + i])
+      result = cbText(t)
+    pos += n
+  of 4:
+    if arg > uint64(b.len - pos): raise newException(CborError, "truncated")
+    var items: seq[CborValue]
+    for _ in 0 ..< int(arg): items.add decodeAt(b, pos, depth + 1)
+    result = cbArray(items)
+  of 5:
+    if arg > uint64(b.len - pos): raise newException(CborError, "truncated")
+    var pairs: seq[(CborValue, CborValue)]
+    for _ in 0 ..< int(arg):
+      let k = decodeAt(b, pos, depth + 1)
+      pairs.add (k, decodeAt(b, pos, depth + 1))
+    result = cbMap(pairs)
+  of 7:
+    case ai
+    of 20'u8: result = cbBool(false)
+    of 21'u8: result = cbBool(true)
+    of 22'u8: result = cbNull()
+    else: raise newException(CborError, "float / simple value not permitted")
+  else: raise newException(CborError, "tags are not permitted")
+
+proc decode*(b: seq[byte]): CborValue =
+  ## Decode exactly one canonical value filling `b`, or raise CborError.
+  var pos = 0
+  result = decodeAt(b, pos, 0)
+  if pos != b.len: raise newException(CborError, "trailing bytes")
+  if encode(result) != b: raise newException(CborError, "not the canonical encoding")
+
+proc field*(m: CborValue, key: string): CborValue =
+  ## A text-keyed map entry, or raise CborError naming the missing key.
+  if m == nil or m.kind != ckMap: raise newException(CborError, "not a map (wanted '" & key & "')")
+  for (k, v) in m.pairs:
+    if k.kind == ckText and k.t == key: return v
+  raise newException(CborError, "missing field '" & key & "'")
