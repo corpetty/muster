@@ -1,15 +1,15 @@
 {
   "id": "derived-exo-403",
   "original_statement": "I can't download the audit trail behind a signature \u2014 one file that describes the whole thing, from where its inputs came from through to how it settled.",
-  "restatement": "A member can export, for any intent in a room they hold, one audit file covering the intent's whole lifecycle \u2014 every signature and exactly what each committed to, where each input came from, and how it settled \u2014 that verifies itself, is deterministic, and can reveal no more than the exporter could already read: (s1) for an intent, the export is one canonical-CBOR file containing the effect and its re-derived materialization, every signature on the intent with its full signing payload (profile, schema-id, environment, account, slot, expiry) and committed provenance record, the parent-closed log entries those records name, and the driver's manifest with its disclosure rows; every provenance-named log position resolves inside the file, and every entry in the file is named by a provenance record or is an ancestor of one that is; (s2) a pure verifier given only the file re-derives the materialization from the effect, recomputes every signing payload and verifies each signature against it, recomputes every entry's content id and parent-closure, and checks each provenance record against the included entries; an untouched file is accepted and any single-byte change is refused with the first discrepancy named; (s3) the file's bytes are a pure function of the room's log and keys: reordering or duplicating the log it is built from yields the byte-identical file, exporting twice yields the same digest, and producing it writes nothing to any store; (s4) the names in both the canonical file and the readable report are exactly the accounts that contributed \u2014 no missing, extra, or swapped signer; (s5) the file contains only entries from membership epochs the exporter holds keys for; if the intent's lineage reaches an epoch the exporter cannot open, the export is refused with that reason and never silently truncated; (s6) when the intent was submitted or finalized, those entries are included and graded as external reads with their chain reference, and the verifier never reports them as verified against the chain; the file states the lifecycle stage reached, so an unsettled intent is labelled as such; (s7) the human-readable report is a pure function of the canonical file and carries its digest: rendering is deterministic, every fact in it traces to a field of the file, and the report is never authoritative \u2014 editing it changes nothing the verifier says; (s8) the intent card offers a Download audit trail action that saves both the canonical file and the readable report; an offscreen self-test clicks it, runs the standalone verifier on the saved file, and gets accepted.",
+  "restatement": "A member can export, for any intent in a room they hold, one audit file covering the intent's whole lifecycle \u2014 every signature and exactly what each committed to, where each input came from, and how it settled \u2014 that verifies itself, is deterministic, and can reveal no more than the exporter could already read: (s1) for an intent, the export is one canonical-CBOR file containing the effect and its re-derived materialization, the intent's signing context, every approval on the intent \u2014 its driver signature, its grade (committed, unattested, or rejected) and, when committed, its attestation over the full signing payload (profile, schema-id, environment, account, slot, expiry) and provenance record \u2014 the parent-closed log entries that provenance names, and the driver's manifest with its disclosure rows, the non-derivable claims (threshold, stage, disclosure) signed by the exporting member; every provenance-named log position resolves inside the file, and every entry in the file is named by a provenance record or is an ancestor of one that is; (s2) a pure verifier given only the file re-derives the materialization from the effect, re-derives the signing payload P, verifies each approval's driver signature is by its named contributor over the materialization, verifies each attestation over P, recomputes every approval's grade, recomputes every entry's content id and parent-closure, checks the provenance record against the included entries, and checks the exporting member's signature over the non-derivable claims; an untouched file is accepted \u2014 with pasted approvals reported as unattested \u2014 and any single-byte change, including a file claiming committed for an approval without a verifying attestation, is refused with the first discrepancy named; (s3) the file's bytes are a pure function of the room's log and keys: reordering or duplicating the log it is built from yields the byte-identical file, exporting twice yields the same digest, and producing it writes nothing to any store; (s4) the names in both the canonical file and the readable report are exactly the accounts that contributed \u2014 no missing, extra, or swapped signer; (s5) the file contains only entries from membership epochs the exporter holds keys for; if the intent's lineage reaches an event the exporter cannot read (an input, or an approval another approval links to), the export is refused with that reason and never silently truncated, and the file states the first epoch it covers so a history that began before the exporter joined is labelled; (s6) when the intent was submitted or finalized, those entries are included and graded as external reads with their chain reference (the transaction hash), and the verifier never reports them as verified against the chain; the file states the lifecycle stage reached, so an unsettled intent is labelled as such, and every pasted approval is reported unattested, never as committed; (s7) the human-readable report is a pure function of the canonical file and carries its digest: rendering is deterministic, every fact in it traces to a field of the file, and the report is never authoritative \u2014 editing it changes nothing the verifier says; (s8) the intent card offers a Download audit trail action that saves both the canonical file and the readable report; an offscreen self-test clicks it, runs the standalone verifier on the saved file, and gets accepted.",
   "restatement_clauses": [
     {
       "id": "s1",
-      "text": "For an intent, the export is one canonical-CBOR file containing the effect and its re-derived materialization, every signature on the intent with its full signing payload (profile, schema-id, environment, account, slot, expiry) and committed provenance record, the parent-closed log entries those records name, and the driver's manifest with its disclosure rows; every provenance-named log position resolves inside the file, and every entry in the file is named by a provenance record or is an ancestor of one that is."
+      "text": "For an intent, the export is one canonical-CBOR file containing the effect and its re-derived materialization, the intent's signing context, every approval on the intent \u2014 its driver signature, its grade (committed, unattested, or rejected) and, when committed, its attestation over the full signing payload (profile, schema-id, environment, account, slot, expiry) and provenance record \u2014 the parent-closed log entries that provenance names, and the driver's manifest with its disclosure rows, the non-derivable claims (threshold, stage, disclosure) signed by the exporting member; every provenance-named log position resolves inside the file, and every entry in the file is named by a provenance record or is an ancestor of one that is."
     },
     {
       "id": "s2",
-      "text": "A pure verifier given only the file re-derives the materialization from the effect, recomputes every signing payload and verifies each signature against it, recomputes every entry's content id and parent-closure, and checks each provenance record against the included entries; an untouched file is accepted and any single-byte change is refused with the first discrepancy named."
+      "text": "A pure verifier given only the file re-derives the materialization from the effect, re-derives the signing payload P, verifies each approval's driver signature is by its named contributor over the materialization, verifies each attestation over P, recomputes every approval's grade, recomputes every entry's content id and parent-closure, checks the provenance record against the included entries, and checks the exporting member's signature over the non-derivable claims; an untouched file is accepted \u2014 with pasted approvals reported as unattested \u2014 and any single-byte change, including a file claiming committed for an approval without a verifying attestation, is refused with the first discrepancy named."
     },
     {
       "id": "s3",
@@ -21,11 +21,11 @@
     },
     {
       "id": "s5",
-      "text": "The file contains only entries from membership epochs the exporter holds keys for; if the intent's lineage reaches an epoch the exporter cannot open, the export is refused with that reason and never silently truncated."
+      "text": "The file contains only entries from membership epochs the exporter holds keys for; if the intent's lineage reaches an event the exporter cannot read (an input, or an approval another approval links to), the export is refused with that reason and never silently truncated, and the file states the first epoch it covers so a history that began before the exporter joined is labelled."
     },
     {
       "id": "s6",
-      "text": "When the intent was submitted or finalized, those entries are included and graded as external reads with their chain reference, and the verifier never reports them as verified against the chain; the file states the lifecycle stage reached, so an unsettled intent is labelled as such."
+      "text": "When the intent was submitted or finalized, those entries are included and graded as external reads with their chain reference (the transaction hash), and the verifier never reports them as verified against the chain; the file states the lifecycle stage reached, so an unsettled intent is labelled as such, and every pasted approval is reported unattested, never as committed."
     },
     {
       "id": "s7",
@@ -36,25 +36,25 @@
       "text": "The intent card offers a Download audit trail action that saves both the canonical file and the readable report; an offscreen self-test clicks it, runs the standalone verifier on the saved file, and gets accepted."
     }
   ],
-  "goal": "For any intent a member holds, one downloadable, self-verifying audit file (canonical CBOR, with a derived human-readable report) describes the whole intent \u2014 every signature and its committed payload and provenance, the lineage slice those records name, the driver's disclosure, and its settlement graded honestly \u2014 deterministic, adding no store, and scoped to the epochs the exporter can read.",
+  "goal": "For any intent a member holds, one downloadable, self-verifying audit file (canonical CBOR, with a derived human-readable report) describes the whole intent \u2014 every approval with its grade and, where committed, its attested payload and provenance, the lineage slice those records name, the driver's disclosure, and its settlement graded honestly \u2014 deterministic, adding no store, and scoped to the epochs the exporter can read.",
   "acceptance_criteria": [
-    "For an intent, the export is one canonical-CBOR file containing the effect and its re-derived materialization, every signature on the intent with its full signing payload (profile, schema-id, environment, account, slot, expiry) and committed provenance record, the parent-closed log entries those records name, and the driver's manifest with its disclosure rows; every provenance-named log position resolves inside the file, and every entry in the file is named by a provenance record or is an ancestor of one that is.",
-    "A pure verifier given only the file re-derives the materialization from the effect, recomputes every signing payload and verifies each signature against it, recomputes every entry's content id and parent-closure, and checks each provenance record against the included entries; an untouched file is accepted and any single-byte change is refused with the first discrepancy named.",
+    "For an intent, the export is one canonical-CBOR file containing the effect and its re-derived materialization, the intent's signing context, every approval on the intent \u2014 its driver signature, its grade (committed, unattested, or rejected) and, when committed, its attestation over the full signing payload (profile, schema-id, environment, account, slot, expiry) and provenance record \u2014 the parent-closed log entries that provenance names, and the driver's manifest with its disclosure rows, the non-derivable claims (threshold, stage, disclosure) signed by the exporting member; every provenance-named log position resolves inside the file, and every entry in the file is named by a provenance record or is an ancestor of one that is.",
+    "A pure verifier given only the file re-derives the materialization from the effect, re-derives the signing payload P, verifies each approval's driver signature is by its named contributor over the materialization, verifies each attestation over P, recomputes every approval's grade, recomputes every entry's content id and parent-closure, checks the provenance record against the included entries, and checks the exporting member's signature over the non-derivable claims; an untouched file is accepted \u2014 with pasted approvals reported as unattested \u2014 and any single-byte change, including a file claiming committed for an approval without a verifying attestation, is refused with the first discrepancy named.",
     "The file's bytes are a pure function of the room's log and keys: reordering or duplicating the log it is built from yields the byte-identical file, exporting twice yields the same digest, and producing it writes nothing to any store.",
     "The names in both the canonical file and the readable report are exactly the accounts that contributed \u2014 no missing, extra, or swapped signer.",
-    "The file contains only entries from membership epochs the exporter holds keys for; if the intent's lineage reaches an epoch the exporter cannot open, the export is refused with that reason and never silently truncated.",
-    "When the intent was submitted or finalized, those entries are included and graded as external reads with their chain reference, and the verifier never reports them as verified against the chain; the file states the lifecycle stage reached, so an unsettled intent is labelled as such.",
+    "The file contains only entries from membership epochs the exporter holds keys for; if the intent's lineage reaches an event the exporter cannot read (an input, or an approval another approval links to), the export is refused with that reason and never silently truncated, and the file states the first epoch it covers so a history that began before the exporter joined is labelled.",
+    "When the intent was submitted or finalized, those entries are included and graded as external reads with their chain reference (the transaction hash), and the verifier never reports them as verified against the chain; the file states the lifecycle stage reached, so an unsettled intent is labelled as such, and every pasted approval is reported unattested, never as committed.",
     "The human-readable report is a pure function of the canonical file and carries its digest: rendering is deterministic, every fact in it traces to a field of the file, and the report is never authoritative \u2014 editing it changes nothing the verifier says.",
     "The intent card offers a Download audit trail action that saves both the canonical file and the readable report; an offscreen self-test clicks it, runs the standalone verifier on the saved file, and gets accepted."
   ],
   "request_clauses": [
     {
       "id": "c1",
-      "text": "For an intent, the export is one canonical-CBOR file containing the effect and its re-derived materialization, every signature on the intent with its full signing payload (profile, schema-id, environment, account, slot, expiry) and committed provenance record, the parent-closed log entries those records name, and the driver's manifest with its disclosure rows; every provenance-named log position resolves inside the file, and every entry in the file is named by a provenance record or is an ancestor of one that is."
+      "text": "For an intent, the export is one canonical-CBOR file containing the effect and its re-derived materialization, the intent's signing context, every approval on the intent \u2014 its driver signature, its grade (committed, unattested, or rejected) and, when committed, its attestation over the full signing payload (profile, schema-id, environment, account, slot, expiry) and provenance record \u2014 the parent-closed log entries that provenance names, and the driver's manifest with its disclosure rows, the non-derivable claims (threshold, stage, disclosure) signed by the exporting member; every provenance-named log position resolves inside the file, and every entry in the file is named by a provenance record or is an ancestor of one that is."
     },
     {
       "id": "c2",
-      "text": "A pure verifier given only the file re-derives the materialization from the effect, recomputes every signing payload and verifies each signature against it, recomputes every entry's content id and parent-closure, and checks each provenance record against the included entries; an untouched file is accepted and any single-byte change is refused with the first discrepancy named."
+      "text": "A pure verifier given only the file re-derives the materialization from the effect, re-derives the signing payload P, verifies each approval's driver signature is by its named contributor over the materialization, verifies each attestation over P, recomputes every approval's grade, recomputes every entry's content id and parent-closure, checks the provenance record against the included entries, and checks the exporting member's signature over the non-derivable claims; an untouched file is accepted \u2014 with pasted approvals reported as unattested \u2014 and any single-byte change, including a file claiming committed for an approval without a verifying attestation, is refused with the first discrepancy named."
     },
     {
       "id": "c3",
@@ -66,11 +66,11 @@
     },
     {
       "id": "c5",
-      "text": "The file contains only entries from membership epochs the exporter holds keys for; if the intent's lineage reaches an epoch the exporter cannot open, the export is refused with that reason and never silently truncated."
+      "text": "The file contains only entries from membership epochs the exporter holds keys for; if the intent's lineage reaches an event the exporter cannot read (an input, or an approval another approval links to), the export is refused with that reason and never silently truncated, and the file states the first epoch it covers so a history that began before the exporter joined is labelled."
     },
     {
       "id": "c6",
-      "text": "When the intent was submitted or finalized, those entries are included and graded as external reads with their chain reference, and the verifier never reports them as verified against the chain; the file states the lifecycle stage reached, so an unsettled intent is labelled as such."
+      "text": "When the intent was submitted or finalized, those entries are included and graded as external reads with their chain reference (the transaction hash), and the verifier never reports them as verified against the chain; the file states the lifecycle stage reached, so an unsettled intent is labelled as such, and every pasted approval is reported unattested, never as committed."
     },
     {
       "id": "c7",
@@ -85,7 +85,7 @@
     {
       "type": "model_check",
       "restatement_clause_id": "s1",
-      "proves": "The stepper enumerates intent lifecycles \u2014 propose; k-of-n signatures interleaved with declines and room messages; an admit mid-intent; submit; final \u2014 and at every reachable state exports and checks both directions: every provenance-named log position resolves to an entry inside the file, and every entry in the file is named by some signature's provenance or is an ancestor of one that is. Catches an export of only the caller's own signature, a slice that drops ancestors, and padding with unrelated room messages (over-disclosure).",
+      "proves": "The stepper enumerates intent lifecycles \u2014 propose; k-of-n approvals mixing in-app (committed), pasted (unattested) and mis-attested (rejected) ones, interleaved with declines and room messages; an admit mid-intent; submit; final \u2014 and at every reachable state exports and checks both directions: every approval in the log appears in the file with its grade, every provenance-named log position resolves to an entry inside the file, and every entry in the file is named by provenance or is an ancestor of one that is. Catches an export of only the caller's own signature, one that drops pasted approvals, a slice that drops ancestors, and padding with unrelated room messages (over-disclosure).",
       "run": [
         "nim",
         "r",
@@ -106,13 +106,13 @@
         "value": true
       },
       "max_states": 80,
-      "description": "For an intent, the export is one canonical-CBOR file containing the effect and its re-derived materialization, every signature on the intent with its full signing payload (profile, schema-id, environment, account, slot, expiry) and committed provenance record, the parent-closed log entries those records name, and the driver's manifest with its disclosure rows; every provenance-named log position resolves inside the file, and every entry in the file is named by a provenance record or is an ancestor of one that is.",
+      "description": "For an intent, the export is one canonical-CBOR file containing the effect and its re-derived materialization, the intent's signing context, every approval on the intent \u2014 its driver signature, its grade (committed, unattested, or rejected) and, when committed, its attestation over the full signing payload (profile, schema-id, environment, account, slot, expiry) and provenance record \u2014 the parent-closed log entries that provenance names, and the driver's manifest with its disclosure rows, the non-derivable claims (threshold, stage, disclosure) signed by the exporting member; every provenance-named log position resolves inside the file, and every entry in the file is named by a provenance record or is an ancestor of one that is.",
       "clause_id": "c1"
     },
     {
       "type": "model_check",
       "restatement_clause_id": "s2",
-      "proves": "From a valid file the stepper enumerates single-field mutations across every field class \u2014 effect, materialization, each signing-payload field, signature bytes, provenance class and position, entry content, a dropped entry, reordered entries, a signature swapped from another intent, an entry spliced from another room \u2014 and requires each to be refused with a named discrepancy while the unmutated file is accepted; the verifier runs with no log, keys, or network. Catches a refuse-everything verifier, one that skips a field class, and one that silently consults the local log.",
+      "proves": "From a valid file the stepper enumerates single-field mutations across every field class \u2014 effect, materialization, each context field, signature bytes, attestation bytes, an approval's grade flipped either way, an attestation stripped or swapped from another approval, provenance class and position, entry content, a dropped entry, reordered entries, a signature swapped from another intent, an entry spliced from another room, the signed claims (threshold, stage, disclosure) and the exporter's signature \u2014 and requires each to be refused with a named discrepancy, while the unmutated file (including its pasted approvals) is accepted and reports those approvals unattested; the verifier runs with no log, keys, or network. Catches a refuse-everything verifier, one that skips a field class, one that trusts a claimed grade, and one that silently consults the local log.",
       "run": [
         "nim",
         "r",
@@ -132,7 +132,7 @@
         "value": true
       },
       "max_states": 80,
-      "description": "A pure verifier given only the file re-derives the materialization from the effect, recomputes every signing payload and verifies each signature against it, recomputes every entry's content id and parent-closure, and checks each provenance record against the included entries; an untouched file is accepted and any single-byte change is refused with the first discrepancy named.",
+      "description": "A pure verifier given only the file re-derives the materialization from the effect, re-derives the signing payload P, verifies each approval's driver signature is by its named contributor over the materialization, verifies each attestation over P, recomputes every approval's grade, recomputes every entry's content id and parent-closure, checks the provenance record against the included entries, and checks the exporting member's signature over the non-derivable claims; an untouched file is accepted \u2014 with pasted approvals reported as unattested \u2014 and any single-byte change, including a file claiming committed for an approval without a verifying attestation, is refused with the first discrepancy named.",
       "clause_id": "c2"
     },
     {
@@ -194,7 +194,7 @@
     {
       "type": "model_check",
       "restatement_clause_id": "s5",
-      "proves": "The stepper enumerates joins, admits and re-keys crossed with the exporter's held epoch keys and the epochs the intent's lineage spans; at every state every entry in the file is from a readable epoch, the export is refused with an epoch reason when the lineage touches an unreadable epoch, and it succeeds otherwise. Catches a late joiner exporting pre-join lineage, silent truncation into a file that claims to be whole, and blanket refusal (a counterexample).",
+      "proves": "The stepper enumerates joins, admits and re-keys crossed with the exporter's held epoch keys and the epochs the intent's lineage spans (inputs, and approvals linked by parents); at every state every entry in the file is from a readable epoch, the export is refused with an epoch reason when the lineage reaches an unreadable event, it succeeds otherwise, and the file's first-epoch label equals the exporter's earliest readable epoch for the intent. Catches a late joiner exporting pre-join lineage, silent truncation into a file that claims to be whole, and blanket refusal (a counterexample).",
       "run": [
         "nim",
         "r",
@@ -215,13 +215,13 @@
         "value": true
       },
       "max_states": 80,
-      "description": "The file contains only entries from membership epochs the exporter holds keys for; if the intent's lineage reaches an epoch the exporter cannot open, the export is refused with that reason and never silently truncated.",
+      "description": "The file contains only entries from membership epochs the exporter holds keys for; if the intent's lineage reaches an event the exporter cannot read (an input, or an approval another approval links to), the export is refused with that reason and never silently truncated, and the file states the first epoch it covers so a history that began before the exporter joined is labelled.",
       "clause_id": "c5"
     },
     {
       "type": "model_check",
       "restatement_clause_id": "s6",
-      "proves": "The stepper enumerates lifecycle stages \u2014 proposed, collecting, executable, submitted, final, declined \u2014 and at each requires the file's stage label to equal reduce(log)'s stage, submit/final entries to be present exactly when in the log and graded external-read with a chain reference, and the verifier's result never to grade them as proven. Catches an unsettled intent labelled as settled and a chain result dressed as cryptographically verified.",
+      "proves": "The stepper enumerates lifecycle stages \u2014 proposed, collecting, executable, submitted, final, declined \u2014 crossed with pasted versus in-app approvals, and at each requires the file's stage label to equal reduce(log)'s stage, submit/final entries to be present exactly when in the log and graded external-read with their transaction hash, pasted approvals to read unattested in both the file and the verifier's result, and the verifier's result never to grade settlement as proven. Catches an unsettled intent labelled as settled, a chain result dressed as cryptographically verified, and a pasted approval presented as committed.",
       "run": [
         "nim",
         "r",
@@ -241,13 +241,13 @@
         "value": true
       },
       "max_states": 80,
-      "description": "When the intent was submitted or finalized, those entries are included and graded as external reads with their chain reference, and the verifier never reports them as verified against the chain; the file states the lifecycle stage reached, so an unsettled intent is labelled as such.",
+      "description": "When the intent was submitted or finalized, those entries are included and graded as external reads with their chain reference (the transaction hash), and the verifier never reports them as verified against the chain; the file states the lifecycle stage reached, so an unsettled intent is labelled as such, and every pasted approval is reported unattested, never as committed.",
       "clause_id": "c6"
     },
     {
       "type": "property_test",
       "restatement_clause_id": "s7",
-      "proves": "On randomized files the report renders identically twice, contains the file's digest, changes whenever any rendered field of the file is perturbed (so it is not a static template), and editing the report leaves the verifier's result unchanged; the renderer takes only the file. Catches a report that pulls live state or can drift from the file it claims to describe.",
+      "proves": "On randomized files the report renders identically twice, contains the file's digest, changes whenever any rendered field of the file is perturbed (so it is not a static template), and editing the report leaves the verifier's result unchanged; the renderer takes only the file. The report shows each approval's grade, pasted ones as unattested. Catches a report that pulls live state or can drift from the file it claims to describe.",
       "trace": [
         "nim",
         "r",
