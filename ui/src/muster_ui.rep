@@ -134,8 +134,8 @@ class MusterUi
     // Choose the room's coordination policy — its DRIVER (coordinate_set_policy):
     // "safe" (EIP-712 / secp owners) or "threshold" (k-of-n Ed25519). The whole
     // propose/contribute/fold path runs under whichever; the policy is a driver, not
-    // hardcoded (invariant 6). Result lands on policyJson {policy, threshold, domain,
-    // membership}. loadPolicy reads the current one (coordinate_policy).
+    // hardcoded (invariant 6). Result lands on policyJson {policy, threshold, domain}.
+    // loadPolicy reads the current one (coordinate_policy).
     SLOT(void setPolicy(const QString &kind))
     SLOT(void loadPolicy())
 
@@ -197,8 +197,7 @@ class MusterUi
     // the module, s1). Publishes a material-share event; offers reload after.
     SLOT(void shareMaterial(const QString &intentId, const QString &requirement, const QString &pub))
     // Decline to take part in a room intent (coordinate_decline): a signed decline
-    // event folded into the intent view — named under a named driver, a count under
-    // an anonymous one. Informational: the threshold is unchanged. Lands on
+    // event folded into the intent view, naming who declined. Informational: the threshold is unchanged. Lands on
     // declineJson {intentId, state, declines} or {error}; intents reload after.
     SLOT(void declineInRoom(const QString &intentId))
     // The information-flow view (coordinate_flow, exo-002.5): who could see what,
@@ -299,7 +298,7 @@ class MusterUi
     PROP(QString flowJson="{\"rows\":[],\"matrix\":{}}" READONLY)
 
     // The room's coordination policy — its driver — as JSON {policy, threshold,
-    // domain, membership}. The view shows which policy governs the room and picks it.
+    // domain}. The view shows which policy governs the room and picks it.
     PROP(QString policyJson="{\"policy\":\"safe\"}" READONLY)
 
     // The room's admitted driver kinds (coordinate_drivers), as a JSON array of

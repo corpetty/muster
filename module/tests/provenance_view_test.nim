@@ -1,7 +1,7 @@
 ## Enriched decision provenance (invariant 10, the investigable lineage) — pure.
 ## intentProvenance now carries a plain-language `what`, a concrete `detail` (the
 ## effect summary / round), and the `guarantee` that makes each input trustworthy,
-## and honours the driver's membership model (named accounts vs anonymous).
+## and names the account behind each approval.
 
 import std/strutils
 import ../src/coordination/intents
@@ -34,9 +34,9 @@ proc approvalsOf(prov: seq[ProvItem]): seq[ProvItem] =
 proc accounts(items: seq[ProvItem]): seq[string] =
   for p in items: result.add p.account
 
-# ── named membership: accounts named, entries enriched ─────────────────────────
+# ── accounts named, entries enriched ─────────────────────────
 block:
-  let named: DriverFor = proc(kind: string): Driver = newStubDriver(membership = mmNamed)
+  let named: DriverFor = proc(kind: string): Driver = newStubDriver()
   let prov = intentProvenance(events, named, id)
   doAssert prov.len == 3, "one proposal + two distinct approvals (duplicate folded), got " & $prov.len
 
@@ -48,20 +48,9 @@ block:
 
   let apps = prov.approvalsOf()
   doAssert apps.len == 2 and apps[0].what == "an approval"
-  doAssert "alice" in apps.accounts() and "bob" in apps.accounts(), "named model names the signers"
+  doAssert "alice" in apps.accounts() and "bob" in apps.accounts(), "the lineage names the signers"
   doAssert apps[0].guarantee.contains("recovers to a configured member"),
            "an approval's guarantee explains the verification"
-  echo "2. named membership — enriched, accounts named, duplicate folded OK"
-
-# ── anonymous membership: same lineage, accounts silent (inv 9) ────────────────
-block:
-  let anon: DriverFor = proc(kind: string): Driver = newStubDriver(membership = mmAnonymous)
-  let prov = intentProvenance(events, anon, id)
-  doAssert prov.len == 3
-  let apps = prov.approvalsOf()
-  doAssert apps[0].account == "" and apps[1].account == "",
-           "anonymous membership never names an account (invariant 9)"
-  doAssert apps[0].guarantee.len > 0, "the guarantee still explains the trust, name or not"
-  echo "3. anonymous membership — accounts silent, guarantee intact OK"
+  echo "2. enriched, accounts named, duplicate folded OK"
 
 echo "provenance_view_test: all OK"

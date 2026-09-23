@@ -183,7 +183,7 @@ proc toJson*(r: Requirement): JsonNode =
   %*{"kind": $r.kind, "name": r.name, "party": $r.party,
      "needs": {"class": $r.needs.class, "target": r.needs.target, "field": r.needs.field}}
 proc toJson*(d: DriverDescriptor): JsonNode =
-  %*{"rounds": d.rounds, "threshold": d.threshold, "membership": $d.membership,
+  %*{"rounds": d.rounds, "threshold": d.threshold,
      "finality": $d.finality, "domain": d.serializationDomain}
 proc toJson*(m: ActionManifest): JsonNode =
   var reqs = newJArray()

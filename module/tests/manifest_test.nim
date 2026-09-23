@@ -15,7 +15,7 @@ let effect = Effect(schemaId: "x", fields: @[("a", cbUint(1'u64))])
 # ── 1. the base default is undeclared, and undeclared is a consistency failure ──
 type Bare = ref object of Driver
 method describe(d: Bare): DriverDescriptor =
-  DriverDescriptor(rounds: 1, serializationDomain: "bare", membership: mmAnonymous,
+  DriverDescriptor(rounds: 1, serializationDomain: "bare",
                    finality: finImmediate, threshold: 1)
 block:
   let m = Bare().manifest(effect)
@@ -33,25 +33,24 @@ block:
   doAssert full.outsideBoundary().len == 2   # timing + topic; nothing else for an immediate stub
   echo "2. baseline disclosure names the store node (FS-9) OK"
 
-# ── 3. the stub follows its own descriptor (probes randomize finality/membership) ──
+# ── 3. the stub follows its own descriptor (probes randomize finality) ──
 block:
   for fin in [finImmediate, finProbabilistic, finExternal]:
-    for mem in [mmAnonymous, mmNamed]:
-      let d = newStubDriver(finality = fin, membership = mem)
-      let m = d.manifest(effect)
-      doAssert m.declared and m.consistent(), $fin & "/" & $mem & ": " & $consistencyFailures(m)
-      doAssert m.agreement == d.describe()
-  echo "3. the stub's manifest is consistent under every finality × membership OK"
+    let d = newStubDriver(finality = fin)
+    let m = d.manifest(effect)
+    doAssert m.declared and m.consistent(), $fin & ": " & $consistencyFailures(m)
+    doAssert m.agreement == d.describe()
+  echo "3. the stub's manifest is consistent under every finality OK"
 
 # ── 4. the consistency rules catch a lying manifest ──────────────────────────────
 block:
-  let ext = newStubDriver(finality = finExternal, membership = mmNamed).describe()
+  let ext = newStubDriver(finality = finExternal).describe()
   var m = ActionManifest(declared: true, agreement: ext)
   let f = consistencyFailures(m)
   doAssert "external finality but no environment requirement" in f
   doAssert "external finality but nothing disclosed to the chain observer" in f
   doAssert "external finality but no write touch" in f
-  doAssert "named membership but no contributor authority requirement" in f
+  doAssert "no contributor authority requirement" in f
   m.requirements = @[req(rqEnvironment, "chain:1"), req(rqAuthority, "owner", rpContributor)]
   m.discloses = @[row("amount", obChainObserver)]
   m.touches = @[touch("chain:1", tmWrite)]
@@ -62,7 +61,7 @@ block:
 
 # ── 4b. the exo-45e party + material rules (docs/design/material-and-disclosure.md) ─
 block:
-  let desc = newStubDriver(finality = finImmediate, membership = mmAnonymous).describe()
+  let desc = newStubDriver(finality = finImmediate).describe()
   # a proposer/counterparty requirement must NAME an effect field.
   var m = ActionManifest(declared: true, agreement: desc,
     requirements: @[req(rqAddress, "payee", rpCounterparty)])   # default needs → no field
@@ -70,7 +69,8 @@ block:
   doAssert consistencyFailures(m)[0].contains("names no effect field")
 
   # with a field declared but ABSENT from the effect, it still fails (nowhere to land).
-  m.requirements = @[req(rqAddress, "payee", rpCounterparty, need(mcAddress, "chain:1", "to"))]
+  m.requirements = @[req(rqAddress, "payee", rpCounterparty, need(mcAddress, "chain:1", "to")),
+                     req(rqAuthority, "member", rpContributor)]   # every driver is named (ADR-015)
   let noTo = Effect(schemaId: "x", fields: @[("value", cbUint(1'u64))])
   doAssert not m.consistent(noTo), "binding an effect field the effect lacks must fail"
   # and passes once the effect carries the field.
@@ -98,7 +98,7 @@ echo "manifest_test: all OK"
 import ../src/drivers/conformance
 type Undeclared = ref object of Driver
 method describe(d: Undeclared): DriverDescriptor =
-  DriverDescriptor(rounds: 1, serializationDomain: "undeclared", membership: mmAnonymous,
+  DriverDescriptor(rounds: 1, serializationDomain: "undeclared",
                    finality: finImmediate, threshold: 1)
 method verifyContribution(d: Undeclared, c: Contribution, round: int): bool = true
 block:

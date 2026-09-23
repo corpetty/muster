@@ -120,7 +120,7 @@
       "step": "collect",
       "kind": "protects",
       "title": "The core never interprets a contribution — the driver does",
-      "body": "The core routes opaque contribution bytes and asks the driver what they mean. Rounds, serialization domain, membership model, and finality are all driver-described, never hardcoded, so a new coordination policy is a new driver, not a core change.",
+      "body": "The core routes opaque contribution bytes and asks the driver what they mean. Rounds, serialization domain, threshold, and finality are all driver-described, never hardcoded, so a new coordination policy is a new driver, not a core change.",
       "requirement": "F-6",
       "test": "module/tests/probes/probe_core_opaque_routing_stepper.nim",
       "credibility": "imperative"
@@ -218,16 +218,16 @@
       "step": "submit",
       "kind": "others-leak",
       "title": "The chain records the signers, forever",
-      "body": "Under a named driver, the on-chain transaction records the signer addresses permanently and publicly — this is real and unavoidable at settlement, which is why the boundary crossing is made explicit rather than hidden.",
+      "body": "The on-chain transaction records the signer addresses permanently and publicly — this is real and unavoidable at settlement, which is why the boundary crossing is made explicit rather than hidden.",
       "system": "the public blockchain",
       "observer": "anyone reading the chain"
     },
     {
       "step": "submit",
       "kind": "gap",
-      "title": "Keeping signers unlinkable at settlement needs an anonymous driver",
-      "body": "The shipped Safe driver names its owners on-chain. The machinery for anonymous membership (count-only slots that leak no signer identity) exists and is probed, but a fully anonymous-membership driver is opt-in and not yet a shipped driver.",
-      "fix": "ship an anonymous-membership driver (count-only authorization slots, FS-7 / ADR-005) whose settlement discloses a threshold proof, not addresses",
+      "title": "Keeping signers unlinkable at settlement needs an aggregate-signature rail",
+      "body": "Inside the room every member knows who approved — that is the design (ADR-015). Outside it, the shipped Safe rail names its owner signers to anyone reading the chain once the transaction settles. FROST produces one aggregate signature, but it runs as a room-native driver today and does not yet settle on a chain.",
+      "fix": "settle through an aggregate-signature rail (FROST/threshold producing one signature on-chain), so chain observers see that the threshold was met, not which owners signed",
       "status": "partial",
       "credibility": "exposed",
       "party": "anyone reading the chain — the settled transaction names the signers"

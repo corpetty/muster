@@ -19,9 +19,6 @@
 ## a fallback the code slips to when the real option fails.
 ##
 ## Invariant guards:
-##   9  — an anonymous driver stays anonymous, so the AUTHENTICATION null is a legitimate
-##        TERMINAL state, not a rung to climb off. No path force-upgrades authentication;
-##        a `require(axAuthentication, rungReal)` belongs only to an already-named context.
 ##   10 — signing is already refused when an input's origin is unaccountable. The PROVENANCE
 ##        rung EXTENDS that refusal into a typed level; it does not duplicate the check.
 
@@ -40,7 +37,7 @@ type
   AxisLevel* = object
     rung*: Rung
     mechanism*: string   ## the concrete mechanism at this rung, NAMED for display — so the
-                         ## UI shows "anonymous" / "bound secp256k1 identity" / "plaintext" /
+                         ## UI shows "bound secp256k1 identity" / "plaintext" /
                          ## "ECIES epoch", not a bare "null" / "real" the reader can't act on
 
   SecurityLevel* = object
@@ -70,9 +67,7 @@ proc atLeast*(l: SecurityLevel, axis: SecurityAxis, want: Rung): bool =
 proc require*(l: SecurityLevel, axis: SecurityAxis, want: Rung) =
   ## The anti-downgrade gate. A consumer that NEEDS `want` on `axis` calls this; if the seam
   ## cannot meet it, this REFUSES (raises) — it never returns, never falls back to the null.
-  ## Negotiation is not a silent downgrade (the honesty rule, in the type). Do NOT call this
-  ## with `(axAuthentication, rungReal)` from an anonymous context: the authentication null
-  ## is a legitimate terminal (invariant 9), and forcing it off would be the bug, not a fix.
+  ## Negotiation is not a silent downgrade (the honesty rule, in the type).
   if l.axes[axis].rung < want:
     raise newException(DowngradeRefused,
       "downgrade refused: " & $axis & " is at '" & l.axes[axis].mechanism &

@@ -14,7 +14,7 @@ let effectJson = """{"to":"0xabc","value":5}"""
 let id = intentIdFor(effectJson)
 # an external-finality named stub: its manifest declares chain-observer rows + a write
 let ext: DriverFor = proc(kind: string): Driver =
-  newStubDriver(rounds = 1, threshold = 2, membership = mmNamed, finality = finExternal, verifyResult = true)
+  newStubDriver(rounds = 1, threshold = 2, finality = finExternal, verifyResult = true)
 let (_, msg) = newMessageEvent("alice", 1, "hi", 1)
 # a causal chain, so the canonical order is the story's order: carol is admitted AFTER
 # the proposal and A's approval, BEFORE B's approval and the submit.
@@ -60,7 +60,7 @@ block:
 # a bare driver with no manifest override → its manifest is undeclared
 type Bare = ref object of Driver
 method describe(d: Bare): DriverDescriptor =
-  DriverDescriptor(rounds: 1, serializationDomain: "bare", membership: mmAnonymous, finality: finExternal, threshold: 1)
+  DriverDescriptor(rounds: 1, serializationDomain: "bare", finality: finExternal, threshold: 1)
 block:
   let bare: DriverFor = proc(kind: string): Driver = Bare()
   let rows = reduceFlow(@[proposeEvent(id, effectJson), submitEvent(id)], bare, @["x"])

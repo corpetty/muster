@@ -31,7 +31,7 @@ block:
 # ── 2. the intent view carries the schema recognition, so the card can gate render ─
 block:
   let stub: DriverFor = proc(kind: string): Driver =
-    newStubDriver(rounds = 1, threshold = 2, membership = mmNamed, verifyResult = true)
+    newStubDriver(rounds = 1, threshold = 2, verifyResult = true)
   # a KNOWN activity: the view renders it as itself.
   let knownJson = """{"effect":"statement","text":"the room agrees"}"""
   let kId = intentIdFor(knownJson)

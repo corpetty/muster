@@ -15,7 +15,7 @@ Muster's coordination surface is already driver-generic. The pieces a "module �
 story must fit into:
 
 - **The `Driver` interface** ([module/src/drivers/driver.nim](../../module/src/drivers/driver.nim)) is tiny and coordination-only:
-  - `describe() -> DriverDescriptor` — `{rounds, serializationDomain, membership, finality, threshold}`. The core routes purely on this (invariant 6): it never reads contribution bytes.
+  - `describe() -> DriverDescriptor` — `{rounds, serializationDomain, finality, threshold}`. The core routes purely on this (invariant 6): it never reads contribution bytes.
   - `canonicalize(effect) -> Materialization` — the effect's deterministic **signable bytes** ([materialization.nim](../../module/src/intents/materialization.nim), Safe's is EIP-712 `safeTxHash`).
   - `verifyContribution(c, round) -> bool` — the driver alone reads the bytes.
 - **Drivers register by kind** ([registry.nim](../../module/src/drivers/registry.nim)): `newDriver("safe"|"threshold"|"frost"|"stub", config)`. Adding a coordination policy is one `case` arm + passing conformance.
@@ -86,7 +86,7 @@ newDriver("invoke", {
 })
 ```
 
-- `describe` → `{rounds: 1, threshold: k, membership: anonymous, finality, domain}`.
+- `describe` → `{rounds: 1, threshold: k, finality, domain}`.
 - `canonicalize` → dCBOR over `{module, method, args}` under the domain (invariant 5).
 - `verifyContribution` → an Ed25519 roster endorsement — **reuse the threshold driver's verify verbatim**. "We, the room, agree to make this call."
 - Execution → a `coordinate_submit`-style path: on executable, the core re-derives (invariant 1), `lp_invoke`s `module.method(args)` (the SDK client), and observes the declared finality signal.

@@ -41,8 +41,8 @@
 
   <rect x="56" y="200" width="390" height="30" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1"/>
   <text x="68" y="219" font-size="11" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">account | membership commitment</text>
-  <text x="470" y="213" font-size="10.5" fill="#3F4742">Aiming an approval at a different account — or, for an</text>
-  <text x="470" y="226" font-size="10.5" fill="#3F4742">anonymous driver, a different member set.</text>
+  <text x="470" y="213" font-size="10.5" fill="#3F4742">Aiming an approval at a different account — or at a</text>
+  <text x="470" y="226" font-size="10.5" fill="#3F4742">different committed signer set.</text>
 
   <rect x="56" y="236" width="390" height="30" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1"/>
   <text x="68" y="255" font-size="11" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">serialization slot (nonce | nullifier)</text>

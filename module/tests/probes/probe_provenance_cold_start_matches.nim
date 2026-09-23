@@ -13,7 +13,6 @@ var r = initRand(0x3A15)
 let classes = [icPluginBlock, icContribution, icExternalRead, icPeerMessage]
 var allMatch = true
 for trial in 0 ..< 200:
-  let model = [mmAnonymous, mmNamed][r.rand(0 .. 1)]
   var inputs: seq[SignedInput]
   for i in 0 ..< r.rand(1 .. 6):
     inputs.add SignedInput(class: classes[r.rand(0 .. 3)], logPos: i,
@@ -22,9 +21,9 @@ for trial in 0 ..< 200:
   var incremental: ProvenanceRecord
   for inp in inputs:
     incremental.entries.add ProvenanceEntry(class: inp.class, logPos: inp.logPos,
-      account: (if model == mmNamed: inp.account else: ""))
+      account: inp.account)
   # Cold start: rebuild from the logged inputs alone (a reduction, no side-car).
-  let rebuilt = buildProvenance(inputs, model)
+  let rebuilt = buildProvenance(inputs)
   let matches = encodeProvenance(incremental) == encodeProvenance(rebuilt)
   if not matches: allMatch = false
   obs.add flag("matches", matches)

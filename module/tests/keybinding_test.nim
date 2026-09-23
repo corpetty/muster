@@ -6,8 +6,7 @@
 ##    joined. So one instance holding several owner keys can prove EACH belongs to the
 ##    room member (F-14 / F-9). Links secp + sodium.
 ## B. the log fold — a published `keyBindingEvent` folds once per (intent, key) idempotently
-##    (invariant 4), is classed peer-message in provenance (named/anon per driver, invariant
-##    9), and discloses only the in-room key-binding link in the flow view (nothing leaves
+##    (invariant 4), is classed peer-message in provenance naming the key, and discloses only the in-room key-binding link in the flow view (nothing leaves
 ##    the room until submit). Pure Nim (stub driver).
 
 import std/[strutils, algorithm]
@@ -74,9 +73,7 @@ block:
 let effectJson = """{"to":"0xabc","value":5}"""
 let id = intentIdFor(effectJson)
 let named: DriverFor = proc(kind: string): Driver =
-  newStubDriver(rounds = 1, threshold = 2, membership = mmNamed, verifyResult = true)
-let anon: DriverFor = proc(kind: string): Driver =
-  newStubDriver(rounds = 1, threshold = 2, membership = mmAnonymous, verifyResult = true)
+  newStubDriver(rounds = 1, threshold = 2, verifyResult = true)
 let linkHex = toHex(encodeLink(ks.bindingForKey(ref1, ctx)))
 
 # ── B1. a binding folds once per (intent, key); reorder + duplicate are idempotent ─────
@@ -106,10 +103,7 @@ block:
       doAssert it.guarantee.contains("admitted") and it.guarantee.contains("F-14"),
         "guarantee is honest: proves an admitted member, not merely a valid owner: " & it.guarantee
   doAssert found, "the binding appears in provenance"
-  # anonymous driver names nobody (invariant 9).
-  for it in logProvenance(events, anon):
-    if it.kind == "binding": doAssert it.account == "", "anonymous driver: the binding names nobody"
-  echo "B2. provenance: a binding is peer-message, named/anon per driver, guarantee honest OK"
+  echo "B2. provenance: a binding is peer-message, names the key, guarantee honest OK"
 
 # ── B3. flow: a binding discloses the in-room key-binding link; nothing leaves the room ─
 block:

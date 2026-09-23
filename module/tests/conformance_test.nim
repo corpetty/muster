@@ -176,7 +176,6 @@ block:
   doAssert inv.describe().serializationDomain == "muster.invoke.v1",
            "registry selected the generic invoke driver"
   doAssert inv.describe().threshold == 1, "registry invoke driver keeps k"
-  doAssert inv.describe().membership == mmNamed, "invoke endorses over a named roster"
   echo "8. registry builds the invoke driver by kind OK"
 
 # ── 9. the eip191 Tier-1 driver conforms — a module-native signing model beyond

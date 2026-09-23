@@ -66,7 +66,7 @@ Item {
         catch (e) { return []; }
     }
     // This instance's own encryption identity (the roster row flagged self) — the id
-    // a decline is keyed by under a named driver, so the card knows "you declined".
+    // a decline is keyed by, so the card knows "you declined".
     readonly property string myIdentity: {
         var arr = room.members;
         for (var i = 0; i < arr.length; ++i)
@@ -315,7 +315,7 @@ Item {
             round: Number((it && it.round) || 1),
             roundApprovals: Number((it && it.roundApprovals) || 0),
             policy: (it && it.policy) ? String(it.policy) : "",
-            // who declined to take part (names only under a named driver, inv 9)
+            // who declined to take part
             declines: Number((it && it.declines) || 0),
             decliners: (it && it.decliners) ? it.decliners : [],
             declinedByMe: !!(it && it.decliners && room.myIdentity

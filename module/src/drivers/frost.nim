@@ -59,7 +59,7 @@ method describe*(d: FrostDriver): DriverDescriptor =
   ## and immediate finality once both rounds close. `rounds: 2` is the whole point:
   ## it makes the core exercise its round-advancement path from the descriptor alone.
   DriverDescriptor(rounds: 2, serializationDomain: "muster.frost.v1",
-                   membership: mmNamed, finality: finImmediate, threshold: d.k)
+                   finality: finImmediate, threshold: d.k)
 
 # canonicalize is NOT overridden — the base dCBOR serialization is the
 # materialization (like the threshold driver), so this also exercises the default

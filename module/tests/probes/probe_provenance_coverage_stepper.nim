@@ -36,7 +36,7 @@ proc inputsFor(id: string): seq[SignedInput] =
 
 proc coverageHolds(id: string): bool =
   let inputs = inputsFor(id)
-  let rec = buildProvenance(inputs, mmNamed)
+  let rec = buildProvenance(inputs)
   if not coverageTwoWay(inputs, rec): return false
   # Discrimination: a doctored record (an entry resolving to no input) must fail,
   # so a coverageTwoWay stubbed to always agree cannot pass this.

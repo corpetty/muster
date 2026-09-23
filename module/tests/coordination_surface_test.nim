@@ -126,7 +126,7 @@ echo "6. render-ready intent view (effect + threshold N=2 + approvals M=2 + re-d
 
 # 7. Provenance (invariant 10): the decision's lineage folded from the log — the
 #    propose (a peer message) and each distinct owner signature (a driver
-#    contribution, NAMED since Safe is mmNamed). The duplicate from step 5 folds
+#    contribution, NAMED: every driver names its contributors). The duplicate from step 5 folds
 #    once; a non-owner never reached the fold, so it is absent by construction.
 block:
   let prov = intentProvenance(bob.log.allEvents(), foldDrv, id)
@@ -140,7 +140,7 @@ block:
       doAssert it.what == "the proposal", "the effect entered as a peer message"
       doAssert it.detail.len > 0, "the propose carries the effect summary in detail"
     elif it.cls == icContribution:
-      doAssert it.account.len > 0, "Safe is mmNamed, so the owner account is named"
+      doAssert it.account.len > 0, "the owner account is named"
       contributors.add it.account
   doAssert proposes == 1, "exactly one propose (peer message, sealed to the room)"
   doAssert contributors.len == 2 and contributors[0] != contributors[1],

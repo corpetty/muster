@@ -14,7 +14,7 @@ import ../src/intents/disclosure
 
 # A Safe-shaped manifest: a contributor safe-owner authority + a counterparty payee
 # address bound to the effect's "to" field, disclosing "to" to the chain observer.
-let desc = DriverDescriptor(rounds: 1, threshold: 2, membership: mmNamed,
+let desc = DriverDescriptor(rounds: 1, threshold: 2,
                             finality: finExternal, serializationDomain: "eip712.safe.v1.4.1")
 let m = ActionManifest(declared: true, agreement: desc,
   requirements: @[req(rqAuthority, "safe-owner", rpContributor),

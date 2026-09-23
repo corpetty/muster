@@ -47,7 +47,7 @@ proc eip191Digest*(msg: seq[byte]): array[32, byte] =
   let prefix = strBytes("\x19Ethereum Signed Message:\n" & $msg.len)
   keccak256(prefix & msg)
 
-# ── The driver: 1-round, named-membership, immediate-finality; canonicalize is the
+# ── The driver: 1-round, immediate-finality; canonicalize is the
 # EIP-191 digest, verify is secp ecrecover to a configured signer set. ───────────
 type PersonalSignDriver* = ref object of Driver
   signers*: seq[Address]             ## the keys whose personal_sign counts
@@ -56,7 +56,7 @@ type PersonalSignDriver* = ref object of Driver
 
 method describe*(d: PersonalSignDriver): DriverDescriptor =
   DriverDescriptor(rounds: 1, serializationDomain: EIP191_DOMAIN,
-                   membership: mmNamed, finality: finImmediate, threshold: d.threshold)
+                   finality: finImmediate, threshold: d.threshold)
 
 method canonicalize*(d: PersonalSignDriver, e: Effect): Materialization =
   ## Override: the materialization is the EIP-191 personal_sign digest of the effect.

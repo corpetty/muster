@@ -12,11 +12,11 @@ import ../../src/security/levels
 # A seam that fills confidentiality with the null (a transparent chain), and one that fills
 # it with the real thing (a shielded chain) — the SAME envelope shape, both axes present.
 let nullConf = securityLevel(
-  axisLevel(rungNull, "anonymous"),
+  axisLevel(rungNull, "unauthenticated (no driver)"),
   axisLevel(rungNull, "unattested"),
   axisLevel(rungNull, "plaintext"))
 let realConf = securityLevel(
-  axisLevel(rungNull, "anonymous"),
+  axisLevel(rungNull, "unauthenticated (no driver)"),
   axisLevel(rungReal, "signed hash-linked log"),
   axisLevel(rungReal, "ECIES epoch"))
 
@@ -34,19 +34,18 @@ block:
   realConf.require(axConfidentiality, rungReal)
   echo "1. a failed upgrade refuses rather than falls back to the null OK"
 
-# ── 2. the authentication null is a LEGITIMATE TERMINAL, not a rung to climb off (inv 9) ─
+# ── 2. authentication refuses the same way: no driver bound is not "authenticated" ──
 block:
-  # An anonymous context is satisfied at the authentication null — it does not require real,
-  # so nothing forces it off. require(null) always holds; the null is a real, chosen level.
-  doAssert nullConf.atLeast(axAuthentication, rungNull), "the auth null satisfies an anon context"
-  nullConf.require(axAuthentication, rungNull)   # does not raise — the terminal is legitimate
-  # And were some path to wrongly demand real auth of an anonymous seam, it would REFUSE
-  # (loudly), not silently de-anonymize — so invariant 9 cannot be violated by a downgrade.
+  # require(null) always holds — the null is an explicit, displayed level.
+  doAssert nullConf.atLeast(axAuthentication, rungNull)
+  nullConf.require(axAuthentication, rungNull)
+  # A consumer that needs a bound speaker, on a seam with no driver bound, is REFUSED —
+  # never passed through as though someone had been authenticated.
   var refused = false
   try: nullConf.require(axAuthentication, rungReal)
   except DowngradeRefused: refused = true
-  doAssert refused, "forcing real auth on an anon seam refuses — it never de-anonymizes quietly"
-  echo "2. the authentication null is a legitimate terminal; forcing it off refuses (inv 9) OK"
+  doAssert refused, "requiring real auth with no driver bound refuses"
+  echo "2. authentication with no driver bound refuses a real requirement, never passes OK"
 
 # ── 3. the level is READ, never inferred by branching on a concrete type ───────────
 block:

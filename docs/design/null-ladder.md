@@ -4,7 +4,7 @@
 
 ## The idea
 
-The status quo is a null cipher. Build the system with the **null in place**, then replace the nulls one at a time. Each real level is the **limiting case** of the null at the *same seam* — the correspondence principle: the weaker theory is the limiting case of the stronger one, not a different theory. An unencrypted channel is an encrypted channel with a transparent key; a local transport is a delivery node with no distance; an anonymous speaker is a bound identity you have chosen not to reveal.
+The status quo is a null cipher. Build the system with the **null in place**, then replace the nulls one at a time. Each real level is the **limiting case** of the null at the *same seam* — the correspondence principle: the weaker theory is the limiting case of the stronger one, not a different theory. An unencrypted channel is an encrypted channel with a transparent key; a local transport is a delivery node with no distance; an unauthenticated speaker is a bound identity whose binding has not been checked.
 
 Two consequences shape the design:
 
@@ -17,7 +17,7 @@ A level on one axis says nothing about another. A signed artifact is not a priva
 
 | Axis | Question | Null | Real |
 | --- | --- | --- | --- |
-| **Authentication** | who is speaking now | anonymous | bound secp256k1 identity |
+| **Authentication** | who is speaking now | unauthenticated (no driver active) | bound secp256k1 identity |
 | **Provenance** | where this came from, what path it took | unattested | signed hash-linked log, attested build |
 | **Confidentiality** | who can read it | plaintext / transparent chain | ECIES epochs, shielded adapter |
 
@@ -39,18 +39,18 @@ TLS shipped NULL and export-grade cipher suites, and the result was **downgrade 
 
 ## Invariant guards
 
-- **Invariant 9** (anonymous drivers stay anonymous): the authentication null is a **legitimate terminal state**, not a rung to climb off. No path force-upgrades authentication; a `require(axAuthentication, rungReal)` belongs only to an already-named context. And were some path to wrongly demand it of an anonymous seam, it would *refuse* — it would never silently de-anonymize. The probe asserts this directly.
+- **Authentication is real whenever a driver is active.** Every driver binds identity (ADR-015 retired anonymous membership), so the authentication null only describes a seam with no driver behind it — it is not a terminal a room settles at. A `require(axAuthentication, rungReal)` against such a seam *refuses*; it never proceeds at the null. Privacy toward everyone outside the room is carried by the confidentiality axis, not by withholding identity inside it.
 - **Invariant 10** (signing refused when an input's origin is unaccountable): the **provenance** rung *extends* that refusal into a typed level; it does not duplicate the check. `rungReal` on provenance is the signed hash-linked log + attested build; `rungNull` is unattested; requiring real of an unattested input refuses — the same refusal invariant 10 already enforces on the signing path, surfaced as a ladder rung.
 
 ## What is done, and what is next
 
 **Done:**
 
-- The pattern is named here, and the refuse-on-failed-upgrade discipline lives in the type: `require` raises `DowngradeRefused` with no `orNull` fallback, proven by the pure probe (a failed upgrade refuses; the authentication null is a legitimate terminal; the null carries the full envelope; rungs are ordered).
+- The pattern is named here, and the refuse-on-failed-upgrade discipline lives in the type: `require` raises `DowngradeRefused` with no `orNull` fallback, proven by the pure probe (a failed upgrade refuses; the null carries the full envelope; rungs are ordered).
 - **All four seams that map to the three axes are typed**, each declaring a `securityLevel()` a consumer reads (never branching on the concrete type):
   - `ChainAdapter` → **confidentiality** (transparent EVM = null, shielded mock/LEZ = real).
   - `ConversationCrypto` → **confidentiality** of room data (`EpochCrypto` = real, ECIES/F-16; base = null).
-  - the driver membership model → **authentication** (`securityLevel(DriverDescriptor)`: named = real, anonymous = null terminal).
+  - the driver → **authentication** (`securityLevel(DriverDescriptor)`: every driver binds identity, so real whenever a driver is active).
   - `Transport` → **none**, honestly: it carries opaque bytes, so all axes are null with mechanisms naming where the real level lives (the `DeliveryTransport` override names the store-node metadata exposure, FS-9).
 - **`combine()`** composes the active room envelope — per axis, the strongest rung any active seam provides — the data source for the UI's "active level on all three axes".
 

@@ -80,7 +80,7 @@ block:
     if it.cls == icPeerMessage: inc proposes
     elif it.cls == icContribution:
       doAssert it.account.startsWith("ed:"),
-               "the threshold driver names the Ed25519 endorser (mmNamed)"
+               "the threshold driver names the Ed25519 endorser"
       endorsers.add it.account
   doAssert proposes == 1, "one propose (peer message)"
   doAssert endorsers.len == 2 and endorsers[0] != endorsers[1],

@@ -26,7 +26,7 @@ proc newThresholdDriver*(roster: seq[Ed25519Pub], k: int): ThresholdDriver =
 
 method describe*(d: ThresholdDriver): DriverDescriptor =
   DriverDescriptor(rounds: 1, serializationDomain: "muster.threshold.v1",
-                   membership: mmNamed, finality: finImmediate, threshold: d.k)
+                   finality: finImmediate, threshold: d.k)
 
 # canonicalize is NOT overridden — the base dCBOR serialization is the
 # materialization, so this driver exercises the default materialization path.

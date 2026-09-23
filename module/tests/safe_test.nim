@@ -40,7 +40,6 @@ block driverCanonicalize:
   for i in 0 ..< 20: safe[i] = byte(0xA0 + i)
   let drv = newSafeDriver(chainId = 1, safe = safe, threshold = 2)
   doAssert drv.describe().rounds == 1
-  doAssert drv.describe().membership == mmNamed
   doAssert drv.describe().finality == finExternal
   let effect = Effect(schemaId: "muster.effect.transfer.v1", fields: @[
     ("to", cbText("0x00112233445566778899aabbccddeeff00112233")),

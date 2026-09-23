@@ -104,7 +104,7 @@ block:
 # ── 5. a module requirement: unknown without an invoker; met/missing with one ──────
 block:
   let mm = ActionManifest(declared: true,
-    agreement: DriverDescriptor(rounds: 1, serializationDomain: "x", membership: mmAnonymous,
+    agreement: DriverDescriptor(rounds: 1, serializationDomain: "x",
                                 finality: finImmediate, threshold: 1),
     requirements: @[req(rqModule, "lez_core"), req(rqCapability, "coordinate.request")])
   let none = assessReadiness(mm, probeFromFacts(HostFacts()))

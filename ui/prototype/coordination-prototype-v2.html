@@ -302,7 +302,6 @@ button{font-family:inherit;color:inherit;cursor:pointer}
   transition:transform .3s cubic-bezier(.3,1.5,.5,1),background .2s,border-color .2s;
 }
 .slot.filled{border-style:solid;border-color:transparent;color:#fff}
-.slot.anon.filled{background:var(--ink);color:var(--paper);font-size:10px}
 .slot.pop{transform:scale(1.24)}
 .threshold{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-align:right;line-height:1.35;flex:none}
 .threshold b{color:var(--ink);font-weight:500;display:block;font-size:12.5px}
@@ -652,7 +651,6 @@ button{font-family:inherit;color:inherit;cursor:pointer}
   <ol>
     <li><b>Pay out August invoices</b> — sign, then submit, and watch it cross the edge</li>
     <li>Propose a second transfer in that room — sequential nonce, so it queues</li>
-    <li><b>Release the Q3 grant</b> — two rounds, anonymous slots, parallel nullifiers</li>
     <li>Nameplate → <b>Run a lying plugin</b> → propose anything → the client blocks the signature</li>
     <li>Nameplate → add someone → the seam in the thread marks what they can't read</li>
     <li><b>Offsite costs</b> — no multisig at all, same room, same components</li>
@@ -682,7 +680,7 @@ const P = {
 const ACCOUNTS = {
   opsafe:{
     id:"opsafe", label:"Ops Safe", driver:"safe", env:"Base",
-    threshold:2, signers:3, anon:false,
+    threshold:2, signers:3,
     rounds:["Signatures"],
     serial:"sequential", nonce:47,
     balance:"41,208.55 USDC",
@@ -691,20 +689,9 @@ const ACCOUNTS = {
     finality:"3 confirmations",
     note:"One nonce at a time. A second proposal waits its turn."
   },
-  logostreasury:{
-    id:"logostreasury", label:"Logos treasury", driver:"threshold", env:"Logos",
-    threshold:4, signers:7, anon:true,
-    rounds:["Nonce commitments","Partial signatures"],
-    serial:"parallel", nonce:null,
-    balance:"1,240,000 LOGOS",
-    assets:["LOGOS"],
-    address:"membership commitment",
-    finality:"threshold proof · final",
-    note:"Nullifier per intent, so proposals run in parallel. The chain learns the count, never the names."
-  },
   personal:{
     id:"personal", label:"Your wallet", driver:"eoa", env:"Base",
-    threshold:1, signers:1, anon:false,
+    threshold:1, signers:1,
     rounds:["Signature"],
     serial:"sequential", nonce:812,
     balance:"3,940.12 USDC",
@@ -715,7 +702,7 @@ const ACCOUNTS = {
   },
   devices:{
     id:"devices", label:"You + your devices", driver:"safe", env:"Base",
-    threshold:2, signers:2, anon:false,
+    threshold:2, signers:2,
     rounds:["Signatures"],
     serial:"sequential", nonce:14,
     balance:"88,300.00 USDC",
@@ -736,9 +723,9 @@ const PLUGINS = {
 
 const VERBS = [
   {id:"pay",    g:"01",name:"Pay someone",          acct:["opsafe","personal","devices"], tmpl:["transfer","balance","decide"]},
-  {id:"treas",  g:"02",name:"Move treasury funds",  acct:["opsafe","logostreasury","devices"], tmpl:["transfer","balance","decide"]},
+  {id:"treas",  g:"02",name:"Move treasury funds",  acct:["opsafe","devices"], tmpl:["transfer","balance","decide"]},
   {id:"split",  g:"03",name:"Split a cost",         acct:["personal"], tmpl:["split","transfer"]},
-  {id:"decide", g:"04",name:"Decide something",     acct:["opsafe","logostreasury","personal"], tmpl:["decide","transfer"]},
+  {id:"decide", g:"04",name:"Decide something",     acct:["opsafe","personal"], tmpl:["decide","transfer"]},
   {id:"buy",    g:"05",name:"Buy together",         acct:["opsafe","personal"], tmpl:["transfer","quote"]},
   {id:"swap",   g:"06",name:"Swap or bridge",       acct:["opsafe","personal","devices"], tmpl:["quote","transfer"]}
 ];
@@ -793,21 +780,6 @@ function seed(){
   });
 
   addRoom({
-    id:"grant", title:"Release the Q3 ecosystem grant", account:"logostreasury", when:"2h",
-    members:[{id:"you",role:"signer"},{id:"mira",role:"signer"},{id:"dev",role:"signer"}],
-    plugins:["transfer","balance"],
-    blocks:[
-      {k:"sys",h:"Room opened by <b>Mira</b> · the signer set is a membership commitment — you see <b>how many</b> signed, never <b>who</b>"},
-      {k:"msg",who:"mira",t:"Milestone 2 artifacts are in storage. Hash checks out against the proposal."},
-      {k:"fact",id:nid("f"),label:"Milestone bundle",value:"bafy…q7xk",
-        by:"mira",method:"content-addressed, fetched and hashed locally",verified:true,
-        detail:"The bundle is addressed by its own hash, so fetching it is verifying it. What Mira supplied was the pointer, not the trust."},
-      mkIntent({template:"transfer",amount:"90,000",asset:"LOGOS",dest:"grant escrow",destLabel:"unlocks on milestone 3",
-        memo:"Q3 grant",account:"logostreasury",preSigned:["?","?"],roundIndex:0})
-    ]
-  });
-
-  addRoom({
     id:"offsite", title:"Split the Lisbon offsite costs", account:"personal", when:"1d",
     members:[{id:"you",role:"signer"},{id:"dev",role:"signer"},{id:"ana",role:"signer"},{id:"jb",role:"signer"}],
     plugins:["split","transfer"],
@@ -850,7 +822,7 @@ function mkIntent(o){
   const it = {
     k:"intent", id:nid("i"), template:o.template, account:o.account,
     effect:{ amount:o.amount, asset:o.asset, dest:o.dest, destLabel:o.destLabel, memo:o.memo },
-    filled, need:acct.threshold, of:acct.signers, anon:acct.anon,
+    filled, need:acct.threshold, of:acct.signers,
     rounds:acct.rounds, roundIndex:o.roundIndex||0, roundFilled:[],
     nonce: acct.serial==="sequential" ? acct.nonce : null,
     serial:acct.serial,
@@ -926,8 +898,7 @@ function roomStatus(room){
   if(it.status==="draft") return {label:"draft",cls:"wait",bucket:"flight"};
   const mine = it.filled.includes("you");
   if(it.status==="executable") return {label:"ready to submit",cls:"",bucket:"needs"};
-  if(!mine && !it.anon) return {label:it.filled.length+" of "+it.need+" signed",cls:"",bucket:"needs"};
-  if(it.anon && it.filled.length<it.need) return {label:it.filled.length+" of "+it.need+" signed",cls:it.roundIndex===0?"":"wait",bucket:it.filled.includes("you")?"flight":"needs"};
+  if(!mine) return {label:it.filled.length+" of "+it.need+" signed",cls:"",bucket:"needs"};
   return {label:it.filled.length+" of "+it.need+" signed",cls:"wait",bucket:"flight"};
 }
 
@@ -1004,9 +975,9 @@ function buildAccounts(){
     c.innerHTML = `
       <div class="hd"><span class="nm">${esc(a.label)}</span><span class="drv">${esc(a.driver)}</span></div>
       <div class="bal">${esc(a.balance)}</div>
-      <div class="kv"><span>policy</span><b>${a.threshold} of ${a.signers}${a.anon?" · anonymous set":""}</b></div>
+      <div class="kv"><span>policy</span><b>${a.threshold} of ${a.signers}</b></div>
       <div class="kv"><span>approval rounds</span><b>${a.rounds.join(" → ")}</b></div>
-      <div class="kv"><span>ordering</span><b>${a.serial}${a.serial==="sequential"?" · nonce "+a.nonce:" · nullifier"}</b></div>
+      <div class="kv"><span>ordering</span><b>${a.serial}${a.serial==="sequential"?" · nonce "+a.nonce:""}</b></div>
       <div class="kv"><span>finality</span><b>${esc(a.finality)}</b></div>
       <div class="kv"><span>address</span><b>${esc(a.address)}</b></div>
       <div class="kv"><span>used in</span><b>${rooms.length?esc(rooms.join(", ")):"—"}</b></div>
@@ -1061,7 +1032,7 @@ function buildAcctChoices(){
     const a = ACCOUNTS[aid];
     const b = el("button","acctpick",
       `<span class="t">${esc(a.label)}</span>
-       <span class="d">${a.threshold} of ${a.signers}${a.anon?" · anonymous":""} · ${a.rounds.length} round${a.rounds.length>1?"s":""} · ${a.serial}<br>${esc(a.balance)} available</span>`);
+       <span class="d">${a.threshold} of ${a.signers} · ${a.rounds.length} round${a.rounds.length>1?"s":""} · ${a.serial}<br>${esc(a.balance)} available</span>`);
     b.setAttribute("aria-pressed","false");
     b.addEventListener("click",()=>{
       pickedAcct = aid;
@@ -1085,7 +1056,7 @@ function syncNew(){
     : (n===0
         ? "A room with one person is still a room. Your devices coordinate the same way."
         : `${n+1} people will be able to read this room. Nobody else.`)
-      + (a? `<br>Approvals: ${a.threshold} of ${a.signers}${a.anon?", anonymous":""}.` : "");
+      + (a? `<br>Approvals: ${a.threshold} of ${a.signers}.` : "");
 }
 
 function createRoom(){
@@ -1115,7 +1086,7 @@ function openRoom(id){
 
   $("#room-title").textContent = cur.title;
   $("#room-account").innerHTML =
-    `▣ <b>${esc(a.label)}</b> <span class="sep">·</span> ${a.threshold} of ${a.signers}${a.anon?" anon":""} <span class="sep">·</span> ${esc(a.env)} <span class="sep">·</span> ${a.serial==="sequential"?"nonce "+a.nonce:"parallel"}`;
+    `▣ <b>${esc(a.label)}</b> <span class="sep">·</span> ${a.threshold} of ${a.signers} <span class="sep">·</span> ${esc(a.env)} <span class="sep">·</span> ${a.serial==="sequential"?"nonce "+a.nonce:"parallel"}`;
 
   renderNameplate();
   renderScopeLine();
@@ -1142,9 +1113,7 @@ function renderScopeLine(){
 
 function buildScopeSheet(){
   const a = ACCOUNTS[cur.account];
-  $("#scope-sub").textContent = a.anon
-    ? "Signatures prove membership without naming the signer. The room still knows exactly who is reading."
-    : "This room is the whole audience. There is no server-side copy and no admin view.";
+  $("#scope-sub").textContent = "This room is the whole audience. There is no server-side copy and no admin view.";
 
   const sm = $("#scope-members"); sm.innerHTML="";
   cur.members.forEach(m=>{
@@ -1179,7 +1148,7 @@ function buildScopeSheet(){
        <div class="row2"><span>amount</span><b>${esc(it.effect.amount)} ${esc(it.effect.asset)}</b></div>
        <div class="row2"><span>recipient</span><b>${esc(it.effect.dest)}</b></div>
        <div class="row2"><span>account</span><b>${esc(a.address)}</b></div>
-       <div class="row2"><span>who signed</span><b>${a.anon?"only the count":"every signer address"}</b></div>
+       <div class="row2"><span>who signed</span><b>every signer address</b></div>
        <div class="row2"><span>timing</span><b>block timestamp</b></div>`
     : `<div class="cap">Nothing proposed yet</div><div class="row2"><span>nothing</span><b>leaves this room</b></div>`;
 
@@ -1312,8 +1281,7 @@ function slotsHTML(it){
   let out="";
   for(let i=0;i<it.of;i++){
     const has = it.filled[i];
-    if(has===undefined) out += `<span class="slot${it.anon?" anon":""}"></span>`;
-    else if(it.anon)    out += `<span class="slot anon filled">✓</span>`;
+    if(has===undefined) out += `<span class="slot"></span>`;
     else                out += `<span class="slot filled" style="background:${P[has].c}">${P[has].i}</span>`;
   }
   return out;
@@ -1343,7 +1311,7 @@ function intentInner(it){
         <span class="lnk"><span>shown</span><span>${esc(it.effect.amount)} ${esc(it.effect.asset)} → ${esc(it.effect.dest)}</span></span>
         <span class="lnk"><span>re-derived</span><span>${it.displayHash}</span></span>
         <span class="lnk"><span>payload</span><span>${it.payloadHash}</span></span>
-        <span class="lnk"><span>domain</span><span>${esc(a.env)} · ${esc(a.address)}${it.nonce!==null?" · nonce "+it.nonce:" · nullifier"}</span></span>
+        <span class="lnk"><span>domain</span><span>${esc(a.env)} · ${esc(a.address)}${it.nonce!==null?" · nonce "+it.nonce:""}</span></span>
         <span class="lnk"><span>plugin</span><span>${esc(PLUGINS[TEMPLATES[it.template].plugin].hash)}</span></span>
       </span>
     </button>`;
@@ -1356,12 +1324,12 @@ function intentInner(it){
     : "";
 
   const label = draft ? "Draft · unsigned"
-    : `${TEMPLATES[it.template].title} · ${it.need} of ${it.of}${it.anon?" anon":""}`;
+    : `${TEMPLATES[it.template].title} · ${it.need} of ${it.of}`;
 
   return `
     <div class="head">
       <span class="kind">${esc(label)}</span>
-      <span class="nonce">${it.nonce!==null?"nonce "+it.nonce:"nullifier · parallel"}</span>
+      <span class="nonce">${it.nonce!==null?"nonce "+it.nonce:"parallel"}</span>
     </div>
     <div class="effect">
       <div class="amount${it.effect.amount==="—"?" unset":""}">${esc(it.effect.amount)} ${esc(it.effect.asset)}</div>
@@ -1424,7 +1392,7 @@ function publicInner(it){
   const a = ACCOUNTS[it.account];
   const final = it.status==="final";
   return `
-    <div class="head"><span class="kind">Submitted · public</span><span class="nonce">${it.nonce!==null?"nonce "+it.nonce:"nullifier"}</span></div>
+    <div class="head"><span class="kind">Submitted · public</span><span class="nonce">${it.nonce!==null?"nonce "+it.nonce:"parallel"}</span></div>
     <div class="effect">
       <div class="amount">${esc(it.effect.amount)} ${esc(it.effect.asset)}</div>
       <div class="dest">to ${esc(it.effect.dest)}${it.effect.destLabel?" ("+esc(it.effect.destLabel)+")":""}</div>
@@ -1435,14 +1403,12 @@ function publicInner(it){
     </div>
     <div class="conf${final?" final":""}">
       <span class="pulse"></span>
-      <span>${final ? `<b>Final.</b> ${a.anon?"The chain recorded a threshold proof.":"The chain recorded every signer address."}`
+      <span>${final ? `<b>Final.</b> The chain recorded every signer address.`
                     : `<b>${it.confirmations}</b> of 3 confirmations`}</span>
     </div>
     <div class="leftroom">
       This left the room. <b>${esc(it.effect.amount)} ${esc(it.effect.asset)}</b>, the recipient and the timing are public and permanent.
-      ${a.anon
-        ? "Who signed stayed inside — the chain saw a count, not a roster."
-        : "Everything said to get here — the quotes, the hesitation, who read without signing — stayed inside."}
+      Everything said to get here — the quotes, the hesitation, who read without signing — stayed inside.
     </div>`;
 }
 
@@ -1453,7 +1419,7 @@ function advance(it,d){
   // multi-round: first round is nonce commitment
   if(it.rounds.length>1 && it.roundIndex===0){
     it.roundIndex = 1;
-    it.filled.push(it.anon?"?":"you");
+    it.filled.push("you");
     it.status = it.filled.length>=it.need ? "executable" : "collecting";
     refresh(it,d);
     pushSys(`Nonce commitment recorded. Round 2 opens — partial signatures combine into one, so the chain sees a single signature no matter how many of you signed.`);
@@ -1461,16 +1427,14 @@ function advance(it,d){
   }
 
   if(it.filled.length < it.need){
-    it.filled.push(it.anon?"?":"you");
+    it.filled.push("you");
     it.status = it.filled.length>=it.need ? "executable" : "collecting";
     refresh(it,d);
     const slots = d.querySelectorAll(".slot.filled");
     const last = slots[slots.length-1];
     if(last){ last.classList.add("pop"); setTimeout(()=>last.classList.remove("pop"),280); }
     if(it.status==="executable"){
-      pushSys(it.anon
-        ? `Threshold met. The partials combine into one signature — the chain learns <b>${it.need} of ${it.of} agreed</b> and nothing else.`
-        : `Threshold met. Any of you can submit it now.`);
+      pushSys(`Threshold met. Any of you can submit it now.`);
     }
     buildHome();
     return;
