@@ -166,6 +166,11 @@ class MusterUi
     // Refreshed on a slower cadence than the message tick (the RPC probe blocks).
     SLOT(void loadConnectivity())
 
+    // The room's active null-ladder level on the three axes (security_levels, exo-1ec.5):
+    // {axes:[{axis,rung,real,mechanism}]} onto securityLevelsJson — which nulls are still
+    // in place (authentication / provenance / confidentiality). A pure fold; slow tick.
+    SLOT(void loadSecurityLevels())
+
     // The room's sending context for the composer (coordinate_account): what an intent
     // here would move (the Safe's live balance — what's available to send) and who you
     // act as (your owner address + whether it's a real Safe owner). Lands on
@@ -261,6 +266,7 @@ class MusterUi
     // {rpc:{name,level,endpoint,detail}, delivery:{name,level,detail}}. level is
     // ok/warn/down; the room renders each as a status indicator (invariant 8).
     PROP(QString connectivityJson="{}" READONLY)
+    PROP(QString securityLevelsJson="{}" READONLY)
 
     // The room's sending context for the composer (coordinate_account), as JSON
     // {policy, account, actingAs, isOwner, assets:[{symbol,decimals,display,raw|error}]}.

@@ -480,6 +480,14 @@ void MusterUiBackend::loadConnectivity()
     setConnectivityJson(modules().muster_module.connectivity());
 }
 
+void MusterUiBackend::loadSecurityLevels()
+{
+    // security_levels → the room's active null-ladder level on the three axes (exo-1ec.5),
+    // {axes:[{axis,rung,real,mechanism}]}. A pure fold (driver membership + the log +
+    // the room crypto), so it rides the slow tick beside connectivity/flow.
+    setSecurityLevelsJson(modules().muster_module.security_levels());
+}
+
 void MusterUiBackend::loadRoomAccount()
 {
     // coordinate_account → the composer's sending context: what's available to send
