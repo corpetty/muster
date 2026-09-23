@@ -116,6 +116,10 @@ proc requestJoin*(s: CoordinationSession, binding: LinkStatement) =
 
 proc members*(s: CoordinationSession): seq[Member] = s.crypto.members()
 proc epoch*(s: CoordinationSession): int = s.crypto.epoch()
+proc securityLevel*(s: CoordinationSession): SecurityLevel = s.crypto.securityLevel()
+  ## The CONFIDENTIALITY level the room's crypto seam provides (null ladder, exo-1ec.5) —
+  ## the real epoch layer, or the null base. The other axes are the driver's (authentication)
+  ## and the log's (provenance); the hosted `security_levels` combines all three.
   ## The current membership epoch (monotonic; bumps on every admit/removal).
   ## The ADMITTED roster of the current epoch (recipients of the epoch key) —
   ## distinct from `pendingBindings` (join-requests not yet admitted).

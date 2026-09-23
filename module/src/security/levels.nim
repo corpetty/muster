@@ -101,3 +101,16 @@ proc `$`*(l: SecurityLevel): string =
   for a in SecurityAxis:
     if result.len > 0: result.add "  ·  "
     result.add $a & "=" & l.axes[a].mechanism & " (" & (if l.axes[a].rung == rungReal: "real" else: "null") & ")"
+
+import std/json
+
+proc toJson*(l: SecurityLevel): JsonNode =
+  ## What the surface returns and the UI renders: one row per axis, in the fixed order
+  ## authentication · provenance · confidentiality, each with its rung and named mechanism.
+  ## `real` is a boolean too, so a consumer never string-compares the rung to decide.
+  result = newJObject()
+  var axes = newJArray()
+  for a in SecurityAxis:
+    axes.add %*{"axis": $a, "rung": (if l.axes[a].rung == rungReal: "real" else: "null"),
+                "real": l.axes[a].rung == rungReal, "mechanism": l.axes[a].mechanism}
+  result["axes"] = axes

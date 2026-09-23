@@ -1513,6 +1513,23 @@ proc musterCoordinateConversations(): string =
                "active": (topic == gTopic)}
   $arr
 
+proc musterSecurityLevels(): string =
+  ## The joined room's ACTIVE null-ladder level on the three axes (exo-1ec.5): the strongest
+  ## guarantee each GOVERNING seam provides, combined into one envelope — authentication from
+  ## the compose-default driver's membership (a named driver binds the speaker; an anonymous
+  ## one is the null terminal, inv 9), provenance from the signed hash-linked log, and
+  ## confidentiality from the room's crypto seam (the real epoch layer, or the null). The
+  ## level is never a silent fallback — a consumer that requires the real level and cannot
+  ## get it refuses (DowngradeRefused), which is why this reports honestly rather than assumes.
+  if gSession == nil: return "not-joined"
+  let auth = driverForKind(gCoordKind).describe().securityLevel()
+  let prov = securityLevel(
+    axisLevel(rungNull, "-"),
+    axisLevel(rungReal, "signed hash-linked log (reduce(log), invariant 4)"),
+    axisLevel(rungNull, "-"))
+  let conf = gSession.securityLevel()
+  $combine(auth, prov, conf).toJson()
+
 # ── wallet: chain-agnostic account/asset/transfer surface ──────────────────────
 # The account-level view of the chains the module touches — distinct from the
 # coordinated intent path. The EVM chain is the same one the Safe settles on; the

@@ -4,7 +4,7 @@
 ## adapter declares (securityLevel), read by a consumer via the axis rung — never inferred by
 ## branching on the concrete adapter type. Links stint + libsodium (wallet types + keystore).
 
-import std/strutils
+import std/[strutils, json]
 import ../src/wallet/adapter
 import ../src/wallet/mock_chain
 import ../src/security/levels
@@ -98,5 +98,27 @@ block:
     cc.securityLevel(), logProv)
   doAssert anonActive.rungOf(axAuthentication) == rungNull, "an anonymous room stays at the auth null"
   echo "7. combine: the active room level is the strongest per axis, one envelope OK"
+
+# ── 8. toJson: the shape the security_levels surface returns / the UI renders ──────
+block:
+  let seed3 = proc(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
+  let active = combine(
+    newStubDriver(rounds = 1, threshold = 1, membership = mmNamed).describe().securityLevel(),
+    securityLevel(axisLevel(rungNull, "-"), axisLevel(rungReal, "signed hash-linked log"), axisLevel(rungNull, "-")),
+    newEpochCrypto(newInMemoryKeystore(seed3(5), seed3(6))).securityLevel())
+  let j = active.toJson()
+  doAssert j.hasKey("axes") and j["axes"].len == 3, "three axes, in order"
+  let axisNames = block:
+    var s: seq[string]
+    for row in j["axes"]: s.add row["axis"].getStr()
+    s
+  doAssert axisNames == @["authentication", "provenance", "confidentiality"], "fixed honest order: " & $axisNames
+  for row in j["axes"]:
+    doAssert row.hasKey("rung") and row.hasKey("real") and row.hasKey("mechanism"), "each row is self-describing"
+    doAssert (row["rung"].getStr() == "real") == row["real"].getBool(), "rung and the real bool agree"
+    doAssert row["mechanism"].getStr().len > 0, "the mechanism is named, never blank"
+  # this named room reaches all-real across the three axes.
+  for row in j["axes"]: doAssert row["real"].getBool(), "a named room is real on every axis here"
+  echo "8. toJson: the security_levels payload — three named axes, rung + real + mechanism OK"
 
 echo "null_ladder_test: all OK"
