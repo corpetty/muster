@@ -68,7 +68,7 @@ proc sigEvents(s: CoordinationSession, id: string): seq[Event] =
 # ── 1. proposing on chain ──────────────────────────────────────────────────────
 let id = liveProposeOnChain(r.alice, aliceKs, resA, policy, act, newLezVoteSeam(chain, A, pA),
                             int64(Now), 1, ttlSec = Ttl)
-doAssert id.len == 64, id
+doAssert id.startsWith("0x"), id
 doAssert chain.readProposal(K, 1).proposal.approved == @[A]
 doAssert r.alice.sigEvents(id).mapIt(it.key.split('/')[3]) == @["lez:" & toHex(A)], "the proposer's vote, reported"
 doAssert intentState(r.alice.log.allEvents(), resA, id) == "collecting"
