@@ -81,6 +81,35 @@ proc effectFromJson*(effectJson: string): Effect =
         let chain = j{"chain"}.getStr()
         if chain.len > 0: fields.add ("chain", cbText(chain))
         return Effect(schemaId: invokeDomain(module, meth), fields: fields)
+      of "btc-spend":
+        # A Bitcoin spend from a multisig account (exo-a50.2.3): every input WITH its
+        # prevout (amount + scriptPubKey — BIP-143 signs only each input's own amount, so
+        # the proposal must carry them for every signer to re-derive the fee), every
+        # output (an address or a scriptPubKey), the locktime and the declared fee.
+        proc bhex(s: string): seq[byte] =
+          var h = s
+          if h.len >= 2 and h[0] == '0' and h[1] in {'x', 'X'}: h = h[2 .. ^1]
+          for i in 0 ..< h.len div 2:
+            try: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
+            except ValueError: discard
+        var ins, outs: seq[CborValue]
+        if j.hasKey("inputs") and j["inputs"].kind == JArray:
+          for i in j["inputs"]:
+            ins.add cbMap(@[(cbText("txid"), cbText(i{"txid"}.getStr())),
+                            (cbText("vout"), cbUint(uint64(i{"vout"}.getBiggestInt()))),
+                            (cbText("value"), cbUint(uint64(i{"value"}.getBiggestInt()))),
+                            (cbText("scriptPubKey"), cbBytes(bhex(i{"scriptPubKey"}.getStr()))),
+                            (cbText("sequence"), cbUint(uint64(i{"sequence"}.getBiggestInt(0xfffffffd))))])
+        if j.hasKey("outputs") and j["outputs"].kind == JArray:
+          for o in j["outputs"]:
+            var m = @[(cbText("value"), cbUint(uint64(o{"value"}.getBiggestInt())))]
+            if o.hasKey("address"): m.add (cbText("address"), cbText(o["address"].getStr()))
+            if o.hasKey("scriptPubKey"): m.add (cbText("scriptPubKey"), cbBytes(bhex(o["scriptPubKey"].getStr())))
+            outs.add cbMap(m)
+        return Effect(schemaId: "muster.effect.btc-spend.v1", fields: @[
+          ("inputs", cbArray(ins)), ("outputs", cbArray(outs)),
+          ("locktime", cbUint(uint64(j{"locktime"}.getBiggestInt(0)))),
+          ("fee", cbUint(uint64(j{"fee"}.getBiggestInt(0))))])
       of "safe-tx":
         # A full Safe transaction (exo-a50.1.4): a transfer's to / value / nonce plus
         # data, operation (0 CALL, 1 DELEGATECALL), the gas fields, the gas token and the
@@ -118,6 +147,7 @@ proc effectSchema*(effectJson: string): tuple[id: string, known: bool] =
     case kind
     of "transfer": return ("muster.effect.transfer.v1", true)
     of "safe-tx": return ("muster.effect.safe-tx.v1", true)
+    of "btc-spend": return ("muster.effect.btc-spend.v1", true)
     of "statement": return ("muster.effect.statement.v1", true)
     of "add-driver": return ("muster.effect.governance.add-driver.v1", true)
     of "invoke":

@@ -44,6 +44,9 @@ proc configFor(kind: string): JsonNode =
   case kind
   of "safe": %*{"chainId": 31337, "safe": SafeAddr, "owners": ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"], "threshold": 1}
   of "eip191": %*{"signers": ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"], "threshold": 1}
+  of "btc-p2wsh", "btc-tapscript":
+    %*{"network": "regtest", "k": 2, "keys": ["0307b8ae49ac90a048e9b53357a2354b3334e9c8bee813ecb98e99a7e07e8c3ba3",
+                                            "03b28f0c28bfab54554ae8c658ac5c3e0ce6e79ad336331f78c428dd43eea8449b"]}
   else: %*{"roster": roster.mapIt(edHex(it)), "k": 2}
 
 # ── 1. the one list builds, and each kind is the family it says it is ─────────
@@ -67,9 +70,9 @@ block:
 
 # ── 2. founding set + the composer's mapping come from the list ───────────────
 block:
-  doAssert foundingKinds() == @["safe", "threshold", "frost", "invoke", "eip191"], $foundingKinds()
+  doAssert foundingKinds() == @["safe", "threshold", "frost", "invoke", "eip191", "btc-p2wsh", "btc-tapscript"], $foundingKinds()
   doAssert "unanimous" notin foundingKinds(), "unanimous is admitted by proposal, not founded"
-  doAssert kindsFor("payment") == @["safe"], $kindsFor("payment")
+  doAssert kindsFor("payment") == @["safe", "btc-p2wsh", "btc-tapscript"], $kindsFor("payment")
   doAssert kindsFor("action") == @["invoke"], $kindsFor("action")
   doAssert kindsFor("statement") == @["threshold", "frost", "eip191", "unanimous"], $kindsFor("statement")
   let j = kindsJson(@["safe", "threshold"])

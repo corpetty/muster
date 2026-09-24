@@ -85,8 +85,8 @@ One row per family, generated from the registry (`contracts/families/registry.js
 | `evm.kernel-weighted` | contract | same bytes | explicit | 1 · deploy | in-place | setup / spend / public | lanes · optional | – | early | watch |
 | `evm.eip7702-delegate` | contract | same bytes | **none** | 1 · register | in-place | setup / spend / public | sequence · none | – | early | reject |
 | `evm.gnosis-multisigwallet` | vote | own tx → **pointer** | explicit | 1 · deploy | in-place | setup / each vote / public | none · none | a tx | deprecated | reject |
-| `btc.p2wsh-sortedmulti` | native | same bytes | implicit | 1 · derive | new-address | spend / spend / public | utxo · none | per sig | production | next (B) |
-| `btc.tapscript-multi-a` | native | same bytes | implicit | 1 · derive | new-address | spend / spend / public | utxo · none | per sig | production | next (B) |
+| `btc.p2wsh-sortedmulti` | native | same bytes | implicit | 1 · derive | new-address | spend / spend / public | utxo · none | per sig | production | partial (B) |
+| `btc.tapscript-multi-a` | native | same bytes | implicit | 1 · derive | new-address | spend / spend / public | utxo · none | per sig | production | partial (B) |
 | `btc.miniscript-decay` | native | same bytes | implicit | 1 · derive | new-address | spend / spend / public | utxo · none | per sig | production | candidate |
 | `btc.musig2-keypath` | aggregate | partial (n-of-n) | implicit | 2 ⚿ · derive | new-address | – / – / public | utxo · none | – | early | candidate |
 | `btc.frost-bip445` | aggregate | partial (t-of-n) | implicit | 2 ⚿ · dkg | new-address | – / – / public | utxo · none | – | draft | candidate (D) |

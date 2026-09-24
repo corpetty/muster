@@ -37,6 +37,8 @@ import ../src/coordination/intents     # intent lifecycle = reduce(log) (the mul
 import ../src/coordination/live        # the live propose/contribute path, driveable in-process (exo-ef1)
 import ../src/coordination/accounts    # accounts disclosed by members into the room (exo-a50.1.3)
 import ../src/settlement/settlement     # the settlement seam: chosen by profile, through the adapter (exo-a50.1.5)
+import ../src/drivers/btc_multisig     # Bitcoin multisig accounts (exo-a50.2.3)
+import ../src/bitcoin/network          # networkByCaip2
 import ../src/coordination/card_rows   # the card's fixed rows, from the profile (exo-a50.1.6)
 import ../src/coordination/invoker     # the execute seam + allowlist/capability gate (P-D2)
 import ../src/coordination/readiness   # the action manifest + this instance's readiness (exo-002.2)
@@ -786,6 +788,9 @@ var gBypassCache = initTable[string, tuple[known: bool, list: seq[string]]]()
   ## account id → the ways around its threshold as last read from the chain (exo-a50.1.6)
 
 proc bypassesOf(a: RoomAccount): JsonNode =
+  if a.family.startsWith("btc."):
+    # a Bitcoin script has no module, guard or admin: nothing gets around k of n
+    return %*{"known": true, "modules": [], "guard": "", "detail": "a script has no way around it"}
   ## {known, modules:[addr], guard, detail} for a Safe, read through the user's RPC on
   ## the account's own chain. A module can move funds with NO owner signature; a guard
   ## can block a transaction the owners agreed to — both belong on the card.
@@ -821,7 +826,10 @@ proc musterCoordinateAccounts(): string =
   let accts = roomAccounts()
   var arr = accountsJson(accts)
   for i, a in accts:
-    let (st, detail) = checkAccount(a, chainViewOf(a))
+    # a Bitcoin disclosure is checked by re-deriving its address from the keys (the
+    # address commits to the policy — no chain read); an EVM one against the chain
+    let (st, detail) = (if a.family.startsWith("btc."): btcDisclosureCheck(a)
+                        else: checkAccount(a, chainViewOf(a)))
     arr[i]["check"] = %*{"status": $st, "detail": detail}
     # The ways around the threshold, READ from the chain (exo-a50.1.4): a Safe's enabled
     # modules execute without the owners, and a guard can veto. Unknown when unread —
@@ -849,9 +857,28 @@ proc musterCoordinateDiscloseAccount(accountJson: string): string =
       for x in j["signers"]: a.signers.add x.getStr().toLowerAscii()
   except CatchableError as e:
     return $(%*{"error": "not an account: " & e.msg})
+  if a.family.startsWith("btc."):
+    # a Bitcoin account (exo-a50.2.3): k of n compressed keys; its address is DERIVED from
+    # them (so it may be omitted) and a given one must match — never taken on trust
+    if a.signers.len == 0 or a.threshold <= 0:
+      return $(%*{"error": "a Bitcoin account needs its signers (33-byte keys) and threshold"})
+    var btcAddr = a.address
+    if btcAddr.len == 0:
+      try:
+        btcAddr = btcAccount(a.family, networkByCaip2(a.chain).name, a.threshold,
+                          a.signers.mapIt(hexToBytes(it))).address
+      except CatchableError as e:
+        return $(%*{"error": "not a valid Bitcoin account: " & e.msg})
+    let (ok, _, detail) = btcAccountOfDisclosure(a.family, a.chain, btcAddr, a.threshold, a.signers)
+    if not ok: return $(%*{"error": "the Bitcoin account does not check out", "detail": detail})
+    a.address = btcAddr
+    let me = toHex(moduleKeystore().encIdentity().toBytes())
+    gSession.publish(accountDiscloseEvent(a, me))
+    let (_, disclosed) = findAccount(roomAccounts(), accountId(a.chain, a.address))
+    return $accountsJson(@[disclosed])[0]
   if a.family != "evm.safe":
     return $(%*{"error": "unsupported account family: " & a.family,
-                "detail": "this client can hold evm.safe accounts (docs/design/multisig-landscape.md, Phase A)"})
+                "detail": "this client holds evm.safe and btc.* accounts"})
   let (isEvm, _) = evmChainId(a.chain)
   if not isEvm or a.address.len != 42 or not a.address.startsWith("0x"):
     return $(%*{"error": "an evm.safe account needs an eip155:<id> chain and a 0x address"})
