@@ -144,6 +144,15 @@ class MusterUi
     // Lands on driversJson; the composer and the policy pickers read only this.
     SLOT(void loadDrivers())
 
+    // The accounts members have disclosed into the room (coordinate_accounts,
+    // exo-a50.1.3): who disclosed each, and whether the chain agrees. Lands on
+    // accountsJson. discloseAccount discloses one as this member ({family, chain,
+    // address, label, signers?, threshold?}); discloseSuggestedAccount discloses the
+    // local test Safe describe() suggests. Results land on accountDiscloseJson.
+    SLOT(void loadAccounts())
+    SLOT(void discloseAccount(const QString &accountJson))
+    SLOT(void discloseSuggestedAccount())
+
     // ── generic module actions (the invoke driver, P-D4) ─────────────────────
     // Discover the coordinatable actions your loaded modules expose
     // (coordinate_available_actions): the things you can DO together, beyond a Safe
@@ -308,7 +317,19 @@ class MusterUi
 
     // The room's coordination policy — its driver — as JSON {policy, threshold,
     // domain}. The view shows which policy governs the room and picks it.
-    PROP(QString policyJson="{\"policy\":\"safe\"}" READONLY)
+    PROP(QString policyJson="{\"policy\":\"threshold\",\"kind\":\"threshold\"}" READONLY)
+
+    // The last policy choice the module refused ({error, ...}: no-account,
+    // choose-account, not admitted), so the picker can say why; "{}" when none.
+    PROP(QString policyErrorJson="{}" READONLY)
+
+    // The accounts members have disclosed into the joined room (coordinate_accounts):
+    // [{id, family, chain, address, label, signers, threshold, disclosedBy,
+    //   disclosedByAlias, conflict, check:{status, detail}}]. exo-a50.1.3.
+    PROP(QString accountsJson="[]" READONLY)
+
+    // The result of the last disclose (the account as folded, or {error}).
+    PROP(QString accountDiscloseJson="{}" READONLY)
 
     // Every driver kind this client has — the module's one kind list (coordinate_drivers,
     // exo-a50.1.2) — as [{kind, family, label, composes, founding, admitted}]. `admitted`

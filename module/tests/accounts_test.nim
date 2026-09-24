@@ -74,24 +74,25 @@ block:
 block:
   let accts = reduceAccounts(@[accountDiscloseEvent(safeA(), aliceId),
                                accountDiscloseEvent(safeOnBase(), bobId)])
-  let pA = qualify("safe", accts[0].id)
+  let aId = accountId("eip155:31337", SafeAddr)   # canonical order, not insertion, orders accts
+  let pA = qualify("safe", aId)
   let pB = qualify("safe", accountId("eip155:8453", SafeB))
   doAssert pA == "safe@eip155:31337:" & SafeAddr.toLowerAscii()
-  doAssert splitPolicy(pA) == ("safe", accts[0].id)
+  doAssert splitPolicy(pA) == ("safe", aId)
   doAssert isKnownKind(pA), "a qualified policy is its kind"
   let dA = driverForPolicy(pA, accts, roomBuild)
   let dB = driverForPolicy(pB, accts, roomBuild)
   doAssert dA.profile().family == "evm.safe" and dB.profile().family == "evm.safe"
   doAssert dA.profile().chain == "eip155:31337" and dB.profile().chain == "eip155:8453"
-  doAssert dA.profile().account == accts[0].id and dB.profile().account == accountId("eip155:8453", SafeB)
+  doAssert dA.profile().account == aId and dB.profile().account == accountId("eip155:8453", SafeB)
   doAssert dA.profile().k == 2 and dA.profile().n == 3
   for bad in ["safe",                                              # no account
               qualify("safe", accountId("eip155:1", SafeAddr)),    # not disclosed here
-              qualify("threshold", accts[0].id),                  # a room kind takes no account
-              qualify("squads", accts[0].id)]:                    # not a kind this client has
+              qualify("threshold", aId),                  # a room kind takes no account
+              qualify("squads", aId)]:                    # not a kind this client has
     doAssert driverForPolicy(bad, accts, roomBuild) of UnsupportedDriver, bad & " must be unsupported"
   doAssert not (driverForPolicy("threshold", accts, roomBuild) of UnsupportedDriver)
-  let att = driverForPolicy(qualify("eip191", accts[0].id), accts, roomBuild)
+  let att = driverForPolicy(qualify("eip191", aId), accts, roomBuild)
   doAssert att.profile().family == "room.eip191-attest" and att.profile().n == 3,
     "an attestation is by the disclosed account's signers"
   doAssert kindNeedsAccount("safe") and kindNeedsAccount("eip191") and not kindNeedsAccount("threshold")

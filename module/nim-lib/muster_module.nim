@@ -35,6 +35,7 @@ import ../src/crypto/keystore         # persistent module identity (FS-4)
 import ../src/coordination/session    # the multi-instance coordination flow
 import ../src/coordination/intents     # intent lifecycle = reduce(log) (the multi-party fold)
 import ../src/coordination/live        # the live propose/contribute path, driveable in-process (exo-ef1)
+import ../src/coordination/accounts    # accounts disclosed by members into the room (exo-a50.1.3)
 import ../src/coordination/invoker     # the execute seam + allowlist/capability gate (P-D2)
 import ../src/coordination/readiness   # the action manifest + this instance's readiness (exo-002.2)
 import ../src/coordination/offers      # requirements × my catalogue → offers (exo-45e K4)
@@ -78,10 +79,12 @@ const OWNER1 = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
 const OWNER2 = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
 const SAFE_ADDR = "0x5FbDB2315678afecb367f032d93F642f64180aa3"
 
-# Selected through the registry by kind + config (not hardcoded to newSafeDriver);
-# a real deployment reads this from the module's persisted config. The single-
-# instance Safe path below uses Safe-specific fields, so it holds the concrete type.
-var gDriver = SafeDriver(newDriver("safe", %*{
+# The LOCAL TEST SAFE (the anvil fixture). It is NOT the room's account: accounts live
+# in the room, disclosed by members (coordination/accounts.nim, exo-a50.1.3), and no
+# room intent resolves to this. It is (a) the suggestion describe() offers a member to
+# disclose into a room when they run against anvil, and (b) the account of the older
+# single-instance lifecycle path (propose/approve/submit, the P4 harness).
+var gDevSafe = SafeDriver(newDriver("safe", %*{
   "chainId": 31337, "safe": SAFE_ADDR,
   "owners": [OWNER0, OWNER1, OWNER2], "threshold": 2}))
 
@@ -97,7 +100,7 @@ var gDriver = SafeDriver(newDriver("safe", %*{
 # gCoordKind is only this instance's COMPOSE DEFAULT — the policy the *next* propose
 # is stamped with. Changing it never re-folds an existing decision, because each
 # intent already carries its own policy. driverFor() is the resolver the folds take.
-var gCoordKind = "safe"
+var gCoordKind = "threshold"
 var gInvoker: Invoker = nil   ## the execute/discovery/readiness seam to other modules, created lazily
 
 proc seedOf(n: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = n)
@@ -106,17 +109,13 @@ proc thrRosterKey(n: byte): Ed25519Pub = encFromSeed(seedOf(n)).identity().ed
 proc currentRoster(): seq[Ed25519Pub]   ## forward — defined once gSession + the keystore are
 proc myAddress(): Address                ## forward — this instance's secp account, defined below
 
-proc driverForKind(kind: string): Driver =
-  ## Build the driver for a policy kind. For the room-native drivers (threshold /
-  ## unanimous / frost) the roster is the room's ACTUAL members — their Ed25519
+proc roomAccounts(): seq[RoomAccount]   ## forward — the room's disclosed accounts, folded from the log
+
+proc roomDriver(kind: string): Driver =
+  ## Build a ROOM kind's driver. The roster is the room's ACTUAL members — their Ed25519
   ## encryption identities, from the membership fold — so THIS instance's own identity
   ## IS a signer and it endorses in-app (no pasted fixture). k is the configured
-  ## threshold capped at the roster size (a 1-member room needs 1); "unanimous" is
-  ## n-of-n. Safe stays the on-chain owner set (gDriver, its owners are not room
-  ## members). A kind not on the one list (drivers/kinds.nim) is UNSUPPORTED — never a
-  ## fallback to the Safe, which would fold, verify and settle a proposal this client
-  ## cannot read as a Safe transfer (exo-a50.1.2).
-  if not isKnownKind(kind): return newUnsupportedDriver(kind)
+  ## threshold capped at the roster size (a 1-member room needs 1); "unanimous" is n-of-n.
   let roster = currentRoster()
   let n = max(1, roster.len)
   case kind
@@ -124,29 +123,18 @@ proc driverForKind(kind: string): Driver =
   of "unanimous": newThresholdDriver(roster, n)
   of "frost":     newFrostDriver(roster, min(2, n))
   of "invoke":    newInvokeDriver(roster, min(2, n))   # generic module-action (P-D2); action in the effect
-  of "eip191":
-    # A room-native EIP-191 personal-sign attestation (P-D6): the room's owners each
-    # personal-sign the effect off-chain — a signed group statement that settles
-    # nothing on-chain. The signer set is EXACTLY the room's Safe OWNER set — the one
-    # secp address set every instance shares identically, so the fold converges (the
-    # Ed25519 membership roster carries no secp addresses, and unioning THIS instance
-    # would give each peer a different set and diverge the count). An instance that is
-    # a configured owner attests in-app; a non-owner honestly cannot.
-    #
-    # Threshold 1: an attestation is a per-signer act — "an owner attests this" — so a
-    # single recognized owner completes it (and others may still co-sign, folded in).
-    # This is what lets a solo owner reach an Endorsed attestation, unlike the Safe
-    # policy whose 2-of-3 is a real on-chain requirement that genuinely needs the group.
-    newPersonalSignDriver(signers = gDriver.owners, threshold = 1)
-  of "safe":
-    # The fold recognizes exactly the REAL owner set — never this instance's own key
-    # injected in (exo-45e K3, rule s4). An in-app approval counts only if YOUR key is a
-    # configured Safe owner (seed it with MUSTER_DEV_SECP_KEY / scripts/demo-peer.sh so it
-    # recovers to a real on-chain owner, exo-001); a non-owner's signature is refused,
-    # exactly as the chain would refuse it at settlement. The safeTxHash never commits to
-    # the owner set, so re-derivation (F-4) and the materialization are unchanged.
-    gDriver
-  else: newUnsupportedDriver(kind)   # unreachable while every listed kind has an arm
+  else: newUnsupportedDriver(kind)
+
+proc driverForKind(kind: string): Driver =
+  ## Resolve an intent's POLICY to its driver (coordination/accounts.driverForPolicy).
+  ## A room kind is built from the roster (roomDriver). An account-bound kind — "safe",
+  ## and "eip191" (an attestation by an account's signers: threshold 1, a per-signer
+  ## act) — is built FROM the account a member disclosed into this room, named in the
+  ## policy ("safe@<CAIP-10>"). The fold recognizes exactly the DISCLOSED signer set —
+  ## never this instance's own key injected in (exo-45e K3) and never a module-global
+  ## Safe: a bare "safe", an undisclosed account, or a kind not on the one list
+  ## (drivers/kinds.nim) is UNSUPPORTED (exo-a50.1.2, exo-a50.1.3).
+  driverForPolicy(kind, roomAccounts(), roomDriver)
 
 let driverFor: DriverFor = proc(kind: string): Driver = driverForKind(kind)
   ## The per-intent driver resolver the folds take: each intent's own policy → its driver.
@@ -379,18 +367,23 @@ proc safeProtocolVersion(): string =
     "unknown"
 
 proc musterDescribe(): string =
-  ## The Safe account this module coordinates against, read straight from the
-  ## driver so the UI displays domain facts it was told, not ones it hardcoded.
-  ## The safeTxHash every intent produces commits to chainId+safe (EIP-712
-  ## domain), so this is exactly the account those bytes are worthless outside of.
+  ## The LOCAL TEST SAFE (the anvil fixture) — offered as a SUGGESTION a member may
+  ## disclose into a room (coordinate_disclose_account), and the account of the older
+  ## single-instance lifecycle path. It is not "the room's account": accounts live in
+  ## the room, disclosed by members (exo-a50.1.3). `family` + `chain` (CAIP-2) make the
+  ## suggestion disclosable as-is.
   var owners = newJArray()
-  for o in gDriver.owners: owners.add %toHex(o)
+  for o in gDevSafe.owners: owners.add %toHex(o)
   $(%*{
-    "chainId": gDriver.chainId.int,
+    "chainId": gDevSafe.chainId.int,
     "safe": SAFE_ADDR,
-    "threshold": gDriver.threshold,
+    "threshold": gDevSafe.threshold,
     "owners": owners,
-    "environment": "anvil-31337",
+    "environment": "eip155:" & $gDevSafe.chainId.int,
+    "family": "evm.safe",
+    "chain": "eip155:" & $gDevSafe.chainId.int,
+    "label": "Local test Safe (anvil)",
+    "suggestion": true,
     "protocol": safeProtocolVersion()   # the logos-protocol ABI this module speaks
   })
 
@@ -410,12 +403,12 @@ proc musterPropose(effectJson: string): string =
                            expiry: high(uint64))
   inc gCounter
   let id = "intent-" & $gCounter
-  var it = newIntent(gDriver, effect, ctx)   # canonicalize dispatches to Safe (EIP-712 safeTxHash + pendingHash)
+  var it = newIntent(gDevSafe, effect, ctx)   # canonicalize dispatches to Safe (EIP-712 safeTxHash + pendingHash)
   var h: array[32, byte]
   for i in 0 ..< 32: h[i] = it.materialization.bytes[i]
   gHashes[id] = h
   gEffects[id] = effect
-  it.apply(gDriver, IntentEvent(kind: iePropose, now: gNow))
+  it.apply(gDevSafe, IntentEvent(kind: iePropose, now: gNow))
   gIntents[id] = it
   id
 
@@ -430,9 +423,9 @@ proc musterApprove(intentId: string, signatureHex: string): string =
   ## refused ("rejected") without touching the intent; a valid one is counted toward
   ## the threshold. Returns the new lifecycle state, or "rejected".
   if intentId notin gIntents: return "unknown-intent"
-  gDriver.pendingHash = gHashes[intentId]                 # verify against THIS intent's hash
+  gDevSafe.pendingHash = gHashes[intentId]                 # verify against THIS intent's hash
   let sig65 = toSig65(hexToBytes(signatureHex))
-  if not recoversToOwner(gHashes[intentId], sig65, gDriver.owners):
+  if not recoversToOwner(gHashes[intentId], sig65, gDevSafe.owners):
     return "rejected"                                     # not an owner — do not advance
 
   # Dedup by signer (Safe dedups too); a re-submission of an already-counted owner
@@ -446,7 +439,7 @@ proc musterApprove(intentId: string, signatureHex: string): string =
 
   var it = gIntents[intentId]
   inc gNow
-  it.apply(gDriver, IntentEvent(kind: ieContribute, now: gNow,
+  it.apply(gDevSafe, IntentEvent(kind: ieContribute, now: gNow,
                                 contribution: Contribution(bytes: @sig65)))
   gIntents[intentId] = it
   $it.state
@@ -476,9 +469,9 @@ proc musterSubmit(intentId: string): string =
   # is held here; the Safe verifies the owners on-chain regardless of the sender.
   let tx = toSafeTx(gEffects[intentId])
   let calldata = assembleExecTransaction(tx.to, tx.value, @[], sigbytes)
-  let txHash = submitExecTransaction(gRpcUrl, toAddr(OWNER0), gDriver.safe, calldata)
+  let txHash = submitExecTransaction(gRpcUrl, toAddr(OWNER0), gDevSafe.safe, calldata)
   inc gNow
-  it.apply(gDriver, IntentEvent(kind: ieSubmit, now: gNow))    # executable -> submitted
+  it.apply(gDevSafe, IntentEvent(kind: ieSubmit, now: gNow))    # executable -> submitted
   gIntents[intentId] = it
 
   # Observe finality from the chain.
@@ -489,7 +482,7 @@ proc musterSubmit(intentId: string): string =
     sleep(200)
   if status == 1:
     inc gNow
-    it.apply(gDriver, IntentEvent(kind: ieFinal, now: gNow))   # submitted -> final
+    it.apply(gDevSafe, IntentEvent(kind: ieFinal, now: gNow))   # submitted -> final
     gIntents[intentId] = it
   $it.state
 
@@ -522,6 +515,14 @@ proc currentRoster(): seq[Ed25519Pub] =
     for m in gSession.members(): result.add m.ed
   if result.len == 0:
     result.add moduleKeystore().encIdentity().ed
+
+proc roomAccounts(): seq[RoomAccount] =
+  ## The accounts members have disclosed into the joined room, folded from its log
+  ## (coordination/accounts.nim, exo-a50.1.3). None without a room. (Forward-declared
+  ## above driverForKind, which resolves account-bound policies against it.)
+  if gSession == nil: return @[]
+  reduceAccounts(gSession.log.allEvents())
+
 var gMsgSeq: uint64 = 0     ## per-instance monotonic nonce, disambiguates identical posts
 
 proc toContentTopic(t: string): string =
@@ -720,8 +721,12 @@ proc musterCoordinateDismissInvite(roomTopic: string): string =
   "ok"
 
 proc policyJson(): JsonNode =
+  ## The compose default: the full policy (qualified with its account for an account-
+  ## bound kind), its kind, the account (CAIP-10, "" for a room kind), and its driver's
+  ## threshold + domain.
   let d = driverForKind(gCoordKind).describe()
-  %*{"policy": gCoordKind, "threshold": d.threshold,
+  let (kind, acct) = splitPolicy(gCoordKind)
+  %*{"policy": gCoordKind, "kind": kind, "account": acct, "threshold": d.threshold,
      "domain": d.serializationDomain}
 
 proc roomKinds(): seq[string] =
@@ -737,6 +742,78 @@ proc musterCoordinateDrivers(): string =
   ## drawn from this, so the UI names no kind of its own (exo-a50.1.2).
   $kindsJson(roomKinds())
 
+proc chainViewOf(a: RoomAccount): ChainView =
+  ## Read an account from the chain through the user's RPC, for checking a disclosure
+  ## (an external read, invariant 10). Only when the RPC serves the account's chain —
+  ## reading a Base Safe through an anvil node would answer the wrong question.
+  if a.family != "evm.safe": return (known: false, signers: @[], threshold: 0,
+                                     detail: "no chain read for a " & a.family & " account yet")
+  if gRpcUrl.len == 0: return (known: false, signers: @[], threshold: 0, detail: "no RPC configured")
+  let (ok, chain, pd) = probeRpc(gRpcUrl)
+  if not ok: return (known: false, signers: @[], threshold: 0, detail: "RPC unreachable: " & pd)
+  if "eip155:" & $chain != a.chain:
+    return (known: false, signers: @[], threshold: 0,
+            detail: "the configured RPC serves eip155:" & $chain & ", the account is on " & a.chain)
+  let owners = getOwners(gRpcUrl, toAddress(a.address))
+  if not owners.known: return (known: false, signers: @[], threshold: 0, detail: owners.detail)
+  let thr = getThreshold(gRpcUrl, toAddress(a.address))
+  if not thr.known: return (known: false, signers: @[], threshold: 0, detail: thr.detail)
+  (known: true, signers: owners.owners.mapIt(toHex(it)), threshold: thr.threshold, detail: "read from chain")
+
+proc musterCoordinateAccounts(): string =
+  ## The accounts members have disclosed into the joined room (exo-a50.1.3), each with
+  ## who disclosed it, whether disclosures disagree, and whether the CHAIN agrees with
+  ## the disclosure: verified / disagrees (naming what differs) / unknown (why). The
+  ## chain read goes through the user's RPC; a failed read is unknown, never verified.
+  if gSession == nil: return "[]"
+  gSession.poll()
+  let accts = roomAccounts()
+  var arr = accountsJson(accts)
+  for i, a in accts:
+    let (st, detail) = checkAccount(a, chainViewOf(a))
+    arr[i]["check"] = %*{"status": $st, "detail": detail}
+    var names = newJArray()
+    for d in a.disclosedBy: names.add %contactBook().aliasOf(d)
+    arr[i]["disclosedByAlias"] = names
+  $arr
+
+proc musterCoordinateDiscloseAccount(accountJson: string): string =
+  ## Disclose an account into the joined room, as this member (exo-a50.1.3). JSON
+  ## {family, chain (CAIP-2), address, label, signers?, threshold?}. When signers or
+  ## threshold are omitted they are read from the chain (and refused if unreadable —
+  ## a disclosure never guesses). The disclosure names this member's encryption
+  ## identity; every reader then checks it against the chain themselves.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  var a: RoomAccount
+  try:
+    let j = parseJson(accountJson)
+    a = RoomAccount(family: j{"family"}.getStr("evm.safe"), chain: j{"chain"}.getStr(),
+                    address: j{"address"}.getStr().toLowerAscii(), label: j{"label"}.getStr(),
+                    threshold: j{"threshold"}.getInt(0))
+    if j.hasKey("signers") and j["signers"].kind == JArray:
+      for x in j["signers"]: a.signers.add x.getStr().toLowerAscii()
+  except CatchableError as e:
+    return $(%*{"error": "not an account: " & e.msg})
+  if a.family != "evm.safe":
+    return $(%*{"error": "unsupported account family: " & a.family,
+                "detail": "this client can hold evm.safe accounts (docs/design/multisig-landscape.md, Phase A)"})
+  let (isEvm, _) = evmChainId(a.chain)
+  if not isEvm or a.address.len != 42 or not a.address.startsWith("0x"):
+    return $(%*{"error": "an evm.safe account needs an eip155:<id> chain and a 0x address"})
+  if a.signers.len == 0 or a.threshold <= 0:
+    let v = chainViewOf(a)
+    if not v.known:
+      return $(%*{"error": "cannot read the account's signers from the chain — pass them explicitly",
+                  "detail": v.detail})
+    a.signers = v.signers.mapIt(it.toLowerAscii())
+    a.threshold = v.threshold
+  if a.threshold > a.signers.len:
+    return $(%*{"error": "threshold " & $a.threshold & " exceeds " & $a.signers.len & " signers"})
+  let me = toHex(moduleKeystore().encIdentity().toBytes())
+  gSession.publish(accountDiscloseEvent(a, me))
+  let (_, disclosed) = findAccount(roomAccounts(), accountId(a.chain, a.address))
+  $accountsJson(@[disclosed])[0]
+
 proc musterCoordinateSetPolicy(kind: string): string =
   ## Choose the COMPOSE DEFAULT policy — the driver the next intent you propose runs
   ## on. "safe" is the EIP-712 Safe above; "threshold" is a k-of-n Ed25519 endorsement
@@ -746,10 +823,35 @@ proc musterCoordinateSetPolicy(kind: string): string =
   ## intent already collecting signatures keeps the policy it was proposed under.
   ## The kind must be one the room has ADMITTED (driver-as-proposal): the founding set,
   ## or a kind a passed add-driver proposal granted (roomDriverKinds).
-  if kind notin roomKinds():
-    return $(%*{"error": "policy not admitted in this room: " & kind,
+  ##
+  ## An account-bound kind ("safe", "eip191") acts FROM an account a member disclosed
+  ## into this room (exo-a50.1.3): pass "safe@<CAIP-10>" to choose it, or the bare kind
+  ## when the room holds exactly one account of a family the kind can use. None →
+  ## {error: no-account}; several → {error: choose-account, accounts}. Never a guess.
+  let (k, acct) = splitPolicy(kind)
+  if k notin roomKinds():
+    return $(%*{"error": "policy not admitted in this room: " & k,
                 "admitted": roomKinds()})
-  gCoordKind = kind
+  if not kindNeedsAccount(k):
+    if acct.len > 0:
+      return $(%*{"error": "a " & k & " policy acts from no account", "kind": k})
+    gCoordKind = k
+    return $policyJson()
+  let fams = kindInfo(k).accountFamilies
+  var candidates: seq[RoomAccount]
+  for a in roomAccounts():
+    if a.family in fams: candidates.add a
+  var target = acct
+  if target.len == 0:
+    if candidates.len == 0:
+      return $(%*{"error": "no-account", "kind": k, "families": fams,
+                  "detail": "no member has disclosed an account this policy can act from — disclose one into the room first"})
+    if candidates.len > 1:
+      return $(%*{"error": "choose-account", "kind": k, "accounts": accountsJson(candidates)})
+    target = candidates[0].id
+  elif not candidates.anyIt(it.id == target.toLowerAscii()):
+    return $(%*{"error": "account not disclosed in this room: " & target, "kind": k})
+  gCoordKind = qualify(k, target.toLowerAscii())
   $policyJson()
 
 proc musterCoordinatePolicy(): string =
@@ -764,7 +866,8 @@ proc musterCoordinatePropose(effectJson: string): string =
   # The context every approval binds to (invariant 2, exo-ef1): a Safe intent is bound
   # to the Safe; a room-native decision to this room. MUSTER_INTENT_TTL_S overrides
   # how long the proposal stays signable (default a week).
-  let account = (if gCoordKind == "safe": toHex(gDriver.safe) else: gTopic)
+  let (pkind, pacct) = splitPolicy(gCoordKind)
+  let account = (if pkind == "safe" and pacct.len > 0: splitAccountId(pacct).address else: gTopic)
   var ttl = DefaultIntentTtl
   try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
   except ValueError: discard
@@ -778,11 +881,16 @@ proc musterCoordinateReannounce(): string =
   let n = liveReannounce(gSession, moduleKeystore(), driverFor, int64(epochTime()), gMsgSeq)
   $(%*{"reannounced": n})
 
-proc roomContext(): LinkContext =
-  ## The context our binding is scoped to — this Safe, valid for a day. Wall-clock
-  ## expiry is fine here: a binding is an admission-time credential, not a signing-
-  ## path artifact (so it never touches the deterministic log).
-  LinkContext(account: SAFE_ADDR, slot: "0", expiry: uint64(epochTime()) + 86_400)
+proc intentLinkContext(intentId: string): LinkContext =
+  ## The context our key binding is scoped to — THIS intent's account (the Safe it acts
+  ## from, or the room), valid for a day. Wall-clock expiry is fine here: a binding is an
+  ## admission-time credential, not a signing-path artifact (it never touches the
+  ## deterministic log). Per intent, so two accounts in one room never share a binding.
+  var account = gTopic
+  if gSession != nil:
+    let ctx = intentContext(gSession.log.allEvents(), intentId)
+    if not ctx.isPlaceholder and ctx.account.len > 0: account = ctx.account
+  LinkContext(account: account, slot: "0", expiry: uint64(epochTime()) + 86_400)
 
 proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: string): string =
   ## Add a contribution (in-app signed when `signatureHex` is empty, else pasted). The
@@ -790,7 +898,7 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
   ## in-process; this is plumbing over the module's session + keystore.
   if gSession == nil: return "not-joined"
   liveContribute(gSession, moduleKeystore(), driverFor, intentId, signatureHex, keyRef,
-                 roomContext(), uint64(epochTime()))
+                 intentLinkContext(intentId), uint64(epochTime()))
 
 proc musterCoordinateIntents(): string =
   ## The room's proposals, folded from the shared log and projected to what a card
@@ -818,16 +926,19 @@ proc musterCoordinateIntents(): string =
     let prof = drv.profile()
     o["n"] = %(if prof.n > 0: prof.n else: desc.threshold)
     o["profile"] = prof.toJson()
-    if drv of SafeDriver:
+    let (vkind, vacct) = splitPolicy(v.policy)
+    o["kind"] = %vkind
+    o["accountId"] = %vacct            # CAIP-10 for an account-bound intent, "" for a room kind
+    if prof.family == "evm.safe":
       # a Safe signature is bound to its EIP-712 domain (chainId + safe); surface it
       # so the verify view names exactly what the bytes are worthless outside of (F-5).
-      let sd = SafeDriver(drv)
       o["rail"] = %"safe"
-      o["chainId"] = %sd.chainId.int
-      o["safe"] = %toHex(sd.safe)
-      o["environment"] = %"anvil-31337"
+      let (_, cid) = evmChainId(prof.chain)
+      o["chainId"] = %cid.int
+      o["safe"] = %splitAccountId(prof.account).address
+      o["environment"] = %prof.chain    # CAIP-2 — the chain the signatures are bound to
     else:
-      o["rail"] = %v.policy
+      o["rail"] = %vkind
     if v.effectJson.len > 0:
       try: o["effect"] = parseJson(v.effectJson)
       except CatchableError: discard
@@ -875,15 +986,19 @@ proc moduleCatalogue(): seq[Material] =
   ## adapter accounts is a follow-on. It never leaves the instance; only a chosen
   ## material's PUBLIC face is ever shared (coordinate_share_material).
   let ks = moduleKeystore()
-  let chain = "evm:" & $gDriver.chainId
+  let chain = "evm:" & $gDevSafe.chainId   # the wallet's configured (dev) chain for receive addresses
   for r in ks.keyRefs():
     result.add Material(class: mcAuthority, chain: "", form: "secp256k1",
       handle: "keystore:secp:" & r, public: r, grade: mgVerifiedLocally, source: msKeystore)
     result.add Material(class: mcAddress, chain: chain, form: "public",
       handle: "keystore:addr:" & r, public: r, grade: mgVerifiedLocally, source: msKeystore)
-  result.add Material(class: mcAuthority, chain: chain, form: "safe-owner",
-    handle: "safe:" & toHex(gDriver.safe), public: toHex(gDriver.safe),
-    grade: mgDeclared, source: msConfigured)
+  # the Safes disclosed into the joined room (exo-a50.1.3) — declared authority,
+  # chain-verified by readiness (K3); never a module-global Safe
+  for a in roomAccounts():
+    if a.family != "evm.safe": continue
+    let (_, cid) = evmChainId(a.chain)
+    result.add Material(class: mcAuthority, chain: "evm:" & $cid, form: "safe-owner",
+      handle: "safe:" & a.address, public: a.address, grade: mgDeclared, source: msConfigured)
   # the native asset you can send on this chain — so compose_offers returns an amount
   # candidate for the proposer to pick (the balance-bounded amount is exo-bf9). Declared
   # (attested by config, not a live balance read here); a failed read is never a zero.
@@ -1046,9 +1161,12 @@ proc musterCoordinateAuthorization(intentId: string): string =
   let policy = intentPolicyOf(events, intentId)
   let folded = reduceIntents(events, driverFor)
   let root = folded[intentId].materialization.bytes
-  let environment = (if policy in ["safe", "eip191"]: "chain:" & $gDriver.chainId else: "room")
-  let account = (if policy == "safe": "safe:" & toHex(gDriver.safe) else: "room")
-  let a = issueAuthorization(moduleKeystore(), intentId, capabilityOf(policy, effectJson),
+  let (akind, aacct) = splitPolicy(policy)
+  let (achain, aaddr) = splitAccountId(aacct)
+  let (isEvm, acid) = evmChainId(achain)
+  let environment = (if aacct.len > 0 and isEvm: "chain:" & $acid else: "room")
+  let account = (if akind == "safe" and aacct.len > 0: "safe:" & aaddr else: "room")
+  let a = issueAuthorization(moduleKeystore(), intentId, capabilityOf(akind, effectJson),
                              environment, account, root, uint64(epochTime()) + 600)
   result = $a.toJson()
   if gLpDebug: stderr.writeLine("MUSTER-LP authorization " & result)
@@ -1077,13 +1195,21 @@ proc lezReadyClosure(adapter: LezAdapter, minRaw: string): proc(): Grade {.gcsaf
     of "missing": (rdMissing, d)
     else: (rdUnknown, d))
 
-proc hostFacts(): HostFacts =
-  ## The host's facts → the readiness probe. The Safe owner set is the driver's (it
-  ## recognizes this instance too, see driverForKind); the roster is the membership fold.
-  var facts = HostFacts(rpcUrl: gRpcUrl, expectedChainId: gDriver.chainId.int,
-                        myAddress: myAddress(), myEd: moduleKeystore().encIdentity().ed,
-                        signers: gDriver.owners, roster: currentRoster(),
-                        safe: gDriver.safe)
+proc hostFacts(policy = ""): HostFacts =
+  ## The host's facts → the readiness probe, for one intent's POLICY: an account-bound
+  ## policy's expected chain, Safe and signer set come from the account a member
+  ## disclosed (exo-a50.1.3); the roster is the membership fold. No policy (the room's
+  ## connectivity) → no account facts, so an account requirement grades unknown.
+  var facts = HostFacts(rpcUrl: gRpcUrl, myAddress: myAddress(),
+                        myEd: moduleKeystore().encIdentity().ed, roster: currentRoster())
+  let (_, pacct) = splitPolicy(policy)
+  if pacct.len > 0:
+    let (found, a) = findAccount(roomAccounts(), pacct)
+    if found:
+      let (_, cid) = evmChainId(a.chain)
+      facts.expectedChainId = cid.int
+      facts.safe = toAddress(a.address)
+      facts.signers = a.signers.mapIt(toAddress(it))
   # The Safe owner set is read FROM THE CHAIN (getOwners, F-10), never a configured or
   # self-injected set: without a chain read the authority grade is unknown, and a key the
   # chain does not recognize grades missing (rule s4, contracts/specs/derived-exo-45e, K3).
@@ -1116,10 +1242,11 @@ proc musterCoordinateReadiness(intentId: string): string =
   let drv = driverForKind(policy)
   let effect = effectFromJson(effectJson)
   let m = drv.manifest(effect)
-  let r = assessReadiness(m, probeFromFacts(hostFacts()))
+  let r = assessReadiness(m, probeFromFacts(hostFacts(policy)))
   var o = r.toJson()
   o["intentId"] = %intentId
   o["policy"] = %policy
+  o["kind"] = %kindOf(policy)
   o["manifest"] = m.toJson()
   o["profile"] = drv.profile().toJson()   # which multisig family, for this instance (exo-a50.1.1)
   try: o["effect"] = parseJson(effectJson)
@@ -1256,7 +1383,8 @@ proc musterCoordinateAccount(): string =
   ## non-Safe policy settles nothing on-chain, so there is no balance to show. Never a
   ## false balance: an unreachable RPC surfaces an error, not a zero.
   let policy = gCoordKind
-  var o = %*{"policy": policy}
+  let (kind, acctId) = splitPolicy(policy)
+  var o = %*{"policy": policy, "kind": kind, "accountId": acctId}
   let acting = toHex(myAddress())
   o["actingAs"] = %acting
   # WHAT identity backs a signature here. Safe approvals and eip191 attestations are
@@ -1264,24 +1392,31 @@ proc musterCoordinateAccount(): string =
   # Safe transactions) — NOT the Ed25519/X25519 encryption identity that names you in
   # the room and encrypts messages. The threshold/frost policies instead endorse with
   # that Ed25519 encryption key. Disclosed so a signer always knows what they're using.
-  o["signsWith"] = %(if policy in ["safe", "eip191"]: "secp256k1 authorization key"
+  o["signsWith"] = %(if kindNeedsAccount(kind): "secp256k1 authorization key"
                      else: "Ed25519 encryption identity")
-  # A recognized-signer check for the secp policies: your key must be a configured
-  # signer or your signature won't count (the "nothing happened" you'd otherwise hit).
-  if policy in ["safe", "eip191"]:
-    var isOwner = false
-    for ow in gDriver.owners:
-      if toHex(ow) == acting: isOwner = true
-    o["isSigner"] = %isOwner
-    o["isOwner"] = %isOwner                 # kept for the Safe composer's existing read
-    o["signerSet"] = %(if policy == "eip191": "the room's Safe owners (attesters)"
-                       else: "the Safe owners")
-  if policy == "safe":
-    o["account"] = %toHex(gDriver.safe)
+  if not kindNeedsAccount(kind): return $o
+  # An account-bound policy acts FROM an account a member disclosed into this room
+  # (exo-a50.1.3) — its signer set, its balance, its nonce. None chosen → say so.
+  let (found, a) = findAccount(roomAccounts(), acctId)
+  if not found:
+    o["error"] = %"no-account"
+    return $o
+  o["accountLabel"] = %a.label
+  o["disclosedBy"] = %a.disclosedBy
+  # A recognized-signer check: your key must be one of the account's DISCLOSED signers
+  # or your signature won't count (the "nothing happened" you'd otherwise hit).
+  let isOwner = acting.toLowerAscii() in a.signers
+  o["isSigner"] = %isOwner
+  o["isOwner"] = %isOwner                 # kept for the Safe composer's existing read
+  o["signerSet"] = %(if kind == "eip191": "the signers of " & (if a.label.len > 0: a.label else: a.id)
+                     else: "the Safe owners")
+  if kind == "safe":
+    o["account"] = %a.address             # the Safe address (the composer's existing read)
+    let safeAddr = toAddress(a.address)
     var assets = newJArray()
     var eth = %*{"symbol": "ETH", "decimals": 18}
     try:
-      let raw = hexToDec(getBalance(gRpcUrl, gDriver.safe))
+      let raw = hexToDec(getBalance(gRpcUrl, safeAddr))
       eth["raw"] = %raw
       eth["display"] = %(formatUnits(raw, 18) & " ETH")
     except CatchableError as e:
@@ -1293,7 +1428,7 @@ proc musterCoordinateAccount(): string =
     # right nonce; without it every proposal used 0 and only the first could settle
     # (exo-275). Best-effort: a failed read omits it and the UI falls back to 0.
     try:
-      o["nonce"] = %(safeNonce(gRpcUrl, gDriver.safe).int)
+      o["nonce"] = %(safeNonce(gRpcUrl, safeAddr).int)
     except CatchableError:
       discard
   $o
@@ -1310,9 +1445,14 @@ proc musterCoordinateSubmit(intentId: string): string =
   gSession.poll()
   let events = gSession.log.allEvents()
   let policy = intentPolicyOf(events, intentId)
-  if policy != "safe":
+  let drv = driverFor(policy)
+  if drv.profile().family != "evm.safe":
     return $(%*{"id": intentId, "error": "not-onchain",
-                "detail": "a " & policy & " endorsement settles nothing on-chain"})
+                "detail": "a " & kindOf(policy) & " endorsement settles nothing on-chain"})
+  # The intent's OWN Safe — the account a member disclosed and the policy names
+  # (exo-a50.1.3). The downcast is the one Safe-specific step left; the settlement seam
+  # (exo-a50.1.5) replaces it.
+  let sd = SafeDriver(drv)
   let st = intentState(events, driverFor, intentId)
   if st != "executable":
     return $(%*{"id": intentId, "error": "not-executable", "state": st})
@@ -1324,9 +1464,9 @@ proc musterCoordinateSubmit(intentId: string): string =
   let effect = effectFromJson(effectJson)
   # Re-derive the exact bytes the owners signed (the safeTxHash) — never trusted from
   # the log, always recomputed from the effect (invariant 1 / F-4).
-  let ctx = SigningContext(environment: "anvil-31337", account: SAFE_ADDR, slot: "0",
+  let ctx = SigningContext(environment: sd.environment(), account: toHex(sd.safe), slot: "0",
                            expiry: high(uint64))
-  let it0 = newIntent(gDriver, effect, ctx)
+  let it0 = newIntent(sd, effect, ctx)
   var hash: array[32, byte]
   for i in 0 ..< 32: hash[i] = it0.materialization.bytes[i]
   # Gather the owner signatures from the shared log (dedup by the recovered signer,
@@ -1337,14 +1477,14 @@ proc musterCoordinateSubmit(intentId: string): string =
     let p = e.key.split('/')
     if p.len >= 4 and p[0] == "intent" and p[1] == intentId and p[2] == "sig":
       let sig65 = toSig65(hexToBytes(e.value))
-      if not recoversToOwner(hash, sig65, gDriver.owners): continue
+      if not recoversToOwner(hash, sig65, sd.owners): continue
       let key = toHex(ecrecover(hash, sig65))
       if key in seenSigner: continue
       seenSigner.add key
       signed.add (ecrecover(hash, sig65), sig65)
-  if signed.len < gDriver.threshold:
+  if signed.len < sd.threshold:
     return $(%*{"id": intentId, "error": "insufficient-signatures",
-                "have": signed.len, "need": gDriver.threshold})
+                "have": signed.len, "need": sd.threshold})
   signed.sort(cmpSigner)
   var sigbytes: seq[byte]
   for (_, s) in signed: sigbytes.add @s
@@ -1354,7 +1494,8 @@ proc musterCoordinateSubmit(intentId: string): string =
   try:
     let tx = toSafeTx(effect)
     let calldata = assembleExecTransaction(tx.to, tx.value, @[], sigbytes)
-    txHash = submitExecTransaction(gRpcUrl, toAddr(OWNER0), gDriver.safe, calldata)
+    # relayer: anvil's unlocked account 0 (a dev relayer; exo-a50.1.5 makes it a seam)
+    txHash = submitExecTransaction(gRpcUrl, toAddr(OWNER0), sd.safe, calldata)
   except CatchableError as e:
     return $(%*{"id": intentId, "error": "rpc-unreachable", "detail": e.msg})
   # Fold the room forward: submit event → every member converges on "submitted".
@@ -1449,7 +1590,11 @@ proc musterCoordinateAvailableActions(): string =
 
 proc musterCoordinateRequestJoin(): string =
   if gSession == nil: return "not-joined"
-  gSession.requestJoin(moduleKeystore().bindingFor(roomContext()))
+  # A join request is scoped to the ROOM (no account yet — a joiner has disclosed
+  # nothing); the admitter checks the binding's signer against the room's disclosed
+  # accounts' signers (coordinate_pending.bindsOwner), never a module-global Safe.
+  gSession.requestJoin(moduleKeystore().bindingFor(
+    LinkContext(account: gTopic, slot: "0", expiry: uint64(epochTime()) + 86_400)))
   "ok"
 
 proc musterContacts(): string =
@@ -1475,7 +1620,7 @@ proc musterCoordinatePending(): string =
     let idHex = toHex(st.enc.toBytes())
     arr.add %*{"identity": idHex,
                "alias": contactBook().aliasOf(idHex),
-               "bindsOwner": bindingBinds(st, gDriver.owners, nowSec)}
+               "bindsOwner": bindingBinds(st, allSigners(roomAccounts()), nowSec)}
   if gLpDebug:
     stderr.writeLine("MUSTER-LP pending=" & $arr.len & " members=" &
                      $gSession.members().len & " msgs=" &
@@ -1798,7 +1943,7 @@ proc musterSettings(): string =
   $(%*{
     "rpc": gRpcUrl,
     "delivery": gDeliveryConfig,
-    "environment": "anvil-31337",
+    "environment": "eip155:" & $gDevSafe.chainId.int,   # the wallet's dev chain (CAIP-2)
     "identity": {"address": toHex(ks.address()),
                  "ed25519": toHex(enc.ed), "x25519": toHex(enc.x)}
   })

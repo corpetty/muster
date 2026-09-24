@@ -126,6 +126,20 @@ proc getOwners*(url: string, safe: Address): tuple[known: bool, owners: seq[Addr
   except CatchableError as e:
     (false, @[], "RPC unreachable: " & e.msg)
 
+proc getThreshold*(url: string, safe: Address): tuple[known: bool, threshold: int, detail: string] =
+  ## The Safe's threshold, read from the chain via `eth_call getThreshold()` — with
+  ## getOwners, what a member's disclosure of the account is checked against
+  ## (exo-a50.1.3). Never raises; `known` is false when the read fails.
+  let sel = keccak256(strBytes("getThreshold()"))
+  let data = @[sel[0], sel[1], sel[2], sel[3]]
+  try:
+    let r = rpc(url, "eth_call", %*[{"to": toHex0x(safe), "data": toHex0x(data)}, "latest"])
+    let h = (if r.isNil or r.kind == JNull: "" else: r.getStr(""))
+    if h.len <= 2: return (false, 0, "getThreshold() returned no data")
+    (true, parseHexInt(h[max(2, h.len - 16) .. ^1]), "read from chain")
+  except CatchableError as e:
+    (false, 0, "RPC unreachable: " & e.msg)
+
 proc probeRpc*(url: string): tuple[ok: bool, chainId: int, detail: string] =
   ## A cheap liveness probe of the user's RPC endpoint (invariant 8: untrusted,
   ## user-chosen infra, so its reachability must be *visible*, never assumed).

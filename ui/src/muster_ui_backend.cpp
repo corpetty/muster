@@ -211,6 +211,7 @@ void MusterUiBackend::joinRoom(const QString &topic)
     loadConnectivity();    // the delivery node + whatever this room's proposals introduced
     loadConversations();   // the room list — this join may have added a room
     loadDrivers();         // the room's admitted policy set (driver-as-proposal)
+    loadAccounts();        // the accounts members have disclosed into this room (exo-a50.1.3)
     loadPending();         // anyone already asking to join this topic
 }
 
@@ -622,7 +623,51 @@ void MusterUiBackend::setPolicy(const QString &kind)
     // hardcoded. Result is {policy, threshold, domain}.
     const QString r = modules().muster_module.coordinate_set_policy(kind);
     qInfo() << "[muster_ui] coordinate_set_policy(" << kind << ") ->" << r;
+    // A refused choice (no-account, choose-account, not admitted) never overwrites the
+    // policy actually in force: it lands on policyErrorJson, and the policy is re-read.
+    const QJsonDocument d = QJsonDocument::fromJson(r.toUtf8());
+    if (d.isObject() && d.object().contains(QStringLiteral("error"))) {
+        setPolicyErrorJson(r);
+        loadPolicy();
+        return;
+    }
+    setPolicyErrorJson(QStringLiteral("{}"));
     setPolicyJson(r);
+}
+
+void MusterUiBackend::loadAccounts()
+{
+    // coordinate_accounts → the accounts members disclosed into the room, each with the
+    // chain's verdict on the disclosure (a read through the user's RPC — so this runs on
+    // join and after a disclose, not on the 1s tick).
+    setAccountsJson(modules().muster_module.coordinate_accounts());
+}
+
+void MusterUiBackend::discloseAccount(const QString &accountJson)
+{
+    // coordinate_disclose_account → disclose an account into the room as this member.
+    const QString r = modules().muster_module.coordinate_disclose_account(accountJson);
+    qInfo() << "[muster_ui] coordinate_disclose_account ->" << r;
+    setAccountDiscloseJson(r);
+    loadAccounts();
+    loadPolicy();
+}
+
+void MusterUiBackend::discloseSuggestedAccount()
+{
+    // The local test Safe describe() suggests (the anvil fixture), disclosed as-is with
+    // its owners + threshold (the fixture exposes no getOwners() to read them from).
+    const QJsonDocument d = QJsonDocument::fromJson(modules().muster_module.describe().toUtf8());
+    if (!d.isObject()) { setAccountDiscloseJson(QStringLiteral("{\"error\":\"no suggestion\"}")); return; }
+    const QJsonObject s = d.object();
+    QJsonObject a;
+    a.insert(QStringLiteral("family"), s.value(QStringLiteral("family")).toString(QStringLiteral("evm.safe")));
+    a.insert(QStringLiteral("chain"), s.value(QStringLiteral("chain")));
+    a.insert(QStringLiteral("address"), s.value(QStringLiteral("safe")));
+    a.insert(QStringLiteral("label"), s.value(QStringLiteral("label")));
+    a.insert(QStringLiteral("signers"), s.value(QStringLiteral("owners")));
+    a.insert(QStringLiteral("threshold"), s.value(QStringLiteral("threshold")));
+    discloseAccount(QString::fromUtf8(QJsonDocument(a).toJson(QJsonDocument::Compact)));
 }
 
 void MusterUiBackend::loadPolicy()
@@ -668,6 +713,9 @@ void MusterUiBackend::onContextReady()
                     // Audit self-test (exo-403): MUSTER_AUTOPOLICY picks the driver first,
                     // MUSTER_AUTOAPPROVE approves in-app, MUSTER_AUTOAUDIT then calls the
                     // SAME slot the card's "Download audit trail" button calls.
+                    // MUSTER_AUTODISCLOSE discloses the local test Safe first, so an
+                    // account-bound policy (safe) has an account to act from (exo-a50.1.3).
+                    if (!qgetenv("MUSTER_AUTODISCLOSE").isEmpty()) discloseSuggestedAccount();
                     const QByteArray autopolicy = qgetenv("MUSTER_AUTOPOLICY");
                     if (!autopolicy.isEmpty()) setPolicy(QString::fromUtf8(autopolicy));
                     const QString id = modules().muster_module.coordinate_propose(effect);

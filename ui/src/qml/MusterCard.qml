@@ -139,8 +139,10 @@ Rectangle {
     // "From you" (exo-45e K6): which of my own holdings fill the slots this asks of me.
     readonly property var offers: (cardRoot.card && cardRoot.card.offers) ? cardRoot.card.offers : null
     // The policy this intent runs under (from readiness), used to gate the picker below.
-    readonly property string policy: (cardRoot.readiness && cardRoot.readiness.policy)
-                                     ? String(cardRoot.readiness.policy) : ""
+    readonly property string policy: (cardRoot.readiness && cardRoot.readiness.kind)
+                                     ? String(cardRoot.readiness.kind)
+                                     : (cardRoot.readiness && cardRoot.readiness.policy)
+                                       ? String(cardRoot.readiness.policy).split("@")[0] : ""
     // The slots I fill by DISCLOSING material — an address or asset the effect needs
     // before it completes. Authority slots are excluded on purpose: those are filled by
     // SIGNING (the Approve button), never by sharing, so they don't belong in this picker.

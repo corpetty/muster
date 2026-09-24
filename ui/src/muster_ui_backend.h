@@ -62,6 +62,9 @@ public:
     void loadActivity() override;
     void submitInRoom(const QString &intentId) override;
     void loadDrivers() override;
+    void loadAccounts() override;
+    void discloseAccount(const QString &accountJson) override;
+    void discloseSuggestedAccount() override;
     void loadAvailableActions() override;
     void executeInRoom(const QString &intentId) override;
     void loadConnectivity() override;

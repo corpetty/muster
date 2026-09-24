@@ -151,7 +151,7 @@ proc liveSubmitPrecheck*(s: CoordinationSession, driverFor: DriverFor,
   s.poll()
   let events = s.log.allEvents()
   let policy = intentPolicyOf(events, intentId)
-  if policy != "safe": return "not-onchain"
+  if kindOf(policy) != "safe": return "not-onchain"
   if intentState(events, driverFor, intentId) != "executable": return "not-executable"
   let ctx = intentContext(events, intentId)
   if ctx.isPlaceholder: return "no-context"
