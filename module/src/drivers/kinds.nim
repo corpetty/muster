@@ -14,7 +14,7 @@
 ##     propose / contribute paths refuse it outright.
 ## Each kind's family is held to contracts/families/registry.json by tests/kinds_test.nim.
 
-import std/[json, sequtils]
+import std/[json, sequtils, strutils]
 import ./driver
 import ./profile
 
@@ -25,16 +25,45 @@ type
     label*: string            ## what a person calls it on the picker
     composes*: seq[string]    ## the proposals it serves: "payment" | "statement" | "action"
     founding*: bool           ## admitted in every room from the start; else only by an approved add-driver
+    accountFamilies*: seq[string]
+      ## non-empty = the kind acts FROM an account a member disclosed into the room
+      ## (exo-a50.1.3): its intents carry "<kind>@<CAIP-10>" and resolve to that
+      ## account; these are the account families it can bind
 
 const Kinds*: seq[KindInfo] = @[
-  KindInfo(kind: "safe", family: "evm.safe", label: "Safe", composes: @["payment"], founding: true),
+  KindInfo(kind: "safe", family: "evm.safe", label: "Safe", composes: @["payment"], founding: true,
+           accountFamilies: @["evm.safe"]),
   KindInfo(kind: "threshold", family: "room.threshold", label: "Threshold", composes: @["statement"], founding: true),
   KindInfo(kind: "frost", family: "room.frost-scaffold", label: "FROST", composes: @["statement"], founding: true),
   KindInfo(kind: "invoke", family: "room.invoke", label: "Module action", composes: @["action"], founding: true),
-  KindInfo(kind: "eip191", family: "room.eip191-attest", label: "Attest", composes: @["statement"], founding: true),
+  KindInfo(kind: "eip191", family: "room.eip191-attest", label: "Attest", composes: @["statement"], founding: true,
+           accountFamilies: @["evm.safe"]),
   KindInfo(kind: "unanimous", family: "room.threshold", label: "Unanimous", composes: @["statement"], founding: false)]
 
-proc isKnownKind*(kind: string): bool = Kinds.anyIt(it.kind == kind)
+# ── a policy is a kind, optionally bound to an account ─────────────────────────
+# An account-bound intent's policy is "<kind>@<CAIP-10 account>" (exo-a50.1.3), so the
+# intent id — which commits to the policy — commits to WHICH account it acts from: the
+# same effect on two Safes is two intents. A room kind's policy is the bare kind.
+proc splitPolicy*(policy: string): tuple[kind, account: string] =
+  let i = policy.find('@')
+  if i < 0: (policy, "") else: (policy[0 ..< i], policy[i+1 .. ^1])
+
+proc kindOf*(policy: string): string = splitPolicy(policy).kind
+
+proc qualify*(kind, account: string): string =
+  if account.len == 0: kind else: kind & "@" & account
+
+proc isKnownKind*(kind: string): bool =
+  ## Whether the policy's KIND is on the list (a qualified policy is its kind).
+  let k = kindOf(kind)
+  Kinds.anyIt(it.kind == k)
+
+proc kindInfo*(kind: string): KindInfo =
+  let k = kindOf(kind)
+  for i in Kinds:
+    if i.kind == k: return i
+
+proc kindNeedsAccount*(kind: string): bool = kindInfo(kind).accountFamilies.len > 0
 
 proc foundingKinds*(): seq[string] =
   for k in Kinds:
@@ -53,6 +82,7 @@ proc kindsJson*(admitted: seq[string]): JsonNode =
   for k in Kinds:
     result.add %*{"kind": k.kind, "family": k.family, "label": k.label,
                   "composes": k.composes, "founding": k.founding,
+                  "accountFamilies": k.accountFamilies,
                   "admitted": k.kind in admitted}
 
 # ── an unknown kind: shown, never guessed ────────────────────────────────────

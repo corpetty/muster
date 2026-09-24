@@ -267,8 +267,37 @@ Item {
         try { return JSON.parse(backend ? backend.policyJson : "{}"); }
         catch (e) { return ({}); }
     }
+    // The compose default's KIND ("safe", "threshold", …) — an account-bound policy is
+    // "<kind>@<CAIP-10 account>" (exo-a50.1.3), so the picker compares the kind.
     readonly property string policyKind:
-        (room.policy && room.policy.policy) ? String(room.policy.policy) : "safe"
+        (room.policy && room.policy.kind) ? String(room.policy.kind)
+        : (room.policy && room.policy.policy) ? String(room.policy.policy).split("@")[0] : ""
+    // the account the compose default acts from (CAIP-10), "" for a room kind
+    readonly property string policyAccount: (room.policy && room.policy.account) ? String(room.policy.account) : ""
+    // the last policy choice the module refused (no-account / choose-account / not admitted)
+    readonly property var policyError: {
+        try { return JSON.parse(backend ? backend.policyErrorJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    // The accounts members have disclosed into this room (coordinate_accounts, exo-a50.1.3).
+    readonly property var roomAccounts: {
+        try { var j = JSON.parse(backend ? backend.accountsJson : "[]"); return Array.isArray(j) ? j : []; }
+        catch (e) { return []; }
+    }
+    readonly property var discloseResult: {
+        try { return JSON.parse(backend ? backend.accountDiscloseJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    // the disclosed accounts a kind can act from (its accountFamilies)
+    function accountsForKind(k) {
+        var info = room.kindInfo(k);
+        var fams = (info && info.accountFamilies) ? info.accountFamilies : [];
+        return room.roomAccounts.filter(function (a) { return fams.indexOf(a.family) >= 0; });
+    }
+    function kindNeedsAccount(k) {
+        var info = room.kindInfo(k);
+        return !!(info && info.accountFamilies && info.accountFamilies.length > 0);
+    }
 
     // How many people must be in the room before a proposal can be submitted. A
     // proposal is something the room acts on together — it needs enough of the people
@@ -348,7 +377,7 @@ Item {
             rounds: Number((it && it.rounds) || 1),
             round: Number((it && it.round) || 1),
             roundApprovals: Number((it && it.roundApprovals) || 0),
-            policy: (it && it.policy) ? String(it.policy) : "",
+            policy: (it && it.kind) ? String(it.kind) : (it && it.policy) ? String(it.policy).split("@")[0] : "",
             // who declined to take part
             declines: Number((it && it.declines) || 0),
             decliners: (it && it.decliners) ? it.decliners : [],
@@ -1117,6 +1146,58 @@ Item {
                     }
                 }
 
+                // FROM which account (exo-a50.1.3): an account-bound kind (Safe, Attest) acts
+                // from an account a member disclosed into this room. One chip per account the
+                // kind can use; none → say so and point at the room's Accounts panel. A refused
+                // choice (no-account / choose-account) is shown, never silently replaced.
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.tiny
+                    visible: room.composeType !== "action" && room.kindNeedsAccount(room.policyKind)
+                             || (room.policyError && room.policyError.error !== undefined)
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        visible: room.kindNeedsAccount(room.policyKind)
+                        LogosText {
+                            text: qsTr("From")
+                            color: Theme.palette.textTertiary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        Repeater {
+                            model: room.accountsForKind(room.policyKind)
+                            delegate: LogosButton {
+                                required property var modelData
+                                objectName: "roomAccount_" + String(modelData.id)
+                                Layout.preferredWidth: 170
+                                text: modelData.label ? String(modelData.label)
+                                      : String(modelData.address).slice(0, 8) + "…" + String(modelData.address).slice(-4)
+                                variant: room.policyAccount === String(modelData.id)
+                                         ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                                onClicked: if (room.backend) room.backend.setPolicy(room.policyKind + "@" + String(modelData.id))
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+                    LogosText {
+                        Layout.fillWidth: true
+                        visible: room.policyError && room.policyError.error !== undefined
+                        text: {
+                            var e = room.policyError || {};
+                            if (e.error === "no-account")
+                                return qsTr("No one has disclosed an account this can act from. Disclose one under Accounts, beside the room.");
+                            if (e.error === "choose-account")
+                                return qsTr("Several accounts are disclosed. Choose which one this acts from.");
+                            return e.error ? String(e.error) : "";
+                        }
+                        color: Theme.palette.warning
+                        font.pixelSize: Theme.typography.badgeText
+                        wrapMode: Text.WordWrap
+                    }
+                }
+
                 // attest: WHAT identity backs your attestation. An EIP-191 attestation
                 // is a personal_sign with your secp256k1 AUTHORIZATION key — the same
                 // key that signs Safe transactions, NOT the encryption identity that
@@ -1608,6 +1689,15 @@ Item {
             ConnectionIndicators {
                 Layout.fillWidth: true
                 status: room.connectivity
+            }
+
+            // The accounts members have disclosed into this room (exo-a50.1.3).
+            RoomAccounts {
+                Layout.fillWidth: true
+                accounts: room.roomAccounts
+                discloseResult: room.discloseResult
+                onDiscloseRequested: function (accountJson) { if (room.backend) room.backend.discloseAccount(accountJson); }
+                onDiscloseSuggested: if (room.backend) room.backend.discloseSuggestedAccount()
             }
 
             Rectangle {

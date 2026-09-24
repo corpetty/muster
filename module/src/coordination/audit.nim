@@ -34,6 +34,7 @@ import ../drivers/frost
 import ../drivers/invoke
 import ../drivers/eip191
 import ../drivers/manifest
+import ../drivers/kinds       # kindOf: an account-bound policy is "<kind>@<account>"
 import ../intents/materialization
 import ../intents/signing_payload
 import ../intents/provenance
@@ -127,7 +128,7 @@ proc fileDriver(policy: string, ctx: SigningContext): Driver =
   ## The driver as far as the file can reconstruct it: enough to re-derive the
   ## materialization (its canonicalize), never the signer set — whether a signer is a
   ## Safe owner or on a roster is a fact outside the file.
-  case policy
+  case kindOf(policy)   # an account-bound policy is "<kind>@<account>" (exo-a50.1.3)
   of "safe":
     if not ctx.environment.startsWith("eip155:"): refuse("a Safe intent's environment is not an EVM chain")
     var chain: uint64

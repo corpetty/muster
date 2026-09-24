@@ -457,9 +457,10 @@ Item {
             Layout.fillWidth: true
         }
 
-        // ── the Safe account being coordinated ────────────────────────────────
-        // Shown from describe(); a null account renders as "not loaded", never as
-        // a fabricated address.
+        // ── the local test Safe (a suggestion) ─────────────────────────────────
+        // Shown from describe(): the anvil fixture a member MAY disclose into a room.
+        // It is not a room's account — accounts live in the room, disclosed by members
+        // (exo-a50.1.3). A null account renders as "not loaded", never fabricated.
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: acctCol.implicitHeight + 2 * Theme.spacing.medium
@@ -475,7 +476,7 @@ Item {
                 spacing: Theme.spacing.tiny
 
                 LogosText {
-                    text: qsTr("SAFE ACCOUNT")
+                    text: qsTr("LOCAL TEST SAFE · disclose it into a room to use it")
                     color: Theme.palette.textTertiary
                     font.family: Theme.typography.mono
                     font.pixelSize: Theme.typography.badgeText

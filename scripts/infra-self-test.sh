@@ -17,15 +17,22 @@ D=$(mktemp -d)
 EFFECT='{"to":"0x70997970C51812dc3A010C7d01b50e0d17dc79C8","value":1,"nonce":0}'
 echo "topic: $TOPIC  policy: $POLICY"
 MUSTER_LP_DEBUG=1 MUSTER_DELIVERY_CONFIG="$CFG" MUSTER_AUTOJOIN_TOPIC="$TOPIC" \
-MUSTER_AUTOPROPOSE="$EFFECT" MUSTER_AUTOPOLICY="$POLICY" LOGOS_INSTANCE_ID=infratest QT_QPA_PLATFORM=offscreen \
+MUSTER_AUTOPROPOSE="$EFFECT" MUSTER_AUTOPOLICY="$POLICY" MUSTER_AUTODISCLOSE=1 LOGOS_INSTANCE_ID=infratest QT_QPA_PLATFORM=offscreen \
   setsid "$RUNNER" --user-dir "$D/A" >"$D/A.log" 2>&1 &
 echo "runner launched offscreen; waiting for join → propose (up to 40s)..."
-for i in $(seq 1 8); do
+# The proposal logs its readiness; wait for a connectivity line AFTER it (the join's
+# own connectivity lines come first, and more than one may land before the proposal).
+after_propose() {
+  awk '/MUSTER-LP readiness/{seen=1} seen && /MUSTER-LP connectivity/{n++} END{print n+0}' "$D/A.log" 2>/dev/null
+}
+for i in $(seq 1 10); do
   sleep 5
-  [ "$(grep -ac 'MUSTER-LP connectivity' "$D/A.log" 2>/dev/null)" -ge 2 ] && break
+  [ "$(after_propose)" -ge 1 ] && break
 done
 ok=1
-lines=$(grep -a 'MUSTER-LP connectivity' "$D/A.log" | sed 's/.*MUSTER-LP connectivity //')
+lines=$( { grep -a 'MUSTER-LP connectivity' "$D/A.log" | head -1;
+           awk '/MUSTER-LP readiness/{seen=1} seen && /MUSTER-LP connectivity/' "$D/A.log" | tail -1; } \
+         | sed 's/.*MUSTER-LP connectivity //')
 [ -n "$lines" ] || { echo "FAIL: no connectivity payload"; ok=0; }
 echo "── on join (before any proposal) ──"
 first=$(echo "$lines" | head -1); echo "$first"
@@ -34,7 +41,7 @@ echo "$first" | python3 -c 'import sys,json; r=json.load(sys.stdin)["rows"]; ass
 echo "── after the $POLICY proposal ──"
 last=$(echo "$lines" | tail -1); echo "$last"
 if [ "$POLICY" = safe ]; then
-  echo "$last" | python3 -c 'import sys,json; r={x["key"]:x for x in json.load(sys.stdin)["rows"]}; assert "rpc" in r, r; assert r["rpc"]["introducedBy"] and r["rpc"]["introducedBy"][0]["policy"]=="safe", r["rpc"]' \
+  echo "$last" | python3 -c 'import sys,json; r={x["key"]:x for x in json.load(sys.stdin)["rows"]}; assert "rpc" in r, r; assert r["rpc"]["introducedBy"] and r["rpc"]["introducedBy"][0]["policy"].split("@")[0]=="safe", r["rpc"]' \
     || { echo "FAIL: the Safe proposal did not introduce the RPC"; ok=0; }
 else
   echo "$last" | python3 -c 'import sys,json; r=[x["key"] for x in json.load(sys.stdin)["rows"]]; assert "rpc" not in r, r' \

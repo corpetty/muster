@@ -38,6 +38,7 @@ Item {
 
     // a policy kind as the room names it
     function policyName(p) {
+        p = String(p || "").split("@")[0];   // an account-bound policy is "<kind>@<account>"
         return p === "safe" ? qsTr("Safe")
              : p === "eip191" ? qsTr("EIP-191")
              : p === "frost" ? qsTr("FROST")
