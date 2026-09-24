@@ -24,6 +24,7 @@ import ../intents/materialization
 import ../intents/signing_payload
 import ../intents/provenance     # InputClass — the spec's accountability vocabulary (inv 10)
 import ../drivers/driver
+import ../drivers/kinds     # the one list of driver kinds (exo-a50.1.2)
 export lifecycle.Intent, lifecycle.LifecycleState
 export provenance.InputClass    # so consumers can name a lineage entry's class
 
@@ -158,7 +159,7 @@ proc roomDriverKinds*(events: seq[Event], driverFor: DriverFor): seq[string] =
   ## governance intent the room APPROVED (reached executable or beyond) admits its
   ## kind. Deterministic: every member derives the same capability set from the same
   ## events, and a capability appears only once the group has actually agreed to it.
-  result = @["safe", "threshold", "frost", "invoke", "eip191"]   # the founding capabilities
+  result = foundingKinds()   # the founding capabilities — from the one kind list (kinds.nim)
   let intents = reduceIntents(events, driverFor)
   for id, it in intents:
     if $it.state notin ["executable", "submitted", "final"]: continue
@@ -168,7 +169,8 @@ proc roomDriverKinds*(events: seq[Event], driverFor: DriverFor): seq[string] =
       let j = parseJson(ej)
       if j.kind == JObject and j.hasKey("effect") and j["effect"].getStr() == "add-driver":
         let k = (if j.hasKey("kind"): j["kind"].getStr() else: "")
-        if k.len > 0 and k notin result: result.add k
+        # only a kind this client has: admitting one it lacks would be a guess (exo-a50.1.2)
+        if k.len > 0 and isKnownKind(k) and k notin result: result.add k
     except CatchableError: discard
 
 # ── render-ready projection (what a card needs, still a pure fold) ─────────────

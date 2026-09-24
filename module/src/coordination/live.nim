@@ -16,6 +16,7 @@ import ../crypto/curve25519
 import ../drivers/driver
 import ../drivers/safe
 import ../drivers/eip191
+import ../drivers/kinds      # supported(): refuse a kind this client has no driver for
 import ../intents/materialization
 import ../intents/lifecycle
 import ../intents/signing_payload
@@ -42,6 +43,9 @@ proc liveProposeIntent*(s: CoordinationSession, ks: Keystore, driverFor: DriverF
   # The intent id commits to its policy, so the SAME effect under two policies is two
   # distinct intents (an intent is a policy boundary). The policy is declared in the
   # log keyed by that id, so every member folds this intent under the same driver.
+  # A kind this client has no driver for is refused — never proposed under a guess
+  # (exo-a50.1.2): nobody here could verify a contribution to it.
+  if not driverFor(policy).supported(): return "unsupported-driver"
   let id = intentIdFor(effectJson, policy)
   s.publish(policyDeclEvent(id, policy))
   s.publish(proposeEvent(id, effectJson))
@@ -80,6 +84,9 @@ proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
   let drv = driverFor(intentPolicyOf(events, intentId))   # THIS intent's own policy
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return "unknown-intent"
+  # Under a kind this client has no driver for, nothing is signed or published: which
+  # key, which bytes, what would count — none of it is known (exo-a50.1.2).
+  if not drv.supported(): return "unsupported-driver"
   let ctx = intentContext(events, intentId)
   if not ctx.isPlaceholder and ctx.expired(nowSec): return "expired"
   let inApp = signatureHex.len == 0
