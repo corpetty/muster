@@ -37,8 +37,10 @@ Skip this if you only want to prove membership + coordination. Needed for step 8
 infra/anvil/devnet.sh
 ```
 
-Leave it running in its own terminal. It starts anvil and deploys the MiniSafe at
-`0x5FbDB…` with owners = anvil accounts 0/1/2 and threshold 2-of-3. muster talks to it over
+Leave it running in its own terminal. It starts anvil and deploys the real Safe v1.4.1 at
+`0xEb45…E841` with owners = anvil accounts 0/1/2 and threshold 2-of-3. In a room, a member
+discloses it (Accounts → **Disclose the local test Safe**) before a Safe payment can act
+from it — accounts live in the room (exo-a50.1.3). muster talks to it over
 the default RPC (`http://127.0.0.1:8545`); change it in **Settings → RPC endpoint** if yours
 differs.
 

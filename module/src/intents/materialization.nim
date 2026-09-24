@@ -49,6 +49,13 @@ method expectMaterialization*(d: Driver, m: Materialization) {.base.} =
   ## stateless ignores it; the Safe driver records it as its pending hash.
   discard
 
+method signRefusal*(d: Driver, e: Effect): string {.base, gcsafe.} =
+  ## Why THIS client will not propose or sign `e` under this driver, or "" if it may.
+  ## A driver-described gate on the signing path (exo-a50.1.4): the Safe refuses a
+  ## delegatecall to a target this client has not allowlisted — the operation that
+  ## runs foreign code AS the Safe. Default: nothing is refused.
+  ""
+
 method identifyContributor*(d: Driver, m: Materialization, c: Contribution): string {.base.} =
   ## The stable id of whoever produced contribution `c` over materialization `m`,
   ## or "" if it is not a legitimate contribution. This is how the multi-party fold

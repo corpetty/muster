@@ -53,15 +53,9 @@ The module submits through `http://127.0.0.1:8545` against a Safe at its configu
 address. Bring that up before running the full harness:
 
 ```bash
-anvil --silent &                                   # fresh chain (Safe nonce 0)
-cd infra/anvil
-K0=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-# MiniSafe must land at 0x5FbDB…aa3 — deploy it as anvil account 0's FIRST tx:
-forge create --rpc-url http://127.0.0.1:8545 --private-key $K0 --broadcast \
-  src/MiniSafe.sol:MiniSafe \
-  --constructor-args "[0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,0x70997970C51812dc3A010C7d01b50e0d17dc79C8,0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC]" 2
-cast send --rpc-url http://127.0.0.1:8545 --private-key $K0 --value 5ether \
-  0x5FbDB2315678afecb367f032d93F642f64180aa3
+# a fresh anvil + the real Safe v1.4.1 (Safe nonce 0), deterministically at
+# 0xEb4520E32862D2adFa2aF042f0B5eA2041dEE841, owners = anvil accounts 0/1/2, 2-of-3:
+infra/anvil/devnet.sh
 ```
 
 Without anvil the first four tests still pass; the submit test fails with the

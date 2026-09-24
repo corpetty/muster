@@ -1,30 +1,44 @@
-# infra/anvil — the P2 Safe fixture
+# infra/anvil — the Safe fixture (the real Safe v1.4.1)
 
-`src/MiniSafe.sol` is a **faithful subset of Safe 1.4.1** for the P2 anvil
-fixture: identical EIP-712 `DOMAIN_TYPEHASH` / `SAFE_TX_TYPEHASH` constants, the
-same `safeTxHash` computation, on-chain `ecrecover` `checkSignatures`
-(ascending-owner dedup + threshold), and `execTransaction`. It stands in for the
-full Safe 1.4.1 singleton deployment; muster computes the identical safeTxHash
-off-chain, collects owner signatures, and submits `execTransaction` here. Swapping
-in the real Safe 1.4.1 singleton is a fixture change, not a muster change.
+`devnet.sh` starts anvil and deploys the **real Safe v1.4.1** from
+`safe-global/safe-smart-account` at the pinned tag (fetched into `lib/`, built with
+solc 0.7.6 — the release compiler — into `out-safe/`, both gitignored): the Safe
+singleton, `SafeProxyFactory`, `CompatibilityFallbackHandler`, then a **2-of-3 proxy
+owned by anvil accounts 0/1/2**, funded with 5 ETH. On a fresh anvil the addresses are
+deterministic; the Safe is `0xEb4520E32862D2adFa2aF042f0B5eA2041dEE841` (the module's
+local test Safe suggestion, `describe()`).
 
-## Run the end-to-end (collect 2-of-3 off-chain, execute on-chain, no indexer)
+It replaced `MiniSafe` (exo-a50.1.4), a four-argument subset the real Safe does not
+have. Against the real contract, muster's `safeTxHash` for a transaction using every
+field (data, DELEGATECALL, the gas fields, gas token, refund receiver) equals the
+Safe's own `getTransactionHash`; settlement uses the real ten-argument
+`execTransaction`; the account check reads `getOwners` / `getThreshold`; and the ways
+around the threshold are read (`getModulesPaginated`, the guard slot).
+
+## Run it
 
 ```bash
-# 1. one command: start anvil, deploy MiniSafe (2-of-3), fund it. Prints SAFE_ADDR.
-./devnet.sh          # needs foundry (anvil/forge/cast)
-
-# 2. drive it from muster. secp is nim-secp256k1 now (no system lib) — put its
-#    closure on the path (clone once; see module/tests/README.md for $SECP):
-cd ../../module
-nim r -d:release --threads:on $SECP tests/safe_anvil_e2e.nim <SAFE_ADDR>
+nix shell nixpkgs#foundry     # anvil / forge / cast (or any foundry install) + jq + git
+infra/anvil/devnet.sh         # prints SAFE_ADDR / RPC
 ```
 
-Verified 2026-08-23 on nim-secp256k1: `execTransaction succeeded on-chain
-(checkSignatures passed -> local safeTxHash matched) ... OK` — the migration
-produces on-chain-valid signatures, not just unit-test-valid ones.
+In a room, a member **discloses** the Safe (Accounts → **Disclose the local test
+Safe**) before a Safe payment can act from it — accounts live in the room, disclosed by
+members (exo-a50.1.3).
 
-Expected: `execTransaction succeeded on-chain (...) ... 2-of-3 collected off-chain,
-executed on-chain, no indexer: OK`. A successful `execTransaction` is itself proof
-that muster's local safeTxHash matched the contract's on-chain `getTxHash` — the
-contract reverts otherwise.
+## The on-chain tests (collect 2-of-3 off-chain, execute on-chain, no indexer)
+
+Each expects a FRESH Safe (nonce 0) — re-run `devnet.sh` on a fresh anvil between them.
+Put the secp closure on the path first (see `module/tests/README.md` for `$SECP`).
+
+```bash
+cd module
+nim r -d:release --threads:on $SECP tests/safe_anvil_e2e.nim        0xEb4520E32862D2adFa2aF042f0B5eA2041dEE841
+nim r -d:release --threads:on $SECP tests/coordinate_submit_anvil.nim 0xEb4520E32862D2adFa2aF042f0B5eA2041dEE841
+nim r -d:release --threads:on $SECP $SODIUM tests/safe_real_anvil_e2e.nim 0xEb4520E32862D2adFa2aF042f0B5eA2041dEE841
+```
+
+Verified 2026-09-23 against Safe v1.4.1: all three OK. A successful `execTransaction`
+is itself proof that muster's local safeTxHash matched the contract's — the Safe
+reverts otherwise; `safe_real_anvil_e2e` additionally compares against
+`getTransactionHash` directly, for every field.

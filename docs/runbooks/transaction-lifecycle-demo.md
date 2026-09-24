@@ -37,14 +37,14 @@ Two tracks, same coordination, different disclosure — **that contrast is the d
 
 | Track | Shows | Needs |
 |---|---|---|
-| **Safe (on-chain 2-of-3)** | every owner's signature disclosed on the public ledger; a real `execTransaction` | anvil + the MiniSafe fixture; peers seeded as real owners |
+| **Safe (on-chain 2-of-3)** | every owner's signature disclosed on the public ledger; a real `execTransaction` | anvil + the real Safe v1.4.1 fixture, disclosed into the room by a member; peers seeded as real owners |
 | **FROST / threshold (k-of-n Ed25519)** | the same agreement reaching finality with one aggregated endorsement — nothing per-signer on the wire | nothing beyond the app |
 | **LEZ (shielded)** | the four rails and what each puts on the public record | the LEZ testnet + a funded account (see the LEZ delegation) |
 
 **Safe track, local chain (the strongest single-machine story):**
 
 ```bash
-cd infra/anvil && ./devnet.sh            # anvil + MiniSafe (2-of-3), prints SAFE_ADDR + RPC
+cd infra/anvil && ./devnet.sh            # anvil + the real Safe v1.4.1 (2-of-3), prints SAFE_ADDR + RPC
 ```
 
 Point the app's RPC at `http://127.0.0.1:8545` (Settings, or `MUSTER_RPC`) and seed each

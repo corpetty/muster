@@ -54,7 +54,7 @@ var sigs: seq[byte]
 for (_, s) in signed: sigs.add @s
 
 echo "recipient balance before: ", getBalance(rpc, recipient)
-let calldata = assembleExecTransaction(recipient, value, @[], sigs)
+let calldata = assembleExecTransaction(SafeTx(to: recipient, value: value), sigs)
 let txHash = submitExecTransaction(rpc, relayer, safeAddr, calldata)
 echo "submitted execTransaction: ", txHash
 

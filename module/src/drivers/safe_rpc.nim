@@ -29,19 +29,28 @@ proc toHex0x(b: openArray[byte]): string =
   for x in b:
     result.add d[int(x shr 4)]; result.add d[int(x and 0x0F)]
 
-proc assembleExecTransaction*(to: Address, value: uint64, data: seq[byte],
-                              signatures: seq[byte]): seq[byte] =
-  ## ABI-encode execTransaction(address,uint256,bytes,bytes). Signatures must be
+proc assembleExecTransaction*(tx: SafeTx, signatures: seq[byte]): seq[byte] =
+  ## ABI-encode the real Safe's execTransaction(address to, uint256 value, bytes data,
+  ## uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address
+  ## gasToken, address refundReceiver, bytes signatures) — selector 0x6a761202 — with
+  ## every SafeTx field where the contract reads it (exo-a50.1.4). Signatures must be
   ## the owner sigs concatenated, sorted by signer address ascending (Safe's dedup).
-  let sel = keccak256(strBytes("execTransaction(address,uint256,bytes,bytes)"))
+  let sel = keccak256(strBytes("execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)"))
   result = @[sel[0], sel[1], sel[2], sel[3]]
-  let dataPadded = pad32(data)
-  result.add encAddr(to)                                   # to
-  result.add enc256(value)                                 # value
-  result.add enc256(128'u64)                               # offset to data (4 head words)
-  result.add enc256(uint64(128 + 32 + dataPadded.len))     # offset to signatures
-  result.add enc256(uint64(data.len)); result.add dataPadded            # data
-  result.add enc256(uint64(signatures.len)); result.add pad32(signatures) # signatures
+  let dataPadded = pad32(tx.data)
+  const head = 10'u64 * 32
+  result.add encAddr(tx.to)
+  result.add enc256(tx.value)
+  result.add enc256(head)                                         # offset to data
+  result.add enc256(uint64(tx.operation))
+  result.add enc256(tx.safeTxGas)
+  result.add enc256(tx.baseGas)
+  result.add enc256(tx.gasPrice)
+  result.add encAddr(tx.gasToken)
+  result.add encAddr(tx.refundReceiver)
+  result.add enc256(head + 32 + uint64(dataPadded.len))           # offset to signatures
+  result.add enc256(uint64(tx.data.len)); result.add dataPadded
+  result.add enc256(uint64(signatures.len)); result.add pad32(signatures)
 
 # ── minimal JSON-RPC over the user's endpoint ─────────────────────────────────
 proc rpc(url, meth: string, params: JsonNode): JsonNode =
@@ -125,6 +134,66 @@ proc getOwners*(url: string, safe: Address): tuple[known: bool, owners: seq[Addr
     (true, decodeAddressArray(r.getStr()), "read from chain")
   except CatchableError as e:
     (false, @[], "RPC unreachable: " & e.msg)
+
+proc ethCall*(url: string, to: Address, data: seq[byte]): string =
+  ## A raw `eth_call` at latest; the hex result ("" on no data). Raises on transport
+  ## failure — callers that must report unknown wrap it.
+  let r = rpc(url, "eth_call", %*[{"to": toHex0x(to), "data": toHex0x(data)}, "latest"])
+  if r.isNil or r.kind == JNull: "" else: r.getStr("")
+
+const GuardSlot* = "0x4a204f620c8c5ccdca3fd54d003badd85ba500436a431f0cbda4f558c93c34c8"
+  ## keccak256("guard_manager.guard.address") — where a Safe stores its transaction guard
+
+proc decodeModulesPage*(hex: string): seq[Address] =
+  ## Decode getModulesPaginated's (address[] array, address next): [offset][next]
+  ## [len][item]* — the array is at the offset the first word names.
+  var s = hex
+  if s.len >= 2 and s[0] == '0' and (s[1] in {'x', 'X'}): s = s[2 .. ^1]
+  if s.len < 192: return @[]
+  let off = int(hexToU64(s[0 ..< 64])) * 2          # byte offset → hex chars
+  if off + 64 > s.len: return @[]
+  let n = int(hexToU64(s[off ..< off + 64]))
+  for i in 0 ..< n:
+    let base = off + 64 + i * 64
+    if base + 64 > s.len: break
+    var a: Address
+    for j in 0 ..< 20:
+      let o = base + 24 + j * 2
+      a[j] = byte(hexToU64(s[o ..< o + 2]))
+    result.add a
+
+proc guardFromSlot*(word: string): string =
+  ## The guard address from the guard storage slot's word; "" when none is set.
+  var s = word
+  if s.len >= 2 and s[0] == '0' and (s[1] in {'x', 'X'}): s = s[2 .. ^1]
+  if s.len < 40 or s.allCharsInSet({'0'}): return ""
+  "0x" & s[^40 .. ^1].toLowerAscii()
+
+proc getModules*(url: string, safe: Address): tuple[known: bool, modules: seq[Address], detail: string] =
+  ## The Safe's enabled modules (getModulesPaginated from the sentinel, first 50). A
+  ## module executes WITHOUT the owners' threshold — a way around the rule. Never raises.
+  let sel = keccak256(strBytes("getModulesPaginated(address,uint256)"))
+  var data = @[sel[0], sel[1], sel[2], sel[3]]
+  var sentinel: Address
+  sentinel[19] = 1
+  data.add encAddr(sentinel); data.add enc256(50'u64)
+  try:
+    let r = rpc(url, "eth_call", %*[{"to": toHex0x(safe), "data": toHex0x(data)}, "latest"])
+    let h = (if r.isNil or r.kind == JNull: "" else: r.getStr(""))
+    if h.len <= 2: return (false, @[], "getModulesPaginated() returned no data")
+    (true, decodeModulesPage(h), "read from chain")
+  except CatchableError as e:
+    (false, @[], "RPC unreachable: " & e.msg)
+
+proc getGuard*(url: string, safe: Address): tuple[known: bool, guard: string, detail: string] =
+  ## The Safe's transaction guard, read from its storage slot ("" when none is set).
+  try:
+    let r = rpc(url, "eth_getStorageAt", %*[toHex0x(safe), GuardSlot, "latest"])
+    let h = (if r.isNil or r.kind == JNull: "" else: r.getStr(""))
+    if h.len <= 2: return (false, "", "guard slot returned no data")
+    (true, guardFromSlot(h), "read from chain")
+  except CatchableError as e:
+    (false, "", "RPC unreachable: " & e.msg)
 
 proc getThreshold*(url: string, safe: Address): tuple[known: bool, threshold: int, detail: string] =
   ## The Safe's threshold, read from the chain via `eth_call getThreshold()` — with

@@ -46,6 +46,10 @@ proc liveProposeIntent*(s: CoordinationSession, ks: Keystore, driverFor: DriverF
   # A kind this client has no driver for is refused — never proposed under a guess
   # (exo-a50.1.2): nobody here could verify a contribution to it.
   if not driverFor(policy).supported(): return "unsupported-driver"
+  # The driver's own gate (exo-a50.1.4): e.g. a Safe delegatecall to a target this
+  # client has not allowlisted is never put in front of the room.
+  let refusal = driverFor(policy).signRefusal(effectFromJson(effectJson))
+  if refusal.len > 0: return "refused: " & refusal
   let id = intentIdFor(effectJson, policy)
   s.publish(policyDeclEvent(id, policy))
   s.publish(proposeEvent(id, effectJson))
@@ -87,6 +91,12 @@ proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
   # Under a kind this client has no driver for, nothing is signed or published: which
   # key, which bytes, what would count — none of it is known (exo-a50.1.2).
   if not drv.supported(): return "unsupported-driver"
+  # The driver's own gate on THIS client's signature (exo-a50.1.4): an in-app approval
+  # of, e.g., a Safe delegatecall to an unallowlisted target is refused, publishing
+  # nothing. A pasted signature was made elsewhere; it is folded (and graded) as usual.
+  if signatureHex.len == 0:
+    let refusal = drv.signRefusal(effectFromJson(effectJson))
+    if refusal.len > 0: return "refused: " & refusal
   let ctx = intentContext(events, intentId)
   if not ctx.isPlaceholder and ctx.expired(nowSec): return "expired"
   let inApp = signatureHex.len == 0

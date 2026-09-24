@@ -95,7 +95,7 @@ echo "2. gathered ", signed.len, " owner sigs FROM the log (not local state) OK"
 #    execTransaction cross-validates the room's safeTxHash against the contract's.
 let balBefore = parseHexInt(getBalance(rpc, recipient))
 echo "recipient balance before: ", balBefore
-let calldata = assembleExecTransaction(recipient, value, @[], sigbytes)
+let calldata = assembleExecTransaction(SafeTx(to: recipient, value: value, nonce: 0), sigbytes)
 let txHash = submitExecTransaction(rpc, relayer, safeAddr, calldata)
 echo "submitted execTransaction: ", txHash
 var status = -1
@@ -137,7 +137,7 @@ signed2.sort(cmpSigner)
 var sigbytes2: seq[byte]
 for (_, s) in signed2: sigbytes2.add @s
 let bal2Before = parseHexInt(getBalance(rpc, recipient))
-let calldata2 = assembleExecTransaction(recipient, value, @[], sigbytes2)
+let calldata2 = assembleExecTransaction(SafeTx(to: recipient, value: value, nonce: 1), sigbytes2)
 let txHash2 = submitExecTransaction(rpc, relayer, safeAddr, calldata2)
 var status2 = -1
 for i in 0 .. 50:

@@ -77,7 +77,8 @@ proc toHex(b: openArray[byte]): string =
 const OWNER0 = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 const OWNER1 = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
 const OWNER2 = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
-const SAFE_ADDR = "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+const SAFE_ADDR = "0xEb4520E32862D2adFa2aF042f0B5eA2041dEE841"
+  ## the real Safe v1.4.1 proxy infra/anvil/devnet.sh creates on a fresh anvil (deterministic)
 
 # The LOCAL TEST SAFE (the anvil fixture). It is NOT the room's account: accounts live
 # in the room, disclosed by members (coordination/accounts.nim, exo-a50.1.3), and no
@@ -111,6 +112,20 @@ proc myAddress(): Address                ## forward — this instance's secp acc
 
 proc roomAccounts(): seq[RoomAccount]   ## forward — the room's disclosed accounts, folded from the log
 
+var gDelegatecallAllow: seq[Address] = @[]
+var gDelegatecallAllowLoaded = false
+proc delegatecallAllow(): seq[Address] =
+  ## The Safe delegatecall targets THIS client will propose or sign (exo-a50.1.4) —
+  ## MUSTER_SAFE_DELEGATECALL_ALLOW, comma-separated addresses (e.g. MultiSendCallOnly).
+  ## Empty by default: a delegatecall runs foreign code as the Safe, so it is refused
+  ## until an operator opts a target in.
+  if not gDelegatecallAllowLoaded:
+    gDelegatecallAllowLoaded = true
+    for t in getEnv("MUSTER_SAFE_DELEGATECALL_ALLOW").split(','):
+      let a = t.strip()
+      if a.len == 42: gDelegatecallAllow.add toAddress(a)
+  gDelegatecallAllow
+
 proc roomDriver(kind: string): Driver =
   ## Build a ROOM kind's driver. The roster is the room's ACTUAL members — their Ed25519
   ## encryption identities, from the membership fold — so THIS instance's own identity
@@ -134,7 +149,7 @@ proc driverForKind(kind: string): Driver =
   ## never this instance's own key injected in (exo-45e K3) and never a module-global
   ## Safe: a bare "safe", an undisclosed account, or a kind not on the one list
   ## (drivers/kinds.nim) is UNSUPPORTED (exo-a50.1.2, exo-a50.1.3).
-  driverForPolicy(kind, roomAccounts(), roomDriver)
+  driverForPolicy(kind, roomAccounts(), roomDriver, delegatecallAllow())
 
 let driverFor: DriverFor = proc(kind: string): Driver = driverForKind(kind)
   ## The per-intent driver resolver the folds take: each intent's own policy → its driver.
@@ -468,7 +483,7 @@ proc musterSubmit(intentId: string): string =
   # Assemble + submit through the user's RPC. anvil unlocks the relayer, so no key
   # is held here; the Safe verifies the owners on-chain regardless of the sender.
   let tx = toSafeTx(gEffects[intentId])
-  let calldata = assembleExecTransaction(tx.to, tx.value, @[], sigbytes)
+  let calldata = assembleExecTransaction(tx, sigbytes)   # the real ten-argument Safe ABI (exo-a50.1.4)
   let txHash = submitExecTransaction(gRpcUrl, toAddr(OWNER0), gDevSafe.safe, calldata)
   inc gNow
   it.apply(gDevSafe, IntentEvent(kind: ieSubmit, now: gNow))    # executable -> submitted
@@ -760,6 +775,27 @@ proc chainViewOf(a: RoomAccount): ChainView =
   if not thr.known: return (known: false, signers: @[], threshold: 0, detail: thr.detail)
   (known: true, signers: owners.owners.mapIt(toHex(it)), threshold: thr.threshold, detail: "read from chain")
 
+proc bypassesOf(a: RoomAccount): JsonNode =
+  ## {known, modules:[addr], guard, detail} for a Safe, read through the user's RPC on
+  ## the account's own chain. A module can move funds with NO owner signature; a guard
+  ## can block a transaction the owners agreed to — both belong on the card.
+  result = %*{"known": false, "modules": [], "guard": "", "detail": ""}
+  if a.family != "evm.safe": (result["detail"] = %"no bypass read for this family yet"; return)
+  if gRpcUrl.len == 0: (result["detail"] = %"no RPC configured"; return)
+  let (ok, chain, pd) = probeRpc(gRpcUrl)
+  if not ok: (result["detail"] = %("RPC unreachable: " & pd); return)
+  if "eip155:" & $chain != a.chain:
+    result["detail"] = %("the configured RPC serves eip155:" & $chain & ", the account is on " & a.chain)
+    return
+  let m = getModules(gRpcUrl, toAddress(a.address))
+  let g = getGuard(gRpcUrl, toAddress(a.address))
+  if not m.known or not g.known:
+    result["detail"] = %(if not m.known: m.detail else: g.detail)
+    return
+  var mods = newJArray()
+  for x in m.modules: mods.add %toHex(x)
+  result = %*{"known": true, "modules": mods, "guard": g.guard, "detail": "read from chain"}
+
 proc musterCoordinateAccounts(): string =
   ## The accounts members have disclosed into the joined room (exo-a50.1.3), each with
   ## who disclosed it, whether disclosures disagree, and whether the CHAIN agrees with
@@ -772,6 +808,10 @@ proc musterCoordinateAccounts(): string =
   for i, a in accts:
     let (st, detail) = checkAccount(a, chainViewOf(a))
     arr[i]["check"] = %*{"status": $st, "detail": detail}
+    # The ways around the threshold, READ from the chain (exo-a50.1.4): a Safe's enabled
+    # modules execute without the owners, and a guard can veto. Unknown when unread —
+    # never reported as "none".
+    arr[i]["bypasses"] = bypassesOf(a)
     var names = newJArray()
     for d in a.disclosedBy: names.add %contactBook().aliasOf(d)
     arr[i]["disclosedByAlias"] = names
@@ -1493,7 +1533,7 @@ proc musterCoordinateSubmit(intentId: string): string =
   var txHash = ""
   try:
     let tx = toSafeTx(effect)
-    let calldata = assembleExecTransaction(tx.to, tx.value, @[], sigbytes)
+    let calldata = assembleExecTransaction(tx, sigbytes)   # the real ten-argument Safe ABI (exo-a50.1.4)
     # relayer: anvil's unlocked account 0 (a dev relayer; exo-a50.1.5 makes it a seam)
     txHash = submitExecTransaction(gRpcUrl, toAddr(OWNER0), sd.safe, calldata)
   except CatchableError as e:

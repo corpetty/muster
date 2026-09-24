@@ -267,9 +267,9 @@ settle on-chain).
 **On-chain submit (needs anvil).** In a separate terminal, bring up the fixture:
 
 ```bash
-# from the repo — see ui/tests/README.md § anvil for the exact MiniSafe deploy
+# from the repo — see ui/tests/README.md § anvil (the real Safe v1.4.1 fixture)
 anvil --silent &
-cd infra/anvil && ./devnet.sh    # deploys MiniSafe at 0x5FbDB…aa3 and funds it
+cd infra/anvil && ./devnet.sh    # deploys the real Safe v1.4.1 at 0xEb45…E841 and funds it
 ```
 
 Then, on the **Account** surface:

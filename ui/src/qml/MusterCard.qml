@@ -520,6 +520,35 @@ Rectangle {
                 font.weight: Theme.typography.weightMedium
             }
 
+            // What a Safe transaction CALLS and HOW (exo-a50.1.4): the data it carries, and
+            // a DELEGATECALL named for what it is — the target's code runs AS the Safe and
+            // can rewrite its owners (the Bybit vector). Muster refuses to sign one unless
+            // this client allowlists the target; the card says so rather than hiding it.
+            LogosText {
+                Layout.fillWidth: true
+                visible: String((cardRoot.card && cardRoot.card.safeData) || "").length > 2
+                text: {
+                    var d = String((cardRoot.card && cardRoot.card.safeData) || "");
+                    var n = Math.max(0, Math.floor((d.length - 2) / 2));
+                    return qsTr("with data %1 (%2 bytes)").arg(d.slice(0, 10) + (d.length > 10 ? "…" : "")).arg(n);
+                }
+                color: Theme.palette.textSecondary
+                font.family: Theme.typography.mono
+                font.pixelSize: Theme.typography.badgeText
+                wrapMode: Text.WrapAnywhere
+            }
+            LogosText {
+                objectName: "cardDelegatecall"
+                Layout.fillWidth: true
+                visible: cardRoot.card && Number(cardRoot.card.operation) === 1
+                text: qsTr("DELEGATECALL: this runs %1's code as the Safe itself. It can change the Safe's owners, threshold and modules. Muster signs it only if you have allowlisted that target.")
+                      .arg(String((cardRoot.card && cardRoot.card.to) || ""))
+                color: Theme.palette.error
+                font.pixelSize: Theme.typography.secondaryText
+                font.weight: Theme.typography.weightMedium
+                wrapMode: Text.WordWrap
+            }
+
             // trace this: the effect is a peer-message (someone proposed it into the
             // room). One tap opens the lineage focused on that origin — the card
             // element leads to where it came from, not a separate hunt.
