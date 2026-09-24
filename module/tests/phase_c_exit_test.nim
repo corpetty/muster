@@ -58,12 +58,15 @@ let recipient = id32("lez-recipient")
 let createKey = id32("room-treasury")
 const Chain = "lez:local"
 
+# The program claims each member account at creation and requires it FRESH (never used),
+# so a member's vote fee is paid from a separate, funded account of theirs (the payer).
+let (payA, payB, payC) = (id32("lez-payer-alice"), id32("lez-payer-bob"), id32("lez-payer-carol"))
 let chain = newFakeLezMultisig(Chain, psLee02, program, feePerTx = 1)
-for m in [A, B, C]: chain.fund(m, 10)
+for p in [payA, payB, payC]: chain.fund(p, 10)
 
 # ── 1. create on chain, disclose into the room, verify ─────────────────────────
-doAssert chain.submit(A, createOp(createKey, 2, @[A, B, C])).ok
-doAssert not chain.submit(A, createOp(id32("another"), 1, @[A])).ok,
+doAssert chain.submit(A, createOp(createKey, 2, @[A, B, C]), payer = payA).ok
+doAssert not chain.submit(A, createOp(id32("another"), 1, @[A]), payer = payA).ok,
   "a member account already claimed by a multisig is not fresh"
 let statePda = statePda(psLee02, program, createKey)
 let config = $(%*{"program": toHex(program), "createKey": toHex(createKey), "pda": $psLee02})
@@ -93,7 +96,7 @@ let drv = LezMultisigDriver(resolverA(policy))
 let vault = vaultPda(psLee02, program, createKey)
 let action = LezAction(target: tokenProgram, instruction: @[1'u32, 500, 0], accounts: @[vault, recipient],
                        pdaSeeds: @[vaultSeed(createKey)], authorized: @[0'u8])
-let aliceSeam = newLezVoteSeam(chain, A)
+let aliceSeam = newLezVoteSeam(chain, A, payA)
 let id = liveProposeOnChain(r.alice, aliceKs, resolverA, policy, action, aliceSeam,
                             int64(Now), 1, ttlSec = Ttl)
 doAssert id.len > 0 and not id.startsWith("refused"), id
@@ -104,10 +107,10 @@ echo "2. proposed on chain as #1 (the proposer's own transaction); the room poin
 
 # ── 3. a member approves in the room: their own vote transaction ───────────────
 r.bob.poll()
-let bobSeam = newLezVoteSeam(chain, B)
+let bobSeam = newLezVoteSeam(chain, B, payB)
 doAssert liveVote(r.bob, bobKs, resolverB, id, bobSeam, bindCtx(), Now) == "executable"
 doAssert chain.readProposal(createKey, 1).proposal.approved == @[A, B], "Bob's vote is on chain"
-doAssert chain.balanceOf(B) == 9, "Bob paid for his own vote"
+doAssert chain.balanceOf(payB) == 9, "Bob paid for his own vote"
 r.alice.poll()
 let grades = approvalGrades(r.alice.log.allEvents(), resolverA, id)
 doAssert gradeOf(grades, "lez:" & toHex(B), 1) == agCommitted, "the room member committed to what the room reviewed"
@@ -117,7 +120,7 @@ echo "3. Bob approved in the room: muster read #1 back, his own vote went on cha
 # ── 4. a pointer to different content is refused before any vote ──────────────
 let decoy = LezAction(target: tokenProgram, instruction: @[1'u32, 9_000, 0], accounts: @[vault, recipient],
                       pdaSeeds: @[vaultSeed(createKey)], authorized: @[0'u8])
-doAssert chain.submit(C, proposeOp(createKey, 2, decoy)).ok        # what is really on chain as #2
+doAssert chain.submit(C, proposeOp(createKey, 2, decoy), payer = payC).ok        # what is really on chain as #2
 let id2 = liveProposeIntent(r.alice, aliceKs, resolverA, policy, lezProposalEffect(2, action),
                             int64(Now), 2, account = toHex(statePda), ttlSec = Ttl)  # what the room is told
 r.bob.poll()
@@ -125,12 +128,12 @@ let before = r.bob.log.allEvents().len
 let refused = liveVote(r.bob, bobKs, resolverB, id2, bobSeam, bindCtx(), Now)
 doAssert refused.startsWith("refused") and "instruction" in refused, refused
 doAssert chain.readProposal(createKey, 2).proposal.approved == @[C], "no vote was cast"
-doAssert chain.balanceOf(B) == 9, "no fee was paid"
+doAssert chain.balanceOf(payB) == 9, "no fee was paid"
 doAssert r.bob.log.allEvents().len == before, "nothing was published"
 echo "4. an intent pointing at different on-chain content: refused before any vote, nothing paid or published OK"
 
 # ── 5. settle on the chain's count ─────────────────────────────────────────────
-let stl = settlementFor(drv, chain, Account(chain: Chain, form: afPublic, id: toHex(A)))
+let stl = settlementFor(drv, chain, Account(chain: Chain, form: afPublic, id: toHex(A) & ":" & toHex(payA)))
 doAssert stl != nil and stl of LezMultisigSettlement
 var contribs: seq[SettleContribution]
 for e in r.alice.log.allEvents():
