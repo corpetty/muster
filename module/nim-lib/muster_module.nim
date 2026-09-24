@@ -60,6 +60,8 @@ import ../src/wallet/mock_chain        # a second, non-EVM chain (proves agnosti
 import ../src/wallet/lez_core          # the LEZ wallet seam + FakeLezCore (P-L3 swaps in real)
 import ../src/wallet/lez_adapter       # the Logos Execution Zone chain (send assets via Logos)
 import ../src/wallet/lez_lp            # LpLezCore — the real lez_core over lp_* (P-L3)
+import ../src/wallet/btc_adapter       # the user's Bitcoin node (exo-a50.2.5/.6)
+import ../src/coordination/attest      # readEvent: the external read a Bitcoin spend's coins cite (inv 10)
 
 proc hexToBytes(s: string): seq[byte] =
   var h = s
@@ -169,6 +171,7 @@ var gNow: uint64 = 0
 # settings surface (settings / set_setting) points it at the user's own node/nodes.
 var gRpcUrl = "http://127.0.0.1:8545"
 var gRelayer = "self"
+var gBtcRpc = getEnv("MUSTER_BTC_RPC", "")   ## the user's Bitcoin node, "http://user:pass@host:port"; "" = none (exo-a50.2.6)
   ## who sends a settling transaction and pays its fee (exo-a50.1.5): "self" = this
   ## instance's own key, signed locally and sent raw; "unlocked:<0x…>" = an account the
   ## node itself unlocks (anvil's dev accounts) via eth_sendTransaction.
@@ -213,6 +216,7 @@ proc loadSettingsFile() =
       let j = parseJson(readFile(p))
       if j.hasKey("rpc"): gRpcUrl = j["rpc"].getStr()
       if j.hasKey("relayer"): gRelayer = j["relayer"].getStr("self")
+      if j.hasKey("btcRpc"): gBtcRpc = j["btcRpc"].getStr()
       if j.hasKey("delivery"):
         gDeliveryConfig = deliveryConfigFor(j["delivery"].getStr())
         gDeliverySaved = true
@@ -229,7 +233,10 @@ proc loadSettingsFile() =
 proc saveSettingsFile() =
   try:
     createDir(parentDir(settingsPath()))
-    writeFile(settingsPath(), $(%*{"rpc": gRpcUrl, "delivery": gDeliveryConfig, "relayer": gRelayer}))
+    # the Bitcoin node URL may carry its RPC credentials — kept beside the keystore,
+    # like a bitcoin.conf, and never shown back (settings() redacts them)
+    writeFile(settingsPath(), $(%*{"rpc": gRpcUrl, "delivery": gDeliveryConfig, "relayer": gRelayer,
+                                   "btcRpc": gBtcRpc}))
   except CatchableError: discard
 
 proc toSig65(b: seq[byte]): Signature65 =
@@ -949,7 +956,8 @@ proc musterCoordinatePropose(effectJson: string): string =
   # to the Safe; a room-native decision to this room. MUSTER_INTENT_TTL_S overrides
   # how long the proposal stays signable (default a week).
   let (pkind, pacct) = splitPolicy(gCoordKind)
-  let account = (if pkind == "safe" and pacct.len > 0: splitAccountId(pacct).address else: gTopic)
+  let account = (if (pkind == "safe" or pkind.startsWith("btc-")) and pacct.len > 0:
+                    splitAccountId(pacct).address else: gTopic)
   var ttl = DefaultIntentTtl
   try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
   except ValueError: discard
@@ -1301,11 +1309,17 @@ proc hostFacts(policy = ""): HostFacts =
       facts.expectedChainId = cid.int
       facts.safe = toAddress(a.address)
       facts.signers = a.signers.mapIt(toAddress(it))
+      if a.family.startsWith("btc."): facts.btcSigners = a.signers   # exo-a50.2.6
   # The Safe owner set is read FROM THE CHAIN (getOwners, F-10), never a configured or
   # self-injected set: without a chain read the authority grade is unknown, and a key the
   # chain does not recognize grades missing (rule s4, contracts/specs/derived-exo-45e, K3).
   if gInvoker == nil: gInvoker = newLpInvoker("muster_module")
   facts.invoker = gInvoker
+  # A Bitcoin proposal introduces the user's node (exo-a50.2.6): graded by asking IT
+  # which chain it serves; my key is graded against the account's keys.
+  facts.btcRpcUrl = gBtcRpc
+  try: facts.myBtcKey = toHex(moduleKeystore().btcPubKey())
+  except CatchableError: discard
   # A LEZ action's `lez-account` requirement is graded against the live zone (exo-44b L2):
   # detect only — the remedy names the LEZ Wallet App. `gLez` may be nil (LEZ not yet
   # initialized) → the closure stays nil → the requirement grades unknown, never a false
@@ -1530,6 +1544,13 @@ proc settlementFor(drv: Driver): Settlement =
   ## relayer. nil when the family settles nowhere (exo-a50.1.5).
   let p = drv.profile()
   if not p.declared or p.settlement == "none": return nil
+  if p.chain.startsWith("bip122:"):
+    # Bitcoin (exo-a50.2.5/.6): the user's own node; nil without one (submit names why)
+    if gBtcRpc.len == 0: return nil
+    try:
+      let adapter = newBitcoindAdapterFromUrl(networkByCaip2(p.chain).name, gBtcRpc)
+      return settlementFor(drv, adapter, Account(chain: p.chain, form: afPublic, id: ""))
+    except CatchableError: return nil
   let (isEvm, cid) = evmChainId(p.chain)
   if not isEvm: return nil
   let unlocked = gRelayer.startsWith("unlocked:")
@@ -1550,6 +1571,10 @@ proc musterCoordinateSubmit(intentId: string): string =
   let events = gSession.log.allEvents()
   let policy = intentPolicyOf(events, intentId)
   let drv = driverFor(policy)
+  let isBtc = drv.profile().chain.startsWith("bip122:")
+  if isBtc and gBtcRpc.len == 0:
+    return $(%*{"id": intentId, "error": "no-bitcoin-node",
+                "detail": "a Bitcoin payment settles through your own node — set Settings → Bitcoin node (btc-rpc)"})
   let st = settlementFor(drv)
   if st == nil:
     return $(%*{"id": intentId, "error": "not-onchain",
@@ -1575,6 +1600,9 @@ proc musterCoordinateSubmit(intentId: string): string =
   try:
     txRef = st.submit(asm0.tx, moduleKeystore())
   except CatchableError as e:
+    if isBtc:
+      return $(%*{"id": intentId, "error": "rpc-unreachable",
+                  "detail": e.msg & " — the Bitcoin node (" & redactUserinfo(gBtcRpc) & ") refused or could not be reached"})
     return $(%*{"id": intentId, "error": "rpc-unreachable", "relayer": gRelayer,
                 "detail": e.msg & " — the relayer (" & asm0.tx.frm.id & ") must be able to pay gas on " &
                           asm0.tx.frm.chain & "; fund it, or set Settings → relayer"})
@@ -1596,6 +1624,65 @@ proc musterCoordinateSubmit(intentId: string): string =
   $(%*{"id": intentId,
        "state": intentState(gSession.log.allEvents(), driverFor, intentId),
        "onchain": onchain, "txHash": txRef.id, "relayer": asm0.tx.frm.id})
+
+# ── signers outside muster + composing a Bitcoin payment (exo-a50.2.6) ────────
+proc musterCoordinateExportOutside(intentId: string): string =
+  ## The intent in its driver's outside-signer format (a Bitcoin spend: a base64 PSBT).
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let r = liveExportOutside(gSession, driverFor, intentId)
+  if not r.ok: return $(%*{"intentId": intentId, "error": r.error})
+  $(%*{"intentId": intentId, "format": r.format, "encoded": r.encoded})
+
+proc musterCoordinateImportOutside(intentId, encoded: string): string =
+  ## An outside signer's response: published as pasted approvals — counted, and graded
+  ## unattested (signed outside muster) by every member, never committed.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let r = liveImportOutside(gSession, moduleKeystore(), driverFor, intentId, encoded,
+                            intentLinkContext(intentId), uint64(epochTime()))
+  if not r.ok:
+    return $(%*{"intentId": intentId, "error": r.error, "detail": r.detail,
+                "imported": r.imported, "state": r.state})
+  $(%*{"intentId": intentId, "imported": r.imported, "already": r.already, "state": r.state})
+
+proc musterCoordinateProposeBtcSpend(payTo, amountSat, feeRate: string): string =
+  ## Propose a Bitcoin payment from the room's chosen Bitcoin account: its coins read
+  ## from the user's node (an external read, recorded in the log so every signer can
+  ## account for the inputs, invariant 10), the spend built largest-first with change
+  ## back to the account, then proposed like any intent.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let (pkind, pacct) = splitPolicy(gCoordKind)
+  if not pkind.startsWith("btc-") or pacct.len == 0:
+    return $(%*{"error": "not-a-bitcoin-policy",
+                "detail": "choose a Bitcoin account for this room first (coordinate_set_policy btc-p2wsh@… / btc-tapscript@…)"})
+  if gBtcRpc.len == 0:
+    return $(%*{"error": "no-bitcoin-node",
+                "detail": "a Bitcoin payment reads its coins from your own node — set Settings → Bitcoin node (btc-rpc)"})
+  let (found, a) = findAccount(roomAccounts(), pacct)
+  if not found: return $(%*{"error": "cannot-build", "detail": "the account is not disclosed in this room"})
+  let (ok, acct, detail) = btcAccountOfDisclosure(a.family, a.chain, a.address, a.threshold, a.signers)
+  if not ok: return $(%*{"error": "cannot-build", "detail": detail})
+  var amount: uint64
+  var rate: int
+  try:
+    amount = uint64(parseBiggestUInt(amountSat.strip()))
+    rate = parseInt(feeRate.strip())
+  except ValueError:
+    return $(%*{"error": "cannot-build", "detail": "amount_sat and fee_rate are whole numbers (sat, sat/vB)"})
+  var effectJson: string
+  try:
+    let node = newBitcoindAdapterFromUrl(acct.network.name, gBtcRpc)
+    effectJson = buildBtcSpend(acct, node.utxosOf(acct.address), payTo.strip(), amount, feeRate = rate)
+  except WalletError as e:
+    return $(%*{"error": "node-unreachable", "detail": e.msg})
+  except CatchableError as e:
+    return $(%*{"error": "cannot-build", "detail": e.msg})
+  let id = musterCoordinatePropose(effectJson)
+  if id.len == 0 or id.startsWith("refused") or id in ["not-joined", "unsupported-driver"]:
+    return $(%*{"error": "cannot-build", "detail": id})
+  # the coins came from the proposer's node: record the read (inv 10) — the source names
+  # the kind of read, never the node's address
+  gSession.publish(readEvent(id, "inputs", "bitcoind:scantxoutset", $parseJson(effectJson)["inputs"]))
+  id
 
 # ── invoke-intent execution (P-D2) — the generic counterpart to coordinate_submit ─
 # An executable invoke intent is executed by the CORE (invariant 3): call the module
@@ -2024,6 +2111,7 @@ proc musterSettings(): string =
   $(%*{
     "rpc": gRpcUrl,
     "relayer": gRelayer,
+    "btcRpc": redactUserinfo(gBtcRpc),
     "delivery": gDeliveryConfig,
     "environment": "eip155:" & $gDevSafe.chainId.int,   # the wallet's dev chain (CAIP-2)
     "identity": {"address": toHex(ks.address()),
@@ -2044,6 +2132,12 @@ proc musterSetSetting(key, value: string): string =
     if value != "self" and not (value.startsWith("unlocked:0x") and value.len == 51):
       return $(%*{"error": "relayer must be \"self\" or \"unlocked:<0x address>\""})
     gRelayer = value
+  of "btc-rpc":
+    # the user's own Bitcoin node (exo-a50.2.6); "" clears it
+    let v = value.strip()
+    if v.len > 0 and not (v.startsWith("http://") or v.startsWith("https://")):
+      return $(%*{"error": "btc-rpc must be an http(s) URL, e.g. http://user:pass@127.0.0.1:8332"})
+    gBtcRpc = v
   of "delivery":
     # Accept a fleet short-name ("logos.test"), a full createNode JSON, or "{}"/"" to
     # fall back to the default fleet — and remember that the user chose, so it wins

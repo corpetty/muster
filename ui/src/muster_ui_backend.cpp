@@ -567,6 +567,42 @@ void MusterUiBackend::declineInRoom(const QString &intentId)
     loadIntents();
 }
 
+void MusterUiBackend::exportOutside(const QString &intentId)
+{
+    // coordinate_export_outside → the intent in its driver's outside-signer format (a
+    // Bitcoin spend: a base64 PSBT). Nothing is signed or published (exo-a50.2.6).
+    const QString r = modules().muster_module.coordinate_export_outside(intentId);
+    qInfo() << "[muster_ui] coordinate_export_outside" << intentId << "->" << r.left(120);
+    setOutsideJson(r);
+}
+
+void MusterUiBackend::importOutside(const QString &intentId, const QString &encoded)
+{
+    // coordinate_import_outside → the driver reads the outside signer's signatures and each
+    // is published as a pasted approval: counted, graded unattested (signed outside muster).
+    const QString r = modules().muster_module.coordinate_import_outside(intentId, encoded.trimmed());
+    qInfo() << "[muster_ui] coordinate_import_outside" << intentId << "->" << r;
+    setOutsideImportJson(r);
+    loadIntents();
+}
+
+void MusterUiBackend::proposeBtcSpend(const QString &payTo, const QString &amountSat, const QString &feeRate)
+{
+    // coordinate_propose_btc_spend → a Bitcoin payment from the room's chosen Bitcoin
+    // account, its coins read from the user's node. An id, or {error, detail}.
+    const QString r = modules().muster_module.coordinate_propose_btc_spend(payTo, amountSat, feeRate);
+    qInfo() << "[muster_ui] coordinate_propose_btc_spend" << payTo << amountSat << feeRate << "->" << r;
+    QJsonObject o;
+    if (r.startsWith("{")) {
+        o = QJsonDocument::fromJson(r.toUtf8()).object();
+    } else {
+        o.insert("id", r);
+    }
+    setBtcProposeJson(QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact)));
+    loadIntents();
+    loadMessages();
+}
+
 void MusterUiBackend::downloadAudit(const QString &intentId)
 {
     // coordinate_audit → the intent's signature-audit file (exo-403). The module

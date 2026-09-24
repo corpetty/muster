@@ -236,6 +236,39 @@ Item {
                         }
                     }
 
+                    // ── the user's Bitcoin node (exo-a50.2.6) ──
+                    LogosText {
+                        Layout.topMargin: Theme.spacing.small
+                        text: qsTr("Bitcoin node  ·  now: %1")
+                              .arg(String((settings.s && settings.s.btcRpc) || "(none — a Bitcoin payment needs one)"))
+                        color: Theme.palette.textSecondary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: 460
+                        Layout.alignment: Qt.AlignLeft
+                        spacing: Theme.spacing.small
+                        LogosTextField {
+                            id: btcRpcField
+                            objectName: "settingsBtcRpc"
+                            Layout.fillWidth: true
+                            // the credentials travel as Basic auth and are never shown back
+                            placeholderText: qsTr("your node, e.g. http://user:pass@127.0.0.1:8332")
+                            font.family: Theme.typography.mono
+                        }
+                        LogosButton {
+                            objectName: "settingsBtcRpcSave"
+                            text: qsTr("Save")
+                            enabled: btcRpcField.text.length > 0
+                            onClicked: {
+                                if (settings.backend) settings.backend.setSetting("btc-rpc", btcRpcField.text);
+                                btcRpcField.text = "";
+                            }
+                        }
+                    }
+
                     // ── delivery config ──
                     LogosText {
                         Layout.topMargin: Theme.spacing.small
