@@ -1,0 +1,24 @@
+chain.json: accounts read back (getAccount / getProgramIds over JSON-RPC) from the PUBLIC
+LEZ testnet, https://testnet.lez.logos.co. They were captured right after lez-multisig's own
+e2e suite (e2e_tests/tests/e2e_multisig.rs, BLOCK_WAIT_SECS=60) passed there.
+
+The program: lez-multisig ported to SPEL v0.7.0 / LEZ v0.2.4, with the lez-multisig#40 fix
+(logos-co/lez-multisig#45, which includes #41). It was deployed to the testnet on 2026-09-24:
+  ImageID    2ced3d301a4d1cd5db6cad9c428b9f3463155073f8bacf73179c6ea6536de4c7
+  deploy tx  61a7abe2cfeddeae3cd54f23317f50e984eb331f420d013210e7eabcc896faa0 (block 23405)
+
+The testnet's built-in program image ids equal a v0.2.4 build's, byte for byte.
+
+The run is the same as in vectors/lez-multisig-v024:
+- a 2-of-3 multisig;
+- proposal 1 initializes the vault's token holding through a ChainedCall into the token
+  program;
+- 500 tokens fund the vault;
+- proposal 2 transfers 200 to a recipient. First, an execute that substitutes the recipient
+  was refused on the live chain. Then the approved execute landed.
+
+Field encoding:
+- `id` fields are the base58 account ids decoded to hex;
+- `program_owner` and the image ids are the [u32; 8] words as little-endian bytes.
+
+Captured 2026-09-24.
