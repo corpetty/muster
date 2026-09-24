@@ -7,6 +7,11 @@ is one BIP-340 signature, so to the chain a FROST account looks single-sig.
 - `secp.nim` — points with an explicit infinity over libsecp256k1's ABI, and scalars mod n
   over stint (inverse by Fermat). This is what the drafts' reference code (secp256k1lab)
   assumes and libsecp's public API lacks.
+- `signing.nim` — FROST signing, a port of the BIP-445 reference (`frost_ref/signing.py`
+  @ siv2r/bips 8e25d57), with its error messages verbatim. It covers nonce gen/agg,
+  sign (which spends the secnonce), partial-signature verify, aggregation into one BIP-340
+  signature, plain and x-only tweaks, and deterministic signing. It is held to every
+  vector in `tests/vectors/bip-0445/`.
 
 Rules:
 - Every algorithm is a port of the draft's Python reference at a named commit, pinned to
