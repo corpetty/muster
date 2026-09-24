@@ -95,7 +95,7 @@ block:
   let good = st.assemble(drv, effect, @[("c", sigBy(Keys[2])), ("a", sigBy(Keys[0]))])
   doAssert good.ok, $good
   var pair = @[(addrOf(Owners[0]), sigBy(Keys[0])), (addrOf(Owners[2]), sigBy(Keys[2]))]
-  pair.sort(proc(x, y: (Address, seq[byte])): int = cmp(@(x[0]), @(y[0])))
+  pair.sort(proc(x, y: (Address, seq[byte])): int = cmpAddress(x[0], y[0]))
   var sigs: seq[byte]
   for (_, s) in pair: sigs.add s
   let expected = assembleExecTransaction(toSafeTx(effect), sigs)

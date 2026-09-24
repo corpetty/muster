@@ -17,6 +17,7 @@ import ../drivers/driver
 import ../drivers/safe
 import ../drivers/eip191
 import ../drivers/kinds      # supported(): refuse a kind this client has no driver for
+import ../drivers/profile    # the family profile: what settles, and where
 import ../intents/materialization
 import ../intents/lifecycle
 import ../intents/signing_payload
@@ -161,7 +162,10 @@ proc liveSubmitPrecheck*(s: CoordinationSession, driverFor: DriverFor,
   s.poll()
   let events = s.log.allEvents()
   let policy = intentPolicyOf(events, intentId)
-  if kindOf(policy) != "safe": return "not-onchain"
+  # what settles is the family's own settlement (exo-a50.1.5): a family whose profile
+  # settles nowhere (a room family) has nothing to put on-chain — read, never a string
+  if driverFor(policy).profile().settlement == "none" or not driverFor(policy).supported():
+    return "not-onchain"
   if intentState(events, driverFor, intentId) != "executable": return "not-executable"
   let ctx = intentContext(events, intentId)
   if ctx.isPlaceholder: return "no-context"

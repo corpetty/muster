@@ -79,7 +79,7 @@ One row per family, generated from the registry (`contracts/families/registry.js
 | `room.eip191-attest` | room | same bytes | room | 1 · none | in-place | – / – / room only | none · optional | – | production | built |
 | `room.invoke` | room | same bytes | room | 1 · none | in-place | – / – / the module it calls | none · optional | – | production | built |
 | `room.frost-scaffold` | room | same bytes | room | 2 · none | in-place | – / – / room only | none · optional | – | demo | partial |
-| `evm.safe` | contract | same bytes | explicit | 1 · deploy | in-place | setup / spend / public | sequence · none | – | production | partial (A) |
+| `evm.safe` | contract | same bytes | explicit | 1 · deploy | in-place | setup / spend / public | sequence · none | – | production | built |
 | `evm.safe-4337` | contract | same bytes | explicit | 1 · deploy | in-place | setup / spend / public | lanes · optional | – | production | candidate |
 | `evm.erc7579-ownable` | contract | same bytes | explicit | 1 · deploy | in-place | setup / spend / public | lanes · optional | – | early | candidate |
 | `evm.kernel-weighted` | contract | same bytes | explicit | 1 · deploy | in-place | setup / spend / public | lanes · optional | – | early | watch |

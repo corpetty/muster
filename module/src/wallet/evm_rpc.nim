@@ -77,6 +77,9 @@ proc rpcReceiptStatus*(url, txHashHex: string): int =
   let cl = getClient(url)
   try:
     let r = waitFor cl.eth_getTransactionReceipt(Hash32.fromHex(txHashHex))
+    # no receipt yet comes back as nil — pending, not a crash (exo-a50.1.5: this was a
+    # SIGSEGV the first time finality was watched through the adapter)
+    if r.isNil: return -1
     if r.status.isSome: (if q(r.status.get) == 1: 1 else: 0) else: -1
   except CatchableError:
     evict(url); -1

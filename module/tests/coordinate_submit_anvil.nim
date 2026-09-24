@@ -15,6 +15,11 @@ import ../src/dcbor/dcbor
 import ../src/intents/materialization
 import ../src/coordination/intents
 import ../src/drivers/driver as drivercore
+import ../src/crypto/keystore
+import ../src/wallet/types
+import ../src/wallet/adapter
+import ../src/wallet/evm_adapter
+import ../src/settlement/settlement
 
 proc hexToBytes(s: string): seq[byte] =
   var h = s
@@ -150,4 +155,36 @@ let bal2After = parseHexInt(getBalance(rpc, recipient))
 doAssert bal2After - bal2Before == 1_000_000_000_000_000_000, "second transfer did not land"
 echo "4. exo-275: second settle at live nonce ", n2, " (safeNonce) succeeded on-chain OK"
 
-echo "coordinate_submit_anvil: room fold -> sigs from log -> on-chain final (x2, live nonce): all OK"
+# 5. exo-a50.1.5: the SAME settle through the settlement SEAM — chosen from the driver's
+#    profile, assembled from the log's contributions, submitted through the EVM chain
+#    adapter by a relayer that SIGNS LOCALLY (anvil account 2's key via the keystore,
+#    eth_sendRawTransaction — not an unlocked node account), and finality watched
+#    through the adapter.
+let n3 = safeNonce(rpc, safeAddr)
+let effectJson3 = """{"effect":"safe-tx","to":"0x00000000000000000000000000000000DeaDBeef","value":""" &
+                  $value & ""","data":"0xcafe","nonce":""" & $n3 & """}"""
+let mat3 = canonicalize(drv, effectFromJson(effectJson3))
+var hash3: array[32, byte]
+for i in 0 ..< 32: hash3[i] = mat3.bytes[i]
+let s30 = toHex(signRecoverable(hash3, k0))
+let s31 = toHex(signRecoverable(hash3, k1))
+let k2 = toKey("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a")
+let relayerKs = newInMemoryKeystore(k2, k2)
+let relayerAcct = Account(chain: "evm:31337", form: afPublic, id: toHex(addressOf(k2)))
+let st = settlementFor(drv, newEvmAdapter("evm:31337", rpc, fromUnlocked = false), relayerAcct)
+doAssert st != nil and st.family == "evm.safe", "the Safe's settlement, chosen from its profile"
+let asm3 = st.assemble(drv, effectFromJson(effectJson3), @[("k0", hexToBytes(s30)), ("k1", hexToBytes(s31))])
+doAssert asm3.ok, "assemble: " & asm3.error & " " & asm3.detail
+let bal3Before = parseHexInt(getBalance(rpc, recipient))
+let ref3 = st.submit(asm3.tx, relayerKs)
+var fin3 = Finality(status: fsPending)
+for _ in 0 .. 50:
+  fin3 = st.watch(ref3)
+  if fin3.status != fsPending: break
+  sleep(200)
+doAssert fin3.status == fsFinal, "the seam's settle must land on the real Safe (" & $fin3.status & " " & fin3.detail & ")"
+doAssert parseHexInt(getBalance(rpc, recipient)) - bal3Before == 1_000_000_000_000_000_000
+doAssert safeNonce(rpc, safeAddr) == n3 + 1
+echo "5. exo-a50.1.5: settled through the seam (profile → assemble from log → adapter, locally-signed relayer) OK"
+
+echo "coordinate_submit_anvil: room fold -> sigs from log -> on-chain final (x2, live nonce) + through the settlement seam: all OK"
