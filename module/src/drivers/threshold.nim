@@ -14,6 +14,7 @@ import ../crypto/curve25519
 import ../intents/materialization
 import ./driver
 import ./manifest
+import ./profile
 
 type
   ThresholdDriver* = ref object of Driver
@@ -67,3 +68,7 @@ method manifest*(d: ThresholdDriver, effect: Effect): ActionManifest =
   ## alters nothing outside the room. Nothing leaves the boundary beyond the baseline.
   ActionManifest(declared: true, agreement: d.describe(),
                  requirements: @[req(rqAuthority, "roster-member", rpContributor)])
+
+method profile*(d: ThresholdDriver): FamilyProfile =
+  ## room.threshold: k of the room's members, final in the room ("unanimous" is k = n).
+  roomProfile("room.threshold", d.describe(), d.roster.len)

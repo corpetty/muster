@@ -206,4 +206,20 @@ block:
   doAssert d.describe().serializationDomain == EIP191_DOMAIN
   echo "9. eip191 (Tier-1, module-native personal_sign) conforms (", r.checks.len, " checks) OK"
 
+
+# ── the family profile: every driver the registry builds declares one (exo-a50.1.1) ──
+import ../src/drivers/profile
+block:
+  let roster = %*["0x" & repeat("01", 32), "0x" & repeat("02", 32)]
+  let owners = %*["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+                  "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"]
+  for (kind, cfg) in [("safe", %*{"chainId": 31337, "safe": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+                                  "owners": owners, "threshold": 2}),
+                      ("threshold", %*{"roster": roster, "k": 2}), ("frost", %*{"roster": roster, "k": 2}),
+                      ("invoke", %*{"roster": roster, "k": 1}), ("eip191", %*{"signers": owners, "threshold": 1}),
+                      ("stub", %*{"rounds": 2, "threshold": 2})]:
+    let r = checkProfileConformance(newDriver(kind, cfg))
+    doAssert r.allPass(), kind & " must declare a consistent family profile: failed " & $r.failed()
+  echo "10. every driver the registry builds declares a consistent family profile OK"
+
 echo "conformance_test: all OK"

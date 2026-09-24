@@ -20,6 +20,7 @@ import ../hashing/keccak256
 import ../dcbor/dcbor
 import ../drivers/driver
 import ../drivers/manifest
+import ./profile
 import ../intents/materialization
 import ../crypto/secp256k1   # Address, Signature65, ecrecover, recoversToOwner
 export secp256k1.Address, secp256k1.Signature65
@@ -104,3 +105,8 @@ method manifest*(d: PersonalSignDriver, effect: Effect): ActionManifest =
   ## sees exactly what the room chose to hand it — nothing leaves here on its own.
   ActionManifest(declared: true, agreement: d.describe(),
                  requirements: @[req(rqAuthority, "signer", rpContributor)])
+
+method profile*(d: PersonalSignDriver): FamilyProfile =
+  ## room.eip191-attest: a signed group statement any EVM tool can verify; it settles
+  ## nothing, so it is a room family with the configured signer set as n.
+  roomProfile("room.eip191-attest", d.describe(), d.signers.len)

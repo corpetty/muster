@@ -70,8 +70,11 @@ def check_consistency(f: dict) -> list[str]:
         errs.append("an aggregate signature reveals neither policy nor signers on-chain")
     if "per-approval" in (rv.get("policy"), rv.get("signers")) and locus != "vote":
         errs.append("reveals per-approval only when approvals are on-chain (vote)")
-    if room and rv != {"policy": "never", "signers": "never", "effect": "room-only"}:
-        errs.append("a room family reveals nothing outside the room")
+    if room and (rv.get("policy") != "never" or rv.get("signers") != "never"
+                 or rv.get("effect") not in ("room-only", "target-module")):
+        errs.append("a room family reveals nothing to a chain")
+    if rv.get("effect") == "target-module" and not room:
+        errs.append("target-module visibility is a room family's")
     if f.get("secretState") and int(f.get("rounds", 1)) < 2:
         errs.append("secret nonce state implies at least 2 rounds")
     if f.get("setup") == "dkg" and scheme != "aggregate-threshold":
@@ -82,7 +85,7 @@ def check_consistency(f: dict) -> list[str]:
 def landscape_table(reg: dict) -> str:
     """The doc's §3 table, one row per family — generated, never hand-edited."""
     when = {"never": "–", "at-creation": "setup", "per-approval": "each vote", "at-settle": "spend"}
-    eff = {"public": "public", "shielded": "**shielded**", "room-only": "room only"}
+    eff = {"public": "public", "shielded": "**shielded**", "room-only": "room only", "target-module": "the module it calls"}
     cost = {"none": "–", "per-signature": "per sig", "per-vote": "a tx", "per-vote-deposit": "a tx + deposit"}
     sch = {"shared-bytes": "same bytes", "per-signer-bytes": "**own blob each**", "own-transaction": "own tx",
            "aggregate-n-of-n": "partial (n-of-n)", "aggregate-threshold": "partial (t-of-n)"}
