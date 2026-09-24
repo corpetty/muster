@@ -62,6 +62,7 @@ type
     chain*: string                ## CAIP-2, e.g. "lez:testnet"
     scheme*: PdaScheme
     program*: seq[byte]           ## the program's 32-byte identity in the scheme
+    layout*: ProposalLayout       ## how this program build lays a proposal out
 
 proc createOp*(createKey: seq[byte], threshold: int, members: seq[seq[byte]]): MultisigOp =
   MultisigOp(kind: moCreate, createKey: createKey, threshold: threshold, members: members)
@@ -94,7 +95,7 @@ proc readState*(c: LezMultisigChain, createKey: seq[byte]): tuple[found: bool, s
 proc readProposal*(c: LezMultisigChain, createKey: seq[byte], index: uint64): tuple[found: bool, proposal: Proposal, height: uint64] =
   let r = c.readAccount(proposalPda(c.scheme, c.program, createKey, index))
   if not r.found: return (false, Proposal(), r.height)
-  (true, decodeProposal(r.data), r.height)
+  (true, decodeProposal(r.data, c.layout), r.height)
 
 # ── hex helpers ───────────────────────────────────────────────────────────────
 proc hx(b: seq[byte]): string =
@@ -164,8 +165,11 @@ type
 
   Refused = object of CatchableError
 
-proc newFakeLezMultisig*(chain: string, scheme: PdaScheme, program: seq[byte], feePerTx = 0'u64): FakeLezMultisig =
-  FakeLezMultisig(chain: chain, scheme: scheme, program: program, feePerTx: feePerTx)
+proc newFakeLezMultisig*(chain: string, scheme: PdaScheme, program: seq[byte], feePerTx = 0'u64,
+                         layout = plCountOnly): FakeLezMultisig =
+  ## `layout` picks the program build modelled: count-only (the published c45100b, #40
+  ## open) or account-ids (the rebuild with #41 — target accounts committed and bound).
+  FakeLezMultisig(chain: chain, scheme: scheme, program: program, feePerTx: feePerTx, layout: layout)
 
 proc fund*(f: FakeLezMultisig, acct: seq[byte], amount: uint64) =
   var a = f.accts.getOrDefault(hx(acct))
@@ -213,12 +217,12 @@ method submit*(f: FakeLezMultisig, signer: seq[byte], op: MultisigOp, payer: seq
   proc loadProposal(s: MultisigState): Proposal =
     let a = acct(propId)
     check(a.owner == f.program and a.data.len > 0, "proposal #" & $op.index & " not found")
-    result = decodeProposal(a.data)
+    result = decodeProposal(a.data, f.layout)
     check(result.createKey == s.createKey, "Proposal does not belong to this multisig")
     check(result.status == psActive, "Proposal is not active")
   proc saveProposal(p: Proposal) =
     var a = acct(propId)
-    a.data = encodeProposal(p)
+    a.data = encodeProposal(p, f.layout)
     a.owner = f.program
     put(propId, a)
   try:
@@ -250,6 +254,11 @@ method submit*(f: FakeLezMultisig, signer: seq[byte], op: MultisigOp, payer: seq
           check(s.members.len < 10, "Maximum 10 members")
         of caRemoveMember: check(s.members.contains(op.config.member), "Account is not a member")
         of caChangeThreshold: check(op.config.threshold >= 1, "Threshold must be at least 1")
+      elif f.layout == plAccountIds:
+        # #41: the committed id list must cover exactly the declared targets
+        check(op.action.accounts.len == op.action.targetAccountCount,
+              "target_account_ids length (" & $op.action.accounts.len & ") must equal target_account_count (" &
+              $op.action.targetAccountCount & ")")
       inc s.transactionIndex
       saveState(s)
       saveProposal(if op.kind == moPropose: newProposal(s.transactionIndex, signer, s.createKey, op.action)
@@ -295,6 +304,10 @@ method submit*(f: FakeLezMultisig, signer: seq[byte], op: MultisigOp, payer: seq
       else:
         check(op.accounts.len == p.action.accountCount,
               "Expected " & $p.action.accountCount & " target accounts, got " & $op.accounts.len)
+        if f.layout == plAccountIds:
+          # #41: bind every supplied account to the one the members approved
+          for i, acct in op.accounts:
+            check(acct == p.action.accounts[i], "Target account " & $i & " does not match the approved proposal")
         calls.add ChainedCallRecord(program: p.action.target, instruction: p.action.instruction,
                                     accounts: op.accounts, authorized: p.action.authorized,
                                     pdaSeeds: p.action.pdaSeeds)

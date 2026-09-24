@@ -180,7 +180,7 @@ method assemble*(s: LezMultisigSettlement, drv: Driver, effect: Effect,
     if not st.found: return Assembled(ok: false, error: "not-settleable", detail: "no multisig state on " & a.chain)
     let state = decodeState(st.data)
     need = state.threshold
-    have = decodeProposal(prop.data).approved.countIt(it in state.members)
+    have = decodeProposal(prop.data, a.layout).approved.countIt(it in state.members)
   except LezDecodeError as e:
     return Assembled(ok: false, error: "not-settleable", detail: "the chain's accounts do not decode: " & e.msg)
   if have < need:
@@ -208,7 +208,7 @@ method watch*(s: LezMultisigSettlement, txRef: TxRef): Finality =
   if f.status != fsFinal or s.watching.len == 0 or not (s.adapter of LezMultisigChain): return f
   try:
     let r = LezMultisigChain(s.adapter).readAccount(s.watching)
-    if r.found and decodeProposal(r.data).status == psExecuted:
+    if r.found and decodeProposal(r.data, LezMultisigChain(s.adapter).layout).status == psExecuted:
       Finality(status: fsFinal, detail: "Executed on chain (height " & $r.height & ")")
     else: Finality(status: fsPending, detail: "included, but the chain does not show the proposal Executed")
   except CatchableError as e: Finality(status: fsPending, detail: "could not read the proposal: " & e.msg)

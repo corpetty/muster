@@ -47,6 +47,7 @@ type
     members*: seq[seq[byte]]  ## LEZ account ids, 32 bytes
     threshold*: int
     accountId*: string        ## CAIP-10: "<chain>:<state pda hex>"
+    layout*: ProposalLayout   ## the program build: count-only (#40 open) or account-ids (#41)
 
   LezMultisigDriver* = ref object of Driver
     account*: LezMultisigAccount
@@ -73,10 +74,11 @@ proc lezMultisigAccountFromParts*(chain, address, config: string, members: seq[s
     let scheme = parsePdaScheme(c{"pda"}.getStr("lee-v0.2"))
     let program = b32(c{"program"}.getStr())
     let createKey = b32(c{"createKey"}.getStr())
+    let layout = parseProposalLayout(c{"layout"}.getStr("count-only"))
     let state = statePda(scheme, program, createKey)
     var acct = LezMultisigAccount(chain: chain, scheme: scheme, program: program, createKey: createKey,
                                   statePda: state, members: members.mapIt(b32(it)), threshold: threshold,
-                                  accountId: chain & ":" & hx(state))
+                                  accountId: chain & ":" & hx(state), layout: layout)
     var given = address.toLowerAscii().strip()
     if given.startsWith("0x"): given = given[2 .. ^1]
     if hx(state) != given:
@@ -203,7 +205,7 @@ method checkRead*(d: LezMultisigDriver, e: Effect, name: string, value: seq[byte
   try: (idx, a) = lezActionOf(e)
   except ValueError as err: return "not a LEZ multisig proposal: " & err.msg
   var p: Proposal
-  try: p = decodeProposal(value)
+  try: p = decodeProposal(value, d.account.layout)
   except LezDecodeError as err: return "the on-chain proposal does not decode: " & err.msg
   if p.index != idx: return "the on-chain proposal is #" & $p.index & "; the room reviewed #" & $idx & " (index)"
   if p.createKey != d.account.createKey: return "the on-chain proposal belongs to another multisig"
@@ -213,6 +215,8 @@ method checkRead*(d: LezMultisigDriver, e: Effect, name: string, value: seq[byte
   if p.action.accountCount != a.targetAccountCount:
     return "the on-chain proposal expects " & $p.action.accountCount & " target accounts; the room reviewed " &
            $a.targetAccountCount
+  if d.account.layout == plAccountIds and p.action.accounts != a.accounts:
+    return "the on-chain proposal names different target accounts"
   if p.action.pdaSeeds != a.pdaSeeds: return "the on-chain proposal proves different PDA seeds"
   if p.action.authorized != a.authorized: return "the on-chain proposal has different authorized target accounts"
   if p.status != psActive: return "the on-chain proposal is " & $p.status & " — no longer open to votes"
@@ -229,8 +233,9 @@ method profile*(d: LezMultisigDriver): FamilyProfile =
     approverCost: acPerVote, rounds: 1, secretState: false, maturity: maDemo,
     chain: d.account.chain, account: d.account.accountId, k: d.account.threshold,
     n: d.account.members.len, bypassesKnown: true,
-    bypasses: @["the executor chooses the target accounts at execute — a proposal records only how many " &
-                "(logos-co/lez-multisig#40)"])
+    bypasses: (if d.account.layout == plAccountIds: @[]      # #41: the accounts are committed and bound
+               else: @["the executor chooses the target accounts at execute — a proposal records only how many " &
+                       "(logos-co/lez-multisig#40)"]))
 
 method manifest*(d: LezMultisigDriver, effect: Effect): ActionManifest =
   ## Needs the zone reachable through lez_core, a funded account to pay each vote, and a

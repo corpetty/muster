@@ -17,12 +17,22 @@
 ##     scheme; the two never mix silently.
 ## The voting rules (auto-approve, one vote per member, flips, threshold, dead) mirror
 ## the program's Proposal impl so the in-process model (multisig_chain) behaves like it.
+##
+## The proposal layout is NAMED too (exo-3c9): the published program records only how many
+## target accounts a call takes (`plCountOnly`, c45100b — lez-multisig#40: whoever executes
+## chooses them); the rebuild for the live testnet line (SPEL v0.7.0 / LEZ v0.2.4) carries
+## #41's fix and commits `target_account_ids` right after the count (`plAccountIds`), which
+## execute then binds. An account's config names its layout; count-only is the default.
 
 import std/[strutils, sequtils]
 import ../hashing/sha256
 
 type
   LezDecodeError* = object of CatchableError
+
+  ProposalLayout* = enum
+    plCountOnly = "count-only"    ## lez-multisig c45100b: target_account_count only (#40)
+    plAccountIds = "account-ids"  ## the rebuild with #41: + target_account_ids, bound at execute
 
   PdaScheme* = enum
     psNssa02 = "nssa-v0.2"    ## nssa v0.2.0-rc3: the program the repo publishes today
@@ -138,7 +148,12 @@ proc decodeState*(b: openArray[byte]): MultisigState =
   result.transactionIndex = r.u64()
   r.done()
 
-proc encodeProposal*(p: Proposal): seq[byte] =
+proc parseProposalLayout*(s: string): ProposalLayout =
+  for x in ProposalLayout:
+    if $x == s: return x
+  raise newException(LezDecodeError, "unknown proposal layout: " & s)
+
+proc encodeProposal*(p: Proposal, layout = plCountOnly): seq[byte] =
   result.putU64(p.index)
   result.put32(p.proposer)
   result.put32(p.createKey)
@@ -146,6 +161,7 @@ proc encodeProposal*(p: Proposal): seq[byte] =
   result.putU32(uint32(p.action.instruction.len))
   for w in p.action.instruction: result.putU32(w)
   result.add byte(p.action.targetAccountCount)
+  if layout == plAccountIds: result.putVec32(p.action.accounts)
   result.putVec32(p.action.pdaSeeds)
   result.putU32(uint32(p.action.authorized.len))
   for x in p.action.authorized: result.add x
@@ -160,7 +176,7 @@ proc encodeProposal*(p: Proposal): seq[byte] =
     of caAddMember, caRemoveMember: result.put32(p.config.member)
     of caChangeThreshold: result.add byte(p.config.threshold)
 
-proc decodeProposal*(b: openArray[byte]): Proposal =
+proc decodeProposal*(b: openArray[byte], layout = plCountOnly): Proposal =
   var r = Reader(b: @b)
   result.index = r.u64()
   result.proposer = r.fixed(32)
@@ -168,6 +184,7 @@ proc decodeProposal*(b: openArray[byte]): Proposal =
   result.action.target = r.fixed(32)
   for _ in 0 ..< r.len32(4): result.action.instruction.add r.u32()
   result.action.accountCount = int(r.u8())
+  if layout == plAccountIds: result.action.accounts = r.vec32()
   result.action.pdaSeeds = r.vec32()
   for _ in 0 ..< r.len32(1): result.action.authorized.add r.u8()
   result.approved = r.vec32()
