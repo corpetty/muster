@@ -481,7 +481,7 @@
       "infra": ["utxo-source", "fee-estimation"],
       "maturity": "draft",
       "notes": "ChillDKG needs authenticated host keys and a relaying coordinator, and aborts on faults (not robust). Resharing is not specified. Frostsnap ships a FROST taproot product.",
-      "muster": {"status": "candidate", "phase": "D", "why": "the flagship: true t-of-n that looks single-sig, and the room is exactly the authenticated coordinator ChillDKG asks for. Shares a driver with lez.frost-public-account."},
+      "muster": {"status": "candidate", "phase": "D", "why": "the flagship: true t-of-n that looks single-sig, and the room is exactly the authenticated coordinator ChillDKG asks for. Shares a driver with lez.frost-public-account. The cryptography has landed (module/src/frost/): BIP-445 FROST signing and ChillDKG, each held to every vector its draft ships, and composed — a ceremony's key signs as one BIP-340 signature libsecp accepts. Not yet: the room-held ceremony, round secrets in the keystore (S7), the driver and a key-path spend (exo-24a, exo-4ca, exo-1ed). Demo-grade (not constant time), behind the production gate."},
       "unverified": ["a FROST PSBT/descriptor standard", "whether Frostsnap matches the BIP-445 test vectors"],
       "sources": ["https://github.com/bitcoin/bips/pull/2070", "https://github.com/bitcoin/bips/pull/2227", "https://github.com/BlockstreamResearch/bip-frost-dkg", "https://github.com/frostsnap/frostsnap"]
     },
