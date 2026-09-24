@@ -125,3 +125,44 @@ reproduces the handlers of `c45100b` with their own messages, over borsh account
   `BINDGEN_EXTRA_CLANG_ARGS`. It also runs genesis in risc0's executor, which needs
   `r0vm` 3.0.5 on `PATH`. Without it genesis panics with a bare "No such file or
   directory".
+
+## Deployed to the testnet (2026-09-24)
+
+- **The testnet is v0.2.4.** Its five built-in program image ids (amm,
+  authenticated_transfer, pinata, privacy_preserving_circuit, token) equal a v0.2.4 build's
+  byte for byte. v0.2.4's wallet also defaults to `https://testnet.lez.logos.co`.
+- **The rebuilt program is deployed there.**
+  - ImageID (its program id): `2ced3d301a4d1cd5db6cad9c428b9f3463155073f8bacf73179c6ea6536de4c7`.
+  - Deploy transaction: `61a7abe2…faa0`, in block 23405.
+
+  A program deployment is unsigned (bytecode only) and its hash is the bytecode's, so the
+  same build deploys to the same id anywhere. The sequencer drops a failing deployment at
+  block production, so inclusion is the proof that the program is on chain.
+- **lez-multisig's `e2e_multisig` passes against the testnet itself**
+  (`SEQUENCER_URL=https://testnet.lez.logos.co BLOCK_WAIT_SECS=60`):
+  - the vault is initialized through a ChainedCall into token, then funded;
+  - a proposal is made and approved;
+  - an execute that **substitutes the recipient is refused on the live chain**;
+  - the approved execute lands, leaving the vault at 300 and the recipient at 200.
+
+  Testnet blocks are about 35–40s apart, so the suite's old 15s block wait gave up on
+  transactions that did land.
+- **Upstream:** [logos-co/lez-multisig#45](https://github.com/logos-co/lez-multisig/pull/45)
+  covers the port, #41's fix, CI on v0.2.4, and the testnet deployment in the README. It
+  supersedes #41.
+- **Muster reads the testnet deployment.** `lez_multisig_rebuilt_test` §5 decodes the
+  testnet multisig's state and both proposals (`module/tests/vectors/lez-multisig-testnet/`),
+  re-encodes them byte for byte, derives their PDAs, and accepts the multisig as a room
+  account on `lez:testnet`. A room discloses a testnet multisig with this config:
+
+  ```json
+  {"program": "2ced3d301a4d1cd5db6cad9c428b9f3463155073f8bacf73179c6ea6536de4c7",
+   "createKey": "<the multisig's create key, hex>", "pda": "lee-v0.2", "layout": "account-ids"}
+  ```
+- **What the live binding (exo-3c9) still needs:**
+  - a `lez_core` that can send a generic public transaction to this program on the v0.2.4
+    line;
+  - the multisig `Instruction` in risc0 serde words. The e2e builds these with
+    `Message::try_new`, which gives muster a reference encoding to pin its own against.
+
+  "Why the program cannot just be deployed" above is resolved.

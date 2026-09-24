@@ -183,7 +183,8 @@ Deferred, infra-bound: client-side EVM signing on a non-anvil node; the beacon l
   - `count-only`: the card names #40;
   - `account-ids`: the target accounts are committed on chain and checked on the S5 re-read.
 
-  lez-multisig's own e2e suites pass against a local v0.2.4 sequencer, including an on-chain refusal of a substituted recipient. Muster decodes the resulting accounts and derives their PDAs byte for byte (`lez_multisig_rebuilt_test` §5). See `docs/labbook/lez-multisig-versions.md`.
+  lez-multisig's own e2e suites pass against a local v0.2.4 sequencer, including an on-chain refusal of a substituted recipient. Muster decodes the resulting accounts and derives their PDAs byte for byte (`lez_multisig_rebuilt_test` §5).
+- **Deployed to the public testnet (2026-09-24).** The testnet is v0.2.4: its built-in image ids equal a v0.2.4 build's. The rebuilt program is live at ImageID `2ced3d30…d4c7` (block 23405). lez-multisig's `e2e_multisig` passes against the testnet itself, including the refused substitution. The port is upstream as [logos-co/lez-multisig#45](https://github.com/logos-co/lez-multisig/pull/45). Muster reads the testnet multisig byte for byte and accepts it as a `lez:testnet` room account (§5). See `docs/labbook/lez-multisig-versions.md`.
 
 **Phase D: the crypto core landed (exo-a50.4, 2026-09-24).** `module/src/frost/` holds threshold Schnorr on secp256k1:
 - **Group arithmetic** (`secp.nim`): points with infinity over libsecp's ABI, scalars mod n over stint.

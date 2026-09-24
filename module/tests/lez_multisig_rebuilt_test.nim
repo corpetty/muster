@@ -15,11 +15,12 @@
 ##      "where" row is imperative); a count-only account keeps naming #40;
 ##   4. in the room: propose on chain, vote, settle — Executed with exactly the reviewed
 ##      accounts; a pointer whose on-chain accounts differ is refused before any vote;
-##   5. the REAL chain: accounts read back from the rebuilt program running on a LEZ v0.2.4
-##      sequencer (vectors/lez-multisig-v024, captured after lez-multisig's own e2e passed):
-##      muster decodes the state and both proposals under the account-ids layout, re-encodes
-##      them byte for byte, and derives the state, proposal and vault PDAs the chain used —
-##      `psLee02` over the image id.
+##   5. the REAL chain: accounts read back from the rebuilt program after lez-multisig's own
+##      e2e passed against it — on a local LEZ v0.2.4 sequencer (vectors/lez-multisig-v024)
+##      and on the PUBLIC TESTNET where it is deployed (vectors/lez-multisig-testnet): muster
+##      decodes the state and both proposals under the account-ids layout, re-encodes them
+##      byte for byte, derives the state, proposal and vault PDAs the chain used (`psLee02`
+##      over the image id), and accepts the multisig as a room account under that config.
 ## Needs the secp closure + libsodium — see tests/README.md.
 
 import std/[json, strutils, sequtils, os]
@@ -157,8 +158,8 @@ block:
   echo "4. in the room: proposed, voted, settled with the reviewed accounts; a pointer to other accounts refused OK"
 
 # ── 5. the real chain ──────────────────────────────────────────────────────────
-block:
-  let v = parseJson(readFile(currentSourcePath.parentDir / "vectors" / "lez-multisig-v024" / "chain.json"))
+proc checkRealChain(vectors, chain: string) =
+  let v = parseJson(readFile(currentSourcePath.parentDir / "vectors" / vectors / "chain.json"))
   let image = hexToBytes(v["program_image_id"].getStr())
   let tokenImage = hexToBytes(v["token_image_id"].getStr())
   proc acct(k: string): (seq[byte], seq[byte], seq[byte]) =
@@ -185,6 +186,15 @@ block:
   let p2 = decodeProposal(acct("proposal2")[2], plAccountIds)
   doAssert p2.action.accounts[0] == vaultId and p2.action.authorized == @[0'u8]
   doAssert p2.action.target == tokenImage
-  echo "5. the real chain (LEZ v0.2.4): state + proposals decode and re-encode byte for byte; PDAs derive OK"
+  # the config a room discloses this multisig with: its address must be the PDA it derives
+  let cfg = $(%*{"program": toHex(image), "createKey": toHex(st.createKey), "pda": "lee-v0.2", "layout": "account-ids"})
+  let (ok, a, detail) = lezMultisigAccountFromParts(chain, toHex(stateId), cfg, st.members.mapIt(toHex(it)), st.threshold)
+  doAssert ok, detail
+  doAssert a.layout == plAccountIds and a.accountId == chain & ":" & toHex(stateId)
+  echo "5. the real chain (", vectors, "): state + proposals decode and re-encode byte for byte; PDAs derive; ",
+       "the room accepts it as ", chain, " OK"
+
+checkRealChain("lez-multisig-v024", "lez:local")
+checkRealChain("lez-multisig-testnet", "lez:testnet")
 
 echo "lez_multisig_rebuilt_test: the rebuilt program commits its target accounts; muster reads and checks them — all OK"
