@@ -990,3 +990,29 @@
 {"type":"status_update","timestamp":"2026-09-23T22:58:41.463662637Z","issue_id":"exo-428","payload":{"status":"in_progress"}}
 {"type":"create","timestamp":"2026-09-23T23:25:44.536072048Z","issue_id":"exo-68f","payload":{"description":"Map the multisig landscape across chains (where the threshold is enforced, scheme, what is signed, rounds/DKG, setup, membership change, on-chain disclosure, ordering/expiry, fees, infra deps, status) and their downstream consequences for muster's invariants and seams. Produce (1) a design doc docs/design/multisig-landscape.md, (2) a machine-readable registry of driver families, (3) a family\u003c\u003edriver strategy (scheme x settlement x account instance) and the UI contract that keeps every multisig feeling the same while showing the differences (the card's fixed slots filled by the driver). Goal: muster as the go-to experience for managing any multisig.","priority":"2","title":"Generalize the multisig experience: landscape map, driver registry, family\u003c\u003edriver strategy","type":"epic"}}
 {"type":"status_update","timestamp":"2026-09-23T23:25:48.995660179Z","issue_id":"exo-68f","payload":{"status":"in_progress"}}
+{"type":"create","timestamp":"2026-09-24T00:47:02.214320976Z","issue_id":"exo-a50","payload":{"description":"Implements docs/design/multisig-landscape.md (design epic exo-68f, merged #131/#132). Family = scheme x settlement, described by a profile; account = a family instance disclosed by a member into the room. Phases A-D each prove one new locus with the fewest new seams; each phase's exit test is written before its implementation (working agreement). Registry: contracts/families/registry.json; atlas: docs/design/multisig-atlas.html.","priority":"1","title":"Multisig families: one experience across chains (implementation, phases A-D)","type":"epic"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:02.46612254Z","issue_id":"exo-a50.1","payload":{"dep_type":"parent-child","depends_on":"exo-a50"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:02.520447027Z","issue_id":"exo-a50.2","payload":{"dep_type":"parent-child","depends_on":"exo-a50"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:02.572648833Z","issue_id":"exo-a50.3","payload":{"dep_type":"parent-child","depends_on":"exo-a50"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:02.621312334Z","issue_id":"exo-a50.4","payload":{"dep_type":"parent-child","depends_on":"exo-a50"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:02.668867396Z","issue_id":"exo-a50.2","payload":{"dep_type":"blocks","depends_on":"exo-a50.1"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:02.720737199Z","issue_id":"exo-a50.3","payload":{"dep_type":"blocks","depends_on":"exo-a50.1"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:02.774035542Z","issue_id":"exo-a50.4","payload":{"dep_type":"blocks","depends_on":"exo-a50.1"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:03.139773285Z","issue_id":"exo-a50.1.1","payload":{"dep_type":"parent-child","depends_on":"exo-a50.1"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:03.186717772Z","issue_id":"exo-a50.1.2","payload":{"dep_type":"parent-child","depends_on":"exo-a50.1"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:03.233444931Z","issue_id":"exo-a50.1.3","payload":{"dep_type":"parent-child","depends_on":"exo-a50.1"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:03.281468261Z","issue_id":"exo-a50.1.4","payload":{"dep_type":"parent-child","depends_on":"exo-a50.1"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:03.327190165Z","issue_id":"exo-a50.1.5","payload":{"dep_type":"parent-child","depends_on":"exo-a50.1"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:03.377347026Z","issue_id":"exo-a50.1.6","payload":{"dep_type":"parent-child","depends_on":"exo-a50.1"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:03.424866191Z","issue_id":"exo-a50.1.7","payload":{"dep_type":"parent-child","depends_on":"exo-a50.1"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:03.468456568Z","issue_id":"exo-a50.1.2","payload":{"dep_type":"blocks","depends_on":"exo-a50.1.1"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:03.515971946Z","issue_id":"exo-a50.1.3","payload":{"dep_type":"blocks","depends_on":"exo-a50.1.1"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:03.56184342Z","issue_id":"exo-a50.1.5","payload":{"dep_type":"blocks","depends_on":"exo-a50.1.3"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:03.609148663Z","issue_id":"exo-a50.1.6","payload":{"dep_type":"blocks","depends_on":"exo-a50.1.1"}}
+{"type":"dep_add","timestamp":"2026-09-24T00:47:03.652550327Z","issue_id":"exo-a50.1.7","payload":{"dep_type":"blocks","depends_on":"exo-a50.1.3"}}
+{"type":"status_update","timestamp":"2026-09-24T00:47:03.697434109Z","issue_id":"exo-a50.1.1","payload":{"status":"in_progress"}}
+{"type":"status_update","timestamp":"2026-09-24T00:47:03.74021075Z","issue_id":"exo-a50.1","payload":{"status":"in_progress"}}
+{"type":"comment","timestamp":"2026-09-24T00:44:08.199681379Z","issue_id":"exo-68f","payload":{"body":"Design merged in #131 (84f6092): docs/design/multisig-landscape.md, contracts/families/registry.json (44 families), scripts/check-family-registry.py, docs/design/multisig-explorer.html (atlas; published artifact https://claude.ai/artifact/574XQ9p5pieHK511UwQEWv). Decisions recorded in §9. Implementation phases A-D not yet filed."}}
+{"type":"close","timestamp":"2026-09-24T00:44:08.243897409Z","issue_id":"exo-68f","payload":{}}
+{"type":"close","timestamp":"2026-09-23T23:20:31.225457501Z","issue_id":"exo-428","payload":{}}
+{"type":"comment","timestamp":"2026-09-23T23:20:31.269166648Z","issue_id":"exo-428","payload":{"body":"Merged in #130 (726361b)."}}
