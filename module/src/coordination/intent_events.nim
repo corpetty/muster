@@ -81,6 +81,17 @@ proc effectFromJson*(effectJson: string): Effect =
         let chain = j{"chain"}.getStr()
         if chain.len > 0: fields.add ("chain", cbText(chain))
         return Effect(schemaId: invokeDomain(module, meth), fields: fields)
+      of "safe-tx":
+        # A full Safe transaction (exo-a50.1.4): a transfer's to / value / nonce plus
+        # data, operation (0 CALL, 1 DELEGATECALL), the gas fields, the gas token and the
+        # refund receiver — every one reaches the safeTxHash the owners sign, so what the
+        # card shows is exactly what is signed. Only the keys present are carried.
+        var fields: seq[(string, CborValue)]
+        for k in ["to", "data", "gasToken", "refundReceiver"]:
+          if j.hasKey(k): fields.add (k, cbText(j[k].getStr()))
+        for k in ["value", "nonce", "operation", "safeTxGas", "baseGas", "gasPrice"]:
+          if j.hasKey(k): fields.add (k, cbUint(uint64(j[k].getInt())))
+        return Effect(schemaId: "muster.effect.safe-tx.v1", fields: fields)
       else:
         var fields: seq[(string, CborValue)]
         if j.hasKey("to"): fields.add ("to", cbText(j["to"].getStr()))
@@ -106,6 +117,7 @@ proc effectSchema*(effectJson: string): tuple[id: string, known: bool] =
     let kind = j["effect"].getStr()
     case kind
     of "transfer": return ("muster.effect.transfer.v1", true)
+    of "safe-tx": return ("muster.effect.safe-tx.v1", true)
     of "statement": return ("muster.effect.statement.v1", true)
     of "add-driver": return ("muster.effect.governance.add-driver.v1", true)
     of "invoke":

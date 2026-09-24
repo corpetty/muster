@@ -17,8 +17,8 @@ in `../contracts/specs/derived-exo-*.spec.json`; each names probes under
 Logos fleet (membership handshake end to end).** The signing-path core, the
 intent lifecycle and driver interface, all ten invariants (the probe suite
 under `tests/probes/` is green), the Safe driver (real EIP-712 `safeTxHash`,
-secp256k1 owner verification, on-chain `execTransaction` against the anvil
-`MiniSafe`), and the LIDL codegen that generates the surface from the contract
+secp256k1 owner verification, on-chain `execTransaction` against the real
+Safe v1.4.1 on anvil), and the LIDL codegen that generates the surface from the contract
 are all in. P4 put the whole lifecycle through the real UI in logos-basecamp
 (ADR-013). P3 — transport, encryption, and multi-party coordination — is built
 and tested; two `muster-ui` instances converge over the public fleet (join →

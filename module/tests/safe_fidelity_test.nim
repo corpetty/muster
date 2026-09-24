@@ -74,13 +74,15 @@ block:
   let cd = assembleExecTransaction(tx, sigs)
   doAssert cd[0 .. 3] == @[0x6a'u8, 0x76, 0x12, 0x02], "execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)"
   proc word(i: int): seq[byte] = cd[4 + 32*i ..< 4 + 32*(i+1)]
+  proc num(i: int): int =
+    for b in word(i)[24 .. 31]: result = (result shl 8) or int(b)
   doAssert word(0)[12 .. 31] == @(addrOf(Target))
-  doAssert word(1)[31] == 5 and word(3)[31] == 1 and word(4)[31] == 7 and word(5)[31] == 8 and word(6)[31] == 9
+  doAssert num(1) == 5 and num(3) == 1 and num(4) == 7 and num(5) == 8 and num(6) == 9
   doAssert word(7)[12 .. 31] == @(addrOf(MultiSend)) and word(8)[12 .. 31] == @(addrOf(Target))
-  doAssert word(2)[31] == 10 * 32, "data sits after the ten head words"
-  doAssert word(10)[31] == 2 and word(11)[0 .. 1] == @[0xde'u8, 0xad]
-  doAssert word(9)[31] == 10 * 32 + 64, "signatures follow data's length word and its padded bytes"
-  doAssert word(12)[31] == 65
+  doAssert num(2) == 10 * 32, "data sits after the ten head words"
+  doAssert num(10) == 2 and word(11)[0 .. 1] == @[0xde'u8, 0xad]
+  doAssert num(9) == 10 * 32 + 64, "signatures follow data's length word and its padded bytes"
+  doAssert num(12) == 65
   echo "2. settlement speaks the real Safe ABI (0x6a761202, all ten arguments) OK"
 
 # ── 3. delegatecall is surfaced and gated ───────────────────────────────────────

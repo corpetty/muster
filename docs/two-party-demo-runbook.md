@@ -6,7 +6,7 @@ and they need different setup:
 
 | Track | What it shows | Needs anvil? | Needs seeded keys? |
 |---|---|---|---|
-| **Safe** (on-chain 2-of-3) | An Ethereum multisig settling on chain — every owner's signature is disclosed on the public ledger | **Yes** (the MiniSafe fixture) | **Yes** — each peer must BE a real Safe owner |
+| **Safe** (on-chain 2-of-3) | An Ethereum multisig settling on chain — every owner's signature is disclosed on the public ledger | **Yes** (the real Safe v1.4.1 on anvil) | **Yes** — each peer must BE a real Safe owner |
 | **threshold / FROST** (k-of-n Ed25519) | The same coordination reaching finality with a roster endorsement — the disclosure contrast (one aggregated key, not every signer) | No | No — any two peers who join the room *are* the roster |
 
 The teaching beat is the contrast: **the room reaches the same decision two ways — settle
@@ -25,8 +25,8 @@ only needs the AppImage file.
 
 ## Why seeding is needed (Safe track only)
 
-The room's Safe is the anvil MiniSafe fixture: **2-of-3, owners = anvil accounts 0/1/2**,
-at `0x5FbDB2315678afecb367f032d93F642f64180aa3` (hardcoded in
+The room's Safe is the real Safe v1.4.1 on anvil (`infra/anvil/devnet.sh`), **disclosed into the room by a member** (Accounts → **Disclose the local test Safe**; accounts live in the room, exo-a50.1.3): **2-of-3, owners = anvil accounts 0/1/2**,
+at `0xEb4520E32862D2adFa2aF042f0B5eA2041dEE841` (hardcoded in
 `module/nim-lib/muster_module.nim`). In-app approval reaches **executable** for any room
 member, but the on-chain `execTransaction` only accepts signatures that recover to the
 **real** owners — so to *settle*, each participant's in-app account must be one of anvil
@@ -52,7 +52,7 @@ the room, so the two peers' own identities are the signer set automatically.
 Local anvil, two isolated peers. Nothing crosses a network except the room itself (over
 the public `logos.test` fleet, the default).
 
-**1. Start anvil + deploy the MiniSafe** (one command; needs foundry):
+**1. Start anvil + deploy the real Safe v1.4.1** (one command; needs foundry):
 
 ```bash
 infra/anvil/devnet.sh
@@ -229,7 +229,7 @@ settle.
 - **Safe Submit fails / card stuck at executable.** The signatures didn't recover to real
   owners: either a peer wasn't seeded (relaunch with `--fresh` so the seed mints a new
   identity), or the RPC isn't pointing at the anvil that has *this* Safe. Confirm the
-  Safe exists: `cast code 0x5FbDB2315678afecb367f032d93F642f64180aa3 --rpc-url <rpc>` is
+  Safe exists: `cast code 0xEb4520E32862D2adFa2aF042f0B5eA2041dEE841 --rpc-url <rpc>` is
   non-empty. If the address is wrong, anvil wasn't fresh — restart it and re-run
   `devnet.sh`.
 - **Seed didn't take (wrong owner).** `MUSTER_DEV_SECP_KEY` is honored only when a *new*
@@ -254,4 +254,4 @@ settle.
   the right nonce — no anvil restart needed between them. (Was: hardcoded nonce 0, only the
   first settle worked; verified fixed by `coordinate_submit_anvil`'s two-settle step.)
 - **Safe address is fixed** to the anvil fixture; there's no in-app Safe-address setting,
-  so the Safe track requires the anvil MiniSafe (not an arbitrary chain).
+  so the Safe track requires the anvil Safe (not an arbitrary chain).

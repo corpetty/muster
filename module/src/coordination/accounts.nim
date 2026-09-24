@@ -131,7 +131,8 @@ proc evmChainId*(chain: string): (bool, uint64) =
   except ValueError: (false, 0'u64)
 
 proc driverForPolicy*(policy: string, accounts: seq[RoomAccount],
-                      roomBuild: proc(kind: string): Driver): Driver =
+                      roomBuild: proc(kind: string): Driver,
+                      delegatecallAllow: seq[Address] = @[]): Driver =
   ## Resolve an intent's policy against the room's disclosed accounts. A room kind is
   ## built by the host (`roomBuild`, its roster wiring); an account-bound kind is built
   ## FROM the disclosure. Anything that cannot be resolved honestly is unsupported.
@@ -148,8 +149,10 @@ proc driverForPolicy*(policy: string, accounts: seq[RoomAccount],
   of "safe":
     let (ok, chainId) = evmChainId(a.chain)
     if not ok: return newUnsupportedDriver(policy)
-    newSafeDriver(chainId = chainId, safe = toAddress(a.address), owners = signers,
-                  threshold = max(1, a.threshold))
+    let sd = newSafeDriver(chainId = chainId, safe = toAddress(a.address), owners = signers,
+                           threshold = max(1, a.threshold))
+    sd.delegatecallAllow = delegatecallAllow   # THIS client's local opt-in (exo-a50.1.4)
+    sd
   of "eip191":
     # an attestation by the account's signers: one recognized signer completes it
     newPersonalSignDriver(signers = signers, threshold = 1)

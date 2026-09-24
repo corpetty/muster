@@ -79,6 +79,7 @@ type SafeDriver* = ref object of Driver
   threshold*: int
   owners*: seq[Address]              ## the Safe's owner set
   pendingHash*: array[32, byte]      ## the safeTxHash currently being collected on
+  delegatecallAllow*: seq[Address]   ## delegatecall targets THIS client will propose/sign (else refused)
 
 method environment*(d: SafeDriver): string =
   ## A Safe settles on one EVM chain: its signatures are bound to that chain id.
@@ -107,21 +108,46 @@ proc hexNibble(c: char): byte =
   of 'A'..'F': byte(ord(c) - ord('A') + 10)
   else: 0'u8
 
+proc parseAddr(t: string): Address =
+  var s = t
+  if s.len >= 2 and s[0] == '0' and (s[1] == 'x' or s[1] == 'X'): s = s[2..^1]
+  for i in 0 ..< min(20, s.len div 2):
+    result[i] = byte((hexNibble(s[2*i]) shl 4) or hexNibble(s[2*i+1]))
+
+proc parseBytes(t: string): seq[byte] =
+  var s = t
+  if s.len >= 2 and s[0] == '0' and (s[1] == 'x' or s[1] == 'X'): s = s[2..^1]
+  for i in 0 ..< s.len div 2:
+    result.add byte((hexNibble(s[2*i]) shl 4) or hexNibble(s[2*i+1]))
+
 proc toSafeTx*(e: Effect): SafeTx =
-  ## Map a transfer effect's fields to a SafeTx. P2 v0 handles the common transfer
-  ## shape; richer effect schemas extend this mapping.
+  ## Map an effect to the SafeTx the owners sign — EVERY field (exo-a50.1.4): a
+  ## transfer carries to / value / nonce; a `safe-tx` effect may also carry data,
+  ## operation (0 CALL, 1 DELEGATECALL), safeTxGas, baseGas, gasPrice, gasToken and
+  ## refundReceiver. An absent field is the Safe's zero value, so a plain transfer's
+  ## hash is unchanged.
   for (k, v) in e.fields:
     case k
     of "to":
-      if v.kind == ckText:
-        var s = v.t
-        if s.len >= 2 and s[0] == '0' and (s[1] == 'x' or s[1] == 'X'): s = s[2..^1]
-        for i in 0 ..< min(20, s.len div 2):
-          result.to[i] = byte((hexNibble(s[2*i]) shl 4) or hexNibble(s[2*i+1]))
+      if v.kind == ckText: result.to = parseAddr(v.t)
     of "value":
       if v.kind == ckUint: result.value = v.u
     of "nonce":
       if v.kind == ckUint: result.nonce = v.u
+    of "data":
+      if v.kind == ckText: result.data = parseBytes(v.t)
+    of "operation":
+      if v.kind == ckUint: result.operation = uint8(min(255'u64, v.u))
+    of "safeTxGas":
+      if v.kind == ckUint: result.safeTxGas = v.u
+    of "baseGas":
+      if v.kind == ckUint: result.baseGas = v.u
+    of "gasPrice":
+      if v.kind == ckUint: result.gasPrice = v.u
+    of "gasToken":
+      if v.kind == ckText: result.gasToken = parseAddr(v.t)
+    of "refundReceiver":
+      if v.kind == ckText: result.refundReceiver = parseAddr(v.t)
     else: discard
 
 method canonicalize*(d: SafeDriver, e: Effect): Materialization =
@@ -169,6 +195,12 @@ method manifest*(d: SafeDriver, effect: Effect): ActionManifest =
   ## provider BEFORE the mempool — the "named intermediary" the PriFi article warns
   ## about, named here rather than hidden.
   let safeId = "safe:" & addrHex(d.safe)
+  var touches = @[touch(safeId, tmWrite), touch(safeId & ":nonce", tmWrite),
+                  touch("chain:" & $d.chainId, tmWrite)]
+  # A DELEGATECALL runs the target's code AS the Safe: it can rewrite the Safe's own
+  # storage — its owners, threshold, modules, guard. Said here, not hidden (the Bybit
+  # vector was a delegatecall its signers never saw, exo-a50.1.4).
+  if toSafeTx(effect).operation == 1: touches.add touch(safeId & ":storage", tmWrite)
   ActionManifest(declared: true, agreement: d.describe(),
     requirements: @[req(rqEnvironment, "chain:" & $d.chainId),
                     req(rqInfra, "rpc"),
@@ -185,10 +217,9 @@ method manifest*(d: SafeDriver, effect: Effect): ActionManifest =
                     req(rqAsset, "amount", rpProposer,
                         need(mcAsset, "chain:" & $d.chainId, "value"))],
     discloses: @[row("to", obChainObserver), row("value", obChainObserver),
-                 row("data", obChainObserver), row("payer", obChainObserver),
-                 row("signed-tx", obRpcProvider)],
-    touches: @[touch(safeId, tmWrite), touch(safeId & ":nonce", tmWrite),
-               touch("chain:" & $d.chainId, tmWrite)])
+                 row("data", obChainObserver), row("operation", obChainObserver),
+                 row("payer", obChainObserver), row("signed-tx", obRpcProvider)],
+    touches: touches)
 
 method profile*(d: SafeDriver): FamilyProfile =
   ## The evm.safe family (contracts/families/registry.json): a contract on one EVM
@@ -205,3 +236,15 @@ method profile*(d: SafeDriver): FamilyProfile =
     approverCost: acNone, rounds: d.describe().rounds, secretState: false,
     maturity: maProduction, chain: chain, account: caip10(chain, addrHex(d.safe)),
     k: d.threshold, n: d.owners.len, bypassesKnown: false)
+
+method signRefusal*(d: SafeDriver, e: Effect): string =
+  ## Refuse to propose or sign a DELEGATECALL unless this client allowlists its target
+  ## (MUSTER_SAFE_DELEGATECALL_ALLOW; e.g. MultiSendCallOnly). A delegatecall runs
+  ## foreign code as the Safe and can take it — so it needs a deliberate local opt-in,
+  ## never a default. An unknown operation is refused outright. A CALL is never refused.
+  let tx = toSafeTx(e)
+  if tx.operation == 0: return ""
+  if tx.operation > 1: return "unknown Safe operation " & $tx.operation
+  if tx.to in d.delegatecallAllow: return ""
+  "delegatecall to " & addrHex(tx.to) & " runs its code as the Safe and can rewrite its owners; " &
+    "it is not on this client's delegatecall allowlist (MUSTER_SAFE_DELEGATECALL_ALLOW)"

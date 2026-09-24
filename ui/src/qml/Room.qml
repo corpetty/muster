@@ -356,6 +356,10 @@ Item {
             amount: (!isStatement && eff.value !== undefined) ? String(eff.value) : "",
             denom: "",
             to: (!isStatement && eff.to !== undefined) ? String(eff.to) : "",
+            // a full Safe transaction's own fields (exo-a50.1.4): what it calls and HOW —
+            // a DELEGATECALL runs the target's code as the Safe, so the card must say so
+            safeData: (!isStatement && eff.data !== undefined) ? String(eff.data) : "",
+            operation: (!isStatement && eff.operation !== undefined) ? Number(eff.operation) : 0,
             rail: (it && it.rail) ? String(it.rail) : "safe",
             threshold: Number((it && it.threshold) || 0),
             n: Number((it && it.n) || 0),

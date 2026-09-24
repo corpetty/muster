@@ -104,7 +104,7 @@ docs/            00-vision · 01-furps · 02-implementation-plan
   diagrams/      the figure programme, its manifest, and the rot checker
   labbook/       traps found the expensive way · posts/ the campaign write-ups
 contracts/specs/ typed specs with acceptance oracles, derived from the invariants
-infra/anvil/     MiniSafe.sol fixture (faithful Safe-1.4.1 subset) + foundry
+infra/anvil/     devnet.sh: anvil + the REAL Safe v1.4.1 (singleton, factory, fallback handler, a 2-of-3 proxy) + foundry
 ui/prototype/    coordination-prototype-v2.html — the standalone HTML reference build
 ```
 

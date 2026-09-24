@@ -104,20 +104,14 @@ MUSTER_SECP256K1_LIB="-L/tmp/secp/lib -lsecp256k1 -Wl,-rpath,/tmp/secp/lib" \
 
 ## Layer C — Safe on-chain end-to-end (anvil, no indexer)
 
-Collect 2-of-3 off-chain, execute `execTransaction` on-chain against the `MiniSafe`
-fixture (a faithful Safe-1.4.1 subset). Full detail in [`../infra/anvil/README.md`](../infra/anvil/README.md).
+Collect 2-of-3 off-chain, execute `execTransaction` on-chain against the real Safe
+v1.4.1 (singleton + factory + a 2-of-3 proxy, exo-a50.1.4). Full detail in
+[`../infra/anvil/README.md`](../infra/anvil/README.md).
 
 ```bash
-# 1. anvil
-anvil --silent &
-
-# 2. deploy MiniSafe with anvil accounts 0/1/2 as owners, threshold 2
-cd infra/anvil
-K0=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-forge create --rpc-url http://127.0.0.1:8545 --private-key $K0 --broadcast \
-  src/MiniSafe.sol:MiniSafe \
-  --constructor-args "[0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,0x70997970C51812dc3A010C7d01b50e0d17dc79C8,0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC]" 2
-cast send --rpc-url http://127.0.0.1:8545 --private-key $K0 --value 5ether <SAFE_ADDR>
+# 1–2. anvil + the real Safe v1.4.1, owners = anvil accounts 0/1/2, threshold 2, funded.
+#      Deterministic on a fresh anvil: SAFE_ADDR=0xEb4520E32862D2adFa2aF042f0B5eA2041dEE841
+infra/anvil/devnet.sh      # needs foundry (nix shell nixpkgs#foundry), jq, git
 
 # 3. drive it from muster (uses the /tmp/secp from Layer B)
 cd ../../module
