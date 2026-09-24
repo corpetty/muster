@@ -59,6 +59,11 @@ proc newDriver*(kind: string, config: JsonNode): Driver =
                   verifyResult = config{"verifyResult"}.getBool(true))
   of "threshold":
     newThresholdDriver(parseRoster(config), config{"k"}.getInt(2))
+  of "unanimous":
+    # The k = n threshold over the same roster (driver-as-proposal: admitted into a room
+    # only by an approved add-driver, see kinds.nim).
+    let roster = parseRoster(config)
+    newThresholdDriver(roster, max(1, roster.len))
   of "frost":
     # 2-round Schnorr-threshold structure over an Ed25519 roster. Same roster/k
     # config shape as "threshold"; the difference is describe().rounds = 2, so the
@@ -81,4 +86,6 @@ proc newDriver*(kind: string, config: JsonNode): Driver =
       for s in config["signers"]: signers.add hexToAddr(s.getStr())
     newPersonalSignDriver(signers = signers, threshold = config{"threshold"}.getInt(2))
   else:
+    # Never a fallback to another family (kinds.nim): a kind this client does not have
+    # is refused here, and resolveKind turns it into an UnsupportedDriver for the fold.
     raise newException(RegistryError, "unknown driver kind: " & kind)

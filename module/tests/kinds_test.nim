@@ -113,10 +113,15 @@ block:
   var r = newRoom("/muster/1/kinds-unknown/proto")
   let resolver: DriverFor = proc(kind: string): Driver =
     resolveKind(kind, proc(k: string): Driver = liveDriverFor(k))
-  let eff = """{"to":"0x70997970C51812dc3A010C7d01b50e0d17dc79C8","value":1,"nonce":0}"""
-  let asSafe = liveProposeIntent(r.alice, aliceKs, resolver, "safe", eff, 0, 1,
+  # a Safe effect whose inputs are accounted for (invariant 10: an in-app approval
+  # refuses unaccountable inputs), exactly as the live probes build one
+  let eff = effectFor("safe", 1, "\"sources\":{\"value\":\"read\",\"nonce\":\"read\"}")
+  let asSafe = liveProposeIntent(r.alice, aliceKs, resolver, "safe", eff, int64(Now), 1,
                                  account = SafeAddr, ttlSec = Ttl)
-  doAssert liveContribute(r.alice, aliceKs, resolver, asSafe, "", "", bindCtx(), Now) in ["collecting", "proposed"]
+  r.alice.publish(readEvent(asSafe, "value", "rpc://probe", "1"))
+  r.alice.publish(readEvent(asSafe, "nonce", "rpc://probe", "0"))
+  let st = liveContribute(r.alice, aliceKs, resolver, asSafe, "", "", bindCtx(), Now)
+  doAssert st in ["collecting", "proposed"], "a Safe owner's in-app approval under the known kind: " & st
   let sigs = r.alice.log.allEvents().filterIt(it.key.startsWith("intent/" & asSafe & "/sig/"))
   doAssert sigs.len == 1
   let odd = intentIdFor(eff, "squads")
@@ -130,7 +135,7 @@ block:
   let before = r.alice.log.allEvents().len
   doAssert liveContribute(r.alice, aliceKs, resolver, odd, "", "", bindCtx(), Now) == "unsupported-driver"
   doAssert r.alice.log.allEvents().len == before, "a refused approval publishes nothing"
-  doAssert liveProposeIntent(r.alice, aliceKs, resolver, "squads", eff, 0, 2,
+  doAssert liveProposeIntent(r.alice, aliceKs, resolver, "squads", eff, int64(Now), 2,
                              account = SafeAddr, ttlSec = Ttl) == "unsupported-driver",
     "proposing under a kind this client lacks is refused"
   echo "3. an unknown kind refuses: registry raises, the fold never counts it, the live path signs nothing OK"

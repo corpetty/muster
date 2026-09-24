@@ -176,13 +176,26 @@ Item {
         try { return JSON.parse(backend ? backend.roomSubmitJson : "{}"); }
         catch (e) { return ({}); }
     }
-    // The driver kinds this room may use (coordinate_drivers) — driver-as-proposal.
-    // Grows by approved add-driver proposal; the picker offers only these.
-    readonly property var drivers: {
-        try { return JSON.parse(backend ? backend.driversJson : "[\"safe\",\"threshold\"]"); }
-        catch (e) { return ["safe", "threshold"]; }
+    // Every driver kind this client has (coordinate_drivers — the ONE list, the module's
+    // drivers/kinds.nim, exo-a50.1.2): [{kind, family, label, composes, founding,
+    // admitted}]. The UI names no kind of its own; `admitted` grows by approved
+    // add-driver proposal (driver-as-proposal). Nothing loaded yet → no kinds, never a
+    // guessed fallback list.
+    readonly property var kinds: {
+        try {
+            var j = JSON.parse(backend ? backend.driversJson : "[]");
+            return Array.isArray(j) ? j.filter(function (k) { return k && typeof k === "object"; }) : [];
+        } catch (e) { return []; }
     }
+    // the kinds the room has admitted (strings), as before
+    readonly property var drivers: room.kinds.filter(function (k) { return k.admitted; })
+                                             .map(function (k) { return String(k.kind); })
     function hasDriver(k) { return (room.drivers || []).indexOf(k) >= 0; }
+    function kindInfo(k) {
+        for (var i = 0; i < room.kinds.length; ++i)
+            if (room.kinds[i].kind === k) return room.kinds[i];
+        return null;
+    }
 
     // Which policies COHERE with a proposal kind. The policy is HOW the room agrees;
     // the kind is WHAT it agrees to — and not every pairing means anything. An
@@ -193,9 +206,13 @@ Item {
     // The composer offers ONLY these for the current kind, so "payment via FROST" —
     // which meant nothing — can't be built.
     function policiesForKind(k) {
-        if (k === "payment") return ["safe"];
-        if (k === "action")  return ["invoke"];
-        return ["threshold", "frost", "eip191", "unanimous"];   // statement
+        // read from the module's one kind list (each kind says which proposals it serves)
+        var out = [];
+        for (var i = 0; i < room.kinds.length; ++i) {
+            var c = room.kinds[i].composes || [];
+            if (c.indexOf(k) >= 0) out.push(String(room.kinds[i].kind));
+        }
+        return out;
     }
     function policyValidForKind(p) {
         return room.policiesForKind(room.composeType).indexOf(p) >= 0;
@@ -206,8 +223,8 @@ Item {
     // fits. Action manages its own policy in proposeAction, so it's left alone.
     function coherePolicy() {
         if (!room.backend || room.composeType === "action") return;
-        var valid = room.policiesForKind(room.composeType);
-        if (valid.indexOf(room.policyKind) < 0)
+        var valid = room.policiesForKind(room.composeType).filter(function (p) { return room.hasDriver(p); });
+        if (valid.length > 0 && valid.indexOf(room.policyKind) < 0)
             room.backend.setPolicy(valid[0]);
     }
 
@@ -1063,71 +1080,29 @@ Item {
                         font.weight: Theme.typography.weightMedium
                     }
 
-                    LogosButton {
-                        objectName: "roomPolicySafe"
-                        visible: room.policyValidForKind("safe")
-                        Layout.preferredWidth: 90
-                        text: qsTr("Safe")
-                        variant: room.policyKind === "safe"
-                                 ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                        onClicked: if (room.backend) room.backend.setPolicy("safe")
-                    }
-
-                    LogosButton {
-                        objectName: "roomPolicyThreshold"
-                        visible: room.policyValidForKind("threshold")
-                        Layout.preferredWidth: 130
-                        text: qsTr("Threshold")
-                        variant: room.policyKind === "threshold"
-                                 ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                        onClicked: if (room.backend) room.backend.setPolicy("threshold")
-                    }
-
-                    // FROST — a 2-round Schnorr-threshold policy (the only driver with
-                    // rounds > 1). In the founding set, so it's directly selectable; the
-                    // card shows "round R of 2" as it collects.
-                    LogosButton {
-                        objectName: "roomPolicyFrost"
-                        visible: room.policyValidForKind("frost")
-                        Layout.preferredWidth: 90
-                        text: qsTr("FROST")
-                        variant: room.policyKind === "frost"
-                                 ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                        onClicked: if (room.backend) room.backend.setPolicy("frost")
-                    }
-
-                    // Attest — an EIP-191 personal-sign by the room's Safe owners (P-D6),
-                    // a signed group statement that settles nothing on-chain. In the
-                    // founding set, so it's directly selectable; distinct from the Safe
-                    // policy (which settles) and from the Ed25519 threshold endorsement.
-                    LogosButton {
-                        objectName: "roomPolicyEip191"
-                        visible: room.policyValidForKind("eip191")
-                        Layout.preferredWidth: 90
-                        text: qsTr("Attest")
-                        variant: room.policyKind === "eip191"
-                                 ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                        onClicked: if (room.backend) room.backend.setPolicy("eip191")
-                    }
-
-                    // Driver-as-proposal (invariant 6): "unanimous" (n-of-n) is NOT in
-                    // the founding set. If the room has admitted it (an approved
-                    // add-driver proposal), it's a selectable policy; otherwise this
-                    // PROPOSES adding it — a governance intent the group must approve.
-                    LogosButton {
-                        objectName: "roomPolicyUnanimous"
-                        visible: room.policyValidForKind("unanimous")
-                        Layout.preferredWidth: 150
-                        text: room.hasDriver("unanimous") ? qsTr("Unanimous")
-                                                          : qsTr("＋ Propose unanimous")
-                        variant: room.policyKind === "unanimous"
-                                 ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                        onClicked: {
-                            if (!room.backend) return;
-                            if (room.hasDriver("unanimous"))
-                                room.backend.setPolicy("unanimous");
-                            else   // propose admitting it — the room approves, then it appears
-                                room.backend.proposeInRoom(JSON.stringify({ effect: "add-driver", kind: "unanimous" }));
+                    // One button per kind that serves this proposal, from the module's one
+                    // kind list (exo-a50.1.2). An admitted kind is selectable; one the room
+                    // has not admitted (e.g. "unanimous", n-of-n) is offered as a governance
+                    // proposal to add it — driver-as-proposal (invariant 6). objectName
+                    // keeps the roomPolicy<Kind> names the UI harness clicks.
+                    Repeater {
+                        model: room.policiesForKind(room.composeType)
+                        delegate: LogosButton {
+                            required property var modelData
+                            readonly property var info: room.kindInfo(modelData)
+                            readonly property string label: info && info.label ? String(info.label) : String(modelData)
+                            objectName: "roomPolicy" + String(modelData).charAt(0).toUpperCase() + String(modelData).slice(1)
+                            Layout.preferredWidth: room.hasDriver(modelData) ? 110 : 170
+                            text: room.hasDriver(modelData) ? label : qsTr("＋ Propose %1").arg(label.toLowerCase())
+                            variant: room.policyKind === modelData
+                                     ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                            onClicked: {
+                                if (!room.backend) return;
+                                if (room.hasDriver(modelData))
+                                    room.backend.setPolicy(modelData);
+                                else   // propose admitting it — the room approves, then it appears
+                                    room.backend.proposeInRoom(JSON.stringify({ effect: "add-driver", kind: modelData }));
+                            }
                         }
                     }
 

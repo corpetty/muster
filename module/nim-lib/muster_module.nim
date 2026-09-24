@@ -20,6 +20,7 @@ import ../src/drivers/invoke         # the generic module-action driver (P-D1/P-
 import ../src/drivers/eip191         # EIP-191 personal-sign attestation (Tier-1, P-D6)
 import ../src/drivers/registry
 import ../src/drivers/profile         # the family profile each driver declares (exo-a50.1.1)
+import ../src/drivers/kinds           # the one list of driver kinds; unknown → unsupported (exo-a50.1.2)
 import ../src/drivers/safe_rpc
 import ../src/wallet/types as wallet_types   # hexToDec + formatUnits: a live balance → "N ETH"
 import ../src/crypto/secp256k1
@@ -112,7 +113,10 @@ proc driverForKind(kind: string): Driver =
   ## IS a signer and it endorses in-app (no pasted fixture). k is the configured
   ## threshold capped at the roster size (a 1-member room needs 1); "unanimous" is
   ## n-of-n. Safe stays the on-chain owner set (gDriver, its owners are not room
-  ## members). Unknown kinds fall back to the Safe.
+  ## members). A kind not on the one list (drivers/kinds.nim) is UNSUPPORTED — never a
+  ## fallback to the Safe, which would fold, verify and settle a proposal this client
+  ## cannot read as a Safe transfer (exo-a50.1.2).
+  if not isKnownKind(kind): return newUnsupportedDriver(kind)
   let roster = currentRoster()
   let n = max(1, roster.len)
   case kind
@@ -142,7 +146,7 @@ proc driverForKind(kind: string): Driver =
     # exactly as the chain would refuse it at settlement. The safeTxHash never commits to
     # the owner set, so re-derivation (F-4) and the materialization are unchanged.
     gDriver
-  else: gDriver
+  else: newUnsupportedDriver(kind)   # unreachable while every listed kind has an arm
 
 let driverFor: DriverFor = proc(kind: string): Driver = driverForKind(kind)
   ## The per-intent driver resolver the folds take: each intent's own policy → its driver.
@@ -723,14 +727,15 @@ proc policyJson(): JsonNode =
 proc roomKinds(): seq[string] =
   ## The driver kinds the joined room may use (driver-as-proposal). Folded from the
   ## room's log; falls back to the founding set when no room is joined.
-  if gSession == nil: return @["safe", "threshold"]
+  if gSession == nil: return foundingKinds()
   roomDriverKinds(gSession.log.allEvents(), driverFor)
 
 proc musterCoordinateDrivers(): string =
-  ## The room's admitted driver kinds, folded from the shared log (invariant 6).
-  var arr = newJArray()
-  for k in roomKinds(): arr.add %k
-  $arr
+  ## Every driver kind this client has — the one list (drivers/kinds.nim) — each with
+  ## its family, label, the proposals it serves, and whether the joined room has
+  ## admitted it (folded from the shared log, invariant 6). The composer's picker is
+  ## drawn from this, so the UI names no kind of its own (exo-a50.1.2).
+  $kindsJson(roomKinds())
 
 proc musterCoordinateSetPolicy(kind: string): string =
   ## Choose the COMPOSE DEFAULT policy — the driver the next intent you propose runs

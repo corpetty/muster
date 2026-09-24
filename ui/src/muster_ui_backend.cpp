@@ -448,9 +448,10 @@ void MusterUiBackend::submitInRoom(const QString &intentId)
 
 void MusterUiBackend::loadDrivers()
 {
-    // coordinate_drivers → the driver kinds this room may use (driver-as-proposal).
-    // Folded from the shared log: the founding set plus any kind an approved
-    // add-driver proposal admitted. The policy pickers offer only these.
+    // coordinate_drivers → every driver kind this client has (the module's one list),
+    // each marked admitted or not for the joined room — folded from the shared log: the
+    // founding set plus any kind an approved add-driver proposal admitted. Without a room
+    // it is the founding set, so the composer can pick a policy before joining.
     setDriversJson(modules().muster_module.coordinate_drivers());
 }
 
@@ -639,6 +640,7 @@ void MusterUiBackend::onContextReady()
     checkHealth();
     loadAccount();
     loadSettings();
+    loadDrivers();   // the one kind list, so the composer picks a policy before any room
     // Begin listening on this identity's inbox so room invites (from "Start something
     // with someone") arrive even before any room is opened. Idempotent; safe on launch.
     startInbox();

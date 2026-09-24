@@ -86,22 +86,30 @@ Item {
     // endorsement) and stays changeable in the room. Muster is a coordination client,
     // not a payments app: money is one of the things you can do together, not the frame.
     readonly property var verbs: [
-        { id: "decide", policy: "threshold", name: qsTr("Decide something together"),
+        { id: "decide", proposal: "statement", name: qsTr("Decide something together"),
           note: qsTr("The room agrees on something — a k-of-n group sign-off. No chain, nothing on a public ledger; just the people who agreed.") },
-        { id: "pay",    policy: "safe",      name: qsTr("Send a payment"),
+        { id: "pay",    proposal: "payment",   name: qsTr("Send a payment"),
           note: qsTr("Money moves from a shared account, coordinated by the room. Each person's address stays in the room — the transaction is signed off together.") },
-        { id: "talk",   policy: "threshold", name: qsTr("Just talk"),
+        { id: "talk",   proposal: "statement", name: qsTr("Just talk"),
           note: qsTr("A private conversation. Only the people in the room can read it — the room is the boundary.") }
     ]
 
     // The driver the room runs on follows from the chosen action, never a separate
-    // jargon step. Changeable later from the room's policy row.
+    // jargon step: the first founding kind that serves the verb's proposal, read from the
+    // module's one kind list (coordinate_drivers, exo-a50.1.2). Changeable later from the
+    // room's policy row. "" until the list is loaded — the room then coheres the policy.
     readonly property string pickedPolicy: {
+        var proposal = "";
         var vs = composer.verbs;
         for (var i = 0; i < vs.length; i++)
-            if (vs[i].id === composer.pickedVerb)
-                return String(vs[i].policy);
-        return "safe";
+            if (vs[i].id === composer.pickedVerb) proposal = String(vs[i].proposal);
+        var ks = [];
+        try { ks = JSON.parse(composer.backend ? composer.backend.driversJson : "[]"); } catch (e) { ks = []; }
+        if (!Array.isArray(ks)) return "";
+        for (var j = 0; j < ks.length; j++)
+            if (ks[j] && ks[j].founding && (ks[j].composes || []).indexOf(proposal) >= 0)
+                return String(ks[j].kind);
+        return "";
     }
 
     readonly property string peer: peerField ? peerField.text.trim() : ""
