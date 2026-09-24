@@ -1,5 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Multisig Family Atlas</title>
+<!-- A self-contained page: open it straight from a checkout. The multisig family registry
+     (contracts/families/registry.json) is embedded below by
+     scripts/check-family-registry.py --write-table, which fails when this copy is stale. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -33,6 +40,7 @@
   --outside:#0A0C0B; --outside-ink:#DCE2DE; --outside-muted:#8C9792; --outside-rule:#2A302D; --outside-accent:#9FB0F7;
 }
 *{box-sizing:border-box}
+html,body{margin:0}
 body{background:var(--paper);color:var(--ink);font-family:var(--ui);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
 button,select,input{font:inherit;color:inherit}
 button{cursor:pointer}
@@ -200,6 +208,8 @@ table.cmp tr.outside-row.diff td .short{color:var(--outside-accent)}
 section[hidden]{display:none!important}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
+</head>
+<body>
 
 <div class="wrap">
   <header class="mast">
@@ -649,3 +659,5 @@ setTab(["atlas","compare","dimensions","plan"].includes(h) ? h : "atlas");
 render();
 })();
 </script>
+</body>
+</html>
