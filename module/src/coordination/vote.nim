@@ -156,7 +156,7 @@ proc confirmOnChain(v: LezVoteSeam, d: Driver, index: uint64): tuple[ok: bool, d
     let a = accountOf(d)
     let r = v.chain.readAccount(proposalPda(a.scheme, a.program, a.createKey, index))
     if not r.found: return (false, "proposal #" & $index & " is not on chain")
-    if v.voter in decodeProposal(r.data).approved: (true, "")
+    if v.voter in decodeProposal(r.data, a.layout).approved: (true, "")
     else: (false, "the chain does not show the vote on #" & $index)
   except CatchableError as err:
     (false, err.msg)

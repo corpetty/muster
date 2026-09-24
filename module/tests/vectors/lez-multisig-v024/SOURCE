@@ -1,0 +1,16 @@
+chain.json — accounts read back (getAccount / getProgramIds over JSON-RPC) from a local
+logos-execution-zone v0.2.4 standalone sequencer (lez/sequencer/service, configs/debug),
+right after lez-multisig's own e2e suite (e2e_tests/tests/e2e_multisig.rs) passed against it.
+
+The program: lez-multisig ported to SPEL v0.7.0 / LEZ v0.2.4 with the lez-multisig#40 fix
+(#41: target_account_ids committed at propose and bound at execute), built with
+`cargo risczero build` in risczero/risc0-guest-builder:r0.1.91.1.
+  ImageID 2ced3d301a4d1cd5db6cad9c428b9f3463155073f8bacf73179c6ea6536de4c7
+
+The run: a 2-of-3 multisig; proposal 1 initializes the vault's token holding through a
+ChainedCall into the token program; 500 tokens fund the vault; proposal 2 transfers 200 to a
+recipient. First an execute with a substituted recipient is refused by the program
+("Target account 1 does not match the approved proposal"), then the approved one lands.
+
+`id` fields are the base58 account ids decoded to hex; `program_owner` and the image ids are
+the [u32; 8] words as little-endian bytes. Captured 2026-09-24.

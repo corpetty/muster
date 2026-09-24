@@ -178,7 +178,12 @@ Deferred, infra-bound: client-side EVM signing on a non-anvil node; the beacon l
 - **Voting in the room.** In `coordination/vote.nim`, approving is the member's **own on-chain transaction**. Their LEZ wallet signs it, never muster, and a funded payer account of theirs pays for it. Muster confirms the vote by reading it back, then publishes the receipt with a room-key attestation.
 - **Settlement.** `LezMultisigSettlement` counts the votes **on chain** and Executes.
 - **Exit test.** `phase_c_exit_test` passes against the model.
-- **Not yet.** The live binding, hosted surface and card are exo-3c9. That work is **blocked upstream**: the published program targets nssa v0.2.0-rc3, while `lez_core` 0.4.x speaks LEE v0.2.5, and the PDA derivation differs. See `docs/labbook/lez-multisig-versions.md`.
+- **Not yet.** The live binding, hosted surface and card are exo-3c9.
+- **The rebuild.** The published program targets nssa v0.2.0-rc3. The live testnet runs the LEZ v0.2.2–v0.2.4 line (probed), so the program was rebuilt for SPEL v0.7.0 / LEZ v0.2.4 with the lez-multisig#40 fix (#41), in the local clone `feat/lee-v0.2.4`. Muster models both builds as named proposal layouts:
+  - `count-only`: the card names #40;
+  - `account-ids`: the target accounts are committed on chain and checked on the S5 re-read.
+
+  lez-multisig's own e2e suites pass against a local v0.2.4 sequencer, including an on-chain refusal of a substituted recipient. Muster decodes the resulting accounts and derives their PDAs byte for byte (`lez_multisig_rebuilt_test` §5). See `docs/labbook/lez-multisig-versions.md`.
 
 **Phase D: the crypto core landed (exo-a50.4, 2026-09-24).** `module/src/frost/` holds threshold Schnorr on secp256k1:
 - **Group arithmetic** (`secp.nim`): points with infinity over libsecp's ABI, scalars mod n over stint.
