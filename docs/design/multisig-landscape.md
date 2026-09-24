@@ -85,8 +85,8 @@ One row per family, generated from the registry (`contracts/families/registry.js
 | `evm.kernel-weighted` | contract | same bytes | explicit | 1 · deploy | in-place | setup / spend / public | lanes · optional | – | early | watch |
 | `evm.eip7702-delegate` | contract | same bytes | **none** | 1 · register | in-place | setup / spend / public | sequence · none | – | early | reject |
 | `evm.gnosis-multisigwallet` | vote | own tx → **pointer** | explicit | 1 · deploy | in-place | setup / each vote / public | none · none | a tx | deprecated | reject |
-| `btc.p2wsh-sortedmulti` | native | same bytes | implicit | 1 · derive | new-address | spend / spend / public | utxo · none | per sig | production | partial (B) |
-| `btc.tapscript-multi-a` | native | same bytes | implicit | 1 · derive | new-address | spend / spend / public | utxo · none | per sig | production | partial (B) |
+| `btc.p2wsh-sortedmulti` | native | same bytes | implicit | 1 · derive | new-address | spend / spend / public | utxo · none | per sig | production | built |
+| `btc.tapscript-multi-a` | native | same bytes | implicit | 1 · derive | new-address | spend / spend / public | utxo · none | per sig | production | built |
 | `btc.miniscript-decay` | native | same bytes | implicit | 1 · derive | new-address | spend / spend / public | utxo · none | per sig | production | candidate |
 | `btc.musig2-keypath` | aggregate | partial (n-of-n) | implicit | 2 ⚿ · derive | new-address | – / – / public | utxo · none | – | early | candidate |
 | `btc.frost-bip445` | aggregate | partial (t-of-n) | implicit | 2 ⚿ · dkg | new-address | – / – / public | utxo · none | – | draft | candidate (D) |
@@ -253,9 +253,20 @@ Each phase proves one new locus with the fewest new seams, and uses real signers
 | Phase | Families | Proves | Seams | Exit test |
 |---|---|---|---|---|
 | **A** | `evm.safe`, done properly | accounts, profile, settlement seam, card copy; no globals | S1, S2, S3, S6, S9, S10, plus Safe fidelity: `data`/`operation` mapped and shown (delegatecall warned), the real 1.5.0 singleton, bypasses read from the chain (modules, guard) | two Safes on two chains in two rooms; the card rows come only from `profile()` |
-| **B** | `btc.p2wsh-sortedmulti` + `btc.tapscript-multi-a` | native locus, UTXO ordering, no expiry, **foreign signers** | S4 (default), S5 (prevouts), S8 (PSBT) | a Keycard Shell cosigner signs a PSBT over QR next to a muster member; the two families' cards differ only in *Who will see what* |
+| **B** ✓ | `btc.p2wsh-sortedmulti` + `btc.tapscript-multi-a` | native locus, UTXO ordering, no expiry, **foreign signers** | S4 (default), S5 (prevouts), S8 (PSBT) | a Keycard Shell cosigner signs a PSBT over QR next to a muster member; the two families' cards differ only in *Who will see what* — **landed 2026-09-24, see below** |
 | **C** | `lez.multisig-program` | vote locus on Logos's own chain; pointer approvals; per-vote cost; an `exposure` row | S5 (on-chain proposal read), S6 (a contribution is a chain transaction) | approving in the room submits the member's LEZ vote; the card says every approval is public |
 | **D** | `btc.frost-bip445` + `lez.frost-public-account` | aggregate locus, the key ceremony in the room, looks single-sig | S7; replaces the `frost` scaffold | a 2-of-3 in-room ChillDKG, then a spend the chain can't tell from single-sig. Includes the LEZ tweak check (§9, Q5) |
+
+**Phase B, as it landed (exo-a50.2, 2026-09-24).** `btc_regtest_e2e` runs both families against Bitcoin Core v31.1 on regtest:
+- Core derives the same address from the descriptor.
+- The spend is built from the UTXOs the node reports.
+- A member approves in-app through the keystore (attested).
+- The outside signer is a **Bitcoin Core wallet**, which signs muster's exported PSBT. The signature is imported, counted, and graded unattested.
+- Core accepts muster's finalized witnesses, and the spend is final a block later.
+
+Two corrections to the plan above:
+- A **Keycard Shell** cosigning over QR is the same PSBT round trip, but it has not been run on the device.
+- The cards do **not** differ in *Who will see what*. A single-leaf tapscript multisig reveals what P2WSH does at spend, the policy and the signers, because the one leaf *is* the whole policy. Its hidden-branch advantage appears only with more leaves (`btc.miniscript-decay`). The rows are identical, and the profiles differ only in family and account.
 
 After D, by demand: `xrpl.signerlist` (per-signer bytes), `sol.squads-v4`, `cosmos.x-auth-multisig`, `sui.multisig`, and `zcash.frost-orchard` once its tooling leaves demo status. The privacy flagship shares Phase D's scheme with a different ciphersuite.
 
