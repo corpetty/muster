@@ -16,6 +16,10 @@ transaction and carries it through the `ChainAdapter` seam (`module/src/wallet/`
   would refuse to sign, has the DRIVER finalize the witnesses (exactly k signatures in
   the script's key order), and hands the adapter a self-contained raw transaction —
   nothing but the witnesses differs from the reviewed spend.
+  `LezMultisigSettlement` (exo-0c9, the vote locus) assembles nothing from signatures: it
+  re-reads the pointer (S5 again), counts the approvals the CHAIN holds against the
+  threshold the chain holds, and prepares an Execute from the relayer member; `watch` is
+  final only when the chain says the proposal is Executed.
 
 Rules: a family with `settlement: none` (room families) or an undeclared/unsupported
 driver has NO settlement (nil) — never a guessed one. Assemble never trusts a
