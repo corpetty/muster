@@ -26,6 +26,7 @@ import ../src/hashing/sha256
 import ../src/lez/multisig
 
 proc b32(x: byte): seq[byte] = newSeqWith(32, x)
+proc bytesOf(s: string): seq[byte] = (for c in s: result.add byte(c))
 proc le32(x: uint32): seq[byte] = @[byte(x and 0xff), byte((x shr 8) and 0xff), byte((x shr 16) and 0xff), byte(x shr 24)]
 proc le64(x: uint64): seq[byte] =
   for i in 0 ..< 8: result.add byte((x shr uint64(8*i)) and 0xff)
@@ -94,7 +95,7 @@ block:
 
 # ── 4. SPEL seeds ──────────────────────────────────────────────────────────────
 block:
-  doAssert seedFromStr("multisig_prop___") == cast[seq[byte]]("multisig_prop___") & newSeq[byte](16)
+  doAssert seedFromStr("multisig_prop___") == bytesOf("multisig_prop___") & newSeq[byte](16)
   var raised = false
   try: discard seedFromStr(repeat("x", 33))
   except LezDecodeError: raised = true
@@ -109,8 +110,8 @@ block:
 # ── 5. PDAs, per scheme ────────────────────────────────────────────────────────
 block:
   let prog = b32(0xAA)
-  let nssa = cast[seq[byte]]("/NSSA/v0.2/AccountId/PDA/") & newSeq[byte](7)
-  let lee = cast[seq[byte]]("/LEE/v0.2/AccountId/PDA/") & newSeq[byte](8)
+  let nssa = bytesOf("/NSSA/v0.2/AccountId/PDA/") & newSeq[byte](7)
+  let lee = bytesOf("/LEE/v0.2/AccountId/PDA/") & newSeq[byte](8)
   doAssert nssa.len == 32 and lee.len == 32
   doAssert publicPda(psNssa02, prog, K) == @(sha256(nssa & prog & K))
   doAssert publicPda(psLee02, prog, K) == @(sha256(lee & prog & K))
