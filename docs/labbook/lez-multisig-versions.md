@@ -116,6 +116,10 @@ reproduces the handlers of `c45100b` with their own messages, over borsh account
   against `k256` 0.14's `^0.4.12`, so regenerate it. The guest builds with
   `cargo risczero build` (cargo-risczero 3.0.5, installed into a scratch root) inside the
   `risczero/risc0-guest-builder:r0.1.91.1` image, the tag LEZ v0.2.4's Justfile pins.
+  **`RISC0_DOCKER_CONTAINER_TAG=r0.1.91.1` is what selects that image.** Without it,
+  risc0-build 3.0.5 falls back to `r0.1.88.0`, whose rustc 1.88 cannot build the v0.2.4
+  tree (`ruint` needs 1.90). The rzup-installed Rust version does not choose the image;
+  upstream CI hit this exactly.
   risc0-build still asks rzup which Rust the guest targets, so answer it with an empty
   `$RISC0_HOME/toolchains/r0.1.91.1-risc0-rust-x86_64-unknown-linux-gnu` marker rather
   than installing a second toolchain. `cargo check --workspace` needs
@@ -150,6 +154,13 @@ reproduces the handlers of `c45100b` with their own messages, over borsh account
 - **Upstream:** [logos-co/lez-multisig#45](https://github.com/logos-co/lez-multisig/pull/45)
   covers the port, #41's fix, CI on v0.2.4, and the testnet deployment in the README. It
   supersedes #41.
+  - **Its CI is green** on unit, check and E2E; E2E runs against a freshly built v0.2.4
+    sequencer. That also fixes upstream `main`, which had been red since July: the
+    circuits installer script it curled was gone, and the circuits now arrive as a cargo
+    git dependency.
+  - **CI's independent guest build reproduces the deployed ImageID** (`2ced3d30…d4c7`),
+    so the testnet program is verifiably the PR's source.
+  - The PR awaits a maintainer review; the repo requires one to merge.
 - **Muster reads the testnet deployment.** `lez_multisig_rebuilt_test` §5 decodes the
   testnet multisig's state and both proposals (`module/tests/vectors/lez-multisig-testnet/`),
   re-encodes them byte for byte, derives their PDAs, and accepts the multisig as a room
