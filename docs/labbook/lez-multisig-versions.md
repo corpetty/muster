@@ -61,3 +61,38 @@ guest build (Docker) and a deployment (`send_program_deployment_transaction` in 
 
 Until then, Phase C runs against `FakeLezMultisig` (`lez/multisig_chain.nim`), which
 reproduces the handlers of `c45100b` with their own messages, over borsh accounts.
+
+## Update: what the live testnet runs, and the rebuild (2026-09-24)
+
+- **The testnet is on the v0.2.2–v0.2.4 line.** This was probed read-only on
+  `testnet.lez.logos.co`:
+  - `getProgramIds` returns `[u32; 8]` image ids (amm, authenticated_transfer, pinata,
+    privacy_preserving_circuit, token);
+  - `getProofsAndRoot` exists (v0.2.2+);
+  - `getFeeState` does not (v0.2.5);
+  - `getProofForCommitment` does not (v0.2.0).
+
+  Its PDAs are `/LEE/v0.2/…` over the **image id**. That is muster's `psLee02` with the
+  config's program set to the image id bytes. v0.2.5's programs-as-accounts is not live
+  yet.
+- **SPEL v0.7.0 targets LEZ v0.2.4**, so the rebuild targets v0.2.4. It lives in a local
+  clone, `~/Github/corpetty/lez-multisig`, on branch `feat/lee-v0.2.4`:
+  - dependencies ported (nssa → `lee_core` / `lee` aliases, SPEL v0.3.0 → v0.7.0, Rust
+    1.94.0);
+  - `multisig_state` PDA-checked on every instruction (as upstream #43 does);
+  - **the #40 fix from draft PR #41**: a proposal commits `target_account_ids` and execute
+    binds them.
+
+  The 29 program unit tests pass, including #41's substituted-account regression.
+- **Muster models both builds.** `ProposalLayout`: `count-only` is the published
+  c45100b, where the card names #40. `account-ids` is the rebuild, where the ids are
+  checked on the S5 re-read and the card names no bypass. An account's config names its
+  layout. The test is `lez_multisig_rebuilt_test`.
+- **Build notes.** The v0.2.4 `wallet` crate pulls in Keycard support
+  (`keycard-rs` → `pcsc-sys`), which needs libpcsclite, and `openssl-sys` needs OpenSSL
+  headers. On this box both come from Nix: `PKG_CONFIG_PATH` points at
+  `nixpkgs#pcsclite.dev` and `nixpkgs#openssl.dev`, and the Nix `pkg-config` wrapper
+  searches only that path. The stale upstream `Cargo.lock` pins `hybrid-array` 0.4.10
+  against `k256` 0.14's `^0.4.12`, so regenerate it. The guest builds with
+  `cargo risczero build` (cargo-risczero 3.0.5, installed into a scratch root) inside the
+  `risczero/risc0-guest-builder:r0.1.91.1` image, the tag LEZ v0.2.4's Justfile pins.
