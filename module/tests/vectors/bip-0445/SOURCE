@@ -1,0 +1,4 @@
+BIP-445 (FROST signing, draft) test vectors, vendored from
+siv2r/bips @ 8e25d57 (branch bip-frost-signing, bitcoin/bips#2070), bip-0445/python/vectors/.
+MIT — see COPYING. Byte-identical except a trailing newline (the repo's end-of-file hook).
+Re-pin, never edit.
