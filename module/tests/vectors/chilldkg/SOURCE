@@ -1,0 +1,3 @@
+ChillDKG (draft) test vectors, vendored from mllwchrry/bips @ 2b9b0b1 (branch chilldkg,
+bitcoin/bips#2227), bip-chilldkg/vectors/. See COPYING. Byte-identical except a trailing
+newline (the repo end-of-file hook). Re-pin, never edit.
