@@ -71,6 +71,14 @@ repos:
     files: ^(contracts/claims/|docs/01-furps\.md|module/tests/|ui/tests/)
 - repo: local
   hooks:
+  - id: family-registry
+    name: Multisig family registry is well-formed and the landscape table is current (exo-68f)
+    entry: scripts/check-family-registry.py
+    language: system
+    pass_filenames: false
+    files: ^(contracts/families/|docs/design/multisig-(landscape\.md|explorer\.html)|module/src/drivers/)
+- repo: local
+  hooks:
   - id: claims-qml-sync
     name: ClaimsRegistry.qml is regenerated from the claims registry
     entry: ui/tools/gen-claims-qml.py
