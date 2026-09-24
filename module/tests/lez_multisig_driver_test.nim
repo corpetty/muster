@@ -36,6 +36,7 @@ import ../src/lez/multisig
 import ../src/lez/multisig_chain
 import ../src/coordination/intent_events
 import ../src/coordination/accounts
+import ../src/coordination/card_rows
 
 proc id32(label: string): seq[byte] = @(sha256(cast[seq[byte]](label)))
 proc hx(b: seq[byte]): string = (for x in b: result.add toLowerAscii(toHex(x, 2)))
@@ -177,5 +178,19 @@ block:
   let wrong = disclosed(threshold = 3)
   doAssert checkAccount(wrong, lezChainView(chain, wrong)).status == acDisagrees
   echo "7. the chain decides: verified / disagrees / unknown OK"
+
+# ── 8. the way around the rule the program leaves open ─────────────────────────
+## logos-co/lez-multisig#40 (open, critical): a proposal records only HOW MANY target
+## accounts the call takes, not which; whoever executes supplies them, so an approved
+## transfer can be executed to a different recipient. The card must say so — never
+## "none known" — and the row that says where the rule lives is then motivational.
+block:
+  let p = drv.profile()
+  doAssert p.bypassesKnown and p.bypasses.len == 1 and "executor" in p.bypasses[0] and "#40" in p.bypasses[0],
+    $p.bypasses
+  let rows = cardRows(p)
+  doAssert rows.filterIt(it.key == "bypass")[0].credibility == "motivational"
+  doAssert rows.filterIt(it.key == "where")[0].credibility == "motivational", "the rule is not all the chain enforces"
+  echo "8. the executor-substitution gap (lez-multisig#40) is on the card, never 'none known' OK"
 
 echo "lez_multisig_driver_test: the vote-locus driver — pointer, receipts, S5 re-reads, the registry's profile — all OK"
