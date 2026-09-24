@@ -18,7 +18,11 @@
 ##     this pointer. The chain is the authority on the tally: settlement recounts there.
 ## The profile is the registry's: vote locus, own transaction, pointer, binding none — a
 ## LEZ public message commits to no zone or chain id, so the card marks the binding
-## exposed (muster binds the environment in the room; the chain does not).
+## exposed (muster binds the environment in the room; the chain does not). And one way
+## around the rule is known (logos-co/lez-multisig#40, open): a proposal records how MANY
+## target accounts its call takes, not which, so whoever executes chooses them — an
+## approved transfer can be executed to another recipient. Muster's own settlement
+## passes the accounts the room reviewed; the chain does not hold anyone else to them.
 
 import std/[json, strutils, sequtils]
 import ../dcbor/dcbor
@@ -224,7 +228,9 @@ method profile*(d: LezMultisigDriver): FamilyProfile =
     revealsPolicy: rvAtCreation, revealsSigners: rvPerApproval, revealsEffect: evPublic,
     approverCost: acPerVote, rounds: 1, secretState: false, maturity: maDemo,
     chain: d.account.chain, account: d.account.accountId, k: d.account.threshold,
-    n: d.account.members.len, bypassesKnown: true)
+    n: d.account.members.len, bypassesKnown: true,
+    bypasses: @["the executor chooses the target accounts at execute — a proposal records only how many " &
+                "(logos-co/lez-multisig#40)"])
 
 method manifest*(d: LezMultisigDriver, effect: Effect): ActionManifest =
   ## Needs the zone reachable through lez_core, a funded account to pay each vote, and a
