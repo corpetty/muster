@@ -42,7 +42,9 @@ const Kinds*: seq[KindInfo] = @[
   KindInfo(kind: "btc-p2wsh", family: "btc.p2wsh-sortedmulti", label: "Bitcoin (P2WSH)", composes: @["payment"],
            founding: true, accountFamilies: @["btc.p2wsh-sortedmulti"]),
   KindInfo(kind: "btc-tapscript", family: "btc.tapscript-multi-a", label: "Bitcoin (taproot)", composes: @["payment"],
-           founding: true, accountFamilies: @["btc.tapscript-multi-a"])]
+           founding: true, accountFamilies: @["btc.tapscript-multi-a"]),
+  KindInfo(kind: "lez-multisig", family: "lez.multisig-program", label: "LEZ multisig", composes: @["payment"],
+           founding: true, accountFamilies: @["lez.multisig-program"])]
 
 # ── a policy is a kind, optionally bound to an account ─────────────────────────
 # An account-bound intent's policy is "<kind>@<CAIP-10 account>" (exo-a50.1.3), so the

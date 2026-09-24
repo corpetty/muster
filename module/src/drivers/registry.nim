@@ -15,6 +15,7 @@ import ./frost
 import ./invoke
 import ./eip191
 import ./btc_multisig
+import ./lez_multisig      # the LEZ multisig program (exo-6cbe)
 import ../bitcoin/tx       # hexToBytes
 import ../crypto/secp256k1    # Address
 import ../crypto/curve25519   # Ed25519Pub (the roster)
@@ -62,6 +63,17 @@ proc newDriver*(kind: string, config: JsonNode): Driver =
       for k in config["keys"]: keys.add hexToBytes(k.getStr())
     let family = (if kind == "btc-p2wsh": P2wshFamily else: TapscriptFamily)
     newBtcMultisigDriver(btcAccount(family, config{"network"}.getStr("regtest"), config{"k"}.getInt(2), keys))
+  of "lez-multisig":
+    # A LEZ multisig account (exo-6cbe): {chain, pda, program, createKey, members, threshold}.
+    let cfg = $(%*{"program": config{"program"}.getStr(), "createKey": config{"createKey"}.getStr(),
+                   "pda": config{"pda"}.getStr("lee-v0.2")})
+    var members: seq[string]
+    for m in config{"members"}.getElems(): members.add m.getStr()
+    let (ok, acct, detail) = lezMultisigAccountFromParts(config{"chain"}.getStr("lez:testnet"), "", cfg,
+                                                          members, config{"threshold"}.getInt(1))
+    # the registry builds from the config alone: the address is the one it derives
+    if not ok and not detail.startsWith("the address"): raise newException(RegistryError, detail)
+    newLezMultisigDriver(acct)
   of "stub":
     newStubDriver(rounds = config{"rounds"}.getInt(1),
                   threshold = config{"threshold"}.getInt(2),

@@ -246,6 +246,16 @@ proc verifyAttestation*(who: string, p: seq[byte], sigHex: string): bool =
     for i in 0 ..< 65: s65[i] = sig[i]
     try: return ecrecover(attestationDigest(p), s65) == addressOfCompressed(pub)
     except CatchableError: return false
+  if who.startsWith("lez:"):
+    # a vote-locus contributor (exo-12a1): the vote's key lives in the member's chain
+    # wallet, so what commits to P is the member's ROOM key — an Ed25519 signature over P,
+    # carried with its public key (32 + 64 bytes)
+    if sig.len != 96: return false
+    var edPk: Ed25519Pub
+    var edSig: Ed25519Sig
+    for i in 0 ..< 32: edPk[i] = sig[i]
+    for i in 0 ..< 64: edSig[i] = sig[32 + i]
+    return edVerify(edPk, p, edSig)
   false
 
 # ── grading every approval ────────────────────────────────────────────────────

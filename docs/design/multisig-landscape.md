@@ -117,7 +117,7 @@ One row per family, generated from the registry (`contracts/families/registry.js
 | `aztec.account-contract` | contract | same bytes | explicit | 1 · deploy | in-place | – / – / **shielded** | dedup · optional | – | experimental | watch |
 | `mpc.threshold-ecdsa` | aggregate | partial (t-of-n) | explicit | 4 ⚿ · dkg | reshare | – / – / public | sequence · none | – | production | candidate |
 | `lez.public-witness` | native | same bytes | **none** | 1 · derive | fixed | spend / spend / public | sequence · none | – | early | candidate |
-| `lez.multisig-program` | vote | own tx → **pointer** | **none** | 1 · deploy | in-place | setup / each vote / public | index · none | a tx | demo | next (C) |
+| `lez.multisig-program` | vote | own tx → **pointer** | **none** | 1 · deploy | in-place | setup / each vote / public | index · none | a tx | demo | partial (C) |
 | `lez.private-multisig` | vote | own tx | **none** | 1 · deploy | new-address | setup / – / public | index · none | a tx | demo | watch |
 | `lez.frost-public-account` | aggregate | partial (t-of-n) | **none** | 2 ⚿ · dkg | new-address | – / – / public | sequence · none | – | draft | candidate (D) |
 <!-- landscape-table:end -->
@@ -254,7 +254,7 @@ Each phase proves one new locus with the fewest new seams, and uses real signers
 |---|---|---|---|---|
 | **A** | `evm.safe`, done properly | accounts, profile, settlement seam, card copy; no globals | S1, S2, S3, S6, S9, S10, plus Safe fidelity: `data`/`operation` mapped and shown (delegatecall warned), the real 1.5.0 singleton, bypasses read from the chain (modules, guard) | two Safes on two chains in two rooms; the card rows come only from `profile()` |
 | **B** ✓ | `btc.p2wsh-sortedmulti` + `btc.tapscript-multi-a` | native locus, UTXO ordering, no expiry, **foreign signers** | S4 (default), S5 (prevouts), S8 (PSBT) | a Keycard Shell cosigner signs a PSBT over QR next to a muster member; the two families' cards differ only in *Who will see what* — **landed 2026-09-24, see below** |
-| **C** | `lez.multisig-program` | vote locus on Logos's own chain; pointer approvals; per-vote cost; an `exposure` row | S5 (on-chain proposal read), S6 (a contribution is a chain transaction) | approving in the room submits the member's LEZ vote; the card says every approval is public |
+| **C** ◐ | `lez.multisig-program` | vote locus on Logos's own chain; pointer approvals; per-vote cost; an `exposure` row | S5 (on-chain proposal read), S6 (a contribution is a chain transaction) | approving in the room submits the member's LEZ vote; the card says every approval is public — **core landed 2026-09-24, live chain blocked upstream, see below** |
 | **D** | `btc.frost-bip445` + `lez.frost-public-account` | aggregate locus, the key ceremony in the room, looks single-sig | S7; replaces the `frost` scaffold | a 2-of-3 in-room ChillDKG, then a spend the chain can't tell from single-sig. Includes the LEZ tweak check (§9, Q5) |
 
 **Phase B, as it landed (exo-a50.2, 2026-09-24).** `btc_regtest_e2e` runs both families against Bitcoin Core v31.1 on regtest:
@@ -267,6 +267,18 @@ Each phase proves one new locus with the fewest new seams, and uses real signers
 Two corrections to the plan above:
 - A **Keycard Shell** cosigning over QR is the same PSBT round trip, but it has not been run on the device.
 - The cards do **not** differ in *Who will see what*. A single-leaf tapscript multisig reveals what P2WSH does at spend, the policy and the signers, because the one leaf *is* the whole policy. Its hidden-branch advantage appears only with more leaves (`btc.miniscript-decay`). The rows are identical, and the profiles differ only in family and account.
+
+**Phase C, as far as it landed (exo-a50.3, 2026-09-24).** `phase_c_exit_test` passes against an in-process model of `lez-multisig` (`FakeLezMultisig`), which reproduces its handlers and stores the program's own borsh accounts at their PDAs. For a 2-of-3:
+- The account is disclosed with its config, and the room re-derives the state PDA and reads the chain.
+- Proposing is the proposer's own Propose transaction.
+- A member approves in the room: muster re-reads proposal #i (S5), casts the member's own vote transaction through their LEZ wallet, paid from their payer account, and confirms it by reading the chain back.
+- A pointer to different on-chain content is refused before any vote.
+- Settlement counts the votes on chain and Executes.
+- The card says every approval is a public transaction and the binding is exposed.
+
+Two findings:
+- **The program cannot run on the chain muster talks to.** It targets nssa v0.2.0-rc3, whose PDAs hash `/NSSA/v0.2/…` over the image id; `lez_core` 0.4.x speaks LEE v0.2.5 (`/LEE/v0.2/…` over the program's account id). The program's guest derives PDAs with its own linked core, so it must be rebuilt upstream before a live run (exo-3c9; `docs/labbook/lez-multisig-versions.md`).
+- **Member accounts must be fresh** when the multisig is created, because the program claims them. Every member therefore needs a separate funded payer account for their vote fees, which is the per-contributor readiness the vote-cost decision (§9) anticipated.
 
 After D, by demand: `xrpl.signerlist` (per-signer bytes), `sol.squads-v4`, `cosmos.x-auth-multisig`, `sui.multisig`, and `zcash.frost-orchard` once its tooling leaves demo status. The privacy flagship shares Phase D's scheme with a different ciphersuite.
 

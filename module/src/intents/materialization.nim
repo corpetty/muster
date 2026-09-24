@@ -56,6 +56,17 @@ method signRefusal*(d: Driver, e: Effect): string {.base, gcsafe.} =
   ## runs foreign code AS the Safe. Default: nothing is refused.
   ""
 
+method reads*(d: Driver, e: Effect): seq[string] {.base, gcsafe.} =
+  ## S5: the external state `e`'s bytes depend on, by name, which the live path reads
+  ## before anyone signs (a pointer approval's on-chain content, exo-6cbe). Default: none.
+  @[]
+
+method checkRead*(d: Driver, e: Effect, name: string, value: seq[byte]): string {.base, gcsafe.} =
+  ## S5: why the value read for `name` refuses signing `e` ("" = it matches). The read is
+  ## re-derived against what the room reviewed; a mismatch refuses (invariant 1 for
+  ## pointers). Default: a read the driver never declared is refused, never waved through.
+  "this driver declares no read named " & name
+
 method identifyContributor*(d: Driver, m: Materialization, c: Contribution): string {.base.} =
   ## The stable id of whoever produced contribution `c` over materialization `m`,
   ## or "" if it is not a legitimate contribution. This is how the multi-party fold

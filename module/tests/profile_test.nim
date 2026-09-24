@@ -48,7 +48,11 @@ let kinds = @[
   ("invoke", %*{"roster": roster, "k": 2}, "module/src/drivers/invoke.nim"),
   ("eip191", %*{"signers": owners, "threshold": 1}, "module/src/drivers/eip191.nim"),
   ("btc-p2wsh", %*{"network": "regtest", "k": 2, "keys": BtcKeys}, "module/src/drivers/btc_multisig.nim"),
-  ("btc-tapscript", %*{"network": "regtest", "k": 2, "keys": BtcKeys}, "module/src/drivers/btc_multisig.nim")]
+  ("btc-tapscript", %*{"network": "regtest", "k": 2, "keys": BtcKeys}, "module/src/drivers/btc_multisig.nim"),
+  ("lez-multisig", %*{"chain": "lez:local", "pda": "lee-v0.2", "program": repeat("aa", 32),
+                      "createKey": repeat("0b", 32), "threshold": 2,
+                      "members": [repeat("01", 32), repeat("02", 32), repeat("03", 32)]},
+   "module/src/drivers/lez_multisig.nim")]
 
 # ── 1. every registered kind declares a consistent profile ─────────────────────
 block:
