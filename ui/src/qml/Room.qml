@@ -359,6 +359,10 @@ Item {
             // a full Safe transaction's own fields (exo-a50.1.4): what it calls and HOW —
             // a DELEGATECALL runs the target's code as the Safe, so the card must say so
             safeData: (!isStatement && eff.data !== undefined) ? String(eff.data) : "",
+            // the card's fixed rows + the family profile (exo-a50.1.6): the same ten
+            // questions for every multisig family, answered by the module from the profile
+            rows: (it && Array.isArray(it.rows)) ? it.rows : [],
+            profile: (it && it.profile) ? it.profile : null,
             operation: (!isStatement && eff.operation !== undefined) ? Number(eff.operation) : 0,
             rail: (it && it.rail) ? String(it.rail) : "safe",
             threshold: Number((it && it.threshold) || 0),

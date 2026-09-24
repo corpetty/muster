@@ -624,14 +624,14 @@ function renderDims(){
 
 /* ── plan ──────────────────────────────────────────────────────── */
 const PHASES = [
-  ["A","The Safe, done properly","Accounts become room objects, the card reads from a family profile, settlement goes through one seam, and the Safe maps data and operation (a hidden delegatecall was the Bybit vector)."],
+  ["A","The Safe, done properly — landed","Landed 2026-09-24 (epic exo-a50): accounts are disclosed by members into the room, every driver declares its family profile, one kind list, the Safe maps every field and refuses an unallowlisted delegatecall against the real Safe v1.4.1, settlement is a seam, and the card's ten rows come from the profile. Its family, evm.safe, is now built."],
   ["B","Bitcoin through PSBT","The protocol-native locus, coins as the ordering, no expiry, and signers outside muster: a Keycard Shell cosigns over QR next to a room member."],
   ["C","The LEZ multisig program","On-chain votes on Logos's own chain: approvals that point at on-chain content, a cost per vote, and an exposure row for the missing zone tag."],
   ["D","FROST, in the room","A key ceremony held in the room and a spend the chain can't tell from a single signer, on Bitcoin taproot and a LEZ account."]
 ];
 function renderPlan(){
   document.getElementById("phases").innerHTML = PHASES.map(([p, h, d]) => {
-    const fams = F.filter(f => f.muster.phase === p);
+    const fams = F.filter(f => f.muster.phase === p || (p === "A" && f.id === "evm.safe"));
     return `<div class="phase"><span class="ph">Phase ${p}</span><h3>${esc(h)}</h3><p>${esc(d)}</p>
       <div class="fams">${fams.map(f => `<button class="linkish" data-id="${f.id}">${esc(f.id)} · ${f.muster.status}</button>`).join("")}</div></div>`;
   }).join("");

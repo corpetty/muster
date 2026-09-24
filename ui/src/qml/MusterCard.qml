@@ -106,7 +106,19 @@ Rectangle {
         var lead = (amt + " " + den).replace(/\s+/g, " ").trim();
         return to.length > 0 ? lead + "  →  " + to : lead;
     }
+    // the card's fixed rows (exo-a50.1.6) and a lookup by key
+    readonly property var rows: (cardRoot.card && Array.isArray(cardRoot.card.rows)) ? cardRoot.card.rows : []
+    property bool rowsOpen: false
+    function rowText(key) {
+        for (var i = 0; i < cardRoot.rows.length; ++i)
+            if (cardRoot.rows[i].key === key) return String(cardRoot.rows[i].text || "");
+        return "";
+    }
     function verifyDomain() {
+        // the chain + account the signatures are bound to, from the family profile
+        var prof = (cardRoot.card && cardRoot.card.profile) ? cardRoot.card.profile : null;
+        if (prof && prof.chain) return String(prof.chain) + (prof.account ? "  ·  " + String(prof.account) : "");
+        if (prof && prof.family) return qsTr("this room (%1)").arg(String(prof.family));
         var parts = [];
         var env = String((cardRoot.card && cardRoot.card.environment) || "");
         if (env.length > 0) parts.push(env);
@@ -296,7 +308,10 @@ Rectangle {
             Layout.fillWidth: true
             text: cardRoot.kind === "address-request" ? qsTr("Asked for an address")
                 : cardRoot.kind === "address-share" ? qsTr("Shared an address")
-                : cardRoot.kind === "intent-propose" ? qsTr("Proposed a payment")
+                : cardRoot.kind === "intent-propose"
+                  ? (String((cardRoot.card && cardRoot.card.statement) || "").length > 0 ? qsTr("Proposed a statement")
+                     : String((cardRoot.card && cardRoot.card.action) || "").length > 0 ? qsTr("Proposed an action")
+                     : qsTr("Proposed a payment"))
                 : cardRoot.kind === "intent-approve" ? qsTr("Approved")
                 : qsTr("Payment sent")
             color: cardRoot.kind === "send-receipt"
@@ -594,7 +609,7 @@ Rectangle {
                     model: [{ k: "proposed", t: qsTr("proposed") },
                             { k: "collecting", t: qsTr("collecting") },
                             { k: "ready", t: qsTr("ready") },
-                            { k: "paid", t: qsTr("paid") }]
+                            { k: "paid", t: qsTr("final") }]
 
                     delegate: RowLayout {
                         id: step
@@ -724,16 +739,65 @@ Rectangle {
                 }
             }
 
-            // The honesty caveat this card must not overstate. The count above
-            // is real in the room; the chain is not asked to check it.
+            // Where the rule lives — the FAMILY's own answer (exo-a50.1.6), never a fixed
+            // caveat: a Safe's threshold IS enforced by its contract, a room threshold is
+            // final in the room. Empty rows (an old module) → nothing claimed at all.
             LogosText {
                 Layout.fillWidth: true
                 Layout.topMargin: 2
                 wrapMode: Text.WordWrap
-                text: qsTr("The threshold is authenticated in the room; "
-                           + "the chain does not enforce it.")
+                visible: text.length > 0
+                text: cardRoot.rowText("where")
                 color: Theme.palette.textTertiary
                 font.pixelSize: Theme.typography.badgeText
+            }
+
+            // ── how this account works: the fixed rows (exo-a50.1.6) ─────────
+            // The same ten questions for every multisig family, answered by the module
+            // from the family profile, each tagged with its credibility and, where
+            // someone is relied on or can see, who. Collapsed to one line by default.
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 2
+                visible: cardRoot.rows.length > 0
+                LogosText {
+                    objectName: "cardRowsToggle"
+                    text: (cardRoot.rowsOpen ? "▾ " : "▸ ") + qsTr("How this account works")
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: Theme.typography.badgeText
+                    font.weight: Theme.typography.weightMedium
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: cardRoot.rowsOpen = !cardRoot.rowsOpen
+                    }
+                }
+                Repeater {
+                    model: cardRoot.rowsOpen ? cardRoot.rows : []
+                    delegate: ColumnLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: 0
+                        LogosText {
+                            Layout.fillWidth: true
+                            text: String(modelData.label || "")
+                                  + (modelData.credibility ? "  ·  " + String(modelData.credibility) : "")
+                            color: modelData.credibility === "exposed" ? Theme.palette.error
+                                 : modelData.credibility === "motivational" ? Theme.palette.warning
+                                 : Theme.palette.textTertiary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        LogosText {
+                            Layout.fillWidth: true
+                            text: String(modelData.text || "")
+                                  + (modelData.party ? "  (" + qsTr("relies on / seen by: %1").arg(String(modelData.party)) + ")" : "")
+                            color: Theme.palette.text
+                            font.pixelSize: Theme.typography.badgeText
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                }
             }
 
             // ── verify: dive in to what you'd sign (F-4 / F-5) ──────────────
