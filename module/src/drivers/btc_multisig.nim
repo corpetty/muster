@@ -19,6 +19,8 @@ import ./driver
 import ./manifest
 import ./profile
 import ../bitcoin/[tx, script, sighash, taproot, keys, bech32, psbt, network]
+import ../crypto/keystore
+import ./inapp
 
 type
   BtcAccount* = object
@@ -285,3 +287,17 @@ proc btcAccountOfDisclosure*(family, chain, address: string, k: int,
     (true, acct, "the address commits to exactly these keys: " & $k & " of " & $signers.len)
   except CatchableError as e:
     (false, BtcAccount(), "not a valid Bitcoin account: " & e.msg)
+
+method signInApp*(d: BtcMultisigDriver, e: Effect, ks: Keystore, attestDigest: array[32, byte]): InAppSig =
+  ## The member's keystore signs every input — DER for P2WSH, BIP-340 for tapscript —
+  ## with the SAME secp key it attests with (a recoverable signature over the attestation
+  ## digest), so the approval is bound to the key that made it. A key that is not one of
+  ## the account's makes a contribution the driver will reject, never a counted one.
+  let pub = ks.btcPubKey()
+  let signHash = proc(h: seq[byte]): seq[byte] =
+    var a: array[32, byte]
+    for i in 0 ..< 32: a[i] = h[i]
+    if d.account.family == P2wshFamily: ks.signEcdsaDer(a) else: ks.signSchnorr(a)
+  let c = d.signContribution(e, pub, signHash)
+  InAppSig(handled: true, contribution: c.bytes, attestation: @(ks.sign(attestDigest)),
+           keyRef: refOf(ks.address()))

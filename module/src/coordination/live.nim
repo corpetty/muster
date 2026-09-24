@@ -18,6 +18,7 @@ import ../drivers/safe
 import ../drivers/eip191
 import ../drivers/kinds      # supported(): refuse a kind this client has no driver for
 import ../drivers/profile    # the family profile: what settles, and where
+import ../drivers/inapp      # in-app signing as a driver hook (exo-a50.2.4)
 import ../intents/materialization
 import ../intents/lifecycle
 import ../intents/signing_payload
@@ -115,7 +116,16 @@ proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
     # An unknown ref is refused — never a silent fall-through to a different key than
     # the caller chose (K2b). An empty ref means the primary key.
     if keyRef.len > 0 and not ks.hasKey(keyRef): return "unknown-key"
-    if drv of SafeDriver or drv of PersonalSignDriver:
+    # A driver that signs in-app itself (a Bitcoin multisig: DER / Schnorr per input,
+    # exo-a50.2.4) does so through the keystore seam; the rest are signed below.
+    let hook = drv.signInApp(effectFromJson(effectJson), ks, attestationDigest(p))
+    if hook.handled:
+      # the hook signs with the key it names; a caller who chose another is refused
+      if keyRef.len > 0 and keyRef != hook.keyRef: return "unknown-key"
+      sig = hex0x(hook.contribution)
+      attestHex = hex0x(hook.attestation)
+      inAppSecpRef = hook.keyRef
+    elif drv of SafeDriver or drv of PersonalSignDriver:
       var h: array[32, byte]
       for i in 0 ..< min(32, mat.bytes.len): h[i] = mat.bytes[i]
       sig = hex0x(if keyRef.len > 0: ks.signWith(keyRef, h) else: ks.sign(h))

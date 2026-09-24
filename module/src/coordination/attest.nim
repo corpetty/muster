@@ -237,6 +237,15 @@ proc verifyAttestation*(who: string, p: seq[byte], sigHex: string): bool =
     for i in 0 ..< 20: owner[i] = a[i]
     try: return ecrecover(attestationDigest(p), s65) == owner
     except CatchableError: return false
+  if who.len == 66 and who[0 .. 1] in ["02", "03"]:
+    # a contributor named by its compressed secp256k1 key (a Bitcoin multisig signer,
+    # exo-a50.2.4): the attestation is a recoverable signature by that same key
+    let pub = hexToBytes(who)
+    if pub.len != 33 or sig.len != 65: return false
+    var s65: Signature65
+    for i in 0 ..< 65: s65[i] = sig[i]
+    try: return ecrecover(attestationDigest(p), s65) == addressOfCompressed(pub)
+    except CatchableError: return false
   false
 
 # ── grading every approval ────────────────────────────────────────────────────
