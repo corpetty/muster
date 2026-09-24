@@ -18,6 +18,8 @@ import ../drivers/safe
 import ../drivers/eip191
 import ../drivers/kinds      # supported(): refuse a kind this client has no driver for
 import ../drivers/profile    # the family profile: what settles, and where
+import ../drivers/inapp      # in-app signing as a driver hook (exo-a50.2.4)
+import ../drivers/interop    # signers outside muster (exo-a50.2.6)
 import ../intents/materialization
 import ../intents/lifecycle
 import ../intents/signing_payload
@@ -115,7 +117,16 @@ proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
     # An unknown ref is refused — never a silent fall-through to a different key than
     # the caller chose (K2b). An empty ref means the primary key.
     if keyRef.len > 0 and not ks.hasKey(keyRef): return "unknown-key"
-    if drv of SafeDriver or drv of PersonalSignDriver:
+    # A driver that signs in-app itself (a Bitcoin multisig: DER / Schnorr per input,
+    # exo-a50.2.4) does so through the keystore seam; the rest are signed below.
+    let hook = drv.signInApp(effectFromJson(effectJson), ks, attestationDigest(p))
+    if hook.handled:
+      # the hook signs with the key it names; a caller who chose another is refused
+      if keyRef.len > 0 and keyRef != hook.keyRef: return "unknown-key"
+      sig = hex0x(hook.contribution)
+      attestHex = hex0x(hook.attestation)
+      inAppSecpRef = hook.keyRef
+    elif drv of SafeDriver or drv of PersonalSignDriver:
       var h: array[32, byte]
       for i in 0 ..< min(32, mat.bytes.len): h[i] = mat.bytes[i]
       sig = hex0x(if keyRef.len > 0: ks.signWith(keyRef, h) else: ks.sign(h))
@@ -154,6 +165,74 @@ proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
     let st = ks.bindingForKey(inAppSecpRef, bindingCtx)
     s.publish(keyBindingEvent(intentId, who, hex0x(encodeLink(st))))
   intentState(s.log.allEvents(), driverFor, intentId)
+
+# ── signers outside muster (exo-a50.2.6; seam S8) ────────────────────────────
+type
+  OutsideExport* = object
+    ok*: bool
+    error*: string        ## unknown-intent | unsupported-driver | no-outside-format
+    format*: string       ## "psbt"
+    encoded*: string      ## what the outside signer takes
+
+  OutsideImport* = object
+    ok*: bool
+    error*: string        ## unknown-intent | unsupported-driver | not-readable | not-this-spend |
+                          ## no-signatures | a refusal from the contribution (expired, rejected)
+    detail*: string
+    imported*: seq[string] ## signers whose approval this import published
+    already*: seq[string]  ## signers the room already had an approval from (not re-published)
+    state*: string         ## the intent's state after the import
+
+proc liveExportOutside*(s: CoordinationSession, driverFor: DriverFor, intentId: string): OutsideExport =
+  ## The proposal's effect in its driver's outside-signer format (a Bitcoin spend: a
+  ## PSBT). Nothing is signed or published; a driver with no such format says so.
+  s.poll()
+  let events = s.log.allEvents()
+  let effectJson = effectJsonOf(events, intentId)
+  if effectJson.len == 0: return OutsideExport(error: "unknown-intent")
+  let drv = driverFor(intentPolicyOf(events, intentId))
+  if not drv.supported(): return OutsideExport(error: "unsupported-driver")
+  let req = drv.exportOutside(effectFromJson(effectJson))
+  if not req.handled: return OutsideExport(error: "no-outside-format")
+  OutsideExport(ok: true, format: req.format, encoded: req.encoded)
+
+proc liveImportOutside*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
+                        intentId, encoded: string, bindingCtx: LinkContext,
+                        nowSec: uint64 = 0): OutsideImport =
+  ## An outside signer's response: the DRIVER reads every contribution in it (verified
+  ## like a native one), and each is published as a PASTED approval — it counts toward
+  ## the threshold and every member grades it unattested ("signed outside muster"),
+  ## never committed. A response to a different effect is refused whole, publishing
+  ## nothing; a signer the room already has an approval from is not re-published.
+  s.poll()
+  let events = s.log.allEvents()
+  let effectJson = effectJsonOf(events, intentId)
+  if effectJson.len == 0: return OutsideImport(error: "unknown-intent")
+  let drv = driverFor(intentPolicyOf(events, intentId))
+  if not drv.supported(): return OutsideImport(error: "unsupported-driver")
+  var got: seq[ImportedContribution]
+  try: got = drv.importOutside(effectFromJson(effectJson), encoded)
+  except InteropMismatch as e: return OutsideImport(error: "not-this-spend", detail: e.msg)
+  except InteropError as e: return OutsideImport(error: "not-readable", detail: e.msg)
+  if got.len == 0:
+    return OutsideImport(error: "no-signatures",
+                         detail: "it carries no signature by one of the account's keys over the whole proposal")
+  for (signer, c) in got:
+    var seen = false
+    for e in events:
+      if e.key.startsWith("intent/" & intentId & "/sig/" & signer): seen = true
+    if seen:
+      result.already.add signer
+      continue
+    let st = liveContribute(s, ks, driverFor, intentId, hex0x(c.bytes), "", bindingCtx, nowSec)
+    if st in ["unknown-intent", "unsupported-driver", "expired", "rejected"]:
+      result.error = st
+      result.detail = "the approval by " & signer & " was not added"
+      result.state = intentState(s.log.allEvents(), driverFor, intentId)
+      return
+    result.imported.add signer
+  result.ok = true
+  result.state = intentState(s.log.allEvents(), driverFor, intentId)
 
 proc liveSubmitPrecheck*(s: CoordinationSession, driverFor: DriverFor,
                          intentId: string, nowSec: uint64 = 0): string =

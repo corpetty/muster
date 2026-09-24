@@ -215,6 +215,19 @@ class MusterUi
     // Downloads folder. Lands on auditJson {ok, intentId, cbor, report, digest} or
     // {ok:false, reason} — a refusal (e.g. history this member cannot read) is shown.
     SLOT(void downloadAudit(const QString &intentId))
+    // Signers outside muster (exo-a50.2.6, seam S8): the intent in its driver's outside
+    // format — a Bitcoin spend as a base64 PSBT for a hardware signer, Sparrow or Bitcoin
+    // Core. Lands on outsideJson {intentId, format, encoded} or {intentId, error}.
+    SLOT(void exportOutside(const QString &intentId))
+    // What the outside signer returned (a signed PSBT): the driver verifies each signature
+    // like its own and each is published as a pasted approval — counted, and shown as
+    // signed outside muster. Lands on outsideImportJson {intentId, imported, already,
+    // state} or {intentId, error, detail}; intents reload after.
+    SLOT(void importOutside(const QString &intentId, const QString &encoded))
+    // Propose a Bitcoin payment from the room's chosen Bitcoin account: its coins are read
+    // from the user's node (Settings → Bitcoin node). Lands on btcProposeJson {id} or
+    // {error, detail}; intents + messages reload after.
+    SLOT(void proposeBtcSpend(const QString &payTo, const QString &amountSat, const QString &feeRate))
     // The information-flow view (coordinate_flow, exo-002.5): who could see what,
     // for every action — {rows:[{seq,kind,intentId,field,to,members,epoch,declared}],
     // matrix:{observer:[fields]}}. A fold over the sealed log (no RPC), refreshed on
@@ -311,6 +324,10 @@ class MusterUi
     PROP(QString declineJson="{}" READONLY)
     // The outcome of the last audit download (downloadAudit).
     PROP(QString auditJson="{}" READONLY)
+    // Signers outside muster (exportOutside / importOutside / proposeBtcSpend).
+    PROP(QString outsideJson="{}" READONLY)
+    PROP(QString outsideImportJson="{}" READONLY)
+    PROP(QString btcProposeJson="{}" READONLY)
     // The room's information flow (loadFlow): {rows, matrix}. The Room renders the
     // observer matrix + per-action rows; the store node is always present (FS-9).
     PROP(QString flowJson="{\"rows\":[],\"matrix\":{}}" READONLY)

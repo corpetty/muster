@@ -46,6 +46,13 @@ proc ecrecover*(msgHash: array[32, byte], sig: Signature65): Address =
   if pub.isErr: raise newException(Secp256k1Error, "recovery failed")
   addressOfPub(pub.get())
 
+proc addressOfCompressed*(pub33: openArray[byte]): Address =
+  ## The Ethereum-style address of a compressed secp256k1 public key — how a key named
+  ## by its public key (a Bitcoin multisig signer) is matched to a recovered signature.
+  let r = sk.SkPublicKey.fromRaw(pub33)
+  if r.isErr: raise newException(Secp256k1Error, "not a public key")
+  addressOfPub(r.get())
+
 proc addressOf*(seckey: array[32, byte]): Address =
   ## The Ethereum address for a private key (for fixtures/tests).
   addressOfPub(secKey(seckey).toPublicKey())

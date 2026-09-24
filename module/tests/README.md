@@ -1,7 +1,7 @@
 # module/tests
 
 Most probes/tests run with bare `nim r -d:release tests/<name>.nim` (pure Nim,
-no external deps; `manifest_test` and `log_proof_test` too). `decline_test` / `provenance_all_test` / `flow_test` / `room_infra_test` (exo-428 — the room's infrastructure is dictated by its drivers; also needs `$SECP` for the real Safe driver) / `btc_driver_test` (exo-a50.2.3 — the Bitcoin multisig driver: P2WSH sortedmulti + tapscript multi_a accounts, sighashes, contributions, conformance, signRefusal, kinds, PSBT both ways; needs `$SECP`) / `psbt_test` (exo-a50.2.2 — PSBT v0 + BIP-371 against the BIP-174/371 vectors; the canonical form never hashes PSBT bytes; pure Nim) / `bitcoin_primitives_test` (exo-a50.2.1 — Bitcoin primitives pinned to the official BIP-143 / BIP-340 / BIP-341 / BIP-350 vectors in `tests/vectors/`; needs `$SECP`) / `phase_a_exit_test` (exo-a50.1.7 — Phase A exit: two Safes, two chains, two rooms, no globals, card rows only from the profile; needs `$SECP` + `$STINT`) / `settlement_test` (exo-a50.1.5 — the settlement seam: chosen by profile, assembled from the log, submitted through the ChainAdapter; needs `$SECP` + `$STINT`) / `safe_fidelity_test` (exo-a50.1.4 — every SafeTx field reaches the signed hash, the real ten-argument execTransaction, delegatecall disclosed + refused unless allowlisted, modules/guard decoding; needs `$SECP`) / `accounts_test` (exo-a50.1.3 — accounts disclosed by members into the room; two Safes on two chains in one room; the chain check; needs `$SECP`) / `kinds_test` (exo-a50.1.2 — the one list of driver kinds; an unknown kind refuses, never a silent Safe; needs `$SECP`) / `profile_test` (exo-a50.1.1 — every driver declares its multisig family profile, held to describe() and to contracts/families/registry.json both ways; needs `$SECP`) / `materialshare_test` (exo-45e K5) / `schema_unknown_test` (exo-1ec.3 — the schema-driven rendering gate) / `lez_readiness_test` (exo-44b L1) are pure Nim but link libsodium
+no external deps; `manifest_test` and `log_proof_test` too). `decline_test` / `provenance_all_test` / `flow_test` / `room_infra_test` (exo-428 — the room's infrastructure is dictated by its drivers; also needs `$SECP` for the real Safe driver) / `btc_outside_signer_test` (exo-a50.2.6 — signers outside muster, seam S8: a Bitcoin intent exports as a PSBT, an outside signer's PSBT imports as counted + unattested, another spend's refused; readiness asks the Bitcoin node which chain it serves; needs `$SECP`) / `btc_settlement_test` (exo-a50.2.5 — the Bitcoin settlement: a spend built from UTXOs, only driver-accepted signatures, P2WSH + tapscript witnesses finalized in script key order, the reviewed tx broadcast; needs `$SECP` + `$STINT`) / `btc_inapp_test` (exo-a50.2.4 — a member signs Bitcoin in-app through the keystore, attested; an outside signature counts, unattested; needs `$SECP`) / `btc_driver_test` (exo-a50.2.3 — the Bitcoin multisig driver: P2WSH sortedmulti + tapscript multi_a accounts, sighashes, contributions, conformance, signRefusal, kinds, PSBT both ways; needs `$SECP`) / `psbt_test` (exo-a50.2.2 — PSBT v0 + BIP-371 against the BIP-174/371 vectors; the canonical form never hashes PSBT bytes; pure Nim) / `bitcoin_primitives_test` (exo-a50.2.1 — Bitcoin primitives pinned to the official BIP-143 / BIP-340 / BIP-341 / BIP-350 vectors in `tests/vectors/`; needs `$SECP`) / `phase_a_exit_test` (exo-a50.1.7 — Phase A exit: two Safes, two chains, two rooms, no globals, card rows only from the profile; needs `$SECP` + `$STINT`) / `settlement_test` (exo-a50.1.5 — the settlement seam: chosen by profile, assembled from the log, submitted through the ChainAdapter; needs `$SECP` + `$STINT`) / `safe_fidelity_test` (exo-a50.1.4 — every SafeTx field reaches the signed hash, the real ten-argument execTransaction, delegatecall disclosed + refused unless allowlisted, modules/guard decoding; needs `$SECP`) / `accounts_test` (exo-a50.1.3 — accounts disclosed by members into the room; two Safes on two chains in one room; the chain check; needs `$SECP`) / `kinds_test` (exo-a50.1.2 — the one list of driver kinds; an unknown kind refuses, never a silent Safe; needs `$SECP`) / `profile_test` (exo-a50.1.1 — every driver declares its multisig family profile, held to describe() and to contracts/families/registry.json both ways; needs `$SECP`) / `materialshare_test` (exo-45e K5) / `schema_unknown_test` (exo-1ec.3 — the schema-driven rendering gate) / `lez_readiness_test` (exo-44b L1) are pure Nim but link libsodium
 (its import closure reaches curve25519) — run it with the `$SODIUM` flag below — this is how the exophial spec oracles under `tests/probes/`
 are graded.
 
@@ -119,4 +119,20 @@ with `infra/anvil/devnet.sh` (starts anvil, deploys + funds MiniSafe, prints
 ```bash
 SAFE=$(infra/anvil/devnet.sh | grep -oE '0x[0-9a-fA-F]{40}' | tail -1)
 nim r -d:release --threads:on $SECP $STINT tests/coordinate_submit_anvil.nim "$SAFE"
+```
+
+**On-chain Bitcoin test (needs a regtest Bitcoin Core).** `infra/bitcoind/regtest.sh`
+starts a FRESH regtest chain (RPC `127.0.0.1:18443`, `muster`/`muster`, `-txindex`;
+`nix shell nixpkgs#bitcoind` provides the binaries). `btc_regtest_e2e` — the Phase B
+exit (exo-a50.2.7) — takes `[rpcUrl] [rpcUser] [rpcPassword]` and, for both
+`btc.p2wsh-sortedmulti` and `btc.tapscript-multi-a`: checks muster derives the address
+Bitcoin Core derives from the descriptor; funds it and builds a spend from the UTXOs the
+node reports; a member approves in-app through the keystore (attested); an outside
+signer — a Bitcoin Core wallet holding the third key — signs muster's exported PSBT and
+the imported signature counts, graded unattested; the settlement finalizes the witnesses
+and the adapter broadcasts; final a block later, the payee paid. Needs `$SECP` + `$STINT`.
+
+```bash
+nix shell nixpkgs#bitcoind -c infra/bitcoind/regtest.sh
+nim r -d:release --threads:on $SECP $STINT tests/btc_regtest_e2e.nim
 ```

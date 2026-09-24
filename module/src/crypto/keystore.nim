@@ -22,6 +22,7 @@ import ./secp256k1
 import ./sodium
 import ./curve25519
 import ./binding
+import ../bitcoin/keys as btckeys   # DER ECDSA + BIP-340 over the same secret (exo-a50.2.4)
 
 type
   KeystoreError* = object of CatchableError
@@ -94,6 +95,17 @@ method signWith*(ks: Keystore, r: KeyRef, msgHash: array[32, byte]): Signature65
 method edSignWith*(ks: Keystore, r: KeyRef, msg: openArray[byte]): Ed25519Sig {.base.} =
   if not ks.hasKey(r): raise newException(KeystoreError, "unknown key ref: " & r)
   ks.edSign(msg)
+
+# ── Bitcoin (exo-a50.2.4): the SAME secp256k1 authorization key, signing as Bitcoin
+# expects — its compressed public key (a public fact), DER ECDSA (low-S) for a P2WSH
+# CHECKMULTISIG, BIP-340 Schnorr for a tapscript CHECKSIG / CHECKSIGADD. Operations, as
+# ever: the secret never leaves the keystore, so a Keycard backend slots in behind these.
+method btcPubKey*(ks: Keystore): seq[byte] {.base.} =
+  raise newException(KeystoreError, "Keystore.btcPubKey is abstract")
+method signEcdsaDer*(ks: Keystore, msgHash: array[32, byte]): seq[byte] {.base.} =
+  raise newException(KeystoreError, "Keystore.signEcdsaDer is abstract")
+method signSchnorr*(ks: Keystore, msg: array[32, byte]): seq[byte] {.base.} =
+  raise newException(KeystoreError, "Keystore.signSchnorr is abstract")
 
 method bindingForKey*(ks: Keystore, r: KeyRef, ctx: LinkContext): LinkStatement {.base.} =
   ## Bind our encryption identity to the AUTHORIZATION key named by `r`: sign the enc
@@ -228,6 +240,9 @@ proc openFileKeystore*(path, passphrase: string, secpSeed: seq[byte] = @[],
   result.finish()
 
 method address*(fk: FileKeystore): Address = fk.addr0
+method btcPubKey*(fk: FileKeystore): seq[byte] = btckeys.compressedPubKey(fk.secret)
+method signEcdsaDer*(fk: FileKeystore, msgHash: array[32, byte]): seq[byte] = btckeys.ecdsaSignDer(fk.secret, msgHash)
+method signSchnorr*(fk: FileKeystore, msg: array[32, byte]): seq[byte] = btckeys.schnorrSign(fk.secret, msg)
 method sign*(fk: FileKeystore, msgHash: array[32, byte]): Signature65 =
   signRecoverable(msgHash, fk.secret)
 method edSign*(fk: FileKeystore, msg: openArray[byte]): Ed25519Sig =
@@ -280,6 +295,9 @@ proc addKey*(ik: InMemoryKeystore, secret: array[32, byte], encSeed: array[32, b
   refOf(addressOf(secret))
 
 method address*(ik: InMemoryKeystore): Address = ik.addr0
+method btcPubKey*(ik: InMemoryKeystore): seq[byte] = btckeys.compressedPubKey(ik.secret)
+method signEcdsaDer*(ik: InMemoryKeystore, msgHash: array[32, byte]): seq[byte] = btckeys.ecdsaSignDer(ik.secret, msgHash)
+method signSchnorr*(ik: InMemoryKeystore, msg: array[32, byte]): seq[byte] = btckeys.schnorrSign(ik.secret, msg)
 method sign*(ik: InMemoryKeystore, msgHash: array[32, byte]): Signature65 =
   signRecoverable(msgHash, ik.secret)
 method edSign*(ik: InMemoryKeystore, msg: openArray[byte]): Ed25519Sig =

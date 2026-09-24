@@ -11,6 +11,11 @@ transaction and carries it through the `ChainAdapter` seam (`module/src/wallet/`
   re-derives the safeTxHash, admits only contributions the driver accepts (dedup by
   recovered owner, ascending order, threshold enforced), builds the real ten-argument
   `execTransaction`, and submits from a configured relayer through the adapter.
+  `BitcoinSettlement` (exo-a50.2.5) admits a contribution only if the Bitcoin driver
+  names an account key for it (one per key), refuses below k or a spend the driver
+  would refuse to sign, has the DRIVER finalize the witnesses (exactly k signatures in
+  the script's key order), and hands the adapter a self-contained raw transaction —
+  nothing but the witnesses differs from the reviewed spend.
 
 Rules: a family with `settlement: none` (room families) or an undeclared/unsupported
 driver has NO settlement (nil) — never a guessed one. Assemble never trusts a

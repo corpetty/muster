@@ -13,13 +13,14 @@
 ## grading logic is a pure function testable without a host; the module itself never
 ## installs, fetches, or executes anything here (invariant 3).
 
-import std/[json, strutils]
+import std/[json, strutils, sequtils]
 import ../drivers/driver
 import ../drivers/manifest
 import ../crypto/secp256k1     # Address
 import ../crypto/curve25519    # Ed25519Pub
 import ../drivers/safe_rpc     # probeRpc
 import ./invoker               # Invoker.methodsOf (is the module loaded?)
+import ../wallet/btc_adapter   # probeBitcoind (exo-a50.2.6)
 export manifest, driver
 
 type
@@ -55,10 +56,13 @@ proc remedyFor*(r: Requirement): string =
   ## it; the host performs it.
   case r.kind
   of rqModule:      "install the " & r.name & " module (host install path)"
-  of rqEnvironment: "point the RPC setting at " & r.name & " (set_setting rpc)"
+  of rqEnvironment:
+    if r.name.startsWith("bip122:"): "point Settings → Bitcoin node at a node on " & r.name & " (set_setting btc-rpc)"
+    else: "point the RPC setting at " & r.name & " (set_setting rpc)"
   of rqAuthority:   "use a key that is a recognized " & r.name & " — or take part without signing"
   of rqInfra:
     if r.name == "lez-account": "set up a funded LEZ account in the LEZ Wallet App"
+    elif r.name == "bitcoind-rpc": "point Settings → Bitcoin node at your own node (set_setting btc-rpc)"
     else: "configure " & r.name & " (set_setting " & r.name & ")"
   of rqCapability:  "grant the " & r.name & " capability in the host"
   of rqAddress:     "share a receiving address when the proposal asks (compose / share)"
@@ -124,6 +128,12 @@ type
                                    ## required amount) into this closure; nil = unknown.
                                    ## Muster only DETECTS; setup is the LEZ Wallet App's
                                    ## job (exo-44b), which the remedy names.
+    btcRpcUrl*: string             ## the user's Bitcoin node ("" = none configured)
+    btcProbe*: proc(url: string): tuple[ok: bool, chain: string, detail: string] {.gcsafe.}
+                                   ## which chain (CAIP-2) the node serves; nil = the real
+                                   ## probeBitcoind (getblockhash 0)
+    myBtcKey*: string              ## this instance's compressed secp key, hex (exo-a50.2.6)
+    btcSigners*: seq[string]       ## the intent's Bitcoin account keys, hex ("" = none)
     ownersProbe*: proc(url: string, safe: Address): tuple[known: bool, owners: seq[Address], detail: string] {.gcsafe.}
                                    ## nil = use the real getOwners. The Safe owner set is
                                    ## read FROM THE CHAIN (F-10), never the configured set:
@@ -136,6 +146,10 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
     if name == "rpc":
       if facts.rpcUrl.len > 0: (rdMet, "rpc = " & facts.rpcUrl)
       else: (rdMissing, "no RPC endpoint configured")
+    elif name == "bitcoind-rpc":
+      # a Bitcoin proposal INTRODUCES its node (exo-a50.2.6): read UTXOs, broadcast
+      if facts.btcRpcUrl.len > 0: (rdMet, "bitcoind = " & redactUserinfo(facts.btcRpcUrl))
+      else: (rdMissing, "no Bitcoin node configured")
     elif name == "lez-account":
       # A set-up, funded LEZ account. DETECTED here (via the host's lezReady closure over
       # lez_core); PROVISIONED in the LEZ Wallet App (exo-44b) — the remedy names it.
@@ -143,8 +157,18 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
       else: (rdUnknown, "cannot check the LEZ account — no zone probe")
     else: (rdUnknown, "unrecognized infra requirement: " & name)
   result.environmentReachable = proc(name: string): Grade =
+    if name.startsWith("bip122:"):
+      # Bitcoin: ask the configured node which chain it serves (its genesis hash) —
+      # never assumed from the setting (exo-a50.2.6)
+      if facts.btcRpcUrl.len == 0:
+        return (rdUnknown, "no Bitcoin node configured to ask which chain it serves")
+      let probe = if facts.btcProbe != nil: facts.btcProbe else: probeBitcoind
+      let (ok, chain, detail) = probe(facts.btcRpcUrl)
+      if not ok: return (rdMissing, "Bitcoin node unreachable: " & detail)
+      if chain == name: return (rdMet, detail)
+      return (rdMissing, "the Bitcoin node serves " & chain & ", the action needs " & name)
     if not name.startsWith("chain:"):
-      # a non-EVM chain (e.g. bip122:… — Bitcoin): the EVM RPC cannot answer for it
+      # a non-EVM chain with no probe on this host
       return (rdUnknown, "this host has no probe for " & name & " yet")
     if facts.rpcUrl.len == 0:
       return (rdUnknown, "no RPC configured to probe " & name & " through")
@@ -166,6 +190,12 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
         if not known: (rdUnknown, "could not read the Safe owner set: " & detail)
         elif facts.myAddress in owners: (rdMet, "your key is a Safe owner (read from chain)")
         else: (rdMissing, "your key is not a Safe owner on-chain — your signature would not count")
+    of "btc-multisig-key":
+      # whether MY key is one of the account's — never who else holds one (exo-a50.2.6)
+      if facts.btcSigners.len == 0: (rdUnknown, "no Bitcoin account keys to grade against")
+      elif facts.myBtcKey.toLowerAscii() in facts.btcSigners.mapIt(it.toLowerAscii()):
+        (rdMet, "your key is one of the account's")
+      else: (rdMissing, "your key is not one of the account's — your signature would not count")
     of "signer":
       if facts.myAddress in facts.signers: (rdMet, "your key is a configured signer")
       else: (rdMissing, "your key is not a configured signer")

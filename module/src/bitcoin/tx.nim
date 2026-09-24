@@ -24,6 +24,13 @@ type
 
   BtcError* = object of CatchableError
 
+  BtcUtxo* = object
+    ## an unspent output as a node reports it — what a spend is built from
+    txid*: string            ## display (big-endian) hex, as RPC and explorers show it
+    vout*: uint32
+    value*: uint64           ## satoshis
+    scriptPubKey*: string    ## hex
+
 proc le32*(x: uint32): seq[byte] = @[byte(x and 0xff), byte((x shr 8) and 0xff), byte((x shr 16) and 0xff), byte(x shr 24)]
 proc le64*(x: uint64): seq[byte] =
   for i in 0 ..< 8: result.add byte((x shr uint64(8*i)) and 0xff)

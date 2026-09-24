@@ -11,8 +11,8 @@
 ## settlementFor picks one from the driver's family PROFILE — never from a policy
 ## string, never by branching on a concrete driver type in the core. A room family
 ## (settlement "none") or an undeclared / unsupported driver has NO settlement: nil,
-## never a guess. The Safe settlement is the first tenant; Phase B's Bitcoin (PSBT)
-## and Phase C's LEZ vote settlements slot in beside it.
+## never a guess. The Safe settlement is the first tenant; Phase B's Bitcoin settlement
+## (exo-a50.2.5) sits beside it, and Phase C's LEZ vote settlement slots in next.
 
 import std/[json, algorithm]
 import ../intents/materialization
@@ -20,6 +20,8 @@ import ../drivers/driver
 import ../drivers/profile
 import ../drivers/safe
 import ../drivers/safe_rpc
+import ../drivers/btc_multisig
+import ../bitcoin/tx
 import ../crypto/secp256k1
 import ../crypto/keystore
 import ../wallet/types
@@ -101,6 +103,42 @@ method assemble*(s: SafeSettlement, drv: Driver, effect: Effect,
     tx: PreparedTx(chain: s.relayer.chain, frm: s.relayer, to: safeHex,
                    payload: $(%*{"to": safeHex, "data": hex0x(calldata), "gas": 400_000})))
 
+# ── Bitcoin (exo-a50.2.5) ─────────────────────────────────────────────────────
+type BitcoinSettlement* = ref object of Settlement
+
+method assemble*(s: BitcoinSettlement, drv: Driver, effect: Effect,
+                 contributions: seq[SettleContribution]): Assembled =
+  ## Re-derive every input's sighash from the effect (invariant 1) and admit a
+  ## contribution only if the driver names a key of the account for it, one per key;
+  ## refuse below k and refuse a spend the driver itself would refuse to sign. The
+  ## witnesses are the driver's to finalize (its script, its key order); the payload is
+  ## the raw transaction — self-contained, since its fee comes out of its own inputs —
+  ## and its txid. Nothing but the witnesses differs from the reviewed spend.
+  if not (drv of BtcMultisigDriver):
+    return Assembled(ok: false, error: "not-settleable", detail: "a Bitcoin settlement needs a Bitcoin multisig driver")
+  let bd = BtcMultisigDriver(drv)
+  let refusal = bd.signRefusal(effect)
+  if refusal.len > 0: return Assembled(ok: false, error: "not-settleable", detail: refusal)
+  let m = canonicalize(bd, effect)
+  var accepted: seq[Contribution]
+  var seen: seq[string]
+  for c in contributions:
+    let who = identifyContributor(bd, m, Contribution(bytes: c.bytes))
+    if who.len == 0 or who in seen: continue
+    seen.add who
+    accepted.add Contribution(bytes: c.bytes)
+  let need = bd.account.k
+  if accepted.len < need:
+    return Assembled(ok: false, error: "insufficient-signatures", have: accepted.len, need: need,
+                     detail: $accepted.len & " of the " & $need & " signatures the account needs")
+  var t: BtcTx
+  try: t = bd.finalizeSpend(effect, accepted)
+  except BtcError as e:
+    return Assembled(ok: false, error: "not-settleable", have: accepted.len, need: need, detail: e.msg)
+  Assembled(ok: true, have: accepted.len, need: need,
+    tx: PreparedTx(chain: bd.account.chain, frm: s.relayer, to: bd.account.address,
+                   payload: $(%*{"rawtx": toHex(t.serialize(withWitness = true)), "txid": txidHex(t)})))
+
 proc settlementFor*(drv: Driver, adapter: ChainAdapter, relayer: Account): Settlement =
   ## The settlement a driver's family needs — read from its PROFILE. nil when the
   ## family settles nowhere (a room family) or the driver declares nothing (unsupported).
@@ -108,4 +146,5 @@ proc settlementFor*(drv: Driver, adapter: ChainAdapter, relayer: Account): Settl
   if not p.declared or p.settlement == "none": return nil
   case p.family
   of "evm.safe": SafeSettlement(family: p.family, adapter: adapter, relayer: relayer)
+  of P2wshFamily, TapscriptFamily: BitcoinSettlement(family: p.family, adapter: adapter, relayer: relayer)
   else: nil

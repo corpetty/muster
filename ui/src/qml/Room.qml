@@ -249,6 +249,25 @@ Item {
         try { return JSON.parse(backend ? backend.contributeJson : "{}"); }
         catch (e) { return ({}); }
     }
+    // Signers outside muster (exo-a50.2.6): the last export (a PSBT for an outside
+    // signer) and the last import (what came back), each naming its intent.
+    readonly property var outsideExport: {
+        try { return JSON.parse(backend ? backend.outsideJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    readonly property var outsideImport: {
+        try { return JSON.parse(backend ? backend.outsideImportJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    // the last Bitcoin payment proposal: {id} or {error, detail}
+    readonly property var btcPropose: {
+        try { return JSON.parse(backend ? backend.btcProposeJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    // a Bitcoin multisig policy: a payment in sat from the account's own coins, read
+    // from the user's node — no Safe balance, no nonce (exo-a50.2.6)
+    readonly property bool isBtcPolicy: room.policyKind.indexOf("btc-") === 0
+    function isBtcIntent(it) { return String((it && it.policy) || "").indexOf("btc-") === 0; }
     // Refresh the action menu when the action composer opens — the module queries each
     // candidate module's methods (never a blind scan), so not on the message tick.
     // Also keep the policy coherent with the kind (payment→Safe, statement→endorsement),
@@ -701,6 +720,8 @@ Item {
 
                     // reveal the signature field for THIS inline proposal.
                     property bool approving: false
+                    // reveal the outside-signer panel (PSBT) for THIS inline proposal.
+                    property bool outsideOpen: false
 
                     ColumnLayout {
                         id: rowCol
@@ -799,6 +820,140 @@ Item {
                                         msg.approving = false;
                                     }
                                 }
+                            }
+                        }
+
+                        // Signers outside muster (exo-a50.2.6, seam S8) — always surfaced:
+                        // a Bitcoin intent exports as a PSBT a hardware signer, Sparrow or
+                        // Bitcoin Core signs; what comes back is verified by the driver like
+                        // an in-app approval, counts, and is shown as signed outside muster.
+                        LogosButton {
+                            objectName: "roomOutsideToggle"
+                            visible: msg.isIntentRef && msg.liveIntent !== null && room.isBtcIntent(msg.liveIntent)
+                                     && !msg.outsideOpen
+                            Layout.leftMargin: Theme.spacing.medium
+                            text: qsTr("Sign outside muster (PSBT)")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: {
+                                msg.outsideOpen = true;
+                                if (room.backend) room.backend.exportOutside(String(msg.liveIntent.id || ""));
+                            }
+                        }
+
+                        ColumnLayout {
+                            id: outsideBox
+                            visible: msg.isIntentRef && msg.liveIntent !== null && room.isBtcIntent(msg.liveIntent)
+                                     && msg.outsideOpen
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Theme.spacing.medium
+                            spacing: Theme.spacing.tiny
+
+                            readonly property string iid: String((msg.liveIntent && msg.liveIntent.id) || "")
+                            // the export and import results, only when they name THIS intent
+                            readonly property var exp: (room.outsideExport && String(room.outsideExport.intentId || "") === outsideBox.iid)
+                                                       ? room.outsideExport : null
+                            readonly property var imp: (room.outsideImport && String(room.outsideImport.intentId || "") === outsideBox.iid)
+                                                       ? room.outsideImport : null
+
+                            LogosText {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: qsTr("Give this PSBT to a signer outside muster (a hardware signer, Sparrow, "
+                                         + "Bitcoin Core). Paste back what it returns: each signature is checked like "
+                                         + "an in-app one, counts toward the threshold, and is shown as signed outside "
+                                         + "muster — it commits to the transaction, nothing more.")
+                                color: Theme.palette.textTertiary
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+
+                            LogosText {
+                                visible: !!(outsideBox.exp && outsideBox.exp.error)
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: qsTr("⚠ No PSBT — %1").arg(String((outsideBox.exp && outsideBox.exp.error) || ""))
+                                color: Theme.palette.warning
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+
+                            Rectangle {
+                                visible: !!(outsideBox.exp && outsideBox.exp.encoded)
+                                Layout.fillWidth: true
+                                implicitHeight: Math.min(96, psbtOut.contentHeight + 2 * Theme.spacing.small)
+                                radius: Theme.spacing.radiusSmall
+                                color: Theme.palette.surfaceRaised
+                                border.width: 1
+                                border.color: Theme.palette.borderSubtle
+                                clip: true
+                                TextEdit {
+                                    id: psbtOut
+                                    objectName: "roomOutsidePsbt"
+                                    anchors.fill: parent
+                                    anchors.margins: Theme.spacing.small
+                                    readOnly: true
+                                    selectByMouse: true
+                                    wrapMode: TextEdit.WrapAnywhere
+                                    text: String((outsideBox.exp && outsideBox.exp.encoded) || "")
+                                    color: Theme.palette.textSecondary
+                                    font.family: Theme.typography.mono
+                                    font.pixelSize: Theme.typography.badgeText
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: Theme.spacing.small
+                                LogosButton {
+                                    objectName: "roomOutsideCopy"
+                                    visible: !!(outsideBox.exp && outsideBox.exp.encoded)
+                                    text: qsTr("Copy PSBT")
+                                    variant: LogosButton.Variant.Secondary
+                                    onClicked: { psbtOut.selectAll(); psbtOut.copy(); psbtOut.deselect(); }
+                                }
+                                LogosTextField {
+                                    id: psbtIn
+                                    objectName: "roomOutsideImport"
+                                    Layout.fillWidth: true
+                                    placeholderText: qsTr("the signed PSBT (base64)")
+                                    font.family: Theme.typography.mono
+                                }
+                                LogosButton {
+                                    objectName: "roomOutsideImportSubmit"
+                                    text: qsTr("Import")
+                                    enabled: psbtIn.text.length > 0
+                                    onClicked: {
+                                        if (room.backend) room.backend.importOutside(outsideBox.iid, psbtIn.text);
+                                        psbtIn.text = "";
+                                    }
+                                }
+                                LogosButton {
+                                    text: qsTr("Close")
+                                    variant: LogosButton.Variant.Secondary
+                                    onClicked: msg.outsideOpen = false
+                                }
+                            }
+
+                            LogosText {
+                                objectName: "roomOutsideImportResult"
+                                visible: outsideBox.imp !== null
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: {
+                                    var r = outsideBox.imp || ({});
+                                    if (r.error) {
+                                        var why = String(r.error);
+                                        if (why === "not-this-spend") why = qsTr("that PSBT is for a different spend — nothing was added");
+                                        else if (why === "no-signatures") why = qsTr("it carries no signature by one of the account's keys");
+                                        else if (why === "not-readable") why = qsTr("that is not a PSBT");
+                                        return qsTr("⚠ %1").arg(why);
+                                    }
+                                    var n = (r.imported || []).length;
+                                    var had = (r.already || []).length;
+                                    return qsTr("✓ %n signature(s) added — signed outside muster, counted.", "", n)
+                                           + (had > 0 ? " " + qsTr("%n already in the room.", "", had) : "")
+                                           + "  " + qsTr("State: %1").arg(String(r.state || ""));
+                                }
+                                color: (outsideBox.imp && outsideBox.imp.error) ? Theme.palette.warning : Theme.palette.textSecondary
+                                font.pixelSize: Theme.typography.badgeText
                             }
                         }
 
@@ -1569,9 +1724,23 @@ Item {
                         Layout.fillWidth: true
                         // wei — the Safe transfers this exact value; the balance above is
                         // shown in ETH and in wei so the unit you type against is explicit.
-                        placeholderText: qsTr("amount (wei)")
+                        // A Bitcoin payment is in satoshis.
+                        placeholderText: room.isBtcPolicy ? qsTr("amount (sat)") : qsTr("amount (wei)")
                         font.family: Theme.typography.mono
                         validator: IntValidator { bottom: 0 }
+                    }
+
+                    // a Bitcoin payment's fee rate: sat/vB over an upper bound of its
+                    // signed size, paid out of the account's own coins
+                    LogosTextField {
+                        id: proposeFeeRate
+                        objectName: "roomProposeFeeRate"
+                        visible: room.composeType === "payment" && room.isBtcPolicy
+                        Layout.preferredWidth: 150
+                        placeholderText: qsTr("fee (sat/vB)")
+                        text: "2"
+                        font.family: Theme.typography.mono
+                        validator: IntValidator { bottom: 1 }
                     }
 
                     // keep the buttons right-aligned when the amount field is hidden.
@@ -1587,6 +1756,7 @@ Item {
                         enabled: room.enoughToPropose && (
                                  room.composeType === "statement" ? proposeText.text.length > 0
                                : room.composeType === "action" ? room.chosenAction !== null
+                               : room.isBtcPolicy ? proposeTo.text.length > 0 && proposeValue.text.length > 0
                                : proposeTo.text.length > 0 && !room.overSends(proposeValue.text))
                         onClicked: {
                             if (room.composeType === "statement") {
@@ -1600,6 +1770,14 @@ Item {
                                     room.modeB ? proposeChain.text : "");
                                 proposeArgs.text = "";
                                 proposeChain.text = "";
+                            } else if (room.isBtcPolicy) {
+                                // coins read from your node, change back to the account
+                                if (room.backend)
+                                    room.backend.proposeBtcSpend(proposeTo.text, proposeValue.text,
+                                                                 proposeFeeRate.text.length > 0 ? proposeFeeRate.text : "1");
+                                proposeTo.text = "";
+                                proposeValue.text = "";
+                                room.composing = false;
                             } else {
                                 room.proposeFrom(proposeTo.text, proposeValue.text);
                                 proposeTo.text = "";
@@ -1614,6 +1792,21 @@ Item {
                         onClicked: room.composing = false
                     }
                 }
+            }
+
+            // a Bitcoin payment that could not be proposed says why (no node configured,
+            // the node unreachable, not enough in the account) — never a silent no-op
+            LogosText {
+                objectName: "roomBtcProposeFeedback"
+                visible: !!(room.btcPropose && room.btcPropose.error)
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("⚠ The Bitcoin payment was not proposed — %1%2")
+                      .arg(String((room.btcPropose && room.btcPropose.error) || ""))
+                      .arg(room.btcPropose && room.btcPropose.detail ? ": " + String(room.btcPropose.detail) : "")
+                color: Theme.palette.warning
+                font.family: Theme.typography.mono
+                font.pixelSize: Theme.typography.badgeText
             }
 
             // approval feedback — an in-app Approve that didn't count says WHY, right

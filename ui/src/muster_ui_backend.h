@@ -76,6 +76,9 @@ public:
     void shareMaterial(const QString &intentId, const QString &requirement, const QString &pub) override;
     void declineInRoom(const QString &intentId) override;
     void downloadAudit(const QString &intentId) override;
+    void exportOutside(const QString &intentId) override;
+    void importOutside(const QString &intentId, const QString &encoded) override;
+    void proposeBtcSpend(const QString &payTo, const QString &amountSat, const QString &feeRate) override;
     void loadFlow() override;
     void setPolicy(const QString &kind) override;
     void loadPolicy() override;
