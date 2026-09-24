@@ -1161,7 +1161,7 @@
       "infra": ["the target chain's"],
       "maturity": "production",
       "notes": "GG18/GG20 are deprecated (BitForge, TSSHOCK). CGGMP21 CVE-2025-66017 (altered presignatures). Several vendors moved from MPC to TEEs. Open libraries: Lockness cggmp21 (no identifiable abort, no refresh), dkls23 (non-commercial license), cb-mpc (MIT). Round count is protocol-dependent (CGGMP: 3-round presign + 1 online).",
-      "muster": {"status": "watch", "why": "a chain-agnostic aggregate that looks single-sig everywhere, but the open implementations are license- or feature-limited and the CVE history is long. FROST covers the Schnorr chains with less risk."},
+      "muster": {"status": "candidate", "why": "a chain-agnostic aggregate that looks single-sig everywhere, including chains without Schnorr. Muster is not production code, so prototype-grade libraries are acceptable now (decision 2026-09-23). PRODUCTION GATE: before real transactions and users, re-choose the library for license, CVE history and identifiable abort."},
       "unverified": ["DKLs23 identifiable abort", "cb-mpc paper and public-release date"],
       "sources": ["https://eprint.iacr.org/2021/060", "https://eprint.iacr.org/2023/765", "https://github.com/advisories/GHSA-8frv-q972-9rq5", "https://github.com/LFDT-Lockness/cggmp21", "https://github.com/coinbase/cb-mpc"]
     },

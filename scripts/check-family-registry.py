@@ -20,8 +20,9 @@ its fields agree with each other, and that what we claim to have built exists.
   FAIL  a built/partial/next family whose chain signature has binding=none but
         names no `exposure` — invariant 2 cannot hold at the chain layer there, so
         the card must say who could replay it, never stay silent
-  FAIL  the landscape table in docs/design/multisig-landscape.md is out of date
-        with the registry (regenerate: scripts/check-family-registry.py --write-table)
+  FAIL  the landscape table in docs/design/multisig-landscape.md, or the registry
+        embedded in docs/design/multisig-explorer.html, is out of date with the
+        registry (regenerate both: scripts/check-family-registry.py --write-table)
   WARN  an entry carries `unverified` items (listed, so they are not forgotten)
 """
 
@@ -36,6 +37,8 @@ ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = ROOT / "contracts" / "families" / "registry.json"
 DOC = ROOT / "docs" / "design" / "multisig-landscape.md"
 BEGIN, END = "<!-- landscape-table:begin -->", "<!-- landscape-table:end -->"
+EXPLORER = ROOT / "docs" / "design" / "multisig-explorer.html"
+EBEGIN, EEND = "<!-- registry-json:begin -->", "<!-- registry-json:end -->"
 
 VOCAB_FIELDS = ["locus", "scheme", "commits", "binding", "ordering", "expiry",
                 "setup", "membershipChange", "approverCost"]
@@ -107,12 +110,23 @@ def spliced_doc(reg: dict) -> tuple[str, str]:
     return doc, doc[:i] + "\n" + landscape_table(reg) + "\n" + doc[j:]
 
 
+def spliced_explorer(reg: dict) -> tuple[str, str]:
+    """The explorer page carries the registry verbatim, so it can never drift from it."""
+    page = EXPLORER.read_text()
+    i, j = page.index(EBEGIN) + len(EBEGIN), page.index(EEND)
+    data = json.dumps(reg, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
+    block = '\n<script id="registry" type="application/json">' + data + "</script>\n"
+    return page, page[:i] + block + page[j:]
+
+
 def main() -> int:
     reg = json.loads(REGISTRY.read_text())
     if "--write-table" in sys.argv:
         _, new = spliced_doc(reg)
         DOC.write_text(new)
-        print(f"wrote the landscape table into {DOC.relative_to(ROOT)}")
+        _, page = spliced_explorer(reg)
+        EXPLORER.write_text(page)
+        print(f"wrote the landscape table into {DOC.relative_to(ROOT)} and the registry into {EXPLORER.relative_to(ROOT)}")
     vocab = reg["about"]["vocabulary"]
     fails: list[str] = []
     warns: list[str] = []
@@ -162,6 +176,12 @@ def main() -> int:
             fails.append(f"{DOC.relative_to(ROOT)}: landscape table is out of date — run {Path(__file__).name} --write-table")
     except (FileNotFoundError, ValueError):
         fails.append(f"{DOC.relative_to(ROOT)}: missing, or its landscape-table markers are gone")
+    try:
+        cur, new = spliced_explorer(reg)
+        if cur != new:
+            fails.append(f"{EXPLORER.relative_to(ROOT)}: embedded registry is out of date — run {Path(__file__).name} --write-table")
+    except (FileNotFoundError, ValueError):
+        fails.append(f"{EXPLORER.relative_to(ROOT)}: missing, or its registry-json markers are gone")
 
     fams = reg["families"]
     by_status = Counter(f.get("muster", {}).get("status") for f in fams)

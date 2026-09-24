@@ -1,6 +1,6 @@
 # One multisig experience, many multisigs
 
-**Status:** design, proposed (epic exo-68f). Registry: `contracts/families/registry.json` (44 families, checked by `scripts/check-family-registry.py`). Nothing in §5–§6 is built yet. What exists today is the room drivers (`threshold`, `eip191`, the `frost` scaffold), one hard-coded Safe (`gDriver`), and the action manifest (`docs/design/action-manifest.md`). The landscape was verified against primary sources as of 2026-09-23; each registry entry lists its sources, and anything that couldn't be confirmed is listed under `unverified`.
+**Status:** design, proposed (epic exo-68f). Registry: `contracts/families/registry.json` (44 families, checked by `scripts/check-family-registry.py`). Nothing in §5–§6 is built yet. What exists today is the room drivers (`threshold`, `eip191`, the `frost` scaffold), one hard-coded Safe (`gDriver`), and the action manifest (`docs/design/action-manifest.md`). The landscape was verified against primary sources as of 2026-09-23; each registry entry lists its sources, and anything that couldn't be confirmed is listed under `unverified`. **Decisions recorded 2026-09-23** (§9). Interactive explorer: `docs/design/multisig-explorer.html`, generated from the registry.
 
 ## 0. The claim
 
@@ -114,7 +114,7 @@ One row per family, generated from the registry (`contracts/families/registry.js
 | `penumbra.threshold` | aggregate | partial (t-of-n) | explicit | 2 ⚿ · dkg | new-address | – / – / **shielded** | dedup · optional | – | production | watch |
 | `monero.multisig` | aggregate | partial (t-of-n) | **none** | 2 ⚿ · dkg | new-address | – / – / **shielded** | dedup · none | – | experimental | reject |
 | `aztec.account-contract` | contract | same bytes | explicit | 1 · deploy | in-place | – / – / **shielded** | dedup · optional | – | experimental | watch |
-| `mpc.threshold-ecdsa` | aggregate | partial (t-of-n) | explicit | 4 ⚿ · dkg | reshare | – / – / public | sequence · none | – | production | watch |
+| `mpc.threshold-ecdsa` | aggregate | partial (t-of-n) | explicit | 4 ⚿ · dkg | reshare | – / – / public | sequence · none | – | production | candidate |
 | `lez.public-witness` | native | same bytes | **none** | 1 · derive | fixed | spend / spend / public | sequence · none | – | early | candidate |
 | `lez.multisig-program` | vote | own tx → **pointer** | **none** | 1 · deploy | in-place | setup / each vote / public | index · none | a tx | demo | next (C) |
 | `lez.private-multisig` | vote | own tx | **none** | 1 · deploy | new-address | setup / – / public | index · none | a tx | demo | watch |
@@ -170,7 +170,7 @@ This turns the family × chain matrix into a sum. FROST-secp256k1 is one scheme 
 
 | # | Change | Why | Replaces today |
 |---|---|---|---|
-| **S1** | **Accounts in the room log**: `account/<id>/declare {family, chain, address, signers, policy, config}`. Import means reading the chain (recorded as an external read) and declaring. Create means a setup proposal | a multisig manager manages *accounts*; this also answers exo-1ec.4's config scope with "per room, in the log" | the `gDriver` global, `SAFE_ADDR`, `environment: "anvil-31337"` |
+| **S1** | **Accounts live in the room, disclosed by members**: `account/<id>/disclose {family, chain, address, signers, policy, config}`, authored by a named member (ADR-015). An account exists to the room only once a member discloses it. Every reader checks the disclosure against the chain (an external read, invariant 10) and the room shows who disclosed it and whether the chain agrees. Create means a setup proposal whose result is disclosed. The local catalogue still records which disclosed accounts *I* can sign for | a multisig manager manages *accounts*; this also answers exo-1ec.4's config scope with "per room, in the log, by disclosure" | the `gDriver` global, `SAFE_ADDR`, `environment: "anvil-31337"` |
 | **S2** | **One kind list**: family id → driver constructor, in `registry.nim`, validated against the registry file. An unknown kind *refuses* | there are four disagreeing lists today, and `driverForKind` silently falls back to the Safe, which is a guess | `driverForKind`'s `else: gDriver`, `roomDriverKinds`, `policiesForKind` |
 | **S3** | **`Driver.profile()`**: the family's profile, filled in for the instance (k, n, chain, address, bypasses read from the chain). Conformance checks that it matches the registry entry and is consistent with `describe()` and `manifest()` | the card's slots and the phrasebook read it; no consumer branches on concrete type (the null-ladder rule) | `drv of SafeDriver` in `live.nim` and `muster_module.nim` |
 | **S4** | **`materializationFor(effect, contributor)`**, defaulting to `canonicalize(effect)` | per-signer families (XRPL, Hedera) | — |
@@ -187,9 +187,11 @@ Conformance grows with S3: a driver whose profile contradicts its registry entry
 
 ### 6.1 Accounts are first-class
 
+- **An account enters a room when a member discloses it.** The chip names who disclosed it and whether the chain agrees with the disclosure (verified · disagrees · couldn't check).
 - **The account chip** appears on the room header, the composer and every card: `Ops Treasury · Safe on Base · 2 of 3`, with a maturity badge when it isn't `production`.
 - **Add a shared account** goes: *which chain* → the registry lists the families available on that chain, each as five plain lines (where the rule lives, who sees what, what approving costs, setup, maturity) → *import existing* (address, descriptor, or a chain read) or *create new* (deploy, derive, or a key ceremony in this room). Families marked `watch` or `reject` still appear, greyed out, with their `why`. Showing a non-option honestly is part of the education.
 - A room can hold several accounts. Each proposal names its account (the policy is already per intent).
+- **Signers outside muster are surfaced, never implied.** Only families with a standard interop format (`interop` in the registry: PSBT, Safe Tx Service JSON, …) offer them. The chooser says whether a family allows outside signers, and the card marks each outside signer's slot with the format they sign through.
 
 ### 6.2 The card has fixed slots
 
@@ -262,11 +264,13 @@ After D, by demand: `xrpl.signerlist` (per-signer bytes), `sol.squads-v4`, `cosm
 - C puts the vote locus on our own chain, through a module already bundled (`lez_core`).
 - D is the highest-value and hardest phase: secret state, a key ceremony, and draft BIPs. It is also ADR-015's remedy, "an aggregate-signature rail", for the one leak ADR-015 names: Safe settlement naming its signers to chain observers.
 
-## 9. Open questions (yours to decide)
+## 9. Decisions (2026-09-23)
 
-1. **Account scope.** Are accounts declared in the room log (members see them; my recommendation) or per identity and brought into rooms? The local catalogue would still hold *which of them I can sign for*.
-2. **Foreign signers as first-class participants.** Should a signer who never opens muster take part through PSBT or Tx-Service JSON (recommended for native and contract families), or must every signer be a room member?
-3. **Families with `binding: none`.** Accept them with an `exposure` row (recommended), or refuse them? For LEZ, the fix is upstream: a zone/domain tag in the public message.
-4. **Vote-locus costs.** Each voter needs their own chain account and gas, which makes it a per-contributor infra requirement. Do we accept that each member must be set up for the chain, or should muster offer a relayer? Muster doesn't run one (invariant 8), so it would have to be user-configured.
-5. **The LEZ aggregate-key assumption.** `lez.frost-public-account` depends on the additive account tweak (`sk + SHA256(pk)`) commuting with aggregation. That is inferred, not documented. It should be confirmed with the LEZ team before Phase D commits to it.
-6. **MPC (threshold ECDSA).** It would reach chains without Schnorr, but the open implementations are license- or feature-limited and the CVE history is long. Stay at `watch` (recommended)?
+| Question | Decision |
+|---|---|
+| Account scope | **Accounts live in the room, as disclosed by members.** A member discloses an account into the room log; readers verify it against the chain; the room names who disclosed it (S1, §6.1). |
+| Signers outside muster | **Yes, where it makes sense, and always surfaced.** Only families with a standard interop format; the chooser and the card say so (S8, §6.1). |
+| Families with `binding: none` | **Accept, with an `exposure` row on the card.** For LEZ, push for a zone/domain tag in the public message upstream. |
+| Vote-locus costs | **Each voter pays their own vote transaction for now**, so every member of a vote-locus account needs a funded chain account; readiness grades it per contributor. Revisit a user-configured relayer later. |
+| The LEZ aggregate-key assumption | **Accepted as the working assumption for Phase D.** It stays in the registry's `unverified` list until a Phase D test proves it. |
+| Threshold ECDSA (MPC) | **Candidate.** Muster isn't production code, so prototype-grade libraries are acceptable now. **Production gate:** before real transactions and users, re-choose the library for license, CVE history and identifiable abort. |

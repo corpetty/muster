@@ -76,7 +76,7 @@ repos:
     entry: scripts/check-family-registry.py
     language: system
     pass_filenames: false
-    files: ^(contracts/families/|docs/design/multisig-landscape\.md|module/src/drivers/)
+    files: ^(contracts/families/|docs/design/multisig-(landscape\.md|explorer\.html)|module/src/drivers/)
 - repo: local
   hooks:
   - id: claims-qml-sync
