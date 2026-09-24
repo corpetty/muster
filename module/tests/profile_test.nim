@@ -35,6 +35,9 @@ let owners = %*["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
                 "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
                 "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"]
 const SafeAddr = "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+const BtcKeys = ["0307b8ae49ac90a048e9b53357a2354b3334e9c8bee813ecb98e99a7e07e8c3ba3",
+                 "03b28f0c28bfab54554ae8c658ac5c3e0ce6e79ad336331f78c428dd43eea8449b",
+                 "034b8113d703413d57761b8b9781957b8c0ac1dfe69f492580ca4195f50376ba4a"]
 
 # every kind the registry can build, with the source file the family names
 let kinds = @[
@@ -43,7 +46,9 @@ let kinds = @[
   ("threshold", %*{"roster": roster, "k": 2}, "module/src/drivers/threshold.nim"),
   ("frost", %*{"roster": roster, "k": 2}, "module/src/drivers/frost.nim"),
   ("invoke", %*{"roster": roster, "k": 2}, "module/src/drivers/invoke.nim"),
-  ("eip191", %*{"signers": owners, "threshold": 1}, "module/src/drivers/eip191.nim")]
+  ("eip191", %*{"signers": owners, "threshold": 1}, "module/src/drivers/eip191.nim"),
+  ("btc-p2wsh", %*{"network": "regtest", "k": 2, "keys": BtcKeys}, "module/src/drivers/btc_multisig.nim"),
+  ("btc-tapscript", %*{"network": "regtest", "k": 2, "keys": BtcKeys}, "module/src/drivers/btc_multisig.nim")]
 
 # ── 1. every registered kind declares a consistent profile ─────────────────────
 block:

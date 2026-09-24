@@ -38,7 +38,11 @@ const Kinds*: seq[KindInfo] = @[
   KindInfo(kind: "invoke", family: "room.invoke", label: "Module action", composes: @["action"], founding: true),
   KindInfo(kind: "eip191", family: "room.eip191-attest", label: "Attest", composes: @["statement"], founding: true,
            accountFamilies: @["evm.safe"]),
-  KindInfo(kind: "unanimous", family: "room.threshold", label: "Unanimous", composes: @["statement"], founding: false)]
+  KindInfo(kind: "unanimous", family: "room.threshold", label: "Unanimous", composes: @["statement"], founding: false),
+  KindInfo(kind: "btc-p2wsh", family: "btc.p2wsh-sortedmulti", label: "Bitcoin (P2WSH)", composes: @["payment"],
+           founding: true, accountFamilies: @["btc.p2wsh-sortedmulti"]),
+  KindInfo(kind: "btc-tapscript", family: "btc.tapscript-multi-a", label: "Bitcoin (taproot)", composes: @["payment"],
+           founding: true, accountFamilies: @["btc.tapscript-multi-a"])]
 
 # ── a policy is a kind, optionally bound to an account ─────────────────────────
 # An account-bound intent's policy is "<kind>@<CAIP-10 account>" (exo-a50.1.3), so the

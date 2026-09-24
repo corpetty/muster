@@ -372,7 +372,7 @@
       "infra": ["utxo-source (bitcoind / Electrum / Esplora)", "fee-estimation"],
       "maturity": "production",
       "notes": "Signatures never expire: revoking means double-spending an input. The fee is implicit (BIP-143 commits only to the signer's own input amount) — every signer must re-derive it from the prevouts. PSBT bytes are not canonical. A fee bump is a new signing round. Keycard Shell 1.4 cosigns P2WSH multisig and stores descriptors.",
-      "muster": {"status": "next", "phase": "B", "why": "proves the native locus + UTXO ordering + foreign signers (a Keycard Shell / Coldcard cosigner who is not in muster participates through PSBT)"},
+      "muster": {"status": "partial", "phase": "B", "driver": "module/src/drivers/btc_multisig.nim", "why": "the driver (module/src/drivers/btc_multisig.nim) derives the account from k of n keys, re-derives every input's BIP-143 hash, verifies DER signatures, refuses foreign coins / a wrong fee / dust, and exports + imports PSBT for signers outside muster (exo-a50.2.3). Still partial: no in-app keystore signing (exo-a50.2.4) or bitcoind settlement (exo-a50.2.5) yet."},
       "sources": ["https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki", "https://github.com/bitcoin/bips/blob/master/bip-0129.mediawiki", "https://github.com/keycard-tech/keycard-shell/releases"]
     },
     {
@@ -399,7 +399,7 @@
       "infra": ["utxo-source", "fee-estimation"],
       "maturity": "production",
       "notes": "Only the executed leaf is revealed; unused leaves stay hidden. Commits to all inputs' amounts, which closes P2WSH's implicit-fee hole. Sparrow rejects taproot script trees.",
-      "muster": {"status": "next", "phase": "B", "why": "same PSBT driver as p2wsh with a better disclosure row — the pair lets the card show the difference"},
+      "muster": {"status": "partial", "phase": "B", "driver": "module/src/drivers/btc_multisig.nim", "why": "the same driver for a single sortedmulti_a leaf under the NUMS internal key: BIP-341/342 script-path hashes, BIP-340 signatures, PSBT with the leaf + control block (exo-a50.2.3). Still partial: keystore Schnorr signing (exo-a50.2.4) and bitcoind settlement (exo-a50.2.5)."},
       "unverified": ["which BIP-48-style path convention wallets use for taproot multisig"],
       "sources": ["https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki", "https://github.com/bitcoin/bips/blob/master/bip-0387.mediawiki"]
     },

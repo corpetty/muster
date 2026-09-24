@@ -13,7 +13,7 @@
 ## grading logic is a pure function testable without a host; the module itself never
 ## installs, fetches, or executes anything here (invariant 3).
 
-import std/json
+import std/[json, strutils]
 import ../drivers/driver
 import ../drivers/manifest
 import ../crypto/secp256k1     # Address
@@ -143,6 +143,9 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
       else: (rdUnknown, "cannot check the LEZ account — no zone probe")
     else: (rdUnknown, "unrecognized infra requirement: " & name)
   result.environmentReachable = proc(name: string): Grade =
+    if not name.startsWith("chain:"):
+      # a non-EVM chain (e.g. bip122:… — Bitcoin): the EVM RPC cannot answer for it
+      return (rdUnknown, "this host has no probe for " & name & " yet")
     if facts.rpcUrl.len == 0:
       return (rdUnknown, "no RPC configured to probe " & name & " through")
     let probe = if facts.rpcProbe != nil: facts.rpcProbe else: probeRpc

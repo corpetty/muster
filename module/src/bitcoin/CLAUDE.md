@@ -14,6 +14,7 @@ nim-secp256k1.
 - `bech32.nim` — BIP-173 / BIP-350 segwit addresses
 - `taproot.nim` — leaf / branch / tweak hashes, the output key, control blocks, the NUMS internal key
 - `keys.nim` — DER ECDSA (low-S) and BIP-340 Schnorr sign / verify, compressed and x-only keys
+- `network.nim` — networks: bech32 prefix and CAIP-2 chain id (bip122:<genesis prefix>)
 - `psbt.nim` — BIP-174 v0 + BIP-371 taproot fields: strict parse, lossless re-serialize, typed access to partial / tapscript signatures, the Combiner, and `canonicalBytes` (the spend, never the PSBT encoding)
 
 Rules: everything here is pinned to the official BIP test vectors

@@ -27,6 +27,7 @@ import ../drivers/driver
 import ../drivers/kinds
 import ../drivers/safe
 import ../drivers/eip191
+import ../drivers/btc_multisig   # Bitcoin accounts (exo-a50.2.3)
 import ../crypto/secp256k1
 
 type
@@ -144,7 +145,7 @@ proc driverForPolicy*(policy: string, accounts: seq[RoomAccount],
   let (found, a) = findAccount(accounts, acct)
   if not found: return newUnsupportedDriver(policy)              # not disclosed in this room
   if a.family notin kindInfo(kind).accountFamilies: return newUnsupportedDriver(policy)
-  let signers = a.signers.mapIt(toAddress(it))
+  let signers = (if a.family.startsWith("evm."): a.signers.mapIt(toAddress(it)) else: @[])
   case kind
   of "safe":
     let (ok, chainId) = evmChainId(a.chain)
@@ -156,6 +157,12 @@ proc driverForPolicy*(policy: string, accounts: seq[RoomAccount],
   of "eip191":
     # an attestation by the account's signers: one recognized signer completes it
     newPersonalSignDriver(signers = signers, threshold = 1)
+  of "btc-p2wsh", "btc-tapscript":
+    # a Bitcoin account: its address must commit to exactly the disclosed keys and k —
+    # a disclosure that does not is refused, never trusted (exo-a50.2.3)
+    let (ok, acct, _) = btcAccountOfDisclosure(a.family, a.chain, a.address, a.threshold, a.signers)
+    if not ok: return newUnsupportedDriver(policy)
+    newBtcMultisigDriver(acct)
   else: newUnsupportedDriver(policy)
 
 proc accountsJson*(accounts: seq[RoomAccount]): JsonNode =
@@ -173,3 +180,11 @@ proc allSigners*(accounts: seq[RoomAccount]): seq[Address] =
     for s in a.signers:
       let ad = toAddress(s)
       if ad notin result: result.add ad
+
+proc btcDisclosureCheck*(a: RoomAccount): tuple[status: AccountCheck, detail: string] =
+  ## A Bitcoin disclosure is verified WITHOUT a chain read: the address commits to the
+  ## policy, so re-deriving it from the disclosed keys and k either reproduces it
+  ## (verified) or does not (disagrees) (exo-a50.2.3).
+  let (ok, _, detail) = btcAccountOfDisclosure(a.family, a.chain, a.address, a.threshold, a.signers)
+  let status = (if ok: acVerified else: acDisagrees)
+  (status, detail)

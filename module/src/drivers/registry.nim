@@ -14,6 +14,8 @@ import ./threshold
 import ./frost
 import ./invoke
 import ./eip191
+import ./btc_multisig
+import ../bitcoin/tx       # hexToBytes
 import ../crypto/secp256k1    # Address
 import ../crypto/curve25519   # Ed25519Pub (the roster)
 
@@ -53,6 +55,13 @@ proc newDriver*(kind: string, config: JsonNode): Driver =
                   safe = hexToAddr(config{"safe"}.getStr()),
                   owners = owners,
                   threshold = config{"threshold"}.getInt(2))
+  of "btc-p2wsh", "btc-tapscript":
+    # A Bitcoin multisig account (exo-a50.2.3): {network, k, keys: [33-byte hex]}.
+    var keys: seq[seq[byte]]
+    if config.hasKey("keys") and config["keys"].kind == JArray:
+      for k in config["keys"]: keys.add hexToBytes(k.getStr())
+    let family = (if kind == "btc-p2wsh": P2wshFamily else: TapscriptFamily)
+    newBtcMultisigDriver(btcAccount(family, config{"network"}.getStr("regtest"), config{"k"}.getInt(2), keys))
   of "stub":
     newStubDriver(rounds = config{"rounds"}.getInt(1),
                   threshold = config{"threshold"}.getInt(2),
