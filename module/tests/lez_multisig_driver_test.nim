@@ -152,9 +152,15 @@ block:
   doAssert p.locus == loVote and p.scheme == scOwnTransaction and p.commits == cmPointer and p.binding == bdNone
   doAssert p.approverCost == acPerVote and p.revealsSigners == rvPerApproval and p.maturity == maDemo
   doAssert p.chain == Chain and p.account == Chain & ":" & hx(state) and p.k == 2 and p.n == 3
-  doAssert profileFailures(p).len == 0, $profileFailures(p)
-  let conf = checkConformance(drv)
+  doAssert profileFailures(p, drv.describe()).len == 0, $profileFailures(p, drv.describe())
+  let eff = effectFromJson(lezProposalEffect(1, act))
+  var ta = act
+  ta.instruction = @[1'u32, 9_999, 0]
+  drv.expectMaterialization(canonicalize(drv, eff))
+  let conf = checkConformance(drv, eff, effectFromJson(lezProposalEffect(1, ta)),
+                              voteReceipt(B, 1, "ab".repeat(32), canonicalize(drv, eff)))
   doAssert conf.allPass(), "conformance: " & $conf.failed()
+  doAssert checkProfileConformance(drv).allPass(), $checkProfileConformance(drv).failed()
   let m = drv.manifest(effectFromJson(lezProposalEffect(1, act)))
   doAssert m.declared and consistencyFailures(m).len == 0, $consistencyFailures(m)
   doAssert m.requirements.anyIt(it.kind == rqEnvironment and it.name == Chain)

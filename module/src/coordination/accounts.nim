@@ -28,6 +28,9 @@ import ../drivers/kinds
 import ../drivers/safe
 import ../drivers/eip191
 import ../drivers/btc_multisig   # Bitcoin accounts (exo-a50.2.3)
+import ../drivers/lez_multisig   # LEZ multisig accounts (exo-6cbe)
+import ../lez/multisig as lezms
+import ../lez/multisig_chain
 import ../crypto/secp256k1
 
 type
@@ -40,7 +43,9 @@ type
     signers*: seq[string]    ## as disclosed (lowercased)
     threshold*: int          ## as disclosed
     disclosedBy*: seq[string] ## every member who disclosed it, first-seen (canonical) order
-    conflict*: bool          ## members disclosed different signers / threshold for it
+    conflict*: bool          ## members disclosed different signers / threshold / config for it
+    config*: string          ## the family's config, as JSON text ("" = none); a LEZ multisig
+                             ## discloses {program, createKey, pda} — its address derives from it
 
   AccountCheck* = enum
     acVerified = "verified"
@@ -58,8 +63,9 @@ proc splitAccountId*(id: string): tuple[chain, address: string] =
   if i < 0: ("", id) else: (id[0 ..< i], id[i+1 .. ^1])
 
 proc disclosureJson(a: RoomAccount): JsonNode =
-  %*{"family": a.family, "chain": a.chain, "address": a.address.toLowerAscii(),
-     "label": a.label, "signers": a.signers.mapIt(it.toLowerAscii()), "threshold": a.threshold}
+  result = %*{"family": a.family, "chain": a.chain, "address": a.address.toLowerAscii(),
+              "label": a.label, "signers": a.signers.mapIt(it.toLowerAscii()), "threshold": a.threshold}
+  if a.config.len > 0: result["config"] = %a.config   # only when present: older disclosures keep their bytes
 
 proc accountDiscloseEvent*(a: RoomAccount, discloser: string): Event =
   ## A member discloses an account into the room. Keyed per discloser, so two members
@@ -68,7 +74,7 @@ proc accountDiscloseEvent*(a: RoomAccount, discloser: string): Event =
         value: $disclosureJson(a))
 
 proc sameConfig(a, b: RoomAccount): bool =
-  a.family == b.family and a.threshold == b.threshold and
+  a.family == b.family and a.threshold == b.threshold and a.config == b.config and
     sorted(a.signers.mapIt(it.toLowerAscii())) == sorted(b.signers.mapIt(it.toLowerAscii()))
 
 proc reduceAccounts*(events: seq[Event]): seq[RoomAccount] =
@@ -82,7 +88,7 @@ proc reduceAccounts*(events: seq[Event]): seq[RoomAccount] =
       let j = parseJson(e.value)
       d = RoomAccount(family: j{"family"}.getStr(), chain: j{"chain"}.getStr(),
                       address: j{"address"}.getStr().toLowerAscii(), label: j{"label"}.getStr(),
-                      threshold: j{"threshold"}.getInt())
+                      threshold: j{"threshold"}.getInt(), config: j{"config"}.getStr())
       if j.hasKey("signers") and j["signers"].kind == JArray:
         for s in j["signers"]: d.signers.add s.getStr().toLowerAscii()
     except CatchableError: continue
@@ -163,6 +169,12 @@ proc driverForPolicy*(policy: string, accounts: seq[RoomAccount],
     let (ok, acct, _) = btcAccountOfDisclosure(a.family, a.chain, a.address, a.threshold, a.signers)
     if not ok: return newUnsupportedDriver(policy)
     newBtcMultisigDriver(acct)
+  of "lez-multisig":
+    # a LEZ multisig account: its address must be the state PDA its config derives
+    # (exo-6cbe) — a disclosure that does not commit to its config is refused
+    let (ok, acct, _) = lezMultisigAccountFromParts(a.chain, a.address, a.config, a.signers, a.threshold)
+    if not ok: return newUnsupportedDriver(policy)
+    newLezMultisigDriver(acct)
   else: newUnsupportedDriver(policy)
 
 proc accountsJson*(accounts: seq[RoomAccount]): JsonNode =
@@ -188,3 +200,27 @@ proc btcDisclosureCheck*(a: RoomAccount): tuple[status: AccountCheck, detail: st
   let (ok, _, detail) = btcAccountOfDisclosure(a.family, a.chain, a.address, a.threshold, a.signers)
   let status = (if ok: acVerified else: acDisagrees)
   (status, detail)
+
+proc lezMultisigAccountOf*(a: RoomAccount): tuple[ok: bool, account: LezMultisigAccount, detail: string] =
+  ## A disclosed LEZ multisig account, re-derived from its config (exo-6cbe).
+  lezMultisigAccountFromParts(a.chain, a.address, a.config, a.signers, a.threshold)
+
+proc lezChainView*(chain: LezMultisigChain, a: RoomAccount): ChainView =
+  ## What the chain says about a disclosed LEZ multisig: its state, read at the PDA the
+  ## disclosure's config derives (an external read, invariant 10). Unknown when the
+  ## disclosure does not derive, the state is not there, or it does not decode.
+  let (ok, acct, detail) = lezMultisigAccountOf(a)
+  if not ok and acct.statePda.len == 0: return (false, @[], 0, detail)
+  try:
+    let r = chain.readAccount(acct.statePda)
+    if not r.found: return (false, @[], 0, "no multisig state on " & a.chain & " at that address (height " & $r.height & ")")
+    let st = lezms.decodeState(r.data)
+    if st.createKey != acct.createKey: return (false, @[], 0, "the state at that address belongs to another create_key")
+    var signers: seq[string]
+    for m in st.members:
+      var h = ""
+      for x in m: h.add toLowerAscii(toHex(x, 2))
+      signers.add h
+    (true, signers, st.threshold, "read at height " & $r.height)
+  except CatchableError as e:
+    (false, @[], 0, "could not read the multisig state: " & e.msg)

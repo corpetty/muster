@@ -81,6 +81,28 @@ proc effectFromJson*(effectJson: string): Effect =
         let chain = j{"chain"}.getStr()
         if chain.len > 0: fields.add ("chain", cbText(chain))
         return Effect(schemaId: invokeDomain(module, meth), fields: fields)
+      of "lez-multisig-proposal":
+        # A pointer to on-chain proposal #index of a LEZ multisig, with the content the
+        # room reviews there (exo-6cbe): the target program, its instruction words, the
+        # execute-time accounts, the PDA seeds, the authorized account indices.
+        proc lhex(s: string): seq[byte] =
+          var h = s
+          if h.len >= 2 and h[0] == '0' and h[1] in {'x', 'X'}: h = h[2 .. ^1]
+          for i in 0 ..< h.len div 2:
+            try: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
+            except ValueError: discard
+        var fields = @[("index", cbUint(uint64(j{"index"}.getBiggestInt(0)))),
+                       ("target", cbBytes(lhex(j{"target"}.getStr())))]
+        var ins, accts, seeds, auth: seq[CborValue]
+        for w in j{"instruction"}.getElems(): ins.add cbUint(uint64(w.getBiggestInt()))
+        for a in j{"accounts"}.getElems(): accts.add cbBytes(lhex(a.getStr()))
+        for s in j{"pdaSeeds"}.getElems(): seeds.add cbBytes(lhex(s.getStr()))
+        for x in j{"authorized"}.getElems(): auth.add cbUint(uint64(x.getBiggestInt()))
+        fields.add ("instruction", cbArray(ins))
+        fields.add ("accounts", cbArray(accts))
+        fields.add ("pdaSeeds", cbArray(seeds))
+        fields.add ("authorized", cbArray(auth))
+        return Effect(schemaId: "muster.effect.lez-multisig-proposal.v1", fields: fields)
       of "btc-spend":
         # A Bitcoin spend from a multisig account (exo-a50.2.3): every input WITH its
         # prevout (amount + scriptPubKey — BIP-143 signs only each input's own amount, so
@@ -148,6 +170,7 @@ proc effectSchema*(effectJson: string): tuple[id: string, known: bool] =
     of "transfer": return ("muster.effect.transfer.v1", true)
     of "safe-tx": return ("muster.effect.safe-tx.v1", true)
     of "btc-spend": return ("muster.effect.btc-spend.v1", true)
+    of "lez-multisig-proposal": return ("muster.effect.lez-multisig-proposal.v1", true)
     of "statement": return ("muster.effect.statement.v1", true)
     of "add-driver": return ("muster.effect.governance.add-driver.v1", true)
     of "invoke":

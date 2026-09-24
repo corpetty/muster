@@ -108,6 +108,9 @@ block:
                elif k.kind in ["btc-p2wsh", "btc-tapscript"]:
                  %*{"network": "regtest", "k": 2, "keys": ["0307b8ae49ac90a048e9b53357a2354b3334e9c8bee813ecb98e99a7e07e8c3ba3",
                                                           "03b28f0c28bfab54554ae8c658ac5c3e0ce6e79ad336331f78c428dd43eea8449b"]}
+               elif k.kind == "lez-multisig":
+                 %*{"chain": "lez:local", "pda": "lee-v0.2", "program": repeat("aa", 32), "createKey": repeat("0b", 32),
+                   "threshold": 2, "members": [repeat("01", 32), repeat("02", 32), repeat("03", 32)]}
                else: %*{"roster": [], "k": 1})
     let rows = cardRows(newDriver(k.kind, cfg).profile())
     doAssert rows.mapIt(it.key) == rowKeys, k.kind & ": " & $rows.mapIt(it.key)

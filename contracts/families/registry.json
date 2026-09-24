@@ -1244,7 +1244,7 @@
       "maturity": "demo",
       "notes": "Modelled on Squads v4. Members must be fresh nonce-0 accounts the program claims. At most 10 members. Timelock is future work.",
       "exposure": "LEZ public messages commit to no zone/chain id: a vote transaction is bound only by the member's account nonce and the program id. Muster's envelope binds the environment in the room (invariant 2); the chain does not — the card must say so, and an upstream domain tag is the fix.",
-      "muster": {"status": "next", "phase": "C", "why": "the vote locus on Logos's own chain, reachable through lez_core (already bundled). Proves the card can show 'each approval is a public transaction'."},
+      "muster": {"status": "partial", "phase": "C", "driver": "module/src/drivers/lez_multisig.nim", "why": "the vote-locus driver (module/src/drivers/lez_multisig.nim): an account disclosed with its config (program, create_key, PDA scheme) whose address must be the state PDA it derives; the effect is a pointer to on-chain proposal #i plus the content the room reviews, re-read and refused on any mismatch before a vote (S5); a contribution is a vote receipt a member counts only for this pointer (exo-6cbe). Still partial: the in-room vote path and settlement are exo-12a1 / exo-0c9, and the live chain waits on lez-multisig being ported to LEE v0.2.5 (exo-3c9)."},
       "sources": ["https://github.com/logos-co/lez-multisig"]
     },
     {
