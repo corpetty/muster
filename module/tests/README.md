@@ -1,7 +1,7 @@
 # module/tests
 
 Most probes/tests run with bare `nim r -d:release tests/<name>.nim` (pure Nim,
-no external deps; `manifest_test` and `log_proof_test` too). `decline_test` / `provenance_all_test` / `flow_test` / `room_infra_test` (exo-428 — the room's infrastructure is dictated by its drivers; also needs `$SECP` for the real Safe driver) / `safe_fidelity_test` (exo-a50.1.4 — every SafeTx field reaches the signed hash, the real ten-argument execTransaction, delegatecall disclosed + refused unless allowlisted, modules/guard decoding; needs `$SECP`) / `accounts_test` (exo-a50.1.3 — accounts disclosed by members into the room; two Safes on two chains in one room; the chain check; needs `$SECP`) / `kinds_test` (exo-a50.1.2 — the one list of driver kinds; an unknown kind refuses, never a silent Safe; needs `$SECP`) / `profile_test` (exo-a50.1.1 — every driver declares its multisig family profile, held to describe() and to contracts/families/registry.json both ways; needs `$SECP`) / `materialshare_test` (exo-45e K5) / `schema_unknown_test` (exo-1ec.3 — the schema-driven rendering gate) / `lez_readiness_test` (exo-44b L1) are pure Nim but link libsodium
+no external deps; `manifest_test` and `log_proof_test` too). `decline_test` / `provenance_all_test` / `flow_test` / `room_infra_test` (exo-428 — the room's infrastructure is dictated by its drivers; also needs `$SECP` for the real Safe driver) / `settlement_test` (exo-a50.1.5 — the settlement seam: chosen by profile, assembled from the log, submitted through the ChainAdapter; needs `$SECP` + `$STINT`) / `safe_fidelity_test` (exo-a50.1.4 — every SafeTx field reaches the signed hash, the real ten-argument execTransaction, delegatecall disclosed + refused unless allowlisted, modules/guard decoding; needs `$SECP`) / `accounts_test` (exo-a50.1.3 — accounts disclosed by members into the room; two Safes on two chains in one room; the chain check; needs `$SECP`) / `kinds_test` (exo-a50.1.2 — the one list of driver kinds; an unknown kind refuses, never a silent Safe; needs `$SECP`) / `profile_test` (exo-a50.1.1 — every driver declares its multisig family profile, held to describe() and to contracts/families/registry.json both ways; needs `$SECP`) / `materialshare_test` (exo-45e K5) / `schema_unknown_test` (exo-1ec.3 — the schema-driven rendering gate) / `lez_readiness_test` (exo-44b L1) are pure Nim but link libsodium
 (its import closure reaches curve25519) — run it with the `$SODIUM` flag below — this is how the exophial spec oracles under `tests/probes/`
 are graded.
 
@@ -39,7 +39,9 @@ nim r -d:release --threads:on $SECP $STINT --path:$D/nim-eth tests/wallet_sign_t
 ```
 
 `wallet_rpc_test` (the nim-web3 RPC seam) and anything importing `evm_adapter`
-(e.g. `wallet_evm_test`) need the full web3 closure — clone with bearssl's
+(e.g. `wallet_evm_test`, and `coordinate_submit_anvil` since exo-a50.1.5 settles through
+the adapter) need the full web3 closure — check each clone out at the rev
+`module/metadata.json` pins (`codegen.nim.packages`); HEADs drift and fail to build — clone with bearssl's
 submodule, and note websock is deliberately NOT needed (we import `web3/eth_api` +
 `json_rpc/clients/httpclient`, not top-level `web3`):
 

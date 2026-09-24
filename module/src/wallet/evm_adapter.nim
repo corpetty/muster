@@ -105,6 +105,12 @@ method prepareTransfer*(a: EvmAdapter, frm: Account, to: string, amt: Amount): P
   PreparedTx(chain: a.chainId, frm: frm, to: to, amount: amt,
              fee: a.estimateFee(frm, to, amt), payload: payload)
 
+proc payloadGas(p: JsonNode, default: uint64): uint64 =
+  ## a contract call (a Safe execTransaction) names its own gas limit; a plain
+  ## transfer / ERC-20 keeps the adapter's defaults
+  if p.hasKey("gas") and p["gas"].kind == JInt and p["gas"].getInt() > 0: uint64(p["gas"].getInt())
+  else: default
+
 proc parsePayload(p: JsonNode): tuple[toHex: string, value: UInt256, data: seq[byte]] =
   let value = if p.hasKey("value"): UInt256.fromHex(p["value"].getStr()) else: 0.u256
   let data = if p.hasKey("data"): verify.hexBytes(p["data"].getStr()) else: @[]
@@ -114,16 +120,17 @@ method submit*(a: EvmAdapter, tx: PreparedTx, ks: Keystore): TxRef =
   ## Anvil unlocks `from`, so eth_sendTransaction needs no client-side signing. For
   ## any other node, sign the EIP-155 transaction with nim-eth + the keystore seam
   ## (the key never leaves the keystore) and broadcast the raw bytes.
-  let (toHex, value, data) = parsePayload(parseJson(tx.payload))
+  let pj = parseJson(tx.payload)
+  let (toHex, value, data) = parsePayload(pj)
   if a.fromUnlocked:
-    let gas = if data.len == 0: 100_000'u64 else: 120_000'u64
+    let gas = payloadGas(pj, if data.len == 0: 100_000'u64 else: 120_000'u64)
     return TxRef(chain: a.chainId,
                  id: rpcSendTransaction(a.rpcUrl, tx.frm.id, toHex, value, data, gas))
 
   # Real client-side signing (RLP + secp256k1 via ks.sign), then eth_sendRawTransaction.
   let nonce = rpcNonce(a.rpcUrl, tx.frm.id)
   let gasPrice = rpcGasPrice(a.rpcUrl)
-  let gasLimit = if data.len == 0: 21_000'u64 else: 65_000'u64
+  let gasLimit = payloadGas(pj, if data.len == 0: 21_000'u64 else: 65_000'u64)
   var toArr: array[20, byte]
   let tb = verify.hexBytes(toHex)
   for i in 0 ..< min(20, tb.len): toArr[i] = tb[i]

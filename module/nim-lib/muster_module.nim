@@ -36,6 +36,7 @@ import ../src/coordination/session    # the multi-instance coordination flow
 import ../src/coordination/intents     # intent lifecycle = reduce(log) (the multi-party fold)
 import ../src/coordination/live        # the live propose/contribute path, driveable in-process (exo-ef1)
 import ../src/coordination/accounts    # accounts disclosed by members into the room (exo-a50.1.3)
+import ../src/settlement/settlement     # the settlement seam: chosen by profile, through the adapter (exo-a50.1.5)
 import ../src/coordination/invoker     # the execute seam + allowlist/capability gate (P-D2)
 import ../src/coordination/readiness   # the action manifest + this instance's readiness (exo-002.2)
 import ../src/coordination/offers      # requirements × my catalogue → offers (exo-45e K4)
@@ -164,6 +165,10 @@ var gNow: uint64 = 0
 # that is empty if the user can't configure it). Defaults to the anvil fixture; a
 # settings surface (settings / set_setting) points it at the user's own node/nodes.
 var gRpcUrl = "http://127.0.0.1:8545"
+var gRelayer = "self"
+  ## who sends a settling transaction and pays its fee (exo-a50.1.5): "self" = this
+  ## instance's own key, signed locally and sent raw; "unlocked:<0x…>" = an account the
+  ## node itself unlocks (anvil's dev accounts) via eth_sendTransaction.
 proc deliveryPreset(name: string): string =
   ## Embedded fleet createNode configs, so delivery WORKS out of the box (invariant 8
   ## says the infra is user-configurable, not that it must start empty). Keep in sync
@@ -204,6 +209,7 @@ proc loadSettingsFile() =
     if fileExists(p):
       let j = parseJson(readFile(p))
       if j.hasKey("rpc"): gRpcUrl = j["rpc"].getStr()
+      if j.hasKey("relayer"): gRelayer = j["relayer"].getStr("self")
       if j.hasKey("delivery"):
         gDeliveryConfig = deliveryConfigFor(j["delivery"].getStr())
         gDeliverySaved = true
@@ -220,7 +226,7 @@ proc loadSettingsFile() =
 proc saveSettingsFile() =
   try:
     createDir(parentDir(settingsPath()))
-    writeFile(settingsPath(), $(%*{"rpc": gRpcUrl, "delivery": gDeliveryConfig}))
+    writeFile(settingsPath(), $(%*{"rpc": gRpcUrl, "delivery": gDeliveryConfig, "relayer": gRelayer}))
   except CatchableError: discard
 
 proc toSig65(b: seq[byte]): Signature65 =
@@ -1473,88 +1479,78 @@ proc musterCoordinateAccount(): string =
       discard
   $o
 
+proc settlementFor(drv: Driver): Settlement =
+  ## The settlement this driver's family needs (settlement/settlement.nim), over an
+  ## adapter on the family's own chain through the user's RPC, sent by the configured
+  ## relayer. nil when the family settles nowhere (exo-a50.1.5).
+  let p = drv.profile()
+  if not p.declared or p.settlement == "none": return nil
+  let (isEvm, cid) = evmChainId(p.chain)
+  if not isEvm: return nil
+  let unlocked = gRelayer.startsWith("unlocked:")
+  let who = (if unlocked: gRelayer["unlocked:".len .. ^1] else: toHex(myAddress()))
+  let adapter = newEvmAdapter("evm:" & $cid, gRpcUrl, fromUnlocked = unlocked)
+  settlementFor(drv, adapter, Account(chain: "evm:" & $cid, form: afPublic, id: who))
+
 proc musterCoordinateSubmit(intentId: string): string =
-  ## Settle a room intent on-chain FROM the room (the room-side counterpart to
-  ## submit()). The coordinated owner signatures come from the shared LOG, not local
-  ## state: fold the intent, re-derive the safeTxHash (F-4), gather the folded owner
-  ## signatures, assemble the Safe execTransaction, submit through the user's RPC, and
-  ## observe finality from the receipt (R-8). A submit event is published so every
-  ## member's fold converges on submitted. Only a Safe-policy, executable intent
-  ## settles on-chain — a threshold endorsement is complete in itself.
+  ## Settle a room intent FROM the room (exo-a50.1.5): the intent's family SETTLEMENT —
+  ## chosen from its driver's profile, never a policy string — assembles from the
+  ## contributions on the shared LOG (only those the driver accepts; the hash is
+  ## re-derived from the effect, invariant 1), submits through the ChainAdapter seam
+  ## from the configured relayer, and finality is watched, never asserted (R-8). A
+  ## submit event is published so every member's fold converges on submitted. A family
+  ## that settles nowhere (a room family) returns not-onchain.
   if gSession == nil: return $(%*{"error": "not-joined"})
   gSession.poll()
   let events = gSession.log.allEvents()
   let policy = intentPolicyOf(events, intentId)
   let drv = driverFor(policy)
-  if drv.profile().family != "evm.safe":
+  let st = settlementFor(drv)
+  if st == nil:
     return $(%*{"id": intentId, "error": "not-onchain",
-                "detail": "a " & kindOf(policy) & " endorsement settles nothing on-chain"})
-  # The intent's OWN Safe — the account a member disclosed and the policy names
-  # (exo-a50.1.3). The downcast is the one Safe-specific step left; the settlement seam
-  # (exo-a50.1.5) replaces it.
-  let sd = SafeDriver(drv)
-  let st = intentState(events, driverFor, intentId)
-  if st != "executable":
-    return $(%*{"id": intentId, "error": "not-executable", "state": st})
+                "detail": "a " & kindOf(policy) & " decision settles nothing on-chain"})
+  let state = intentState(events, driverFor, intentId)
+  if state != "executable":
+    return $(%*{"id": intentId, "error": "not-executable", "state": state})
   # invariant 2 at submit time: past the intent's declared expiry nothing settles.
   let pre = liveSubmitPrecheck(gSession, driverFor, intentId, uint64(epochTime()))
   if pre.len > 0: return $(%*{"id": intentId, "error": pre})
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return $(%*{"error": "unknown-intent"})
-  let effect = effectFromJson(effectJson)
-  # Re-derive the exact bytes the owners signed (the safeTxHash) — never trusted from
-  # the log, always recomputed from the effect (invariant 1 / F-4).
-  let ctx = SigningContext(environment: sd.environment(), account: toHex(sd.safe), slot: "0",
-                           expiry: high(uint64))
-  let it0 = newIntent(sd, effect, ctx)
-  var hash: array[32, byte]
-  for i in 0 ..< 32: hash[i] = it0.materialization.bytes[i]
-  # Gather the owner signatures from the shared log (dedup by the recovered signer,
-  # exactly as the fold counts them), sorted by signer address for Safe.checkSignatures.
-  var signed: seq[(Address, Signature65)]
-  var seenSigner: seq[string]
+  var contribs: seq[SettleContribution]
   for e in events:
     let p = e.key.split('/')
     if p.len >= 4 and p[0] == "intent" and p[1] == intentId and p[2] == "sig":
-      let sig65 = toSig65(hexToBytes(e.value))
-      if not recoversToOwner(hash, sig65, sd.owners): continue
-      let key = toHex(ecrecover(hash, sig65))
-      if key in seenSigner: continue
-      seenSigner.add key
-      signed.add (ecrecover(hash, sig65), sig65)
-  if signed.len < sd.threshold:
-    return $(%*{"id": intentId, "error": "insufficient-signatures",
-                "have": signed.len, "need": sd.threshold})
-  signed.sort(cmpSigner)
-  var sigbytes: seq[byte]
-  for (_, s) in signed: sigbytes.add @s
-  # Assemble + submit through the user's RPC. A failed read/submit surfaces honestly —
-  # never a false "landed" (R-8).
-  var txHash = ""
+      contribs.add (contributor: p[3], bytes: hexToBytes(e.value))
+  let asm0 = st.assemble(drv, effectFromJson(effectJson), contribs)
+  if not asm0.ok:
+    return $(%*{"id": intentId, "error": asm0.error, "detail": asm0.detail,
+                "have": asm0.have, "need": asm0.need})
+  var txRef: TxRef
   try:
-    let tx = toSafeTx(effect)
-    let calldata = assembleExecTransaction(tx, sigbytes)   # the real ten-argument Safe ABI (exo-a50.1.4)
-    # relayer: anvil's unlocked account 0 (a dev relayer; exo-a50.1.5 makes it a seam)
-    txHash = submitExecTransaction(gRpcUrl, toAddr(OWNER0), sd.safe, calldata)
+    txRef = st.submit(asm0.tx, moduleKeystore())
   except CatchableError as e:
-    return $(%*{"id": intentId, "error": "rpc-unreachable", "detail": e.msg})
+    return $(%*{"id": intentId, "error": "rpc-unreachable", "relayer": gRelayer,
+                "detail": e.msg & " — the relayer (" & asm0.tx.frm.id & ") must be able to pay gas on " &
+                          asm0.tx.frm.chain & "; fund it, or set Settings → relayer"})
   # Fold the room forward: submit event → every member converges on "submitted".
-  gSession.publish(submitEvent(intentId, chainRef = txHash))
+  gSession.publish(submitEvent(intentId, chainRef = txRef.id))
   # Observe finality from the chain (never asserted). Bounded poll (~4s) so a slow or
-  # unreachable node reports "pending" rather than freezing the UI; anvil auto-mines,
-  # so a healthy receipt returns on the first tick.
-  var status = -1
+  # unreachable node reports "pending" rather than freezing the UI.
+  var fin = Finality(status: fsPending)
   for _ in 0 .. 20:
-    status = watchReceiptStatus(gRpcUrl, txHash)
-    if status >= 0: break
+    try: fin = st.watch(txRef)
+    except CatchableError: discard
+    if fin.status != fsPending: break
     sleep(200)
-  # On a real on-chain success, fold the intent to `final` so every member's card
-  # advances to "paid" — not just the submitted state the submit event set.
-  if status == 1: gSession.publish(finalEvent(intentId, chainRef = txHash))
-  let onchain = (if status == 1: "final" elif status == 0: "failed" else: "pending")
+  if fin.status == fsFinal: gSession.publish(finalEvent(intentId, chainRef = txRef.id))
+  let onchain = (case fin.status
+                 of fsFinal: "final"
+                 of fsFailed: "failed"
+                 else: "pending")
   $(%*{"id": intentId,
        "state": intentState(gSession.log.allEvents(), driverFor, intentId),
-       "onchain": onchain, "txHash": txHash})
+       "onchain": onchain, "txHash": txRef.id, "relayer": asm0.tx.frm.id})
 
 # ── invoke-intent execution (P-D2) — the generic counterpart to coordinate_submit ─
 # An executable invoke intent is executed by the CORE (invariant 3): call the module
@@ -1982,6 +1978,7 @@ proc musterSettings(): string =
   let enc = ks.encIdentity()
   $(%*{
     "rpc": gRpcUrl,
+    "relayer": gRelayer,
     "delivery": gDeliveryConfig,
     "environment": "eip155:" & $gDevSafe.chainId.int,   # the wallet's dev chain (CAIP-2)
     "identity": {"address": toHex(ks.address()),
@@ -1997,6 +1994,11 @@ proc musterSetSetting(key, value: string): string =
   of "rpc":
     gRpcUrl = value
     gWallet = nil            # re-init the EVM adapter against the new endpoint
+  of "relayer":
+    # who sends settling transactions: "self" or "unlocked:<0x…>" (exo-a50.1.5)
+    if value != "self" and not (value.startsWith("unlocked:0x") and value.len == 51):
+      return $(%*{"error": "relayer must be \"self\" or \"unlocked:<0x address>\""})
+    gRelayer = value
   of "delivery":
     # Accept a fleet short-name ("logos.test"), a full createNode JSON, or "{}"/"" to
     # fall back to the default fleet — and remember that the user chose, so it wins
