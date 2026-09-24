@@ -64,7 +64,8 @@
       "effectVisibility": {
         "public": "the action's contents are public on settle",
         "shielded": "the action's contents stay private on-chain",
-        "room-only": "the action never leaves the room"
+        "room-only": "the action never leaves the room",
+        "target-module": "the room agrees, then the action is handed to the Logos module it names; that module's own disclosure applies"
       },
       "approverCost": {
         "none": "approving costs the approver nothing",
@@ -134,6 +135,32 @@
       "infra": [],
       "maturity": "production",
       "muster": {"status": "built", "driver": "module/src/drivers/eip191.nim", "why": "a group statement any EVM tool can verify; settles nothing"}
+    },
+    {
+      "id": "room.invoke",
+      "name": "Room-agreed module action (invoke)",
+      "chains": [],
+      "settlement": "none",
+      "locus": "room",
+      "scheme": "shared-bytes",
+      "curves": ["ed25519"],
+      "signs": "dCBOR [domain, schemaId = muster.invoke.<module>.<method>.v1, args] — two methods never share signable bytes",
+      "commits": "content",
+      "binding": "room",
+      "rounds": 1,
+      "secretState": false,
+      "setup": "none",
+      "membershipChange": "in-place",
+      "ordering": "none",
+      "expiry": "optional",
+      "reveals": {"policy": "never", "signers": "never", "effect": "target-module"},
+      "approverCost": "none",
+      "bypasses": [],
+      "interop": [],
+      "infra": ["the named Logos module, loaded on this host"],
+      "maturity": "production",
+      "notes": "What the called module does next (e.g. lez_core sending on the LEZ) is that module's own disclosure, carried on the manifest's target-module rows.",
+      "muster": {"status": "built", "driver": "module/src/drivers/invoke.nim", "why": "any Logos module action under a room threshold (driver derivation, exo-fa4)"}
     },
     {
       "id": "room.frost-scaffold",

@@ -1,6 +1,6 @@
 # One multisig experience, many multisigs
 
-**Status:** design, proposed (epic exo-68f). Registry: `contracts/families/registry.json` (44 families, checked by `scripts/check-family-registry.py`). Nothing in §5–§6 is built yet. What exists today is the room drivers (`threshold`, `eip191`, the `frost` scaffold), one hard-coded Safe (`gDriver`), and the action manifest (`docs/design/action-manifest.md`). The landscape was verified against primary sources as of 2026-09-23; each registry entry lists its sources, and anything that couldn't be confirmed is listed under `unverified`. **Decisions recorded 2026-09-23** (§9). Interactive atlas: `docs/design/multisig-atlas.html`, a self-contained page (open it from a checkout) with the registry embedded.
+**Status:** design, proposed (epic exo-68f). Registry: `contracts/families/registry.json` (45 families, checked by `scripts/check-family-registry.py`). Nothing in §5–§6 is built yet. What exists today is the room drivers (`threshold`, `eip191`, `invoke`, the `frost` scaffold), one hard-coded Safe (`gDriver`), and the action manifest (`docs/design/action-manifest.md`). The landscape was verified against primary sources as of 2026-09-23; each registry entry lists its sources, and anything that couldn't be confirmed is listed under `unverified`. **Decisions recorded 2026-09-23** (§9). Interactive atlas: `docs/design/multisig-atlas.html`, a self-contained page (open it from a checkout) with the registry embedded.
 
 ## 0. The claim
 
@@ -77,6 +77,7 @@ One row per family, generated from the registry (`contracts/families/registry.js
 |---|---|---|---|---|---|---|---|---|---|---|
 | `room.threshold` | room | same bytes | room | 1 · none | in-place | – / – / room only | none · optional | – | production | built |
 | `room.eip191-attest` | room | same bytes | room | 1 · none | in-place | – / – / room only | none · optional | – | production | built |
+| `room.invoke` | room | same bytes | room | 1 · none | in-place | – / – / the module it calls | none · optional | – | production | built |
 | `room.frost-scaffold` | room | same bytes | room | 2 · none | in-place | – / – / room only | none · optional | – | demo | partial |
 | `evm.safe` | contract | same bytes | explicit | 1 · deploy | in-place | setup / spend / public | sequence · none | – | production | partial (A) |
 | `evm.safe-4337` | contract | same bytes | explicit | 1 · deploy | in-place | setup / spend / public | lanes · optional | – | production | candidate |

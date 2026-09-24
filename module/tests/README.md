@@ -1,7 +1,7 @@
 # module/tests
 
 Most probes/tests run with bare `nim r -d:release tests/<name>.nim` (pure Nim,
-no external deps; `manifest_test` and `log_proof_test` too). `decline_test` / `provenance_all_test` / `flow_test` / `room_infra_test` (exo-428 — the room's infrastructure is dictated by its drivers; also needs `$SECP` for the real Safe driver) / `materialshare_test` (exo-45e K5) / `schema_unknown_test` (exo-1ec.3 — the schema-driven rendering gate) / `lez_readiness_test` (exo-44b L1) are pure Nim but link libsodium
+no external deps; `manifest_test` and `log_proof_test` too). `decline_test` / `provenance_all_test` / `flow_test` / `room_infra_test` (exo-428 — the room's infrastructure is dictated by its drivers; also needs `$SECP` for the real Safe driver) / `profile_test` (exo-a50.1.1 — every driver declares its multisig family profile, held to describe() and to contracts/families/registry.json both ways; needs `$SECP`) / `materialshare_test` (exo-45e K5) / `schema_unknown_test` (exo-1ec.3 — the schema-driven rendering gate) / `lez_readiness_test` (exo-44b L1) are pure Nim but link libsodium
 (its import closure reaches curve25519) — run it with the `$SODIUM` flag below — this is how the exophial spec oracles under `tests/probes/`
 are graded.
 

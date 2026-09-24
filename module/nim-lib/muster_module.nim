@@ -19,6 +19,7 @@ import ../src/drivers/frost          # 2-round FROST-style — the multi-round p
 import ../src/drivers/invoke         # the generic module-action driver (P-D1/P-D2)
 import ../src/drivers/eip191         # EIP-191 personal-sign attestation (Tier-1, P-D6)
 import ../src/drivers/registry
+import ../src/drivers/profile         # the family profile each driver declares (exo-a50.1.1)
 import ../src/drivers/safe_rpc
 import ../src/wallet/types as wallet_types   # hexToDec + formatUnits: a live balance → "N ETH"
 import ../src/crypto/secp256k1
@@ -805,12 +806,13 @@ proc musterCoordinateIntents(): string =
     let drv = driverForKind(v.policy)
     let desc = drv.describe()
     var o = intentViewJson(v, desc)
-    # n = how many could sign (owners / roster), so the card reads "M of N" honestly
-    # (e.g. 2 of 3), not "threshold of threshold".
-    if drv of SafeDriver: o["n"] = %SafeDriver(drv).owners.len
-    elif drv of ThresholdDriver: o["n"] = %ThresholdDriver(drv).roster.len
-    elif drv of FrostDriver: o["n"] = %FrostDriver(drv).roster.len
-    else: o["n"] = %desc.threshold
+    # n = how many could sign, so the card reads "M of N" honestly (e.g. 2 of 3), not
+    # "threshold of threshold". It comes from the driver's family profile — never from
+    # branching on the concrete driver type (exo-a50.1.1) — and the whole profile rides
+    # along so the card's fixed rows can be drawn from it (exo-a50.1.6).
+    let prof = drv.profile()
+    o["n"] = %(if prof.n > 0: prof.n else: desc.threshold)
+    o["profile"] = prof.toJson()
     if drv of SafeDriver:
       # a Safe signature is bound to its EIP-712 domain (chainId + safe); surface it
       # so the verify view names exactly what the bytes are worthless outside of (F-5).
@@ -1114,6 +1116,7 @@ proc musterCoordinateReadiness(intentId: string): string =
   o["intentId"] = %intentId
   o["policy"] = %policy
   o["manifest"] = m.toJson()
+  o["profile"] = drv.profile().toJson()   # which multisig family, for this instance (exo-a50.1.1)
   try: o["effect"] = parseJson(effectJson)
   except CatchableError: o["effect"] = %effectJson
   result = $o

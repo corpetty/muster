@@ -16,6 +16,7 @@ import ../hashing/keccak256
 import ../dcbor/dcbor
 import ../drivers/driver
 import ../drivers/manifest
+import ./profile
 import ../intents/materialization
 import ../crypto/secp256k1   # Address, Signature65, recoversToOwner
 export secp256k1.Address, secp256k1.Signature65   # part of the Safe API surface
@@ -188,3 +189,19 @@ method manifest*(d: SafeDriver, effect: Effect): ActionManifest =
                  row("signed-tx", obRpcProvider)],
     touches: @[touch(safeId, tmWrite), touch(safeId & ":nonce", tmWrite),
                touch("chain:" & $d.chainId, tmWrite)])
+
+method profile*(d: SafeDriver): FamilyProfile =
+  ## The evm.safe family (contracts/families/registry.json): a contract on one EVM
+  ## chain checks k of the owners signed the full SafeTx (EIP-712, chain id + Safe in
+  ## the domain), once, sequentially by nonce; signatures never expire; the owners are
+  ## public from deployment and who signed is public at settlement. The Safe's MODULES
+  ## can execute without the threshold — they are not read from the chain yet
+  ## (exo-a50.1.4), so the ways around the rule are UNKNOWN here, never "none".
+  let chain = caip2Evm(d.chainId)
+  FamilyProfile(declared: true, family: "evm.safe", settlement: "evm",
+    locus: loContract, scheme: scSharedBytes, commits: cmContent, binding: bdExplicit,
+    ordering: orSequence, expiry: exNone, setup: suDeploy, signerChange: chInPlace,
+    revealsPolicy: rvAtCreation, revealsSigners: rvAtSettle, revealsEffect: evPublic,
+    approverCost: acNone, rounds: d.describe().rounds, secretState: false,
+    maturity: maProduction, chain: chain, account: caip10(chain, addrHex(d.safe)),
+    k: d.threshold, n: d.owners.len, bypassesKnown: false)

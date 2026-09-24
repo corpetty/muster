@@ -44,6 +44,7 @@ import ../crypto/curve25519
 import ../intents/materialization
 import ./driver
 import ./manifest
+import ./profile
 
 type
   FrostDriver* = ref object of Driver
@@ -104,3 +105,9 @@ method manifest*(d: FrostDriver, effect: Effect): ActionManifest =
   ## structure is on the agreement half (describe()), where the core reads it.
   ActionManifest(declared: true, agreement: d.describe(),
                  requirements: @[req(rqAuthority, "roster-member", rpContributor)])
+
+method profile*(d: FrostDriver): FamilyProfile =
+  ## room.frost-scaffold: the two-round room policy — its own header says it is a
+  ## coordination scaffold, not production FROST, so its maturity is demo. The real
+  ## aggregate families (btc.frost-bip445, lez.frost-public-account) are Phase D.
+  roomProfile("room.frost-scaffold", d.describe(), d.roster.len, maturity = maDemo)

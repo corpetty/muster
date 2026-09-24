@@ -18,10 +18,15 @@
 ##   6. the action manifest is stable, DECLARED, consistent with describe(), and its
 ##      agreement half IS describe() (exo-002.1) — a driver that does not say what it
 ##      needs, touches, and discloses, or contradicts its own policy, does not ship.
+##   7. the family profile (exo-a50.1.1, checkProfileConformance) is stable, DECLARED,
+##      and consistent with describe() — a driver that does not say what kind of
+##      multisig it is (docs/design/multisig-landscape.md) does not ship. Graded as its
+##      own report so each check names exactly what an undeclared driver lacks.
 
 import ../intents/materialization
 import ./driver
 import ./manifest
+import ./profile
 
 type
   ConformanceReport* = object
@@ -79,4 +84,14 @@ proc checkConformance*(d: Driver, effect, tampered: Effect,
   result.add("manifest agreement is describe()", m.agreement == desc)
   let fails = consistencyFailures(m, effect)
   result.add("manifest is declared and consistent" &
+             (if fails.len > 0: " (" & $fails & ")" else: ""), fails.len == 0)
+
+proc checkProfileConformance*(d: Driver): ConformanceReport =
+  ## 7. the family profile: which multisig family this driver is, filled for its
+  ## instance. Stable, declared, and consistent with describe() (profileFailures —
+  ## the registry's cross-field rules plus rounds / k / finality agreement).
+  let p = d.profile()
+  result.add("profile is stable", p == d.profile())
+  let fails = profileFailures(p, d.describe())
+  result.add("profile is declared and consistent" &
              (if fails.len > 0: " (" & $fails & ")" else: ""), fails.len == 0)

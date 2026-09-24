@@ -22,6 +22,7 @@ import ../crypto/curve25519
 import ../intents/materialization
 import ./driver
 import ./manifest
+import ./profile
 
 type
   InvokeDriver* = ref object of Driver
@@ -112,3 +113,9 @@ method manifest*(d: InvokeDriver, effect: Effect): ActionManifest =
   let chain = effect.fieldText("chain")
   if chain.len > 0 and chain.startsWith("lez"):
     result.requirements.add req(rqInfra, "lez-account", rpInstance)
+
+method profile*(d: InvokeDriver): FamilyProfile =
+  ## room.invoke: the room agrees, then this instance hands the action to the Logos
+  ## module it names — so the action is visible to that module (its own disclosure,
+  ## carried on the manifest's target-module rows), and to nothing on a chain.
+  roomProfile("room.invoke", d.describe(), d.roster.len, effect = evTargetModule)
