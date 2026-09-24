@@ -12,7 +12,7 @@
 ## each owner signs. A CONTRIBUTION is one signer's signature for every input.
 ## Outside signers speak PSBT: exportPsbt / importPsbtContributions (seam S8).
 
-import std/[json, strutils, sequtils]
+import std/[json, strutils, sequtils, algorithm]
 import ../dcbor/dcbor
 import ../intents/materialization
 import ./driver
@@ -233,6 +233,125 @@ method manifest*(d: BtcMultisigDriver, effect: Effect): ActionManifest =
                  row("policy", obChainObserver), row("signers", obChainObserver),
                  row("signed-tx", obRpcProvider)],
     touches: touches)
+
+# ── building a spend from the account's coins (exo-a50.2.5) ───────────────────
+const DustLimit* = 546'u64   ## an output below this is non-standard: never made
+
+proc inputWeight(acct: BtcAccount): int =
+  ## An upper bound, in weight units, for one input of this account's spend: the
+  ## non-witness part (outpoint, empty scriptSig, sequence) at 4 WU a byte, the witness
+  ## at 1 — P2WSH: the dummy, k DER signatures at their 72-byte maximum + the hashtype,
+  ## the witnessScript; tapscript: one slot per key (k Schnorr signatures, the rest
+  ## empty), the leaf, the control block.
+  let n = acct.keys.len
+  let witness =
+    if acct.family == P2wshFamily:
+      compactSize(uint64(acct.k + 2)).len + 1 + acct.k * (1 + 73) + withSize(acct.witnessScript).len
+    else:
+      compactSize(uint64(n + 2)).len + acct.k * (1 + 64) + (n - acct.k) +
+        withSize(acct.leafScript).len + withSize(acct.controlBlock).len
+  4 * (32 + 4 + 1 + 4) + witness
+
+proc vsizeEstimate(acct: BtcAccount, nIn: int, outSpks: seq[seq[byte]]): uint64 =
+  var w = 4 * (4 + 4 + compactSize(uint64(nIn)).len + compactSize(uint64(outSpks.len)).len) + 2
+  w += nIn * inputWeight(acct)
+  for spk in outSpks: w += 4 * (8 + withSize(spk).len)
+  uint64((w + 3) div 4)
+
+proc buildBtcSpend*(acct: BtcAccount, utxos: seq[BtcUtxo], payTo: string, amount: uint64,
+                    feeRate = 1, sequence = 0xfffffffd'u32, locktime = 0'u32): string =
+  ## A btc-spend effect paying `amount` sat to `payTo` from this account's coins: the
+  ## largest first until the payment and its fee are covered, the payee first, change
+  ## back to the account unless it would be dust (then it goes to the fee). The fee is
+  ## `feeRate` sat/vB over an UPPER bound of the signed size, declared as inputs −
+  ## outputs, and the inputs are declared an external read (invariant 10): whoever
+  ## proposes records where the coins were read from. Raises BtcError when the coins
+  ## cannot pay — never a spend that could not be broadcast.
+  if amount < DustLimit: raise newException(BtcError, "a payment below " & $DustLimit & " sat is dust")
+  if feeRate < 1: raise newException(BtcError, "a fee rate is at least 1 sat/vB")
+  let paySpk = scriptPubKeyOfAddress(hrpOfAddress(payTo), payTo)
+  let mine = toHex(acct.scriptPubKey)
+  var coins = utxos.filterIt(it.scriptPubKey.toLowerAscii() == mine)   # only coins this account can spend
+  coins.sort(proc(a, b: BtcUtxo): int =
+    if a.value != b.value: cmp(b.value, a.value)
+    elif a.txid != b.txid: cmp(a.txid, b.txid)
+    else: cmp(a.vout, b.vout))
+  let rate = uint64(feeRate)
+  var chosen: seq[BtcUtxo]
+  var total: uint64
+  for c in coins:
+    if c.txid.len != 64 or hexToBytes(c.txid).len != 32:
+      raise newException(BtcError, "a txid is 32 bytes: " & c.txid)
+    chosen.add c
+    total += c.value
+    let bare = rate * vsizeEstimate(acct, chosen.len, @[paySpk])
+    if total < amount + bare: continue
+    let withChange = rate * vsizeEstimate(acct, chosen.len, @[paySpk, acct.scriptPubKey])
+    var outs = %*[{"address": payTo, "value": amount}]
+    var fee = total - amount
+    if total >= amount + withChange and total - amount - withChange >= DustLimit:
+      outs.add %*{"address": acct.address, "value": total - amount - withChange}
+      fee = withChange
+    var ins = newJArray()
+    for u in chosen:
+      ins.add %*{"txid": u.txid.toLowerAscii(), "vout": u.vout, "value": u.value,
+                 "scriptPubKey": u.scriptPubKey.toLowerAscii(), "sequence": sequence}
+    return $(%*{"effect": "btc-spend", "inputs": ins, "outputs": outs, "locktime": locktime,
+                "fee": fee, "sources": {"inputs": "read"}})
+  raise newException(BtcError, "not enough in the account: " & $total & " sat for " & $amount &
+                               " sat and its fee at " & $feeRate & " sat/vB")
+
+# ── finalizing: the signatures into the witnesses (exo-a50.2.5) ─────────────────
+proc leafKeys(leaf: seq[byte]): seq[seq[byte]] =
+  ## the x-only keys of a multi_a leaf, in script order (<32-byte push> CHECKSIG[ADD] …)
+  var i = 0
+  while i + 34 <= leaf.len and leaf[i] == 0x20'u8:
+    result.add leaf[i + 1 .. i + 32]
+    i += 34
+
+proc finalizeSpend*(d: BtcMultisigDriver, e: Effect, accepted: seq[Contribution]): BtcTx =
+  ## The spend with every input's witness filled from EXACTLY k of the accepted
+  ## contributions — the first k signers in the script's key order, since CHECKMULTISIG
+  ## consumes signatures in key order and multi_a sums to exactly k (NUMEQUAL). P2WSH:
+  ## the dummy, the signatures + SIGHASH_ALL, the witnessScript. Tapscript: one slot per
+  ## key, the last key's first (the first key checked pops the top), empty for a key
+  ## that does not sign, then the leaf and the control block. The caller admits only
+  ## contributions the driver accepts; raises BtcError below k.
+  var (t, _, _) = spendOf(e)
+  var bySigner: seq[(seq[byte], seq[seq[byte]])]
+  for c in accepted:
+    let v = decode(c.bytes)
+    let signer = v.mapGet("signer")
+    let sigs = v.mapGet("sigs")
+    if signer.kind != ckBytes or sigs.kind != ckArray or sigs.arr.len != t.inputs.len: continue
+    bySigner.add (signer.b, sigs.arr.mapIt(it.b))
+  let order = (if d.account.family == P2wshFamily: d.account.keys else: leafKeys(d.account.leafScript))
+  var slot = newSeq[seq[seq[byte]]](order.len)
+  var used = 0
+  for j, key in order:
+    if used == d.account.k: break
+    for (signer, sigs) in bySigner:
+      let k2 = (if d.account.family == P2wshFamily: signer else: xonlyOfCompressed(signer))
+      if k2 == key:
+        slot[j] = sigs
+        inc used
+        break
+  if used < d.account.k:
+    raise newException(BtcError, $used & " of the " & $d.account.k & " signatures the account needs")
+  for i in 0 ..< t.inputs.len:
+    var w: seq[seq[byte]]
+    if d.account.family == P2wshFamily:
+      w.add newSeq[byte]()
+      for j in 0 ..< order.len:
+        if slot[j].len > 0: w.add slot[j][i] & @[SighashAll]
+      w.add d.account.witnessScript
+    else:
+      for j in countdown(order.len - 1, 0):
+        w.add (if slot[j].len > 0: slot[j][i] else: newSeq[byte]())
+      w.add d.account.leafScript
+      w.add d.account.controlBlock
+    t.inputs[i].witness = w
+  t
 
 # ── PSBT, both ways (outside signers, seam S8) ─────────────────────────────────
 proc exportPsbt*(d: BtcMultisigDriver, e: Effect): Psbt =
