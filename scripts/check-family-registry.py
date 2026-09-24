@@ -21,7 +21,7 @@ its fields agree with each other, and that what we claim to have built exists.
         names no `exposure` — invariant 2 cannot hold at the chain layer there, so
         the card must say who could replay it, never stay silent
   FAIL  the landscape table in docs/design/multisig-landscape.md, or the registry
-        embedded in docs/design/multisig-explorer.html, is out of date with the
+        embedded in docs/design/multisig-atlas.html, is out of date with the
         registry (regenerate both: scripts/check-family-registry.py --write-table)
   WARN  an entry carries `unverified` items (listed, so they are not forgotten)
 """
@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = ROOT / "contracts" / "families" / "registry.json"
 DOC = ROOT / "docs" / "design" / "multisig-landscape.md"
 BEGIN, END = "<!-- landscape-table:begin -->", "<!-- landscape-table:end -->"
-EXPLORER = ROOT / "docs" / "design" / "multisig-explorer.html"
+EXPLORER = ROOT / "docs" / "design" / "multisig-atlas.html"
 EBEGIN, EEND = "<!-- registry-json:begin -->", "<!-- registry-json:end -->"
 
 VOCAB_FIELDS = ["locus", "scheme", "commits", "binding", "ordering", "expiry",

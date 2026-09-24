@@ -1,6 +1,6 @@
 # One multisig experience, many multisigs
 
-**Status:** design, proposed (epic exo-68f). Registry: `contracts/families/registry.json` (44 families, checked by `scripts/check-family-registry.py`). Nothing in §5–§6 is built yet. What exists today is the room drivers (`threshold`, `eip191`, the `frost` scaffold), one hard-coded Safe (`gDriver`), and the action manifest (`docs/design/action-manifest.md`). The landscape was verified against primary sources as of 2026-09-23; each registry entry lists its sources, and anything that couldn't be confirmed is listed under `unverified`. **Decisions recorded 2026-09-23** (§9). Interactive explorer: `docs/design/multisig-explorer.html`, generated from the registry.
+**Status:** design, proposed (epic exo-68f). Registry: `contracts/families/registry.json` (44 families, checked by `scripts/check-family-registry.py`). Nothing in §5–§6 is built yet. What exists today is the room drivers (`threshold`, `eip191`, the `frost` scaffold), one hard-coded Safe (`gDriver`), and the action manifest (`docs/design/action-manifest.md`). The landscape was verified against primary sources as of 2026-09-23; each registry entry lists its sources, and anything that couldn't be confirmed is listed under `unverified`. **Decisions recorded 2026-09-23** (§9). Interactive atlas: `docs/design/multisig-atlas.html`, a self-contained page (open it from a checkout) with the registry embedded.
 
 ## 0. The claim
 
