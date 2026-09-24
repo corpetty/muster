@@ -1238,7 +1238,7 @@
       "expiry": "none",
       "reveals": {"policy": "at-creation", "signers": "per-approval", "effect": "public"},
       "approverCost": "per-vote",
-      "bypasses": [],
+      "bypasses": ["the executor supplies the target accounts at execute; a proposal records only their count (logos-co/lez-multisig#40, open)"],
       "interop": [],
       "infra": ["lez sequencer RPC", "lez_core module"],
       "maturity": "demo",
