@@ -22,7 +22,7 @@
 ## they become satoshis by rounding ×1e8, exact for every amount Bitcoin can hold
 ## (< 2^53 sat), and nothing on a signing path ever sees a float (invariant 5).
 
-import std/[httpclient, json, base64, strutils, math]
+import std/[httpclient, json, base64, strutils, math, uri]
 import ./types
 import ./adapter
 import ../crypto/keystore
@@ -39,6 +39,25 @@ proc newBitcoindAdapter*(networkName, url, user, pass: string): BitcoindAdapter 
   let net = networkByName(networkName)
   BitcoindAdapter(network: net, url: url.strip(chars = {'/'}, leading = false), user: user, pass: pass,
                   finalDepth: (if net.name == "regtest": 1 else: 6))
+
+proc splitCredentials*(url: string): tuple[url, user, pass: string] =
+  ## A node URL may carry its RPC credentials ("http://user:pass@host:port"): split them
+  ## out, so they travel as a Basic auth header and are never echoed back.
+  var u = parseUri(url)
+  result.user = decodeUrl(u.username)
+  result.pass = decodeUrl(u.password)
+  u.username = ""
+  u.password = ""
+  result.url = ($u).strip(chars = {'/'}, leading = false)
+
+proc redactUserinfo*(url: string): string =
+  ## the URL as it may be shown: credentials never are
+  let (bare, user, _) = splitCredentials(url)
+  if user.len == 0: bare else: bare.replace("://", "://" & user & ":***@")
+
+proc newBitcoindAdapterFromUrl*(networkName, url: string): BitcoindAdapter =
+  let (bare, user, pass) = splitCredentials(url)
+  newBitcoindAdapter(networkName, bare, user, pass)
 
 proc nativeAsset(a: BitcoindAdapter): AssetId =
   AssetId(chain: a.network.caip2, symbol: "BTC", kind: akNative, decimals: 8)
@@ -134,3 +153,20 @@ method finality*(a: BitcoindAdapter, txRef: TxRef): Finality =
   let conf = r{"confirmations"}.getInt(0)
   if conf >= a.finalDepth: Finality(status: fsFinal, detail: $conf & " confirmation(s)")
   else: Finality(status: fsPending, detail: (if conf == 0: "in the mempool" else: $conf & " confirmation(s)"))
+
+proc probeBitcoind*(url: string): tuple[ok: bool, chain: string, detail: string] {.gcsafe.} =
+  ## Which chain the node at `url` serves, as CAIP-2 (bip122:<first 32 hex of the
+  ## genesis block hash>) — asked of the node, never assumed from a setting.
+  try:
+    {.cast(gcsafe).}:
+      let (bare, user, pass) = splitCredentials(url)
+      let a = BitcoindAdapter(url: bare, user: user, pass: pass, finalDepth: 1)
+      let genesis = a.call("getblockhash", %*[0]).getStr()
+      if genesis.len != 64: return (false, "", "not a block hash: " & genesis)
+      let chain = "bip122:" & genesis[0 ..< 32]
+      var name = chain
+      try: name = networkByCaip2(chain).name
+      except CatchableError: discard
+      (true, chain, "the node serves " & name & " (" & chain & ")")
+  except CatchableError as e:
+    (false, "", e.msg)

@@ -21,6 +21,8 @@ import ./profile
 import ../bitcoin/[tx, script, sighash, taproot, keys, bech32, psbt, network]
 import ../crypto/keystore
 import ./inapp
+import ./interop   # outside signers speak PSBT (exo-a50.2.6)
+export interop.ImportedContribution
 
 type
   BtcAccount* = object
@@ -39,8 +41,6 @@ type
   BtcMultisigDriver* = ref object of Driver
     account*: BtcAccount
     pending: seq[seq[byte]]  ## the sighashes contributions currently verify against
-
-  ImportedContribution* = tuple[signer: string, contribution: Contribution]
 
 const P2wshFamily* = "btc.p2wsh-sortedmulti"
 const TapscriptFamily* = "btc.tapscript-multi-a"
@@ -392,6 +392,19 @@ proc importPsbtContributions*(d: BtcMultisigDriver, e: Effect, p: Psbt): seq[Imp
     if sigs.len == hashes.len:
       let c = Contribution(bytes: contributionBytes(key, sigs))
       if d.verifyAgainst(hashes, c).len > 0: result.add (signer: toHex(key), contribution: c)
+
+method exportOutside*(d: BtcMultisigDriver, e: Effect): OutsideRequest =
+  ## The proposal's spend as a base64 PSBT (exo-a50.2.6).
+  try: OutsideRequest(handled: true, format: "psbt", encoded: d.exportPsbt(e).toBase64())
+  except BtcError, PsbtError: OutsideRequest(handled: false)
+
+method importOutside*(d: BtcMultisigDriver, e: Effect, encoded: string): seq[ImportedContribution] =
+  ## A PSBT an outside signer returned: every account key that signed every input.
+  var p: Psbt
+  try: p = parsePsbtBase64(encoded.strip())
+  except CatchableError as err: raise newException(InteropError, "not a PSBT: " & err.msg)
+  try: d.importPsbtContributions(e, p)
+  except PsbtError as err: raise newException(InteropMismatch, err.msg)
 
 proc btcAccountOfDisclosure*(family, chain, address: string, k: int,
                              signers: seq[string]): tuple[ok: bool, account: BtcAccount, detail: string] =

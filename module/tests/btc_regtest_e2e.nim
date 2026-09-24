@@ -33,6 +33,7 @@ import ../src/wallet/btc_adapter
 import ../src/settlement/settlement
 import ../src/coordination/accounts
 import ../src/coordination/card_rows
+import ../src/coordination/live
 import ./probes/live_room
 
 let url = (if paramCount() >= 1: paramStr(1) else: "http://127.0.0.1:18443")
@@ -76,7 +77,8 @@ proc rpc(meth: string, params: JsonNode = newJArray(), wallet = ""): JsonNode =
 # a miner wallet (funds + mines) and Carol's wallet (the outside signer)
 for w in ["miner", "carol"]:
   try: discard rpc("createwallet", %*[w, false, w == "carol", "", false, true])
-  except CatchableError: discard rpc("loadwallet", %*[w])
+  except CatchableError as e:
+    quit "btc_regtest_e2e needs a FRESH regtest chain (infra/bitcoind/regtest.sh): " & e.msg
 let minerAddr = rpc("getnewaddress", %*["", "bech32"], "miner").getStr()
 discard rpc("generatetoaddress", %*[101, minerAddr])
 
@@ -125,12 +127,12 @@ for (family, kind) in [(P2wshFamily, "btc-p2wsh"), (TapscriptFamily, "btc-tapscr
   echo "3. ", family, ": disclosed, proposed, Alice approved in-app through her keystore OK"
 
   # ── 4. Carol signs OUTSIDE muster, through Bitcoin Core ─────────────────────────
-  let exported = exportPsbt(drv, effectFromJson(effectJson)).toBase64()
-  let signed = rpc("walletprocesspsbt", %*[exported, true, (if family == P2wshFamily: "ALL" else: "DEFAULT")], "carol")
-  let imported = importPsbtContributions(drv, effectFromJson(effectJson), parsePsbtBase64(signed["psbt"].getStr()))
-  doAssert imported.len == 1 and imported[0].signer == toHex(C), $imported.mapIt(it.signer)
-  let st = liveContribute(r.alice, aliceKs, resolver, id, toHex(imported[0].contribution.bytes), "", bindCtx(), Now)
-  doAssert st == "executable", st
+  let exported = liveExportOutside(r.alice, resolver, id)     # what the room exports (seam S8)
+  doAssert exported.ok and exported.format == "psbt", exported.error
+  let signed = rpc("walletprocesspsbt", %*[exported.encoded, true, (if family == P2wshFamily: "ALL" else: "DEFAULT")], "carol")
+  let im = liveImportOutside(r.alice, aliceKs, resolver, id, signed["psbt"].getStr(), bindCtx(), Now)
+  doAssert im.ok and im.imported == @[toHex(C)], $im
+  doAssert im.state == "executable", im.state
   let grades = approvalGrades(r.alice.log.allEvents(), resolver, id)
   doAssert gradeOf(grades, toHex(A), 1) == agCommitted, "Alice approved in muster: attested"
   doAssert gradeOf(grades, toHex(C), 1) == agUnattested, "Carol signed outside muster: shown as such, never 'committed'"
