@@ -183,7 +183,7 @@ Deferred, infra-bound: client-side EVM signing on a non-anvil node; the beacon l
   - `count-only`: the card names #40;
   - `account-ids`: the target accounts are committed on chain and checked on the S5 re-read.
 
-  See `docs/labbook/lez-multisig-versions.md`.
+  lez-multisig's own e2e suites pass against a local v0.2.4 sequencer, including an on-chain refusal of a substituted recipient. Muster decodes the resulting accounts and derives their PDAs byte for byte (`lez_multisig_rebuilt_test` §5). See `docs/labbook/lez-multisig-versions.md`.
 
 **Phase D: the crypto core landed (exo-a50.4, 2026-09-24).** `module/src/frost/` holds threshold Schnorr on secp256k1:
 - **Group arithmetic** (`secp.nim`): points with infinity over libsecp's ABI, scalars mod n over stint.

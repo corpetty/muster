@@ -84,10 +84,30 @@ reproduces the handlers of `c45100b` with their own messages, over borsh account
     binds them.
 
   The 29 program unit tests pass, including #41's substituted-account regression.
+  The host crates are ported too:
+  - the FFI: `WalletCore::from_env()` is async now, and the IDL/client regenerate with
+    `spel-client-gen` v0.7.0;
+  - the e2e suites.
+
+  **Both of lez-multisig's own e2e suites pass on a local v0.2.4 sequencer:**
+  - `e2e_multisig`: create a 2-of-3; initialize the vault through a ChainedCall into the
+    token program; fund it; propose, approve and execute a transfer;
+  - `e2e_member_management`: add a member, change the threshold, remove a member, and the
+    N < M guard;
+  - a new step in `e2e_multisig`: an execute that substitutes the recipient is refused
+    **by the program on chain** ("Target account 1 does not match the approved
+    proposal").
+
+  The guest's ImageID is `2ced3d30…d4c7`.
 - **Muster models both builds.** `ProposalLayout`: `count-only` is the published
   c45100b, where the card names #40. `account-ids` is the rebuild, where the ids are
   checked on the S5 re-read and the card names no bypass. An account's config names its
-  layout. The test is `lez_multisig_rebuilt_test`.
+  layout. The test is `lez_multisig_rebuilt_test`. Its §5 holds muster to **real chain
+  bytes**: the state and both proposals read back from that sequencer after the e2e run
+  (`module/tests/vectors/lez-multisig-v024/`). Muster:
+  - decodes them under `account-ids` and re-encodes them byte for byte;
+  - derives the state, proposal and vault PDAs the chain used (`psLee02` over the image
+    id).
 - **Build notes.** The v0.2.4 `wallet` crate pulls in Keycard support
   (`keycard-rs` → `pcsc-sys`), which needs libpcsclite, and `openssl-sys` needs OpenSSL
   headers. On this box both come from Nix: `PKG_CONFIG_PATH` points at
@@ -96,3 +116,12 @@ reproduces the handlers of `c45100b` with their own messages, over borsh account
   against `k256` 0.14's `^0.4.12`, so regenerate it. The guest builds with
   `cargo risczero build` (cargo-risczero 3.0.5, installed into a scratch root) inside the
   `risczero/risc0-guest-builder:r0.1.91.1` image, the tag LEZ v0.2.4's Justfile pins.
+  risc0-build still asks rzup which Rust the guest targets, so answer it with an empty
+  `$RISC0_HOME/toolchains/r0.1.91.1-risc0-rust-x86_64-unknown-linux-gnu` marker rather
+  than installing a second toolchain. `cargo check --workspace` needs
+  `RISC0_SKIP_BUILD=1`, because the methods crate otherwise builds the guest on the host.
+  The sequencer (`--features standalone`) links RocksDB, whose bindgen needs libclang:
+  set `LIBCLANG_PATH` to `nixpkgs#libclang.lib` and pass its resource headers through
+  `BINDGEN_EXTRA_CLANG_ARGS`. It also runs genesis in risc0's executor, which needs
+  `r0vm` 3.0.5 on `PATH`. Without it genesis panics with a bare "No such file or
+  directory".

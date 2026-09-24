@@ -14,10 +14,15 @@
 ##      target accounts on the S5 re-read, and its card names no way around the rule (the
 ##      "where" row is imperative); a count-only account keeps naming #40;
 ##   4. in the room: propose on chain, vote, settle — Executed with exactly the reviewed
-##      accounts; a pointer whose on-chain accounts differ is refused before any vote.
+##      accounts; a pointer whose on-chain accounts differ is refused before any vote;
+##   5. the REAL chain: accounts read back from the rebuilt program running on a LEZ v0.2.4
+##      sequencer (vectors/lez-multisig-v024, captured after lez-multisig's own e2e passed):
+##      muster decodes the state and both proposals under the account-ids layout, re-encodes
+##      them byte for byte, and derives the state, proposal and vault PDAs the chain used —
+##      `psLee02` over the image id.
 ## Needs the secp closure + libsodium — see tests/README.md.
 
-import std/[json, strutils, sequtils]
+import std/[json, strutils, sequtils, os]
 import ../src/hashing/sha256
 import ../src/log/log
 import ../src/drivers/driver
@@ -150,5 +155,36 @@ block:
   doAssert stl.watch(stl.submit(asm0.tx, aliceKs)).status == fsFinal
   doAssert c.chainedCalls[^1].accounts == act.accounts, "Executed with exactly the reviewed accounts"
   echo "4. in the room: proposed, voted, settled with the reviewed accounts; a pointer to other accounts refused OK"
+
+# ── 5. the real chain ──────────────────────────────────────────────────────────
+block:
+  let v = parseJson(readFile(currentSourcePath.parentDir / "vectors" / "lez-multisig-v024" / "chain.json"))
+  let image = hexToBytes(v["program_image_id"].getStr())
+  let tokenImage = hexToBytes(v["token_image_id"].getStr())
+  proc acct(k: string): (seq[byte], seq[byte], seq[byte]) =
+    let a = v["accounts"][k]
+    (hexToBytes(a["id"].getStr()), hexToBytes(a["program_owner"].getStr()), hexToBytes(a["data"].getStr()))
+  let (stateId, stateOwner, stateData) = acct("state")
+  let st = decodeState(stateData)
+  doAssert stateOwner == image, "the state account belongs to the program"
+  doAssert encodeState(st) == stateData, "state: byte-exact round trip"
+  doAssert st.threshold == 2 and st.members.len == 3 and st.transactionIndex == 2
+  doAssert statePda(psLee02, image, st.createKey) == stateId, "the state PDA: /LEE/v0.2/ over the image id"
+  let (vaultId, vaultOwner, _) = acct("vault")
+  doAssert vaultPda(psLee02, image, st.createKey) == vaultId
+  doAssert vaultOwner == tokenImage, "the vault holds tokens"
+  for (k, idx) in [("proposal1", 1'u64), ("proposal2", 2'u64)]:
+    let (pid, owner, data) = acct(k)
+    let p = decodeProposal(data, plAccountIds)
+    doAssert owner == image and p.index == idx and p.createKey == st.createKey
+    doAssert encodeProposal(p, plAccountIds) == data, k & ": byte-exact round trip"
+    doAssert proposalPda(psLee02, image, st.createKey, idx) == pid, k & ": the proposal PDA"
+    doAssert p.status == psExecuted and p.approved.len == 2
+    doAssert p.action.accounts.len == p.action.accountCount and p.action.pdaSeeds == @[vaultSeed(st.createKey)]
+  # proposal 2 is the transfer: out of the vault, with the vault the authorized PDA
+  let p2 = decodeProposal(acct("proposal2")[2], plAccountIds)
+  doAssert p2.action.accounts[0] == vaultId and p2.action.authorized == @[0'u8]
+  doAssert p2.action.target == tokenImage
+  echo "5. the real chain (LEZ v0.2.4): state + proposals decode and re-encode byte for byte; PDAs derive OK"
 
 echo "lez_multisig_rebuilt_test: the rebuilt program commits its target accounts; muster reads and checks them — all OK"
