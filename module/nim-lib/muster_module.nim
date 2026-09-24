@@ -37,6 +37,7 @@ import ../src/coordination/intents     # intent lifecycle = reduce(log) (the mul
 import ../src/coordination/live        # the live propose/contribute path, driveable in-process (exo-ef1)
 import ../src/coordination/accounts    # accounts disclosed by members into the room (exo-a50.1.3)
 import ../src/settlement/settlement     # the settlement seam: chosen by profile, through the adapter (exo-a50.1.5)
+import ../src/coordination/card_rows   # the card's fixed rows, from the profile (exo-a50.1.6)
 import ../src/coordination/invoker     # the execute seam + allowlist/capability gate (P-D2)
 import ../src/coordination/readiness   # the action manifest + this instance's readiness (exo-002.2)
 import ../src/coordination/offers      # requirements × my catalogue → offers (exo-45e K4)
@@ -781,6 +782,9 @@ proc chainViewOf(a: RoomAccount): ChainView =
   if not thr.known: return (known: false, signers: @[], threshold: 0, detail: thr.detail)
   (known: true, signers: owners.owners.mapIt(toHex(it)), threshold: thr.threshold, detail: "read from chain")
 
+var gBypassCache = initTable[string, tuple[known: bool, list: seq[string]]]()
+  ## account id → the ways around its threshold as last read from the chain (exo-a50.1.6)
+
 proc bypassesOf(a: RoomAccount): JsonNode =
   ## {known, modules:[addr], guard, detail} for a Safe, read through the user's RPC on
   ## the account's own chain. A module can move funds with NO owner signature; a guard
@@ -799,7 +803,12 @@ proc bypassesOf(a: RoomAccount): JsonNode =
     result["detail"] = %(if not m.known: m.detail else: g.detail)
     return
   var mods = newJArray()
-  for x in m.modules: mods.add %toHex(x)
+  var list: seq[string]
+  for x in m.modules:
+    mods.add %toHex(x)
+    list.add "module " & toHex(x) & " can execute without the owners"
+  if g.guard.len > 0: list.add "guard " & g.guard & " can block what the owners agree to"
+  gBypassCache[a.id] = (known: true, list: list)
   result = %*{"known": true, "modules": mods, "guard": g.guard, "detail": "read from chain"}
 
 proc musterCoordinateAccounts(): string =
@@ -969,9 +978,18 @@ proc musterCoordinateIntents(): string =
     # "threshold of threshold". It comes from the driver's family profile — never from
     # branching on the concrete driver type (exo-a50.1.1) — and the whole profile rides
     # along so the card's fixed rows can be drawn from it (exo-a50.1.6).
-    let prof = drv.profile()
+    var prof = drv.profile()
     o["n"] = %(if prof.n > 0: prof.n else: desc.threshold)
+    # The ways around a Safe's threshold, as last READ from the chain (coordinate_accounts
+    # caches them — no chain read on this 1s tick); unread stays unknown (exo-a50.1.6).
+    if prof.account.len > 0 and prof.account in gBypassCache:
+      let b = gBypassCache[prof.account]
+      prof.bypassesKnown = b.known
+      prof.bypasses = b.list
     o["profile"] = prof.toJson()
+    # The card's fixed rows — the same ten questions for every family, answered from
+    # the profile alone, each with its credibility (coordination/card_rows.nim).
+    o["rows"] = cardRowsJson(cardRows(prof))
     let (vkind, vacct) = splitPolicy(v.policy)
     o["kind"] = %vkind
     o["accountId"] = %vacct            # CAIP-10 for an account-bound intent, "" for a room kind
