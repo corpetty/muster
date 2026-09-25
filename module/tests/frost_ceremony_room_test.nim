@@ -31,7 +31,7 @@ import ../src/coordination/[session, intent_events, intents, live, accounts, agg
 import ./probes/live_room
 
 var r = newRoom3("/muster/1/frost-room/proto")
-let members = @[(r.alice, Keystore(aliceKs)), (r.bob, Keystore(bobKs)), (r.carol, Keystore(carolKs))]
+let members = @[(r.alice, Keystore(aliceKs)), (r.bob, Keystore(bobKs)), (r.carol, Keystore(room3CarolKs))]
 proc pollAll() =
   for (s, _) in members: s.poll()
 proc res(s: CoordinationSession): DriverFor =
@@ -79,7 +79,7 @@ block:
   doAssert got == "collecting", got
 pollAll()
 block:
-  let got = liveFrostContribute(r.carol, carolKs, res(r.carol), id, Now)
+  let got = liveFrostContribute(r.carol, room3CarolKs, res(r.carol), id, Now)
   doAssert got == "collecting", got
 pollAll()
 let it1 = reduceIntents(r.bob.log.allEvents(), res(r.bob))[id]
@@ -93,7 +93,7 @@ block:
   doAssert got == "collecting", got
 pollAll()
 block:
-  let got = liveFrostContribute(r.carol, carolKs, res(r.carol), id, Now)
+  let got = liveFrostContribute(r.carol, room3CarolKs, res(r.carol), id, Now)
   doAssert got == "executable", got
 pollAll()
 doAssert intentState(r.bob.log.allEvents(), res(r.bob), id) == "executable"
@@ -127,7 +127,7 @@ block:
   doAssert got == "collecting", got
 pollAll()
 block:
-  let got = liveFrostContribute(r.carol, carolKs, res(r.carol), id2, Now)
+  let got = liveFrostContribute(r.carol, room3CarolKs, res(r.carol), id2, Now)
   doAssert got == "collecting", got
 pollAll()
 let carolRestarted = restartedCarolKs()

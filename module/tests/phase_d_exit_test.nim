@@ -43,7 +43,7 @@ discard rpc("generatetoaddress", %*[101, minerAddr])
 
 # ── 1. the ceremony in the room ───────────────────────────────────────────────
 var r = newRoom3("/muster/1/phase-d/proto")
-let members = @[(r.alice, Keystore(aliceKs)), (r.bob, Keystore(bobKs)), (r.carol, Keystore(carolKs))]
+let members = @[(r.alice, Keystore(aliceKs)), (r.bob, Keystore(bobKs)), (r.carol, Keystore(room3CarolKs))]
 proc pollAll() =
   for (s, _) in members: s.poll()
 proc res(s: CoordinationSession): DriverFor =
@@ -89,8 +89,8 @@ let id = liveProposeIntent(r.alice, aliceKs, res(r.alice), policy, effectJson, i
 doAssert id.startsWith("0x"), id
 r.alice.publish(readEvent(id, "inputs", "bitcoind://scantxoutset", $parseJson(effectJson)["inputs"]))
 pollAll()
-for (s, ks, want) in [(r.alice, Keystore(aliceKs), "collecting"), (r.carol, Keystore(carolKs), "collecting"),
-                      (r.alice, Keystore(aliceKs), "collecting"), (r.carol, Keystore(carolKs), "executable")]:
+for (s, ks, want) in [(r.alice, Keystore(aliceKs), "collecting"), (r.carol, Keystore(room3CarolKs), "collecting"),
+                      (r.alice, Keystore(aliceKs), "collecting"), (r.carol, Keystore(room3CarolKs), "executable")]:
   let got = liveFrostContribute(s, ks, res(s), id, Now)
   doAssert got == want, got
   pollAll()

@@ -78,7 +78,7 @@ proc newRoom*(topic = "/muster/1/ef1-probe/proto"): Room =
        bob: newCoordinationSession(newLocalTransport(net), bobCrypto, topic))
 
 # A third member, for families that need three participants (a 2-of-3 ceremony, Phase D).
-let carolKs* = newInMemoryKeystore(key("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"), seed(3))
+let room3CarolKs* = newInMemoryKeystore(key("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"), seed(3))
 proc restartedCarolKs*(): InMemoryKeystore =
   ## Carol's keystore as a restart gives it back: the same secrets, nothing in memory.
   newInMemoryKeystore(key("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"), seed(3))
@@ -91,11 +91,11 @@ type Room3* = object
 proc newRoom3*(topic = "/muster/1/three/proto"): Room3 =
   ## Alice founds the room for Bob and Carol: one epoch key, granted to both.
   let net = newLocalNetwork()
-  let aliceCrypto = newEpochCrypto(aliceKs, @[bobKs.encIdentity(), carolKs.encIdentity()])
+  let aliceCrypto = newEpochCrypto(aliceKs, @[bobKs.encIdentity(), room3CarolKs.encIdentity()])
   let bobCrypto = newEpochJoiner(bobKs)
   bobCrypto.ingestGrant(aliceCrypto.grantFor(0, bobKs.encIdentity()))
-  let carolCrypto = newEpochJoiner(carolKs)
-  carolCrypto.ingestGrant(aliceCrypto.grantFor(0, carolKs.encIdentity()))
+  let carolCrypto = newEpochJoiner(room3CarolKs)
+  carolCrypto.ingestGrant(aliceCrypto.grantFor(0, room3CarolKs.encIdentity()))
   Room3(topic: topic, net: net,
         alice: newCoordinationSession(newLocalTransport(net), aliceCrypto, topic),
         bob: newCoordinationSession(newLocalTransport(net), bobCrypto, topic),
@@ -106,7 +106,7 @@ proc frostTestRecoveryHex*(): string =
   ## A real 2-of-3 ChillDKG's public recovery data (Alice, Bob, Carol), for a test that
   ## builds a btc-frost driver from a config. Run once per process.
   if gFrostRecovery.len == 0:
-    let kss = @[Keystore(aliceKs), Keystore(bobKs), Keystore(carolKs)]
+    let kss = @[Keystore(aliceKs), Keystore(bobKs), Keystore(room3CarolKs)]
     const L = "fixture/frost"
     let params = SessionParams(hostpubkeys: kss.mapIt(it.frostHostPubkey(L)), t: 2)
     let pm1 = kss.mapIt(it.frostDkgStep1(L, params))
