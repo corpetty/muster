@@ -55,7 +55,7 @@ module/          Nim core behind the muster.lidl contract → muster-module.lgx
   src/hashing/   sha256 · keccak256 · domain-separated hash-input records (inv 5)
   src/log/       signed hash-linked log, reduce(log) (inv 4)
   src/intents/   lifecycle (F-3) · materialization · signing_payload · provenance · disclosure (observer classes + the FS-9 baseline rows, exo-002)
-  src/drivers/   driver interface (inv 6) · profile (the multisig family each driver implements, per instance: locus/scheme/binding/…, CAIP-2 chain, CAIP-10 account, k of n — held to contracts/families/registry.json, exo-a50.1.1) · manifest (the per-action manifest: agreement/requirements/disclosure/touches, `Driver.manifest(effect)`, conformance-checked — exo-002.1) · safe · safe_rpc (P2 wedge) · threshold · frost · invoke · eip191 · btc_multisig (P2WSH sortedmulti + tapscript multi_a, exo-a50.2) · lez_multisig (the vote locus: pointer effect, vote receipts, S5 reads, exo-a50.3) · inapp (in-app signing as a driver hook) · interop (signers outside muster, seam S8) · kinds · registry · conformance
+  src/drivers/   driver interface (inv 6) · profile (the multisig family each driver implements, per instance: locus/scheme/binding/…, CAIP-2 chain, CAIP-10 account, k of n — held to contracts/families/registry.json, exo-a50.1.1) · manifest (the per-action manifest: agreement/requirements/disclosure/touches, `Driver.manifest(effect)`, conformance-checked — exo-002.1) · safe · safe_rpc (P2 wedge) · threshold · frost · invoke · eip191 · btc_multisig (P2WSH sortedmulti + tapscript multi_a, exo-a50.2) · lez_multisig (the vote locus: pointer effect, vote receipts, S5 reads, exo-a50.3) · frost_group (a FROST group: the two rounds' contributions, verification, aggregation — shared by every aggregate-locus family) · btc_frost (btc.frost-bip445: a ChillDKG taproot account, key-path spend, Phase D) · lez_frost (lez.frost-public-account: the group's untweaked LEZ public account, lez-call at a chain-read nonce, exo-55e) · inapp (in-app signing as a driver hook) · interop (signers outside muster, seam S8) · kinds · registry · conformance
   src/crypto/    secp256k1 (authorization identity) · curve25519 (Ed25519/X25519 encryption identity, F-14) · binding (secp↔enc link statement, F-14/F-9) · conversation (ConversationCrypto seam) · epoch_crypto (ECIES-via-sealed-box stopgap, F-16) · sodium (libsodium AEAD + Argon2id) · keystore (two-identity seam, FS-4: file stopgap + in-memory)
   src/transport/ transport (F-15 interface + LocalTransport) · delivery (DeliveryTransport, over the SDK's `logos_sdk/ffi` lp_* binding) · inbound_queue (foreign-thread seam) · infra (inv 8)
   src/coordination/ session (multi-instance flow) · intents (intent lifecycle = reduce(log); gates approvals on their attestation) · intent_events (event constructors) · live (the hosted propose/contribute path, driveable in-process) · attest (invariants 2+10 live: the intent context, log-derived inputs citing content ids, the same-key attestation over P, approval grades — exo-ef1) · audit (the signature-audit file: export / verify-from-the-file-alone / report — exo-403) · vote (a vote-locus approval = the member's own on-chain vote: S5 re-read, cast, confirm, receipt — exo-a50.3)
@@ -222,7 +222,12 @@ Deferred, infra-bound: client-side EVM signing on a non-anvil node; the beacon l
   - A pump on the intents tick advances every ceremony this member joined, and runs round 2 after this member's Approve, so a member approves once.
   - The Bitcoin spend composer builds a FROST key-path spend for a `btc-frost@` policy, and `coordinate_submit` settles through the user's node.
   - The room accounts panel has a key-ceremony section; the card already shows "round R of N".
-- **Not yet:** the LEZ room flow (a FROST account signing the LEZ message hash in the room).
+- **LEZ from the room** (exo-55e, `lez_frost_room_e2e` on a real v0.2.4 chain):
+  - The same ceremony, run on a `lez:` zone, discloses the group's untweaked LEZ public account (`drivers/lez_frost.nim`).
+  - A `lez-call` at the account's chain-read nonce (a recorded read) runs both rounds.
+  - Settlement re-reads the nonce (a stale one can never land, so it is refused), aggregates one signature, and sends it.
+  - `drivers/frost_group.nim` is the group and rounds both FROST families share.
+- **Not yet:** LEZ FROST's hosted surface and UI (the ceremony section already opens a `lez:` ceremony).
 
 Next: the LEZ multisig's and FROST's on-display runs in a runner and across two instances.
 
