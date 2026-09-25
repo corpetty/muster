@@ -350,11 +350,18 @@ of them because it isn't theirs to close.
 
 ## Next
 
-Contracting — stage four, and the one this post was secretly about. Now that provenance and
-re-derivation are on the table as two halves of the same question, contracting is where they
-meet the thing you actually sign: what a verifiable signing context looks like, exactly where
-the byte-commitment could reach the signature and what it costs to get there, and how much of
-this survives contact with a real multi-party approval instead of a single-key transfer.
+Contracting — stage four, and the one this post was secretly about. Contracting is where the
+agreement gets *formalized*: for a chain action, building the transaction that gets signed and
+then signing it; off-chain, whatever the formality of agreement is. It's the stage that pulls
+in the infrastructure and dependencies the agreement needs — and the *commitments* each party
+is making. Provenance and re-derivation are two halves of one of those commitments; the next
+post puts them next to the others and asks the question this one didn't: not just *what* you're
+signing and *where it came from*, but *what kind of commitment* each party is under — the ones
+whose discretion to defect is removed structurally, and the ones that merely rest on a party
+having a reason not to. And for that second kind, the part I think contracting should always
+surface and rarely does: how they could defect, and what it would cost them if that can be put
+a number on. That, and how much of all of this survives a real multi-party approval instead of
+a single-key transfer.
 
 ---
 

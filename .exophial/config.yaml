@@ -27,8 +27,10 @@ spec_dir: "contracts/specs"
 # today; the extra tiers/rows activate for free once specs commit a difficulty_class.
 worker_model:
   tiers:
-    default: "sonnet"
-    frontier: "opus"
+    # Concrete current model ids (this box's claude CLI 1.0.112 resolves the
+    # "opus"/"sonnet" aliases to retired ids that 404; `claude update` needs sudo).
+    default: "claude-sonnet-4-5"
+    frontier: "claude-opus-4-8"
   routing:
     default: frontier
 
@@ -53,8 +55,8 @@ llm_transport:
 # (metamorphic/model_check/proof_obligation) oracle proposals.
 intake_derivation:
   tiers:
-    small: "sonnet"
-    frontier: "opus"
+    small: "claude-sonnet-4-5"
+    frontier: "claude-opus-4-8"
   thinking_budgets:
     small: 4000
     frontier: 31999

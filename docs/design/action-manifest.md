@@ -37,6 +37,21 @@ Of the article's seven links (discovery, diligence, negotiation, contracting, or
 
 The Bybit failure is the clean example of a link flipping columns: settlement was imperative, signing was motivational (trust the interface). F-4 re-derivation moves signing into the imperative column and can prove it with a test. That sentence belongs in the article's companion material.
 
+### 2a. Motivational is not one thing: the defection facet (proposed, `exo-3ae` — not built)
+
+Classifying a commitment `motivational` and naming its `party` is honest but coarse. Two motivational commitments can differ by orders of magnitude in strength, and the difference is *what defection costs the party who holds the discretion*. A signer bonded to forfeit a stake if they equivocate is making a far stronger motivational commitment than a store node we merely *ask* not to analyse the graph — yet today both render as the same word. Contracting is exactly where that difference should be made legible, because contracting is where the agreement is formalized and each party's commitment is fixed.
+
+So a motivational classification extends, driver-described (invariant 6), with two facets:
+
+- **defection path** — how the party would exercise the discretion the classification says they hold. The store node: correlate subscription timing. The RPC: return a state root that isn't the chain's. A bonded signer: sign a conflicting materialization.
+- **cost of defection** — what exercising it costs *them*, when the rail makes it calculable: `{value, unit, bearer, beneficiary}` — a slashed stake, a forfeited deposit, a burned bond — naming who loses it and to whom it accrues. When the cost is reputational, legal, or social, it is **`not-calculable`**, shown as such and never guessed (the `unknown`-is-first-class rule, `exo-1ec.5`). A defection with **no** cost is its own strong disclosure: the commitment rests on nothing but a promise, and the card should say exactly that.
+
+This stays inside *classify, never score*. A cost of defection is a **concrete stake** — a fact about the arrangement — not a probability that the party holds. "Cost of defection: a 2 ETH bond, forfeited to the counterparty" tells you the commitment's teeth; "80% reliable" hides the residual trust behind a number, which is the failure the article's private-order-flow example describes. We surface the stake; we never surface a likelihood. Where the stake is zero or unknowable, that is the answer, printed.
+
+The facet composes with the existing grades. F-10's `attested` (motivational) read from a user-configured RPC has defection path "serve a false root" and, today, cost `not-calculable` — until a beacon light-client (ADR-014) verifies the root, which moves the link to `verified-locally` (imperative) and dissolves the facet entirely. Finality `external` (motivational) has defection path "the external system decides against us"; whether that carries a calculable cost is the driver's to declare. The facet is where a driver that *does* bond its participants (a slashing threshold driver, a deposit-backed escrow) shows its teeth, and where one that bonds nothing is held honestly to a bare promise.
+
+**Status: proposed (`exo-3ae`), not built.** M8 shipped the classification and the `party`; the defection facet is a further declared field on a motivational classification, driver-described like the rest of the manifest (§3), and rendered on the card's "How do we agree?" answer beside the credibility line. It must never let a driver render teeth it does not have: the conformance rule that fails a lying manifest (M1) governs it — a declared cost a driver cannot enforce is a conformance failure, not a copy choice.
+
 ## 3. The object
 
 ```
