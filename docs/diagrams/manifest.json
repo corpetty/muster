@@ -212,7 +212,7 @@
     {
       "file": "arch-contract-seam.svg",
       "serves": "BOTH",
-      "shows": "The two codegen paths and the hand-written region each ends in: muster.lidl through the lidl_c.h JSON bridge to a generated Nim surface, and metadata.json plus a .rep through logos-module-builder to the plugin entry point and QtRO glue.",
+      "shows": "The two codegen paths and the hand-written region each ends in: muster.lidl through the lidl_c.h JSON bridge to a generated Nim surface, and ui/metadata.json plus muster_ui.rep through logos-module-builder to the plugin entry point and QtRO glue, ending in MusterUiBackend and the QML.",
       "sources": [
         {
           "path": "docs/02-implementation-plan.md",
@@ -221,28 +221,37 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "2ab6fac5b81393829bd89da80d30f01813f04ecc9ebbe05e58c520d2f8607371",
+          "sha256": "d723cd10f386ee3fecd1c492316292ef5c5c48edaf72cdec293a01f97b48a787",
           "note": "the two rules the C header states, and the never-hand-write-what-the-contract-generates rule"
-        },
-        {
-          "path": "demo/muster-ui/metadata.json",
-          "sha256": "e4953f1434822141605d47711bcde4351f5df915e2ecac42f66068ccc2425a87",
-          "note": "the codegen keys — rep, backend_class, backend_header"
-        },
-        {
-          "path": "demo/muster-ui/CMakeLists.txt",
-          "sha256": "309fee74fedfe49dab5f1893ba824a73fefc33584d99320d8c3db71d31e73887",
-          "note": "logos_module() with REP_FILE, the macro that emits the plugin and QtRO glue"
         },
         {
           "path": "module/metadata.json",
           "sha256": "3342756eebdb429fa874e1ab00868b0e48060ccf0ea6f6bcc0f5c98e5c6d6394"
+        },
+        {
+          "path": "ui/metadata.json",
+          "sha256": "cc470acf28fa70040e7f0cd69f9c74f0186697d2fb3feeff4736217aebc974f9",
+          "note": "the one codegen key — rep"
+        },
+        {
+          "path": "ui/CMakeLists.txt",
+          "sha256": "26201f831db6502166c89e3000738ec31ed1c1f809e518934e49b378dc1bc628",
+          "note": "logos_module() with REP_FILE, the macro that emits the plugin and QtRO glue"
+        },
+        {
+          "path": "ui/src/muster_ui_backend.h",
+          "sha256": "254e67f173574ae772b49794c2362446a9978054e95a321925bcc85bfab5681e",
+          "note": "MusterUiBackend, the hand-written backend class"
         }
       ],
       "evidence": [
         {
           "grade": "from-source",
-          "note": "The four lidl_c.h functions, the two rules the header states outright, and the codegen keys — read off the header and metadata.json"
+          "note": "The four lidl_c.h functions, the two rules the header states outright, and the one codegen key (rep) — read off the header and ui/metadata.json"
+        },
+        {
+          "grade": "from-source",
+          "note": "The view half is the real muster-ui (ui/): muster_ui.rep, MusterUiBackend and src/qml, no longer the demo's ChatBackend; the Nim core's subsystem list is module/src's directories"
         },
         {
           "grade": "from-source",
@@ -347,13 +356,13 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "2ab6fac5b81393829bd89da80d30f01813f04ecc9ebbe05e58c520d2f8607371",
+          "sha256": "d723cd10f386ee3fecd1c492316292ef5c5c48edaf72cdec293a01f97b48a787",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
-          "path": "demo/GAPS.md",
-          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
-          "note": "what the demo does instead, stated row by row"
+          "path": "module/src/intents/materialization.nim",
+          "sha256": "d26198259f4735b666309eeaccad2287c5650b6656848d80658c34671d4a9ed0",
+          "note": "reviewAndCheck, canonicalize as a Driver method, signProposal consulting no config"
         }
       ],
       "evidence": [
@@ -363,7 +372,7 @@
         },
         {
           "grade": "from-source",
-          "note": "The demo has no effect/materialization split at all — GAPS.md §5 states it as an absence"
+          "note": "Built: reviewAndCheck (module/src/intents/materialization.nim) re-derives through the driver's canonicalize and compares bytes, and signProposal has no branch that consults configuration — the status strip reads from here"
         },
         {
           "grade": "illustrative",
@@ -375,7 +384,7 @@
     {
       "file": "mech-signing-payload.svg",
       "serves": "POST",
-      "shows": "The fields a signing payload commits to and the specific reuse each one defeats, with the two versioned fields marked apart from the invariant property, and the provenance record F-20 adds to the same payload.",
+      "shows": "The fields a signing payload commits to and the specific reuse each one defeats, each row marked built or not, with the two versioned fields marked apart from the invariant property, and the provenance record F-20 adds to the same payload.",
       "sources": [
         {
           "path": "docs/01-furps.md",
@@ -386,6 +395,16 @@
           "path": "docs/02-implementation-plan.md",
           "sha256": "bc70ab6ba31d55b067679e6c0b9a13d4b770c3eb72b0e83368286bacfd906b88",
           "note": "which phase builds it, and the accept criteria"
+        },
+        {
+          "path": "module/src/intents/signing_payload.nim",
+          "sha256": "4d3c5450f7569f2582545d28024df5adf8d6cc4a71d9d93277a4b6f86c3a1aed",
+          "note": "SigningPayload: environment, account, slot, expiry, materialization root"
+        },
+        {
+          "path": "module/src/coordination/attest.nim",
+          "sha256": "d6aa28724cfdcbf1434883638ed62257c990cbe008dbb1a6a6ed3b3bcafe952d",
+          "note": "the live attestation P = signedBytes(payload, provenance record), exo-ef1"
         }
       ],
       "evidence": [
@@ -402,11 +421,15 @@
           "note": "The provenance-record row from F-20, which commits the same payload to where each of its inputs came from"
         },
         {
+          "grade": "from-source",
+          "note": "Row status: SigningPayload encodes environment, account, slot, expiry and the materialization root; attest.nim commits the provenance record with it; there is no profile or schema-id field, so the schema id reaches the signed bytes only where a driver's canonicalize includes it. FS-3 is probed by probe_replay_binding_*. The account row follows F-5 as amended by ADR-015 (the room, not a membership commitment)"
+        },
+        {
           "grade": "illustrative",
           "note": "The what-it-defeats column is the author's reading of why each field is there, not text quoted from the requirement"
         }
       ],
-      "recheck": "P1, and if ADR-009's schema-identity derivation changes — though the property it protects is not allowed to."
+      "recheck": "When profile + schema-id become payload fields (ADR-009), or the SigningPayload encoding changes — though the property it protects is not allowed to."
     },
     {
       "file": "mech-provenance-trail.svg",
@@ -420,19 +443,29 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "2ab6fac5b81393829bd89da80d30f01813f04ecc9ebbe05e58c520d2f8607371",
+          "sha256": "d723cd10f386ee3fecd1c492316292ef5c5c48edaf72cdec293a01f97b48a787",
           "note": "invariant 10, and invariant 1 whose blind spot the figure draws"
         },
         {
           "path": "contracts/specs/derived-exo-3a1.spec.json",
           "sha256": "dab6f29767237c132e3a6e82ff67745169a6e0b371fcbb236f11687907b48ffc",
           "note": "the six spans and their oracles; the status banner's probe count comes from here"
+        },
+        {
+          "path": "module/src/intents/provenance.nim",
+          "sha256": "f00fe539c22fda5cacae00ddcbb5e24186016e1c6383a3e31c76be9fe9d81701",
+          "note": "the entry shape {class, position, account} and the refusal"
+        },
+        {
+          "path": "module/src/coordination/attest.nim",
+          "sha256": "d6aa28724cfdcbf1434883638ed62257c990cbe008dbb1a6a6ed3b3bcafe952d",
+          "note": "the live path: log-derived inputs, the unaccountable-input refusal, approval grades"
         }
       ],
       "evidence": [
         {
           "grade": "from-source",
-          "note": "The four input classes and their requirement ids, the class-plus-log-position record shape, and the refusal, all verbatim from F-20"
+          "note": "The four input classes and their requirement ids, and the refusal, verbatim from F-20; the entry shape {class, position = the source event's content id, account} from module/src/intents/provenance.nim"
         },
         {
           "grade": "from-source",
@@ -440,14 +473,14 @@
         },
         {
           "grade": "from-source",
-          "note": "The status banner's claim that no probe exists and four oracles await an executor, read from derived-exo-3a1's acceptance_tests"
+          "note": "The status strip: all six derived-exo-3a1 probes exist (probe_provenance_*, four as model-check steppers), and the live path is attest.nim with seven probe_live_* probes (exo-ef1); an approval signed outside muster carries no attestation and is graded unattested"
         },
         {
           "grade": "illustrative",
           "note": "The untrusted-RPC example under the blind-spot row is a worked instance chosen to make the gap concrete, not a case quoted from the requirement"
         }
       ],
-      "recheck": "P0/P1, when the signing path first exists — and immediately if the model_check executor lands, since the status banner counts what is undischarged."
+      "recheck": "If the provenance entry shape or attest.nim's grading changes, or when the spec's model_check oracles gain an executor."
     },
     {
       "file": "mech-reduce-log.svg",
@@ -466,13 +499,23 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "2ab6fac5b81393829bd89da80d30f01813f04ecc9ebbe05e58c520d2f8607371",
+          "sha256": "d723cd10f386ee3fecd1c492316292ef5c5c48edaf72cdec293a01f97b48a787",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
           "path": "demo/CLAUDE.md",
           "sha256": "dbdb1541afd3c82728a4ab2cf8d5c28bd1702677c51c8b0b5f48d1e887b545d0",
           "note": "the demo's own account of what it folds and what it does not have"
+        },
+        {
+          "path": "module/src/log/log.nim",
+          "sha256": "13362a456f164fe833c9cad5875ddfeac939a0b39351a416a53654b8c3d7edf0",
+          "note": "the Event shape, content addressing, canonical order, reduce"
+        },
+        {
+          "path": "module/src/coordination/session.nim",
+          "sha256": "45a8fb4c9bfef4244b4ac00113a90c89eb2434da265642e141ba2727220fa717",
+          "note": "each event sealed to the room under the epoch key"
         }
       ],
       "evidence": [
@@ -481,11 +524,15 @@
           "note": "F-1, F-2, R-2 and R-3, and the P0 accept criterion that adversarial orders converge byte-identically as a generated-input property test"
         },
         {
+          "grade": "from-source",
+          "note": "Event = {parents, key, value} (module/src/log/log.nim): content-addressed and hash-linked, sealed under the membership epoch key (coordination/session.nim), with no per-author signature — tracked as exo-f76. The three properties are probed: probe_reducer_idempotent, probe_convergence_reorder_stepper, probe_state_cold_start_matches"
+        },
+        {
           "grade": "measured",
           "note": "The demo folds get_messages and holds no second record — its own CLAUDE.md states this as a rule, and the build follows it"
         }
       ],
-      "recheck": "Built at P0; made a literal multi-party fold at P3 (two instances converge over encrypted transport). Re-check if the event names (F-2's v0 list) change."
+      "recheck": "When exo-f76 lands (events become author-signed — the log heading, the event labels and the strip change), or if the event names (F-2's v0 list) change."
     },
     {
       "file": "mech-membership-epochs.svg",
@@ -503,9 +550,9 @@
           "note": "which phase builds it, and the accept criteria"
         },
         {
-          "path": "demo/GAPS.md",
-          "sha256": "f8846a99e98b5eb715350294561d6d56da997dec9ce3e476c2d2ffbd2ba6e8ff",
-          "note": "what the demo does instead, stated row by row"
+          "path": "module/src/crypto/epoch_crypto.nim",
+          "sha256": "bb2c114bae579e7deb5c5c686c16b71323011ba98f517adee26767ce959446ca",
+          "note": "EpochCrypto: sealed-box key wrap; add, admit and removal each open a new epoch"
         }
       ],
       "evidence": [
@@ -515,19 +562,19 @@
         },
         {
           "grade": "from-source",
-          "note": "The demo neither verifies nor claims the chat module's re-keying, stated as such in GAPS.md §5"
+          "note": "Built: EpochCrypto (module/src/crypto/epoch_crypto.nim) wraps each epoch key to the members as a libsodium sealed box (ECIES over X25519) and opens a new epoch on every add, admit and removal; verified by epoch_crypto_test and the probe_epoch_* probes"
         },
         {
           "grade": "illustrative",
           "note": "Alice, Bob and Carol are an example. The forward-only limit on removal is a property of any such scheme, not a measurement"
         }
       ],
-      "recheck": "Built at P3 as ECIES-secp256k1 epochs with F-16 verified in test. Re-check when native logos-chat-module is adopted — its MLS epochs replace these behind the same ConversationCrypto seam."
+      "recheck": "Built at P3 as X25519 sealed-box epochs behind ConversationCrypto, F-16 verified in test. Re-check when native logos-chat-module is adopted — its MLS epochs replace these behind the same seam."
     },
     {
       "file": "mech-driver-seam.svg",
       "serves": "BUILD",
-      "shows": "The seven driver methods, the three divergence axes describe returns, three drivers behind one interface, and the conformance suite that gates them.",
+      "shows": "F-6's seven driver methods and where the build puts each (the Driver, the core's Collection, the Settlement seam), the axes describe returns, three of the registry's drivers behind one interface, and the conformance suite that gates them.",
       "sources": [
         {
           "path": "docs/01-furps.md",
@@ -541,8 +588,23 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "2ab6fac5b81393829bd89da80d30f01813f04ecc9ebbe05e58c520d2f8607371",
+          "sha256": "d723cd10f386ee3fecd1c492316292ef5c5c48edaf72cdec293a01f97b48a787",
           "note": "the invariant this figure draws, in its shortest form"
+        },
+        {
+          "path": "module/src/drivers/driver.nim",
+          "sha256": "dc9573ca287c435fb960660d32c17908a9d588b8b241ff5c1bfcf35b64830f74",
+          "note": "describe, verifyContribution, environment, the Collection"
+        },
+        {
+          "path": "module/src/drivers/registry.nim",
+          "sha256": "2e2b7430bbed8dd8798f2355dd70912c9042ef80b730dc765f88032914315986",
+          "note": "the registered driver kinds"
+        },
+        {
+          "path": "module/src/settlement/settlement.nim",
+          "sha256": "7d2ee042af5cf0a209eb297f56e34360f3d83aaebedc9ba755547df7f244ec1a",
+          "note": "assemble, submit and watch on the Settlement seam"
         }
       ],
       "evidence": [
@@ -552,10 +614,10 @@
         },
         {
           "grade": "from-source",
-          "note": "The demo has no drivers and no seam — a send is a send"
+          "note": "The split, read from the build: driver.nim (describe, verifyContribution, environment, Collection), intents/materialization.nim (canonicalize and the fold hooks), drivers/manifest.nim and profile.nim, settlement/settlement.nim (assemble, submit, watch); the twelve kinds from drivers/registry.nim. F-8's queue is not in the code"
         }
       ],
-      "recheck": "P1 and P2. The threshold column is P6 and the least settled of the three."
+      "recheck": "When a driver kind is added to registry.nim, the Driver's methods change, or F-8's queue lands."
     },
     {
       "file": "mech-two-identities.svg",
@@ -611,8 +673,13 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "2ab6fac5b81393829bd89da80d30f01813f04ecc9ebbe05e58c520d2f8607371",
+          "sha256": "d723cd10f386ee3fecd1c492316292ef5c5c48edaf72cdec293a01f97b48a787",
           "note": "the invariant this figure draws, in its shortest form"
+        },
+        {
+          "path": "module/src/plugins/plugin.nim",
+          "sha256": "d7751f4669356052c81e5f0fbc6a27480827194ad1c5df72b1352276257ddbde",
+          "note": "the P1 sandbox: noSideEffect Plugin, the one-operation grant, typed-only output, BlockKind"
         }
       ],
       "evidence": [
@@ -623,9 +690,13 @@
         {
           "grade": "from-source",
           "note": "The P5 accept criterion: a plugin whose materialization diverges from its displayed effect is blocked by core, demonstrated in CI"
+        },
+        {
+          "grade": "from-source",
+          "note": "Part built at P1: plugin.nim (a noSideEffect Plugin, pluginGrant = {opEmitBlock}, acceptOutput typed-only, BlockKind text/amount/choice/fact) and four probe_plugin_* probes. No plugin runtime, bundle verification, runtime manifest enforcement or lying-plugin test exists — those rows carry P5 tags"
         }
       ],
-      "recheck": "P5. Third-party isolation via capability-restricted modules is ADR-007 and post-v1, which the strip says."
+      "recheck": "P5, when the plugin runtime lands. Third-party isolation via capability-restricted modules is ADR-007 and post-v1."
     },
     {
       "file": "pipeline-three-leaks.svg",
@@ -984,7 +1055,7 @@
     {
       "file": "mech-wallet-seam.svg",
       "serves": "BOTH",
-      "shows": "A Wallet aggregate over a ChainAdapter seam with two adapters (EVM, mock shielded), the four divergences the seam keeps distinct (account model, assets, finality, failure), and where signing (FS-4) and the untrusted RPC (inv 8) sit.",
+      "shows": "A Wallet aggregate over a ChainAdapter seam, drawn with its first two adapters (EVM, mock shielded) of the five it has today, the four divergences the seam keeps distinct (account model, assets, finality, failure), and where signing (FS-4) and the untrusted RPC (inv 8) sit.",
       "sources": [
         {
           "path": "docs/01-furps.md",
@@ -998,8 +1069,23 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "2ab6fac5b81393829bd89da80d30f01813f04ecc9ebbe05e58c520d2f8607371",
+          "sha256": "d723cd10f386ee3fecd1c492316292ef5c5c48edaf72cdec293a01f97b48a787",
           "note": "the src/wallet layout and the reuse posture"
+        },
+        {
+          "path": "module/src/wallet/lez_adapter.nim",
+          "sha256": "882e482e39836d2f44e0fef7196dddca1ab4c0741b2e26a6467d4520bde87df6",
+          "note": "the real LEZ adapter"
+        },
+        {
+          "path": "module/src/wallet/btc_adapter.nim",
+          "sha256": "33440552f0465e426fb7f1a776748850ecd81a2601ab4fcf2040f4079a01f5ac",
+          "note": "BitcoindAdapter"
+        },
+        {
+          "path": "module/src/lez/multisig_chain.nim",
+          "sha256": "0daaa5056271a62f834cc9c4da77037024d6f3b180285805b159fbcbe1b78245",
+          "note": "LezMultisigChain, the LEZ multisig program's chain"
         }
       ],
       "evidence": [
@@ -1014,9 +1100,13 @@
         {
           "grade": "measured",
           "note": "both adapters built and tested (wallet_types_test, wallet_mock_test, wallet_evm_test); the hosted wallet_* surface is wired"
+        },
+        {
+          "grade": "from-source",
+          "note": "Five ChainAdapter impls: EvmAdapter, MockChain, LezAdapter (wallet/lez_adapter.nim), LezMultisigChain (lez/multisig_chain.nim) and BitcoindAdapter (wallet/btc_adapter.nim)"
         }
       ],
-      "recheck": "Re-check when the real LEZ adapter lands (registers behind the same seam) or a third chain is added."
+      "recheck": "When a ChainAdapter impl is added or removed, or the seam's methods change."
     },
     {
       "file": "mech-verified-reads.svg",
@@ -1035,7 +1125,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "2ab6fac5b81393829bd89da80d30f01813f04ecc9ebbe05e58c520d2f8607371",
+          "sha256": "d723cd10f386ee3fecd1c492316292ef5c5c48edaf72cdec293a01f97b48a787",
           "note": "verify.nim reuse of nim-eth and the deferred sidecar"
         }
       ],
@@ -1072,8 +1162,13 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "2ab6fac5b81393829bd89da80d30f01813f04ecc9ebbe05e58c520d2f8607371",
+          "sha256": "d723cd10f386ee3fecd1c492316292ef5c5c48edaf72cdec293a01f97b48a787",
           "note": "the reuse note and the src/wallet layout"
+        },
+        {
+          "path": "module/flake.nix",
+          "sha256": "5356bb685af31ef432435dbc5bae9a5236229692bd7c9742e909b196845922db",
+          "note": "the builder pin: corpetty/logos-module-builder@codegen-on-basecamp"
         }
       ],
       "evidence": [
@@ -1088,14 +1183,18 @@
         {
           "grade": "from-source",
           "note": "invariant 5 keeps dcbor ours; F-14 keeps curve25519 ours (the chat-curve identity)"
+        },
+        {
+          "grade": "from-source",
+          "note": "Where the hook lives: module/flake.nix pins the builder fork's codegen-on-basecamp branch; the nim.packages + RUNPATH half is upstream-pending as logos-module-builder#226"
         }
       ],
-      "recheck": "Re-check when the nim.packages hook lands upstream, or a pinned rev in module/metadata.json codegen.nim.packages is bumped."
+      "recheck": "When logos-module-builder#226 merges (the flake repoints at logos-co), or a pinned rev in module/metadata.json codegen.nim.packages is bumped."
     },
     {
       "file": "mech-driver-contract.svg",
       "serves": "BOTH",
-      "shows": "The Driver contract (describe/canonicalize/verifyContribution), the driver-generic core it plugs into, the conformance suite that grades any driver (stub + Safe pass), and the recipe for adding a new driver without touching the core.",
+      "shows": "The Driver contract (describe/canonicalize/verifyContribution plus a declared manifest and profile), the driver-generic core it plugs into, the conformance suite that grades any driver, and the recipe for adding a new driver without touching the core.",
       "sources": [
         {
           "path": "docs/01-furps.md",
@@ -1109,25 +1208,50 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "2ab6fac5b81393829bd89da80d30f01813f04ecc9ebbe05e58c520d2f8607371",
+          "sha256": "d723cd10f386ee3fecd1c492316292ef5c5c48edaf72cdec293a01f97b48a787",
           "note": "the working agreement and the Driver seam methods"
+        },
+        {
+          "path": "module/src/drivers/conformance.nim",
+          "sha256": "a424c8f1cb3fdcb43eb8af3804fac5f4413e60242220a9b5b5927b4d180d58c0",
+          "note": "checkConformance and checkProfileConformance"
+        },
+        {
+          "path": "module/src/drivers/manifest.nim",
+          "sha256": "7332bc6d9db9edc6bcdadf0eeba18b3b77883032453f47290d8f051906388352",
+          "note": "manifest(effect), UNDECLARED by default"
+        },
+        {
+          "path": "module/src/drivers/profile.nim",
+          "sha256": "bb4673b0891ba54b7fc6f9c759ba21bdb44fcf431dfa2faac6cc312ce3072bc8",
+          "note": "profile(), UNDECLARED by default"
+        },
+        {
+          "path": "module/tests/conformance_test.nim",
+          "sha256": "ae69f3a929bc351939a03b3a9678251416a54121d2e0a8720fd398e117f808b3",
+          "note": "the drivers graded by checkConformance"
+        },
+        {
+          "path": "module/tests/profile_test.nim",
+          "sha256": "535c6eb861f19c45d340af59abb39561bf17f9301e1fe6158bb605169452909a",
+          "note": "the profile check over every registered kind"
         }
       ],
       "evidence": [
         {
           "grade": "from-source",
-          "note": "invariant 6 (driver-described rounds/domain/membership/finality; the core never reads contribution bytes) and invariant 1 (re-derive-or-refuse)"
-        },
-        {
-          "grade": "measured",
-          "note": "src/drivers/conformance.nim grades a driver on those properties; tests/conformance_test passes it against stub and Safe (6/6 each)"
+          "note": "invariant 6 (driver-described rounds/domain/finality/threshold; the core never reads contribution bytes) and invariant 1 (re-derive-or-refuse); membership left describe() with ADR-015"
         },
         {
           "grade": "from-source",
-          "note": "F-6/F-7 name the axes; the plan lists FROST threshold + a describe-only LEZ driver at P6"
+          "note": "conformance.nim grades describe, canonicalize, re-derive-or-refuse, verifyContribution, convergence and the manifest (checkConformance) plus the profile (checkProfileConformance); conformance_test runs it on stub, Safe, threshold, frost, invoke and eip191, btc_driver_test and lez_multisig_driver_test on the Bitcoin and LEZ multisig drivers, and profile_test checks every kind's profile. Read from the tests, not run for this figure"
+        },
+        {
+          "grade": "from-source",
+          "note": "F-6/F-7 name the axes; FROST (frost, btc-frost, lez-frost), Bitcoin P2WSH/tapscript and the LEZ multisig program are registered in drivers/registry.nim, and a new kind is also named once in drivers/kinds.nim"
         }
       ],
-      "recheck": "Re-check when a third driver is added or a new conformance check is added to src/drivers/conformance.nim."
+      "recheck": "When a driver kind is added, or a check is added to src/drivers/conformance.nim."
     }
   ]
 }

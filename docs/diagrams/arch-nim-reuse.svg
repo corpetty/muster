@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 560" width="880" height="560" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>How the module reuses the Nimbus Nim stack</title>
-  <desc>metadata.json's codegen.nim.packages pins a flat closure of Status/Nimbus Nim libraries; the logos-module-builder's nim.packages hook fetches each from GitHub (with submodules where a package vendors C) and adds it to the Nim import path with --path, so the module core compiles against the org stack instead of hand-rolled code. Reused: stint (amounts), nim-secp256k1 (one secp source), nim-eth (RLP signing + verifyMptProof), nim-web3 (typed RPC over chronos), nimcrypto, and their closure. Kept ours on purpose: dcbor (deterministic signing-path encoding, invariant 5) and curve25519 over libsodium (the F-14 chat-curve identity). The same hook now also pins muster's own SDK, logos_sdk (github: corpetty/logos-nim-sdk, subdir src), which provides the lp_* runtime + the generated surface. The hook plus per-package fetchSubmodules are local builder-fork commits worth upstreaming.</desc>
+  <desc>metadata.json's codegen.nim.packages pins a flat closure of Status/Nimbus Nim libraries; the logos-module-builder's nim.packages hook fetches each from GitHub (with submodules where a package vendors C) and adds it to the Nim import path with --path, so the module core compiles against the org stack instead of hand-rolled code. Reused: stint (amounts), nim-secp256k1 (one secp source), nim-eth (RLP signing + verifyMptProof), nim-web3 (typed RPC over chronos), nimcrypto, and their closure. Kept ours on purpose: dcbor (deterministic signing-path encoding, invariant 5) and curve25519 over libsodium (the F-14 chat-curve identity). The same hook now also pins muster's own SDK, logos_sdk (github: corpetty/logos-nim-sdk, subdir src), which provides the lp_* runtime + the generated surface. The hook plus per-package fetchSubmodules are commits on the builder fork the module pins (corpetty/logos-module-builder@codegen-on-basecamp), upstream-pending as logos-module-builder#226.</desc>
 <!-- provenance
      serves:   BUILD
      shows:    The reuse toolchain: metadata.json's pinned nim.packages closure -> the
@@ -10,6 +10,7 @@
      sources:  module/metadata.json
                docs/02-implementation-plan.md
                CLAUDE.md
+               module/flake.nix
      evidence: [from-source] ADR-014 records the decision, the nim.packages hook, the
                    reused set and what is kept ours; metadata.json carries the pinned closure
                [measured] the portable .lgx builds clean with the whole closure (incl.
@@ -17,8 +18,11 @@
                    secp256k1
                [from-source] invariant 5 keeps dcbor ours; F-14 keeps curve25519 ours
                    (the chat-curve identity)
-     recheck:  Re-check when the nim.packages hook lands upstream, or a pinned rev in
-               module/metadata.json codegen.nim.packages is bumped.
+               [from-source] Where the hook lives: module/flake.nix pins the builder
+                   fork's codegen-on-basecamp branch; the nim.packages + RUNPATH half is
+                   upstream-pending as logos-module-builder#226
+     recheck:  When logos-module-builder#226 merges (the flake repoints at logos-co), or
+               a pinned rev in module/metadata.json codegen.nim.packages is bumped.
 -->
 
   <defs>
@@ -89,5 +93,5 @@
   <text x="56" y="480" font-size="11" fill="#96A19B"><tspan font-weight="600">bearssl</tspan> vendors BearSSL C via a git submodule — so the hook gained per-package fetchSubmodules.</text>
 
   <text x="40" y="512" font-size="10.5" font-weight="600" fill="#1E6B52">Verified: all 42 invariant probes pass on nim-secp256k1 with no system lib; safe_anvil_e2e runs green on live anvil.</text>
-  <text x="40" y="530" font-size="10.5" fill="#3F4742">The nim.packages hook + fetchSubmodules are local builder-fork commits (branch nim-cdylib-authoring), worth upstreaming.</text>
+  <text x="40" y="530" font-size="10.5" fill="#3F4742">The nim.packages hook + fetchSubmodules ride the pinned builder fork (codegen-on-basecamp), upstream-pending as #226.</text>
 </svg>

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 550" width="880" height="550" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>Plugins emit typed blocks and nothing else</title>
-  <desc>A plugin is a pure function from conversation context and user input to typed blocks and proposed effects. It never signs, never holds keys, has no ambient network access, and never gets a canvas — the render vocabulary is closed and adding to it is a core release. Specified as F-12, F-13 and FS-5; built at P1.</desc>
+  <desc>A plugin is a pure function from conversation context and user input to typed blocks and proposed effects. It never signs, never holds keys, has no ambient network access, and never gets a canvas — the render vocabulary is closed and adding to it is a core release. Specified as F-12, F-13 and FS-5. Part built: the sandbox and its invariant-3 boundary landed at P1 — a noSideEffect plugin type, a one-operation grant, typed-only output, four probes — with the block kinds text, amount, choice and fact; the plugin runtime, signed bundles, runtime manifest enforcement and the lying-plugin test are P5.</desc>
 <!-- provenance
      serves:   BUILD
      shows:    A plugin as a pure function to typed blocks, the closed render vocabulary,
@@ -9,12 +9,18 @@
      sources:  docs/01-furps.md
                docs/02-implementation-plan.md
                CLAUDE.md
+               module/src/plugins/plugin.nim
      evidence: [from-source] F-12's signature and prohibitions, F-13's six-item closed
                    vocabulary, FS-4 and FS-5 — all verbatim
                [from-source] The P5 accept criterion: a plugin whose materialization
                    diverges from its displayed effect is blocked by core, demonstrated in CI
-     recheck:  P5. Third-party isolation via capability-restricted modules is ADR-007 and
-               post-v1, which the strip says.
+               [from-source] Part built at P1: plugin.nim (a noSideEffect Plugin,
+                   pluginGrant = {opEmitBlock}, acceptOutput typed-only, BlockKind
+                   text/amount/choice/fact) and four probe_plugin_* probes. No plugin
+                   runtime, bundle verification, runtime manifest enforcement or lying-plugin
+                   test exists — those rows carry P5 tags
+     recheck:  P5, when the plugin runtime lands. Third-party isolation via capability-
+               restricted modules is ADR-007 and post-v1.
 -->
 
   <defs>
@@ -30,8 +36,8 @@
 
   <rect x="40" y="80" width="800" height="30" rx="5" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.2"/>
   <rect x="52" y="88" width="150" height="15" rx="7.5" fill="#A32D1E"/>
-  <text x="127" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#F6E3DF">SPECIFIED · NOT BUILT</text>
-  <text x="214" y="99" font-size="10" fill="#3F4742">F-12, F-13, FS-5 · built at P5 · the demo has no plugin runtime; third-party isolation is documented now, built post-v1</text>
+  <text x="127" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#F6E3DF">SPECIFIED · PART BUILT</text>
+  <text x="214" y="99" font-size="10" fill="#3F4742">F-12, F-13, FS-5 · P1 built the sandbox + inv-3 boundary (four probes) · runtime, bundles, lying-plugin test: P5</text>
 
   <!-- ══ the function ══ -->
   <rect x="40" y="132" width="212" height="66" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
@@ -56,13 +62,15 @@
   <!-- ══ never ══ -->
   <rect x="40" y="216" width="800" height="62" rx="6" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.4"/>
   <text x="56" y="238" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#A32D1E">WHAT A PLUGIN NEVER DOES — F-12, FS-4</text>
+  <text x="824" y="238" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="end" fill="#1E6B52">THE NEVERS: BUILT P1 · FOUR PROBES</text>
   <text x="56" y="258" font-size="11.5" font-weight="600" fill="#1A1F1C">Never signs. Never holds keys. No ambient network access.</text>
   <text x="470" y="258" font-size="10.5" fill="#3F4742">Key material is not reachable by a plugin at all —</text>
   <text x="470" y="272" font-size="10.5" fill="#3F4742">it is not in the log, and not in any export.</text>
-  <text x="56" y="272" font-size="10.5" fill="#3F4742">Declared data needs are met by the user's own node.</text>
+  <text x="56" y="272" font-size="10.5" fill="#3F4742">Declared data needs are met by the user's own node (P5).</text>
 
   <!-- ══ closed vocabulary ══ -->
   <text x="40" y="306" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">F-13 — THE RENDER VOCABULARY IS CLOSED</text>
+  <text x="840" y="306" font-size="9.5" text-anchor="end" fill="#656E66">F-13's set, as specified · the P1 sandbox types text · amount · choice · fact</text>
 
   <rect x="40" y="316" width="118" height="26" rx="13" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
   <text x="99" y="333" font-size="10" text-anchor="middle" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">message</text>
@@ -83,18 +91,20 @@
   <!-- ══ distribution ══ -->
   <rect x="40" y="396" width="390" height="76" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
   <text x="56" y="418" font-size="10.5" font-weight="600" fill="#1A1F1C">Installing one is trusting a hash</text>
+  <text x="414" y="418" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="end" fill="#A32D1E">P5 · NOT BUILT</text>
   <text x="56" y="436" font-size="10" fill="#3F4742">Signed, content-addressed bundles, verified</text>
   <text x="56" y="450" font-size="10" fill="#3F4742">against their hash before load. Not a registry,</text>
   <text x="56" y="464" font-size="10" fill="#3F4742">and so not a registry to compromise.</text>
 
   <rect x="450" y="396" width="390" height="76" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
   <text x="466" y="418" font-size="10.5" font-weight="600" fill="#1A1F1C">The manifest is enforced at runtime</text>
+  <text x="824" y="418" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="end" fill="#A32D1E">P5 · NOT BUILT</text>
   <text x="466" y="436" font-size="10" fill="#3F4742">No network, no key APIs, no storage outside</text>
   <text x="466" y="450" font-size="10" fill="#3F4742">declared scopes. For third parties the platform's</text>
   <text x="466" y="464" font-size="10" fill="#3F4742">subprocess and token model is the sandbox.</text>
 
   <!-- ══ the test ══ -->
   <rect x="40" y="488" width="800" height="46" rx="6" fill="#23282A"/>
-  <text x="56" y="508" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#96A19B">THE ACCEPT CRITERION — DEMONSTRATED IN CI, NOT BY REVIEW</text>
+  <text x="56" y="508" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#96A19B">THE P5 ACCEPT CRITERION — TO BE DEMONSTRATED IN CI · NOT YET WRITTEN</text>
   <text x="56" y="525" font-size="11.5" font-weight="600" fill="#DCE2DE">A plugin whose proposed materialization diverges from its displayed effect is blocked by the core. The lying-plugin test.</text>
 </svg>

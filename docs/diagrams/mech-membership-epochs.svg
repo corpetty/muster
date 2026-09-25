@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 522" width="880" height="522" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>Membership epochs: joining does not grant the past</title>
-  <desc>Adding a member re-keys the conversation forward, so prior epochs stay unreadable to them; removing one rotates the epoch immediately. The seam drawn in the thread depends on this being true rather than merely displayed. Built at P3 as an ECIES-secp256k1 epoch layer with the F-16 property verified in test; ADR-010 resolved.</desc>
+  <desc>Adding a member re-keys the conversation forward, so prior epochs stay unreadable to them; removing one rotates the epoch immediately. The seam drawn in the thread depends on this being true rather than merely displayed. Built at P3 as an epoch layer whose keys wrap to each member as libsodium sealed boxes (ECIES over X25519), with the F-16 property verified in test; ADR-010 resolved.</desc>
 <!-- provenance
      serves:   BOTH
      shows:    Three epochs across a join and a removal: what a joining member cannot
@@ -8,16 +8,18 @@
                is a cryptographic claim.
      sources:  docs/01-furps.md
                docs/02-implementation-plan.md
-               demo/GAPS.md
+               module/src/crypto/epoch_crypto.nim
      evidence: [from-source] F-16 — adding re-keys forward, removal rotates immediately —
                    and U-6's seam
-               [from-source] The demo neither verifies nor claims the chat module's re-
-                   keying, stated as such in GAPS.md §5
+               [from-source] Built: EpochCrypto (module/src/crypto/epoch_crypto.nim)
+                   wraps each epoch key to the members as a libsodium sealed box (ECIES over
+                   X25519) and opens a new epoch on every add, admit and removal; verified by
+                   epoch_crypto_test and the probe_epoch_* probes
                [illustrative] Alice, Bob and Carol are an example. The forward-only limit
                    on removal is a property of any such scheme, not a measurement
-     recheck:  Built at P3 as ECIES-secp256k1 epochs with F-16 verified in test. Re-check
-               when native logos-chat-module is adopted — its MLS epochs replace these
-               behind the same ConversationCrypto seam.
+     recheck:  Built at P3 as X25519 sealed-box epochs behind ConversationCrypto, F-16
+               verified in test. Re-check when native logos-chat-module is adopted — its
+               MLS epochs replace these behind the same seam.
 -->
 
   <rect width="880" height="522" fill="#E4E6E0"/>
@@ -25,10 +27,10 @@
   <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">Joining a room does not grant its past</text>
   <text x="40" y="64" font-size="13.5" fill="#656E66">The seam drawn in the thread is a claim about cryptography, not a rendering choice — which is why it has to be true.</text>
 
-  <rect x="40" y="80" width="800" height="30" rx="5" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.2"/>
-  <rect x="52" y="88" width="150" height="15" rx="7.5" fill="#A32D1E"/>
-  <text x="127" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#F6E3DF">SPECIFIED · NOT BUILT</text>
-  <text x="214" y="99" font-size="10" fill="#3F4742">F-16, U-6 · built at P3 (ECIES-secp256k1, F-16 verified); ADR-010 resolved · the demo neither verifies nor claims chat's re-keying</text>
+  <rect x="40" y="80" width="800" height="30" rx="5" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1.2"/>
+  <rect x="52" y="88" width="80" height="15" rx="7.5" fill="#1E6B52"/>
+  <text x="92" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#DFEDE6">BUILT · F-16</text>
+  <text x="144" y="99" font-size="10" fill="#2A4A3C">Built at P3 — X25519 sealed-box epochs, re-keyed on every admit and removal; verified by epoch_crypto_test + probe_epoch_*</text>
 
   <!-- ══ epochs ══ -->
   <rect x="40" y="140" width="250" height="88" rx="6" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.2"/>
