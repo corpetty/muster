@@ -19,3 +19,11 @@ result-*
 module/flake.lock
 ui/flake.lock
 .rtamt-venv/
+
+# Third-party reference sources pulled down for the multisig landscape research
+# (Substrate pallet_multisig / AHP, Cosmos SDK group + tx). Not ours to redistribute —
+# ms.go is under an evaluation-only license — so never committed.
+/ahp.rs
+/multisig.rs
+/ms.go
+/tx.proto
