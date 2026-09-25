@@ -208,6 +208,9 @@ module/tests/run-suite.sh e2e btc_regtest_e2e
 ```
 
 **A LEZ v0.2.4 sequencer.** `infra/lez/localnet.sh` runs one on `127.0.0.1:3040` (the
-first build takes about 15 minutes; its header lists the toolchain, and
-`docs/labbook/lez-multisig-versions.md` the reasons). The public testnet works too:
+first build takes 5–15 minutes; its header lists the toolchain, including what a machine
+with no system g++ needs, and `docs/labbook/lez-multisig-versions.md` the reasons).
+`lez_multisig_live_e2e` deploys the program first when `MUSTER_LEZ_MULTISIG_BIN` names the
+guest — `make build` in `logos-co/lez-multisig` (PR #45 or later), which reproduces the
+testnet's ImageID `2ced3d30…d4c7`. The public testnet works too:
 `TEST_ARGS="https://testnet.lez.logos.co 40"`.
