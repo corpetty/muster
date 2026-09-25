@@ -15,7 +15,7 @@ in `../contracts/specs/derived-exo-*.spec.json`; each names probes under
 
 **P0–P4 landed; P3 built — two instances converge over the live Logos fleet;
 the multisig families (Phases A–D) landed 2026-09-24/25.** The signing-path core,
-the intent lifecycle and driver interface, all ten invariants (92 unit tests and
+the intent lifecycle and driver interface, all ten invariants (93 unit tests and
 55 invariant probes, green via `tests/run-suite.sh`), and the LIDL codegen that
 generates the surface from the contract are all in. P4 put the whole lifecycle
 through the real UI (ADR-013). P3 — transport, encryption, and multi-party
@@ -25,8 +25,9 @@ The room coordinates and settles multisigs of four kinds: Safe v1.4.1 (the real
 contract on anvil, at the live nonce), Bitcoin P2WSH / tapscript through PSBT
 (regtest), the LEZ multisig program (on the public LEZ testnet), and FROST
 (one BIP-340 signature on Bitcoin, or from an untweaked LEZ account). What remains
-is the multi-party runs across two machines, and author-signed log events
-(exo-f76). See [`../CLAUDE.md`](../CLAUDE.md) for the phase-by-phase detail and
+is the multi-party runs across two machines. Author-bearing log events (chat,
+declines, material shares, account disclosures, FROST joins) are signed by their author,
+and the room reads only those that verify (exo-f76). See [`../CLAUDE.md`](../CLAUDE.md) for the phase-by-phase detail and
 [`../docs/two-instance-fleet-runbook.md`](../docs/two-instance-fleet-runbook.md)
 for the operator flow.
 
@@ -98,7 +99,8 @@ src/
   crypto/       two bound identities (secp256k1 auth + Ed25519/X25519 enc),
                 signed binding, keystore seam, epoch crypto (F-14/F-16)
   transport/    Transport interface + local/delivery transports (inv 8)
-  coordination/ multi-party session · intent lifecycle = reduce(log) · readiness ·
+  coordination/ multi-party session · intent lifecycle = reduce(log) · authorship (author-
+                signed events, the room's authentic view) · readiness ·
                 information-flow view · offers/material folds
   wallet/       chain-agnostic wallet: EVM + Bitcoin Core + mock + real LEZ adapters, verified reads
   settlement/   the settlement seam, chosen by the driver's profile: Safe · Bitcoin · LEZ multisig · LEZ FROST
@@ -122,4 +124,4 @@ tests/          unit tests · run-suite.sh (all of them, one command) · vectors
 - Invariant tests are append-only. Extend, don't weaken.
 - The module imports nothing from `../ui/`; it reaches other modules only through logos-core.
 
-<!-- rot-check: current-phase=CLAUDE.md sha256=23859ca04cb56c32a0e61229dc150cf04894b7c4783a2d728f2c3d161cfe6463 -->
+<!-- rot-check: current-phase=CLAUDE.md sha256=4869cf24ab98183b8d931013bbd718db9f9c6b971d7ea042f9b6d897c40e8f5e -->
