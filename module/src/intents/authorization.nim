@@ -64,7 +64,10 @@ proc checkAuthorization*(a: Authorization, now: uint64,
     return (false, "authorization expired", default(Address))
   if expectedRoot.len > 0 and a.materializationRoot != expectedRoot:
     return (false, "materialization root does not match the call being dispatched", default(Address))
-  let recovered = ecrecover(authorizationDigest(a), a.signature)
+  var recovered: Address
+  try: recovered = ecrecover(authorizationDigest(a), a.signature)
+  except Secp256k1Error:
+    return (false, "signature is malformed", default(Address))
   if recovered != a.issuer:
     return (false, "signature does not recover to the claimed issuer", default(Address))
   if allowedIssuers.len > 0 and recovered notin allowedIssuers:

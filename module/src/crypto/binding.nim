@@ -99,5 +99,5 @@ proc bindingBinds*(st: LinkStatement, owners: openArray[Address], now: uint64): 
     for o in owners:
       if o == signer: return true
     false
-  except BindingError:
+  except BindingError, Secp256k1Error:   # expired, or a malformed signature: binds no one
     false

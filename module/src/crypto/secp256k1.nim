@@ -67,7 +67,12 @@ proc signRecoverable*(msgHash: array[32, byte], seckey: array[32, byte]): Signat
 proc recoversToOwner*(msgHash: array[32, byte], sig: Signature65, owners: openArray[Address]): bool =
   ## True iff the signature over msgHash recovers to one of the owners (Safe's
   ## checkSignatures, minus ordering/threshold which the collection core handles).
-  let a = ecrecover(msgHash, sig)
+  ## A malformed signature (a recovery id outside 0..3, r/s that recover nothing) is
+  ## simply not an owner's: false, never a raise — the fold calls this on bytes any
+  ## member can publish, so a raise here would break reduce(log) for the whole room.
+  var a: Address
+  try: a = ecrecover(msgHash, sig)
+  except Secp256k1Error: return false
   for o in owners:
     if o == a: return true
   false
