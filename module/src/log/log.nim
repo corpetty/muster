@@ -1,10 +1,12 @@
 ## Content-addressed, hash-linked log and its reducer (spec:
 ## contracts/specs/derived-exo-548.spec.json, invariant 4).
 ##
-## An Event carries no author signature: in the room, the session seals each one
+## An Event carries no signature of its own: in the room, the session seals each one
 ## under the membership epoch key (coordination/session.nim), which proves a member
-## sent it but not which one. A kind that names its author (message, decline,
-## material share) is therefore only as good as that claim — exo-f76.
+## sent it but not which one. The kinds that name their author (message, decline,
+## material share, account disclosure, FROST join) carry that author's signature in
+## their value, and the room reads only those that verify (coordination/authorship.nim,
+## exo-f76). This log stays kind-agnostic: it keeps whatever it received.
 ##
 ## State is always reduce(log): a pure, deterministic function of the event set.
 ## Events are content-addressed (their id is the digest of a domain-separated

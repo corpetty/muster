@@ -126,9 +126,9 @@ block:
   c.fund(pay, 20)
   doAssert c.submit(A, createOp(K, 2, @[A, B, C]), payer = pay).ok
   var r = newRoom("/muster/1/lez-rebuilt/proto")
-  r.alice.publish(accountDiscloseEvent(RoomAccount(family: LezMultisigFamily, chain: Chain,
+  r.discloseAs("alice", RoomAccount(family: LezMultisigFamily, chain: Chain,
     address: toHex(statePda(psLee02, program, K)), label: "T", signers: @[A, B, C].mapIt(toHex(it)),
-    threshold: 2, config: cfgOf("account-ids")), "alice"))
+    threshold: 2, config: cfgOf("account-ids")))
   r.bob.poll()
   proc res(s: CoordinationSession): DriverFor =
     let sess = s

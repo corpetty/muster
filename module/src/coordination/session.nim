@@ -12,7 +12,7 @@
 ## This is the join point: swap LocalTransport→delivery for a real network, or
 ## EpochCrypto→native chat, and this layer is unchanged (both are interfaces).
 
-import std/[json, sequtils]
+import std/[json, sequtils, tables]
 import ../transport/transport
 import ../crypto/conversation
 import ../crypto/binding
@@ -28,6 +28,7 @@ type
     log*: Log
     pending: seq[LinkStatement]  ## join-requests seen but not yet admitted (each carries a binding; no authority)
     invites: seq[seq[byte]]      ## invite frames seen on this (inbox) topic — opaque, sealed to the owner; the module opens them
+    authorChecked*: Table[string, bool]  ## exo-f76: event id → its author signature verifies (authorship.nim). A pure function of (topic, event), so safe to cache
 
 # Every frame on the topic carries a 1-byte kind, so the membership handshake
 # shares the topic with data without either misreading the other.
@@ -89,6 +90,9 @@ proc newCoordinationSession*(transport: Transport, crypto: ConversationCrypto,
   transport.subscribe(topic, proc (m: IncomingMessage) {.gcsafe.} =
     {.cast(gcsafe).}:                 # crypto.open uses secp's global context
       self.ingestEnvelope(m))
+
+proc topic*(s: CoordinationSession): string = s.topic
+  ## The room's content topic — what an author signature binds to (authorship.nim).
 
 proc publish*(s: CoordinationSession, e: Event) =
   ## Record locally, then broadcast the sealed event to the room.

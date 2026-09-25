@@ -24,6 +24,7 @@ import ../intents/materialization
 import ../intents/lifecycle
 import ../intents/signing_payload
 import ./session
+import ./authorship   # the room's authentic view + author-signed publishing (exo-f76)
 import ./intents
 import ./attest
 
@@ -66,7 +67,7 @@ proc liveProposeIntent*(s: CoordinationSession, ks: Keystore, driverFor: DriverF
   let author = hex0x(ks.encIdentity().toBytes())
   let refBody = $(%*{"kind": "intent-ref", "intentId": id})
   let (_, ev) = newMessageEvent(author, nowSec, refBody, msgSeq)
-  s.publish(ev)
+  s.publishAuthored(ks, ev)
   id
 
 proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
@@ -87,7 +88,7 @@ proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
   ## outside muster: it is published as-is and graded unattested, never shown as
   ## committed.
   s.poll()
-  let events = s.log.allEvents()
+  let events = s.roomEvents()
   let drv = driverFor(intentPolicyOf(events, intentId))   # THIS intent's own policy
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return "unknown-intent"
@@ -164,7 +165,7 @@ proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
   if inAppSecpRef.len > 0:
     let st = ks.bindingForKey(inAppSecpRef, bindingCtx)
     s.publish(keyBindingEvent(intentId, who, hex0x(encodeLink(st))))
-  intentState(s.log.allEvents(), driverFor, intentId)
+  intentState(s.roomEvents(), driverFor, intentId)
 
 # ── signers outside muster (exo-a50.2.6; seam S8) ────────────────────────────
 type
@@ -187,7 +188,7 @@ proc liveExportOutside*(s: CoordinationSession, driverFor: DriverFor, intentId: 
   ## The proposal's effect in its driver's outside-signer format (a Bitcoin spend: a
   ## PSBT). Nothing is signed or published; a driver with no such format says so.
   s.poll()
-  let events = s.log.allEvents()
+  let events = s.roomEvents()
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return OutsideExport(error: "unknown-intent")
   let drv = driverFor(intentPolicyOf(events, intentId))
@@ -205,7 +206,7 @@ proc liveImportOutside*(s: CoordinationSession, ks: Keystore, driverFor: DriverF
   ## never committed. A response to a different effect is refused whole, publishing
   ## nothing; a signer the room already has an approval from is not re-published.
   s.poll()
-  let events = s.log.allEvents()
+  let events = s.roomEvents()
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return OutsideImport(error: "unknown-intent")
   let drv = driverFor(intentPolicyOf(events, intentId))
@@ -228,18 +229,18 @@ proc liveImportOutside*(s: CoordinationSession, ks: Keystore, driverFor: DriverF
     if st in ["unknown-intent", "unsupported-driver", "expired", "rejected"]:
       result.error = st
       result.detail = "the approval by " & signer & " was not added"
-      result.state = intentState(s.log.allEvents(), driverFor, intentId)
+      result.state = intentState(s.roomEvents(), driverFor, intentId)
       return
     result.imported.add signer
   result.ok = true
-  result.state = intentState(s.log.allEvents(), driverFor, intentId)
+  result.state = intentState(s.roomEvents(), driverFor, intentId)
 
 proc liveSubmitPrecheck*(s: CoordinationSession, driverFor: DriverFor,
                          intentId: string, nowSec: uint64 = 0): string =
   ## What must hold before a room intent is settled: "" when it may proceed, else the
   ## refusal. Only a Safe-policy intent settles on-chain, and only once executable.
   s.poll()
-  let events = s.log.allEvents()
+  let events = s.roomEvents()
   let policy = intentPolicyOf(events, intentId)
   # what settles is the family's own settlement (exo-a50.1.5): a family whose profile
   # settles nowhere (a room family) has nothing to put on-chain — read, never a string
@@ -261,7 +262,7 @@ proc liveReannounce*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
   ## events under the new epoch. Approvals are NOT re-shared: what members signed
   ## before the joiner arrived stays in its epoch. Returns how many were re-announced.
   s.poll()
-  let events = s.log.allEvents()
+  let events = s.roomEvents()
   let folded = reduceIntents(events, driverFor)
   let author = hex0x(ks.encIdentity().toBytes())
   for id, it in folded:
@@ -276,5 +277,5 @@ proc liveReannounce*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
     inc msgSeq
     let refBody = $(%*{"kind": "intent-ref", "intentId": id})
     let (_, ev) = newMessageEvent(author, nowSec, refBody, msgSeq)
-    s.publish(ev)
+    s.publishAuthored(ks, ev)
     inc result

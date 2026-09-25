@@ -47,7 +47,7 @@ let idB = accountId(acctB.chain, acctB.address)
 
 proc runRoom(topic: string, acct: RoomAccount, n: int): (Room, string) =
   var r = newRoom(topic)
-  r.alice.publish(accountDiscloseEvent(acct, "alice"))
+  r.discloseAs("alice", acct)
   r.bob.poll()
   let policy = qualify("safe", accountId(acct.chain, acct.address))
   let eff = effectFor("safe", n, "\"sources\":{\"value\":\"read\",\"nonce\":\"read\"}")

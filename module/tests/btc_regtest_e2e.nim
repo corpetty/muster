@@ -113,8 +113,8 @@ for (family, kind) in [(P2wshFamily, "btc-p2wsh"), (TapscriptFamily, "btc-tapscr
 
   # ── 3. disclose, propose, Alice approves in-app ────────────────────────────────
   var r = newRoom("/muster/1/btc-e2e-" & kind & "/proto")
-  r.alice.publish(accountDiscloseEvent(RoomAccount(family: family, chain: acct.chain, address: acct.address,
-    label: "Vault", signers: @[A, B, C].mapIt(toHex(it)), threshold: 2), "alice"))
+  r.discloseAs("alice", RoomAccount(family: family, chain: acct.chain, address: acct.address,
+    label: "Vault", signers: @[A, B, C].mapIt(toHex(it)), threshold: 2))
   r.bob.poll()
   let resolver: DriverFor = proc(policy: string): Driver =
     driverForPolicy(policy, reduceAccounts(r.alice.log.allEvents()), proc(k: string): Driver = newUnsupportedDriver(k))

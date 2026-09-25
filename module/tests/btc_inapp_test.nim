@@ -63,8 +63,8 @@ proc resolverOf(r: Room): DriverFor =
     driverForPolicy(policy, reduceAccounts(s.log.allEvents()), proc(k: string): Driver = newUnsupportedDriver(k))
 
 proc disclose(r: Room, acct: BtcAccount, keys: seq[seq[byte]]) =
-  r.alice.publish(accountDiscloseEvent(RoomAccount(family: acct.family, chain: acct.chain,
-    address: acct.address, label: "Vault", signers: keys.mapIt(toHex(it)), threshold: acct.k), "alice"))
+  r.discloseAs("alice", RoomAccount(family: acct.family, chain: acct.chain,
+    address: acct.address, label: "Vault", signers: keys.mapIt(toHex(it)), threshold: acct.k))
   r.bob.poll()
 
 var seqNo = 0'u64
