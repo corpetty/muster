@@ -38,6 +38,14 @@ import ../src/coordination/live        # the live propose/contribute path, drive
 import ../src/coordination/accounts    # accounts disclosed by members into the room (exo-a50.1.3)
 import ../src/settlement/settlement     # the settlement seam: chosen by profile, through the adapter (exo-a50.1.5)
 import ../src/drivers/btc_multisig     # Bitcoin multisig accounts (exo-a50.2.3)
+import ../src/drivers/lez_multisig     # the LEZ multisig vote locus (exo-a50.3)
+import ../src/lez/multisig as lezms    # its on-chain objects + PDAs
+import ../src/lez/multisig_chain       # the chain seam
+import ../src/lez/tx as leztx          # base58 ids, public account ids
+import ../src/wallet/lez_multisig_live # the live chain: the member's own transactions (exo-3c9)
+import ../src/coordination/vote        # a vote-locus approval = the member's own on-chain vote
+import std/sysrand                     # a multisig create key
+import stint                           # LEZ nonces (u128)
 import ../src/bitcoin/network          # networkByCaip2
 import ../src/coordination/card_rows   # the card's fixed rows, from the profile (exo-a50.1.6)
 import ../src/coordination/invoker     # the execute seam + allowlist/capability gate (P-D2)
@@ -172,6 +180,13 @@ var gNow: uint64 = 0
 var gRpcUrl = "http://127.0.0.1:8545"
 var gRelayer = "self"
 var gBtcRpc = getEnv("MUSTER_BTC_RPC", "")   ## the user's Bitcoin node, "http://user:pass@host:port"; "" = none (exo-a50.2.6)
+# The LEZ multisig, live (exo-3c9): the user's sequencer (untrusted, invariant 8), the zone
+# it serves, and the multisig program. By default: the public testnet (the LEZ wallet's
+# own default), and the lez-multisig build deployed there (logos-co/lez-multisig#45).
+const LezDeployedMultisig = "2ced3d301a4d1cd5db6cad9c428b9f3463155073f8bacf73179c6ea6536de4c7"
+var gLezRpc = getEnv("MUSTER_LEZ_RPC", "https://testnet.lez.logos.co")
+var gLezChain = getEnv("MUSTER_LEZ_CHAIN", "lez:testnet")
+var gLezProgram = getEnv("MUSTER_LEZ_MULTISIG_PROGRAM", LezDeployedMultisig)
   ## who sends a settling transaction and pays its fee (exo-a50.1.5): "self" = this
   ## instance's own key, signed locally and sent raw; "unlocked:<0x…>" = an account the
   ## node itself unlocks (anvil's dev accounts) via eth_sendTransaction.
@@ -217,6 +232,9 @@ proc loadSettingsFile() =
       if j.hasKey("rpc"): gRpcUrl = j["rpc"].getStr()
       if j.hasKey("relayer"): gRelayer = j["relayer"].getStr("self")
       if j.hasKey("btcRpc"): gBtcRpc = j["btcRpc"].getStr()
+      if j.hasKey("lezRpc"): gLezRpc = j["lezRpc"].getStr()
+      if j.hasKey("lezChain"): gLezChain = j["lezChain"].getStr()
+      if j.hasKey("lezMultisigProgram"): gLezProgram = j["lezMultisigProgram"].getStr()
       if j.hasKey("delivery"):
         gDeliveryConfig = deliveryConfigFor(j["delivery"].getStr())
         gDeliverySaved = true
@@ -236,7 +254,8 @@ proc saveSettingsFile() =
     # the Bitcoin node URL may carry its RPC credentials — kept beside the keystore,
     # like a bitcoin.conf, and never shown back (settings() redacts them)
     writeFile(settingsPath(), $(%*{"rpc": gRpcUrl, "delivery": gDeliveryConfig, "relayer": gRelayer,
-                                   "btcRpc": gBtcRpc}))
+                                   "btcRpc": gBtcRpc, "lezRpc": gLezRpc, "lezChain": gLezChain,
+                                   "lezMultisigProgram": gLezProgram}))
   except CatchableError: discard
 
 proc toSig65(b: seq[byte]): Signature65 =
@@ -773,10 +792,57 @@ proc musterCoordinateDrivers(): string =
   ## drawn from this, so the UI names no kind of its own (exo-a50.1.2).
   $kindsJson(roomKinds())
 
+# ── the LEZ multisig, live (exo-3c9) ──────────────────────────────────────────
+# A member's LEZ accounts are keystore-derived, one per slot label "lez-member/<i>", so
+# which ones are ours is recomputed from keys, never stored (invariant 4).
+const LezMemberSlots = 64
+
+proc lezMemberLabel(i: int): string = "lez-member/" & $i
+
+proc lezHx(b: openArray[byte]): string =
+  for x in b: result.add toLowerAscii(toHex(x, 2))
+
+proc lezLiveFor(chain: string, scheme: PdaScheme, program: seq[byte], layout: ProposalLayout): LezMultisigLive =
+  newLezMultisigLive(newLezRpc(gLezRpc), moduleKeystore(), chain, scheme, program, layout,
+                     blockMs = 45_000, pollMs = 3_000)
+
+proc lezLiveOf(a: LezMultisigAccount): LezMultisigLive = lezLiveFor(a.chain, a.scheme, a.program, a.layout)
+
+proc lezOurMember(c: LezMultisigLive, members: seq[seq[byte]]): tuple[found: bool, account: seq[byte]] =
+  ## The first of this keystore's member accounts that is one of `members`, registered
+  ## with the chain so it can sign for it.
+  let ks = moduleKeystore()
+  for i in 0 ..< LezMemberSlots:
+    let id = publicAccountId(ks.lezMemberKey(lezMemberLabel(i)))
+    if id in members:
+      discard c.addMember(lezMemberLabel(i))
+      return (true, id)
+  (false, @[])
+
+proc lezIdOf(s: string): seq[byte] =
+  ## An account id given as hex (64, optional 0x) or base58; raises ValueError.
+  var h = s.strip()
+  if h.startsWith("0x"): h = h[2 .. ^1]
+  if h.len == 64 and h.allCharsInSet(HexDigits):
+    for i in 0 ..< 32: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
+    return
+  accountIdFromBase58(s.strip())
+
+proc lezChainViewOf(a: RoomAccount): ChainView =
+  if a.chain != gLezChain:
+    return (known: false, signers: @[], threshold: 0,
+            detail: "the configured LEZ sequencer serves " & gLezChain & ", the account is on " & a.chain)
+  let (_, acct, detail) = lezMultisigAccountOf(a)
+  if acct.statePda.len == 0: return (known: false, signers: @[], threshold: 0, detail: detail)
+  try: lezChainView(lezLiveOf(acct), a)
+  except CatchableError as e:
+    (known: false, signers: @[], threshold: 0, detail: "the LEZ sequencer: " & e.msg)
+
 proc chainViewOf(a: RoomAccount): ChainView =
   ## Read an account from the chain through the user's RPC, for checking a disclosure
   ## (an external read, invariant 10). Only when the RPC serves the account's chain —
   ## reading a Base Safe through an anvil node would answer the wrong question.
+  if a.family == LezMultisigFamily: return lezChainViewOf(a)
   if a.family != "evm.safe": return (known: false, signers: @[], threshold: 0,
                                      detail: "no chain read for a " & a.family & " account yet")
   if gRpcUrl.len == 0: return (known: false, signers: @[], threshold: 0, detail: "no RPC configured")
@@ -862,8 +928,32 @@ proc musterCoordinateDiscloseAccount(accountJson: string): string =
                     threshold: j{"threshold"}.getInt(0))
     if j.hasKey("signers") and j["signers"].kind == JArray:
       for x in j["signers"]: a.signers.add x.getStr().toLowerAscii()
+    if j.hasKey("config"):
+      a.config = (if j["config"].kind == JString: j["config"].getStr() else: $j["config"])
   except CatchableError as e:
     return $(%*{"error": "not an account: " & e.msg})
+  if a.family == LezMultisigFamily:
+    # a LEZ multisig (exo-3c9): the address is the state PDA its config derives, and its
+    # members and threshold are what the CHAIN holds at that PDA, never taken on trust
+    if a.config.len == 0:
+      return $(%*{"error": "a LEZ multisig account needs its config {program, createKey, pda, layout}"})
+    if a.chain.len == 0: a.chain = gLezChain
+    let (_, acct0, detail0) = lezMultisigAccountOf(a)
+    if acct0.statePda.len == 0: return $(%*{"error": "not a LEZ multisig account", "detail": detail0})
+    if a.address.len == 0: a.address = lezHx(acct0.statePda)
+    let v = lezChainViewOf(a)
+    if not v.known:
+      return $(%*{"error": "cannot read the multisig from the chain", "detail": v.detail})
+    if a.signers.len > 0 and (a.signers != v.signers or (a.threshold > 0 and a.threshold != v.threshold)):
+      return $(%*{"error": "the chain disagrees with the given members or threshold", "detail": v.detail})
+    a.signers = v.signers
+    a.threshold = v.threshold
+    let (ok, _, detail) = lezMultisigAccountOf(a)
+    if not ok: return $(%*{"error": "the LEZ multisig account does not check out", "detail": detail})
+    let me = toHex(moduleKeystore().encIdentity().toBytes())
+    gSession.publish(accountDiscloseEvent(a, me))
+    let (_, disclosed) = findAccount(roomAccounts(), accountId(a.chain, a.address))
+    return $accountsJson(@[disclosed])[0]
   if a.family.startsWith("btc."):
     # a Bitcoin account (exo-a50.2.3): k of n compressed keys; its address is DERIVED from
     # them (so it may be omitted) and a given one must match — never taken on trust
@@ -885,7 +975,7 @@ proc musterCoordinateDiscloseAccount(accountJson: string): string =
     return $accountsJson(@[disclosed])[0]
   if a.family != "evm.safe":
     return $(%*{"error": "unsupported account family: " & a.family,
-                "detail": "this client holds evm.safe and btc.* accounts"})
+                "detail": "this client holds evm.safe, btc.* and lez.multisig-program accounts"})
   let (isEvm, _) = evmChainId(a.chain)
   if not isEvm or a.address.len != 42 or not a.address.startsWith("0x"):
     return $(%*{"error": "an evm.safe account needs an eip155:<id> chain and a 0x address"})
@@ -982,11 +1072,33 @@ proc intentLinkContext(intentId: string): LinkContext =
     if not ctx.isPlaceholder and ctx.account.len > 0: account = ctx.account
   LinkContext(account: account, slot: "0", expiry: uint64(epochTime()) + 86_400)
 
+proc musterCoordinateVote(intentId: string): string =
+  ## Approve a vote-locus intent with this member's own on-chain vote (exo-3c9): S5
+  ## re-read, the member's Approve signed by their LEZ key and awaited, confirmed on chain,
+  ## then the receipt (coordination/vote.nim).
+  if gSession == nil: return "not-joined"
+  gSession.poll()
+  let drv = driverFor(intentPolicyOf(gSession.log.allEvents(), intentId))
+  if not (drv of LezMultisigDriver): return "not-a-vote-locus"
+  let a = LezMultisigDriver(drv).account
+  try:
+    let c = lezLiveOf(a)
+    let (mine, me) = c.lezOurMember(a.members)
+    if not mine: return "refused: none of your LEZ member accounts is a member of this multisig"
+    liveVote(gSession, moduleKeystore(), driverFor, intentId, newLezVoteSeam(c, me),
+             intentLinkContext(intentId), uint64(epochTime()))
+  except CatchableError as e:
+    "refused: the LEZ sequencer: " & e.msg
+
 proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: string): string =
   ## Add a contribution (in-app signed when `signatureHex` is empty, else pasted). The
   ## live contribute path lives in coordination/live.nim (exo-ef1) so it can be driven
-  ## in-process; this is plumbing over the module's session + keystore.
+  ## in-process; this is plumbing over the module's session + keystore. A vote-locus
+  ## intent is approved by the member's own chain vote instead (coordinate_vote).
   if gSession == nil: return "not-joined"
+  if signatureHex.len == 0:
+    let drv = driverFor(intentPolicyOf(gSession.log.allEvents(), intentId))
+    if drv of LezMultisigDriver: return musterCoordinateVote(intentId)
   liveContribute(gSession, moduleKeystore(), driverFor, intentId, signatureHex, keyRef,
                  intentLinkContext(intentId), uint64(epochTime()))
 
@@ -1544,6 +1656,14 @@ proc settlementFor(drv: Driver): Settlement =
   ## relayer. nil when the family settles nowhere (exo-a50.1.5).
   let p = drv.profile()
   if not p.declared or p.settlement == "none": return nil
+  if drv of LezMultisigDriver:
+    # the LEZ multisig (exo-3c9): Execute is a member's own transaction, so the relayer
+    # is this instance's member account; nil when it holds none (submit names why)
+    let a = LezMultisigDriver(drv).account
+    let c = lezLiveOf(a)
+    let (mine, me) = c.lezOurMember(a.members)
+    if not mine: return nil
+    return settlementFor(drv, c, Account(chain: a.chain, form: afPublic, id: lezHx(me)))
   if p.chain.startsWith("bip122:"):
     # Bitcoin (exo-a50.2.5/.6): the user's own node; nil without one (submit names why)
     if gBtcRpc.len == 0: return nil
@@ -1575,6 +1695,14 @@ proc musterCoordinateSubmit(intentId: string): string =
   if isBtc and gBtcRpc.len == 0:
     return $(%*{"id": intentId, "error": "no-bitcoin-node",
                 "detail": "a Bitcoin payment settles through your own node — set Settings → Bitcoin node (btc-rpc)"})
+  if drv of LezMultisigDriver:
+    let a = LezMultisigDriver(drv).account
+    var mine = false
+    try: mine = lezLiveOf(a).lezOurMember(a.members).found
+    except CatchableError: discard
+    if not mine:
+      return $(%*{"id": intentId, "error": "not-a-lez-member",
+                  "detail": "Execute is a member's own transaction, and none of your LEZ member accounts is a member of this multisig"})
   let st = settlementFor(drv)
   if st == nil:
     return $(%*{"id": intentId, "error": "not-onchain",
@@ -1683,6 +1811,149 @@ proc musterCoordinateProposeBtcSpend(payTo, amountSat, feeRate: string): string 
   # the kind of read, never the node's address
   gSession.publish(readEvent(id, "inputs", "bitcoind:scantxoutset", $parseJson(effectJson)["inputs"]))
   id
+
+# ── the LEZ multisig composers (exo-3c9) ───────────────────────────────────────
+proc lezComposeAccount(): tuple[ok: bool, acct: LezMultisigAccount, err: string] =
+  let (pkind, pacct) = splitPolicy(gCoordKind)
+  if pkind != "lez-multisig" or pacct.len == 0:
+    return (false, LezMultisigAccount(), $(%*{"error": "not-a-lez-policy",
+      "detail": "choose a LEZ multisig account for this room first (coordinate_set_policy lez-multisig@…)"}))
+  let (found, a) = findAccount(roomAccounts(), pacct)
+  if not found:
+    return (false, LezMultisigAccount(), $(%*{"error": "not-a-lez-policy", "detail": "the account is not disclosed in this room"}))
+  let (ok, acct, detail) = lezMultisigAccountOf(a)
+  if not ok: return (false, acct, $(%*{"error": "not-a-lez-policy", "detail": detail}))
+  (true, acct, "")
+
+proc lezProposeAction(action: LezAction): string =
+  ## The proposer's own Propose transaction, then the room intent pointing at it.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let (ok, acct, err) = lezComposeAccount()
+  if not ok: return err
+  var ttl = DefaultIntentTtl
+  try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
+  except ValueError: discard
+  try:
+    let c = lezLiveOf(acct)
+    let (mine, me) = c.lezOurMember(acct.members)
+    if not mine:
+      return $(%*{"error": "not-a-member", "detail": "none of your LEZ member accounts is a member of this multisig"})
+    inc gMsgSeq
+    let id = liveProposeOnChain(gSession, moduleKeystore(), driverFor, gCoordKind, action, newLezVoteSeam(c, me),
+                                int64(epochTime()), gMsgSeq, ttlSec = ttl)
+    if not id.startsWith("0x"): return $(%*{"error": "refused", "detail": id})
+    id
+  except CatchableError as e:
+    $(%*{"error": "sequencer-unreachable", "detail": e.msg})
+
+proc musterCoordinateProposeLez(actionJson: string): string =
+  var action: LezAction
+  try:
+    let j = parseJson(actionJson)
+    action.target = lezIdOf(j["target"].getStr())
+    for w in j["instruction"]: action.instruction.add uint32(w.getBiggestInt())
+    for x in j["accounts"]: action.accounts.add lezIdOf(x.getStr())
+    for x in j{"pdaSeeds"}.getElems(): action.pdaSeeds.add lezIdOf(x.getStr())
+    for x in j{"authorized"}.getElems(): action.authorized.add uint8(x.getInt())
+  except CatchableError as e:
+    return $(%*{"error": "not-an-action", "detail": e.msg})
+  lezProposeAction(action)
+
+proc lezTokenAction(accounts: seq[seq[byte]], words: seq[uint32], authorized: uint8): tuple[ok: bool, action: LezAction, err: string] =
+  let (ok, acct, err) = lezComposeAccount()
+  if not ok: return (false, LezAction(), err)
+  try:
+    let token = newLezRpc(gLezRpc).programId("token")
+    (true, LezAction(target: token, instruction: words, accounts: accounts,
+                     pdaSeeds: @[vaultSeed(acct.createKey)], authorized: @[authorized]), "")
+  except CatchableError as e:
+    (false, LezAction(), $(%*{"error": "sequencer-unreachable", "detail": e.msg}))
+
+proc musterCoordinateProposeLezTransfer(recipient, amount: string): string =
+  ## Transfer `amount` of the vault's token to `recipient`: token Transfer (variant 0,
+  ## amount a u128 = four words), the vault the authorized PDA.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let (ok, acct, err) = lezComposeAccount()
+  if not ok: return err
+  var to: seq[byte]
+  var amt: uint64
+  try:
+    to = lezIdOf(recipient)
+    amt = uint64(parseBiggestUInt(amount.strip()))
+  except CatchableError as e:
+    return $(%*{"error": "not-an-action", "detail": "a recipient account (hex or base58) and a whole amount: " & e.msg})
+  let words = @[0'u32, uint32(amt and 0xffff_ffff'u64), uint32(amt shr 32), 0'u32, 0'u32]
+  let vault = vaultPda(acct.scheme, acct.program, acct.createKey)
+  let (tok, action, terr) = lezTokenAction(@[vault, to], words, 0)
+  if not tok: return terr
+  lezProposeAction(action)
+
+proc musterCoordinateProposeLezVaultInit(definition: string): string =
+  ## Initialize the vault as a holding of the token `definition`: token
+  ## InitializeAccount (variant 3), the vault the authorized PDA.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let (ok, acct, err) = lezComposeAccount()
+  if not ok: return err
+  var def: seq[byte]
+  try: def = lezIdOf(definition)
+  except CatchableError as e: return $(%*{"error": "not-an-action", "detail": "a token definition account: " & e.msg})
+  let vault = vaultPda(acct.scheme, acct.program, acct.createKey)
+  let (tok, action, terr) = lezTokenAction(@[def, vault], @[3'u32], 1)
+  if not tok: return terr
+  lezProposeAction(action)
+
+proc musterLezMemberAccount(index: string): string =
+  ## One of this instance's LEZ member accounts; empty index = the first still fresh.
+  let ks = moduleKeystore()
+  proc entry(i: int, fresh: JsonNode): JsonNode =
+    let id = publicAccountId(ks.lezMemberKey(lezMemberLabel(i)))
+    %*{"index": i, "account": lezHx(id), "base58": accountIdToBase58(id), "fresh": fresh}
+  proc isFresh(rpc: LezRpc, i: int): bool =
+    let a = rpc.getAccount(publicAccountId(ks.lezMemberKey(lezMemberLabel(i))))
+    a.owner.len == 0 and a.data.len == 0 and a.nonce.isZero
+  let rpc = newLezRpc(gLezRpc)
+  if index.strip().len > 0:
+    var i: int
+    try: i = parseInt(index.strip())
+    except ValueError: return $(%*{"error": "index is a whole number 0-" & $(LezMemberSlots - 1)})
+    if i < 0 or i >= LezMemberSlots: return $(%*{"error": "index is a whole number 0-" & $(LezMemberSlots - 1)})
+    var fresh = newJNull()
+    try: fresh = %rpc.isFresh(i)
+    except CatchableError: discard
+    return $entry(i, fresh)
+  try:
+    for i in 0 ..< LezMemberSlots:
+      if rpc.isFresh(i): return $entry(i, %true)
+    $(%*{"error": "all " & $LezMemberSlots & " of your LEZ member accounts are in use"})
+  except CatchableError as e:
+    $(%*{"error": "sequencer-unreachable", "detail": e.msg})
+
+proc musterLezMultisigCreate(threshold, members: string): string =
+  ## Create a k-of-n LEZ multisig on chain; the result is ready to disclose.
+  var ms: seq[seq[byte]]
+  try:
+    for m in members.split({',', ' ', '\n'}):
+      if m.strip().len > 0: ms.add lezIdOf(m)
+  except CatchableError as e:
+    return $(%*{"error": "bad-member", "detail": e.msg})
+  var k: int
+  try: k = parseInt(threshold.strip())
+  except ValueError: return $(%*{"error": "bad-threshold", "detail": "a whole number"})
+  if ms.len == 0 or k < 1 or k > ms.len:
+    return $(%*{"error": "bad-threshold", "detail": "k=" & $k & " does not fit " & $ms.len & " members"})
+  var ck = newSeq[byte](32)
+  if not urandom(ck): return $(%*{"error": "refused", "detail": "no randomness for the create key"})
+  var program: seq[byte]
+  for i in 0 ..< 32: program.add byte(parseHexInt(gLezProgram[2*i .. 2*i+1]))
+  try:
+    let c = lezLiveFor(gLezChain, psLee02, program, plAccountIds)
+    let t = c.submit(@[], createOp(ck, k, ms))
+    if not t.ok: return $(%*{"error": "refused", "detail": t.error})
+    let config = %*{"program": gLezProgram, "createKey": lezHx(ck), "pda": "lee-v0.2", "layout": "account-ids"}
+    $(%*{"family": LezMultisigFamily, "chain": gLezChain, "address": lezHx(statePda(psLee02, program, ck)),
+         "config": $config, "threshold": k, "members": ms.mapIt(lezHx(it)), "tx": t.hash, "height": t.height})
+  except CatchableError as e:
+    $(%*{"error": "sequencer-unreachable", "detail": e.msg})
 
 # ── invoke-intent execution (P-D2) — the generic counterpart to coordinate_submit ─
 # An executable invoke intent is executed by the CORE (invariant 3): call the module
@@ -2112,6 +2383,7 @@ proc musterSettings(): string =
     "rpc": gRpcUrl,
     "relayer": gRelayer,
     "btcRpc": redactUserinfo(gBtcRpc),
+    "lez": {"rpc": gLezRpc, "chain": gLezChain, "multisigProgram": gLezProgram},
     "delivery": gDeliveryConfig,
     "environment": "eip155:" & $gDevSafe.chainId.int,   # the wallet's dev chain (CAIP-2)
     "identity": {"address": toHex(ks.address()),
@@ -2138,6 +2410,24 @@ proc musterSetSetting(key, value: string): string =
     if v.len > 0 and not (v.startsWith("http://") or v.startsWith("https://")):
       return $(%*{"error": "btc-rpc must be an http(s) URL, e.g. http://user:pass@127.0.0.1:8332"})
     gBtcRpc = v
+  of "lez-rpc":
+    # the user's LEZ sequencer (exo-3c9); "" restores the public testnet
+    let v = value.strip()
+    if v.len > 0 and not (v.startsWith("http://") or v.startsWith("https://")):
+      return $(%*{"error": "lez-rpc must be an http(s) URL, e.g. https://testnet.lez.logos.co"})
+    gLezRpc = (if v.len == 0: "https://testnet.lez.logos.co" else: v)
+  of "lez-chain":
+    let v = value.strip()
+    if not v.startsWith("lez:") or v.len < 5:
+      return $(%*{"error": "lez-chain is a CAIP-2 LEZ zone, e.g. lez:testnet"})
+    gLezChain = v
+  of "lez-multisig-program":
+    var v = value.strip().toLowerAscii()
+    if v.startsWith("0x"): v = v[2 .. ^1]
+    if v.len == 0: v = LezDeployedMultisig
+    if v.len != 64 or not v.allCharsInSet(HexDigits):
+      return $(%*{"error": "lez-multisig-program is the program's image id: 64 hex characters"})
+    gLezProgram = v
   of "delivery":
     # Accept a fleet short-name ("logos.test"), a full createNode JSON, or "{}"/"" to
     # fall back to the default fleet — and remember that the user chose, so it wins

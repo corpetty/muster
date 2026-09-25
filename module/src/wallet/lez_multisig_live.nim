@@ -88,6 +88,12 @@ proc sendTransaction*(r: LezRpc, leeTx: seq[byte]): string =
   ## → the transaction hash (hex) the sequencer accepted into its mempool; not yet landed.
   r.call("sendTransaction", %*[encode(leeTx)]).getStr()
 
+proc programId*(r: LezRpc, name: string): seq[byte] =
+  ## A built-in program's id by name (getProgramIds, e.g. "token"), as its LE bytes.
+  let j = r.call("getProgramIds", newJArray())
+  if not j.hasKey(name): raise newException(WalletError, "the sequencer names no program " & name)
+  wordsToBytes(j[name])
+
 proc getTransaction*(r: LezRpc, hash: string): tuple[known: bool, height: uint64] =
   let j = r.call("getTransaction", %*[hash])
   if j.kind != JArray or j.len < 2: return (false, 0'u64)
