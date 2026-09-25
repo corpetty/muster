@@ -6,24 +6,25 @@ Muster's first mission is education — it walks people through the entire trans
 
 ## What is actually here
 
-The specified client now exists and runs. The Nim core (`module/`) and the QML UI (`ui/`) were built P0→P4: the whole transaction lifecycle runs in the UI against a real 2-of-3 Safe, and the invariant-probe suite is green. Read the table before drawing conclusions from anything below it.
+The specified client now exists and runs. The Nim core (`module/`) and the QML UI (`ui/`) were built P0→P4: the whole transaction lifecycle runs in the UI against a real 2-of-3 Safe, the room coordinates Bitcoin, LEZ and FROST multisigs too, and the unit tests and invariant probes are green. Read the table before drawing conclusions from anything below it.
 
 | | What it is | State |
 |---|---|---|
-| **[`module/`](module/) + [`ui/`](ui/)** | The specified client — a Nim core behind the `muster.lidl` contract (`muster-module.lgx`) and a QML frontend (`muster-ui.lgx`), hosted on logos-core | **Runs.** P0–P2 and P4 landed; the full lifecycle (describe → propose → approve → submit) runs in `logos-basecamp` against a real Safe. Invariant probes green |
+| **[`module/`](module/) + [`ui/`](ui/)** | The specified client — a Nim core behind the `muster.lidl` contract (`muster-module.lgx`) and a QML frontend (`muster-ui.lgx`), hosted on logos-core | **Runs.** P0–P4 landed, plus the multisig families (Safe, Bitcoin PSBT, the LEZ multisig program, FROST); the full lifecycle (describe → propose → approve → submit) runs in the UI. Unit tests and invariant probes green (`module/tests/run-suite.sh`) |
 | **[`demo/`](demo/)** | A one-week speed build of the simplest complete journey — one person pays another, coordinated inside a private conversation — composing Logos modules that ship today | **Runs.** Two peers, real payments on the LEZ testnet. Deliberately violates most invariants |
-| **[`docs/`](docs/) + [`contracts/specs/`](contracts/specs/)** | The specification for the real client: vision, normative requirements, phase plan, and the ten invariants as twelve typed specs with acceptance oracles | Written, and now substantially implemented and probe-checked |
+| **[`docs/`](docs/) + [`contracts/specs/`](contracts/specs/)** | The specification for the real client: vision, normative requirements, phase plan, and the ten invariants as fourteen typed specs with acceptance oracles | Written, and now substantially implemented and probe-checked |
 | **[`docs/diagrams/`](docs/diagrams/)** | The figure programme — mechanics, architecture, and where each stage of a transaction leaks | Published at **<https://corpetty.github.io/muster/>** |
 
 The demo and the specified client are different codebases. The demo violates most of the invariants the real client holds, which is why it could exist in a week. It says so on itself, at length, in [`demo/README.md`](demo/README.md). Do not cite it as how Muster works — for that, read `module/`.
 
-**Ten invariants, twelve specs — the mismatch is deliberate.** `CLAUDE.md` numbers the invariants 1–10 (5b is explicitly *not* an invariant). Invariant 5 (deterministic bytes on signing paths) is carried by two specs — the dCBOR encoder and the domain-separated hash-input records — and one further spec pins the P4 loading-spike accept criterion, which is a phase gate rather than an invariant. Ten plus one, plus one, is twelve.
+**Ten invariants, fourteen specs — the mismatch is deliberate.** `CLAUDE.md` numbers the invariants 1–10 (5b is explicitly *not* an invariant). Two invariants carry more than one spec. Invariant 5 (deterministic bytes on signing paths) is the dCBOR encoder and the domain-separated hash-input records. Invariant 10 (provenance) is the record itself, its wiring into the live room, and the audit file a member can download. One further spec pins the P4 host-return gate, which is a phase gate rather than an invariant. Ten, plus one, plus two, plus one, is fourteen. A retired spec — anonymous membership, ADR-015 — stays in [`contracts/specs/retired/`](contracts/specs/retired/) as the record of why.
 
 ## Start here
 
 | If you want to… | Go to |
 |---|---|
-| **Run the specified client** | [`module/README.md`](module/README.md) — build `muster-module.lgx`, load it headless, run the probes |
+| **Run the specified client** | [Below](#run-the-specified-client) — `make build`, then `make run`; [`module/README.md`](module/README.md) for the module alone |
+| **Run the tests** | `module/tests/run-suite.sh` — every unit test and invariant probe in one command; [`module/tests/README.md`](module/tests/README.md) for the chain-bound ones |
 | **Run the demo instead** | [`demo/RUNBOOK.md`](demo/RUNBOOK.md) — two peers on one machine, and the journey end to end |
 | **Understand the argument** | [`docs/posts/01-the-pipeline-and-discovery.md`](docs/posts/01-the-pipeline-and-discovery.md), then the [diagram site](https://corpetty.github.io/muster/) |
 | **Know why Muster exists** | [`docs/00-vision.md`](docs/00-vision.md) — the lifecycle-as-curriculum framing, and the honesty rules that bind every surface |
@@ -50,10 +51,10 @@ make run     # launch: the lifecycle dashboard (propose → approve → submit) 
 cd module && nix build .#lgx-portable
 lgpm install --file ./result*/*.lgx --modules-dir <dir>
 logoscore -m <dir> -l muster_module -c 'muster_module.health()' --quit-on-finish
-nim r -d:release module/tests/probes/probe_materialization_mismatch_refused.nim   # no host needed
+module/tests/run-suite.sh      # every unit test + invariant probe, in parallel — no host, no chain
 ```
 
-> **Runs on a contributor's machine today, not yet from a fresh clone.** `module/` and `ui/` pin `logos-module-builder` to a **local** checkout of its `nim-cdylib-authoring` branch (the `nim.packages` hook + a RUNPATH fix, [PR #202](https://github.com/logos-co/logos-module-builder/pull/202)), and `ui/flake.nix` references `muster_module` by absolute path — both machine-specific until those land upstream. Until then, other people run it from a prebuilt release, not `make run` on a clone. See [`module/README.md`](module/README.md) and [`module/tests/README.md`](module/tests/README.md) for build/test details.
+**A fresh clone builds.** Every flake input is a GitHub ref. `module/` pins `logos-module-builder` to the `corpetty` fork (the `nim.packages` hook + a RUNPATH fix, upstream-pending in [logos-module-builder#226](https://github.com/logos-co/logos-module-builder/pull/226)), and `ui/` reaches `muster_module` inside the clone. See [`module/README.md`](module/README.md) and [`module/tests/README.md`](module/tests/README.md) for build and test details.
 
 ## Run the demo
 
@@ -89,14 +90,19 @@ Wait for both account cards to read **Online**, open and fund each wallet, then 
 module/          the Nim core behind muster.lidl → muster-module.lgx
   src/api/       muster.lidl (the only outward seam) + generated surface
   src/dcbor/     deterministic CDE encoder (inv 5)
-  src/log/       signed hash-linked log, reduce(log) (inv 4)
+  src/log/       content-addressed, hash-linked log, reduce(log) (inv 4)
   src/intents/   lifecycle · materialization · signing payload · provenance
-  src/drivers/   driver interface (inv 6) · safe · threshold · conformance
+  src/drivers/   driver interface (inv 6) · manifest · profile · conformance · safe · btc multisig ·
+                 lez multisig · frost (btc + lez) · threshold · invoke · eip191
   src/crypto/    two bound identities (secp256k1 auth + Ed25519/X25519 enc), keystore, epochs
   src/transport/ Transport interface + local/delivery transports (inv 8)
   src/coordination/ multi-party session · intent lifecycle = reduce(log)
-  src/wallet/    chain-agnostic wallet: EVM + mock + real LEZ adapters (send assets via Logos), verified reads
-  tests/probes/  invariant probes
+  src/wallet/    chain-agnostic wallet: EVM + Bitcoin Core + mock + real LEZ adapters, verified reads
+  src/settlement/ the settlement seam: Safe · Bitcoin (multisig + FROST) · LEZ multisig · LEZ FROST, by the driver's profile
+  src/bitcoin/   Bitcoin primitives + PSBT, pinned to the BIP vectors
+  src/frost/     FROST (BIP-445) + ChillDKG, held to every draft vector
+  src/lez/       the LEZ multisig program model + LEZ public transactions
+  tests/         unit tests · probes/ the invariant probes · run-suite.sh runs them all
 ui/              QML view + C++ backend → muster-ui.lgx
 demo/            the speed build — runnable, and not the specified client
   RUNBOOK.md     how to run two peers · GAPS.md what it does not protect
@@ -104,7 +110,10 @@ docs/            00-vision · 01-furps · 02-implementation-plan
   diagrams/      the figure programme, its manifest, and the rot checker
   labbook/       traps found the expensive way · posts/ the campaign write-ups
 contracts/specs/ typed specs with acceptance oracles, derived from the invariants
+contracts/families/ the multisig family registry · claims/ the walkthrough's claims registry
 infra/anvil/     devnet.sh: anvil + the REAL Safe v1.4.1 (singleton, factory, fallback handler, a 2-of-3 proxy) + foundry
+infra/bitcoind/  regtest.sh: a fresh Bitcoin Core regtest · lez/ localnet.sh: a LEZ v0.2.4 sequencer
+infra/fleets/    the Logos delivery fleets the peers join
 ui/prototype/    coordination-prototype-v2.html — the standalone HTML reference build
 ```
 
@@ -112,11 +121,14 @@ ui/prototype/    coordination-prototype-v2.html — the standalone HTML referenc
 
 ## Status
 
-**P0–P2 and P4 landed; P3 is functionally complete against a local transport.** The signing-path core (deterministic dCBOR, domain-separated hash-input records, a signed hash-linked log), the intent lifecycle engine and driver interface, and all ten invariants landed by hand — the invariant-probe suite is green. The Safe driver re-derives the EIP-712 `safeTxHash`, verifies secp256k1 owner signatures, collects 2-of-3, and executes a real on-chain `execTransaction` against an anvil `MiniSafe`. **P4** put the whole lifecycle through the real UI in `logos-basecamp` (ADR-013); its acceptance harness is 6/6. The UI has since grown from that spike to the **product surfaces** — a home → compose → room shell with chat, the closed card vocabulary (intent-propose with a status rail + approval slots, receipts), and a scope/membership panel — folding over a new conversation layer in the module (`coordinate_post_message` / `coordinate_messages` / `coordinate_members`). It reproduces the demo's experience in the spec-first client and runs standalone via `make run`. The room's proposal cards are now wired to the **verified** path — they render the `coordinate_intents` fold (effect + threshold + distinct-owner approvals), Propose calls `coordinate_propose`, and Approve feeds an owner signature to `coordinate_contribute`, which the driver refuses unless it recovers to a configured owner. The real transport is now stood up too: `delivery_module` rides the standalone runner's module set and the host loads + initializes it, so `coordinate_join` boots a real node and connects to the public Logos fleet — **two instances converge over it (join → ask → admit → both at two members)**, and the room settles Safe intents on-chain (`coordinate_submit`, proven on anvil, at the Safe's live nonce). Latency polish landed (~1s store-catchup) and room-side submit landed; the seeding the cross-host Safe settle needs now ships in `scripts/demo-peer.sh`, so a two-machine end-to-end settle run is what remains. The real **LEZ adapter** now lands the shielded journey — send assets via Logos on the zone's four rails (public/shield/deshield/private) with a per-rail disclosure of what hits the public record; the live end-to-end send against the testnet zone is what remains (`docs/design/lez-adapter.md`).
+**P0–P4 landed; two instances converge over the live Logos fleet; the multisig families (Phases A–D) landed 2026-09-24/25. What remains is the multi-party runs across two machines.**
 
-**P3** — real transport, encryption, and multi-party coordination — is built and tested: two bound identities (a secp256k1 authorization identity and an Ed25519/X25519 encryption identity, joined by a signed binding the core verifies on ingest), an ECIES epoch layer with forward secrecy verified (a mid-conversation joiner cannot open earlier epochs, F-16), a persistent keystore behind an operation seam, the hosted coordination surface, and a membership/grant handshake. **Two instances now converge over the live Logos fleet — the membership handshake works end to end (join → ask → admit → both at two members).** Cross-host delivery is store-polled at chat cadence (~1s receive after the latency pass). What remains is a two-machine **Safe-transaction** settle over the live wire — the peer seeding it needs now ships in [`scripts/demo-peer.sh`](scripts/demo-peer.sh) (seeds each peer as an anvil Safe owner), so what's left is the end-to-end run plus the R-4/R-6 kill-mid-collection resilience check. See the [two-party Safe+FROST runbook](docs/two-party-demo-runbook.md) and [`docs/two-instance-fleet-runbook.md`](docs/two-instance-fleet-runbook.md) for the operator flow, and [`docs/labbook/two-instance-live-wire-blockers.md`](docs/labbook/two-instance-live-wire-blockers.md) for the six fixes it took.
-
-**Beyond the phase plan:** a chain-agnostic wallet (a `ChainAdapter` seam with EVM, mock, and a real **LEZ** adapter — send assets via Logos on public/shielded rails; verified reads via `eth_getProof` reusing the Nimbus verified-proxy core in-process), a driver standard (a registry, a conformance suite, a threshold k-of-n driver, and a generic **invoke** driver that coordinates any Logos module action), the **action manifest** (one per-action object answering what an action does / needs / touches / discloses / how the room agrees — with per-instance readiness, an information-flow view, exportable provenance, and a self-explaining card), the **material** layer (a local holdings catalogue, offers that pair each requirement with your own holdings and the disclosure each choice adds, keyed contribution with a per-key F-14 binding published in-room, and a room-coordinated LEZ transfer where the recipient supplies their own address), and a Basecamp **capability-alignment** design for how those actions map to app-to-app intents.
+- **Core and lifecycle.** The signing-path core (deterministic dCBOR, domain-separated hash-input records, a content-addressed hash-linked log), the intent lifecycle and driver interface, and all ten invariants. 92 unit tests and 55 invariant probes run green in one command (`module/tests/run-suite.sh`); eight more need a local chain. P4 put the whole lifecycle through the real UI (ADR-013; its acceptance harness is 6/6), and the room has since grown into the product: home → compose → room, chat, the closed card vocabulary, a scope panel, and on every card the **action manifest** — what an action does, needs, touches and discloses, and how the room agrees — with per-instance readiness, an information-flow view, and a downloadable, self-verifying audit file.
+- **Transport and encryption (P3).** Two bound identities (a secp256k1 authorization identity and an Ed25519/X25519 encryption identity, joined by a signed binding the core verifies on ingest), forward-secret membership epochs (a mid-conversation joiner cannot open earlier epochs, F-16), a persistent keystore behind an operation seam, and the membership handshake. **Two instances converge over the public Logos fleet** (join → ask → admit → both at two members; `scripts/two-instance-proof.sh`), with ~1s cross-host receive.
+- **Multisig families (epic exo-a50).** Each family is a driver with a declared profile, held to [`contracts/families/registry.json`](contracts/families/registry.json). **Safe v1.4.1** on EVM: every SafeTx field reaches the signed hash, and the room settles on the real contract (anvil) at the Safe's live nonce. **Bitcoin** P2WSH sortedmulti and tapscript multi_a through PSBT, including signers outside muster (exit test on regtest). The **LEZ multisig program**, voted from the room, rebuilt for LEZ v0.2.4 and deployed on the public LEZ testnet. **FROST** (BIP-445 signing and the ChillDKG ceremony, held to every draft vector): the ceremony and both signing rounds run over the room's log, and settle as one 64-byte signature on Bitcoin or from an untweaked LEZ public account.
+- **Wallet.** A chain-agnostic `ChainAdapter` seam: EVM (verified reads via `eth_getProof`, reusing the Nimbus verified-proxy core in-process), Bitcoin Core, and the real **LEZ** adapter on the zone's four rails (public / shield / deshield / private) with a per-rail disclosure of what reaches the public record.
+- **Also beyond the phase plan.** A driver standard (a registry, a conformance suite every driver passes identically, and a generic **invoke** driver that coordinates any Logos module action); the **material** layer (a local holdings catalogue, offers that pair each requirement with your own holdings and the disclosure each choice adds, keyed contribution with a per-key F-14 binding published in-room, and a room-coordinated LEZ transfer where the recipient supplies their own address); and a Basecamp **capability-alignment** design for how those actions map to app-to-app intents.
+- **What remains.** The multi-party runs across two machines: the cross-host Safe settle over the live wire plus the R-4/R-6 kill-mid-collection check, the LEZ multisig propose → vote → settle between two instances, and a two-instance FROST ceremony. The LEZ multisig, FROST and LEZ FROST room surfaces are verified headless and offscreen, but nobody has clicked through them on screen against a live chain. Log events are not author-signed, so a room member can post a chat message, a decline or a material share in another member's name (tracked as exo-f76; approvals are unaffected, because the driver verifies their signatures). See the [two-party Safe+FROST runbook](docs/two-party-demo-runbook.md), [`docs/two-instance-fleet-runbook.md`](docs/two-instance-fleet-runbook.md), and [`docs/04-session-handoff-2026-09-25.md`](docs/04-session-handoff-2026-09-25.md) §4.
 
 See [`docs/02-implementation-plan.md`](docs/02-implementation-plan.md) for per-phase accept criteria and ADR status.
 
@@ -128,4 +140,4 @@ Dual MIT / Apache-2.0, matching the Logos platform repos.
 
 This is an independent community project intended to demonstrate some of the capabilities and potential uses of the Logos technology stack. It has been developed independently by its contributor(s) and is not built for, on behalf of, or as part of the work of Logos or the Institute of Free Technology ("IFT"). It has not been reviewed, audited, approved, or endorsed by Logos or IFT. The project, including its code, documentation, views, and functionality, is the sole responsibility of its contributor(s) and should not be attributed to Logos or IFT.
 
-<!-- rot-check: current-phase=CLAUDE.md sha256=83e2734993a2be21e707d12f07a6d6750d714d87d0a00e88612c8395f840f5d2 -->
+<!-- rot-check: current-phase=CLAUDE.md sha256=23859ca04cb56c32a0e61229dc150cf04894b7c4783a2d728f2c3d161cfe6463 -->

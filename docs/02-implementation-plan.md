@@ -114,7 +114,7 @@ muster/
 
 ## Phases
 
-> **Status (updated 2026-09-11):** P0 ✅ · P1 ✅ · P2 ✅ · P4 ✅ (UI ships the whole lifecycle; render blocker routed around via ADR-013, 6/6 acceptance harness) · P3 ✅ core (transport + encryption + multi-party coordination; **two instances converge over the live Logos fleet**; room settles Safe intents on-chain via `coordinate_submit`; only the two-machine cross-host Safe settle run + R-4/R-6 resilience remain) · P5–P6 not started. The 11 invariant pebbles are closed and the 42-probe suite is green. Per-phase status lines below.
+> **Status (updated 2026-09-25):** P0 ✅ · P1 ✅ · P2 ✅ · P4 ✅ (UI ships the whole lifecycle; render blocker routed around via ADR-013, 6/6 acceptance harness) · P3 ✅ core (transport + encryption + multi-party coordination; **two instances converge over the live Logos fleet**; room settles Safe intents on-chain via `coordinate_submit`; only the two-machine cross-host Safe settle run + R-4/R-6 resilience remain) · P5–P6 not started. Beyond the phase plan, the multisig families (epic exo-a50) landed Phases A–D 2026-09-24/25 (Safe fidelity, Bitcoin through PSBT, the LEZ multisig program, FROST); their two-machine runs remain. The 11 invariant pebbles are closed; 92 unit tests and 55 invariant probes are green via `module/tests/run-suite.sh`. Per-phase status lines below.
 
 ### P0 — Module scaffold and the log
 

@@ -22,20 +22,14 @@ differs and report it (a short "what to report" list is at the end).
 
 ## Prerequisites
 
-> **Building is not yet bare-clone portable** (Makefile PORTABILITY CAVEAT, ADR-013/
-> ADR-014): the flakes pin the module and the builder by **local absolute paths**, and
-> the build needs `logos-module-builder` fork commits that are not upstream yet. So a
-> follower needs the same local logos setup, not just a checkout of this repo.
+A fresh clone builds: every flake input is a GitHub ref (`module/` pins the
+`logos-module-builder` fork until logos-co/logos-module-builder#226 lands, and `ui/`
+reaches `muster_module` inside the clone). No local checkout or path edit is needed.
 
 - **Nix** (flakes enabled), and access to the `cache.nix.logos.co` substituter that
   `make` passes for you (you are not a trusted nix user, so `make` passes it explicitly).
-- A local **`logos-module-builder`** checkout on the `nim-cdylib-authoring` branch
-  (PR #202), at the path `module/flake.nix`'s `logos-module-builder.url` points to —
-  **edit that path to your checkout**. It carries the `nim.packages` hook + the RUNPATH
-  fix the module build needs.
-- `ui/flake.nix`'s `muster_module.url` is a `git+file://<abs-path>?dir=module` input —
-  **edit the path to your clone of this repo**, then `cd ui && nix flake update
-  muster_module` to re-lock it.
+- **Commit first.** `make build` builds `muster_module` from the last *committed* tree of
+  this clone (it warns when there are uncommitted changes).
 - **Optional**, only for Part 7's on-chain submit: `foundry` (anvil + cast).
 
 ---

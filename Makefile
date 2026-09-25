@@ -6,11 +6,11 @@
 #
 # Prefer basecamp? See ui/tests/README.md § "Producing the app-under-test".
 #
-# PORTABILITY CAVEAT — builds on THIS machine only, for now. ui/flake.nix pins
-# muster_module by an absolute git+file path, and the muster build needs local
-# logos-module-builder fork commits (the nim.packages hook + a RUNPATH fix) that
-# are not upstream yet. Until those land, other people run it from a prebuilt
-# release, not from a clone. Tracked in ADR-013/ADR-014.
+# A fresh clone builds: every flake input is a GitHub ref. module/flake.nix pins
+# logos-module-builder to the corpetty fork (the nim.packages hook + a RUNPATH fix,
+# upstream-pending in logos-co/logos-module-builder#226), and ui/flake.nix reaches
+# muster_module inside the clone (`build` below overrides it to this clone's absolute
+# path at build time). Tests: module/tests/run-suite.sh (module/tests/README.md).
 
 UI       := ui
 RUN_DIR  ?= $(CURDIR)/.run/muster

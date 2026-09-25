@@ -13,21 +13,21 @@ in `../contracts/specs/derived-exo-*.spec.json`; each names probes under
 
 ## Status
 
-**P0–P2 and P4 landed; P3 built — two instances now converge over the live
-Logos fleet (membership handshake end to end).** The signing-path core, the
-intent lifecycle and driver interface, all ten invariants (the probe suite
-under `tests/probes/` is green), the Safe driver (real EIP-712 `safeTxHash`,
-secp256k1 owner verification, on-chain `execTransaction` against the real
-Safe v1.4.1 on anvil), and the LIDL codegen that generates the surface from the contract
-are all in. P4 put the whole lifecycle through the real UI in logos-basecamp
-(ADR-013). P3 — transport, encryption, and multi-party coordination — is built
-and tested; two `muster-ui` instances converge over the public fleet (join →
-ask → admit → both at two members), and the room settles Safe intents on-chain
-(`coordinate_submit`, proven on anvil, at the live nonce). Latency polish landed
-(~1s store-catchup, time-windowed); what remains is the cross-host Safe-transaction
-settle over the live wire (seeding now ships in `scripts/demo-peer.sh`). See
-[`../CLAUDE.md`](../CLAUDE.md) for the phase-by-phase
-detail and [`../docs/two-instance-fleet-runbook.md`](../docs/two-instance-fleet-runbook.md)
+**P0–P4 landed; P3 built — two instances converge over the live Logos fleet;
+the multisig families (Phases A–D) landed 2026-09-24/25.** The signing-path core,
+the intent lifecycle and driver interface, all ten invariants (92 unit tests and
+55 invariant probes, green via `tests/run-suite.sh`), and the LIDL codegen that
+generates the surface from the contract are all in. P4 put the whole lifecycle
+through the real UI (ADR-013). P3 — transport, encryption, and multi-party
+coordination — is built and tested; two `muster-ui` instances converge over the
+public fleet (join → ask → admit → both at two members, ~1s cross-host receive).
+The room coordinates and settles multisigs of four kinds: Safe v1.4.1 (the real
+contract on anvil, at the live nonce), Bitcoin P2WSH / tapscript through PSBT
+(regtest), the LEZ multisig program (on the public LEZ testnet), and FROST
+(one BIP-340 signature on Bitcoin, or from an untweaked LEZ account). What remains
+is the multi-party runs across two machines, and author-signed log events
+(exo-f76). See [`../CLAUDE.md`](../CLAUDE.md) for the phase-by-phase detail and
+[`../docs/two-instance-fleet-runbook.md`](../docs/two-instance-fleet-runbook.md)
 for the operator flow.
 
 **Landed beyond the phase plan:** a chain-agnostic wallet (EVM + mock + a real LEZ
@@ -43,11 +43,14 @@ where the recipient supplies their own address.
 
 ## Build
 
-The flake pins `logos-module-builder` as a local path-input on its
-`nim-cdylib-authoring` branch (not upstream yet, PR #202), so a fresh clone needs
-that checkout beside this repo. Build through `cache.nix.logos.co` as a
-substituter — the invoking user is not a trusted nix user, so pass it
-explicitly.
+The flake pins `logos-module-builder` to a GitHub ref on the `corpetty` fork
+(`c10a94c`): basecamp's coherent builder plus the `nim.packages` hook and a RUNPATH
+fix, upstream-pending in
+[logos-module-builder#226](https://github.com/logos-co/logos-module-builder/pull/226).
+No local checkout is needed; a fresh clone builds. Build through
+`cache.nix.logos.co` as a substituter — the invoking user is not a trusted nix
+user, so pass it explicitly (`--extra-substituters https://cache.nix.logos.co/public
+--extra-trusted-public-keys public:l4HrXgL4nw246+LBh2SOJyhz64BoGegOYLheT/iIAPU=`).
 
 ```bash
 nix build .#lgx            # muster-module.lgx (dev, keyed linux-amd64-dev)
@@ -63,16 +66,21 @@ logoscore -m <dir> -l muster_module -c 'muster_module.health()' --quit-on-finish
 
 ## Test
 
-The pure-Nim invariant probes need no host:
+One command runs every unit test and invariant probe, in parallel, with no host
+and no chain:
 
 ```bash
-nim r -d:release tests/probes/probe_materialization_mismatch_refused.nim
+tests/run-suite.sh              # everything that needs no chain
+tests/run-suite.sh probes       # the invariant probes only
+tests/run-suite.sh dcbor frost  # the tests whose path contains either substring
 ```
 
-The P2 crypto/Safe tests link `libsecp256k1` and the full P3 stack links
-`libsodium` too — see [`tests/README.md`](tests/README.md) for the link flags
-and the anvil-backed `safe_anvil_e2e`. Regenerate the generated surface from the
-contract with [`tools/regen.sh`](tools/regen.sh).
+It fetches the Nim closure at the revs `metadata.json` pins
+([`tools/nim-closure.sh`](tools/nim-closure.sh), into `~/.cache/muster/nimpkgs`) and
+takes libsodium from nixpkgs. The tests that need a local chain (anvil, Bitcoin Core
+regtest, a LEZ sequencer) run by name with `tests/run-suite.sh e2e <name>`; see
+[`tests/README.md`](tests/README.md) for each one's chain and arguments. Regenerate
+the generated surface from the contract with [`tools/regen.sh`](tools/regen.sh).
 
 ## Layout
 
@@ -81,20 +89,27 @@ src/
   api/          muster.lidl (the only outward seam) + generated surface
   dcbor/        deterministic CDE encoder (inv 5)
   hashing/      sha256 · keccak256 · domain-separated hash-input records (inv 5)
-  log/          signed hash-linked log, reduce(log) (inv 4)
+  log/          content-addressed, hash-linked log, reduce(log) (inv 4)
   intents/      lifecycle (F-3) · materialization · signing_payload · provenance · disclosure
   drivers/      driver interface (inv 6) · manifest (per-action provenance/permissions/
-                disclosure) · safe · threshold · frost · invoke (any module action) · conformance
+                disclosure) · profile (the multisig family) · conformance · safe ·
+                btc_multisig · lez_multisig · frost / btc_frost / lez_frost · threshold ·
+                invoke (any module action) · eip191
   crypto/       two bound identities (secp256k1 auth + Ed25519/X25519 enc),
                 signed binding, keystore seam, epoch crypto (F-14/F-16)
   transport/    Transport interface + local/delivery transports (inv 8)
   coordination/ multi-party session · intent lifecycle = reduce(log) · readiness ·
                 information-flow view · offers/material folds
-  wallet/       chain-agnostic wallet: EVM + mock + real LEZ adapters (send assets via Logos), verified reads
+  wallet/       chain-agnostic wallet: EVM + Bitcoin Core + mock + real LEZ adapters, verified reads
+  settlement/   the settlement seam, chosen by the driver's profile: Safe · Bitcoin · LEZ multisig · LEZ FROST
+  bitcoin/      Bitcoin primitives + PSBT, pinned to the BIP vectors
+  frost/        FROST (BIP-445) + ChillDKG, held to every draft vector; round secrets as keystore ops
+  lez/          the LEZ multisig program model + LEZ public transactions
   plugins/      plugin sandbox (inv 3)
 nim-lib/        muster_gen.nim (generated) + muster_module.nim (hosted surface)
-tools/          regen.sh (fetches the SDK's lidl-gen + regenerates muster_gen.nim) · headless-host/
-tests/          lifecycle/safe/crypto/transport/coordination tests
+tools/          regen.sh (fetches the SDK's lidl-gen + regenerates muster_gen.nim) · nim-closure.sh
+                (the pinned Nim closure) · muster_audit_verify.nim · headless-host/
+tests/          unit tests · run-suite.sh (all of them, one command) · vectors/ (BIP, FROST, LEZ)
   probes/       the probe_*.nim acceptance oracles named by the derived-exo-* specs
 ```
 
@@ -107,4 +122,4 @@ tests/          lifecycle/safe/crypto/transport/coordination tests
 - Invariant tests are append-only. Extend, don't weaken.
 - The module imports nothing from `../ui/`; it reaches other modules only through logos-core.
 
-<!-- rot-check: current-phase=CLAUDE.md sha256=83e2734993a2be21e707d12f07a6d6750d714d87d0a00e88612c8395f840f5d2 -->
+<!-- rot-check: current-phase=CLAUDE.md sha256=23859ca04cb56c32a0e61229dc150cf04894b7c4783a2d728f2c3d161cfe6463 -->
