@@ -180,15 +180,14 @@ method verifyContribution*(d: BtcMultisigDriver, c: Contribution, round: int): b
 method identifyContributor*(d: BtcMultisigDriver, m: Materialization, c: Contribution): string =
   d.verifyAgainst(sighashesIn(m), c)
 
-method signRefusal*(d: BtcMultisigDriver, e: Effect): string =
-  ## Before anyone signs: every input must be THIS account's coins, the declared fee
-  ## must be exactly inputs − outputs (BIP-143 signs only each input's own amount, so a
-  ## wrong prevout would silently change the fee), and no output may be dust.
+proc spendRefusal*(e: Effect, accountSpk: seq[byte]): string =
+  ## Before anyone signs a spend from the account whose scriptPubKey is `accountSpk`:
+  ## every input must be its coins, the declared fee exactly inputs − outputs, no dust.
   var s: tuple[tx: BtcTx, amounts: seq[uint64], spks: seq[seq[byte]]]
   try: s = spendOf(e)
   except BtcError as err: return "not a valid Bitcoin spend: " & err.msg
   for i, spk in s.spks:
-    if spk != d.account.scriptPubKey: return "input " & $i & " spends coins that are not this account's"
+    if spk != accountSpk: return "input " & $i & " spends coins that are not this account's"
   var inSum, outSum: uint64
   for a in s.amounts: inSum += a
   for (i, o) in s.tx.outputs.pairs:
@@ -199,6 +198,12 @@ method signRefusal*(d: BtcMultisigDriver, e: Effect): string =
   if fee.kind != ckUint or fee.u != inSum - outSum:
     return "the declared fee is not inputs − outputs (" & $(inSum - outSum) & " sat)"
   ""
+
+method signRefusal*(d: BtcMultisigDriver, e: Effect): string =
+  ## Before anyone signs: every input must be THIS account's coins, the declared fee
+  ## must be exactly inputs − outputs (BIP-143 signs only each input's own amount, so a
+  ## wrong prevout would silently change the fee), and no output may be dust.
+  spendRefusal(e, d.account.scriptPubKey)
 
 method profile*(d: BtcMultisigDriver): FamilyProfile =
   ## Both families: the protocol itself checks k of n (native); everyone signs the same
@@ -252,14 +257,15 @@ proc inputWeight(acct: BtcAccount): int =
         withSize(acct.leafScript).len + withSize(acct.controlBlock).len
   4 * (32 + 4 + 1 + 4) + witness
 
-proc vsizeEstimate(acct: BtcAccount, nIn: int, outSpks: seq[seq[byte]]): uint64 =
+proc vsizeEstimate(inWeight: int, nIn: int, outSpks: seq[seq[byte]]): uint64 =
   var w = 4 * (4 + 4 + compactSize(uint64(nIn)).len + compactSize(uint64(outSpks.len)).len) + 2
-  w += nIn * inputWeight(acct)
+  w += nIn * inWeight
   for spk in outSpks: w += 4 * (8 + withSize(spk).len)
   uint64((w + 3) div 4)
 
-proc buildBtcSpend*(acct: BtcAccount, utxos: seq[BtcUtxo], payTo: string, amount: uint64,
-                    feeRate = 1, sequence = 0xfffffffd'u32, locktime = 0'u32): string =
+proc buildSpendFrom*(accountSpk: seq[byte], accountAddress: string, inWeight: int, utxos: seq[BtcUtxo],
+                     payTo: string, amount: uint64, feeRate = 1, sequence = 0xfffffffd'u32,
+                     locktime = 0'u32): string =
   ## A btc-spend effect paying `amount` sat to `payTo` from this account's coins: the
   ## largest first until the payment and its fee are covered, the payee first, change
   ## back to the account unless it would be dust (then it goes to the fee). The fee is
@@ -270,7 +276,7 @@ proc buildBtcSpend*(acct: BtcAccount, utxos: seq[BtcUtxo], payTo: string, amount
   if amount < DustLimit: raise newException(BtcError, "a payment below " & $DustLimit & " sat is dust")
   if feeRate < 1: raise newException(BtcError, "a fee rate is at least 1 sat/vB")
   let paySpk = scriptPubKeyOfAddress(hrpOfAddress(payTo), payTo)
-  let mine = toHex(acct.scriptPubKey)
+  let mine = toHex(accountSpk)
   var coins = utxos.filterIt(it.scriptPubKey.toLowerAscii() == mine)   # only coins this account can spend
   coins.sort(proc(a, b: BtcUtxo): int =
     if a.value != b.value: cmp(b.value, a.value)
@@ -284,13 +290,13 @@ proc buildBtcSpend*(acct: BtcAccount, utxos: seq[BtcUtxo], payTo: string, amount
       raise newException(BtcError, "a txid is 32 bytes: " & c.txid)
     chosen.add c
     total += c.value
-    let bare = rate * vsizeEstimate(acct, chosen.len, @[paySpk])
+    let bare = rate * vsizeEstimate(inWeight, chosen.len, @[paySpk])
     if total < amount + bare: continue
-    let withChange = rate * vsizeEstimate(acct, chosen.len, @[paySpk, acct.scriptPubKey])
+    let withChange = rate * vsizeEstimate(inWeight, chosen.len, @[paySpk, accountSpk])
     var outs = %*[{"address": payTo, "value": amount}]
     var fee = total - amount
     if total >= amount + withChange and total - amount - withChange >= DustLimit:
-      outs.add %*{"address": acct.address, "value": total - amount - withChange}
+      outs.add %*{"address": accountAddress, "value": total - amount - withChange}
       fee = withChange
     var ins = newJArray()
     for u in chosen:
@@ -300,6 +306,11 @@ proc buildBtcSpend*(acct: BtcAccount, utxos: seq[BtcUtxo], payTo: string, amount
                 "fee": fee, "sources": {"inputs": "read"}})
   raise newException(BtcError, "not enough in the account: " & $total & " sat for " & $amount &
                                " sat and its fee at " & $feeRate & " sat/vB")
+
+proc buildBtcSpend*(acct: BtcAccount, utxos: seq[BtcUtxo], payTo: string, amount: uint64,
+                    feeRate = 1, sequence = 0xfffffffd'u32, locktime = 0'u32): string =
+  buildSpendFrom(acct.scriptPubKey, acct.address, inputWeight(acct), utxos, payTo, amount,
+                 feeRate, sequence, locktime)
 
 # ── finalizing: the signatures into the witnesses (exo-a50.2.5) ─────────────────
 proc leafKeys(leaf: seq[byte]): seq[seq[byte]] =

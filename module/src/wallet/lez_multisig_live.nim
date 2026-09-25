@@ -161,28 +161,47 @@ proc awaitInclusion(c: LezMultisigLive, hash: string): LezTx =
                           "refuses a transaction (the program's reason is in the sequencer's log)")
     sleep(c.pollMs)
 
-proc sendSigned*(c: LezMultisigLive, program: seq[byte], accounts: seq[seq[byte]], signers: seq[seq[byte]],
-                 words: seq[uint32]): LezTx =
-  ## A public transaction to any program, signed by the keystore's member keys for
-  ## `signers` (each one this chain `signs`), sent and awaited. A signer this keystore
-  ## does not hold refuses before anything is sent.
+proc sendWith*(c: LezMultisigLive, program: seq[byte], accounts: seq[seq[byte]], signers: seq[seq[byte]],
+               words: seq[uint32], witness: proc(h: array[32, byte]): seq[LezWitness]): LezTx =
+  ## A public transaction to any program whose witnesses `witness` produces over the
+  ## message hash: one per signer, in `signers` order, each the account's own key. A
+  ## keystore label signs for a member account (sendSigned); a FROST signing round signs
+  ## for an account an aggregate key owns (Phase D, exo-a50.4.6). The nonces are read
+  ## from the chain; the transaction is sent and, unless waitForInclusion is off, awaited.
   var nonces: seq[UInt128]
-  for s in signers:
-    if not c.signs(s): return LezTx(ok: false, error: "this keystore holds no key for account " & hx(s))
-    nonces.add c.rpc.getAccount(s).nonce
+  for s in signers: nonces.add c.rpc.getAccount(s).nonce
   let m = LezMessage(program: program, accounts: accounts, nonces: nonces, words: words)
-  let h = messageHash(m)
-  var ws: seq[LezWitness]
-  for s in signers:
-    let label = c.labels[hx(s)]
-    ws.add LezWitness(signature: c.ks.lezMemberSign(label, h), xonly: c.ks.lezMemberKey(label))
-  let sent = c.rpc.sendTransaction(leeTxPublic(m, ws))
+  let ws = witness(messageHash(m))
+  if ws.len != signers.len: return LezTx(ok: false, error: "one witness per signer")
+  for i, w in ws:
+    if publicAccountId(w.xonly) != signers[i]:
+      return LezTx(ok: false, error: "witness " & $i & " is not by account " & hx(signers[i]))
+  var sent: string
+  try: sent = c.rpc.sendTransaction(leeTxPublic(m, ws))
+  except WalletError as e:
+    # the sequencer answered with a JSON-RPC error (a bad signature, a malformed
+    # transaction): it refused the transaction outright; anything else is unreachability
+    if "\"code\"" in e.msg: return LezTx(ok: false, error: "the sequencer refused it: " & e.msg)
+    raise e
   let want = publicTxHash(m, ws)
   if sent.toLowerAscii() != want:
     return LezTx(ok: false, error: "the sequencer answered hash " & sent & " for transaction " & want)
   c.sent[want] = epochTime()
   if not c.waitForInclusion: return LezTx(ok: true, hash: want)     # sent, not yet landed
   c.awaitInclusion(want)
+
+proc sendSigned*(c: LezMultisigLive, program: seq[byte], accounts: seq[seq[byte]], signers: seq[seq[byte]],
+                 words: seq[uint32]): LezTx =
+  ## A public transaction to any program, signed by the keystore's member keys for
+  ## `signers` (each one this chain `signs`). A signer this keystore does not hold
+  ## refuses before anything is sent.
+  for s in signers:
+    if not c.signs(s): return LezTx(ok: false, error: "this keystore holds no key for account " & hx(s))
+  let (ks, labels) = (c.ks, c.labels)
+  c.sendWith(program, accounts, signers, words, proc(h: array[32, byte]): seq[LezWitness] =
+    for s in signers:
+      let label = labels[hx(s)]
+      result.add LezWitness(signature: ks.lezMemberSign(label, h), xonly: ks.lezMemberKey(label)))
 
 method submit*(c: LezMultisigLive, signer: seq[byte], op: MultisigOp, payer: seq[byte] = @[]): LezTx =
   ## The member's own multisig transaction. A create is signed by nobody (it claims fresh

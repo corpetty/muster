@@ -481,7 +481,7 @@
       "infra": ["utxo-source", "fee-estimation"],
       "maturity": "draft",
       "notes": "ChillDKG needs authenticated host keys and a relaying coordinator, and aborts on faults (not robust). Resharing is not specified. Frostsnap ships a FROST taproot product.",
-      "muster": {"status": "candidate", "phase": "D", "why": "the flagship: true t-of-n that looks single-sig, and the room is exactly the authenticated coordinator ChillDKG asks for. Shares a driver with lez.frost-public-account. The cryptography has landed (module/src/frost/): BIP-445 FROST signing and ChillDKG, each held to every vector its draft ships, and composed — a ceremony's key signs as one BIP-340 signature libsecp accepts. Not yet: the room-held ceremony, round secrets in the keystore (S7), the driver and a key-path spend (exo-24a, exo-4ca, exo-1ed). Demo-grade (not constant time), behind the production gate."},
+      "muster": {"status": "partial", "phase": "D", "driver": "module/src/drivers/btc_frost.nim", "why": "the flagship: true t-of-n that looks single-sig, and the room is exactly the authenticated coordinator ChillDKG asks for. Built, and held to Phase D's exit on a real Bitcoin Core (phase_d_exit_test): the ChillDKG ceremony over the room's log (every member computes the coordinator's steps; the account is disclosed with its public recovery data), round secrets as keystore operations (S7: shares recovered from the recovery data, never stored; nonces consumed before use; a restart aborts), the two rounds with the signer set fixed by the log, and a key-path spend whose witness is one BIP-340 signature — Core's rawtr(x(Q)), indistinguishable from a single-sig spend. Still partial: the hosted surface and UI. Demo-grade (not constant time), behind the production gate."},
       "unverified": ["a FROST PSBT/descriptor standard", "whether Frostsnap matches the BIP-445 test vectors"],
       "sources": ["https://github.com/bitcoin/bips/pull/2070", "https://github.com/bitcoin/bips/pull/2227", "https://github.com/BlockstreamResearch/bip-frost-dkg", "https://github.com/frostsnap/frostsnap"]
     },
@@ -1297,9 +1297,9 @@
       "interop": [],
       "infra": ["lez sequencer RPC"],
       "maturity": "draft",
-      "notes": "INFERRED, not documented upstream: LEZ public keys are BIP-340 x-only and the account tweak is additive (sk + SHA256(pk)), so an aggregate key should be able to own a public account. Untested.",
-      "muster": {"status": "candidate", "phase": "D", "why": "the same FROST-secp256k1 driver as btc.frost-bip445 gives Logos a threshold account that looks single-sig — the ADR-015 aggregate-signature rail on our own chain"},
-      "unverified": ["that an aggregate key can own a LEZ public account (the additive tweak must commute with aggregation)"],
+      "notes": "VERIFIED on a LEZ v0.2.4 chain (module/tests/lez_frost_account_e2e.nim, exo-a50.4.6): a public account's id is SHA-256(\"/LEE/v0.3/AccountId/Public/\" ‖ x-only key) and the chain checks a BIP-340 signature under that key, so the x-only form of a ChillDKG threshold key owns an account directly, with no tweak. PrivateKey::tweak (sk + SHA256(pk)) is a wallet-side key derivation the chain never checks. A FROST aggregate co-signed a mint and alone signed a transfer; a wrong aggregate was refused at submission (InvalidSignature).",
+      "muster": {"status": "candidate", "phase": "D", "why": "the same FROST-secp256k1 driver as btc.frost-bip445 gives Logos a threshold account that looks single-sig: the ADR-015 aggregate-signature rail on our own chain. The key question is settled on a real v0.2.4 chain (lez_frost_account_e2e): an aggregate key owns a public account, untweaked, and LezMultisigLive.sendWith carries a FROST witness. Not yet: the room flow for LEZ (the ceremony is shared with btc.frost-bip445; the rounds sign the LEZ message hash)."},
+      "unverified": [],
       "sources": ["https://github.com/logos-blockchain/logos-execution-zone/blob/main/lee/state_machine/src/signature/private_key.rs"]
     }
   ]

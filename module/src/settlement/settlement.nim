@@ -22,6 +22,7 @@ import ../drivers/profile
 import ../drivers/safe
 import ../drivers/safe_rpc
 import ../drivers/btc_multisig
+import ../drivers/btc_frost        # the aggregate locus (Phase D)
 import ../drivers/lez_multisig
 import ../lez/multisig
 import ../lez/multisig_chain
@@ -118,6 +119,25 @@ method assemble*(s: BitcoinSettlement, drv: Driver, effect: Effect,
   ## witnesses are the driver's to finalize (its script, its key order); the payload is
   ## the raw transaction — self-contained, since its fee comes out of its own inputs —
   ## and its txid. Nothing but the witnesses differs from the reviewed spend.
+  if drv of BtcFrostDriver:
+    # the aggregate locus (Phase D): t round-2 partials of one signer set aggregate into
+    # one BIP-340 signature per input — the witness a single-sig key-path spend has
+    let fd = BtcFrostDriver(drv)
+    let refusal = fd.signRefusal(effect)
+    if refusal.len > 0: return Assembled(ok: false, error: "not-settleable", detail: refusal)
+    let cs = contributions.mapIt(Contribution(bytes: it.bytes))
+    let need = fd.account.params.t
+    let have = fd.completeSigners(effect, cs)
+    if have < need:
+      return Assembled(ok: false, error: "insufficient-signatures", have: have, need: need,
+                       detail: $have & " of the " & $need & " partial signatures one signer set needs")
+    var ft: BtcTx
+    try: ft = fd.finalizeFrostSpend(effect, cs)
+    except CatchableError as e:
+      return Assembled(ok: false, error: "not-settleable", have: have, need: need, detail: e.msg)
+    return Assembled(ok: true, have: have, need: need,
+      tx: PreparedTx(chain: fd.account.chain, frm: s.relayer, to: fd.account.address,
+                     payload: $(%*{"rawtx": toHex(ft.serialize(withWitness = true)), "txid": txidHex(ft)})))
   if not (drv of BtcMultisigDriver):
     return Assembled(ok: false, error: "not-settleable", detail: "a Bitcoin settlement needs a Bitcoin multisig driver")
   let bd = BtcMultisigDriver(drv)
@@ -220,6 +240,6 @@ proc settlementFor*(drv: Driver, adapter: ChainAdapter, relayer: Account): Settl
   if not p.declared or p.settlement == "none": return nil
   case p.family
   of "evm.safe": SafeSettlement(family: p.family, adapter: adapter, relayer: relayer)
-  of P2wshFamily, TapscriptFamily: BitcoinSettlement(family: p.family, adapter: adapter, relayer: relayer)
+  of P2wshFamily, TapscriptFamily, FrostFamily: BitcoinSettlement(family: p.family, adapter: adapter, relayer: relayer)
   of LezMultisigFamily: LezMultisigSettlement(family: p.family, adapter: adapter, relayer: relayer)
   else: nil

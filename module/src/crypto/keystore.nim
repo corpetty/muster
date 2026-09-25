@@ -24,6 +24,9 @@ import ./curve25519
 import ./binding
 import ../bitcoin/keys as btckeys   # DER ECDSA + BIP-340 over the same secret (exo-a50.2.4)
 import nimcrypto/[hmac, sha2]      # HMAC-SHA256: derived LEZ member keys (exo-3c9)
+import std/options
+import ../frost/chilldkg            # FROST (Phase D, S7): the ceremony + signing secrets, held
+import ../frost/keystore_ops
 
 type
   KeystoreError* = object of CatchableError
@@ -120,20 +123,73 @@ method lezMemberSign*(ks: Keystore, label: string, msgHash: array[32, byte]): se
   ## A BIP-340 signature by the member key named `label`.
   raise newException(KeystoreError, "Keystore.lezMemberSign is abstract")
 
-proc lezChildSecret(secret: array[32, byte], label: string): array[32, byte] =
-  ## HMAC-SHA256(secret, "muster/lez-member-key/v1" 0x00 label 0x00 counter), taking the
-  ## first counter that gives a valid scalar.
-  if label.len == 0: raise newException(KeystoreError, "a LEZ member key needs a label")
+proc childSecret(secret: array[32, byte], domain, label: string): array[32, byte] =
+  ## HMAC-SHA256(secret, domain 0x00 label 0x00 counter), taking the first counter that
+  ## gives a valid scalar. One derivation, a domain per use.
+  if label.len == 0: raise newException(KeystoreError, "a derived key needs a label")
   for counter in 0 .. 255:
     var msg: seq[byte]
-    for c in "muster/lez-member-key/v1": msg.add byte(c)
+    for c in domain: msg.add byte(c)
     msg.add 0
     for c in label: msg.add byte(c)
     msg.add 0
     msg.add byte(counter)
     let d = sha256.hmac(secret, msg).data
     if btckeys.validSecret(d): return d
-  raise newException(KeystoreError, "no valid LEZ member key for this label")
+  raise newException(KeystoreError, "no valid key for this label")
+
+proc lezChildSecret(secret: array[32, byte], label: string): array[32, byte] =
+  childSecret(secret, "muster/lez-member-key/v1", label)
+
+# FROST (Phase D, seam S7; exo-a50.4.4): a member's host key for a ChillDKG ceremony is
+# derived per label, like a LEZ member key. The ceremony's states and the signing nonces
+# are held in memory (frost/keystore_ops.nim). A secret share is never stored or
+# returned: it is recovered from the ceremony's public recovery data plus the host key.
+# A nonce is consumed before it is used, and a restart aborts its session.
+method frostHostPubkey*(ks: Keystore, label: string): seq[byte] {.base.} =
+  ## The 33-byte host public key for `label`: what a member offers a ceremony.
+  raise newException(KeystoreError, "Keystore.frostHostPubkey is abstract")
+method frostHostSign*(ks: Keystore, label: string, digest: array[32, byte]): seq[byte] {.base.} =
+  ## A BIP-340 signature by the host key (for attestations), under its x-only form.
+  raise newException(KeystoreError, "Keystore.frostHostSign is abstract")
+method frostHostAttest*(ks: Keystore, label: string, digest: array[32, byte]): seq[byte] {.base.} =
+  ## A recoverable (65-byte) signature by the host key: the attestation a contributor
+  ## named by that key makes over P (coordination/attest.nim).
+  raise newException(KeystoreError, "Keystore.frostHostAttest is abstract")
+method frostDkgStep1*(ks: Keystore, label: string, params: SessionParams): seq[byte] {.base.} =
+  raise newException(KeystoreError, "Keystore.frostDkgStep1 is abstract")
+method frostDkgStep2*(ks: Keystore, label: string, params: SessionParams, cmsg1: seq[byte]): seq[byte] {.base.} =
+  raise newException(KeystoreError, "Keystore.frostDkgStep2 is abstract")
+method frostDkgFinalize*(ks: Keystore, label: string, params: SessionParams,
+                         cmsg2: seq[byte]): tuple[output: DkgOutput, recoveryData: seq[byte]] {.base.} =
+  ## The ceremony's outcome, with NO secret share in it.
+  raise newException(KeystoreError, "Keystore.frostDkgFinalize is abstract")
+method frostNonceCommit*(ks: Keystore, label, session: string, recoveryData: seq[byte],
+                         msgs: seq[seq[byte]]): seq[seq[byte]] {.base.} =
+  ## Round 1: one public nonce per message, once per session.
+  raise newException(KeystoreError, "Keystore.frostNonceCommit is abstract")
+method frostPartialSign*(ks: Keystore, label, session: string, recoveryData: seq[byte], ids: seq[int],
+                         pubnonces: seq[seq[seq[byte]]], msgs: seq[seq[byte]]): seq[seq[byte]] {.base.} =
+  ## Round 2: one partial signature per message, consuming the session's nonces.
+  raise newException(KeystoreError, "Keystore.frostPartialSign is abstract")
+
+proc frostHostSecret(secret: array[32, byte], label: string): seq[byte] =
+  @(childSecret(secret, "muster/frost-host-key/v1", label))
+
+template frostOp(body: untyped): untyped =
+  ## The helper's refusals (and the ceremony's own errors) as KeystoreError.
+  try: body
+  except KeystoreError as e: raise e
+  except CatchableError as e: raise newException(KeystoreError, e.msg)
+
+proc frostDo(secret: array[32, byte], fs: FrostSessions, label: string, op: string,
+             params: SessionParams = SessionParams(), msg: seq[byte] = @[]): seq[byte] =
+  let hs = frostHostSecret(secret, label)
+  frostOp:
+    case op
+    of "step1": dkgStep1(fs, hs, label, params)
+    of "step2": dkgStep2(fs, hs, label, params, msg)
+    else: raise newException(KeystoreError, "unknown FROST op " & op)
 
 method bindingForKey*(ks: Keystore, r: KeyRef, ctx: LinkContext): LinkStatement {.base.} =
   ## Bind our encryption identity to the AUTHORIZATION key named by `r`: sign the enc
@@ -170,6 +226,7 @@ type
     path: string
     pass: string
     extra: seq[FileKey]              # additional keyfiles loaded into the set (K2b)
+    frost: FrostSessions             # FROST ceremony states + nonces, in memory only (S7)
 
 proc finish(fk: FileKeystore) =
   fk.addr0 = addressOf(fk.secret)
@@ -247,7 +304,7 @@ proc openFileKeystore*(path, passphrase: string, secpSeed: seq[byte] = @[],
   ## demo peer's room-membership id is deterministic and known ahead of time, which is
   ## what lets peers be pre-seeded as each other's contacts (exo-1fc). Demo-only; on
   ## the normal path it is empty and the encryption identity is a fresh random key.
-  result = FileKeystore(path: path, pass: passphrase)
+  result = FileKeystore(path: path, pass: passphrase, frost: newFrostSessions())
   var encSeed: array[32, byte]
   if fileExists(path):
     let (secret, seed, upgraded) = readKeyfile(path, passphrase)
@@ -275,6 +332,28 @@ method lezMemberKey*(fk: FileKeystore, label: string): seq[byte] =
   btckeys.xonlyPubKey(lezChildSecret(fk.secret, label))
 method lezMemberSign*(fk: FileKeystore, label: string, msgHash: array[32, byte]): seq[byte] =
   btckeys.schnorrSign(lezChildSecret(fk.secret, label), msgHash, newSeq[byte](32))
+method frostHostPubkey*(fk: FileKeystore, label: string): seq[byte] =
+  frostOp: hostpubkeyGen(frostHostSecret(fk.secret, label))
+method frostHostSign*(fk: FileKeystore, label: string, digest: array[32, byte]): seq[byte] =
+  btckeys.schnorrSign(frostHostSecret(fk.secret, label), digest, newSeq[byte](32))
+method frostHostAttest*(fk: FileKeystore, label: string, digest: array[32, byte]): seq[byte] =
+  let hs = frostHostSecret(fk.secret, label)
+  var sec: array[32, byte]
+  for i in 0 ..< 32: sec[i] = hs[i]
+  @(signRecoverable(digest, sec))
+method frostDkgStep1*(fk: FileKeystore, label: string, params: SessionParams): seq[byte] =
+  frostDo(fk.secret, fk.frost, label, "step1", params)
+method frostDkgStep2*(fk: FileKeystore, label: string, params: SessionParams, cmsg1: seq[byte]): seq[byte] =
+  frostDo(fk.secret, fk.frost, label, "step2", params, cmsg1)
+method frostDkgFinalize*(fk: FileKeystore, label: string, params: SessionParams,
+                         cmsg2: seq[byte]): tuple[output: DkgOutput, recoveryData: seq[byte]] =
+  frostOp: dkgFinalize(fk.frost, label, params, cmsg2)
+method frostNonceCommit*(fk: FileKeystore, label, session: string, recoveryData: seq[byte],
+                         msgs: seq[seq[byte]]): seq[seq[byte]] =
+  frostOp: nonceCommit(fk.frost, frostHostSecret(fk.secret, label), label, session, recoveryData, msgs)
+method frostPartialSign*(fk: FileKeystore, label, session: string, recoveryData: seq[byte], ids: seq[int],
+                         pubnonces: seq[seq[seq[byte]]], msgs: seq[seq[byte]]): seq[seq[byte]] =
+  frostOp: partialSign(fk.frost, frostHostSecret(fk.secret, label), label, session, recoveryData, ids, pubnonces, msgs)
 method sign*(fk: FileKeystore, msgHash: array[32, byte]): Signature65 =
   signRecoverable(msgHash, fk.secret)
 method edSign*(fk: FileKeystore, msg: openArray[byte]): Ed25519Sig =
@@ -316,9 +395,10 @@ type
     enc: EncKeys
     addr0: Address
     extra: seq[MemKey]              # additional keys in the set (K2b)
+    frost: FrostSessions            # FROST ceremony states + nonces, in memory only (S7)
 
 proc newInMemoryKeystore*(secret: array[32, byte], encSeed: array[32, byte]): InMemoryKeystore =
-  InMemoryKeystore(secret: secret, enc: encFromSeed(encSeed), addr0: addressOf(secret))
+  InMemoryKeystore(secret: secret, enc: encFromSeed(encSeed), addr0: addressOf(secret), frost: newFrostSessions())
 
 proc addKey*(ik: InMemoryKeystore, secret: array[32, byte], encSeed: array[32, byte]): KeyRef =
   ## Add another authorization key to the set; returns its ref. For tests and raw-key
@@ -334,6 +414,28 @@ method lezMemberKey*(ik: InMemoryKeystore, label: string): seq[byte] =
   btckeys.xonlyPubKey(lezChildSecret(ik.secret, label))
 method lezMemberSign*(ik: InMemoryKeystore, label: string, msgHash: array[32, byte]): seq[byte] =
   btckeys.schnorrSign(lezChildSecret(ik.secret, label), msgHash, newSeq[byte](32))
+method frostHostPubkey*(ik: InMemoryKeystore, label: string): seq[byte] =
+  frostOp: hostpubkeyGen(frostHostSecret(ik.secret, label))
+method frostHostSign*(ik: InMemoryKeystore, label: string, digest: array[32, byte]): seq[byte] =
+  btckeys.schnorrSign(frostHostSecret(ik.secret, label), digest, newSeq[byte](32))
+method frostHostAttest*(ik: InMemoryKeystore, label: string, digest: array[32, byte]): seq[byte] =
+  let hs = frostHostSecret(ik.secret, label)
+  var sec: array[32, byte]
+  for i in 0 ..< 32: sec[i] = hs[i]
+  @(signRecoverable(digest, sec))
+method frostDkgStep1*(ik: InMemoryKeystore, label: string, params: SessionParams): seq[byte] =
+  frostDo(ik.secret, ik.frost, label, "step1", params)
+method frostDkgStep2*(ik: InMemoryKeystore, label: string, params: SessionParams, cmsg1: seq[byte]): seq[byte] =
+  frostDo(ik.secret, ik.frost, label, "step2", params, cmsg1)
+method frostDkgFinalize*(ik: InMemoryKeystore, label: string, params: SessionParams,
+                         cmsg2: seq[byte]): tuple[output: DkgOutput, recoveryData: seq[byte]] =
+  frostOp: dkgFinalize(ik.frost, label, params, cmsg2)
+method frostNonceCommit*(ik: InMemoryKeystore, label, session: string, recoveryData: seq[byte],
+                         msgs: seq[seq[byte]]): seq[seq[byte]] =
+  frostOp: nonceCommit(ik.frost, frostHostSecret(ik.secret, label), label, session, recoveryData, msgs)
+method frostPartialSign*(ik: InMemoryKeystore, label, session: string, recoveryData: seq[byte], ids: seq[int],
+                         pubnonces: seq[seq[seq[byte]]], msgs: seq[seq[byte]]): seq[seq[byte]] =
+  frostOp: partialSign(ik.frost, frostHostSecret(ik.secret, label), label, session, recoveryData, ids, pubnonces, msgs)
 method sign*(ik: InMemoryKeystore, msgHash: array[32, byte]): Signature65 =
   signRecoverable(msgHash, ik.secret)
 method edSign*(ik: InMemoryKeystore, msg: openArray[byte]): Ed25519Sig =
