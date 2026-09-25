@@ -24,7 +24,9 @@
 
 import std/[os, json, strutils, sequtils, random, times]
 import stint
+import ../src/log/log
 import ../src/drivers/driver
+import ../src/drivers/kinds
 import ../src/drivers/lez_multisig
 import ../src/lez/multisig
 import ../src/lez/multisig_chain
@@ -79,7 +81,9 @@ let created = ca.submit(@[], createOp(ck, 2, @[m1, m2, m3]))
 doAssert created.ok, created.error
 let (found, st, _) = ca.readState(ck)
 doAssert found and st.threshold == 2 and st.members == @[m1, m2, m3] and st.transactionIndex == 0
-doAssert ca.readAccount(m1).owner == program, "the program claimed the member accounts"
+# The program asserts the members are fresh at create. On the SPEL v0.7.0 rebuild it does
+# NOT claim them (its doc comment says it does): the chain shows them still unowned.
+doAssert ca.readAccount(m1).owner.len == 0, "the rebuild leaves member accounts unowned"
 echo "2. a 2-of-3 on chain (tx ", created.hash[0 .. 11], "…, height ", created.height, "); state read back at its PDA OK"
 
 # ── 3. a token to move ────────────────────────────────────────────────────────

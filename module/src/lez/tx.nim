@@ -52,6 +52,47 @@ proc publicAccountId*(xonly: seq[byte]): seq[byte] =
   need32(xonly, "an x-only key")
   @(sha256(padded(AccountIdPrefix) & xonly))
 
+# ── account ids on the wire: base58 (the JSON-RPC form) ───────────────────────
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+proc accountIdToBase58*(id: seq[byte]): string =
+  need32(id, "an account id")
+  var digits: seq[int]                              # base 58, least significant first
+  for b in id:
+    var carry = int(b)
+    for j in 0 ..< digits.len:
+      carry += digits[j] * 256
+      digits[j] = carry mod 58
+      carry = carry div 58
+    while carry > 0:
+      digits.add carry mod 58
+      carry = carry div 58
+  for b in id:
+    if b != 0: break
+    result.add '1'
+  for i in countdown(digits.high, 0): result.add B58[digits[i]]
+
+proc accountIdFromBase58*(s: string): seq[byte] =
+  ## Raises ValueError unless `s` is base58 for exactly 32 bytes.
+  if s.len == 0: raise newException(ValueError, "an empty account id")
+  var bytes: seq[int]                               # base 256, least significant first
+  for c in s:
+    let d = B58.find(c)
+    if d < 0: raise newException(ValueError, "not base58: " & s)
+    var carry = d
+    for j in 0 ..< bytes.len:
+      carry += bytes[j] * 58
+      bytes[j] = carry and 0xff
+      carry = carry shr 8
+    while carry > 0:
+      bytes.add carry and 0xff
+      carry = carry shr 8
+  for c in s:
+    if c != '1': break
+    result.add 0
+  for i in countdown(bytes.high, 0): result.add byte(bytes[i])
+  if result.len != 32: raise newException(ValueError, "not a 32-byte account id: " & s)
+
 # ── risc0 serde words ─────────────────────────────────────────────────────────
 proc wU8(w: var seq[uint32], x: int) =
   if x < 0 or x > 255: raise newException(ValueError, "not a u8: " & $x)
