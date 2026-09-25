@@ -29,6 +29,7 @@ import ../drivers/safe
 import ../drivers/eip191
 import ../drivers/btc_multisig   # Bitcoin accounts (exo-a50.2.3)
 import ../drivers/lez_multisig   # LEZ multisig accounts (exo-6cbe)
+import ../drivers/btc_frost      # FROST accounts: the ceremony's recovery data (Phase D)
 import ../lez/multisig as lezms
 import ../lez/multisig_chain
 import ../crypto/secp256k1
@@ -175,6 +176,15 @@ proc driverForPolicy*(policy: string, accounts: seq[RoomAccount],
     let (ok, acct, _) = lezMultisigAccountFromParts(a.chain, a.address, a.config, a.signers, a.threshold)
     if not ok: return newUnsupportedDriver(policy)
     newLezMultisigDriver(acct)
+  of "btc-frost":
+    # a FROST account (Phase D): its address must be the threshold key its recovery data
+    # derives — the ceremony itself, re-derived, never taken on trust
+    var rec = ""
+    try: rec = parseJson(a.config)["recovery"].getStr()
+    except CatchableError: return newUnsupportedDriver(policy)
+    let (ok, acct, _) = frostAccountOfDisclosure(a.chain, a.address, rec)
+    if not ok: return newUnsupportedDriver(policy)
+    newBtcFrostDriver(acct)
   else: newUnsupportedDriver(policy)
 
 proc accountsJson*(accounts: seq[RoomAccount]): JsonNode =
@@ -192,6 +202,18 @@ proc allSigners*(accounts: seq[RoomAccount]): seq[Address] =
     for s in a.signers:
       let ad = toAddress(s)
       if ad notin result: result.add ad
+
+proc frostDisclosureOf*(a: RoomAccount): tuple[ok: bool, account: FrostAccount, detail: string] =
+  ## A FROST disclosure, re-derived from the recovery data in its config.
+  var rec: string
+  try: rec = parseJson(a.config)["recovery"].getStr()
+  except CatchableError: return (false, FrostAccount(), "no recovery data in the config")
+  frostAccountOfDisclosure(a.chain, a.address, rec)
+
+proc frostDisclosureCheck*(a: RoomAccount): tuple[status: AccountCheck, detail: string] =
+  ## Verified without a chain read: the recovery data derives the address, or it does not.
+  let (ok, _, detail) = frostDisclosureOf(a)
+  ((if ok: acVerified else: acDisagrees), detail)
 
 proc btcDisclosureCheck*(a: RoomAccount): tuple[status: AccountCheck, detail: string] =
   ## A Bitcoin disclosure is verified WITHOUT a chain read: the address commits to the

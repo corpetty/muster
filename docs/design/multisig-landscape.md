@@ -89,7 +89,7 @@ One row per family, generated from the registry (`contracts/families/registry.js
 | `btc.tapscript-multi-a` | native | same bytes | implicit | 1 · derive | new-address | spend / spend / public | utxo · none | per sig | production | built |
 | `btc.miniscript-decay` | native | same bytes | implicit | 1 · derive | new-address | spend / spend / public | utxo · none | per sig | production | candidate |
 | `btc.musig2-keypath` | aggregate | partial (n-of-n) | implicit | 2 ⚿ · derive | new-address | – / – / public | utxo · none | – | early | candidate |
-| `btc.frost-bip445` | aggregate | partial (t-of-n) | implicit | 2 ⚿ · dkg | new-address | – / – / public | utxo · none | – | draft | candidate (D) |
+| `btc.frost-bip445` | aggregate | partial (t-of-n) | implicit | 2 ⚿ · dkg | new-address | – / – / public | utxo · none | – | draft | partial (D) |
 | `sol.squads-v4` | vote | own tx → **pointer** | implicit | 1 · deploy | in-place | setup / each vote / public | index · forced (each vote transaction's blockhash lives ~60-90s) | a tx | production | candidate |
 | `sol.squads-smart-account` | contract | same bytes | implicit | 1 · deploy | in-place | setup / spend / public | objects · forced (blockhash ~60-90s unless a durable nonce is used) | – | early | watch |
 | `sol.spl-token-multisig` | contract | same bytes | implicit | 1 · deploy | fixed | setup / spend / public | dedup · forced (blockhash ~60-90s) | per sig | production | watch |

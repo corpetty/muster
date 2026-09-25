@@ -164,6 +164,10 @@ proc contributionRound*(c: Contribution): int =
     if r.kind == ckUint and r.u in [1'u64, 2'u64]: int(r.u) else: 0
   except CatchableError: 0
 
+proc decodeRound1Nonces*(c: Contribution): seq[seq[byte]] =
+  ## A round-1 contribution's public nonces, one per input.
+  bytesList(decode(c.bytes).mapGet("nonces"))
+
 proc round2Of*(c: Contribution): Round2 =
   let v = decode(c.bytes)
   result.signer = v.mapGet("signer").b

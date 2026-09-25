@@ -27,7 +27,7 @@ import ../src/drivers/[driver, kinds, btc_frost, btc_multisig]
 import ../src/bitcoin/[tx, keys]
 import ../src/wallet/[types, btc_adapter]
 import ../src/settlement/settlement
-import ../src/coordination/[session, intent_events, intents, live, accounts, aggregate]
+import ../src/coordination/[session, intent_events, intents, live, accounts, aggregate, attest]
 import ./probes/live_room
 
 var r = newRoom3("/muster/1/frost-room/proto")
@@ -71,10 +71,16 @@ let effectJson = buildFrostSpend(acct, utxos, "bcrt1qw508d6qejxtdg4y5r3zarvary0c
 let id = liveProposeIntent(r.alice, aliceKs, res(r.alice), policy, effectJson, int64(Now), 1,
                            account = a.address, ttlSec = Ttl)
 doAssert id.startsWith("0x"), id
+# the coins came from the proposer's node: the read is recorded (invariant 10), as the composer does
+r.alice.publish(readEvent(id, "inputs", "bitcoind:scantxoutset", $parseJson(effectJson)["inputs"]))
 pollAll()
-doAssert liveFrostContribute(r.alice, aliceKs, res(r.alice), id, Now) == "collecting"
+block:
+  let got = liveFrostContribute(r.alice, aliceKs, res(r.alice), id, Now)
+  doAssert got == "collecting", got
 pollAll()
-doAssert liveFrostContribute(r.carol, carolKs, res(r.carol), id, Now) == "collecting"
+block:
+  let got = liveFrostContribute(r.carol, carolKs, res(r.carol), id, Now)
+  doAssert got == "collecting", got
 pollAll()
 let it1 = reduceIntents(r.bob.log.allEvents(), res(r.bob))[id]
 doAssert it1.collection.round == 2, "round 1 closed at t = 2"
@@ -82,9 +88,13 @@ echo "3. round 1: Alice and Carol publish nonces from their keystores; round 1 c
 
 # ── 4. round 2 ────────────────────────────────────────────────────────────────
 doAssert liveFrostContribute(r.bob, bobKs, res(r.bob), id, Now).startsWith("not-in-signing-set")
-doAssert liveFrostContribute(r.alice, aliceKs, res(r.alice), id, Now) == "collecting"
+block:
+  let got = liveFrostContribute(r.alice, aliceKs, res(r.alice), id, Now)
+  doAssert got == "collecting", got
 pollAll()
-doAssert liveFrostContribute(r.carol, carolKs, res(r.carol), id, Now) == "executable"
+block:
+  let got = liveFrostContribute(r.carol, carolKs, res(r.carol), id, Now)
+  doAssert got == "executable", got
 pollAll()
 doAssert intentState(r.bob.log.allEvents(), res(r.bob), id) == "executable"
 echo "4. round 2: the log fixes the signer set; partials make it executable; Bob outside the set publishes nothing OK"
@@ -106,12 +116,19 @@ doAssert schnorrVerify(spent.inputs[0].witness[0], drv.sighashesOf(effectFromJso
 echo "5. settlement: one BIP-340 signature, alone in the witness, under the account key OK"
 
 # ── 6. a restart between the rounds aborts ────────────────────────────────────
-let id2 = liveProposeIntent(r.alice, aliceKs, res(r.alice), policy, effectJson.replace("50000", "40000"),
+let effectJson2 = buildFrostSpend(acct, utxos, "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080", 40_000, feeRate = 2)
+let id2 = liveProposeIntent(r.alice, aliceKs, res(r.alice), policy, effectJson2,
                             int64(Now), 2, account = a.address, ttlSec = Ttl)
+doAssert id2.startsWith("0x"), id2
+r.alice.publish(readEvent(id2, "inputs", "bitcoind:scantxoutset", $parseJson(effectJson2)["inputs"]))
 pollAll()
-doAssert liveFrostContribute(r.alice, aliceKs, res(r.alice), id2, Now) == "collecting"
+block:
+  let got = liveFrostContribute(r.alice, aliceKs, res(r.alice), id2, Now)
+  doAssert got == "collecting", got
 pollAll()
-doAssert liveFrostContribute(r.carol, carolKs, res(r.carol), id2, Now) == "collecting"
+block:
+  let got = liveFrostContribute(r.carol, carolKs, res(r.carol), id2, Now)
+  doAssert got == "collecting", got
 pollAll()
 let carolRestarted = restartedCarolKs()
 let before = r.carol.log.allEvents().len
@@ -121,12 +138,12 @@ doAssert r.carol.log.allEvents().len == before, "nothing published"
 echo "6. a restart between the rounds aborts the session: no nonce, no partial, nothing published OK"
 
 # ── 7. no secret enters the log ───────────────────────────────────────────────
-var kinds = initCountTable[string]()
+var entryKinds = initCountTable[string]()
 for e in r.bob.log.allEvents():
   let p = e.key.split('/')
-  if p.len >= 3 and p[0] == "frost": kinds.inc p[2]
-doAssert kinds["open"] == 1 and kinds["join"] == 3 and kinds["pmsg1"] == 3 and kinds["pmsg2"] == 3
-doAssert toSeq(kinds.keys).allIt(it in ["open", "join", "pmsg1", "pmsg2"]), $kinds
+  if p.len >= 3 and p[0] == "frost": entryKinds.inc p[2]
+doAssert entryKinds["open"] == 1 and entryKinds["join"] == 3 and entryKinds["pmsg1"] == 3 and entryKinds["pmsg2"] == 3
+doAssert toSeq(entryKinds.keys).allIt(it in ["open", "join", "pmsg1", "pmsg2"]), $entryKinds
 echo "7. the ceremony's log: one open, three joins, three step-1 and three step-2 messages — no shares, no nonces OK"
 
 echo "frost_ceremony_room_test: the room runs the ceremony and both rounds; the chain would see one signature — all OK"

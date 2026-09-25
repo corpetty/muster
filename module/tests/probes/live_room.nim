@@ -25,6 +25,8 @@ import ../../src/coordination/session
 import ../../src/coordination/intents
 import ../../src/coordination/live
 import ../../src/coordination/attest
+import ../../src/frost/chilldkg          # frostTestRecoveryHex: a real ceremony, once
+import std/sequtils
 export log, keystore, driver, signing_payload, session, intents, live, attest, tables, strutils,
        transport, epoch_crypto, binding
 
@@ -98,6 +100,22 @@ proc newRoom3*(topic = "/muster/1/three/proto"): Room3 =
         alice: newCoordinationSession(newLocalTransport(net), aliceCrypto, topic),
         bob: newCoordinationSession(newLocalTransport(net), bobCrypto, topic),
         carol: newCoordinationSession(newLocalTransport(net), carolCrypto, topic))
+
+var gFrostRecovery = ""
+proc frostTestRecoveryHex*(): string =
+  ## A real 2-of-3 ChillDKG's public recovery data (Alice, Bob, Carol), for a test that
+  ## builds a btc-frost driver from a config. Run once per process.
+  if gFrostRecovery.len == 0:
+    let kss = @[Keystore(aliceKs), Keystore(bobKs), Keystore(carolKs)]
+    const L = "fixture/frost"
+    let params = SessionParams(hostpubkeys: kss.mapIt(it.frostHostPubkey(L)), t: 2)
+    let pm1 = kss.mapIt(it.frostDkgStep1(L, params))
+    let (cst, cmsg1) = coordinatorStep1(pm1, params)
+    let pm2 = kss.mapIt(it.frostDkgStep2(L, params, cmsg1))
+    let (_, _, rec) = coordinatorFinalize(cst, pm2)
+    const hexd = "0123456789abcdef"
+    for b in rec: (gFrostRecovery.add hexd[int(b shr 4)]; gFrostRecovery.add hexd[int(b and 0x0F)])
+  gFrostRecovery
 
 proc bindCtx*(): LinkContext = LinkContext(account: SafeAddr, slot: "0", expiry: Now + 86_400)
 

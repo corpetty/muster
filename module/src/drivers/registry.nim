@@ -16,6 +16,7 @@ import ./invoke
 import ./eip191
 import ./btc_multisig
 import ./lez_multisig      # the LEZ multisig program (exo-6cbe)
+import ./btc_frost         # FROST: the aggregate locus (Phase D)
 import ../bitcoin/tx       # hexToBytes
 import ../crypto/secp256k1    # Address
 import ../crypto/curve25519   # Ed25519Pub (the roster)
@@ -74,6 +75,9 @@ proc newDriver*(kind: string, config: JsonNode): Driver =
     # the registry builds from the config alone: the address is the one it derives
     if not ok and not detail.startsWith("the address"): raise newException(RegistryError, detail)
     newLezMultisigDriver(acct)
+  of "btc-frost":
+    # A FROST account (Phase D): {network, recovery: the ceremony's recovery data, hex}.
+    newBtcFrostDriver(frostAccount(config{"network"}.getStr("regtest"), hexToBytes(config{"recovery"}.getStr())))
   of "stub":
     newStubDriver(rounds = config{"rounds"}.getInt(1),
                   threshold = config{"threshold"}.getInt(2),

@@ -152,6 +152,10 @@ method frostHostPubkey*(ks: Keystore, label: string): seq[byte] {.base.} =
 method frostHostSign*(ks: Keystore, label: string, digest: array[32, byte]): seq[byte] {.base.} =
   ## A BIP-340 signature by the host key (for attestations), under its x-only form.
   raise newException(KeystoreError, "Keystore.frostHostSign is abstract")
+method frostHostAttest*(ks: Keystore, label: string, digest: array[32, byte]): seq[byte] {.base.} =
+  ## A recoverable (65-byte) signature by the host key: the attestation a contributor
+  ## named by that key makes over P (coordination/attest.nim).
+  raise newException(KeystoreError, "Keystore.frostHostAttest is abstract")
 method frostDkgStep1*(ks: Keystore, label: string, params: SessionParams): seq[byte] {.base.} =
   raise newException(KeystoreError, "Keystore.frostDkgStep1 is abstract")
 method frostDkgStep2*(ks: Keystore, label: string, params: SessionParams, cmsg1: seq[byte]): seq[byte] {.base.} =
@@ -332,6 +336,11 @@ method frostHostPubkey*(fk: FileKeystore, label: string): seq[byte] =
   frostOp: hostpubkeyGen(frostHostSecret(fk.secret, label))
 method frostHostSign*(fk: FileKeystore, label: string, digest: array[32, byte]): seq[byte] =
   btckeys.schnorrSign(frostHostSecret(fk.secret, label), digest, newSeq[byte](32))
+method frostHostAttest*(fk: FileKeystore, label: string, digest: array[32, byte]): seq[byte] =
+  let hs = frostHostSecret(fk.secret, label)
+  var sec: array[32, byte]
+  for i in 0 ..< 32: sec[i] = hs[i]
+  @(signRecoverable(digest, sec))
 method frostDkgStep1*(fk: FileKeystore, label: string, params: SessionParams): seq[byte] =
   frostDo(fk.secret, fk.frost, label, "step1", params)
 method frostDkgStep2*(fk: FileKeystore, label: string, params: SessionParams, cmsg1: seq[byte]): seq[byte] =
@@ -409,6 +418,11 @@ method frostHostPubkey*(ik: InMemoryKeystore, label: string): seq[byte] =
   frostOp: hostpubkeyGen(frostHostSecret(ik.secret, label))
 method frostHostSign*(ik: InMemoryKeystore, label: string, digest: array[32, byte]): seq[byte] =
   btckeys.schnorrSign(frostHostSecret(ik.secret, label), digest, newSeq[byte](32))
+method frostHostAttest*(ik: InMemoryKeystore, label: string, digest: array[32, byte]): seq[byte] =
+  let hs = frostHostSecret(ik.secret, label)
+  var sec: array[32, byte]
+  for i in 0 ..< 32: sec[i] = hs[i]
+  @(signRecoverable(digest, sec))
 method frostDkgStep1*(ik: InMemoryKeystore, label: string, params: SessionParams): seq[byte] =
   frostDo(ik.secret, ik.frost, label, "step1", params)
 method frostDkgStep2*(ik: InMemoryKeystore, label: string, params: SessionParams, cmsg1: seq[byte]): seq[byte] =

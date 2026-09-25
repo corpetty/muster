@@ -22,6 +22,7 @@ import ../src/drivers/registry
 import ../src/drivers/conformance
 
 const RegistryPath = currentSourcePath().parentDir() / ".." / ".." / "contracts" / "families" / "registry.json"
+import ./probes/live_room   # frostTestRecoveryHex: a real ceremony for the btc-frost entry
 let reg = parseJson(readFile(RegistryPath))
 
 proc entry(family: string): JsonNode =
@@ -52,7 +53,8 @@ let kinds = @[
   ("lez-multisig", %*{"chain": "lez:local", "pda": "lee-v0.2", "program": repeat("aa", 32),
                       "createKey": repeat("0b", 32), "threshold": 2,
                       "members": [repeat("01", 32), repeat("02", 32), repeat("03", 32)]},
-   "module/src/drivers/lez_multisig.nim")]
+   "module/src/drivers/lez_multisig.nim"),
+  ("btc-frost", %*{"network": "regtest", "recovery": frostTestRecoveryHex()}, "module/src/drivers/btc_frost.nim")]
 
 # ── 1. every registered kind declares a consistent profile ─────────────────────
 block:
