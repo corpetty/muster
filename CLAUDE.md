@@ -227,7 +227,11 @@ Deferred, infra-bound: client-side EVM signing on a non-anvil node; the beacon l
   - A `lez-call` at the account's chain-read nonce (a recorded read) runs both rounds.
   - Settlement re-reads the nonce (a stale one can never land, so it is refused), aggregates one signature, and sends it.
   - `drivers/frost_group.nim` is the group and rounds both FROST families share.
-- **Not yet:** LEZ FROST's hosted surface and UI (the ceremony section already opens a `lez:` ceremony).
+- **Hosted and in the room UI** (exo-55e):
+  - A ceremony opened on a `lez:` zone discloses the group's LEZ account.
+  - Under a `lez-frost@` policy the LEZ transfer composer sends from the group's account (a `lez-call` at its chain-read nonce).
+  - Approve runs both rounds; the partial follows automatically once round 1 closes.
+  - `coordinate_submit` sends the aggregate through the user's sequencer, and the pump watches for inclusion.
 
 Next: the LEZ multisig's and FROST's on-display runs in a runner and across two instances.
 
