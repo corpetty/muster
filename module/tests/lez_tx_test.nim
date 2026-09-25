@@ -15,6 +15,8 @@
 ##   5. a program deployment (LeeTransaction::ProgramDeployment) and its hash;
 ##   6. the account list each instruction names: state PDA, signer, proposal PDA, then the
 ##      execute's target accounts; a create names the state PDA and the members, no signer.
+##   7. an account id on the wire is base58 (the chain's JSON-RPC) — both ways, against
+##      ids the testnet and a local sequencer returned; a malformed one is refused.
 ## Needs the secp closure — see tests/README.md.
 
 import std/[json, os, strutils, sequtils, base64]
@@ -110,5 +112,19 @@ doAssert opAccounts(psLee02, prog, executeOp(ck, 2, @[vault, to]), me) ==
          @[state, me, proposalPda(psLee02, prog, ck, 2), vault, to]
 doAssert not opSigned(createOp(ck, 2, ids[0 .. 2])) and opSigned(approveOp(ck, 2))
 echo "6. accounts: state PDA, signer, proposal PDA (+ execute targets); a create names the members, unsigned OK"
+
+# ── 7. base58 account ids ─────────────────────────────────────────────────────
+for dir in ["lez-multisig-testnet", "lez-multisig-v024"]:
+  let c = parseJson(readFile(currentSourcePath.parentDir / "vectors" / dir / "chain.json"))
+  for k, a in c["accounts"]:
+    doAssert accountIdToBase58(hb(a["id"].getStr())) == a["id_base58"].getStr(), dir & "/" & k
+    doAssert accountIdFromBase58(a["id_base58"].getStr()) == hb(a["id"].getStr()), dir & "/" & k
+doAssert accountIdFromBase58(accountIdToBase58(newSeq[byte](32))) == newSeq[byte](32), "leading zeros"
+for bad in ["", "0OIl", "2" & repeat('z', 50)]:
+  var refused = false
+  try: discard accountIdFromBase58(bad)
+  except ValueError: refused = true
+  doAssert refused, "refused: " & bad
+echo "7. base58 account ids, both ways, against the chain's own; malformed refused OK"
 
 echo "lez_tx_test: LEZ v0.2.4 public transactions, byte for byte against LEZ's own types — all OK"
