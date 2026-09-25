@@ -18,6 +18,10 @@ proc msgOf(h: openArray[byte]): sk.SkMessage =
   if r.isErr: raise newException(BtcError, "a message is 32 bytes")
   r.get()
 
+proc validSecret*(secret: openArray[byte]): bool =
+  ## 0 < secret < n: a usable secp256k1 secret key.
+  secret.len == 32 and sk.SkSecretKey.fromRaw(secret).isOk
+
 proc compressedPubKey*(secret: openArray[byte]): seq[byte] = @(secretOf(secret).toPublicKey().toRawCompressed())
 proc xonlyPubKey*(secret: openArray[byte]): seq[byte] = @(secretOf(secret).toPublicKey().toXOnly().toRaw())
 proc xonlyOfCompressed*(pub33: openArray[byte]): seq[byte] =

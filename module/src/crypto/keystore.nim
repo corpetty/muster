@@ -23,6 +23,7 @@ import ./sodium
 import ./curve25519
 import ./binding
 import ../bitcoin/keys as btckeys   # DER ECDSA + BIP-340 over the same secret (exo-a50.2.4)
+import nimcrypto/[hmac, sha2]      # HMAC-SHA256: derived LEZ member keys (exo-3c9)
 
 type
   KeystoreError* = object of CatchableError
@@ -106,6 +107,33 @@ method signEcdsaDer*(ks: Keystore, msgHash: array[32, byte]): seq[byte] {.base.}
   raise newException(KeystoreError, "Keystore.signEcdsaDer is abstract")
 method signSchnorr*(ks: Keystore, msg: array[32, byte]): seq[byte] {.base.} =
   raise newException(KeystoreError, "Keystore.signSchnorr is abstract")
+
+# LEZ member keys (exo-3c9): the LEZ multisig claims every member account at create, so
+# each membership needs a FRESH account. The keystore derives one key per label from its
+# own secret. The label is what the room records, so state stays "log + keys" (inv 4).
+# The member's transactions are signed BIP-340, the LEZ public-transaction scheme, with
+# zero aux randomness so that a signature is reproducible. The secret never leaves.
+method lezMemberKey*(ks: Keystore, label: string): seq[byte] {.base.} =
+  ## The x-only public key of the member key named `label`.
+  raise newException(KeystoreError, "Keystore.lezMemberKey is abstract")
+method lezMemberSign*(ks: Keystore, label: string, msgHash: array[32, byte]): seq[byte] {.base.} =
+  ## A BIP-340 signature by the member key named `label`.
+  raise newException(KeystoreError, "Keystore.lezMemberSign is abstract")
+
+proc lezChildSecret(secret: array[32, byte], label: string): array[32, byte] =
+  ## HMAC-SHA256(secret, "muster/lez-member-key/v1" 0x00 label 0x00 counter), taking the
+  ## first counter that gives a valid scalar.
+  if label.len == 0: raise newException(KeystoreError, "a LEZ member key needs a label")
+  for counter in 0 .. 255:
+    var msg: seq[byte]
+    for c in "muster/lez-member-key/v1": msg.add byte(c)
+    msg.add 0
+    for c in label: msg.add byte(c)
+    msg.add 0
+    msg.add byte(counter)
+    let d = sha256.hmac(secret, msg).data
+    if btckeys.validSecret(d): return d
+  raise newException(KeystoreError, "no valid LEZ member key for this label")
 
 method bindingForKey*(ks: Keystore, r: KeyRef, ctx: LinkContext): LinkStatement {.base.} =
   ## Bind our encryption identity to the AUTHORIZATION key named by `r`: sign the enc
@@ -243,6 +271,10 @@ method address*(fk: FileKeystore): Address = fk.addr0
 method btcPubKey*(fk: FileKeystore): seq[byte] = btckeys.compressedPubKey(fk.secret)
 method signEcdsaDer*(fk: FileKeystore, msgHash: array[32, byte]): seq[byte] = btckeys.ecdsaSignDer(fk.secret, msgHash)
 method signSchnorr*(fk: FileKeystore, msg: array[32, byte]): seq[byte] = btckeys.schnorrSign(fk.secret, msg)
+method lezMemberKey*(fk: FileKeystore, label: string): seq[byte] =
+  btckeys.xonlyPubKey(lezChildSecret(fk.secret, label))
+method lezMemberSign*(fk: FileKeystore, label: string, msgHash: array[32, byte]): seq[byte] =
+  btckeys.schnorrSign(lezChildSecret(fk.secret, label), msgHash, newSeq[byte](32))
 method sign*(fk: FileKeystore, msgHash: array[32, byte]): Signature65 =
   signRecoverable(msgHash, fk.secret)
 method edSign*(fk: FileKeystore, msg: openArray[byte]): Ed25519Sig =
@@ -298,6 +330,10 @@ method address*(ik: InMemoryKeystore): Address = ik.addr0
 method btcPubKey*(ik: InMemoryKeystore): seq[byte] = btckeys.compressedPubKey(ik.secret)
 method signEcdsaDer*(ik: InMemoryKeystore, msgHash: array[32, byte]): seq[byte] = btckeys.ecdsaSignDer(ik.secret, msgHash)
 method signSchnorr*(ik: InMemoryKeystore, msg: array[32, byte]): seq[byte] = btckeys.schnorrSign(ik.secret, msg)
+method lezMemberKey*(ik: InMemoryKeystore, label: string): seq[byte] =
+  btckeys.xonlyPubKey(lezChildSecret(ik.secret, label))
+method lezMemberSign*(ik: InMemoryKeystore, label: string, msgHash: array[32, byte]): seq[byte] =
+  btckeys.schnorrSign(lezChildSecret(ik.secret, label), msgHash, newSeq[byte](32))
 method sign*(ik: InMemoryKeystore, msgHash: array[32, byte]): Signature65 =
   signRecoverable(msgHash, ik.secret)
 method edSign*(ik: InMemoryKeystore, msg: openArray[byte]): Ed25519Sig =
