@@ -22,6 +22,14 @@ is one BIP-340 signature, so to the chain a FROST account looks single-sig.
   `tests/vectors/chilldkg/`. The coordinator only relays, so in a room every member can
   compute its steps from the log.
 
+- `keystore_ops.nim`: the keystore's side of a ceremony and of signing (seam S7,
+  exo-a50.4.4), reachable only through `crypto/keystore.nim`'s `frost*` operations.
+  - Participant states are held between steps, and each step runs once.
+  - The secret share is never stored or returned: it is recovered from the ceremony's
+    PUBLIC recovery data plus the host key.
+  - A nonce is held in memory, once per session, and removed before the partial signature
+    is computed. A restart aborts the session.
+
 Rules:
 - Every algorithm is a port of the draft's Python reference at a named commit, pinned to
   the draft's own vectors. A draft change is a re-pin, never a silent drift.
@@ -29,4 +37,4 @@ Rules:
   The production gate in landscape §9 applies: re-choose the implementation before real
   funds.
 - Secrets (shares, nonces) never enter the room log. Holding them is the keystore's job
-  (seam S7, exo-24a).
+  (seam S7). The recovery data may enter the log: it is public by the draft's design.
