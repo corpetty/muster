@@ -18,6 +18,11 @@
 ## when the transaction does not land. The sequencer's log holds the program's reason;
 ## the JSON-RPC does not expose it. LEZ v0.2.4 charges no fees, so `payer` is unused.
 ##
+## A hosted call must not wait on a block (a UI call times out at 20s; a testnet block is
+## ~40s), so `waitForInclusion = false` sends and returns at once: `finality` then reads
+## a transaction it sent as pending until it lands, and as failed once 4 blocks pass
+## without it. The callers complete on later ticks (coordination/vote.nim).
+##
 ## Transport: nim-json-rpc over chronos (TLS by bearssl), like wallet/evm_rpc.nim; a
 ## call runs to completion with waitFor.
 
@@ -106,6 +111,8 @@ type LezMultisigLive* = ref object of LezMultisigChain
   labels: Table[string, string]   ## member account id (hex) → the keystore label that signs it
   blockMs*: int                   ## the chain's block time; submit waits up to 4 blocks
   pollMs*: int
+  waitForInclusion*: bool         ## false: send and return; completion is the caller's
+  sent: Table[string, float]      ## hash → when this chain sent it (for finality)
 
 proc hx(b: openArray[byte]): string =
   for x in b: result.add toLowerAscii(toHex(x, 2))
@@ -113,7 +120,7 @@ proc hx(b: openArray[byte]): string =
 proc newLezMultisigLive*(rpc: LezRpc, ks: Keystore, chain: string, scheme: PdaScheme, program: seq[byte],
                          layout: ProposalLayout, blockMs = 15_000, pollMs = 2_000): LezMultisigLive =
   LezMultisigLive(rpc: rpc, ks: ks, chain: chain, scheme: scheme, program: program, layout: layout,
-                  blockMs: blockMs, pollMs: pollMs)
+                  blockMs: blockMs, pollMs: pollMs, waitForInclusion: true)
 
 proc addMember*(c: LezMultisigLive, label: string): seq[byte] =
   ## The LEZ account this keystore signs for under `label` (fresh until first used): its
@@ -132,6 +139,16 @@ method readAccount*(c: LezMultisigLive, id: seq[byte]): LezRead =
 
 method txIncluded*(c: LezMultisigLive, hash: string): tuple[known: bool, height: uint64] =
   c.rpc.getTransaction(hash)
+
+method finality*(c: LezMultisigLive, txRef: TxRef): Finality =
+  ## Final once included. A transaction this chain sent and the chain does not know yet
+  ## is pending for 4 blocks, then failed: dropped, which is how the chain refuses.
+  let (known, h) = c.txIncluded(txRef.id)
+  if known: return Finality(status: fsFinal, detail: "included at height " & $h)
+  let at = c.sent.getOrDefault(txRef.id, 0.0)
+  if at > 0 and epochTime() < at + float(4 * c.blockMs) / 1000.0:
+    return Finality(status: fsPending, detail: "sent; waiting for the chain to include it")
+  Finality(status: fsFailed, detail: "the chain does not know this transaction (dropped: refused)")
 
 proc awaitInclusion(c: LezMultisigLive, hash: string): LezTx =
   let deadline = epochTime() + float(4 * c.blockMs) / 1000.0
@@ -163,6 +180,8 @@ proc sendSigned*(c: LezMultisigLive, program: seq[byte], accounts: seq[seq[byte]
   let want = publicTxHash(m, ws)
   if sent.toLowerAscii() != want:
     return LezTx(ok: false, error: "the sequencer answered hash " & sent & " for transaction " & want)
+  c.sent[want] = epochTime()
+  if not c.waitForInclusion: return LezTx(ok: true, hash: want)     # sent, not yet landed
   c.awaitInclusion(want)
 
 method submit*(c: LezMultisigLive, signer: seq[byte], op: MultisigOp, payer: seq[byte] = @[]): LezTx =
@@ -179,6 +198,8 @@ proc deploy*(c: LezMultisigLive, bytecode: seq[byte]): LezTx =
   let want = deployTxHash(bytecode)
   if sent.toLowerAscii() != want:
     return LezTx(ok: false, error: "the sequencer answered hash " & sent & " for deployment " & want)
+  c.sent[want] = epochTime()
+  if not c.waitForInclusion: return LezTx(ok: true, hash: want)
   c.awaitInclusion(want)
 
 method balance*(c: LezMultisigLive, account: Account, asset: AssetId): Amount =

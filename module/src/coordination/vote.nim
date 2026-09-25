@@ -18,6 +18,13 @@
 ##      reviewed. The S5 read is recorded as an external read — evidence of what was
 ##      checked, where, at what height — outside P, so earlier attestations stay valid.
 ## The chain is the authority on the tally: settlement recounts there (exo-0c9).
+##
+## Each step is also split in two, for a chain that sends without waiting (exo-3c9: a
+## hosted call must not wait on a block): liveVoteCast runs 1-3 and returns what
+## completion needs; liveVoteComplete runs 4-5, answering "unconfirmed: …" until the chain
+## shows the vote. liveProposeOnChainStart sends the Propose; liveProposeOnChainComplete
+## answers "pending" until proposal #i is on chain, then publishes the intent. liveVote and
+## liveProposeOnChain are the two halves back to back.
 
 import std/[json, strutils, tables]
 import ../log/log
@@ -75,44 +82,70 @@ proc publishVote(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, int
   s.publish(attestEvent(intentId, who, round, attest, parents = @[eventId(sigEv)]))
   who
 
+type PendingVote* = object
+  ## A vote cast and not yet confirmed: what completing it publishes.
+  intentId*: string
+  effectJson*: string
+  tx*: string
+  recorded*: seq[Event]           ## the S5 reads, published with the receipt
+  p*: seq[byte]                   ## the attestation payload P
+
+proc liveVoteCast*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, intentId: string,
+                   seam: VoteSeam, bindingCtx: LinkContext, nowSec: uint64 = 0): tuple[outcome: string, pending: PendingVote] =
+  ## Steps 1-3: the gates, the S5 re-read, the member's own vote transaction. outcome is
+  ## "" when the vote was cast (pending holds what completion needs), else a refusal
+  ## ("refused: …", "expired", "not-a-vote-locus", …) with nothing cast or published.
+  s.poll()
+  let events = s.log.allEvents()
+  let effectJson = effectJsonOf(events, intentId)
+  if effectJson.len == 0: return ("unknown-intent", PendingVote())
+  let drv = driverFor(intentPolicyOf(events, intentId))
+  if not drv.supported(): return ("unsupported-driver", PendingVote())
+  if drv.profile().locus != loVote: return ("not-a-vote-locus", PendingVote())
+  let effect = effectFromJson(effectJson)
+  let refusal = drv.signRefusal(effect)
+  if refusal.len > 0: return ("refused: " & refusal, PendingVote())
+  let ctx = intentContext(events, intentId)
+  if ctx.isPlaceholder: return ("no-context", PendingVote())
+  if ctx.expired(nowSec): return ("expired", PendingVote())
+  if not intentInputs(events, driverFor, intentId).allAccountable: return ("unaccountable-input", PendingVote())
+  let p = attestationPayload(events, driverFor, intentId)
+  if p.len == 0: return ("unaccountable-input", PendingVote())
+  # S5: the pointer's content, re-read and re-derived before anything is cast
+  var recorded: seq[Event]
+  for name in drv.reads(effect):
+    let r = seam.readPointer(drv, effect, name)
+    if not r.ok: return ("refused: could not read the " & name & " from the chain: " & r.detail, PendingVote())
+    let why = drv.checkRead(effect, name, r.bytes)
+    if why.len > 0: return ("refused: " & why, PendingVote())
+    recorded.add readEvent(intentId, name & "-" & seam.voterName(), r.source, hx(r.bytes))
+  # S6: the member's own vote transaction — their wallet signs it
+  let voted = seam.castVote(drv, effect)
+  if not voted.ok: return ("refused: the chain refused the vote: " & voted.detail, PendingVote())
+  ("", PendingVote(intentId: intentId, effectJson: effectJson, tx: voted.tx, recorded: recorded, p: p))
+
+proc liveVoteComplete*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, seam: VoteSeam,
+                       pv: PendingVote): string =
+  ## Steps 4-5: the vote confirmed on chain, then the S5 reads and the receipt published.
+  ## "unconfirmed: …" (nothing published) while the chain does not show the vote.
+  s.poll()
+  let drv = driverFor(intentPolicyOf(s.log.allEvents(), pv.intentId))
+  let effect = effectFromJson(pv.effectJson)
+  let conf = seam.confirmVote(drv, effect)
+  if not conf.ok: return "unconfirmed: " & conf.detail
+  for e in pv.recorded: s.publish(e)
+  if publishVote(s, ks, driverFor, pv.intentId, pv.effectJson, seam.receiptFor(drv, effect, pv.tx), pv.p).len == 0:
+    return "rejected"
+  intentState(s.log.allEvents(), driverFor, pv.intentId)
+
 proc liveVote*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, intentId: string,
                seam: VoteSeam, bindingCtx: LinkContext, nowSec: uint64 = 0): string =
   ## Approve a vote-locus intent in the room: re-read (S5), cast the member's own vote
   ## (S6), confirm, then publish the receipt. Returns the intent's state, or a refusal
   ## ("refused: …", "expired", "not-a-vote-locus", …) with nothing cast or published.
-  s.poll()
-  let events = s.log.allEvents()
-  let effectJson = effectJsonOf(events, intentId)
-  if effectJson.len == 0: return "unknown-intent"
-  let drv = driverFor(intentPolicyOf(events, intentId))
-  if not drv.supported(): return "unsupported-driver"
-  if drv.profile().locus != loVote: return "not-a-vote-locus"
-  let effect = effectFromJson(effectJson)
-  let refusal = drv.signRefusal(effect)
-  if refusal.len > 0: return "refused: " & refusal
-  let ctx = intentContext(events, intentId)
-  if ctx.isPlaceholder: return "no-context"
-  if ctx.expired(nowSec): return "expired"
-  if not intentInputs(events, driverFor, intentId).allAccountable: return "unaccountable-input"
-  let p = attestationPayload(events, driverFor, intentId)
-  if p.len == 0: return "unaccountable-input"
-  # S5: the pointer's content, re-read and re-derived before anything is cast
-  var recorded: seq[Event]
-  for name in drv.reads(effect):
-    let r = seam.readPointer(drv, effect, name)
-    if not r.ok: return "refused: could not read the " & name & " from the chain: " & r.detail
-    let why = drv.checkRead(effect, name, r.bytes)
-    if why.len > 0: return "refused: " & why
-    recorded.add readEvent(intentId, name & "-" & seam.voterName(), r.source, hx(r.bytes))
-  # S6: the member's own vote transaction — their wallet signs it
-  let voted = seam.castVote(drv, effect)
-  if not voted.ok: return "refused: the chain refused the vote: " & voted.detail
-  let conf = seam.confirmVote(drv, effect)
-  if not conf.ok: return "unconfirmed: " & conf.detail
-  for e in recorded: s.publish(e)
-  if publishVote(s, ks, driverFor, intentId, effectJson, seam.receiptFor(drv, effect, voted.tx), p).len == 0:
-    return "rejected"
-  intentState(s.log.allEvents(), driverFor, intentId)
+  let (outcome, pv) = liveVoteCast(s, ks, driverFor, intentId, seam, bindingCtx, nowSec)
+  if outcome.len > 0: return outcome
+  liveVoteComplete(s, ks, driverFor, seam, pv)
 
 # ── the LEZ multisig program's vote seam ──────────────────────────────────────
 type LezVoteSeam* = ref object of VoteSeam
@@ -168,6 +201,55 @@ method confirmVote*(v: LezVoteSeam, d: Driver, e: Effect): tuple[ok: bool, detai
 method receiptFor*(v: LezVoteSeam, d: Driver, e: Effect, tx: string): Contribution =
   voteReceipt(v.voter, lezActionOf(e).index, tx, canonicalize(d, e))
 
+type PendingPropose* = object
+  ## A Propose sent and not yet on chain: what completing it publishes.
+  policy*: string
+  action*: LezAction
+  index*: uint64
+  tx*: string
+  nowSec*: int64
+  msgSeq*: uint64
+  ttlSec*: int64
+
+proc liveProposeOnChainStart*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, policy: string,
+                              action: LezAction, seam: LezVoteSeam, nowSec: int64, msgSeq: uint64,
+                              ttlSec = DefaultIntentTtl): tuple[outcome: string, pending: PendingPropose] =
+  ## The proposer's own Propose transaction, as the next proposal. outcome "" = sent
+  ## (pending holds what completion needs), else a refusal; nothing is published here.
+  let drv = driverFor(policy)
+  if not drv.supported() or not (drv of LezMultisigDriver): return ("unsupported-driver", PendingPropose())
+  let a = LezMultisigDriver(drv).account
+  var index: uint64
+  try:
+    let st = seam.chain.readAccount(a.statePda)
+    if not st.found: return ("refused: no multisig state on " & seam.chain.chain & " for this account", PendingPropose())
+    index = decodeState(st.data).transactionIndex + 1
+  except CatchableError as err: return ("refused: could not read the multisig state: " & err.msg, PendingPropose())
+  let t = seam.chain.submit(seam.voter, proposeOp(a.createKey, index, action), seam.payer)
+  if not t.ok: return ("refused: the chain refused the proposal: " & t.error, PendingPropose())
+  ("", PendingPropose(policy: policy, action: action, index: index, tx: t.hash, nowSec: nowSec,
+                     msgSeq: msgSeq, ttlSec: ttlSec))
+
+proc liveProposeOnChainComplete*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, seam: LezVoteSeam,
+                                 pp: PendingPropose): string =
+  ## "pending" until proposal #index is on chain with the proposer's vote; then the room
+  ## intent pointing at it, and the proposer's vote reported. Returns the intent id, a
+  ## refusal, or "pending".
+  let drv = driverFor(pp.policy)
+  if not drv.supported() or not (drv of LezMultisigDriver): return "unsupported-driver"
+  let a = LezMultisigDriver(drv).account
+  if not seam.confirmOnChain(drv, pp.index).ok: return "pending"
+  let effectJson = lezProposalEffect(pp.index, pp.action)
+  let id = liveProposeIntent(s, ks, driverFor, pp.policy, effectJson, pp.nowSec, pp.msgSeq,
+                             account = hx(a.statePda), ttlSec = pp.ttlSec)
+  if not id.startsWith("0x"): return id   # a refusal, not an intent id
+  # the proposer's Propose was their vote: report it like any other
+  let p = attestationPayload(s.log.allEvents(), driverFor, id)
+  if p.len > 0:
+    discard publishVote(s, ks, driverFor, id, effectJson, voteReceipt(seam.voter, pp.index, pp.tx,
+                        canonicalize(drv, effectFromJson(effectJson))), p)
+  id
+
 proc liveProposeOnChain*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, policy: string,
                          action: LezAction, seam: LezVoteSeam, nowSec: int64, msgSeq: uint64,
                          ttlSec = DefaultIntentTtl): string =
@@ -175,26 +257,7 @@ proc liveProposeOnChain*(s: CoordinationSession, ks: Keystore, driverFor: Driver
   ## CHAIN as the next proposal (which auto-approves), the room intent points at it with
   ## the content the room reviews, and the proposer's vote is reported like any other.
   ## Returns the intent id, or a refusal.
-  let drv = driverFor(policy)
-  if not drv.supported() or not (drv of LezMultisigDriver): return "unsupported-driver"
-  let a = LezMultisigDriver(drv).account
-  var index: uint64
-  try:
-    let st = seam.chain.readAccount(a.statePda)
-    if not st.found: return "refused: no multisig state on " & seam.chain.chain & " for this account"
-    index = decodeState(st.data).transactionIndex + 1
-  except CatchableError as err: return "refused: could not read the multisig state: " & err.msg
-  let t = seam.chain.submit(seam.voter, proposeOp(a.createKey, index, action), seam.payer)
-  if not t.ok: return "refused: the chain refused the proposal: " & t.error
-  let effectJson = lezProposalEffect(index, action)
-  let id = liveProposeIntent(s, ks, driverFor, policy, effectJson, nowSec, msgSeq,
-                             account = hx(a.statePda), ttlSec = ttlSec)
-  if not id.startsWith("0x"): return id   # a refusal, not an intent id
-  # the proposer's Propose was their vote: confirm it on chain, then report it
-  if not seam.confirmOnChain(drv, index).ok: return id
-  let events = s.log.allEvents()
-  let p = attestationPayload(events, driverFor, id)
-  if p.len > 0:
-    discard publishVote(s, ks, driverFor, id, effectJson, voteReceipt(seam.voter, index, t.hash,
-                        canonicalize(drv, effectFromJson(effectJson))), p)
-  id
+  let (outcome, pp) = liveProposeOnChainStart(s, ks, driverFor, policy, action, seam, nowSec, msgSeq, ttlSec)
+  if outcome.len > 0: return outcome
+  let id = liveProposeOnChainComplete(s, ks, driverFor, seam, pp)
+  if id == "pending": "refused: the chain does not show proposal #" & $pp.index & " after it was accepted" else: id
