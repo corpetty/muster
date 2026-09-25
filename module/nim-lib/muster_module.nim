@@ -44,6 +44,8 @@ import ../src/lez/multisig_chain       # the chain seam
 import ../src/lez/tx as leztx          # base58 ids, public account ids
 import ../src/wallet/lez_multisig_live # the live chain: the member's own transactions (exo-3c9)
 import ../src/coordination/vote        # a vote-locus approval = the member's own on-chain vote
+import ../src/drivers/btc_frost        # FROST: the aggregate locus (Phase D)
+import ../src/coordination/aggregate   # the ChillDKG ceremony + the two rounds over the log
 import std/sysrand                     # a multisig create key
 import stint                           # LEZ nonces (u128)
 import ../src/bitcoin/network          # networkByCaip2
@@ -900,6 +902,34 @@ proc lezPendingFor(intentId: string): string =
     if p.intentId == intentId and p.kind in {lpVote, lpSettle}: return $p.kind
   ""
 
+# FROST (Phase D): a joined ceremony advances, and an approved intent's round 2 follows,
+# on the coordinate_intents tick, so a member acts once and nothing waits in a hosted call.
+var gFrostJoined: seq[(CoordinationSession, string)]   ## (room, ceremony id) this member joined
+var gFrostLast = initTable[string, string]()           ## ceremony id → this member's last step outcome
+var gFrostAuto: seq[string]                            ## intents this member approved (round 2 follows)
+var gFrostPumpAt = 0.0
+
+proc frostPump() =
+  if gSession == nil or epochTime() - gFrostPumpAt < 2.0: return
+  gFrostPumpAt = epochTime()
+  let ks = moduleKeystore()
+  var keep: seq[(CoordinationSession, string)]
+  for (s, cid) in gFrostJoined:
+    if s != gSession:
+      keep.add (s, cid)
+      continue
+    let r = frostCeremonyStep(s, ks, cid)
+    gFrostLast[cid] = r
+    if not (r.startsWith("done") or r.startsWith("refused") or r == "not-a-participant"): keep.add (s, cid)
+  gFrostJoined = keep
+  var auto: seq[string]
+  for id in gFrostAuto:
+    let r = liveFrostContribute(gSession, ks, driverFor, id, uint64(epochTime()))
+    if r == "collecting" or r.startsWith("waiting") or r == "already-contributed":
+      let folded = reduceIntents(gSession.log.allEvents(), driverFor)
+      if id in folded and not folded[id].collection.complete: auto.add id
+  gFrostAuto = auto
+
 proc lezChainViewOf(a: RoomAccount): ChainView =
   if a.chain != gLezChain:
     return (known: false, signers: @[], threshold: 0,
@@ -1178,6 +1208,13 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
   if signatureHex.len == 0:
     let drv = driverFor(intentPolicyOf(gSession.log.allEvents(), intentId))
     if drv of LezMultisigDriver: return musterCoordinateVote(intentId)
+    if drv of BtcFrostDriver:
+      # a FROST approval is two rounds: this member's nonces now, its partial signature
+      # under the log's signer set once round 1 closes (frostPump) — one approval, two halves
+      let r = liveFrostContribute(gSession, moduleKeystore(), driverFor, intentId, uint64(epochTime()))
+      if r in ["collecting", "executable"] or r.startsWith("waiting") or r == "already-contributed":
+        if intentId notin gFrostAuto: gFrostAuto.add intentId
+      return r
   liveContribute(gSession, moduleKeystore(), driverFor, intentId, signatureHex, keyRef,
                  intentLinkContext(intentId), uint64(epochTime()))
 
@@ -1190,6 +1227,7 @@ proc musterCoordinateIntents(): string =
   if gSession == nil: return "[]"
   gSession.poll()
   lezPump()                            # complete any LEZ step the chain has since included
+  frostPump()                          # advance joined FROST ceremonies and round 2
   let events = gSession.log.allEvents()
   var arr = newJArray()
   for v in reduceIntentViews(events, driverFor):
@@ -1874,8 +1912,6 @@ proc musterCoordinateProposeBtcSpend(payTo, amountSat, feeRate: string): string 
                 "detail": "a Bitcoin payment reads its coins from your own node — set Settings → Bitcoin node (btc-rpc)"})
   let (found, a) = findAccount(roomAccounts(), pacct)
   if not found: return $(%*{"error": "cannot-build", "detail": "the account is not disclosed in this room"})
-  let (ok, acct, detail) = btcAccountOfDisclosure(a.family, a.chain, a.address, a.threshold, a.signers)
-  if not ok: return $(%*{"error": "cannot-build", "detail": detail})
   var amount: uint64
   var rate: int
   try:
@@ -1885,8 +1921,17 @@ proc musterCoordinateProposeBtcSpend(payTo, amountSat, feeRate: string): string 
     return $(%*{"error": "cannot-build", "detail": "amount_sat and fee_rate are whole numbers (sat, sat/vB)"})
   var effectJson: string
   try:
-    let node = newBitcoindAdapterFromUrl(acct.network.name, gBtcRpc)
-    effectJson = buildBtcSpend(acct, node.utxosOf(acct.address), payTo.strip(), amount, feeRate = rate)
+    if a.family == FrostFamily:
+      # a FROST account (Phase D): its key-path spend, sized for one signature per input
+      let (fok, facct, fdetail) = frostDisclosureOf(a)
+      if not fok: return $(%*{"error": "cannot-build", "detail": fdetail})
+      let node = newBitcoindAdapterFromUrl(facct.network.name, gBtcRpc)
+      effectJson = buildFrostSpend(facct, node.utxosOf(facct.address), payTo.strip(), amount, feeRate = rate)
+    else:
+      let (ok, acct, detail) = btcAccountOfDisclosure(a.family, a.chain, a.address, a.threshold, a.signers)
+      if not ok: return $(%*{"error": "cannot-build", "detail": detail})
+      let node = newBitcoindAdapterFromUrl(acct.network.name, gBtcRpc)
+      effectJson = buildBtcSpend(acct, node.utxosOf(acct.address), payTo.strip(), amount, feeRate = rate)
   except WalletError as e:
     return $(%*{"error": "node-unreachable", "detail": e.msg})
   except CatchableError as e:
@@ -1992,6 +2037,57 @@ proc musterCoordinateProposeLezVaultInit(definition: string): string =
   let (tok, action, terr) = lezTokenAction(@[def, vault], @[3'u32], 1)
   if not tok: return terr
   lezProposeAction(action)
+
+proc musterFrostCeremonyOpen(ceremonyId, network, t, n: string): string =
+  ## Open a FROST ceremony in the joined room and join it.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  var ti, ni: int
+  try:
+    ti = parseInt(t.strip())
+    ni = parseInt(n.strip())
+  except ValueError: return $(%*{"error": "t and n are whole numbers"})
+  if ceremonyId.strip().len == 0 or '/' in ceremonyId: return $(%*{"error": "a ceremony id is a name without /"})
+  if ni < 2 or ti < 1 or ti > ni: return $(%*{"error": "a t-of-n needs 1 <= t <= n and n >= 2"})
+  let net = (if network.strip().len > 0: network.strip() else: "regtest")
+  discard frostCeremonyOpen(gSession, ceremonyId.strip(), net, ti, ni)
+  let host = frostCeremonyJoin(gSession, moduleKeystore(), ceremonyId.strip())
+  gFrostJoined.add (gSession, ceremonyId.strip())
+  $(%*{"ceremony": ceremonyId.strip(), "network": net, "t": ti, "n": ni, "host": host})
+
+proc musterFrostCeremonyJoin(ceremonyId: string): string =
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  if not ceremonyView(gSession.log.allEvents(), ceremonyId.strip()).open:
+    return $(%*{"error": "not-open", "detail": "no ceremony " & ceremonyId & " is open in this room"})
+  let host = frostCeremonyJoin(gSession, moduleKeystore(), ceremonyId.strip())
+  gFrostJoined.add (gSession, ceremonyId.strip())
+  $(%*{"ceremony": ceremonyId.strip(), "host": host})
+
+proc musterFrostCeremonies(): string =
+  if gSession == nil: return "[]"
+  gSession.poll()
+  frostPump()
+  let events = gSession.log.allEvents()
+  let mine = moduleKeystore()
+  var arr = newJArray()
+  var seen: seq[string]
+  for e in events:
+    let p = e.key.split('/')
+    if p.len != 3 or p[0] != "frost" or p[2] != "open" or p[1] in seen: continue
+    seen.add p[1]
+    let cid = p[1]
+    let v = ceremonyView(events, cid)
+    var address = ""
+    for a in roomAccounts():
+      if a.family == FrostFamily:
+        try:
+          if parseJson(a.config)["ceremony"].getStr() == cid: address = a.address
+        except CatchableError: discard
+    arr.add %*{"ceremony": cid, "network": v.network, "t": v.t, "n": v.n, "joined": v.hosts.len,
+               "step1": v.pmsg1.len, "step2": v.pmsg2.len,
+               "participant": mine.frostHostPubkey(ceremonyLabel(cid)) in v.hosts,
+               "address": address, "last": gFrostLast.getOrDefault(cid, "")}
+  $arr
 
 proc musterLezPending(): string =
   ## The LEZ steps sent and not yet included, and the last outcomes.

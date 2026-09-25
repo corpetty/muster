@@ -284,6 +284,15 @@ Item {
         try { return JSON.parse(backend ? backend.lezCreateJson : "{}"); }
         catch (e) { return ({}); }
     }
+    // the room's FROST key ceremonies, and the last open/join result (Phase D)
+    readonly property var frostCeremonies: {
+        try { return JSON.parse(backend ? backend.frostCeremoniesJson : "[]"); }
+        catch (e) { return []; }
+    }
+    readonly property var frostCeremony: {
+        try { return JSON.parse(backend ? backend.frostCeremonyJson : "{}"); }
+        catch (e) { return ({}); }
+    }
     // A LEZ multisig proposal in words: the effect carries the target program, the
     // instruction words and the accounts. A token Transfer is [0, amount (u128, 4 words)],
     // InitializeAccount is [3]; anything else is shown as the raw call.
@@ -2001,6 +2010,12 @@ Item {
                 discloseResult: room.discloseResult
                 lezMember: room.lezMember
                 lezCreate: room.lezCreate
+                frostCeremonies: room.frostCeremonies
+                frostCeremony: room.frostCeremony
+                onFrostOpenRequested: function (cid, network, t, n) {
+                    if (room.backend) room.backend.frostCeremonyOpen(cid, network, t, n);
+                }
+                onFrostJoinRequested: function (cid) { if (room.backend) room.backend.frostCeremonyJoin(cid); }
                 onDiscloseRequested: function (accountJson) { if (room.backend) room.backend.discloseAccount(accountJson); }
                 onLezMemberRequested: if (room.backend) room.backend.lezMemberAccount("")
                 onLezCreateRequested: function (threshold, members) {

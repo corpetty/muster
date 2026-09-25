@@ -26,6 +26,10 @@ Item {
     signal discloseSuggested()
     signal lezMemberRequested()
     signal lezCreateRequested(string threshold, string members)
+    property var frostCeremonies: []      // the room's FROST key ceremonies (Phase D)
+    property var frostCeremony: ({})      // the last open/join result ({ceremony, host} or {error})
+    signal frostOpenRequested(string ceremonyId, string network, string t, string n)
+    signal frostJoinRequested(string ceremonyId)
 
     implicitHeight: col.implicitHeight
 
@@ -170,6 +174,94 @@ Item {
                 family: "evm.safe", chain: "eip155:" + chainField.text.trim(),
                 address: addrField.text.trim(), label: "" }))
         }
+        // ── a FROST key ceremony (Phase D) ──
+        // The room is the ceremony's coordinator. Each participant's part runs on the room's
+        // tick, and the t-of-n taproot account is disclosed here when it completes. To the
+        // chain it will look like one key: one signature, no policy.
+        LogosText {
+            Layout.fillWidth: true
+            Layout.topMargin: Theme.spacing.small
+            text: qsTr("FROST key ceremony (Bitcoin taproot)")
+            color: Theme.palette.textSecondary
+            font.pixelSize: Theme.typography.badgeText
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Theme.spacing.small
+            LogosTextField {
+                id: frostCid
+                objectName: "frostCeremonyId"
+                Layout.fillWidth: true
+                placeholderText: qsTr("a name for the key")
+            }
+            LogosTextField {
+                id: frostT
+                objectName: "frostT"
+                Layout.preferredWidth: 50
+                placeholderText: qsTr("t")
+                text: "2"
+            }
+            LogosTextField {
+                id: frostN
+                objectName: "frostN"
+                Layout.preferredWidth: 50
+                placeholderText: qsTr("n")
+                text: "3"
+            }
+            LogosTextField {
+                id: frostNet
+                objectName: "frostNetwork"
+                Layout.preferredWidth: 90
+                placeholderText: qsTr("network")
+                text: "regtest"
+            }
+        }
+        LogosButton {
+            objectName: "frostOpen"
+            Layout.fillWidth: true
+            enabled: frostCid.text.trim().length > 0
+            text: qsTr("Open the ceremony and join it")
+            variant: LogosButton.Variant.Secondary
+            onClicked: acc.frostOpenRequested(frostCid.text.trim(), frostNet.text.trim(), frostT.text.trim(), frostN.text.trim())
+        }
+        Repeater {
+            model: acc.frostCeremonies
+            delegate: RowLayout {
+                required property var modelData
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                LogosText {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: modelData.address
+                          ? qsTr("%1 · %2 of %3 · %4").arg(modelData.ceremony).arg(modelData.t).arg(modelData.n).arg(modelData.address)
+                          : qsTr("%1 · %2 of %3 · %4 joined · step 1 %5/%3 · step 2 %6/%3%7")
+                              .arg(modelData.ceremony).arg(modelData.t).arg(modelData.n).arg(modelData.joined)
+                              .arg(modelData.step1).arg(modelData.step2)
+                              .arg(modelData.last ? " · " + String(modelData.last) : "")
+                    color: Theme.palette.textSecondary
+                    font.family: Theme.typography.mono
+                    font.pixelSize: Theme.typography.badgeText
+                }
+                LogosButton {
+                    visible: !modelData.participant && !modelData.address && Number(modelData.joined) < Number(modelData.n)
+                    text: qsTr("Join")
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: acc.frostJoinRequested(String(modelData.ceremony))
+                }
+            }
+        }
+        LogosText {
+            Layout.fillWidth: true
+            visible: !!(acc.frostCeremony && acc.frostCeremony.error)
+            text: acc.frostCeremony && acc.frostCeremony.error
+                  ? "⚠ " + String(acc.frostCeremony.error) + (acc.frostCeremony.detail ? " — " + String(acc.frostCeremony.detail) : "")
+                  : ""
+            color: Theme.palette.error
+            font.pixelSize: Theme.typography.badgeText
+            wrapMode: Text.WordWrap
+        }
+
         // ── a LEZ multisig (exo-3c9) ──
         // Each member gives the creator a FRESH LEZ account (its key stays in their own
         // keystore); the creator puts the k-of-n on chain, and it is disclosed here once
