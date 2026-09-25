@@ -269,7 +269,7 @@ Item {
     readonly property bool isBtcPolicy: room.policyKind.indexOf("btc-") === 0
     // a LEZ multisig policy (exo-3c9): a payment moves a token out of the multisig's
     // vault; proposing and approving are members' own on-chain transactions
-    readonly property bool isLezPolicy: room.policyKind === "lez-multisig"
+    readonly property bool isLezPolicy: room.policyKind === "lez-multisig" || room.policyKind === "lez-frost"
     // the last LEZ proposal ({pending: "propose", index, tx} or {error, detail}), the
     // member account shown, and the last create
     readonly property var lezPropose: {
@@ -1886,7 +1886,7 @@ Item {
             }
             RowLayout {
                 objectName: "roomLezVaultInit"
-                visible: room.isLezPolicy && room.composing
+                visible: room.policyKind === "lez-multisig" && room.composing
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
                 LogosTextField {

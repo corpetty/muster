@@ -46,6 +46,8 @@ import ../src/wallet/lez_multisig_live # the live chain: the member's own transa
 import ../src/coordination/vote        # a vote-locus approval = the member's own on-chain vote
 import ../src/drivers/btc_frost        # FROST: the aggregate locus (Phase D)
 import ../src/coordination/aggregate   # the ChillDKG ceremony + the two rounds over the log
+import ../src/drivers/lez_frost        # a FROST group acting on LEZ (exo-55e)
+import ../src/drivers/frost_group      # frostGroupOf: any FROST family's approval is two rounds
 import std/sysrand                     # a multisig create key
 import stint                           # LEZ nonces (u128)
 import ../src/bitcoin/network          # networkByCaip2
@@ -1208,8 +1210,8 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
   if signatureHex.len == 0:
     let drv = driverFor(intentPolicyOf(gSession.log.allEvents(), intentId))
     if drv of LezMultisigDriver: return musterCoordinateVote(intentId)
-    if drv of BtcFrostDriver:
-      # a FROST approval is two rounds: this member's nonces now, its partial signature
+    if drv.frostGroupOf().ok:
+      # a FROST approval (Bitcoin or LEZ) is two rounds: this member's nonces now, its partial signature
       # under the log's signer set once round 1 closes (frostPump) — one approval, two halves
       let r = liveFrostContribute(gSession, moduleKeystore(), driverFor, intentId, uint64(epochTime()))
       if r in ["collecting", "executable"] or r.startsWith("waiting") or r == "already-contributed":
@@ -1785,6 +1787,14 @@ proc settlementFor(drv: Driver): Settlement =
     let (mine, me) = c.lezOurMember(a.members)
     if not mine: return nil
     return settlementFor(drv, c, Account(chain: a.chain, form: afPublic, id: lezHx(me)))
+  if drv of LezFrostDriver:
+    # a FROST group's LEZ call (exo-55e): no member sends it as themselves — the group's
+    # aggregate signature is the witness — so any member's instance submits it; the pump
+    # watches for inclusion
+    let a = LezFrostDriver(drv).account
+    let c = lezLiveFor(a.chain, psLee02, newSeq[byte](32), plAccountIds)
+    c.waitForInclusion = false
+    return settlementFor(drv, c, Account(chain: a.chain, form: afPublic, id: a.address))
   if p.chain.startsWith("bip122:"):
     # Bitcoin (exo-a50.2.5/.6): the user's own node; nil without one (submit names why)
     if gBtcRpc.len == 0: return nil
@@ -1866,7 +1876,7 @@ proc musterCoordinateSubmit(intentId: string): string =
     if fin.status != fsPending: break
     sleep(200)
   if fin.status == fsFinal: gSession.publish(finalEvent(intentId, chainRef = txRef.id))
-  elif fin.status == fsPending and drv of LezMultisigDriver:
+  elif fin.status == fsPending and (drv of LezMultisigDriver or drv of LezFrostDriver):
     # a LEZ Execute lands a block later: the pump publishes final when the chain says Executed
     gLezPending.add LezPending(kind: lpSettle, session: gSession, settle: st, txRef: txRef, intentId: intentId,
                                started: epochTime())
@@ -2005,10 +2015,44 @@ proc lezTokenAction(accounts: seq[seq[byte]], words: seq[uint32], authorized: ui
   except CatchableError as e:
     (false, LezAction(), $(%*{"error": "sequencer-unreachable", "detail": e.msg}))
 
+proc lezFrostTransfer(recipient, amount: string): string =
+  ## A FROST group's own LEZ account sends `amount` of the token it holds: token Transfer
+  ## signed by the group, at the account's nonce read from the chain (a recorded read).
+  let (_, pacct) = splitPolicy(gCoordKind)
+  let (found, a) = findAccount(roomAccounts(), pacct)
+  if not found: return $(%*{"error": "not-a-lez-policy", "detail": "the account is not disclosed in this room"})
+  var rec = ""
+  try: rec = parseJson(a.config)["recovery"].getStr()
+  except CatchableError: return $(%*{"error": "not-a-lez-policy", "detail": "no recovery data"})
+  let (ok, acct, detail) = lezFrostAccountOfDisclosure(a.chain, a.address, rec)
+  if not ok: return $(%*{"error": "not-a-lez-policy", "detail": detail})
+  var to: seq[byte]
+  var amt: uint64
+  try:
+    to = lezIdOf(recipient)
+    amt = uint64(parseBiggestUInt(amount.strip()))
+  except CatchableError as e:
+    return $(%*{"error": "not-an-action", "detail": "a recipient account (hex or base58) and a whole amount: " & e.msg})
+  let words = @[0'u32, uint32(amt and 0xffff_ffff'u64), uint32(amt shr 32), 0'u32, 0'u32]
+  var effectJson: string
+  try:
+    let rpc = newLezRpc(gLezRpc)
+    effectJson = lezFrostCallEffect(rpc.programId("token"), @[acct.accountId, to], words, acct.accountId,
+                                    rpc.getAccount(acct.accountId).nonce)
+  except CatchableError as e:
+    return $(%*{"error": "sequencer-unreachable", "detail": e.msg})
+  let id = musterCoordinatePropose(effectJson)
+  if not id.startsWith("0x"): return $(%*{"error": "refused", "detail": id})
+  # the nonce came from the user's sequencer: the read is recorded (invariant 10)
+  gSession.publish(readEvent(id, "nonces", "lez:getAccount", $parseJson(effectJson)["nonces"]))
+  id
+
 proc musterCoordinateProposeLezTransfer(recipient, amount: string): string =
   ## Transfer `amount` of the vault's token to `recipient`: token Transfer (variant 0,
-  ## amount a u128 = four words), the vault the authorized PDA.
+  ## amount a u128 = four words), the vault the authorized PDA. For a FROST group's own
+  ## LEZ account (lez-frost@), the group sends from the account itself.
   if gSession == nil: return $(%*{"error": "not-joined"})
+  if splitPolicy(gCoordKind).kind == "lez-frost": return lezFrostTransfer(recipient, amount)
   let (ok, acct, err) = lezComposeAccount()
   if not ok: return err
   var to: seq[byte]
