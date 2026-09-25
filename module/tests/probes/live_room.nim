@@ -75,6 +75,30 @@ proc newRoom*(topic = "/muster/1/ef1-probe/proto"): Room =
        alice: newCoordinationSession(newLocalTransport(net), aliceCrypto, topic),
        bob: newCoordinationSession(newLocalTransport(net), bobCrypto, topic))
 
+# A third member, for families that need three participants (a 2-of-3 ceremony, Phase D).
+let carolKs* = newInMemoryKeystore(key("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"), seed(3))
+proc restartedCarolKs*(): InMemoryKeystore =
+  ## Carol's keystore as a restart gives it back: the same secrets, nothing in memory.
+  newInMemoryKeystore(key("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"), seed(3))
+
+type Room3* = object
+  topic*: string
+  net*: LocalNetwork
+  alice*, bob*, carol*: CoordinationSession
+
+proc newRoom3*(topic = "/muster/1/three/proto"): Room3 =
+  ## Alice founds the room for Bob and Carol: one epoch key, granted to both.
+  let net = newLocalNetwork()
+  let aliceCrypto = newEpochCrypto(aliceKs, @[bobKs.encIdentity(), carolKs.encIdentity()])
+  let bobCrypto = newEpochJoiner(bobKs)
+  bobCrypto.ingestGrant(aliceCrypto.grantFor(0, bobKs.encIdentity()))
+  let carolCrypto = newEpochJoiner(carolKs)
+  carolCrypto.ingestGrant(aliceCrypto.grantFor(0, carolKs.encIdentity()))
+  Room3(topic: topic, net: net,
+        alice: newCoordinationSession(newLocalTransport(net), aliceCrypto, topic),
+        bob: newCoordinationSession(newLocalTransport(net), bobCrypto, topic),
+        carol: newCoordinationSession(newLocalTransport(net), carolCrypto, topic))
+
 proc bindCtx*(): LinkContext = LinkContext(account: SafeAddr, slot: "0", expiry: Now + 86_400)
 
 proc accountFor*(r: Room, policy: string): string =
