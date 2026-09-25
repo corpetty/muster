@@ -50,16 +50,22 @@ type CeremonyView* = object
   pmsg2*: Table[string, seq[byte]]
 
 proc ceremonyView*(events: seq[Event], cid: string): CeremonyView =
-  ## The ceremony as the log holds it: reduce(log), nothing else.
-  for e in canonicalOrder(events):
+  ## The ceremony as the log holds it: reduce(log), nothing else. Canonical order is not
+  ## arrival order, so the open is read first, then everything else in that order.
+  let ordered = canonicalOrder(events)
+  for e in ordered:
+    if e.key == "frost/" & cid & "/open":
+      try:
+        let j = parseJson(e.value)
+        result = CeremonyView(open: true, network: j["network"].getStr(), t: j["t"].getInt(), n: j["n"].getInt())
+        break
+      except CatchableError: discard
+  if not result.open: return
+  for e in ordered:
     let p = e.key.split('/')
     if p.len < 3 or p[0] != "frost" or p[1] != cid: continue
     try:
       case p[2]
-      of "open":
-        if not result.open:
-          let j = parseJson(e.value)
-          result = CeremonyView(open: true, network: j["network"].getStr(), t: j["t"].getInt(), n: j["n"].getInt())
       of "join":
         if result.open and result.hosts.len < result.n:
           let h = hexToBytes(parseJson(e.value)["host"].getStr())
