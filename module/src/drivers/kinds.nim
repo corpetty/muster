@@ -46,7 +46,9 @@ const Kinds*: seq[KindInfo] = @[
   KindInfo(kind: "lez-multisig", family: "lez.multisig-program", label: "LEZ multisig", composes: @["payment"],
            founding: true, accountFamilies: @["lez.multisig-program"]),
   KindInfo(kind: "btc-frost", family: "btc.frost-bip445", label: "Bitcoin (FROST)", composes: @["payment"],
-           founding: true, accountFamilies: @["btc.frost-bip445"])]
+           founding: true, accountFamilies: @["btc.frost-bip445"]),
+  KindInfo(kind: "lez-frost", family: "lez.frost-public-account", label: "LEZ (FROST)", composes: @["payment"],
+           founding: true, accountFamilies: @["lez.frost-public-account"])]
 
 # ── a policy is a kind, optionally bound to an account ─────────────────────────
 # An account-bound intent's policy is "<kind>@<CAIP-10 account>" (exo-a50.1.3), so the

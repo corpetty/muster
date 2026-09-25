@@ -69,13 +69,14 @@ echo "1. a 2-of-3 ceremony in the room on lez:local: LEZ account ", accountIdToB
 # ── 2. setup: the account holds tokens ────────────────────────────────────────
 let c = newLezMultisigLive(newLezRpc(url), aliceKs, "lez:local", psLee02, newSeq[byte](32), plAccountIds,
                            blockMs = blockSec * 1000)
-var session = 0
+var setupSession = 0
 proc groupSign(h: array[32, byte]): LezWitness =
   ## Setup only: the group signs in-process (the room path is §3–5).
-  inc session
-  let sid = "setup-" & $session
-  let signers = @[0, 2]
+  inc setupSession
+  let sid = "setup-" & $setupSession
   let who = @[Keystore(aliceKs), Keystore(room3CarolKs)]
+  # participant ids are the ceremony order (the log canonical join order): look them up
+  let signers = who.mapIt(acct.group.params.hostpubkeys.find(it.frostHostPubkey(ceremonyLabel(cid))))
   let rec = acct.group.recoveryData
   let pubnonces = who.mapIt(it.frostNonceCommit(ceremonyLabel(cid), sid, rec, @[@h]))
   let partials = who.mapIt(it.frostPartialSign(ceremonyLabel(cid), sid, rec, signers, pubnonces, @[@h]))
@@ -106,7 +107,7 @@ proc propose(n: uint64, seqNo: uint64): string =
                              account = a.address, ttlSec = Ttl)
   doAssert id.startsWith("0x"), id
   # the nonce came from the chain: the read is recorded (invariant 10)
-  r.alice.publish(readEvent(id, "nonce", "lez:getAccount", $nonce))
+  r.alice.publish(readEvent(id, "nonces", "lez:getAccount", $parseJson(effectJson)["nonces"]))
   pollAll()
   id
 let id = propose(1, 1)

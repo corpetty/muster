@@ -54,7 +54,8 @@ let kinds = @[
                       "createKey": repeat("0b", 32), "threshold": 2,
                       "members": [repeat("01", 32), repeat("02", 32), repeat("03", 32)]},
    "module/src/drivers/lez_multisig.nim"),
-  ("btc-frost", %*{"network": "regtest", "recovery": frostTestRecoveryHex()}, "module/src/drivers/btc_frost.nim")]
+  ("btc-frost", %*{"network": "regtest", "recovery": frostTestRecoveryHex()}, "module/src/drivers/btc_frost.nim"),
+  ("lez-frost", %*{"chain": "lez:local", "recovery": frostTestRecoveryHex()}, "module/src/drivers/lez_frost.nim")]
 
 # ── 1. every registered kind declares a consistent profile ─────────────────────
 block:

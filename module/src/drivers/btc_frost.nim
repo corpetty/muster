@@ -35,6 +35,8 @@ import ./profile
 import ./btc_multisig              # the btc-spend effect, its checks and its builder
 import ../bitcoin/[tx, script, sighash, keys, bech32, network]
 import ../frost/[secp, signing, chilldkg]
+import ./frost_group                # the group, the two rounds' contributions, aggregation
+export frost_group
 
 const FrostFamily* = "btc.frost-bip445"
 const FrostDomain = "bip341.keypath.frost-bip445.v1"
@@ -119,157 +121,34 @@ proc sighashesIn(m: Materialization): seq[seq[byte]] =
 
 method expectMaterialization*(d: BtcFrostDriver, m: Materialization) = d.pending = sighashesIn(m)
 
-# ── the two rounds' contributions ─────────────────────────────────────────────
-proc mapGet(m: CborValue, key: string): CborValue =
-  if m.kind != ckMap: return cbNull()
-  for (k, v) in m.pairs:
-    if k.kind == ckText and k.t == key: return v
-  cbNull()
+# ── the two rounds (drivers/frost_group.nim), over this family's messages ──────
+proc groupOf*(a: FrostAccount): FrostGroup =
+  FrostGroup(params: a.params, threshPk: a.threshPk, pubshares: a.pubshares, recoveryData: a.recoveryData,
+             xonly: a.xonly)
 
-proc round1Contribution*(host: seq[byte], nonces: seq[seq[byte]]): Contribution =
-  Contribution(bytes: encode(cbMap(@[(cbText("r"), cbUint(1)), (cbText("signer"), cbBytes(host)),
-                                     (cbText("nonces"), cbArray(nonces.mapIt(cbBytes(it))))])))
-
-proc round2Contribution*(host: seq[byte], set: seq[(seq[byte], seq[seq[byte]])],
-                         psigs: seq[seq[byte]]): Contribution =
-  var entries: seq[CborValue]
-  for (h, ns) in set:
-    entries.add cbMap(@[(cbText("signer"), cbBytes(h)), (cbText("nonces"), cbArray(ns.mapIt(cbBytes(it))))])
-  Contribution(bytes: encode(cbMap(@[(cbText("r"), cbUint(2)), (cbText("signer"), cbBytes(host)),
-                                     (cbText("set"), cbArray(entries)),
-                                     (cbText("psigs"), cbArray(psigs.mapIt(cbBytes(it))))])))
-
-proc bytesList(v: CborValue): seq[seq[byte]] =
-  if v.kind != ckArray: return
-  for x in v.arr:
-    if x.kind != ckBytes: return @[]
-    result.add x.b
-
-proc validNonce(n: seq[byte]): bool =
-  if n.len != 66: return false
-  try:
-    discard nonceAgg(@[n])
-    true
-  except CatchableError: false
-
-type Round2* = object
-  signer*: seq[byte]
-  set*: seq[(seq[byte], seq[seq[byte]])]
-  psigs*: seq[seq[byte]]
-
-proc contributionRound*(c: Contribution): int =
-  ## 1 or 2 by the payload's own tag; 0 if it is not a FROST contribution.
-  try:
-    let r = decode(c.bytes).mapGet("r")
-    if r.kind == ckUint and r.u in [1'u64, 2'u64]: int(r.u) else: 0
-  except CatchableError: 0
-
-proc decodeRound1Nonces*(c: Contribution): seq[seq[byte]] =
-  ## A round-1 contribution's public nonces, one per input.
-  bytesList(decode(c.bytes).mapGet("nonces"))
-
-proc round2Of*(c: Contribution): Round2 =
-  let v = decode(c.bytes)
-  result.signer = v.mapGet("signer").b
-  for e in v.mapGet("set").arr:
-    result.set.add (e.mapGet("signer").b, bytesList(e.mapGet("nonces")))
-  result.psigs = bytesList(v.mapGet("psigs"))
-
-proc verifyAgainst(d: BtcFrostDriver, hashes: seq[seq[byte]], c: Contribution, wantRound = 0): string =
-  ## The signer's host key hex if `c` is a valid contribution over `hashes`, else "".
-  let a = d.account
-  if hashes.len == 0: return ""
-  var v: CborValue
-  try: v = decode(c.bytes)
-  except CatchableError: return ""
-  let round = contributionRound(c)
-  if round == 0 or (wantRound > 0 and round != wantRound): return ""
-  let signer = v.mapGet("signer")
-  if signer.kind != ckBytes or a.params.hostpubkeys.find(signer.b) < 0: return ""
-  if round == 1:
-    let ns = bytesList(v.mapGet("nonces"))
-    if ns.len != hashes.len or not ns.allIt(validNonce(it)): return ""
-    return toHex(signer.b)
-  var r2: Round2
-  try: r2 = round2Of(c)
-  except CatchableError: return ""
-  if r2.set.len != a.params.t or r2.psigs.len != hashes.len: return ""
-  var ids: seq[int]
-  for (h, ns) in r2.set:
-    let id = a.params.hostpubkeys.find(h)
-    if id < 0 or id in ids or ns.len != hashes.len or not ns.allIt(validNonce(it)): return ""
-    ids.add id
-  let me = r2.set.mapIt(it[0]).find(signer.b)
-  if me < 0: return ""
-  for j, h in hashes:
-    var ok = false
-    try:
-      ok = partialSigVerify(r2.psigs[j], r2.set.mapIt(it[1][j]), a.params.hostpubkeys.len, a.params.t,
-                            ids, ids.mapIt(a.pubshares[it]), a.threshPk, @[], @[], h, me)
-    except CatchableError: ok = false
-    if not ok: return ""
-  toHex(signer.b)
+method frostGroupOf*(d: BtcFrostDriver): tuple[ok: bool, group: FrostGroup] = (true, groupOf(d.account))
+method frostMessages*(d: BtcFrostDriver, e: Effect): seq[seq[byte]] =
+  try: d.sighashesOf(e) except CatchableError: @[]
 
 method verifyContribution*(d: BtcFrostDriver, c: Contribution, round: int): bool =
-  d.verifyAgainst(d.pending, c, round).len > 0
+  verifyFrost(groupOf(d.account), d.pending, c, round).len > 0
 
 method identifyContributor*(d: BtcFrostDriver, m: Materialization, c: Contribution): string =
-  d.verifyAgainst(sighashesIn(m), c)
+  verifyFrost(groupOf(d.account), sighashesIn(m), c)
 
-# ── settlement: aggregate one set into one signature per input ────────────────
 proc finalizeFrostSpend*(d: BtcFrostDriver, e: Effect, contributions: seq[Contribution]): BtcTx =
-  ## The spend with every input's witness one aggregate BIP-340 signature, from a signer
-  ## set every one of whose t members contributed a valid round-2 partial under it. The
-  ## aggregate is verified under the account key before it is used. Raises BtcError when
-  ## no set is complete.
-  let a = d.account
+  ## The spend with every input's witness one aggregate BIP-340 signature from a complete
+  ## signer set, verified under the account key. Raises BtcError when no set is complete.
   var (t, _, _) = spendOf(e)
-  let hashes = d.sighashesOf(e)
-  var groups: seq[(seq[(seq[byte], seq[seq[byte]])], seq[Round2])]
-  for c in contributions:
-    if contributionRound(c) != 2 or d.verifyAgainst(hashes, c, 2).len == 0: continue
-    let r2 = round2Of(c)
-    var placed = false
-    for g in groups.mitems:
-      if g[0] == r2.set:
-        if not g[1].anyIt(it.signer == r2.signer): g[1].add r2
-        placed = true
-    if not placed: groups.add (r2.set, @[r2])
-  for (set, parts) in groups:
-    if parts.len < a.params.t: continue
-    let ids = set.mapIt(a.params.hostpubkeys.find(it[0]))
-    var sigs: seq[seq[byte]]
-    for j, h in hashes:
-      var psigs: seq[seq[byte]]
-      for (host, _) in set:
-        for p in parts:
-          if p.signer == host: psigs.add p.psigs[j]
-      let ctx = SessionContext(n: a.params.hostpubkeys.len, t: a.params.t, ids: ids,
-                               pubshares: some(ids.mapIt(a.pubshares[it])), threshPk: a.threshPk,
-                               aggnonce: nonceAgg(set.mapIt(it[1][j])), msg: h)
-      let sig = partialSigAgg(psigs, ctx)
-      if not schnorrVerify(sig, h, a.xonly): raise newException(BtcError, "the aggregate does not verify")
-      sigs.add sig
-    for i in 0 ..< t.inputs.len: t.inputs[i].witness = @[sigs[i]]
-    return t
-  raise newException(BtcError, "no signer set has all " & $a.params.t & " partial signatures")
+  var sigs: seq[seq[byte]]
+  try: sigs = aggregateFrost(groupOf(d.account), d.sighashesOf(e), contributions)
+  except ValueError as err: raise newException(BtcError, err.msg)
+  for i in 0 ..< t.inputs.len: t.inputs[i].witness = @[sigs[i]]
+  t
 
 proc completeSigners*(d: BtcFrostDriver, e: Effect, contributions: seq[Contribution]): int =
   ## How many signers the most complete round-2 set has (for "have k of t").
-  let hashes = d.sighashesOf(e)
-  var best = 0
-  var sets: seq[(seq[(seq[byte], seq[seq[byte]])], seq[seq[byte]])]
-  for c in contributions:
-    if contributionRound(c) != 2 or d.verifyAgainst(hashes, c, 2).len == 0: continue
-    let r2 = round2Of(c)
-    var placed = false
-    for s in sets.mitems:
-      if s[0] == r2.set:
-        if r2.signer notin s[1]: s[1].add r2.signer
-        placed = true
-    if not placed: sets.add (r2.set, @[r2.signer])
-  for s in sets: best = max(best, s[1].len)
-  best
+  completeSignersFrost(groupOf(d.account), d.sighashesOf(e), contributions)
 
 # ── checks, profile, manifest ─────────────────────────────────────────────────
 method signRefusal*(d: BtcFrostDriver, e: Effect): string =

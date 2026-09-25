@@ -30,6 +30,7 @@ import ../drivers/eip191
 import ../drivers/btc_multisig   # Bitcoin accounts (exo-a50.2.3)
 import ../drivers/lez_multisig   # LEZ multisig accounts (exo-6cbe)
 import ../drivers/btc_frost      # FROST accounts: the ceremony's recovery data (Phase D)
+import ../drivers/lez_frost      # a FROST group's LEZ public account (exo-55e)
 import ../lez/multisig as lezms
 import ../lez/multisig_chain
 import ../crypto/secp256k1
@@ -185,6 +186,14 @@ proc driverForPolicy*(policy: string, accounts: seq[RoomAccount],
     let (ok, acct, _) = frostAccountOfDisclosure(a.chain, a.address, rec)
     if not ok: return newUnsupportedDriver(policy)
     newBtcFrostDriver(acct)
+  of "lez-frost":
+    # a FROST group's LEZ account: its id must be the threshold key its recovery data derives
+    var rec = ""
+    try: rec = parseJson(a.config)["recovery"].getStr()
+    except CatchableError: return newUnsupportedDriver(policy)
+    let (ok, acct, _) = lezFrostAccountOfDisclosure(a.chain, a.address, rec)
+    if not ok: return newUnsupportedDriver(policy)
+    newLezFrostDriver(acct)
   else: newUnsupportedDriver(policy)
 
 proc accountsJson*(accounts: seq[RoomAccount]): JsonNode =
