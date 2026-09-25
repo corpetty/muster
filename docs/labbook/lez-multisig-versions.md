@@ -231,3 +231,31 @@ reproduces the handlers of `c45100b` with their own messages, over borsh account
 - **Not yet.** The on-display render in a runner. A room of two instances doing it over
   the live wire. A proposal's account list is still hand-built by the composer (transfer
   / vault setup) or given as raw JSON (`coordinate_propose_lez`).
+
+## Reproduced on a second machine (2026-09-25)
+
+A from-scratch bring-up on a machine with no LEZ toolchain and **no system g++** (Fedora
+44, 20 cores, rootless podman instead of docker). Everything above reproduced; the new
+traps are recorded in `infra/lez/localnet.sh`'s header.
+
+- **The guest is reproducible.** `make build` in `logos-co/lez-multisig` at PR #45
+  (`b5d4b5c`), with `RISC0_DOCKER_CONTAINER_TAG=r0.1.91.1` (the Makefile now sets it) and the
+  empty `$RISC0_HOME/toolchains/r0.1.91.1-risc0-rust-x86_64-unknown-linux-gnu` marker,
+  produced ImageID `2ced3d301a4d1cd5db6cad9c428b9f3463155073f8bacf73179c6ea6536de4c7` —
+  the testnet deployment's, byte for byte.
+- **podman works as the builder.** A two-line `docker` shim (`exec podman "$@"`) on PATH is
+  enough. Pull the image by its fully qualified name first
+  (`podman pull docker.io/risczero/risc0-guest-builder:r0.1.91.1`, 5.25 GB): a short name
+  would hit podman's short-name prompt, which a non-interactive build cannot answer.
+- **No rzup.** `cargo install risc0-r0vm --version 3.0.5 --locked` and
+  `cargo install cargo-risczero --version 3.0.5 --locked` from crates.io, each into its own
+  `--root` (both install an `r0vm`).
+- **No system g++.** nixpkgs' gcc first on PATH builds everything, but its wrapper stamps
+  nix glibc's loader on the binaries and that loader never searches `/lib64`, so
+  `sequencer_service`, `r0vm` and `cargo-risczero` failed with a bare "libstdc++.so.6:
+  cannot open shared object file" until `patchelf --add-rpath` pointed them at
+  `nixpkgs#gcc.cc.lib`'s `lib/`.
+- **Faster than advertised.** The standalone sequencer built in ~5 minutes, not ~15.
+- **Verified.** On the fresh local chain: `lez_frost_account_e2e` (53 s),
+  `lez_frost_room_e2e` (75 s) and `lez_multisig_live_e2e` §1–7 (273 s, deploying the
+  reproduced guest first) — including the on-chain refusal of a substituted recipient.

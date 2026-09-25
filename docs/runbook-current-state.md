@@ -1,5 +1,15 @@
 # Runbook — verify the current state (2026-08-21)
 
+> **Superseded (2026-09-25) — a record of the 2026-08-21 state, not current instructions.**
+> It predates P4's completion (ADR-013 routed around `exo-c6a`), the fresh-clone build,
+> and Phases A–D. Verify the build today with:
+> [`module/tests/README.md`](../module/tests/README.md) (`module/tests/run-suite.sh` —
+> every unit test and probe in one command, plus the chain-bound tests),
+> the offscreen UI self-tests in [`scripts/`](../scripts/) (`card-`, `infra-`,
+> `audit-download-self-test.sh`, `two-instance-proof.sh`), and
+> [`manual-test-runbook.md`](manual-test-runbook.md) for what only a person at the screen
+> can check. The phase status lives in `CLAUDE.md`.
+
 A layered runbook for exercising what the **real `module/`+`ui/` build** does today.
 Each layer is independent; run top-to-bottom for a full sweep, or jump to the layer
 you care about. Where a layer is blocked, that is called out with the tracking pebble.

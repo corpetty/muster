@@ -18,6 +18,16 @@
 #   - r0vm 3.0.5 on PATH: genesis runs in risc0's executor, and without it the start panics
 #     with a bare "No such file or directory". Get it with `rzup install r0vm 3.0.5`.
 #   - Rust 1.94.0: the LEZ repo's rust-toolchain.toml pins it, and rustup fetches it.
+#   - A C++ compiler: RocksDB and risc0's circuit kernels compile C++. With no system g++,
+#     put `nix build --print-out-paths nixpkgs#gcc`/bin first on PATH. Its wrapper then
+#     stamps nix glibc's loader on the binaries, which does not search /lib64, so they
+#     fail with "libstdc++.so.6: cannot open shared object file": add the rpath with
+#     `patchelf --add-rpath <nixpkgs#gcc.cc.lib>/lib` on sequencer_service and r0vm.
+#   - rzup is optional: `cargo install risc0-r0vm --version 3.0.5 --locked --root <dir>`
+#     builds the same r0vm from crates.io (nixpkgs ships 3.0.6, inside cargo-risczero).
+#     cargo-risczero also installs an r0vm, so give it its own --root.
+# Verified from scratch on a second machine 2026-09-25: the sequencer builds in ~5 min on
+# 20 cores; lez_frost_account_e2e, lez_frost_room_e2e and lez_multisig_live_e2e pass.
 set -euo pipefail
 DIR="${MUSTER_LEZ_DIR:-$HOME/.cache/muster/lez-v0.2.4}"
 PIDFILE="$DIR/.sequencer.pid"

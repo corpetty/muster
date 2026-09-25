@@ -1,23 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 582" width="880" height="582" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>What a signing payload commits to, and what each field defeats</title>
-  <desc>Every signing payload binds an execution environment, an account or membership commitment, a serialization slot, an expiry, the schema identity of the effect, and a record of where each of its inputs came from — so a contribution collected in one context fails verification in every other, and one built on inputs that cannot be accounted for is never signed at all. Specified as F-5, FS-3 and F-20; built at P1.</desc>
+  <desc>Every signing payload binds an execution environment, an account (or, for a room-native decision, the room), a serialization slot, an expiry, the schema identity of the effect, and a record of where each of its inputs came from — so a contribution collected in one context fails verification in every other, and one built on inputs that cannot be accounted for is never signed at all. Specified as F-5, FS-3 and F-20. Built at P1 and live on the approval path since exo-ef1: the payload encodes environment, account, slot, expiry and the materialization root, and the attestation commits the provenance record with it; profile and schema-id are not yet payload fields — the schema id reaches the signed bytes only where a driver's canonicalize includes it.</desc>
 <!-- provenance
      serves:   POST
      shows:    The fields a signing payload commits to and the specific reuse each one
-               defeats, with the two versioned fields marked apart from the invariant
-               property, and the provenance record F-20 adds to the same payload.
+               defeats, each row marked built or not, with the two versioned fields
+               marked apart from the invariant property, and the provenance record F-20
+               adds to the same payload.
      sources:  docs/01-furps.md
                docs/02-implementation-plan.md
+               module/src/intents/signing_payload.nim
+               module/src/coordination/attest.nim
      evidence: [from-source] The four F-5 fields verbatim; schema identity and effect
                    value root from the plan's P1 note and the FURPS encoding constraint
                [from-source] FS-3's requirement that a test demonstrate cross-context
                    failure
                [from-source] The provenance-record row from F-20, which commits the same
                    payload to where each of its inputs came from
+               [from-source] Row status: SigningPayload encodes environment, account,
+                   slot, expiry and the materialization root; attest.nim commits the
+                   provenance record with it; there is no profile or schema-id field, so the
+                   schema id reaches the signed bytes only where a driver's canonicalize
+                   includes it. FS-3 is probed by probe_replay_binding_*. The account row
+                   follows F-5 as amended by ADR-015 (the room, not a membership commitment)
                [illustrative] The what-it-defeats column is the author's reading of why
                    each field is there, not text quoted from the requirement
-     recheck:  P1, and if ADR-009's schema-identity derivation changes — though the
-               property it protects is not allowed to.
+     recheck:  When profile + schema-id become payload fields (ADR-009), or the
+               SigningPayload encoding changes — though the property it protects is not
+               allowed to.
 -->
 
   <rect width="880" height="582" fill="#E4E6E0"/>
@@ -27,8 +37,8 @@
 
   <rect x="40" y="80" width="800" height="30" rx="5" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.2"/>
   <rect x="52" y="88" width="150" height="15" rx="7.5" fill="#A32D1E"/>
-  <text x="127" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#F6E3DF">SPECIFIED · NOT BUILT</text>
-  <text x="214" y="99" font-size="10" fill="#3F4742">F-5, FS-3, F-20 · built at P1 · the demo constructs no signing payloads at all, so it has nothing to bind</text>
+  <text x="127" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#F6E3DF">SPECIFIED · PART BUILT</text>
+  <text x="214" y="99" font-size="10" fill="#3F4742">F-5, FS-3, F-20 · built at P1, live since exo-ef1 · each row is marked; profile + schema-id are not fields yet</text>
 
   <!-- ══ the record ══ -->
   <rect x="40" y="130" width="800" height="288" rx="6" fill="#F7F8F5" stroke="#4B33C4" stroke-width="1.4"/>
@@ -37,33 +47,40 @@
 
   <rect x="56" y="164" width="390" height="30" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1"/>
   <text x="68" y="183" font-size="11" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">execution environment id</text>
+  <text x="438" y="183" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="end" fill="#1E6B52">BUILT</text>
   <text x="470" y="183" font-size="10.5" fill="#3F4742">Replaying the signature on a different chain or zone.</text>
 
   <rect x="56" y="200" width="390" height="30" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1"/>
-  <text x="68" y="219" font-size="11" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">account | membership commitment</text>
-  <text x="470" y="213" font-size="10.5" fill="#3F4742">Aiming an approval at a different account — or at a</text>
-  <text x="470" y="226" font-size="10.5" fill="#3F4742">different committed signer set.</text>
+  <text x="68" y="219" font-size="11" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">account (or the room)</text>
+  <text x="438" y="219" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="end" fill="#1E6B52">BUILT</text>
+  <text x="470" y="213" font-size="10.5" fill="#3F4742">Aiming an approval at a different account — or, for a</text>
+  <text x="470" y="226" font-size="10.5" fill="#3F4742">room-native decision, at a different room.</text>
 
   <rect x="56" y="236" width="390" height="30" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1"/>
   <text x="68" y="255" font-size="11" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">serialization slot (nonce | nullifier)</text>
+  <text x="438" y="255" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="end" fill="#1E6B52">BUILT</text>
   <text x="470" y="249" font-size="10.5" fill="#3F4742">Spending the same approval twice, or against a queue</text>
   <text x="470" y="262" font-size="10.5" fill="#3F4742">position it was never given.</text>
 
   <rect x="56" y="272" width="390" height="30" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1"/>
   <text x="68" y="291" font-size="11" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">expiry</text>
+  <text x="438" y="291" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="end" fill="#1E6B52">BUILT</text>
   <text x="470" y="291" font-size="10.5" fill="#3F4742">Holding an approval until the terms around it change.</text>
 
   <rect x="56" y="308" width="390" height="30" rx="4" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1"/>
   <text x="68" y="327" font-size="11" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">profile + schema-id</text>
+  <text x="438" y="327" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="end" fill="#A32D1E">NOT YET A FIELD</text>
   <text x="470" y="321" font-size="10.5" fill="#3F4742">Reinterpreting the same bytes under a different effect</text>
   <text x="470" y="334" font-size="10.5" fill="#3F4742">schema, so they mean something else entirely.</text>
 
   <rect x="56" y="344" width="390" height="30" rx="4" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1"/>
   <text x="68" y="363" font-size="11" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">effect value root</text>
+  <text x="438" y="363" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="end" fill="#1E6B52">BUILT · AS THE MATERIALIZATION ROOT</text>
   <text x="470" y="363" font-size="10.5" fill="#3F4742">Changing the effect after it was approved.</text>
 
   <rect x="56" y="380" width="390" height="30" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1"/>
   <text x="68" y="399" font-size="11" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">provenance record</text>
+  <text x="438" y="399" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="end" fill="#1E6B52">BUILT · IN THE ATTESTATION</text>
   <text x="470" y="393" font-size="10.5" fill="#3F4742">Signing inputs whose origin you cannot account for.</text>
   <text x="470" y="406" font-size="10.5" fill="#3F4742">F-20 — drawn in full at mech-provenance-trail.</text>
 

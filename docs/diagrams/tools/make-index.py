@@ -31,7 +31,7 @@ FAMILIES = [
     ("pipeline", "The pipeline, and what leaks",
      "Seven stages, the infrastructure that runs each, and who is positioned to see what."),
     ("mech", "Muster's own guarantees",
-     "Mostly specified and not yet built. Every figure says so on its face, above the content."),
+     "Mostly built now. Every figure carries its status on its face, above the content: built, part built, or specified."),
     ("series", "Series chrome",
      "The per-post locator strip: seven stages, one lit."),
 ]
@@ -234,9 +234,9 @@ content is measured, read from source, or illustrative.</p>
   <p><strong>measured</strong> — observed on a specific machine, with a date. <strong>from source</strong> — read off
   code or a contract, not separately exercised. <strong>illustrative</strong> — characterises a situation; not a
   measurement of any named system, and never to be read as one.</p>
-  <p>Several figures describe guarantees that are <strong>specified and not yet built</strong>. Each says so in a strip
-  above its content, with the requirement ids, the phase that builds it, and what exists today instead — so a
-  screenshot cannot lose the caveat.</p>
+  <p>Each figure of a guarantee carries its status in a strip above its content — <strong>built</strong>,
+  <strong>part built</strong>, or <strong>specified</strong> — with the requirement ids, and for anything not built,
+  the phase that builds it and what exists today instead, so a screenshot cannot lose the caveat.</p>
 </div>
 
 <footer>

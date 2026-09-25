@@ -37,6 +37,45 @@ extern "C" {
   void  logos_module_string_free(const char* s);
 }
 
+// The lp_* inter-module ABI (logos_sdk/ffi.nim). The shipped plugin statically
+// links its own logos-protocol, which defines these; this harness links only the
+// module's Nim staticlib, so it defines them itself — as a host with NO protocol
+// stack: every client/subscription is null, every call fails. None of the calls
+// this probe makes (health, propose, status) should reach another module, so each
+// stub counts its calls and the harness reports the count; a non-zero count is
+// visible in the probe's output rather than hidden behind a silent success.
+extern "C" {
+struct LpClient;
+struct LpSubscription;
+static int g_lpCalls = 0;
+const char* lp_protocol_version() { ++g_lpCalls; return "0.0.0-harness"; }
+int  lp_protocol_abi_major() { ++g_lpCalls; return 0; }
+int  lp_set_mode(const char*) { ++g_lpCalls; return -1; }
+const char* lp_get_mode() { ++g_lpCalls; return "none"; }
+int  lp_set_default_transport(const char*) { ++g_lpCalls; return -1; }
+void lp_string_free(const char*) {}
+LpClient* lp_client_create(const char*, const char*, const char*, const char*) {
+  ++g_lpCalls; return nullptr;
+}
+void lp_client_destroy(LpClient*) {}
+int  lp_invoke(LpClient*, const char*, const char*, int, const char** outResult,
+               const char** outError) {
+  ++g_lpCalls;
+  if (outResult) *outResult = nullptr;
+  if (outError) *outError = nullptr;
+  return -1;
+}
+int  lp_invoke_async(LpClient*, const char*, const char*, int, void*, void*) {
+  ++g_lpCalls; return -1;
+}
+int  lp_token_save(const char*, const char*) { ++g_lpCalls; return -1; }
+LpSubscription* lp_subscribe(LpClient*, const char*, void*, void*) {
+  ++g_lpCalls; return nullptr;
+}
+void lp_unsubscribe(LpSubscription*) {}
+const char* lp_get_methods(LpClient*) { ++g_lpCalls; return nullptr; }
+}
+
 namespace {
 
 // The three client-observed shapes the reduction can land on. `String` is the
@@ -186,5 +225,8 @@ int main() {
     std::string idArg = std::string("[\"") + jsonEscape(pr.value) + "\"]";
     emit("status", "state_token", callClient("status", idArg));
   }
+  // Not an observation (no client_return_typed key): the probe ignores it; a reader
+  // of the log sees whether any of the above reached the lp_* stubs.
+  printf("{\"lp_stub_calls\": %d}\n", g_lpCalls);
   return 0;
 }
