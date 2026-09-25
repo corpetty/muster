@@ -1297,9 +1297,9 @@
       "interop": [],
       "infra": ["lez sequencer RPC"],
       "maturity": "draft",
-      "notes": "INFERRED, not documented upstream: LEZ public keys are BIP-340 x-only and the account tweak is additive (sk + SHA256(pk)), so an aggregate key should be able to own a public account. Untested.",
-      "muster": {"status": "candidate", "phase": "D", "why": "the same FROST-secp256k1 driver as btc.frost-bip445 gives Logos a threshold account that looks single-sig — the ADR-015 aggregate-signature rail on our own chain"},
-      "unverified": ["that an aggregate key can own a LEZ public account (the additive tweak must commute with aggregation)"],
+      "notes": "VERIFIED on a LEZ v0.2.4 chain (module/tests/lez_frost_account_e2e.nim, exo-a50.4.6): a public account's id is SHA-256(\"/LEE/v0.3/AccountId/Public/\" ‖ x-only key) and the chain checks a BIP-340 signature under that key, so the x-only form of a ChillDKG threshold key owns an account directly, with no tweak. PrivateKey::tweak (sk + SHA256(pk)) is a wallet-side key derivation the chain never checks. A FROST aggregate co-signed a mint and alone signed a transfer; a wrong aggregate was refused at submission (InvalidSignature).",
+      "muster": {"status": "candidate", "phase": "D", "why": "the same FROST-secp256k1 driver as btc.frost-bip445 gives Logos a threshold account that looks single-sig: the ADR-015 aggregate-signature rail on our own chain. The key question is settled on a real v0.2.4 chain (lez_frost_account_e2e): an aggregate key owns a public account, untweaked, and LezMultisigLive.sendWith carries a FROST witness. Not yet: the room flow for LEZ (the ceremony is shared with btc.frost-bip445; the rounds sign the LEZ message hash)."},
+      "unverified": [],
       "sources": ["https://github.com/logos-blockchain/logos-execution-zone/blob/main/lee/state_machine/src/signature/private_key.rs"]
     }
   ]
