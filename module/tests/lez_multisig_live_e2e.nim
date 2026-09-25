@@ -14,7 +14,13 @@
 ##   6. #2 transfers 200 from the vault to Carol's holding. Before the room settles it,
 ##      Bob tries to Execute with a substituted recipient: the program refuses it on chain
 ##      (the transaction is never included) and nothing moves. Then the room settles #2 —
-##      the vault holds 300 and Carol 200.
+##      the vault holds 300 and Carol 200;
+##   7. the same, ASYNCHRONOUSLY — how the hosted surface drives it, since a UI call must
+##      not wait on a block: with a chain that sends without waiting, the proposer's
+##      Propose, Bob's vote and the Execute each return at once, and each completes on a
+##      later tick when the chain includes it — the intent appears only once #3 is on
+##      chain, the vote's receipt only once the chain shows the vote, final only once the
+##      chain says Executed. Vault 250, Carol 250.
 ## Usage: lez_multisig_live_e2e [sequencerUrl] [blockSeconds]
 ##   defaults http://127.0.0.1:3040 and 15 (the local standalone config); the public
 ##   testnet is https://testnet.lez.logos.co with ~40.
@@ -150,5 +156,48 @@ doAssert decodeProposal(ca.readAccount(proposalPda(psLee02, program, ck, 2)).dat
 settle(lezProposalEffect(2, pay))
 doAssert ca.tokenBalance(vault) == 300 and ca.tokenBalance(carol) == 200
 echo "6. #2: a substituted recipient refused ON CHAIN (never included); settled — vault 300, Carol 200 OK"
+
+# ── 7. asynchronously: start now, complete when the chain includes it ─────────
+proc tick() = sleep(2000)
+let (aa, ab) = (chainFor(aliceKs), chainFor(bobKs))
+aa.waitForInclusion = false
+ab.waitForInclusion = false
+discard aa.addMember("e2e/" & run & "/alice")
+discard ab.addMember("e2e/" & run & "/bob")
+let pay3 = LezAction(target: tokenProgram, instruction: words(vectors["token"]["transfer_500"])[0 .. 0] & @[50'u32, 0, 0, 0],
+                     accounts: @[vault, carol], pdaSeeds: @[vaultSeed(ck)], authorized: @[0'u8])
+let (started, pp) = liveProposeOnChainStart(r.alice, aliceKs, res(r.alice), policy, pay3, newLezVoteSeam(aa, m1),
+                                            int64(Now), 3, ttlSec = Ttl)
+doAssert started.len == 0 and pp.index == 3'u64, started
+var id3 = liveProposeOnChainComplete(r.alice, aliceKs, res(r.alice), newLezVoteSeam(aa, m1), pp)
+doAssert id3 == "pending", "nothing is published before the chain has #3: " & id3
+var waited = 0
+while id3 == "pending" and waited < 30:
+  tick(); inc waited
+  id3 = liveProposeOnChainComplete(r.alice, aliceKs, res(r.alice), newLezVoteSeam(aa, m1), pp)
+doAssert id3.startsWith("0x"), id3
+r.bob.poll()
+let (cast3, pv) = liveVoteCast(r.bob, bobKs, res(r.bob), id3, newLezVoteSeam(ab, m2), bindCtx(), Now)
+doAssert cast3.len == 0, cast3
+var voted = liveVoteComplete(r.bob, bobKs, res(r.bob), newLezVoteSeam(ab, m2), pv)
+doAssert voted.startsWith("unconfirmed"), "no receipt before the chain shows the vote: " & voted
+waited = 0
+while voted.startsWith("unconfirmed") and waited < 30:
+  tick(); inc waited
+  voted = liveVoteComplete(r.bob, bobKs, res(r.bob), newLezVoteSeam(ab, m2), pv)
+doAssert voted == "executable", voted
+let stl3 = settlementFor(drv, aa, Account(chain: Chain, form: afPublic, id: toHex(m1)))
+let asm3 = stl3.assemble(drv, effectFromJson(lezProposalEffect(3, pay3)), @[])
+doAssert asm3.ok, asm3.error & " " & asm3.detail
+let ref3 = stl3.submit(asm3.tx, aliceKs)
+doAssert stl3.watch(ref3).status == fsPending, "an Execute not yet included is pending, never final"
+var fin = fsPending
+waited = 0
+while fin == fsPending and waited < 30:
+  tick(); inc waited
+  fin = stl3.watch(ref3).status
+doAssert fin == fsFinal
+doAssert ca.tokenBalance(vault) == 250 and ca.tokenBalance(carol) == 250
+echo "7. asynchronously: propose, vote and Execute each return at once and complete when the chain includes them — vault 250, Carol 250 OK"
 
 echo "lez_multisig_live_e2e: the room drove the LEZ multisig on a real v0.2.4 chain — all OK"
