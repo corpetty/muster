@@ -177,3 +177,57 @@ reproduces the handlers of `c45100b` with their own messages, over borsh account
     `Message::try_new`, which gives muster a reference encoding to pin its own against.
 
   "Why the program cannot just be deployed" above is resolved.
+
+## The live binding (2026-09-25, exo-3c9)
+
+- **Why muster signs, not `lez_core`.** muster's pin, lez_core 0.4.0 at `549cf11` (LEZ
+  v0.2.2), has `send_generic_public_transaction`, but its instruction argument is a
+  `std::vector<uint32_t>`. The module's header→LIDL generator turns that into an opaque
+  `any`, and QtRO silently drops every argument across the process boundary. Upstream fixed
+  it in `51eadfb` (a byte string of LE words), but it ships only in lez_core 0.4.1+, which
+  targets LEZ **v0.2.5 release candidates**, while the testnet runs **v0.2.4**. So muster
+  builds the member's transaction itself (`lez/tx.nim`, held to vectors from LEZ's own
+  crates) and signs it with the member's key from the keystore, as the in-app EVM and
+  Bitcoin signers do. It then sends it to the user's own sequencer over JSON-RPC
+  (`wallet/lez_multisig_live.nim`). A wallet-backed chain can slot in behind the same
+  `LezMultisigChain` seam once lez_core can reach the program on the testnet's line.
+- **The transaction** (v0.2.4):
+  - the instruction is risc0 serde words: a byte is a word, a u64 two, a u128 four, a
+    `Vec` its length then its items;
+  - the message is borsh, hashed as SHA-256("/LEE/v0.3/Message/Public/" padded ‖ borsh);
+  - signatures are BIP-340 over that hash, with the x-only key in the witness;
+  - the account id is SHA-256("/LEE/v0.3/AccountId/Public/" padded ‖ x-only);
+  - `sendTransaction` takes base64 of `0x00 ‖ borsh(tx)`, and the tx hash is SHA-256 of
+    the tx borsh;
+  - v0.2.4 has no fees, so the seam's `payer` is unused.
+- **Member keys.** The program requires every member account to be fresh at create. The
+  keystore derives one key per label: HMAC-SHA256(secret, "muster/lez-member-key/v1" ‖
+  label ‖ counter). The hosted surface uses labels `lez-member/<i>` and recomputes which
+  are ours from the keys, so nothing is stored (invariant 4).
+- **Found on the chain:** the SPEL v0.7.0 rebuild's `CreateMultisig` asserts that members
+  are fresh but does **not** claim them. Its own doc comment says it does; the chain shows
+  them unowned. One member account can therefore sit in several multisigs until its first
+  transaction.
+- **Refusal = not included.** A transaction the program refuses is dropped at block
+  production, and its reason is only in the sequencer log. Muster reads non-inclusion
+  within 4 blocks as refusal.
+- **Asynchronous.** A UI call to the module times out at 20s, and a testnet block is about
+  40s. So every hosted LEZ step sends and returns at once (`waitForInclusion = false`). A
+  pump driven by the `coordinate_intents` tick completes it once the chain includes it,
+  through the split in `coordination/vote.nim`. Nothing is published before the chain has
+  it: no intent before the proposal, no receipt before the vote, nothing final before
+  Executed. A step not included in 10 minutes is dropped.
+- **Verified.** `lez_multisig_live_e2e` §1–7 are green on a local v0.2.4 sequencer
+  (`infra/lez/localnet.sh`), and §1–6 against the **public testnet**. In both, the room
+  drove the deployed program:
+  - create a 2-of-3, mint a token;
+  - #1, the vault setup: the proposer's own Propose, then Bob's own Approve after an S5
+    re-read, then settlement counting the votes on chain and Executing;
+  - fund the vault;
+  - #2, a transfer: a substituted recipient is refused on the live chain, then the
+    transfer settles;
+  - §7 repeats the flow asynchronously.
+  The hosted module and the UI build as `.lgx`.
+- **Not yet.** The on-display render in a runner. A room of two instances doing it over
+  the live wire. A proposal's account list is still hand-built by the composer (transfer
+  / vault setup) or given as raw JSON (`coordinate_propose_lez`).
