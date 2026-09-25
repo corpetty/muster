@@ -828,6 +828,78 @@ proc lezIdOf(s: string): seq[byte] =
     return
   accountIdFromBase58(s.strip())
 
+# A hosted call must not wait on a block (a UI call times out at 20s; a testnet block is
+# ~40s). So a LEZ step SENDS and returns, and completes on a later tick once the chain
+# includes it (coordination/vote.nim). coordinate_intents drives the pump. Nothing is
+# published before the chain has it: no intent before the proposal, no receipt before
+# the vote, nothing final before Executed.
+type
+  LezPendingKind = enum lpCreate = "create", lpPropose = "propose", lpVote = "vote", lpSettle = "settle"
+  LezPending = object
+    kind: LezPendingKind
+    session: CoordinationSession  ## the room the step belongs to; it completes only there
+    seam: LezVoteSeam
+    propose: PendingPropose
+    vote: PendingVote
+    settle: Settlement
+    txRef: TxRef
+    intentId: string
+    created: JsonNode              ## a create's disclosure, published once the state is on chain
+    started: float
+
+const LezPendingDeadlineS = 600.0
+var gLezPending: seq[LezPending]
+var gLezRecent: seq[JsonNode]    ## the last outcomes, newest last (lez_pending)
+var gLezPumpAt = 0.0
+
+proc lezRecord(p: LezPending, outcome: string) =
+  gLezRecent.add %*{"kind": $p.kind, "intentId": p.intentId, "index": p.propose.index,
+                    "outcome": outcome, "at": int64(epochTime())}
+  if gLezRecent.len > 20: gLezRecent.delete(0)
+
+proc lezPump() =
+  ## Complete what the chain has included since the last tick; at most every 2s, one or
+  ## two quick reads per step. A step still not included after 10 minutes is dropped.
+  if gLezPending.len == 0 or epochTime() - gLezPumpAt < 2.0: return
+  gLezPumpAt = epochTime()
+  var keep: seq[LezPending]
+  for p in gLezPending:
+    if p.session != gSession:          # it completes in its own room, when that is joined
+      keep.add p
+      continue
+    var outcome = ""
+    try:
+      case p.kind
+      of lpCreate:
+        let r = musterCoordinateDiscloseAccount($p.created)
+        let j = parseJson(r)
+        if not j.hasKey("error"): outcome = "disclosed " & j{"id"}.getStr()
+        elif j{"error"}.getStr() != "cannot read the multisig from the chain": outcome = "not disclosed: " & r
+      of lpPropose:
+        let r = liveProposeOnChainComplete(p.session, moduleKeystore(), driverFor, p.seam, p.propose)
+        if r != "pending": outcome = r
+      of lpVote:
+        let r = liveVoteComplete(p.session, moduleKeystore(), driverFor, p.seam, p.vote)
+        if not r.startsWith("unconfirmed"): outcome = r
+      of lpSettle:
+        let f = p.settle.watch(p.txRef)
+        if f.status == fsFinal:
+          p.session.publish(finalEvent(p.intentId, chainRef = p.txRef.id))
+          outcome = "final"
+        elif f.status == fsFailed: outcome = "failed: " & f.detail
+    except CatchableError:
+      discard                          # an unreachable sequencer: try again next tick
+    if outcome.len == 0 and epochTime() - p.started > LezPendingDeadlineS:
+      outcome = "timed out: the chain did not include it"
+    if outcome.len == 0: keep.add p
+    else: lezRecord(p, outcome)
+  gLezPending = keep
+
+proc lezPendingFor(intentId: string): string =
+  for p in gLezPending:
+    if p.intentId == intentId and p.kind in {lpVote, lpSettle}: return $p.kind
+  ""
+
 proc lezChainViewOf(a: RoomAccount): ChainView =
   if a.chain != gLezChain:
     return (known: false, signers: @[], threshold: 0,
@@ -1081,12 +1153,19 @@ proc musterCoordinateVote(intentId: string): string =
   let drv = driverFor(intentPolicyOf(gSession.log.allEvents(), intentId))
   if not (drv of LezMultisigDriver): return "not-a-vote-locus"
   let a = LezMultisigDriver(drv).account
+  if lezPendingFor(intentId) == "vote": return "pending: your vote is on its way to the chain"
   try:
     let c = lezLiveOf(a)
+    c.waitForInclusion = false         # never wait on a block inside a hosted call
     let (mine, me) = c.lezOurMember(a.members)
     if not mine: return "refused: none of your LEZ member accounts is a member of this multisig"
-    liveVote(gSession, moduleKeystore(), driverFor, intentId, newLezVoteSeam(c, me),
-             intentLinkContext(intentId), uint64(epochTime()))
+    let seam = newLezVoteSeam(c, me)
+    let (outcome, pv) = liveVoteCast(gSession, moduleKeystore(), driverFor, intentId, seam,
+                                     intentLinkContext(intentId), uint64(epochTime()))
+    if outcome.len > 0: return outcome
+    gLezPending.add LezPending(kind: lpVote, session: gSession, seam: seam, vote: pv, intentId: intentId,
+                               started: epochTime())
+    "pending: your vote is on its way to the chain (tx " & pv.tx & ")"
   except CatchableError as e:
     "refused: the LEZ sequencer: " & e.msg
 
@@ -1110,6 +1189,7 @@ proc musterCoordinateIntents(): string =
   ## its cards come from real state (reduce(log)) rather than posted demo JSON.
   if gSession == nil: return "[]"
   gSession.poll()
+  lezPump()                            # complete any LEZ step the chain has since included
   let events = gSession.log.allEvents()
   var arr = newJArray()
   for v in reduceIntentViews(events, driverFor):
@@ -1169,6 +1249,8 @@ proc musterCoordinateIntents(): string =
                   # an approval's grade (exo-ef1): committed | unattested; "" otherwise
                   "attestation": item.attestation}
     o["provenance"] = prov
+    let chainPending = lezPendingFor(v.id)   # "vote" | "settle" while the chain has not included it
+    if chainPending.len > 0: o["chainPending"] = %chainPending
     arr.add o
   $arr
 
@@ -1661,6 +1743,7 @@ proc settlementFor(drv: Driver): Settlement =
     # is this instance's member account; nil when it holds none (submit names why)
     let a = LezMultisigDriver(drv).account
     let c = lezLiveOf(a)
+    c.waitForInclusion = false         # the Execute's finality is watched by the pump
     let (mine, me) = c.lezOurMember(a.members)
     if not mine: return nil
     return settlementFor(drv, c, Account(chain: a.chain, form: afPublic, id: lezHx(me)))
@@ -1745,6 +1828,10 @@ proc musterCoordinateSubmit(intentId: string): string =
     if fin.status != fsPending: break
     sleep(200)
   if fin.status == fsFinal: gSession.publish(finalEvent(intentId, chainRef = txRef.id))
+  elif fin.status == fsPending and drv of LezMultisigDriver:
+    # a LEZ Execute lands a block later: the pump publishes final when the chain says Executed
+    gLezPending.add LezPending(kind: lpSettle, session: gSession, settle: st, txRef: txRef, intentId: intentId,
+                               started: epochTime())
   let onchain = (case fin.status
                  of fsFinal: "final"
                  of fsFailed: "failed"
@@ -1838,11 +1925,15 @@ proc lezProposeAction(action: LezAction): string =
     let (mine, me) = c.lezOurMember(acct.members)
     if not mine:
       return $(%*{"error": "not-a-member", "detail": "none of your LEZ member accounts is a member of this multisig"})
+    c.waitForInclusion = false         # never wait on a block inside a hosted call
     inc gMsgSeq
-    let id = liveProposeOnChain(gSession, moduleKeystore(), driverFor, gCoordKind, action, newLezVoteSeam(c, me),
-                                int64(epochTime()), gMsgSeq, ttlSec = ttl)
-    if not id.startsWith("0x"): return $(%*{"error": "refused", "detail": id})
-    id
+    let seam = newLezVoteSeam(c, me)
+    let (outcome, pp) = liveProposeOnChainStart(gSession, moduleKeystore(), driverFor, gCoordKind, action, seam,
+                                                int64(epochTime()), gMsgSeq, ttlSec = ttl)
+    if outcome.len > 0: return $(%*{"error": "refused", "detail": outcome})
+    gLezPending.add LezPending(kind: lpPropose, session: gSession, seam: seam, propose: pp, started: epochTime())
+    $(%*{"pending": "propose", "index": pp.index, "tx": pp.tx,
+         "detail": "proposal #" & $pp.index & " is on its way to the chain; it appears in the room once included"})
   except CatchableError as e:
     $(%*{"error": "sequencer-unreachable", "detail": e.msg})
 
@@ -1902,6 +1993,15 @@ proc musterCoordinateProposeLezVaultInit(definition: string): string =
   if not tok: return terr
   lezProposeAction(action)
 
+proc musterLezPending(): string =
+  ## The LEZ steps sent and not yet included, and the last outcomes.
+  lezPump()
+  var pend = newJArray()
+  for p in gLezPending:
+    pend.add %*{"kind": $p.kind, "intentId": p.intentId, "index": p.propose.index,
+                "since": int64(p.started), "room": (if p.session == gSession: "this" else: "another")}
+  $(%*{"pending": pend, "recent": gLezRecent})
+
 proc musterLezMemberAccount(index: string): string =
   ## One of this instance's LEZ member accounts; empty index = the first still fresh.
   let ks = moduleKeystore()
@@ -1947,11 +2047,18 @@ proc musterLezMultisigCreate(threshold, members: string): string =
   for i in 0 ..< 32: program.add byte(parseHexInt(gLezProgram[2*i .. 2*i+1]))
   try:
     let c = lezLiveFor(gLezChain, psLee02, program, plAccountIds)
+    c.waitForInclusion = false         # never wait on a block inside a hosted call
     let t = c.submit(@[], createOp(ck, k, ms))
     if not t.ok: return $(%*{"error": "refused", "detail": t.error})
     let config = %*{"program": gLezProgram, "createKey": lezHx(ck), "pda": "lee-v0.2", "layout": "account-ids"}
-    $(%*{"family": LezMultisigFamily, "chain": gLezChain, "address": lezHx(statePda(psLee02, program, ck)),
-         "config": $config, "threshold": k, "members": ms.mapIt(lezHx(it)), "tx": t.hash, "height": t.height})
+    let created = %*{"family": LezMultisigFamily, "chain": gLezChain, "address": lezHx(statePda(psLee02, program, ck)),
+                     "config": $config, "threshold": k, "members": ms.mapIt(lezHx(it)), "tx": t.hash,
+                     "label": "LEZ " & $k & "-of-" & $ms.len}
+    # in a room, it is disclosed there once the chain has the state (the pump)
+    if gSession != nil:
+      gLezPending.add LezPending(kind: lpCreate, session: gSession, created: created, started: epochTime())
+    created["pending"] = %"create"
+    $created
   except CatchableError as e:
     $(%*{"error": "sequencer-unreachable", "detail": e.msg})
 
