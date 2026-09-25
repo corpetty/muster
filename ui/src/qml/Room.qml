@@ -267,6 +267,39 @@ Item {
     // a Bitcoin multisig policy: a payment in sat from the account's own coins, read
     // from the user's node — no Safe balance, no nonce (exo-a50.2.6)
     readonly property bool isBtcPolicy: room.policyKind.indexOf("btc-") === 0
+    // a LEZ multisig policy (exo-3c9): a payment moves a token out of the multisig's
+    // vault; proposing and approving are members' own on-chain transactions
+    readonly property bool isLezPolicy: room.policyKind === "lez-multisig"
+    // the last LEZ proposal ({pending: "propose", index, tx} or {error, detail}), the
+    // member account shown, and the last create
+    readonly property var lezPropose: {
+        try { return JSON.parse(backend ? backend.lezProposeJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    readonly property var lezMember: {
+        try { return JSON.parse(backend ? backend.lezMemberJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    readonly property var lezCreate: {
+        try { return JSON.parse(backend ? backend.lezCreateJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    // A LEZ multisig proposal in words: the effect carries the target program, the
+    // instruction words and the accounts. A token Transfer is [0, amount (u128, 4 words)],
+    // InitializeAccount is [3]; anything else is shown as the raw call.
+    function lezSummary(eff) {
+        var ins = eff.instruction || [];
+        var acc = eff.accounts || [];
+        var idx = String(eff.index || "?");
+        function abbrev(h) { h = String(h || ""); return h.length > 16 ? h.slice(0, 8) + "…" + h.slice(-6) : h; }
+        if (ins.length === 5 && Number(ins[0]) === 0 && acc.length === 2)
+            return qsTr("On-chain proposal #%1: transfer %2 from the vault to %3")
+                   .arg(idx).arg(Number(ins[1]) + Number(ins[2]) * 4294967296).arg(abbrev(acc[1]));
+        if (ins.length === 1 && Number(ins[0]) === 3 && acc.length === 2)
+            return qsTr("On-chain proposal #%1: set up the vault to hold token %2").arg(idx).arg(abbrev(acc[0]));
+        return qsTr("On-chain proposal #%1: call %2 with %3 words on %4 accounts")
+               .arg(idx).arg(abbrev(eff.target)).arg(ins.length).arg(acc.length);
+    }
     function isBtcIntent(it) { return String((it && it.policy) || "").indexOf("btc-") === 0; }
     // Refresh the action menu when the action composer opens — the module queries each
     // candidate module's methods (never a blind scan), so not on the message tick.
@@ -359,9 +392,11 @@ Item {
         // shows "call module.method(…)" instead of amount → destination.
         var isInvoke = effKind === "invoke";
         var invokeArgs = (isInvoke && eff.args) ? eff.args : [];
+        var isLez = effKind === "lez-multisig-proposal";
         return {
             kind: "intent-propose",
             label: isGovernance ? qsTr("Add policy")
+                 : isLez ? qsTr("LEZ multisig")
                  : isInvoke ? qsTr("Action")
                  : isStatement ? qsTr("Statement") : qsTr("Payment"),
             // an invoke intent's target, rendered by the card as "call module.method(…)".
@@ -371,7 +406,10 @@ Item {
             // the text instead of amount → destination.
             statement: isGovernance
                      ? qsTr("Grant the room the “%1” policy").arg(String(eff.kind || ""))
+                     : isLez ? room.lezSummary(eff)
                      : isStatement ? String(eff.text || "") : "",
+            // a LEZ step the chain has not included yet: "vote" | "settle" (exo-3c9)
+            chainPending: (it && it.chainPending) ? String(it.chainPending) : "",
             amount: (!isStatement && eff.value !== undefined) ? String(eff.value) : "",
             denom: "",
             to: (!isStatement && eff.to !== undefined) ? String(eff.to) : "",
@@ -1657,7 +1695,8 @@ Item {
                         id: proposeTo
                         objectName: "roomProposeTo"
                         Layout.fillWidth: true
-                        placeholderText: qsTr("recipient (0x…)")
+                        placeholderText: room.isLezPolicy ? qsTr("recipient token holding (base58 or hex)")
+                                                          : qsTr("recipient (0x…)")
                         font.family: Theme.typography.mono
                     }
 
@@ -1725,7 +1764,8 @@ Item {
                         // wei — the Safe transfers this exact value; the balance above is
                         // shown in ETH and in wei so the unit you type against is explicit.
                         // A Bitcoin payment is in satoshis.
-                        placeholderText: room.isBtcPolicy ? qsTr("amount (sat)") : qsTr("amount (wei)")
+                        placeholderText: room.isBtcPolicy ? qsTr("amount (sat)")
+                                       : room.isLezPolicy ? qsTr("amount (token units)") : qsTr("amount (wei)")
                         font.family: Theme.typography.mono
                         validator: IntValidator { bottom: 0 }
                     }
@@ -1757,6 +1797,7 @@ Item {
                                  room.composeType === "statement" ? proposeText.text.length > 0
                                : room.composeType === "action" ? room.chosenAction !== null
                                : room.isBtcPolicy ? proposeTo.text.length > 0 && proposeValue.text.length > 0
+                               : room.isLezPolicy ? proposeTo.text.length > 0 && proposeValue.text.length > 0
                                : proposeTo.text.length > 0 && !room.overSends(proposeValue.text))
                         onClicked: {
                             if (room.composeType === "statement") {
@@ -1770,6 +1811,13 @@ Item {
                                     room.modeB ? proposeChain.text : "");
                                 proposeArgs.text = "";
                                 proposeChain.text = "";
+                            } else if (room.isLezPolicy) {
+                                // the proposer's own Propose, sent now; the card appears
+                                // once a block includes it
+                                if (room.backend) room.backend.proposeLezTransfer(proposeTo.text, proposeValue.text);
+                                proposeTo.text = "";
+                                proposeValue.text = "";
+                                room.composing = false;
                             } else if (room.isBtcPolicy) {
                                 // coins read from your node, change back to the account
                                 if (room.backend)
@@ -1806,6 +1854,60 @@ Item {
                       .arg(room.btcPropose && room.btcPropose.detail ? ": " + String(room.btcPropose.detail) : "")
                 color: Theme.palette.warning
                 font.family: Theme.typography.mono
+                font.pixelSize: Theme.typography.badgeText
+            }
+
+            // a LEZ multisig proposal is sent at once and appears once the chain has it;
+            // say which, or why it was not sent (exo-3c9)
+            LogosText {
+                objectName: "roomLezProposeFeedback"
+                visible: !!(room.lezPropose && (room.lezPropose.error || room.lezPropose.pending))
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: room.lezPropose && room.lezPropose.error
+                      ? qsTr("⚠ The LEZ proposal was not sent — %1%2")
+                            .arg(String(room.lezPropose.error))
+                            .arg(room.lezPropose.detail ? ": " + String(room.lezPropose.detail) : "")
+                      : qsTr("⏳ Proposal #%1 is on its way to the chain (tx %2…) — it appears here once a block includes it.")
+                            .arg(String((room.lezPropose && room.lezPropose.index) || "?"))
+                            .arg(String((room.lezPropose && room.lezPropose.tx) || "").slice(0, 12))
+                color: room.lezPropose && room.lezPropose.error ? Theme.palette.warning : Theme.palette.textSecondary
+                font.family: Theme.typography.mono
+                font.pixelSize: Theme.typography.badgeText
+            }
+            RowLayout {
+                objectName: "roomLezVaultInit"
+                visible: room.isLezPolicy && room.composing
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                LogosTextField {
+                    id: lezDefinition
+                    objectName: "roomLezDefinition"
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("token definition account — to set up the vault to hold it")
+                    font.family: Theme.typography.mono
+                }
+                LogosButton {
+                    objectName: "roomLezVaultInitPropose"
+                    text: qsTr("Propose vault setup")
+                    enabled: room.enoughToPropose && lezDefinition.text.length > 0
+                    onClicked: {
+                        if (room.backend) room.backend.proposeLezVaultInit(lezDefinition.text);
+                        lezDefinition.text = "";
+                        room.composing = false;
+                    }
+                }
+            }
+
+            // a vote-locus approval is the member's own chain transaction: sent now, it
+            // counts once a block includes it
+            LogosText {
+                objectName: "roomApprovePending"
+                visible: !!(room.contributeResult && String(room.contributeResult.state || "").indexOf("pending") === 0)
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("⏳ Your vote is on its way to the chain — it counts once a block includes it.")
+                color: Theme.palette.textSecondary
                 font.pixelSize: Theme.typography.badgeText
             }
 
@@ -1897,7 +1999,13 @@ Item {
                 Layout.fillWidth: true
                 accounts: room.roomAccounts
                 discloseResult: room.discloseResult
+                lezMember: room.lezMember
+                lezCreate: room.lezCreate
                 onDiscloseRequested: function (accountJson) { if (room.backend) room.backend.discloseAccount(accountJson); }
+                onLezMemberRequested: if (room.backend) room.backend.lezMemberAccount("")
+                onLezCreateRequested: function (threshold, members) {
+                    if (room.backend) room.backend.lezCreateMultisig(threshold, members);
+                }
                 onDiscloseSuggested: if (room.backend) room.backend.discloseSuggestedAccount()
             }
 

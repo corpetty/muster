@@ -642,6 +642,21 @@ Rectangle {
                 }
             }
 
+            // ── a LEZ step the chain has not included yet (exo-3c9) ────────
+            // A vote-locus approval and the Execute are members' own chain
+            // transactions: sent at once, they count only once a block includes them.
+            LogosText {
+                objectName: "cardChainPending"
+                visible: cardRoot.kind === "intent-propose" && !!(cardRoot.card && cardRoot.card.chainPending)
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: cardRoot.card && cardRoot.card.chainPending === "settle"
+                      ? qsTr("⏳ Executing on chain — final once a block includes it.")
+                      : qsTr("⏳ Your vote is on its way to the chain — it counts once a block includes it.")
+                color: Theme.palette.textSecondary
+                font.pixelSize: Theme.typography.badgeText
+            }
+
             // ── approval slots ─────────────────────────────────────────────
             // Slots fill as approvals arrive; the empty ones are drawn too,
             // because the shape of what is missing is the information. An
