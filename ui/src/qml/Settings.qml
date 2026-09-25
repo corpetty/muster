@@ -269,6 +269,39 @@ Item {
                         }
                     }
 
+                    // ── the user's LEZ sequencer (exo-3c9) ──
+                    LogosText {
+                        Layout.topMargin: Theme.spacing.small
+                        text: qsTr("LEZ sequencer  ·  now: %1  (%2)")
+                              .arg(String((settings.s && settings.s.lez && settings.s.lez.rpc) || "https://testnet.lez.logos.co"))
+                              .arg(String((settings.s && settings.s.lez && settings.s.lez.chain) || "lez:testnet"))
+                        color: Theme.palette.textSecondary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: 460
+                        Layout.alignment: Qt.AlignLeft
+                        spacing: Theme.spacing.small
+                        LogosTextField {
+                            id: lezRpcField
+                            objectName: "settingsLezRpc"
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("your sequencer, e.g. http://127.0.0.1:3040")
+                            font.family: Theme.typography.mono
+                        }
+                        LogosButton {
+                            objectName: "settingsLezRpcSave"
+                            text: qsTr("Save")
+                            enabled: lezRpcField.text.length > 0
+                            onClicked: {
+                                if (settings.backend) settings.backend.setSetting("lez-rpc", lezRpcField.text);
+                                lezRpcField.text = "";
+                            }
+                        }
+                    }
+
                     // ── delivery config ──
                     LogosText {
                         Layout.topMargin: Theme.spacing.small

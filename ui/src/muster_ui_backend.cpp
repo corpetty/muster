@@ -395,7 +395,12 @@ void MusterUiBackend::contributeInRoom(const QString &intentId, const QString &s
     qInfo() << "[muster_ui] coordinate_contribute" << intentId << keyRef << "->" << st;
     // Surface the outcome: an approval that didn't count (your key isn't a recognized
     // signer for this policy) must SAY so, not vanish. ok iff st is a lifecycle state.
-    const bool ok = (st != "rejected" && st != "not-joined" && st != "unknown-intent" && st != "unknown-key");
+    // A vote-locus approval (a LEZ multisig, exo-3c9) answers "pending: …" while the
+    // chain includes the member's vote (ok), or "refused: …" and the like (not ok).
+    const bool ok = (st != "rejected" && st != "not-joined" && st != "unknown-intent" && st != "unknown-key"
+                     && !st.startsWith("refused") && st != "not-a-vote-locus" && st != "expired"
+                     && st != "unsupported-driver" && st != "no-context" && st != "unaccountable-input"
+                     && !st.startsWith("unconfirmed"));
     QJsonObject r;
     r.insert("intentId", intentId);
     r.insert("state", st);
@@ -601,6 +606,49 @@ void MusterUiBackend::proposeBtcSpend(const QString &payTo, const QString &amoun
     setBtcProposeJson(QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact)));
     loadIntents();
     loadMessages();
+}
+
+static QString asObjectJson(const QString &r, const char *key)
+{
+    // a module answer that is JSON stays as is; a bare string becomes {key: r}
+    QJsonObject o;
+    if (r.startsWith("{")) o = QJsonDocument::fromJson(r.toUtf8()).object();
+    else o.insert(QString::fromLatin1(key), r);
+    return QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));
+}
+
+void MusterUiBackend::proposeLezTransfer(const QString &recipient, const QString &amount)
+{
+    // coordinate_propose_lez_transfer → the proposer's own Propose, sent (not awaited);
+    // the room intent appears on a later intents tick once the chain holds it.
+    const QString r = modules().muster_module.coordinate_propose_lez_transfer(recipient.trimmed(), amount.trimmed());
+    qInfo() << "[muster_ui] coordinate_propose_lez_transfer" << recipient << amount << "->" << r;
+    setLezProposeJson(asObjectJson(r, "id"));
+    loadIntents();
+}
+
+void MusterUiBackend::proposeLezVaultInit(const QString &definition)
+{
+    const QString r = modules().muster_module.coordinate_propose_lez_vault_init(definition.trimmed());
+    qInfo() << "[muster_ui] coordinate_propose_lez_vault_init" << definition << "->" << r;
+    setLezProposeJson(asObjectJson(r, "id"));
+    loadIntents();
+}
+
+void MusterUiBackend::lezMemberAccount(const QString &index)
+{
+    const QString r = modules().muster_module.lez_member_account(index.trimmed());
+    qInfo() << "[muster_ui] lez_member_account" << index << "->" << r;
+    setLezMemberJson(asObjectJson(r, "error"));
+}
+
+void MusterUiBackend::lezCreateMultisig(const QString &threshold, const QString &members)
+{
+    // lez_multisig_create → sent (not awaited); disclosed into the room by the module
+    // once the chain holds the multisig's state.
+    const QString r = modules().muster_module.lez_multisig_create(threshold.trimmed(), members.trimmed());
+    qInfo() << "[muster_ui] lez_multisig_create" << threshold << members << "->" << r;
+    setLezCreateJson(asObjectJson(r, "error"));
 }
 
 void MusterUiBackend::downloadAudit(const QString &intentId)

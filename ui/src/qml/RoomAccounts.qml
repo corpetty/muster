@@ -20,8 +20,12 @@ Item {
 
     property var accounts: []
     property var discloseResult: ({})     // the last disclose's result ({error} or the account)
+    property var lezMember: ({})          // this instance's LEZ member account ({base58, account, fresh} or {error})
+    property var lezCreate: ({})          // the last LEZ multisig create ({address, tx, pending} or {error, detail})
     signal discloseRequested(string accountJson)
     signal discloseSuggested()
+    signal lezMemberRequested()
+    signal lezCreateRequested(string threshold, string members)
 
     implicitHeight: col.implicitHeight
 
@@ -165,6 +169,98 @@ Item {
             onClicked: acc.discloseRequested(JSON.stringify({
                 family: "evm.safe", chain: "eip155:" + chainField.text.trim(),
                 address: addrField.text.trim(), label: "" }))
+        }
+        // ── a LEZ multisig (exo-3c9) ──
+        // Each member gives the creator a FRESH LEZ account (its key stays in their own
+        // keystore); the creator puts the k-of-n on chain, and it is disclosed here once
+        // a block includes it. An existing one is disclosed by its config.
+        LogosText {
+            Layout.fillWidth: true
+            Layout.topMargin: Theme.spacing.small
+            text: qsTr("LEZ multisig")
+            color: Theme.palette.textSecondary
+            font.pixelSize: Theme.typography.badgeText
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Theme.spacing.small
+            LogosButton {
+                objectName: "lezShowMember"
+                text: qsTr("My LEZ member account")
+                variant: LogosButton.Variant.Secondary
+                onClicked: acc.lezMemberRequested()
+            }
+            LogosText {
+                objectName: "lezMemberAccount"
+                Layout.fillWidth: true
+                elide: Text.ElideMiddle
+                text: acc.lezMember && acc.lezMember.base58 ? String(acc.lezMember.base58)
+                    : acc.lezMember && acc.lezMember.error ? "⚠ " + String(acc.lezMember.error)
+                      + (acc.lezMember.detail ? ": " + String(acc.lezMember.detail) : "")
+                    : qsTr("give this to whoever creates the multisig")
+                color: Theme.palette.textSecondary
+                font.family: Theme.typography.mono
+                font.pixelSize: Theme.typography.badgeText
+            }
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Theme.spacing.small
+            LogosTextField {
+                id: lezThreshold
+                objectName: "lezCreateThreshold"
+                Layout.preferredWidth: 60
+                placeholderText: qsTr("k")
+                text: "2"
+            }
+            LogosTextField {
+                id: lezMembers
+                objectName: "lezCreateMembers"
+                Layout.fillWidth: true
+                placeholderText: qsTr("members' LEZ accounts, comma-separated")
+                font.family: Theme.typography.mono
+            }
+        }
+        LogosButton {
+            objectName: "lezCreate"
+            Layout.fillWidth: true
+            enabled: lezMembers.text.trim().length > 0 && lezThreshold.text.trim().length > 0
+            text: qsTr("Create this LEZ multisig on chain")
+            variant: LogosButton.Variant.Secondary
+            onClicked: acc.lezCreateRequested(lezThreshold.text.trim(), lezMembers.text.trim())
+        }
+        LogosText {
+            objectName: "lezCreateResult"
+            Layout.fillWidth: true
+            visible: !!(acc.lezCreate && (acc.lezCreate.error || acc.lezCreate.address))
+            wrapMode: Text.WordWrap
+            text: acc.lezCreate && acc.lezCreate.error
+                  ? "⚠ " + String(acc.lezCreate.error) + (acc.lezCreate.detail ? " — " + String(acc.lezCreate.detail) : "")
+                  : qsTr("⏳ Sent to %1 (tx %2…) — it is disclosed here once a block includes it.")
+                        .arg(String((acc.lezCreate && acc.lezCreate.chain) || ""))
+                        .arg(String((acc.lezCreate && acc.lezCreate.tx) || "").slice(0, 12))
+            color: acc.lezCreate && acc.lezCreate.error ? Theme.palette.error : Theme.palette.textSecondary
+            font.pixelSize: Theme.typography.badgeText
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Theme.spacing.small
+            LogosTextField {
+                id: lezConfig
+                objectName: "lezDiscloseConfig"
+                Layout.fillWidth: true
+                placeholderText: qsTr("an existing LEZ multisig's config {program, createKey, pda, layout}")
+                font.family: Theme.typography.mono
+            }
+            LogosButton {
+                objectName: "lezDisclose"
+                text: qsTr("Disclose")
+                variant: LogosButton.Variant.Secondary
+                enabled: lezConfig.text.trim().length > 0
+                onClicked: acc.discloseRequested(JSON.stringify({
+                    family: "lez.multisig-program", chain: "", address: "", label: "",
+                    config: lezConfig.text.trim() }))
+            }
         }
         LogosText {
             Layout.fillWidth: true

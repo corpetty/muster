@@ -228,6 +228,19 @@ class MusterUi
     // from the user's node (Settings → Bitcoin node). Lands on btcProposeJson {id} or
     // {error, detail}; intents + messages reload after.
     SLOT(void proposeBtcSpend(const QString &payTo, const QString &amountSat, const QString &feeRate))
+    // The LEZ multisig (exo-3c9). A LEZ step is SENT at once and completes on a later
+    // intents tick once the chain includes it (the module's pump), so none of these waits
+    // on a block. Propose a token transfer out of the room's LEZ multisig vault, or the
+    // vault's setup for a token: lands on lezProposeJson {pending: "propose", index, tx}
+    // or {error, detail}.
+    SLOT(void proposeLezTransfer(const QString &recipient, const QString &amount))
+    SLOT(void proposeLezVaultInit(const QString &definition))
+    // This instance's LEZ member account (keystore-derived; "" = the first still fresh):
+    // lands on lezMemberJson {index, account, base58, fresh} or {error}.
+    SLOT(void lezMemberAccount(const QString &index))
+    // Create a k-of-n LEZ multisig on chain; in the room it is disclosed once the chain
+    // holds it. Lands on lezCreateJson {address, config, tx, pending} or {error, detail}.
+    SLOT(void lezCreateMultisig(const QString &threshold, const QString &members))
     // The information-flow view (coordinate_flow, exo-002.5): who could see what,
     // for every action — {rows:[{seq,kind,intentId,field,to,members,epoch,declared}],
     // matrix:{observer:[fields]}}. A fold over the sealed log (no RPC), refreshed on
@@ -328,6 +341,9 @@ class MusterUi
     PROP(QString outsideJson="{}" READONLY)
     PROP(QString outsideImportJson="{}" READONLY)
     PROP(QString btcProposeJson="{}" READONLY)
+    PROP(QString lezProposeJson="{}" READONLY)
+    PROP(QString lezMemberJson="{}" READONLY)
+    PROP(QString lezCreateJson="{}" READONLY)
     // The room's information flow (loadFlow): {rows, matrix}. The Room renders the
     // observer matrix + per-action rows; the store node is always present (FS-9).
     PROP(QString flowJson="{\"rows\":[],\"matrix\":{}}" READONLY)
