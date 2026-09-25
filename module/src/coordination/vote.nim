@@ -38,6 +38,7 @@ import ../crypto/curve25519
 import ../lez/multisig
 import ../lez/multisig_chain
 import ./session
+import ./authorship   # the room's authentic view + author-signed publishing (exo-f76)
 import ./intent_events
 import ./intents
 import ./attest
@@ -65,12 +66,12 @@ proc publishVote(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, int
                  receipt: Contribution, p: seq[byte]): string =
   ## Publish a confirmed vote's receipt + the room-key attestation over P. Returns the
   ## contributor, or "" if the driver does not accept the receipt (nothing published).
-  let who = contributorOf(driverFor(intentPolicyOf(s.log.allEvents(), intentId)), effectJson, hx(receipt.bytes))
+  let who = contributorOf(driverFor(intentPolicyOf(s.roomEvents(), intentId)), effectJson, hx(receipt.bytes))
   if who.len == 0: return ""
   let edPub = ks.encIdentity().ed
   let attest = hx(@edPub & @(ks.edSign(p)))
   if not verifyAttestation(who, p, attest): return ""
-  let events = s.log.allEvents()
+  let events = s.roomEvents()
   let folded = reduceIntents(events, driverFor)
   let round = (if intentId in folded: folded[intentId].collection.round else: 1)
   var parents: seq[EventId]
@@ -96,7 +97,7 @@ proc liveVoteCast*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, i
   ## "" when the vote was cast (pending holds what completion needs), else a refusal
   ## ("refused: …", "expired", "not-a-vote-locus", …) with nothing cast or published.
   s.poll()
-  let events = s.log.allEvents()
+  let events = s.roomEvents()
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return ("unknown-intent", PendingVote())
   let drv = driverFor(intentPolicyOf(events, intentId))
@@ -129,14 +130,14 @@ proc liveVoteComplete*(s: CoordinationSession, ks: Keystore, driverFor: DriverFo
   ## Steps 4-5: the vote confirmed on chain, then the S5 reads and the receipt published.
   ## "unconfirmed: …" (nothing published) while the chain does not show the vote.
   s.poll()
-  let drv = driverFor(intentPolicyOf(s.log.allEvents(), pv.intentId))
+  let drv = driverFor(intentPolicyOf(s.roomEvents(), pv.intentId))
   let effect = effectFromJson(pv.effectJson)
   let conf = seam.confirmVote(drv, effect)
   if not conf.ok: return "unconfirmed: " & conf.detail
   for e in pv.recorded: s.publish(e)
   if publishVote(s, ks, driverFor, pv.intentId, pv.effectJson, seam.receiptFor(drv, effect, pv.tx), pv.p).len == 0:
     return "rejected"
-  intentState(s.log.allEvents(), driverFor, pv.intentId)
+  intentState(s.roomEvents(), driverFor, pv.intentId)
 
 proc liveVote*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, intentId: string,
                seam: VoteSeam, bindingCtx: LinkContext, nowSec: uint64 = 0): string =
@@ -244,7 +245,7 @@ proc liveProposeOnChainComplete*(s: CoordinationSession, ks: Keystore, driverFor
                              account = hx(a.statePda), ttlSec = pp.ttlSec)
   if not id.startsWith("0x"): return id   # a refusal, not an intent id
   # the proposer's Propose was their vote: report it like any other
-  let p = attestationPayload(s.log.allEvents(), driverFor, id)
+  let p = attestationPayload(s.roomEvents(), driverFor, id)
   if p.len > 0:
     discard publishVote(s, ks, driverFor, id, effectJson, voteReceipt(seam.voter, pp.index, pp.tx,
                         canonicalize(drv, effectFromJson(effectJson))), p)

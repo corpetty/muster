@@ -33,9 +33,8 @@ proc scenarioCorrect(sc: string): bool =
       discard r.approveAs("alice", id); r.misattestAs("bob", policy, id)
     of "declines_messages":
       discard r.approveAs("alice", id)
-      r.bob.publish(declineEvent(id, "bob"))
-      let (_, m) = newMessageEvent("alice", 1, "hello room", 1)
-      r.alice.publish(m)
+      r.declineAs("bob", id)
+      r.messageAs("alice", 1, "hello room", 1)
     of "admit_mid":
       discard r.approveAs("alice", id)
       discard r.joinCarol()

@@ -27,7 +27,7 @@ for trial in 0 ..< 16:
     of 0: discard
     of 1: (discard r.approveAs(who, id); inc approvals)
     of 2: (discard r.pasteAs(who, policy, id); inc approvals)
-    else: r.sessOf(who).publish(declineEvent(id, who))
+    else: r.declineAs(who, id)
   if policy == "safe" and approvals == 2 and rng.rand(0 .. 1) == 1: r.settle(id)
   let evs = r.alice.log.allEvents()
   let before = evs.len

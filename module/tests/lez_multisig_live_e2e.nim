@@ -105,9 +105,9 @@ echo "3. MusterTest minted: 1,000,000 to a holding muster signs for OK"
 let vault = vaultPda(psLee02, program, ck)
 let cfg = $(%*{"program": ImageId, "createKey": toHex(ck), "pda": "lee-v0.2", "layout": "account-ids"})
 var r = newRoom("/muster/1/lez-live/" & run)
-r.alice.publish(accountDiscloseEvent(RoomAccount(family: LezMultisigFamily, chain: Chain,
+r.discloseAs("alice", RoomAccount(family: LezMultisigFamily, chain: Chain,
   address: toHex(statePda(psLee02, program, ck)), label: "live", signers: @[m1, m2, m3].mapIt(toHex(it)),
-  threshold: 2, config: cfg), "alice"))
+  threshold: 2, config: cfg))
 r.bob.poll()
 proc res(s: CoordinationSession): DriverFor =
   let sess = s

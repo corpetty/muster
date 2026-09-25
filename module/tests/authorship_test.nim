@@ -188,7 +188,7 @@ block:
   v.publishAuthored(victorKs, hello)
   a.poll()
   doAssert a.log.allEvents().len == 5, "the log keeps everything it received (" & $a.log.allEvents().len & ")"
-  let seen = a.events()
+  let seen = a.roomEvents()
   doAssert decliners(seen).len == 0, "the forged decline never names Victor"
   doAssert reduceMessages(seen).mapIt(it.body) == @["hello"], "only Victor's own message"
   doAssert reduceShares(seen, intentId).mapIt(it.who) == @[victor]
