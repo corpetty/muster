@@ -11,8 +11,8 @@
 #
 # stderr: the narrative. stdout: ONE JSON document, the property_test trace
 # {"traces": [[{"download_verified": bool}, ...]]} — one observation per check.
-# Needs: `make build` (the runner), and the probe build closure in /tmp/nimpkgs
-# (tests/README.md) for the verifier.
+# Needs: `make build` (the runner). The verifier builds against the Nim closure
+# module/tools/nim-closure.sh materializes at metadata.json's pins (fetched on a miss).
 set -uo pipefail
 cd "$(dirname "$0")/.."
 say() { echo "$@" >&2; }
@@ -29,7 +29,7 @@ RUNNER=".run/runner/bin/muster-ui"
 D=$(mktemp -d)
 
 # ── the standalone verifier (reads only the file) ─────────────────────────────
-P=/tmp/nimpkgs
+P=$(module/tools/nim-closure.sh) || { say "could not materialize the Nim closure"; obs+=(0); emit; exit 1; }
 SODIUM=$(nix build nixpkgs#libsodium --no-link --print-out-paths 2>/dev/null | head -1)
 if ! (cd module && nim c -d:release --hints:off --warnings:off --threads:on \
       --path:$P/nim-secp256k1 --path:$P/nim-stew --path:$P/nim-results --path:$P/nimcrypto \
