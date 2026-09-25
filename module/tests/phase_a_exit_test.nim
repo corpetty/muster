@@ -112,6 +112,7 @@ block:
                  %*{"chain": "lez:local", "pda": "lee-v0.2", "program": repeat("aa", 32), "createKey": repeat("0b", 32),
                    "threshold": 2, "members": [repeat("01", 32), repeat("02", 32), repeat("03", 32)]}
                elif k.kind == "btc-frost": %*{"network": "regtest", "recovery": frostTestRecoveryHex()}
+               elif k.kind == "lez-frost": %*{"chain": "lez:local", "recovery": frostTestRecoveryHex()}
                else: %*{"roster": [], "k": 1})
     let rows = cardRows(newDriver(k.kind, cfg).profile())
     doAssert rows.mapIt(it.key) == rowKeys, k.kind & ": " & $rows.mapIt(it.key)

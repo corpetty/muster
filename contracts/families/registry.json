@@ -1285,6 +1285,7 @@
       "signs": "the LEZ public message hash, signed by an aggregate BIP-340 key",
       "commits": "content",
       "binding": "none",
+      "exposure": "LEZ public messages commit to no zone/chain id: a signature by the group's account is bound only by the account's nonce and the program. Muster's envelope binds the environment in the room (invariant 2); the chain does not, and a signature for an old nonce can never land — the card must say so, and an upstream domain tag is the fix.",
       "rounds": 2,
       "secretState": true,
       "setup": "dkg",
@@ -1298,7 +1299,7 @@
       "infra": ["lez sequencer RPC"],
       "maturity": "draft",
       "notes": "VERIFIED on a LEZ v0.2.4 chain (module/tests/lez_frost_account_e2e.nim, exo-a50.4.6): a public account's id is SHA-256(\"/LEE/v0.3/AccountId/Public/\" ‖ x-only key) and the chain checks a BIP-340 signature under that key, so the x-only form of a ChillDKG threshold key owns an account directly, with no tweak. PrivateKey::tweak (sk + SHA256(pk)) is a wallet-side key derivation the chain never checks. A FROST aggregate co-signed a mint and alone signed a transfer; a wrong aggregate was refused at submission (InvalidSignature).",
-      "muster": {"status": "candidate", "phase": "D", "why": "the same FROST-secp256k1 driver as btc.frost-bip445 gives Logos a threshold account that looks single-sig: the ADR-015 aggregate-signature rail on our own chain. The key question is settled on a real v0.2.4 chain (lez_frost_account_e2e): an aggregate key owns a public account, untweaked, and LezMultisigLive.sendWith carries a FROST witness. Not yet: the room flow for LEZ (the ceremony is shared with btc.frost-bip445; the rounds sign the LEZ message hash)."},
+      "muster": {"status": "partial", "phase": "D", "driver": "module/src/drivers/lez_frost.nim", "why": "the same FROST-secp256k1 group as btc.frost-bip445 gives Logos a threshold account that looks single-sig: the ADR-015 aggregate-signature rail on our own chain. Built: an aggregate key owns a public account untweaked (lez_frost_account_e2e), and the room drives it (lez_frost_room_e2e, a real v0.2.4 chain) — a ceremony on a lez: zone discloses the account, a lez-call at the account's chain-read nonce runs both rounds, and settlement re-reads the nonce, aggregates one signature and sends it; a stale nonce is refused. Still partial: the hosted surface and UI. Demo-grade (not constant time), behind the production gate."},
       "unverified": [],
       "sources": ["https://github.com/logos-blockchain/logos-execution-zone/blob/main/lee/state_machine/src/signature/private_key.rs"]
     }

@@ -29,6 +29,8 @@ import ../intents/materialization
 import ../drivers/driver
 import ../drivers/kinds
 import ../drivers/btc_frost
+import ../drivers/frost_group      # the group + the two rounds, whatever a family signs
+import ../drivers/lez_frost        # a ceremony on a lez: zone discloses a LEZ account
 import ../frost/chilldkg
 import ../crypto/keystore
 import ../crypto/curve25519
@@ -114,15 +116,21 @@ proc frostCeremonyStep*(s: CoordinationSession, ks: Keystore, cid: string): stri
       return "step2"
     if v.pmsg2.len < v.n: return "waiting: step 2 from " & $(v.n - v.pmsg2.len) & " participants"
     let (cmsg2, _, rec) = coordinatorFinalize(cst, v.hosts.mapIt(v.pmsg2[toHex(it)]))
-    let acct = frostAccount(v.network, rec)
+    var (family, chain, address) = (FrostFamily, "", "")
+    if v.network.startsWith("lez:"):
+      let la = lezFrostAccount(v.network, rec)            # a LEZ public account, untweaked
+      (family, chain, address) = (LezFrostFamily, la.chain, la.address)
+    else:
+      let ba = frostAccount(v.network, rec)
+      (chain, address) = (ba.chain, ba.address)
     let me = memberId(ks)
-    let (found, ra) = findAccount(reduceAccounts(events), accountId(acct.chain, acct.address))
+    let (found, ra) = findAccount(reduceAccounts(events), accountId(chain, address))
     if not (found and me in ra.disclosedBy):
       discard ks.frostDkgFinalize(lab, params, cmsg2)   # this member's check of the certificate
-      s.publish(accountDiscloseEvent(RoomAccount(family: FrostFamily, chain: acct.chain, address: acct.address,
+      s.publish(accountDiscloseEvent(RoomAccount(family: family, chain: chain, address: address,
         label: "FROST " & $v.t & " of " & $v.n, signers: v.hosts.mapIt(toHex(it)), threshold: v.t,
         config: $(%*{"ceremony": cid, "recovery": toHex(rec)})), me))
-    "done " & acct.address
+    "done " & address
   except CatchableError as e:
     "refused: " & e.msg
 
@@ -132,7 +140,7 @@ proc contributed(events: seq[Event], intentId, who: string, round: int): bool =
   events.anyIt(it.key == k)
 
 proc signingSet*(events: seq[Event], driverFor: DriverFor, intentId: string,
-                 fd: BtcFrostDriver): seq[(seq[byte], seq[seq[byte]])] =
+                 fd: Driver): seq[(seq[byte], seq[seq[byte]])] =
   ## The signer set the log fixes: the first t round-1 contributions the fold accepts, in
   ## its order (canonical order, the attestation gate, the driver's check).
   let effectJson = effectJsonOf(events, intentId)
@@ -160,7 +168,7 @@ proc signingSet*(events: seq[Event], driverFor: DriverFor, intentId: string,
       nonces = v
     except CatchableError: continue
     result.add (hexToBytes(who), nonces)
-    if result.len == fd.account.params.t: break
+    if result.len == fd.frostGroupOf().group.params.t: break
 
 proc liveFrostContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, intentId: string,
                           nowSec: uint64 = 0): string =
@@ -175,8 +183,9 @@ proc liveFrostContribute*(s: CoordinationSession, ks: Keystore, driverFor: Drive
   if effectJson.len == 0: return "unknown-intent"
   let policy = intentPolicyOf(events, intentId)
   let drv = driverFor(policy)
-  if not (drv of BtcFrostDriver): return "not-an-aggregate-locus"
-  let fd = BtcFrostDriver(drv)
+  let (isFrost, g) = drv.frostGroupOf()
+  if not isFrost: return "not-an-aggregate-locus"
+  let fd = drv
   let effect = effectFromJson(effectJson)
   let refusal = fd.signRefusal(effect)
   if refusal.len > 0: return "refused: " & refusal
@@ -199,20 +208,21 @@ proc liveFrostContribute*(s: CoordinationSession, ks: Keystore, driverFor: Drive
   let lab = ceremonyLabel(cid)
   let host = ks.frostHostPubkey(lab)
   let hh = toHex(host)
-  if host notin fd.account.params.hostpubkeys: return "not-a-participant"
+  if host notin g.params.hostpubkeys: return "not-a-participant"
   if contributed(events, intentId, hh, round): return "already-contributed"
-  let hashes = fd.sighashesOf(effect)
-  let rec = fd.account.recoveryData
+  let hashes = fd.frostMessages(effect)
+  if hashes.len == 0: return "refused: nothing to sign"
+  let rec = g.recoveryData
   var c: Contribution
   try:
     if round == 1:
       c = round1Contribution(host, ks.frostNonceCommit(lab, intentId, rec, hashes))
     else:
       let set = signingSet(events, driverFor, intentId, fd)
-      if set.len < fd.account.params.t: return "waiting: round 1 has not closed"
+      if set.len < g.params.t: return "waiting: round 1 has not closed"
       if host notin set.mapIt(it[0]):
-        return "not-in-signing-set: the log's first " & $fd.account.params.t & " round-1 contributions sign"
-      let ids = set.mapIt(fd.account.params.hostpubkeys.find(it[0]))
+        return "not-in-signing-set: the log's first " & $g.params.t & " round-1 contributions sign"
+      let ids = set.mapIt(g.params.hostpubkeys.find(it[0]))
       c = round2Contribution(host, set, ks.frostPartialSign(lab, intentId, rec, ids, set.mapIt(it[1]), hashes))
   except KeystoreError as e:
     return "refused: " & e.msg

@@ -26,7 +26,7 @@
 ## Transport: nim-json-rpc over chronos (TLS by bearssl), like wallet/evm_rpc.nim; a
 ## call runs to completion with waitFor.
 
-import std/[json, tables, strutils, base64, times, os]
+import std/[json, tables, strutils, base64, times, os, sequtils]
 import chronos
 import stint
 import json_rpc/clients/httpclient
@@ -135,7 +135,7 @@ method height*(c: LezMultisigLive): uint64 = c.rpc.lastBlockId()
 method readAccount*(c: LezMultisigLive, id: seq[byte]): LezRead =
   let h = c.rpc.lastBlockId()
   let a = c.rpc.getAccount(id)
-  LezRead(found: a.owner.len > 0 or a.data.len > 0, data: a.data, owner: a.owner, height: h)
+  LezRead(found: a.owner.len > 0 or a.data.len > 0, data: a.data, owner: a.owner, height: h, nonce: a.nonce)
 
 method txIncluded*(c: LezMultisigLive, hash: string): tuple[known: bool, height: uint64] =
   c.rpc.getTransaction(hash)
@@ -189,6 +189,13 @@ proc sendWith*(c: LezMultisigLive, program: seq[byte], accounts: seq[seq[byte]],
   c.sent[want] = epochTime()
   if not c.waitForInclusion: return LezTx(ok: true, hash: want)     # sent, not yet landed
   c.awaitInclusion(want)
+
+method sendWitnessed*(c: LezMultisigLive, program: seq[byte], accounts, signers: seq[seq[byte]],
+                      words: seq[uint32], witnesses: seq[(seq[byte], seq[byte])]): LezTx =
+  ## The given witnesses, as they are: a nonce the chain moved past makes them invalid,
+  ## and the sequencer refuses the transaction.
+  let ws = witnesses.mapIt(LezWitness(signature: it[0], xonly: it[1]))
+  c.sendWith(program, accounts, signers, words, proc(h: array[32, byte]): seq[LezWitness] = ws)
 
 proc sendSigned*(c: LezMultisigLive, program: seq[byte], accounts: seq[seq[byte]], signers: seq[seq[byte]],
                  words: seq[uint32]): LezTx =

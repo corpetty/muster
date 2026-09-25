@@ -18,6 +18,7 @@
 ## charges nothing. The live binding over lez_core is exo-3c9.
 
 import std/[json, tables, strutils, sequtils]
+import stint
 import ../hashing/sha256
 import ../crypto/keystore
 import ../wallet/types
@@ -50,6 +51,7 @@ type
     data*: seq[byte]
     owner*: seq[byte]             ## the owning program ("" = none)
     height*: uint64               ## the chain height the read was taken at
+    nonce*: UInt128               ## the account's nonce (how many transactions it signed)
 
   ChainedCallRecord* = object
     program*: seq[byte]
@@ -85,6 +87,11 @@ method submit*(c: LezMultisigChain, signer: seq[byte], op: MultisigOp, payer: se
   raise newException(WalletError, "LezMultisigChain.submit is abstract")
 method txIncluded*(c: LezMultisigChain, hash: string): tuple[known: bool, height: uint64] {.base.} =
   raise newException(WalletError, "LezMultisigChain.txIncluded is abstract")
+method sendWitnessed*(c: LezMultisigChain, program: seq[byte], accounts, signers: seq[seq[byte]],
+                      words: seq[uint32], witnesses: seq[(seq[byte], seq[byte])]): LezTx {.base.} =
+  ## A public transaction whose witnesses (signature, x-only key) someone already made,
+  ## e.g. a FROST aggregate (lez.frost-public-account). The live chain sends it.
+  raise newException(WalletError, "LezMultisigChain.sendWitnessed is abstract")
 
 proc readState*(c: LezMultisigChain, createKey: seq[byte]): tuple[found: bool, state: MultisigState, height: uint64] =
   ## The multisig's state, decoded from its PDA; raises LezDecodeError on a malformed account.
@@ -187,7 +194,7 @@ method readAccount*(f: FakeLezMultisig, id: seq[byte]): LezRead =
   let k = hx(id)
   if k notin f.accts: return LezRead(found: false, height: f.tip)
   let a = f.accts[k]
-  LezRead(found: a.data.len > 0 or a.owner.len > 0, data: a.data, owner: a.owner, height: f.tip)
+  LezRead(found: a.data.len > 0 or a.owner.len > 0, data: a.data, owner: a.owner, height: f.tip, nonce: u128(a.nonce))
 
 method txIncluded*(f: FakeLezMultisig, hash: string): tuple[known: bool, height: uint64] =
   if hash in f.txs: (true, f.txs[hash]) else: (false, 0'u64)

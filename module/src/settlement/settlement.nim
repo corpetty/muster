@@ -23,6 +23,8 @@ import ../drivers/safe
 import ../drivers/safe_rpc
 import ../drivers/btc_multisig
 import ../drivers/btc_frost        # the aggregate locus (Phase D)
+import ../drivers/lez_frost        # a FROST group acting on LEZ (exo-55e)
+import stint
 import ../drivers/lez_multisig
 import ../lez/multisig
 import ../lez/multisig_chain
@@ -233,6 +235,63 @@ method watch*(s: LezMultisigSettlement, txRef: TxRef): Finality =
     else: Finality(status: fsPending, detail: "included, but the chain does not show the proposal Executed")
   except CatchableError as e: Finality(status: fsPending, detail: "could not read the proposal: " & e.msg)
 
+# ── a FROST group acting on LEZ (exo-55e) ──────────────────────────────────────
+type LezFrostSettlement* = ref object of Settlement
+
+proc zx(b: seq[byte]): string =
+  for x in b: result.add toLowerAscii(toHex(x, 2))
+
+method assemble*(s: LezFrostSettlement, drv: Driver, effect: Effect,
+                 contributions: seq[SettleContribution]): Assembled =
+  ## Re-read the account's nonce (S5): a signature for a nonce the chain moved past can
+  ## never land, so it is refused and the room proposes again. Then one aggregate BIP-340
+  ## signature from a complete signer set, verified under x(Q) before anything is sent.
+  if not (drv of LezFrostDriver):
+    return Assembled(ok: false, error: "not-settleable", detail: "a LEZ FROST settlement needs a LEZ FROST driver")
+  if not (s.adapter of LezMultisigChain):
+    return Assembled(ok: false, error: "not-settleable", detail: "no LEZ chain to send through")
+  let d = LezFrostDriver(drv)
+  let refusal = d.signRefusal(effect)
+  if refusal.len > 0: return Assembled(ok: false, error: "not-settleable", detail: refusal)
+  let call = callOf(effect)
+  try:
+    let now = LezMultisigChain(s.adapter).readAccount(d.account.accountId)
+    if now.nonce != call.nonces[0]:
+      return Assembled(ok: false, error: "not-settleable",
+        detail: "the account's nonce moved (" & $call.nonces[0] & " signed, " & $now.nonce &
+                " on chain): this signature can never land — propose again")
+  except CatchableError as e:
+    return Assembled(ok: false, error: "not-settleable", detail: "could not read the account's nonce: " & e.msg)
+  let cs = contributions.mapIt(Contribution(bytes: it.bytes))
+  let msgs = d.frostMessages(effect)
+  let need = d.account.group.params.t
+  let have = completeSignersFrost(d.account.group, msgs, cs)
+  if have < need:
+    return Assembled(ok: false, error: "insufficient-signatures", have: have, need: need,
+                     detail: $have & " of the " & $need & " partial signatures one signer set needs")
+  var sig: seq[byte]
+  try: sig = aggregateFrost(d.account.group, msgs, cs)[0]
+  except CatchableError as e:
+    return Assembled(ok: false, error: "not-settleable", have: have, need: need, detail: e.msg)
+  Assembled(ok: true, have: have, need: need,
+    tx: PreparedTx(chain: d.account.chain, frm: s.relayer, to: d.account.address,
+                   payload: $(%*{"program": zx(call.program), "accounts": call.accounts.mapIt(zx(it)),
+                                 "signers": call.signers.mapIt(zx(it)), "words": call.words.mapIt(int64(it)),
+                                 "sig": zx(sig), "xonly": zx(d.account.group.xonly)})))
+
+method submit*(s: LezFrostSettlement, tx: PreparedTx, ks: Keystore): TxRef =
+  ## Send the call with the aggregate as its one witness; a refusal raises.
+  proc unz(h: string): seq[byte] =
+    for i in 0 ..< h.len div 2: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
+  let p = parseJson(tx.payload)
+  let r = LezMultisigChain(s.adapter).sendWitnessed(unz(p["program"].getStr()),
+    p["accounts"].getElems().mapIt(unz(it.getStr())), p["signers"].getElems().mapIt(unz(it.getStr())),
+    p["words"].getElems().mapIt(uint32(it.getBiggestInt())), @[(unz(p["sig"].getStr()), unz(p["xonly"].getStr()))])
+  if not r.ok: raise newException(WalletError, "the chain refused it: " & r.error)
+  TxRef(chain: tx.chain, id: r.hash)
+
+method watch*(s: LezFrostSettlement, txRef: TxRef): Finality = s.adapter.finality(txRef)
+
 proc settlementFor*(drv: Driver, adapter: ChainAdapter, relayer: Account): Settlement =
   ## The settlement a driver's family needs — read from its PROFILE. nil when the
   ## family settles nowhere (a room family) or the driver declares nothing (unsupported).
@@ -242,4 +301,5 @@ proc settlementFor*(drv: Driver, adapter: ChainAdapter, relayer: Account): Settl
   of "evm.safe": SafeSettlement(family: p.family, adapter: adapter, relayer: relayer)
   of P2wshFamily, TapscriptFamily, FrostFamily: BitcoinSettlement(family: p.family, adapter: adapter, relayer: relayer)
   of LezMultisigFamily: LezMultisigSettlement(family: p.family, adapter: adapter, relayer: relayer)
+  of LezFrostFamily: LezFrostSettlement(family: p.family, adapter: adapter, relayer: relayer)
   else: nil

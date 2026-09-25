@@ -119,7 +119,7 @@ One row per family, generated from the registry (`contracts/families/registry.js
 | `lez.public-witness` | native | same bytes | **none** | 1 · derive | fixed | spend / spend / public | sequence · none | – | early | candidate |
 | `lez.multisig-program` | vote | own tx → **pointer** | **none** | 1 · deploy | in-place | setup / each vote / public | index · none | a tx | demo | built |
 | `lez.private-multisig` | vote | own tx | **none** | 1 · deploy | new-address | setup / – / public | index · none | a tx | demo | watch |
-| `lez.frost-public-account` | aggregate | partial (t-of-n) | **none** | 2 ⚿ · dkg | new-address | – / – / public | sequence · none | – | draft | candidate (D) |
+| `lez.frost-public-account` | aggregate | partial (t-of-n) | **none** | 2 ⚿ · dkg | new-address | – / – / public | sequence · none | – | draft | partial (D) |
 <!-- landscape-table:end -->
 
 **Gotchas that shape the design.** All are verified; the sources are in the registry.

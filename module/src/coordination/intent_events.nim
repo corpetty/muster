@@ -103,6 +103,24 @@ proc effectFromJson*(effectJson: string): Effect =
         fields.add ("pdaSeeds", cbArray(seeds))
         fields.add ("authorized", cbArray(auth))
         return Effect(schemaId: "muster.effect.lez-multisig-proposal.v1", fields: fields)
+      of "lez-call":
+        # A LEZ public call signed by one account (lez.frost-public-account, exo-55e): the
+        # program, its accounts, the instruction words, the signer and its nonce (read from
+        # the chain, a recorded read). Exactly what the LEZ message hash commits to.
+        proc zhex(s: string): seq[byte] =
+          var h = s
+          if h.len >= 2 and h[0] == '0' and h[1] in {'x', 'X'}: h = h[2 .. ^1]
+          for i in 0 ..< h.len div 2:
+            try: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
+            except ValueError: discard
+        var accts, signers, nonces, ins: seq[CborValue]
+        for a in j{"accounts"}.getElems(): accts.add cbBytes(zhex(a.getStr()))
+        for sgn in j{"signers"}.getElems(): signers.add cbBytes(zhex(sgn.getStr()))
+        for n in j{"nonces"}.getElems(): nonces.add cbText(n.getStr())
+        for w in j{"instruction"}.getElems(): ins.add cbUint(uint64(w.getBiggestInt()))
+        return Effect(schemaId: "muster.effect.lez-call.v1", fields: @[
+          ("program", cbBytes(zhex(j{"program"}.getStr()))), ("accounts", cbArray(accts)),
+          ("instruction", cbArray(ins)), ("signers", cbArray(signers)), ("nonces", cbArray(nonces))])
       of "btc-spend":
         # A Bitcoin spend from a multisig account (exo-a50.2.3): every input WITH its
         # prevout (amount + scriptPubKey — BIP-143 signs only each input's own amount, so
