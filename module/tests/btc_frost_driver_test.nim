@@ -32,6 +32,7 @@ import ../src/drivers/[driver, profile, btc_multisig, btc_frost]
 import ../src/wallet/types
 import ../src/wallet/btc_adapter
 import ../src/settlement/settlement
+import ../src/coordination/intent_events   # effectFromJson
 
 proc seed(b: byte): array[32, byte] =
   for i in 0 ..< 32: result[i] = b
