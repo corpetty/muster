@@ -83,6 +83,9 @@ public:
     void proposeLezVaultInit(const QString &definition) override;
     void lezMemberAccount(const QString &index) override;
     void lezCreateMultisig(const QString &threshold, const QString &members) override;
+    void frostCeremonyOpen(const QString &ceremonyId, const QString &network, const QString &t, const QString &n) override;
+    void frostCeremonyJoin(const QString &ceremonyId) override;
+    void loadFrostCeremonies() override;
     void loadFlow() override;
     void setPolicy(const QString &kind) override;
     void loadPolicy() override;

@@ -416,6 +416,8 @@ void MusterUiBackend::loadIntents()
     // coordinate_intents → the room's proposals folded from the shared log, as
     // [{id, state}]. Drives inbound delivery first (in the module).
     setIntentsJson(modules().muster_module.coordinate_intents());
+    // the room's FROST ceremonies advance on the same tick (the module's pump)
+    loadFrostCeremonies();
     // The activity feed folds from the SAME log, so refresh it whenever the
     // intents do — every join, propose, contribute, submit, and periodic tick.
     loadActivity();
@@ -649,6 +651,29 @@ void MusterUiBackend::lezCreateMultisig(const QString &threshold, const QString 
     const QString r = modules().muster_module.lez_multisig_create(threshold.trimmed(), members.trimmed());
     qInfo() << "[muster_ui] lez_multisig_create" << threshold << members << "->" << r;
     setLezCreateJson(asObjectJson(r, "error"));
+}
+
+void MusterUiBackend::frostCeremonyOpen(const QString &ceremonyId, const QString &network, const QString &t, const QString &n)
+{
+    // frost_ceremony_open → open + join; the module advances this member's steps on the
+    // intents tick, and discloses the account once the ceremony completes.
+    const QString r = modules().muster_module.frost_ceremony_open(ceremonyId.trimmed(), network.trimmed(), t.trimmed(), n.trimmed());
+    qInfo() << "[muster_ui] frost_ceremony_open" << ceremonyId << network << t << n << "->" << r;
+    setFrostCeremonyJson(asObjectJson(r, "error"));
+    loadFrostCeremonies();
+}
+
+void MusterUiBackend::frostCeremonyJoin(const QString &ceremonyId)
+{
+    const QString r = modules().muster_module.frost_ceremony_join(ceremonyId.trimmed());
+    qInfo() << "[muster_ui] frost_ceremony_join" << ceremonyId << "->" << r;
+    setFrostCeremonyJson(asObjectJson(r, "error"));
+    loadFrostCeremonies();
+}
+
+void MusterUiBackend::loadFrostCeremonies()
+{
+    setFrostCeremoniesJson(modules().muster_module.frost_ceremonies());
 }
 
 void MusterUiBackend::downloadAudit(const QString &intentId)

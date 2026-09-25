@@ -241,6 +241,13 @@ class MusterUi
     // Create a k-of-n LEZ multisig on chain; in the room it is disclosed once the chain
     // holds it. Lands on lezCreateJson {address, config, tx, pending} or {error, detail}.
     SLOT(void lezCreateMultisig(const QString &threshold, const QString &members))
+    // FROST (Phase D): open a key ceremony in the room and join it, or join one; the
+    // module advances this member's part on the intents tick. The room's ceremonies land
+    // on frostCeremoniesJson [{ceremony, network, t, n, joined, step1, step2, participant,
+    // address, last}]; the last open/join result on frostCeremonyJson.
+    SLOT(void frostCeremonyOpen(const QString &ceremonyId, const QString &network, const QString &t, const QString &n))
+    SLOT(void frostCeremonyJoin(const QString &ceremonyId))
+    SLOT(void loadFrostCeremonies())
     // The information-flow view (coordinate_flow, exo-002.5): who could see what,
     // for every action — {rows:[{seq,kind,intentId,field,to,members,epoch,declared}],
     // matrix:{observer:[fields]}}. A fold over the sealed log (no RPC), refreshed on
@@ -344,6 +351,8 @@ class MusterUi
     PROP(QString lezProposeJson="{}" READONLY)
     PROP(QString lezMemberJson="{}" READONLY)
     PROP(QString lezCreateJson="{}" READONLY)
+    PROP(QString frostCeremoniesJson="[]" READONLY)
+    PROP(QString frostCeremonyJson="{}" READONLY)
     // The room's information flow (loadFlow): {rows, matrix}. The Room renders the
     // observer matrix + per-action rows; the store node is always present (FS-9).
     PROP(QString flowJson="{\"rows\":[],\"matrix\":{}}" READONLY)
