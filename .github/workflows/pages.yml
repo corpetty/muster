@@ -1,13 +1,16 @@
-# Publish docs/diagrams/ — and only that — as the Pages site.
+# Publish docs/diagrams/ — plus the multisig family atlas at /atlas/, and nothing
+# else — as the Pages site.
 #
 # The interactive substrates need a page that permits <script>, which forum
 # software does not (docs/diagrams/README.md §3.2). Posts embed the exported
 # static frame and link out to the live version here.
 #
-# The artifact path is docs/diagrams, not docs: the specification documents are
-# already public in the repository, and rendering them as a website is a
-# separate decision from serving the diagrams. Widening this path publishes
-# them — do it deliberately or not at all.
+# The artifact is assembled, not docs/ wholesale: the specification documents are
+# already public in the repository, and rendering them as a website is a separate
+# decision from serving the diagrams. The one deliberate widening (2026-09-27) is
+# the atlas, docs/design/multisig-atlas.html, served at /atlas/ so it can be shared
+# by link: a self-contained page, like the substrates. Add any other page here the
+# same way — by name — or not at all.
 #
 # No build step. The substrates are self-contained single files and the figures
 # are plain SVG, so this uploads the directory as it stands. That is the same
@@ -19,6 +22,7 @@ on:
     branches: [main]
     paths:
       - 'docs/diagrams/**'
+      - 'docs/design/multisig-atlas.html'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -52,9 +56,20 @@ jobs:
           git diff --exit-code -- docs/diagrams/index.html \
             || { echo "::error::index.html is stale — run tools/make-index.py and commit it"; exit 1; }
 
+      # The atlas embeds contracts/families/registry.json; publish it only when that
+      # copy is current (the same gate the pre-commit hook applies).
+      - name: Check the atlas's embedded registry
+        run: python3 scripts/check-family-registry.py
+
+      - name: Assemble the site
+        run: |
+          mkdir -p _site/atlas
+          cp -r docs/diagrams/. _site/
+          cp docs/design/multisig-atlas.html _site/atlas/index.html
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/diagrams
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4
