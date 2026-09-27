@@ -271,8 +271,9 @@ proc declineEvent*(intentId, who: string, parents: seq[EventId] = @[]): Event =
   ## A member declines to take part in an intent (the card's Deny, exo-002.3). It is
   ## informational: it never blocks the driver's threshold — whether a decline by a
   ## required signer should DROP the intent is driver policy, not core policy. `who`
-  ## dedups one decline per member, and the view names who declined.
-  Event(parents: parents, key: "intent/" & intentId & "/decline/" & who, value: "1")
+  ## dedups one decline per member, and the view names who declined. The value is a
+  ## JSON object so it can carry `who`'s author signature (authorship.nim, exo-f76).
+  Event(parents: parents, key: "intent/" & intentId & "/decline/" & who, value: "{}")
 
 proc finalEvent*(intentId: string, parents: seq[EventId] = @[], chainRef = ""): Event =
   ## Published once the on-chain execution is observed final (R-8) — folds the intent

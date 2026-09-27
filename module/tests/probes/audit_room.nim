@@ -29,6 +29,16 @@ proc hexOf*(b: openArray[byte]): string =
 proc ksOf*(who: string): Keystore = (if who == "alice": aliceKs else: bobKs)
 proc sessOf*(r: Room, who: string): CoordinationSession = (if who == "alice": r.alice else: r.bob)
 
+proc declineAs*(r: Room, who, id: string) =
+  ## The card's Deny, as the hosted module sends it: named by the member's encryption
+  ## identity and signed by it (exo-f76) — an unsigned decline never reaches the room.
+  r.sessOf(who).publishAuthored(ksOf(who), declineEvent(id, hexOf(ksOf(who).encIdentity().toBytes())))
+
+proc messageAs*(r: Room, who: string, ts: int64, body: string, nonce: uint64) =
+  ## A chat line, authored and signed as the hosted module posts it (exo-f76).
+  let (_, m) = newMessageEvent(hexOf(ksOf(who).encIdentity().toBytes()), ts, body, nonce)
+  r.sessOf(who).publishAuthored(ksOf(who), m)
+
 proc pasteAs*(r: Room, who, policy, id: string): string =
   ## An approval made OUTSIDE muster: the member's key signs the materialization
   ## directly (a hardware wallet would), and the signature is pasted in.

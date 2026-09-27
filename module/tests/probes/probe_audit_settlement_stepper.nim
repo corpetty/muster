@@ -28,7 +28,7 @@ proc stageCorrect(stage, kind: string): bool =
     of "executable": (approve("alice"); approve("bob"))
     of "submitted": (approve("alice"); approve("bob"); r.settle(id, final = false))
     of "final": (approve("alice"); approve("bob"); r.settle(id))
-    of "declined": r.bob.publish(declineEvent(id, "bob"))
+    of "declined": r.declineAs("bob", id)
     else: discard
     let evs = r.alice.log.allEvents()
     let res = r.exportAs("alice", id)

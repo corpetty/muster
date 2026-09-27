@@ -33,6 +33,7 @@ import ../src/transport/delivery      # DeliveryTransport (transport over lp_*)
 import ../src/crypto/epoch_crypto     # EpochCrypto (ECIES-secp256k1 + libsodium AEAD)
 import ../src/crypto/keystore         # persistent module identity (FS-4)
 import ../src/coordination/session    # the multi-instance coordination flow
+import ../src/coordination/authorship # the room's authentic view; author-bearing events signed (exo-f76)
 import ../src/coordination/intents     # intent lifecycle = reduce(log) (the multi-party fold)
 import ../src/coordination/live        # the live propose/contribute path, driveable in-process (exo-ef1)
 import ../src/coordination/accounts    # accounts disclosed by members into the room (exo-a50.1.3)
@@ -575,7 +576,7 @@ proc roomAccounts(): seq[RoomAccount] =
   ## (coordination/accounts.nim, exo-a50.1.3). None without a room. (Forward-declared
   ## above driverForKind, which resolves account-bound policies against it.)
   if gSession == nil: return @[]
-  reduceAccounts(gSession.log.allEvents())
+  reduceAccounts(gSession.roomEvents())
 
 var gMsgSeq: uint64 = 0     ## per-instance monotonic nonce, disambiguates identical posts
 
@@ -787,7 +788,7 @@ proc roomKinds(): seq[string] =
   ## The driver kinds the joined room may use (driver-as-proposal). Folded from the
   ## room's log; falls back to the founding set when no room is joined.
   if gSession == nil: return foundingKinds()
-  roomDriverKinds(gSession.log.allEvents(), driverFor)
+  roomDriverKinds(gSession.roomEvents(), driverFor)
 
 proc musterCoordinateDrivers(): string =
   ## Every driver kind this client has — the one list (drivers/kinds.nim) — each with
@@ -928,7 +929,7 @@ proc frostPump() =
   for id in gFrostAuto:
     let r = liveFrostContribute(gSession, ks, driverFor, id, uint64(epochTime()))
     if r == "collecting" or r.startsWith("waiting") or r == "already-contributed":
-      let folded = reduceIntents(gSession.log.allEvents(), driverFor)
+      let folded = reduceIntents(gSession.roomEvents(), driverFor)
       if id in folded and not folded[id].collection.complete: auto.add id
   gFrostAuto = auto
 
@@ -1055,7 +1056,7 @@ proc musterCoordinateDiscloseAccount(accountJson: string): string =
     let (ok, _, detail) = lezMultisigAccountOf(a)
     if not ok: return $(%*{"error": "the LEZ multisig account does not check out", "detail": detail})
     let me = toHex(moduleKeystore().encIdentity().toBytes())
-    gSession.publish(accountDiscloseEvent(a, me))
+    gSession.publishAuthored(moduleKeystore(), accountDiscloseEvent(a, me))
     let (_, disclosed) = findAccount(roomAccounts(), accountId(a.chain, a.address))
     return $accountsJson(@[disclosed])[0]
   if a.family.startsWith("btc."):
@@ -1074,7 +1075,7 @@ proc musterCoordinateDiscloseAccount(accountJson: string): string =
     if not ok: return $(%*{"error": "the Bitcoin account does not check out", "detail": detail})
     a.address = btcAddr
     let me = toHex(moduleKeystore().encIdentity().toBytes())
-    gSession.publish(accountDiscloseEvent(a, me))
+    gSession.publishAuthored(moduleKeystore(), accountDiscloseEvent(a, me))
     let (_, disclosed) = findAccount(roomAccounts(), accountId(a.chain, a.address))
     return $accountsJson(@[disclosed])[0]
   if a.family != "evm.safe":
@@ -1093,7 +1094,7 @@ proc musterCoordinateDiscloseAccount(accountJson: string): string =
   if a.threshold > a.signers.len:
     return $(%*{"error": "threshold " & $a.threshold & " exceeds " & $a.signers.len & " signers"})
   let me = toHex(moduleKeystore().encIdentity().toBytes())
-  gSession.publish(accountDiscloseEvent(a, me))
+  gSession.publishAuthored(moduleKeystore(), accountDiscloseEvent(a, me))
   let (_, disclosed) = findAccount(roomAccounts(), accountId(a.chain, a.address))
   $accountsJson(@[disclosed])[0]
 
@@ -1172,7 +1173,7 @@ proc intentLinkContext(intentId: string): LinkContext =
   ## deterministic log). Per intent, so two accounts in one room never share a binding.
   var account = gTopic
   if gSession != nil:
-    let ctx = intentContext(gSession.log.allEvents(), intentId)
+    let ctx = intentContext(gSession.roomEvents(), intentId)
     if not ctx.isPlaceholder and ctx.account.len > 0: account = ctx.account
   LinkContext(account: account, slot: "0", expiry: uint64(epochTime()) + 86_400)
 
@@ -1182,7 +1183,7 @@ proc musterCoordinateVote(intentId: string): string =
   ## then the receipt (coordination/vote.nim).
   if gSession == nil: return "not-joined"
   gSession.poll()
-  let drv = driverFor(intentPolicyOf(gSession.log.allEvents(), intentId))
+  let drv = driverFor(intentPolicyOf(gSession.roomEvents(), intentId))
   if not (drv of LezMultisigDriver): return "not-a-vote-locus"
   let a = LezMultisigDriver(drv).account
   if lezPendingFor(intentId) == "vote": return "pending: your vote is on its way to the chain"
@@ -1208,7 +1209,7 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
   ## intent is approved by the member's own chain vote instead (coordinate_vote).
   if gSession == nil: return "not-joined"
   if signatureHex.len == 0:
-    let drv = driverFor(intentPolicyOf(gSession.log.allEvents(), intentId))
+    let drv = driverFor(intentPolicyOf(gSession.roomEvents(), intentId))
     if drv of LezMultisigDriver: return musterCoordinateVote(intentId)
     if drv.frostGroupOf().ok:
       # a FROST approval (Bitcoin or LEZ) is two rounds: this member's nonces now, its partial signature
@@ -1230,7 +1231,7 @@ proc musterCoordinateIntents(): string =
   gSession.poll()
   lezPump()                            # complete any LEZ step the chain has since included
   frostPump()                          # advance joined FROST ceremonies and round 2
-  let events = gSession.log.allEvents()
+  let events = gSession.roomEvents()
   var arr = newJArray()
   for v in reduceIntentViews(events, driverFor):
     # Each intent renders under ITS OWN driver — the policy it was proposed with
@@ -1300,12 +1301,12 @@ proc musterCoordinateDecline(intentId: string): string =
   ## threshold is untouched; dropping is driver policy, not core policy.
   if gSession == nil: return $(%*{"error": "not-joined"})
   gSession.poll()
-  let events = gSession.log.allEvents()
+  let events = gSession.roomEvents()
   if effectJsonOf(events, intentId).len == 0:
     return $(%*{"error": "unknown-intent", "intentId": intentId})
   let who = toHex(moduleKeystore().encIdentity().toBytes())
-  gSession.publish(declineEvent(intentId, who))
-  let after = gSession.log.allEvents()
+  gSession.publishAuthored(moduleKeystore(), declineEvent(intentId, who))
+  let after = gSession.roomEvents()
   var declines = 0
   for v in reduceIntentViews(after, driverFor):
     if v.id == intentId: declines = v.declines
@@ -1344,7 +1345,7 @@ proc musterCoordinateOffers(intentId: string): string =
   ## it reads only moduleCatalogue(), never another member's holdings (invariant 9, s3).
   if gSession == nil: return $(%*{"error": "not-joined"})
   gSession.poll()
-  let events = gSession.log.allEvents()
+  let events = gSession.roomEvents()
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return $(%*{"error": "unknown-intent", "intentId": intentId})
   let m = driverForKind(intentPolicyOf(events, intentId)).manifest(effectFromJson(effectJson))
@@ -1371,7 +1372,7 @@ proc musterCoordinateShareMaterial(intentId, requirement, publicFace: string): s
   ## (its encryption identity); folds once per (requirement, sharer).
   if gSession == nil: return $(%*{"error": "not-joined"})
   gSession.poll()
-  let events = gSession.log.allEvents()
+  let events = gSession.roomEvents()
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return $(%*{"error": "unknown-intent", "intentId": intentId})
   let m = driverForKind(intentPolicyOf(events, intentId)).manifest(effectFromJson(effectJson))
@@ -1387,7 +1388,7 @@ proc musterCoordinateShareMaterial(intentId, requirement, publicFace: string): s
     if $mat.class == class and mat.public == publicFace: (form = mat.form; mine = true)
   if not mine: return $(%*{"error": "not one of your holdings for this slot", "public": publicFace})
   let who = toHex(moduleKeystore().encIdentity().toBytes())
-  gSession.publish(materialShareEvent(intentId, requirement, who, publicFace, form, class, field))
+  gSession.publishAuthored(moduleKeystore(), materialShareEvent(intentId, requirement, who, publicFace, form, class, field))
   result = $(%*{"intentId": intentId, "requirement": requirement, "field": field, "public": publicFace})
   if gLpDebug: stderr.writeLine("MUSTER-LP share_material " & result)
 
@@ -1397,7 +1398,7 @@ proc musterCoordinateProvenance(): string =
   if gSession == nil: return "[]"
   gSession.poll()
   var arr = newJArray()
-  for it in logProvenance(gSession.log.allEvents(), driverFor):
+  for it in logProvenance(gSession.roomEvents(), driverFor):
     let alias = (if it.account.len > 0: contactBook().aliasOf(it.account) else: "")
     arr.add %*{"seq": it.seq, "class": $it.cls, "kind": it.kind, "intentId": it.intentId,
                "account": it.account, "alias": alias, "accountable": it.accountable,
@@ -1412,7 +1413,7 @@ proc musterCoordinateProof(): string =
   var epochTo = 0
   try: epochTo = gSession.epoch()
   except CatchableError: discard
-  $buildProof(gSession.log.allEvents(), 0, epochTo).toJson()
+  $buildProof(gSession.log.allEvents(), 0, epochTo).toJson()   # the raw log: a proof accounts for every entry, forgeries included (exo-f76)
 
 proc musterCoordinateVerifyProof(proofJson: string): string =
   ## Refuse-on-mismatch verification of a log proof — pure, reads only the proof.
@@ -1433,7 +1434,7 @@ proc musterCoordinateAudit(intentId: string): string =
   ## the readable report rendered from them, and their digest — or the refusal.
   if gSession == nil: return $(%*{"ok": false, "reason": "not-joined"})
   gSession.poll()
-  let res = exportAudit(gSession.log.allEvents(), driverFor, intentId, moduleKeystore())
+  let res = exportAudit(gSession.roomEvents(), driverFor, intentId, moduleKeystore())
   if not res.ok:
     result = $(%*{"ok": false, "reason": res.reason, "intentId": intentId})
   else:
@@ -1466,7 +1467,7 @@ proc musterCoordinateFlow(): string =
   ## joiner the log admits — the log names admits, not the founding set.
   if gSession == nil: return $(%*{"rows": [], "matrix": {}})
   gSession.poll()
-  let events = gSession.log.allEvents()
+  let events = gSession.roomEvents()
   var admitted = initHashSet[string]()
   for e in events:
     let p = e.key.split('/')
@@ -1485,7 +1486,7 @@ proc musterCoordinateAuthorization(intentId: string): string =
   ## intent: the room's agreement is the permission; nothing is authorized before it.
   if gSession == nil: return $(%*{"error": "not-joined"})
   gSession.poll()
-  let events = gSession.log.allEvents()
+  let events = gSession.roomEvents()
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return $(%*{"error": "unknown-intent", "intentId": intentId})
   let st = intentState(events, driverFor, intentId)
@@ -1574,7 +1575,7 @@ proc musterCoordinateReadiness(intentId: string): string =
   ## the host performs them (invariant 3: nothing is installed or fetched here).
   if gSession == nil: return $(%*{"error": "not-joined"})
   gSession.poll()
-  let events = gSession.log.allEvents()
+  let events = gSession.roomEvents()
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return $(%*{"error": "unknown-intent", "intentId": intentId})
   let policy = intentPolicyOf(events, intentId)
@@ -1604,7 +1605,7 @@ proc musterCoordinateActivity(): string =
   if gSession == nil: return "[]"
   gSession.poll()
   var arr = newJArray()
-  for a in reduceActivity(gSession.log.allEvents(), driverFor):
+  for a in reduceActivity(gSession.roomEvents(), driverFor):
     arr.add %*{"seq": a.seq, "kind": a.kind, "intentId": a.intentId,
                "account": a.account, "title": a.title, "detail": a.detail}
   $arr
@@ -1652,7 +1653,7 @@ proc musterConnectivity(): string =
     if gLpDebug: stderr.writeLine("MUSTER-LP connectivity " & result)
     return
   gSession.poll()
-  let needs = roomInfraNeeds(gSession.log.allEvents(), driverFor)
+  let needs = roomInfraNeeds(gSession.roomEvents(), driverFor)
   # ── the RPC: one endpoint serves both an `infra:rpc` need and every `environment:
   # chain:<id>` need, so they fold into ONE row, probed once (eth_chainId) against the
   # chain(s) the introducing proposals need.
@@ -1819,7 +1820,7 @@ proc musterCoordinateSubmit(intentId: string): string =
   ## that settles nowhere (a room family) returns not-onchain.
   if gSession == nil: return $(%*{"error": "not-joined"})
   gSession.poll()
-  let events = gSession.log.allEvents()
+  let events = gSession.roomEvents()
   let policy = intentPolicyOf(events, intentId)
   let drv = driverFor(policy)
   let isBtc = drv.profile().chain.startsWith("bip122:")
@@ -1885,7 +1886,7 @@ proc musterCoordinateSubmit(intentId: string): string =
                  of fsFailed: "failed"
                  else: "pending")
   $(%*{"id": intentId,
-       "state": intentState(gSession.log.allEvents(), driverFor, intentId),
+       "state": intentState(gSession.roomEvents(), driverFor, intentId),
        "onchain": onchain, "txHash": txRef.id, "relayer": asm0.tx.frm.id})
 
 # ── signers outside muster + composing a Bitcoin payment (exo-a50.2.6) ────────
@@ -2101,7 +2102,7 @@ proc musterFrostCeremonyOpen(ceremonyId, network, t, n: string): string =
 proc musterFrostCeremonyJoin(ceremonyId: string): string =
   if gSession == nil: return $(%*{"error": "not-joined"})
   gSession.poll()
-  if not ceremonyView(gSession.log.allEvents(), ceremonyId.strip()).open:
+  if not ceremonyView(gSession.roomEvents(), ceremonyId.strip()).open:
     return $(%*{"error": "not-open", "detail": "no ceremony " & ceremonyId & " is open in this room"})
   let host = frostCeremonyJoin(gSession, moduleKeystore(), ceremonyId.strip())
   gFrostJoined.add (gSession, ceremonyId.strip())
@@ -2111,7 +2112,7 @@ proc musterFrostCeremonies(): string =
   if gSession == nil: return "[]"
   gSession.poll()
   frostPump()
-  let events = gSession.log.allEvents()
+  let events = gSession.roomEvents()
   let mine = moduleKeystore()
   var arr = newJArray()
   var seen: seq[string]
@@ -2229,7 +2230,7 @@ proc musterCoordinateExecute(intentId: string): string =
   ## Gate on allowlist + capability, invoke, and fold the room forward.
   if gSession == nil: return $(%*{"error": "not-joined"})
   gSession.poll()
-  let events = gSession.log.allEvents()
+  let events = gSession.roomEvents()
   let policy = intentPolicyOf(events, intentId)
   if policy != "invoke":
     return $(%*{"id": intentId, "error": "not-invoke",
@@ -2256,7 +2257,7 @@ proc musterCoordinateExecute(intentId: string): string =
   if ex.finalityEvent.len == 0:
     gSession.publish(finalEvent(intentId))
   $(%*{"id": intentId, "executed": true,
-       "state": intentState(gSession.log.allEvents(), driverFor, intentId),
+       "state": intentState(gSession.roomEvents(), driverFor, intentId),
        "detail": ex.reason})
 
 proc musterCoordinateAvailableActions(): string =
@@ -2310,7 +2311,7 @@ proc musterCoordinatePending(): string =
   if gLpDebug:
     stderr.writeLine("MUSTER-LP pending=" & $arr.len & " members=" &
                      $gSession.members().len & " msgs=" &
-                     $reduceMessages(gSession.log.allEvents()).len)
+                     $reduceMessages(gSession.roomEvents()).len)
   $arr
 
 # ── chat/room surface (messages · roster · conversations) ──────────────────────
@@ -2330,7 +2331,7 @@ proc musterCoordinatePostMessage(body: string): string =
   inc gMsgSeq
   let ts = int64(epochTime())
   let (id, ev) = newMessageEvent(author, ts, body, gMsgSeq)
-  gSession.publish(ev)
+  gSession.publishAuthored(moduleKeystore(), ev)
   id
 
 proc musterCoordinateMessages(): string =
@@ -2341,7 +2342,7 @@ proc musterCoordinateMessages(): string =
   gSession.poll()
   let meHex = toHex(gSession.selfIdentity().toBytes())
   var arr = newJArray()
-  for m in reduceMessages(gSession.log.allEvents()):
+  for m in reduceMessages(gSession.roomEvents()):
     arr.add %*{"id": m.id, "author": m.author, "ts": m.ts, "body": m.body,
                "alias": contactBook().aliasOf(m.author),
                "self": (normId(m.author) == normId(meHex))}
@@ -2369,7 +2370,7 @@ proc musterCoordinateConversations(): string =
   for topic, s in gSessions:
     if topic in gInboxTopics: continue      # an inbox is a drop-box, not a room to list
     s.poll()
-    let msgs = reduceMessages(s.log.allEvents())
+    let msgs = reduceMessages(s.roomEvents())
     let lastTs = if msgs.len > 0: msgs[^1].ts else: 0'i64
     arr.add %*{"topic": topic, "address": myAddr, "lastTs": lastTs,
                "active": (topic == gTopic)}

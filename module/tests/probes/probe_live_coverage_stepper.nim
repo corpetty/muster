@@ -43,9 +43,9 @@ proc build(policy, shape: string, variant: string): (Room, string, seq[(string, 
     expect.add ("intent/" & id & "/read/" & field, icExternalRead)
   if shape == "material1" or (shape == "read_material" and policy == "safe"):
     let pub = (if policy == "safe": "0x1111111111111111111111111111111111111111" else: "probe 9")
-    r.bob.publish(materialShareEvent(id, "payee", "bob", pub, "address-" & variant,
-                                     "account", toField))
-    expect.add ("intent/" & id & "/material/payee/bob", icPeerMessage)
+    r.bob.publishAuthored(bobKs, materialShareEvent(id, "payee", bobEncId, pub, "address-" & variant,
+                                                    "account", toField))   # signed, as Bob's module does (exo-f76)
+    expect.add ("intent/" & id & "/material/payee/" & bobEncId, icPeerMessage)
   (r, id, expect)
 
 proc shapeCorrect(shape: string): bool =

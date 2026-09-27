@@ -49,9 +49,9 @@ for p in [pA, pB, pC, pD]: chain.fund(p, 10)
 doAssert chain.submit(A, createOp(K, 2, @[A, B, C]), payer = pA).ok
 let config = $(%*{"program": toHex(program), "createKey": toHex(K), "pda": "lee-v0.2"})
 var r = newRoom("/muster/1/lez-vote/proto")
-r.alice.publish(accountDiscloseEvent(RoomAccount(family: LezMultisigFamily, chain: Chain,
+r.discloseAs("alice", RoomAccount(family: LezMultisigFamily, chain: Chain,
   address: toHex(statePda(psLee02, program, K)), label: "T", signers: @[A, B, C].mapIt(toHex(it)),
-  threshold: 2, config: config), "alice"))
+  threshold: 2, config: config))
 r.bob.poll()
 proc resolver(s: CoordinationSession): DriverFor =
   let sess = s

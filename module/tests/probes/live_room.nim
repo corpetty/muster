@@ -25,10 +25,12 @@ import ../../src/coordination/session
 import ../../src/coordination/intents
 import ../../src/coordination/live
 import ../../src/coordination/attest
+import ../../src/coordination/authorship   # the room's authentic view (exo-f76)
+import ../../src/coordination/accounts
 import ../../src/frost/chilldkg          # frostTestRecoveryHex: a real ceremony, once
 import std/sequtils
 export log, keystore, driver, signing_payload, session, intents, live, attest, tables, strutils,
-       transport, epoch_crypto, binding
+       transport, epoch_crypto, binding, authorship
 
 proc key(hex: string): array[32, byte] =
   var h = hex
@@ -49,6 +51,11 @@ const Ttl* = 3600'i64                ## proposal lifetime
 # anvil accounts 0/1 are Safe owners; the Ed25519 halves form the threshold roster.
 let aliceKs* = newInMemoryKeystore(key("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"), seed(1))
 let bobKs* = newInMemoryKeystore(key("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"), seed(2))
+
+proc encHex(ks: Keystore): string =
+  const d = "0123456789abcdef"
+  for x in ks.encIdentity().toBytes(): (result.add d[int(x shr 4)]; result.add d[int(x and 0x0F)])
+let bobEncId* = encHex(bobKs)   ## Bob's encryption identity: what an author-bearing event of his names (exo-f76)
 
 let safeDrv* = newSafeDriver(chainId = 31337, safe = toAddr(SafeAddr),
   owners = @[toAddr("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
@@ -142,9 +149,17 @@ proc approveAs*(r: Room, who: string, id: string, nowSec = Now): string =
   let (s, ks) = (if who == "alice": (r.alice, aliceKs) else: (r.bob, bobKs))
   liveContribute(s, ks, liveDriverFor, id, "", "", bindCtx(), nowSec)
 
+proc discloseAs*(r: Room, who: string, a: RoomAccount) =
+  ## An account disclosure as the hosted module sends it: named by the member's
+  ## encryption identity and signed by it (exo-f76) — the room drops any other kind.
+  let (s, ks) = (if who == "alice": (r.alice, aliceKs) else: (r.bob, bobKs))
+  s.publishAuthored(ks, accountDiscloseEvent(a, encHex(ks)))
+
 proc events*(r: Room): seq[Event] =
+  ## Alice's view of the room, as the hosted module reads it: the authentic events
+  ## (an author-bearing event counts only if its author signed it, exo-f76).
   r.alice.poll(); r.bob.poll()
-  r.alice.log.allEvents()
+  r.alice.roomEvents()
 
 proc attestEventsFor*(evs: seq[Event], id: string): seq[Event] =
   for e in evs:

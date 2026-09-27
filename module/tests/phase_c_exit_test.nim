@@ -74,7 +74,7 @@ proc disclosure(threshold: int): RoomAccount =
   RoomAccount(family: LezMultisigFamily, chain: Chain, address: toHex(statePda), label: "Treasury",
               signers: @[A, B, C].mapIt(toHex(it)), threshold: threshold, config: config)
 var r = newRoom("/muster/1/lez-multisig-exit/proto")
-r.alice.publish(accountDiscloseEvent(disclosure(2), "alice"))
+r.discloseAs("alice", disclosure(2))
 r.bob.poll()
 let acct = reduceAccounts(r.alice.log.allEvents())[0]
 doAssert acct.config == config, "the disclosure carries its config"

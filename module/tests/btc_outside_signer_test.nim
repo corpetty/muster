@@ -64,8 +64,8 @@ var seqNo = 0'u64
 for (family, kind) in [(P2wshFamily, "btc-p2wsh"), (TapscriptFamily, "btc-tapscript")]:
   let acct = btcAccount(family, "regtest", 2, @[A, B, C])
   var r = newRoom("/muster/1/btc-outside-" & kind & "/proto")
-  r.alice.publish(accountDiscloseEvent(RoomAccount(family: family, chain: acct.chain, address: acct.address,
-    label: "Vault", signers: @[A, B, C].mapIt(toHex(it)), threshold: 2), "alice"))
+  r.discloseAs("alice", RoomAccount(family: family, chain: acct.chain, address: acct.address,
+    label: "Vault", signers: @[A, B, C].mapIt(toHex(it)), threshold: 2))
   let s = r.alice
   let resolver: DriverFor = proc(policy: string): Driver =
     driverForPolicy(policy, reduceAccounts(s.log.allEvents()), proc(k: string): Driver = liveDriverFor(k))

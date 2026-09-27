@@ -2,7 +2,7 @@
 
 ## Run them
 
-One command runs every test that needs no chain — 92 unit tests and the 55 invariant
+One command runs every test that needs no chain — 93 unit tests and the 55 invariant
 probes under `probes/`, in parallel:
 
 ```bash
@@ -51,6 +51,7 @@ wants (below), which the runner supplies.
 
 - `dcbor_golden_test` (known-answer bytes for invariant 5, hand-computed from RFC 8949: width boundaries, the CDE-vs-length-first ordering discriminator, hash-input framing; it catches a byte-order flip the property probes pass)
 - `manifest_test`
+- `authorship_test` (exo-f76 — an author-bearing event counts only when its author signed it: forged, wrong-key, cross-room, tampered and malformed author events are dropped, genuine ones count, over the wire included; `$SECP` + `$STINT` + `$SODIUM`)
 - `log_proof_test`
 - `malformed_sig_test` (exo-cf7 — a malformed signature is never fatal: the verifiers, both owner-signature drivers, the fold with a hostile approval in the log, join-request bindings, authorizations; needs `$SECP` + `$SODIUM`)
 - `decline_test`
@@ -169,9 +170,11 @@ tests/run-suite.sh return_marshalling
 **anvil + the Safe fixture.** `infra/anvil/devnet.sh` starts anvil, deploys and funds
 the real Safe v1.4.1 (singleton, factory, fallback handler, a 2-of-3 proxy), and
 prints `SAFE_ADDR`. Each test takes `<safeAddr> [rpcUrl]`. They share the Safe's nonce,
-so the runner runs e2e tests one at a time; `safe_anvil_e2e` also assumes a **fresh**
-devnet (it signs at nonce 0 and expects an unfunded recipient), so run it first or
-restart the devnet (`pkill -x anvil; infra/anvil/devnet.sh`).
+so the runner runs e2e tests one at a time. `safe_anvil_e2e` and `coordinate_submit_anvil`
+each assume a **fresh** devnet (each signs its first transaction at nonce 0, and
+`safe_anvil_e2e` expects an unfunded recipient), so give each its own: restart the devnet
+between them (`pkill -x anvil; infra/anvil/devnet.sh`). `safe_real_anvil_e2e` reads the
+live nonce and runs on any devnet.
 
 - `safe_anvil_e2e` — the single-instance path: collect 2-of-3 owner signatures
   locally, assemble `execTransaction`, submit, confirm the transfer on-chain.

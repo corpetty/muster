@@ -36,6 +36,7 @@ import ../crypto/keystore
 import ../crypto/curve25519
 import ../bitcoin/tx                 # toHex / hexToBytes
 import ./session
+import ./authorship   # the room's authentic view + author-signed publishing (exo-f76)
 import ./intent_events
 import ./intents
 import ./attest
@@ -88,7 +89,7 @@ proc memberId(ks: Keystore): string = toHex(ks.encIdentity().toBytes())
 proc frostCeremonyJoin*(s: CoordinationSession, ks: Keystore, cid: string): string =
   ## Offer this member's host key for the ceremony; returns it (hex).
   let host = toHex(ks.frostHostPubkey(ceremonyLabel(cid)))
-  s.publish(Event(key: "frost/" & cid & "/join/" & memberId(ks), value: $(%*{"host": host})))
+  s.publishAuthored(ks, Event(key: "frost/" & cid & "/join/" & memberId(ks), value: $(%*{"host": host})))
   host
 
 proc frostCeremonyStep*(s: CoordinationSession, ks: Keystore, cid: string): string =
@@ -96,7 +97,7 @@ proc frostCeremonyStep*(s: CoordinationSession, ks: Keystore, cid: string): stri
   ## "step2", "done <address>" (finalized and disclosed), "waiting: …", or a refusal.
   ## Idempotent: call it on every tick.
   s.poll()
-  let events = s.log.allEvents()
+  let events = s.roomEvents()
   let v = ceremonyView(events, cid)
   if not v.open: return "waiting: the ceremony is not open"
   if v.hosts.len < v.n: return "waiting: " & $v.hosts.len & " of " & $v.n & " participants joined"
@@ -127,7 +128,7 @@ proc frostCeremonyStep*(s: CoordinationSession, ks: Keystore, cid: string): stri
     let (found, ra) = findAccount(reduceAccounts(events), accountId(chain, address))
     if not (found and me in ra.disclosedBy):
       discard ks.frostDkgFinalize(lab, params, cmsg2)   # this member's check of the certificate
-      s.publish(accountDiscloseEvent(RoomAccount(family: family, chain: chain, address: address,
+      s.publishAuthored(ks, accountDiscloseEvent(RoomAccount(family: family, chain: chain, address: address,
         label: "FROST " & $v.t & " of " & $v.n, signers: v.hosts.mapIt(toHex(it)), threshold: v.t,
         config: $(%*{"ceremony": cid, "recovery": toHex(rec)})), me))
     "done " & address
@@ -178,7 +179,7 @@ proc liveFrostContribute*(s: CoordinationSession, ks: Keystore, driverFor: Drive
   ## ("not-in-signing-set: …", "refused: …", "already-contributed", …) with nothing
   ## published.
   s.poll()
-  let events = s.log.allEvents()
+  let events = s.roomEvents()
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return "unknown-intent"
   let policy = intentPolicyOf(events, intentId)
@@ -235,4 +236,4 @@ proc liveFrostContribute*(s: CoordinationSession, ks: Keystore, driverFor: Drive
   let sigEv = contributeEvent(intentId, hh, toHex(c.bytes), round = round, parents = parents)
   s.publish(sigEv)
   s.publish(attestEvent(intentId, hh, round, att, parents = @[eventId(sigEv)]))
-  intentState(s.log.allEvents(), driverFor, intentId)
+  intentState(s.roomEvents(), driverFor, intentId)

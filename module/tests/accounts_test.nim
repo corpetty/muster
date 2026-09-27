@@ -116,8 +116,8 @@ block:
 # ── 4. live: disclose → propose under the account → two owners → executable ─────
 block:
   var r = newRoom("/muster/1/accounts-live/proto")
-  r.alice.publish(accountDiscloseEvent(safeA(), aliceId))
-  r.alice.publish(accountDiscloseEvent(safeOnBase(), aliceId))
+  r.discloseAs("alice", safeA())
+  r.discloseAs("alice", safeOnBase())
   r.bob.poll()
   let resolverOf = proc(s: CoordinationSession): DriverFor =
     (proc(policy: string): Driver = driverForPolicy(policy, reduceAccounts(s.log.allEvents()), roomBuild))
