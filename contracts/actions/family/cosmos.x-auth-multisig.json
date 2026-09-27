@@ -1,0 +1,1851 @@
+{
+  "actions": [
+    {
+      "id": "cosmos.x-auth-multisig/derive-account",
+      "name": "Derive a Cosmos multisig account",
+      "area": "family",
+      "family": "cosmos.x-auth-multisig",
+      "status": "declared",
+      "summary": "The room agrees on a threshold k and an ordered list of n member keys, and each member confirms their own key. The address is a hash of that policy. Nothing goes on chain now: the account appears when it first receives funds, and its keys become public on its first signed transaction.",
+      "effect": {
+        "schema": "muster.effect.cosmos.x-auth-multisig.derive-account.v0",
+        "fields": [
+          {
+            "name": "threshold",
+            "means": "k: how many of the listed keys must sign (1 to n)"
+          },
+          {
+            "name": "keys",
+            "means": "the n member public keys (secp256k1 by default), in the order they are hashed"
+          },
+          {
+            "name": "order",
+            "means": "sorted by each key's address (what keys add --multisig does) or as given (--nosort); the order changes the address"
+          },
+          {
+            "name": "chain",
+            "means": "the chain the account is for: CAIP-2 cosmos:<chain_id>, and its bech32 address prefix"
+          },
+          {
+            "name": "address",
+            "means": "the derived address: the first 20 bytes of SHA-256 over the amino encoding of LegacyAminoPubKey{threshold, pubkeys}"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "n of n: every listed key holder confirms their own key; nothing is signed on chain",
+        "finality": "immediate",
+        "domain": "cosmos.legacy-amino-pubkey.address.v1"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "cosmos:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "cosmos:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "cosmos-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "cosmos-rpc",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "cosmos-multisig-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "cosmos-multisig:<multisig address>",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "cosmos:*",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Names k, the member keys and their order. Muster would build LegacyAminoPubKey{threshold, pubkeys} and hash its amino bytes (route tendermint/PubKeyMultisigThreshold): the address is the first 20 bytes of SHA-256. The same keys in another order, or another k, give another address. The chain accepts any keys here; it asks for no proof that their holders agreed.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/multisig/multisig.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/multisig/codec.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/crypto/multisig/keys.proto",
+            "https://github.com/cometbft/cometbft/blob/v0.40.0/crypto/tmhash/hash.go",
+            "https://github.com/cometbft/cometbft/blob/v0.40.0/crypto/crypto.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/client/keys/add.go"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Each member re-derives the address from k and the ordered keys, and confirms that the key listed for them is theirs. A member confirms only their own key. The client reads the chain's TxSigLimit from the x/auth params through the user's RPC and records the read.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/sigverify.go#L549-L572",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/types/params.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/client/keys/add.go"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "The room records the account: address, k and the ordered keys. The chain has nothing yet. x/bank creates the account when it first receives coins, with an account number and no public key. The keys and k stay off chain until the account first signs: that transaction must carry the whole LegacyAminoPubKey, which x/auth checks against the address and then stores on the account.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/bank/keeper/send.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/sigverify.go#L63-L118",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/tx/v1beta1/tx.proto"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an account disclosure whose address does not re-derive from its k and its ordered keys",
+          "why": "invariant 1: re-derive or refuse. The address is a hash over the ordered amino bytes, so the same keys in another order are another account",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/multisig/multisig.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/client/keys/add.go",
+            "https://github.com/cometbft/cometbft/blob/v0.40.0/crypto/tmhash/hash.go"
+          ]
+        },
+        {
+          "what": "a policy whose key count (nested multisig keys counted) exceeds the chain's TxSigLimit, read and recorded (default 7)",
+          "why": "the chain's rule: ValidateSigCountDecorator counts every key in the multisig, signed or not, and rejects the transaction. Such an account could receive coins and never spend them",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/sigverify.go#L549-L572",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/types/params.go"
+          ]
+        },
+        {
+          "what": "presenting a listed key as a member's before that member has confirmed it in the room",
+          "why": "invariant 9: the client says about a member only what that member disclosed. The chain takes any keys with no proof of possession; a key nobody confirms is shown as a signer outside the room",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/multisig/multisig.go"
+          ]
+        },
+        {
+          "what": "a policy that lists the same key more than once, unless the room is shown that its holder counts more than once",
+          "why": "the chain's rule allows repeated keys; the holder then supplies several of the k signatures, so k of n would not mean k people",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/multisig/multisig.go"
+          ]
+        },
+        {
+          "what": "a threshold below 1 or above n",
+          "why": "the chain's constructor rejects it (NewLegacyAminoPubKey panics on k <= 0 or n < k)",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/multisig/multisig.go"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The address commits to k and to every key, in order. Change any of them and the address changes.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Until the account first signs, the chain holds no public key for it: an observer sees only an address and its balance.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "On the account's first signed transaction, anyone reading the chain learns all n keys and k, and they stay in state.",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        },
+        {
+          "claim": "The chain does not check that a listed key's holder agreed to join the account.",
+          "credibility": "exposed",
+          "party": "a proposer who lists a key its holder does not control"
+        },
+        {
+          "claim": "On default parameters a multisig with more than 7 keys (say 3 of 8) can never spend: TxSigLimit counts all n keys.",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/multisig/multisig.go",
+          "what": "LegacyAminoPubKey: constructor (k in 1..n, repeated keys allowed), Address() = AddressHash of the amino bytes, key order preserved"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/multisig/codec.go",
+          "what": "the amino codec for the multisig key: route tendermint/PubKeyMultisigThreshold and the registered key types"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/crypto/multisig/keys.proto",
+          "what": "LegacyAminoPubKey proto: threshold + public_keys (amino field name pubkeys, threshold written as a string)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cometbft/cometbft/blob/v0.40.0/crypto/tmhash/hash.go",
+          "what": "CometBFT SumTruncated: SHA-256, first 20 bytes"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cometbft/cometbft/blob/v0.40.0/crypto/crypto.go",
+          "what": "CometBFT AddressHash = tmhash.SumTruncated"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/client/keys/add.go",
+          "what": "keys add --multisig: keys sorted by address unless --nosort; duplicate key names rejected"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/sigverify.go",
+          "what": "SetPubKeyDecorator stores the multisig key on first spend and checks it hashes to the signer address; ValidateSigCountDecorator counts all subkeys against TxSigLimit"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/types/params.go",
+          "what": "x/auth DefaultTxSigLimit = 7"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/bank/keeper/send.go",
+          "what": "x/bank creates the recipient account if it does not exist"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/tx/v1beta1/tx.proto",
+          "what": "SignerInfo.public_key is optional only for accounts that already have a key in state"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/CHANGELOG.md",
+          "what": "cosmos-sdk v0.55.0 CHANGELOG: ML-DSA-65 keys with multisig support (#26436, #26472)"
+        }
+      ],
+      "unverified": [
+        "Which key types a given chain accepts inside a multisig for transaction signing (the registry lists secp256k1-ecdsa, ed25519 and ml-dsa-65; v0.55 registers ed25519, secp256k1, bls12_381, ML-DSA-65 and secp256k1eth in the multisig codec). Only secp256k1 is described here.",
+        "Where each chain's bech32 prefix and a non-default TxSigLimit are read from in practice (chain registry vs node params) was not checked per chain."
+      ]
+    },
+    {
+      "id": "cosmos.x-auth-multisig/send",
+      "name": "Send coins from a Cosmos multisig",
+      "area": "family",
+      "family": "cosmos.x-auth-multisig",
+      "status": "declared",
+      "summary": "k of the n key holders send coins from the multisig with a bank MsgSend. Each signs the same amino-JSON sign doc; one member assembles the multisignature and broadcasts. The x/auth ante handler on the chain checks the threshold.",
+      "effect": {
+        "schema": "muster.effect.cosmos.x-auth-multisig.send.v0",
+        "fields": [
+          {
+            "name": "from",
+            "means": "the multisig account's address: the MsgSend from_address and the fee payer"
+          },
+          {
+            "name": "to",
+            "means": "the payee's address"
+          },
+          {
+            "name": "amount",
+            "means": "the coins to send: a list of {denom, amount}"
+          },
+          {
+            "name": "fee",
+            "means": "the fee coins and the gas limit; the multisig pays (it is the first and only signer)"
+          },
+          {
+            "name": "memo",
+            "means": "the transaction memo; public once broadcast"
+          },
+          {
+            "name": "timeout_height",
+            "means": "optional: the last block height at which the transaction is valid; 0 means none"
+          },
+          {
+            "name": "chain_id",
+            "means": "the chain id every signature commits to"
+          },
+          {
+            "name": "account_number",
+            "means": "the multisig's account number, read from the chain"
+          },
+          {
+            "name": "sequence",
+            "means": "the multisig's sequence, read from the chain at propose; the transaction is valid only at this sequence"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n keys (the multisig's LegacyAminoPubKey threshold)",
+        "finality": "external",
+        "domain": "cosmos.amino-json.v1"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "cosmos:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "cosmos:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "cosmos-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "cosmos-rpc",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "cosmos-multisig-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "cosmos-multisig:<multisig address>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "payee",
+          "party": "proposer",
+          "class": "address",
+          "target": "cosmos:*",
+          "field": "to"
+        },
+        {
+          "kind": "asset",
+          "name": "multisig-coins",
+          "party": "proposer",
+          "class": "asset",
+          "target": "cosmos-multisig:<multisig address>",
+          "field": "amount"
+        }
+      ],
+      "touches": [
+        {
+          "target": "cosmos:*",
+          "mode": "write"
+        },
+        {
+          "target": "cosmos-multisig:<multisig address>",
+          "mode": "write"
+        },
+        {
+          "target": "cosmos:<payee address>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "payer",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "amount",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payee",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "effect",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Composes MsgSend{from_address: the multisig, to_address, amount}, the fee (coins and gas limit), the memo and an optional timeout_height, as tx bank send --generate-only would. Muster would read the multisig's account_number and sequence through the user's RPC and record both reads. Every room member re-derives the same sign doc. The RPC provider learns which account is being prepared.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "payer",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/bank/v1beta1/tx.proto",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/tx.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/aminojson.go"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Each key holder re-derives the sign doc and signs it with their own key, as tx sign --multisig=<address> --sign-mode amino-json does. A contribution is the member's public key, sign mode, signature and sequence: the signature file tx multisign reads.",
+          "signs": "SHA-256 of the SIGN_MODE_LEGACY_AMINO_JSON sign doc, signed with the member's own secp256k1 key (ECDSA; a 64-byte r||s signature in low-S form). The sign doc is compact JSON with keys sorted at every level: {account_number, chain_id, fee: {amount: [{amount, denom}], gas[, granter][, payer]}, memo, msgs: [{type: cosmos-sdk/MsgSend, value: {amount: [{amount, denom}], from_address, to_address}}], sequence[, timeout_height][, timeout_timestamp][, unordered]}. Every uint64 is a decimal string. The bracketed fields are left out when empty or zero. account_number and sequence are the multisig account's, not the member's. chain_id is inside the bytes (explicit binding); so are the fee, the memo and the expiry. Not inside: any public key, the multisig policy, which other keys sign, or their signatures, so each member signs without knowing who else will.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/aminojson.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/internal/aminojsonpb/aminojson.proto",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/json_marshal.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/secp256k1/secp256k1_nocgo.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/cli/tx_sign.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/bank/v1beta1/tx.proto"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "Once k signatures verify, any member assembles the transaction, as tx multisign does. The multisignature is a CompactBitArray of n bits marking which keys signed, in the multisig's key order, plus the signatures in that same order. The signer info carries the LegacyAminoPubKey (all n keys and k), ModeInfo.Multi with LEGACY_AMINO_JSON for each signer, and the sequence. The member broadcasts it through their own RPC. The RPC provider sees the signed transaction first. Validators and the mempool see it next, before inclusion. The chain's ante handler checks that all n keys fit TxSigLimit, that the sequence is the account's current one, that at least k bits are set, and that each signature verifies. It charges verification gas for every signature present, and deducts the fee from the multisig.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payee",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/cli/tx_multisign.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/types/multisig/multisignature.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/crypto/multisig/v1beta1/multisig.proto",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/tx/v1beta1/tx.proto",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/sigverify.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/multisig/multisig.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/tx/builder.go"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "The client watches for the block that includes the transaction. CometBFT commits a block when more than 2/3 of validator voting power precommits it. The fee and the sequence are spent in the ante handler, whose writes are kept even if the message itself then fails. On the account's first spend, x/auth stores the multisig public key on the account, so it stays readable in state.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/baseapp/baseapp.go#L866-L921",
+            "https://docs.cosmos.network/cometbft/latest/docs/introduction/intro",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/sigverify.go#L63-L118"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a contribution whose signature does not verify over the sign doc muster re-derived, or that was made in any sign mode but LEGACY_AMINO_JSON",
+          "why": "invariant 1 (F-4): re-derive, refuse on mismatch. tx multisign supports only amino-json; SIGN_MODE_DIRECT is not supported for a multisig",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/aminojson.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/cli/tx_multisign.go",
+            "https://docs.cosmos.network/sdk/latest/node/txs"
+          ]
+        },
+        {
+          "what": "assembling or broadcasting once the multisig's sequence has moved past the one in the sign doc",
+          "why": "the chain's rule: a signature whose sequence is not the account's current sequence fails (ErrWrongSequence). Any other transaction from the multisig first voids every signature collected at the old sequence",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/sigverify.go#L369-L376"
+          ]
+        },
+        {
+          "what": "signing when account_number, sequence or chain_id reached the sign doc without a recorded read",
+          "why": "invariant 10: all three are chain state inside the signed bytes, read through the RPC",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/aminojson.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/tx.go"
+          ]
+        },
+        {
+          "what": "a signature from a key that is not in the multisig's key list",
+          "why": "the chain's rule: a signature is placed by its key's index in the policy, and tx multisign refuses a key outside it",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/types/multisig/multisignature.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/multisig/multisig.go"
+          ]
+        },
+        {
+          "what": "submitting after the proposal's timeout_height",
+          "why": "invariant 2 (expiry): the chain rejects a transaction past its timeout height (ErrTxTimeoutHeight)",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/basic.go#L205-L216"
+          ]
+        },
+        {
+          "what": "a transaction body that carries extension options",
+          "why": "the amino-json sign mode refuses to produce sign bytes for such a body, so no member could sign it",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/aminojson.go"
+          ]
+        },
+        {
+          "what": "a send from a policy whose key count exceeds the chain's TxSigLimit",
+          "why": "the chain's rule: every key counts, signed or not, so the transaction is rejected whatever k signed",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/sigverify.go#L549-L572",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/types/params.go"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Every member signs the same bytes, and they name the chain (chain_id) and the account (account_number). A signature is worthless on another chain or for another account.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The multisig's sequence is inside the signed bytes. Any other transaction from the account first makes every collected signature stale.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The chain itself checks that k of the n keys signed. The one way around it is an x/authz grant the account itself signed: the grantee can then execute the granted message types for the account with no multisig signatures.",
+          "credibility": "motivational",
+          "party": "a grantee the multisig authorized through x/authz"
+        },
+        {
+          "claim": "At settlement anyone reading the chain learns all n keys and k (first spend), which keys signed, the payee, the amount and the memo.",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        },
+        {
+          "claim": "The RPC provider learns which account is being prepared when muster reads its account number and sequence, and sees the signed transaction before the network does.",
+          "credibility": "exposed",
+          "party": "the user-configured RPC provider"
+        },
+        {
+          "claim": "Approving costs a member nothing directly. Each signature adds verification gas to the one fee the multisig pays.",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/bank/v1beta1/tx.proto",
+          "what": "MsgSend {from_address, to_address, amount}; amino name cosmos-sdk/MsgSend; signer from_address"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/aminojson.go",
+          "what": "the LEGACY_AMINO_JSON handler: AminoSignDoc = account_number, timeout_height, chain_id, sequence, memo, msgs, unordered, timeout_timestamp, fee{amount, gas, payer, granter}; refuses extension options"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/internal/aminojsonpb/aminojson.proto",
+          "what": "the AminoSignDoc / AminoSignFee proto: which fields are always written and which are omitted when empty (unordered and timeout_timestamp added in 0.53)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/json_marshal.go",
+          "what": "the amino-JSON encoder: field names sorted, compact output, uint64/int64 written as quoted decimal strings"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/secp256k1/secp256k1_nocgo.go",
+          "what": "secp256k1 Sign: ECDSA over SHA-256 of the message, 64-byte R||S, low-S enforced on verify"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/sigverify.go",
+          "what": "x/auth ante: SetPubKey stores the multisig key on first spend, sequence must equal the account's, ValidateSigCount counts all n keys against TxSigLimit, verification gas per signature present"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/types/params.go",
+          "what": "x/auth defaults: TxSigLimit 7, SigVerifyCostSecp256k1 1000, TxSizeCostPerByte 10"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/multisig/multisig.go",
+          "what": "LegacyAminoPubKey.VerifyMultisignature: bit array size must equal n, at least k bits set, each signature verified against the key at its index"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/cli/tx_multisign.go",
+          "what": "tx multisign: reads per-member signature files, verifies each, places it by key index, sets the multisig's account number and sequence from state; SIGN_MODE_DIRECT not supported"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/cli/tx_sign.go",
+          "what": "tx sign --multisig: a member signs on behalf of the multisig account and outputs a signature only"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/tx.go",
+          "what": "SignTxWithSignerAddress: multisigs only support LEGACY_AMINO_JSON; account number and sequence read from the multisig's state"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/tx/v1beta1/tx.proto",
+          "what": "SignerInfo (public_key optional once in state, mode_info, sequence), ModeInfo.Multi (bitarray + per-signer modes), TxBody timeout_height / unordered / timeout_timestamp"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/crypto/multisig/v1beta1/multisig.proto",
+          "what": "MultiSignature {signatures} and CompactBitArray"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/basic.go",
+          "what": "TxTimeoutHeightDecorator rejects a transaction past timeout_height or timeout_timestamp"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/baseapp/baseapp.go",
+          "what": "runTx writes the ante handler's state (fee, sequence) before running messages, so they stay spent if a message fails"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/tx/builder.go",
+          "what": "the fee payer is the first signer unless fee.payer is set"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.cosmos.network/sdk/latest/node/txs",
+          "what": "Cosmos SDK docs: tx multisign assumes SIGN_MODE_LEGACY_AMINO_JSON; a multisig with a SIGN_MODE_DIRECT signer is not yet possible; --generate-only"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.cosmos.network/cometbft/latest/docs/introduction/intro",
+          "what": "CometBFT: a block is committed when more than 2/3 of validators precommit it; safety holds while fewer than 1/3 are Byzantine"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/authz/keeper/keeper.go",
+          "what": "x/authz DispatchActions: a message whose signer is the granter runs on the grantee's authority when a grant exists"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/CHANGELOG.md",
+          "what": "cosmos-sdk v0.55.0 CHANGELOG: SIGN_MODE_TEXTUAL removed (#26456); ML-DSA-65 account keys with multisig support; unordered transactions (#23708)"
+        }
+      ],
+      "unverified": [
+        "Unordered transactions (cosmos-sdk v0.53+) with a multisig: the amino-json sign doc does carry unordered and timeout_timestamp, and the ante handler then requires sequence 0. But tx sign --multisig and tx multisign fill in the multisig's on-chain sequence when online, so an unordered multisig transaction appears to need --offline with sequence 0, and the chain must enable unordered transactions. Not confirmed end to end.",
+        "Using fee.granter (x/feegrant) or a separate fee.payer with a multisig was not examined."
+      ]
+    },
+    {
+      "id": "cosmos.x-auth-multisig/contract-call",
+      "name": "Call a CosmWasm contract from a Cosmos multisig",
+      "area": "family",
+      "family": "cosmos.x-auth-multisig",
+      "status": "declared",
+      "summary": "k of the n key holders execute a CosmWasm contract from the multisig with MsgExecuteContract, on a chain that runs x/wasm. The signing path is the same as a send; the contract's code decides what the call does.",
+      "effect": {
+        "schema": "muster.effect.cosmos.x-auth-multisig.contract-call.v0",
+        "fields": [
+          {
+            "name": "from",
+            "means": "the multisig account's address: the MsgExecuteContract sender and the fee payer"
+          },
+          {
+            "name": "contract",
+            "means": "the contract's address"
+          },
+          {
+            "name": "msg",
+            "means": "the JSON message passed to the contract"
+          },
+          {
+            "name": "funds",
+            "means": "coins sent to the contract with the call: a list of {denom, amount}; may be empty"
+          },
+          {
+            "name": "code_id",
+            "means": "the contract's code id, read from the chain at propose"
+          },
+          {
+            "name": "admin",
+            "means": "the contract's admin, who can migrate its code; read from the chain at propose"
+          },
+          {
+            "name": "fee",
+            "means": "the fee coins and the gas limit; the multisig pays (it is the first and only signer)"
+          },
+          {
+            "name": "memo",
+            "means": "the transaction memo; public once broadcast"
+          },
+          {
+            "name": "timeout_height",
+            "means": "optional: the last block height at which the transaction is valid; 0 means none"
+          },
+          {
+            "name": "chain_id",
+            "means": "the chain id every signature commits to"
+          },
+          {
+            "name": "account_number",
+            "means": "the multisig's account number, read from the chain"
+          },
+          {
+            "name": "sequence",
+            "means": "the multisig's sequence, read from the chain at propose; the transaction is valid only at this sequence"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n keys (the multisig's LegacyAminoPubKey threshold)",
+        "finality": "external",
+        "domain": "cosmos.amino-json.v1"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "cosmos:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "cosmos:* running x/wasm",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "cosmos-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "cosmos-rpc",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "cosmos-multisig-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "cosmos-multisig:<multisig address>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "contract",
+          "party": "proposer",
+          "class": "address",
+          "target": "cosmos:*",
+          "field": "contract"
+        },
+        {
+          "kind": "asset",
+          "name": "multisig-coins",
+          "party": "proposer",
+          "class": "asset",
+          "target": "cosmos-multisig:<multisig address>",
+          "field": "funds"
+        }
+      ],
+      "touches": [
+        {
+          "target": "cosmos:*",
+          "mode": "write"
+        },
+        {
+          "target": "cosmos-multisig:<multisig address>",
+          "mode": "write"
+        },
+        {
+          "target": "cosmwasm-contract:<contract address>",
+          "mode": "write"
+        },
+        {
+          "target": "cosmwasm-contract:<contract address>",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "payer",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "args",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "args",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "amount",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payee",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "effect",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Composes MsgExecuteContract{sender: the multisig, contract, msg, funds}, the fee, the memo and an optional timeout_height. Muster would read the multisig's account_number and sequence, and the contract's code id and admin, through the user's RPC and record every read. Every room member re-derives the same sign doc. The RPC provider learns the account and the contract being prepared.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "payer",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "args",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/CosmWasm/wasmd/blob/v0.70.3/proto/cosmwasm/wasm/v1/tx.proto",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/tx.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/aminojson.go"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Each key holder re-derives the sign doc and signs it with their own key, as tx sign --multisig --sign-mode amino-json does. The contract message is not signed as carried: the sign doc parses it with Go's encoding/json and writes it back with object keys sorted, numbers passed through float64, and <, >, & escaped.",
+          "signs": "SHA-256 of the SIGN_MODE_LEGACY_AMINO_JSON sign doc, signed with the member's own secp256k1 key (ECDSA; a 64-byte r||s signature in low-S form). The sign doc is compact JSON with keys sorted at every level: {account_number, chain_id, fee: {amount: [{amount, denom}], gas[, granter][, payer]}, memo, msgs: [{type: wasm/MsgExecuteContract, value: {contract, funds: [{amount, denom}], msg: <the contract message inlined as JSON>, sender}}], sequence[, timeout_height][, timeout_timestamp][, unordered]}. Every uint64 is a decimal string. The bracketed fields are left out when empty or zero. account_number and sequence are the multisig account's, not the member's. chain_id is inside the bytes (explicit binding); so are the fee, the memo and the expiry. Not inside: any public key, the multisig policy, which other keys sign, or their signatures, so each member signs without knowing who else will.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/aminojson.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/internal/aminojsonpb/aminojson.proto",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/json_marshal.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/encoder.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/secp256k1/secp256k1_nocgo.go",
+            "https://github.com/CosmWasm/wasmd/blob/v0.70.3/proto/cosmwasm/wasm/v1/tx.proto",
+            "https://pkg.go.dev/encoding/json"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "Once k signatures verify, any member assembles the transaction, as tx multisign does. The multisignature is a CompactBitArray of n bits marking which keys signed, in the multisig's key order, plus the signatures in that same order. The signer info carries the LegacyAminoPubKey (all n keys and k), ModeInfo.Multi with LEGACY_AMINO_JSON for each signer, and the sequence. The member broadcasts it through their own RPC. The RPC provider sees the signed transaction first. Validators and the mempool see it next, before inclusion. The chain's ante handler checks that all n keys fit TxSigLimit, that the sequence is the account's current one, that at least k bits are set, and that each signature verifies. It charges verification gas for every signature present, and deducts the fee from the multisig. The contract then runs with the multisig as sender.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "args",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payee",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/cli/tx_multisign.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/types/multisig/multisignature.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/tx/v1beta1/tx.proto",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/sigverify.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/multisig/multisig.go"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "The client watches for the block that includes the transaction. CometBFT commits a block when more than 2/3 of validator voting power precommits it. The fee and the sequence are spent in the ante handler, whose writes are kept even if the message itself then fails. On the account's first spend, x/auth stores the multisig public key on the account, so it stays readable in state. A call that fails inside the contract still spends the fee and the sequence.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/baseapp/baseapp.go#L866-L921",
+            "https://docs.cosmos.network/cometbft/latest/docs/introduction/intro"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a contract msg holding a JSON number that does not survive a float64 round trip (an integer above 2^53, say)",
+          "why": "invariant 1: the sign doc re-encodes msg through encoding/json into float64, so the signed bytes would carry a rounded number while the transaction body carries the original. What the members sign would not be what the body says",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/encoder.go",
+            "https://pkg.go.dev/encoding/json",
+            "https://github.com/CosmWasm/wasmd/blob/v0.70.3/proto/cosmwasm/wasm/v1/tx.proto"
+          ]
+        },
+        {
+          "what": "assembling when the contract's code id or admin differs from the one read and recorded at propose",
+          "why": "invariants 1 and 10: the call is signed as content, but its behavior is the contract's code, which the admin can replace with MsgMigrateContract between approval and settlement",
+          "evidence": [
+            "https://github.com/CosmWasm/wasmd/blob/v0.70.3/proto/cosmwasm/wasm/v1/tx.proto"
+          ]
+        },
+        {
+          "what": "proposing a contract call on a chain that does not run x/wasm",
+          "why": "MsgExecuteContract is a wasmd message; a chain without x/wasm has no handler for it",
+          "evidence": [
+            "https://github.com/CosmWasm/wasmd/blob/v0.70.3/proto/cosmwasm/wasm/v1/tx.proto"
+          ]
+        },
+        {
+          "what": "a contribution whose signature does not verify over the sign doc muster re-derived, or that was made in any sign mode but LEGACY_AMINO_JSON",
+          "why": "invariant 1 (F-4): re-derive, refuse on mismatch. tx multisign supports only amino-json; SIGN_MODE_DIRECT is not supported for a multisig",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/aminojson.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/cli/tx_multisign.go",
+            "https://docs.cosmos.network/sdk/latest/node/txs"
+          ]
+        },
+        {
+          "what": "assembling or broadcasting once the multisig's sequence has moved past the one in the sign doc",
+          "why": "the chain's rule: a signature whose sequence is not the account's current sequence fails (ErrWrongSequence). Any other transaction from the multisig first voids every signature collected at the old sequence",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/sigverify.go#L369-L376"
+          ]
+        },
+        {
+          "what": "signing when account_number, sequence or chain_id reached the sign doc without a recorded read",
+          "why": "invariant 10: all three are chain state inside the signed bytes, read through the RPC",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/aminojson.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/tx.go"
+          ]
+        },
+        {
+          "what": "a signature from a key that is not in the multisig's key list",
+          "why": "the chain's rule: a signature is placed by its key's index in the policy, and tx multisign refuses a key outside it",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/types/multisig/multisignature.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/multisig/multisig.go"
+          ]
+        },
+        {
+          "what": "submitting after the proposal's timeout_height",
+          "why": "invariant 2 (expiry): the chain rejects a transaction past its timeout height (ErrTxTimeoutHeight)",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/basic.go#L205-L216"
+          ]
+        },
+        {
+          "what": "a transaction body that carries extension options",
+          "why": "the amino-json sign mode refuses to produce sign bytes for such a body, so no member could sign it",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/aminojson.go"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Every member signs the same bytes, and they name the chain (chain_id) and the account (account_number). A signature is worthless on another chain or for another account.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The multisig's sequence is inside the signed bytes. Any other transaction from the account first makes every collected signature stale.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The members sign the call, not the code it runs. A contract admin can migrate the code between approval and settlement.",
+          "credibility": "motivational",
+          "party": "the contract's admin"
+        },
+        {
+          "claim": "At settlement anyone reading the chain learns all n keys and k (first spend), which keys signed, the contract, the message and the funds.",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        },
+        {
+          "claim": "The RPC provider learns which account is being prepared when muster reads its account number and sequence, and sees the signed transaction before the network does.",
+          "credibility": "exposed",
+          "party": "the user-configured RPC provider"
+        },
+        {
+          "claim": "The chain itself checks that k of the n keys signed. The one way around it is an x/authz grant the account itself signed: the grantee can then execute the granted message types for the account with no multisig signatures.",
+          "credibility": "motivational",
+          "party": "a grantee the multisig authorized through x/authz"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/CosmWasm/wasmd/blob/v0.70.3/proto/cosmwasm/wasm/v1/tx.proto",
+          "what": "wasmd MsgExecuteContract {sender, contract, msg (amino inline_json), funds}; amino name wasm/MsgExecuteContract; MsgMigrateContract and MsgUpdateAdmin"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/encoder.go",
+          "what": "the inline_json encoder: parses msg with encoding/json into interface{}, sorts object keys, re-marshals"
+        },
+        {
+          "kind": "source",
+          "url": "https://pkg.go.dev/encoding/json",
+          "what": "Go encoding/json: JSON numbers decode to float64 in an interface{}; Marshal sorts map keys and escapes <, >, &"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/aminojson.go",
+          "what": "the LEGACY_AMINO_JSON handler: AminoSignDoc = account_number, timeout_height, chain_id, sequence, memo, msgs, unordered, timeout_timestamp, fee{amount, gas, payer, granter}; refuses extension options"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/internal/aminojsonpb/aminojson.proto",
+          "what": "the AminoSignDoc / AminoSignFee proto: which fields are always written and which are omitted when empty (unordered and timeout_timestamp added in 0.53)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/json_marshal.go",
+          "what": "the amino-JSON encoder: field names sorted, compact output, uint64/int64 written as quoted decimal strings"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/secp256k1/secp256k1_nocgo.go",
+          "what": "secp256k1 Sign: ECDSA over SHA-256 of the message, 64-byte R||S, low-S enforced on verify"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/sigverify.go",
+          "what": "x/auth ante: SetPubKey stores the multisig key on first spend, sequence must equal the account's, ValidateSigCount counts all n keys against TxSigLimit, verification gas per signature present"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/types/params.go",
+          "what": "x/auth defaults: TxSigLimit 7, SigVerifyCostSecp256k1 1000, TxSizeCostPerByte 10"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/multisig/multisig.go",
+          "what": "LegacyAminoPubKey.VerifyMultisignature: bit array size must equal n, at least k bits set, each signature verified against the key at its index"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/cli/tx_multisign.go",
+          "what": "tx multisign: reads per-member signature files, verifies each, places it by key index, sets the multisig's account number and sequence from state; SIGN_MODE_DIRECT not supported"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/cli/tx_sign.go",
+          "what": "tx sign --multisig: a member signs on behalf of the multisig account and outputs a signature only"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/tx.go",
+          "what": "SignTxWithSignerAddress: multisigs only support LEGACY_AMINO_JSON; account number and sequence read from the multisig's state"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/tx/v1beta1/tx.proto",
+          "what": "SignerInfo (public_key optional once in state, mode_info, sequence), ModeInfo.Multi (bitarray + per-signer modes), TxBody timeout_height / unordered / timeout_timestamp"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/crypto/multisig/v1beta1/multisig.proto",
+          "what": "MultiSignature {signatures} and CompactBitArray"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/basic.go",
+          "what": "TxTimeoutHeightDecorator rejects a transaction past timeout_height or timeout_timestamp"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/baseapp/baseapp.go",
+          "what": "runTx writes the ante handler's state (fee, sequence) before running messages, so they stay spent if a message fails"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/tx/builder.go",
+          "what": "the fee payer is the first signer unless fee.payer is set"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.cosmos.network/sdk/latest/node/txs",
+          "what": "Cosmos SDK docs: tx multisign assumes SIGN_MODE_LEGACY_AMINO_JSON; a multisig with a SIGN_MODE_DIRECT signer is not yet possible; --generate-only"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.cosmos.network/cometbft/latest/docs/introduction/intro",
+          "what": "CometBFT: a block is committed when more than 2/3 of validators precommit it; safety holds while fewer than 1/3 are Byzantine"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/authz/keeper/keeper.go",
+          "what": "x/authz DispatchActions: a message whose signer is the granter runs on the grantee's authority when a grant exists"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/CHANGELOG.md",
+          "what": "cosmos-sdk v0.55.0 CHANGELOG: SIGN_MODE_TEXTUAL removed (#26456); ML-DSA-65 account keys with multisig support; unordered transactions (#23708)"
+        }
+      ],
+      "unverified": [
+        "Unordered transactions (cosmos-sdk v0.53+) with a multisig: the amino-json sign doc does carry unordered and timeout_timestamp, and the ante handler then requires sequence 0. But tx sign --multisig and tx multisign fill in the multisig's on-chain sequence when online, so an unordered multisig transaction appears to need --offline with sequence 0, and the chain must enable unordered transactions. Not confirmed end to end.",
+        "Whether wasmd hands the contract the msg bytes exactly as carried in the transaction body (not the re-sorted sign-doc form) was not checked in wasmd's keeper.",
+        "Which chains run x/wasm, and which wasmd version each runs, varies by chain; the message layout here is wasmd v0.70.3."
+      ]
+    },
+    {
+      "id": "cosmos.x-auth-multisig/change-signers",
+      "name": "Change the signers of a Cosmos multisig",
+      "area": "family",
+      "family": "cosmos.x-auth-multisig",
+      "status": "declared",
+      "summary": "x/auth cannot re-key an account, so new signers mean a new account. The room derives the new multisig, then k of the OLD keys sign a sweep of the old account's coins to the new address. Staking and other positions do not move with the sweep.",
+      "effect": {
+        "schema": "muster.effect.cosmos.x-auth-multisig.change-signers.v0",
+        "fields": [
+          {
+            "name": "from",
+            "means": "the old multisig account's address: the sweep's sender and fee payer"
+          },
+          {
+            "name": "new_threshold",
+            "means": "k for the new policy"
+          },
+          {
+            "name": "new_keys",
+            "means": "the new policy's member keys, in hashing order"
+          },
+          {
+            "name": "new_address",
+            "means": "the new account's address, derived as in derive-account"
+          },
+          {
+            "name": "sweep",
+            "means": "the coins moved: the old account's spendable balance, less the fee in the fee denom"
+          },
+          {
+            "name": "not_swept",
+            "means": "what one MsgSend does not move, listed for the room: delegations and unbonding entries, coins still locked by vesting, contract admin roles, grants the old account made"
+          },
+          {
+            "name": "fee",
+            "means": "the fee coins and the gas limit; the multisig pays (it is the first and only signer)"
+          },
+          {
+            "name": "memo",
+            "means": "the transaction memo; public once broadcast"
+          },
+          {
+            "name": "timeout_height",
+            "means": "optional: the last block height at which the transaction is valid; 0 means none"
+          },
+          {
+            "name": "chain_id",
+            "means": "the chain id every signature commits to"
+          },
+          {
+            "name": "account_number",
+            "means": "the multisig's account number, read from the chain"
+          },
+          {
+            "name": "sequence",
+            "means": "the multisig's sequence, read from the chain at propose; the transaction is valid only at this sequence"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n keys of the OLD policy (the old account's LegacyAminoPubKey threshold)",
+        "finality": "external",
+        "domain": "cosmos.amino-json.v1"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "cosmos:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "cosmos:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "cosmos-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "cosmos-rpc",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "cosmos-multisig-key-old",
+          "party": "contributor",
+          "class": "authority",
+          "target": "cosmos-multisig:<multisig address>",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "cosmos-multisig-key-new",
+          "party": "contributor",
+          "class": "authority",
+          "target": "cosmos-multisig:<new multisig address>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "new-multisig-address",
+          "party": "proposer",
+          "class": "address",
+          "target": "cosmos-multisig:<new multisig address>",
+          "field": "new_address"
+        },
+        {
+          "kind": "asset",
+          "name": "old-multisig-coins",
+          "party": "proposer",
+          "class": "asset",
+          "target": "cosmos-multisig:<multisig address>",
+          "field": "sweep"
+        }
+      ],
+      "touches": [
+        {
+          "target": "cosmos:*",
+          "mode": "write"
+        },
+        {
+          "target": "cosmos-multisig:<multisig address>",
+          "mode": "write"
+        },
+        {
+          "target": "cosmos-multisig:<new multisig address>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "payer",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "amount",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payee",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Runs derive-account for the new policy first; each new member confirms their own key. Then composes the sweep: MsgSend from the old account to the new address, of the old account's spendable balance less the fee. Muster would read the balances, the account number and the sequence, and record each read. It lists what the sweep does not move: delegations and unbonding entries, coins locked by vesting, contract admin roles (wasm MsgUpdateAdmin), grants the old account made. Each needs its own message from the old account, under the old policy.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "payer",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/docs/architecture/adr-034-account-rekeying.md",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/bank/keeper/send.go",
+            "https://github.com/CosmWasm/wasmd/blob/v0.70.3/proto/cosmwasm/wasm/v1/tx.proto",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/tx.go"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "k holders of the OLD keys each re-derive the sweep's sign doc and sign it. The new policy's keys sign nothing here. A member being removed is still an old signer and can still approve.",
+          "signs": "SHA-256 of the SIGN_MODE_LEGACY_AMINO_JSON sign doc, signed with the member's own secp256k1 key (ECDSA; a 64-byte r||s signature in low-S form). The sign doc is compact JSON with keys sorted at every level: {account_number, chain_id, fee: {amount: [{amount, denom}], gas[, granter][, payer]}, memo, msgs: [{type: cosmos-sdk/MsgSend, value: {amount: [{amount, denom}], from_address, to_address}}], sequence[, timeout_height][, timeout_timestamp][, unordered]}. Every uint64 is a decimal string. The bracketed fields are left out when empty or zero. account_number and sequence are the multisig account's, not the member's. chain_id is inside the bytes (explicit binding); so are the fee, the memo and the expiry. Not inside: any public key, the multisig policy, which other keys sign, or their signatures, so each member signs without knowing who else will.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/aminojson.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/internal/aminojsonpb/aminojson.proto",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/json_marshal.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/secp256k1/secp256k1_nocgo.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/cli/tx_sign.go"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "Once k signatures verify, any member assembles the transaction, as tx multisign does. The multisignature is a CompactBitArray of n bits marking which keys signed, in the multisig's key order, plus the signatures in that same order. The signer info carries the LegacyAminoPubKey (all n keys and k), ModeInfo.Multi with LEGACY_AMINO_JSON for each signer, and the sequence. The member broadcasts it through their own RPC. The RPC provider sees the signed transaction first. Validators and the mempool see it next, before inclusion. The chain's ante handler checks that all n keys fit TxSigLimit, that the sequence is the account's current one, that at least k bits are set, and that each signature verifies. It charges verification gas for every signature present, and deducts the fee from the multisig. The chain sees the old policy and the new address as the payee. It does not see the new policy: that stays off chain until the new account first signs.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payee",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/cli/tx_multisign.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/types/multisig/multisignature.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/tx/v1beta1/tx.proto",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/sigverify.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/bank/keeper/send.go"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "The coins sit at the new address; x/bank created that account if it was new. The old account still exists under the old policy: anything later sent to it can be spent by k of the old keys, a removed member's included. x/auth has no message to replace an account's public key (ADR-034 proposed one; it is still PROPOSED), so the address changes whenever the signers do.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "payee",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/auth/v1beta1/tx.proto",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/docs/architecture/adr-034-account-rekeying.md",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/baseapp/baseapp.go#L866-L921",
+            "https://docs.cosmos.network/cometbft/latest/docs/introduction/intro"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a new address that does not re-derive from the new k and the new ordered keys",
+          "why": "invariant 1: re-derive or refuse; a mistyped key or order sends everything to an account no one controls",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/multisig/multisig.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/client/keys/add.go"
+          ]
+        },
+        {
+          "what": "a sweep whose amount plus fee exceeds the spendable balance read at propose",
+          "why": "the chain deducts the fee in the ante handler before the MsgSend runs, and sends only unlocked coins; an overdrawn sweep fails after the fee and the sequence are spent",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/baseapp/baseapp.go#L866-L921",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/bank/keeper/send.go"
+          ]
+        },
+        {
+          "what": "marking the signer change complete while the old account still holds coins or positions",
+          "why": "invariant 7: the room's signer set changed, but the chain's did not. The old policy still controls the old address",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/docs/architecture/adr-034-account-rekeying.md",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/auth/v1beta1/tx.proto"
+          ]
+        },
+        {
+          "what": "a contribution whose signature does not verify over the sign doc muster re-derived, or that was made in any sign mode but LEGACY_AMINO_JSON",
+          "why": "invariant 1 (F-4): re-derive, refuse on mismatch. tx multisign supports only amino-json; SIGN_MODE_DIRECT is not supported for a multisig",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/aminojson.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/cli/tx_multisign.go",
+            "https://docs.cosmos.network/sdk/latest/node/txs"
+          ]
+        },
+        {
+          "what": "assembling or broadcasting once the multisig's sequence has moved past the one in the sign doc",
+          "why": "the chain's rule: a signature whose sequence is not the account's current sequence fails (ErrWrongSequence). Any other transaction from the multisig first voids every signature collected at the old sequence",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/sigverify.go#L369-L376"
+          ]
+        },
+        {
+          "what": "signing when account_number, sequence or chain_id reached the sign doc without a recorded read",
+          "why": "invariant 10: all three are chain state inside the signed bytes, read through the RPC",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/aminojson.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/tx.go"
+          ]
+        },
+        {
+          "what": "a signature from a key that is not in the multisig's key list",
+          "why": "the chain's rule: a signature is placed by its key's index in the policy, and tx multisign refuses a key outside it",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/types/multisig/multisignature.go",
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/multisig/multisig.go"
+          ]
+        },
+        {
+          "what": "submitting after the proposal's timeout_height",
+          "why": "invariant 2 (expiry): the chain rejects a transaction past its timeout height (ErrTxTimeoutHeight)",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/basic.go#L205-L216"
+          ]
+        },
+        {
+          "what": "a transaction body that carries extension options",
+          "why": "the amino-json sign mode refuses to produce sign bytes for such a body, so no member could sign it",
+          "evidence": [
+            "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/aminojson.go"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "There is no in-place re-key: the x/auth Msg service offers only MsgUpdateParams, so new signers mean a new address and a sweep.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Until the sweep settles, k of the old keys, a removed member's included, can still spend from the old account.",
+          "credibility": "exposed",
+          "party": "a removed member together with enough other old signers"
+        },
+        {
+          "claim": "Coins sent to the old address after the sweep stay under the old policy.",
+          "credibility": "exposed",
+          "party": "the old signers, if anyone keeps paying the old address"
+        },
+        {
+          "claim": "Staked coins do not move with a MsgSend: they must be unbonded first, which takes the chain's unbonding period.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The chain learns the new address when the sweep lands, but not the new keys until the new account first signs.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Every member signs the same bytes, and they name the chain (chain_id) and the account (account_number). A signature is worthless on another chain or for another account.",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/auth/v1beta1/tx.proto",
+          "what": "the x/auth Msg service: only UpdateParams; no message changes an account's public key"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/docs/architecture/adr-034-account-rekeying.md",
+          "what": "ADR-034 Account Rekeying: status PROPOSED; explains that a multisig account's key cannot be updated and that bonded coins need a full unbonding to move"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/bank/keeper/send.go",
+          "what": "x/bank: sends only unlocked coins (subUnlockedCoins) and creates the recipient account if missing"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/CosmWasm/wasmd/blob/v0.70.3/proto/cosmwasm/wasm/v1/tx.proto",
+          "what": "wasmd MsgUpdateAdmin: a contract admin role moves only by its own message"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/client/keys/add.go",
+          "what": "keys add --multisig: sort by address unless --nosort"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/aminojson.go",
+          "what": "the LEGACY_AMINO_JSON handler: AminoSignDoc = account_number, timeout_height, chain_id, sequence, memo, msgs, unordered, timeout_timestamp, fee{amount, gas, payer, granter}; refuses extension options"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/internal/aminojsonpb/aminojson.proto",
+          "what": "the AminoSignDoc / AminoSignFee proto: which fields are always written and which are omitted when empty (unordered and timeout_timestamp added in 0.53)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/tx/signing/aminojson/json_marshal.go",
+          "what": "the amino-JSON encoder: field names sorted, compact output, uint64/int64 written as quoted decimal strings"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/secp256k1/secp256k1_nocgo.go",
+          "what": "secp256k1 Sign: ECDSA over SHA-256 of the message, 64-byte R||S, low-S enforced on verify"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/sigverify.go",
+          "what": "x/auth ante: SetPubKey stores the multisig key on first spend, sequence must equal the account's, ValidateSigCount counts all n keys against TxSigLimit, verification gas per signature present"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/types/params.go",
+          "what": "x/auth defaults: TxSigLimit 7, SigVerifyCostSecp256k1 1000, TxSizeCostPerByte 10"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/crypto/keys/multisig/multisig.go",
+          "what": "LegacyAminoPubKey.VerifyMultisignature: bit array size must equal n, at least k bits set, each signature verified against the key at its index"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/cli/tx_multisign.go",
+          "what": "tx multisign: reads per-member signature files, verifies each, places it by key index, sets the multisig's account number and sequence from state; SIGN_MODE_DIRECT not supported"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/cli/tx_sign.go",
+          "what": "tx sign --multisig: a member signs on behalf of the multisig account and outputs a signature only"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/client/tx.go",
+          "what": "SignTxWithSignerAddress: multisigs only support LEGACY_AMINO_JSON; account number and sequence read from the multisig's state"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/tx/v1beta1/tx.proto",
+          "what": "SignerInfo (public_key optional once in state, mode_info, sequence), ModeInfo.Multi (bitarray + per-signer modes), TxBody timeout_height / unordered / timeout_timestamp"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/proto/cosmos/crypto/multisig/v1beta1/multisig.proto",
+          "what": "MultiSignature {signatures} and CompactBitArray"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/basic.go",
+          "what": "TxTimeoutHeightDecorator rejects a transaction past timeout_height or timeout_timestamp"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/baseapp/baseapp.go",
+          "what": "runTx writes the ante handler's state (fee, sequence) before running messages, so they stay spent if a message fails"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/tx/builder.go",
+          "what": "the fee payer is the first signer unless fee.payer is set"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.cosmos.network/sdk/latest/node/txs",
+          "what": "Cosmos SDK docs: tx multisign assumes SIGN_MODE_LEGACY_AMINO_JSON; a multisig with a SIGN_MODE_DIRECT signer is not yet possible; --generate-only"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.cosmos.network/cometbft/latest/docs/introduction/intro",
+          "what": "CometBFT: a block is committed when more than 2/3 of validators precommit it; safety holds while fewer than 1/3 are Byzantine"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/authz/keeper/keeper.go",
+          "what": "x/authz DispatchActions: a message whose signer is the granter runs on the grantee's authority when a grant exists"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/CHANGELOG.md",
+          "what": "cosmos-sdk v0.55.0 CHANGELOG: SIGN_MODE_TEXTUAL removed (#26456); ML-DSA-65 account keys with multisig support; unordered transactions (#23708)"
+        }
+      ],
+      "unverified": [
+        "Chain-specific account re-keying: ADR-034's MsgChangePubKey is not in x/auth v0.55, but whether any individual Cosmos chain ships its own account re-key module was not checked. (x/staking v0.55 added rotation of validator consensus keys, which does not re-key an account.)",
+        "The full list of positions a MsgSend does not move (distribution rewards and withdraw address, authz and feegrant grants, governance deposits, IBC-held state, validator operator roles) was not checked module by module.",
+        "Unordered transactions (cosmos-sdk v0.53+) with a multisig: the amino-json sign doc does carry unordered and timeout_timestamp, and the ante handler then requires sequence 0. But tx sign --multisig and tx multisign fill in the multisig's on-chain sequence when online, so an unordered multisig transaction appears to need --offline with sequence 0, and the chain must enable unordered transactions. Not confirmed end to end."
+      ]
+    }
+  ]
+}

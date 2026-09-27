@@ -1,0 +1,2349 @@
+{
+  "actions": [
+    {
+      "id": "wallet/balances",
+      "name": "See your accounts and balances",
+      "area": "wallet",
+      "status": "built",
+      "summary": "Lists this instance's accounts on every configured chain — the EVM account, the demo mock shielded chain, and a public and a private LEZ account — and reads each balance. Every balance is graded attested (the provider's word); a failed read is an error, never a zero. Nothing is agreed.",
+      "requirements": [
+        {
+          "kind": "infra",
+          "name": "rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "the EVM RPC in Settings (the hosted wallet is fixed to evm:31337)",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "lez-sequencer",
+          "party": "instance",
+          "class": "infra",
+          "target": "the LEZ sequencer, through lez_core (real core only)",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "chain:eip155:31337",
+          "mode": "read"
+        },
+        {
+          "target": "chain:lez:testnet",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "account address",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "timing",
+          "observer": "rpc-provider",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the member",
+          "does": "wallet_accounts lists each chain's accounts: EVM (evm:31337, the keystore's secp address), the mock chain (a demo, seeded with balances), and the LEZ (one public and one private account from lez_core; each LEZ row carries share, the address to hand out to be paid). A chain that cannot answer adds {chain, error} instead of emptying the list. wallet_balances reads every account × asset: EVM through eth_getBalance (ETH) on the user's RPC, the LEZ through lez_core's get_balance. Each entry carries grade: attested.",
+          "signs": "nothing",
+          "reveals": [
+            {
+              "field": "account address",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "timing",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/wallet_mock_test.nim",
+            "module/tests/wallet_lez_test.nim",
+            "module/tests/wallet_evm_test.nim",
+            "module/nim-lib/muster_module.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "reporting a failed or unanswerable read as a zero balance",
+          "why": "the read raises and the entry carries an error (the LEZ's empty-string convention included)",
+          "evidence": [
+            "module/tests/wallet_mock_test.nim",
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "what": "hanging on, or trusting, an unreachable RPC",
+          "why": "it raises WalletError",
+          "evidence": [
+            "module/tests/wallet_rpc_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "wallet_accounts",
+        "wallet_balances"
+      ],
+      "ui": "the Main.qml wallet card (each balance with its grade badge) and LezSend.qml",
+      "invariants": [
+        8
+      ],
+      "claims": [
+        {
+          "claim": "A failed read is reported as an error, never as a zero balance.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Balances are the provider's word (attested) unless checked against a state root.",
+          "credibility": "exposed"
+        },
+        {
+          "claim": "The RPC provider sees which addresses you read, and when.",
+          "credibility": "exposed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_mock_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_lez_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_evm_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_rpc_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_types_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/nim-lib/muster_module.nim",
+          "what": "moduleWallet: the chains the hosted wallet registers"
+        }
+      ],
+      "unverified": [
+        "The EVM balance read is tested only for parsing and for the unreachable-RPC failure; no test reads a live node.",
+        "With MUSTER_LEZ_REAL set, the first wallet call in each process creates a new public LEZ account (and registers it on chain) and a new private one: LezAdapter caches accounts in memory only (lez_adapter.nim accounts, lez_lp.nim createAccount). Read from source; not run."
+      ]
+    },
+    {
+      "id": "wallet/evm-send-eth",
+      "name": "Send ETH from your own account",
+      "area": "wallet",
+      "status": "partial",
+      "summary": "Sends ETH from this instance's account on the configured EVM chain. The hosted wallet_send is fixed to evm:31337 and submits with eth_sendTransaction, so the node signs for an unlocked account (anvil). Client-side EIP-155 signing through the keystore is built and proven, but the hosted wallet does not select it, so on any other node the hosted send fails. No UI sends ETH. Nobody else approves a wallet send, so there is no agreement field.",
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "chain:31337",
+          "party": "instance",
+          "class": "infra",
+          "target": "evm:31337 (fixed in the hosted wallet)",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "the EVM RPC in Settings",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "evm-account-key",
+          "party": "instance",
+          "class": "authority",
+          "target": "hosted path: an account the node has unlocked; client-signing path: the keystore's secp256k1 key",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "ETH",
+          "party": "instance",
+          "class": "asset",
+          "target": "evm:31337 ETH at the sending account",
+          "field": "raw"
+        },
+        {
+          "kind": "address",
+          "name": "payee",
+          "party": "counterparty",
+          "class": "address",
+          "target": "evm:31337 — a 20-byte address",
+          "field": "to"
+        }
+      ],
+      "touches": [
+        {
+          "target": "chain:eip155:31337",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "from",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "to",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "value",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "timing",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "from",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "to",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "value",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the sender",
+          "does": "wallet_estimate_fee(\"evm:31337\", to, \"ETH\", raw) returns the RPC's gas price × 21 000.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/src/wallet/evm_adapter.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "the sender",
+          "does": "wallet_send(\"evm:31337\", from, to, \"ETH\", raw): prepareTransfer builds {to, value}. Hosted path (fromUnlocked, what muster_module builds): eth_sendTransaction(from, to, value, gas 100 000) and the node signs. Client-signing path (fromUnlocked = false): read the nonce and gas price from the RPC, build an EIP-155 legacy transaction (gas 21 000), sign it through the keystore, and broadcast the raw bytes with eth_sendRawTransaction.",
+          "signs": "Hosted path: nothing — the node signs. Client-signing path: the keystore's secp256k1 key signs keccak256(RLP(nonce, gasPrice, gasLimit, to, value, data, chainId, 0, 0)); V = recid + 2·chainId + 35.",
+          "reveals": [
+            {
+              "field": "from",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "to",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "value",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/wallet_sign_test.nim",
+            "module/tests/coordinate_submit_anvil.nim",
+            "module/src/wallet/evm_adapter.nim",
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "the chain",
+          "does": "The chain includes the transaction; from, to and value become public.",
+          "signs": "nothing more",
+          "reveals": [
+            {
+              "field": "from",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "to",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "value",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "module/src/wallet/evm_adapter.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "the sender",
+          "does": "wallet_finality(\"evm:31337\", txHash) reads the receipt: status 1 is final, 0 failed, no receipt pending. Observed, never asserted.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/coordinate_submit_anvil.nim",
+            "module/src/wallet/evm_adapter.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an asset symbol the wallet does not hold",
+          "why": "{error: unknown asset}",
+          "evidence": [
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "what": "an unreachable RPC",
+          "why": "it raises WalletError; nothing is reported as sent",
+          "evidence": [
+            "module/tests/wallet_rpc_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "wallet_estimate_fee",
+        "wallet_send",
+        "wallet_finality"
+      ],
+      "ui": "headless only",
+      "invariants": [
+        8
+      ],
+      "claims": [
+        {
+          "claim": "On the hosted path the node, not the keystore, signs: the RPC must hold the key.",
+          "credibility": "exposed"
+        },
+        {
+          "claim": "On the client-signing path the key never leaves the keystore, and the signed bytes match the canonical EIP-155 vector.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The RPC provider sees the whole transaction before the chain does.",
+          "credibility": "exposed"
+        },
+        {
+          "claim": "A legacy transaction binds the chain id and the nonce but carries no expiry.",
+          "credibility": "exposed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_sign_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_evm_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_rpc_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/coordinate_submit_anvil.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/evm_adapter.nim",
+          "what": "submit: the unlocked path and the client-signing path"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/evm_sign.nim",
+          "what": "signLegacyTransfer through the keystore seam"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/nim-lib/muster_module.nim",
+          "what": "moduleWallet: newEvmAdapter(\"evm:31337\", rpc) — fromUnlocked defaults to true"
+        }
+      ],
+      "unverified": [
+        "No test sends a plain ETH transfer. The client-signing path is proven by the EIP-155 vector (wallet_sign_test.nim) and live on anvil only as the Safe settlement relayer's execTransaction (coordinate_submit_anvil.nim step 5).",
+        "That the hosted wallet selects the unlocked path is read from source (muster_module.nim moduleWallet)."
+      ]
+    },
+    {
+      "id": "wallet/evm-send-erc20",
+      "name": "Send an ERC-20 token from your own account",
+      "area": "wallet",
+      "status": "partial",
+      "summary": "Sends an ERC-20 token by calling transfer(address,uint256) on the token contract. The adapter builds the calldata and reads balanceOf, and the transaction goes out as in wallet/evm-send-eth. But the hosted wallet registers no token, so wallet_send with a token symbol returns an unknown-asset error today. Nobody else approves a wallet send, so there is no agreement field.",
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "chain:31337",
+          "party": "instance",
+          "class": "infra",
+          "target": "evm:31337 (fixed in the hosted wallet)",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "the EVM RPC in Settings",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "evm-account-key",
+          "party": "instance",
+          "class": "authority",
+          "target": "hosted path: an account the node has unlocked; client-signing path: the keystore's secp256k1 key",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "token",
+          "party": "instance",
+          "class": "asset",
+          "target": "an ERC-20 registered with the adapter (none is, today)",
+          "field": "raw"
+        },
+        {
+          "kind": "address",
+          "name": "payee",
+          "party": "counterparty",
+          "class": "address",
+          "target": "evm:31337 — a 20-byte address",
+          "field": "to"
+        }
+      ],
+      "touches": [
+        {
+          "target": "erc20:<token contract>",
+          "mode": "write"
+        },
+        {
+          "target": "chain:eip155:31337",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "from",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "token",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "to",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "amount",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "from",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "token",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "to",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "amount",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the sender",
+          "does": "prepareTransfer builds {to: the token contract, data: 0xa9059cbb ‖ the payee as a 32-byte word ‖ the amount as a 32-byte word}. The fee estimate uses 65 000 gas. Submission is as in wallet/evm-send-eth: eth_sendTransaction on the hosted path (gas 120 000), or an EIP-155 transaction signed through the keystore (gas 65 000).",
+          "signs": "Hosted path: nothing — the node signs. Client-signing path: the keystore's secp256k1 key signs the EIP-155 signing hash of the transaction carrying that calldata.",
+          "reveals": [
+            {
+              "field": "to",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "amount",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/wallet_evm_test.nim",
+            "module/tests/wallet_sign_test.nim",
+            "module/src/wallet/evm_adapter.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "the chain",
+          "does": "The chain includes the call; the token, payee and amount are in public calldata and the Transfer event.",
+          "signs": "nothing more",
+          "reveals": [
+            {
+              "field": "to",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "module/src/wallet/evm_adapter.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "the sender",
+          "does": "wallet_finality reads the receipt status, as for ETH.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/src/wallet/evm_adapter.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a token symbol the hosted wallet has not registered — every token, today",
+          "why": "{error: unknown asset}",
+          "evidence": [
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "what": "a payee that is not a 20-byte address",
+          "why": "the calldata builder raises WalletError",
+          "evidence": [
+            "module/src/wallet/evm_adapter.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "wallet_estimate_fee",
+        "wallet_send",
+        "wallet_finality",
+        "wallet_balances"
+      ],
+      "ui": "headless only",
+      "invariants": [
+        8
+      ],
+      "claims": [
+        {
+          "claim": "The transfer calldata is the standard ERC-20 encoding.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The payee and amount are in public calldata; every chain observer reads them.",
+          "credibility": "exposed"
+        },
+        {
+          "claim": "On the hosted path the node, not the keystore, would sign.",
+          "credibility": "exposed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_evm_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_sign_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/evm_adapter.nim",
+          "what": "erc20TransferData / erc20BalanceOfData / prepareTransfer"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/nim-lib/muster_module.nim",
+          "what": "moduleWallet registers the EVM adapter with no tokens"
+        }
+      ],
+      "unverified": [
+        "No test submits an ERC-20 transfer; wallet_evm_test.nim checks the calldata only."
+      ]
+    },
+    {
+      "id": "wallet/evm-verified-balance",
+      "name": "Read a balance verified against a state root",
+      "area": "wallet",
+      "status": "partial",
+      "summary": "Upgrades a balance from attested to verified-locally (F-10): the untrusted RPC's eth_getProof is checked against a state root, in process, with nim-eth's verifyMptProof — the Nimbus verified-proxy core. The check is built and tested. The trusted state root is the caller's to supply: the beacon light-client sidecar that would make it trustless is not built. The hosted method is fixed to evm:31337 and nothing in the UI calls it. Nothing is agreed.",
+      "requirements": [
+        {
+          "kind": "infra",
+          "name": "rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "an EVM RPC that serves eth_getProof",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "trusted-state-root",
+          "party": "instance",
+          "class": "infra",
+          "target": "a consensus-verified execution state root — the beacon light-client sidecar is not built; the caller supplies it",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "chain:eip155:31337",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "account address",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "timing",
+          "observer": "rpc-provider",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the member",
+          "does": "wallet_verified_balance(account, stateRoot) fetches eth_getProof(account, latest) from the RPC and verifies the account's Merkle-Patricia proof against stateRoot. A valid proof returns {display, raw, grade: verified-locally}. A proven-absent account is a verified zero. A proof that does not verify returns {error}.",
+          "signs": "nothing",
+          "reveals": [
+            {
+              "field": "account address",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/wallet_verify_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a provider's balance that does not match the state root",
+          "why": "the proof fails and the read raises; the number is never trusted",
+          "evidence": [
+            "module/tests/wallet_verify_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "wallet_verified_balance"
+      ],
+      "ui": "headless only (the Main.qml wallet card has a 'verified' badge, but wallet_balances always returns attested)",
+      "invariants": [
+        8
+      ],
+      "claims": [
+        {
+          "claim": "A provider whose answer does not match the state root is refused, never trusted.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A verified balance is only as trustworthy as the state root the caller supplies.",
+          "credibility": "motivational"
+        },
+        {
+          "claim": "The RPC provider sees which address you ask about.",
+          "credibility": "exposed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_verify_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/verify.nim",
+          "what": "verifyAccount / verifyAccountFields over nim-eth verifyMptProof"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/evm_adapter.nim",
+          "what": "verifiedBalance: eth_getProof then verify"
+        }
+      ],
+      "unverified": [
+        "wallet_verify_test.nim verifies proofs from a trie it builds itself; no test fetches eth_getProof from a node."
+      ]
+    },
+    {
+      "id": "wallet/lez-setup",
+      "name": "Set up and fund a LEZ account (fallback)",
+      "area": "wallet",
+      "status": "partial",
+      "summary": "Ensures this instance has a public LEZ account, activated on chain, and optionally funds it from the pinata faucet, driving lez_core directly (exo-44b). It is the fallback: delegating setup to the LEZ Wallet App is preferred when the Basecamp broker exists. It runs on the deterministic FakeLezCore by default. The real lez_core path (LpLezCore) is used only when MUSTER_LEZ_REAL is set and lez_core is loaded, and it falls back to the fake if lez_core cannot be reached. Only the fake path is exercised by tests; the live send against testnet.lez.logos.co has not been run. Nobody else approves a wallet send, so there is no agreement field.",
+      "requirements": [
+        {
+          "kind": "module",
+          "name": "lez_core",
+          "party": "instance",
+          "class": "capability",
+          "target": "lez_core (only when MUSTER_LEZ_REAL is set)",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "lez-sequencer",
+          "party": "instance",
+          "class": "infra",
+          "target": "the sequencer lez_core's wallet config names",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "module:lez_core.create_account_public",
+          "mode": "write"
+        },
+        {
+          "target": "module:lez_core.register_public_account",
+          "mode": "write"
+        },
+        {
+          "target": "module:lez_core.claim_pinata",
+          "mode": "write"
+        },
+        {
+          "target": "chain:lez:testnet",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "public account id",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "public account id",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the member",
+          "does": "wallet_lez_setup(pinataId) ensures a public account (create_account_public, then register_public_account — activation on chain, because the sequencer silently drops transactions to an inactive account) and a private one. With a pinata id it reads the faucet's challenge (difficulty and seed), solves the proof of work locally, and calls claim_pinata to fund the public account. Returns {account, state: met | missing | unknown, detail}. The keys stay in lez_core.",
+          "signs": "lez_core signs the activation and the claim inside its own wallet; muster's keystore signs nothing.",
+          "reveals": [
+            {
+              "field": "public account id",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_provision_test.nim",
+            "module/tests/wallet_lez_encoding_test.nim",
+            "module/tests/lez_readiness_test.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "the zone",
+          "does": "The activation and the faucet credit land when a block commits (minutes); the public account id is on the public record.",
+          "signs": "nothing more",
+          "reveals": [
+            {
+              "field": "public account id",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "module/src/wallet/lez_lp.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a failed faucet claim reported as funded",
+          "why": "it raises; never a false receipt",
+          "evidence": [
+            "module/tests/lez_provision_test.nim"
+          ]
+        },
+        {
+          "what": "minting a new account on each call within one process",
+          "why": "the account is reused",
+          "evidence": [
+            "module/tests/lez_provision_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "wallet_lez_setup"
+      ],
+      "ui": "headless only",
+      "invariants": [
+        8
+      ],
+      "claims": [
+        {
+          "claim": "A faucet failure is an error, never a false receipt.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Activation and the faucet claim put the public account id on the public record.",
+          "credibility": "exposed"
+        },
+        {
+          "claim": "Letting the LEZ Wallet App set up the account is preferred; this path exists so muster is not blocked without it.",
+          "credibility": "not-applicable"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/lez_provision_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_lez_encoding_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_readiness_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_adapter.nim",
+          "what": "provision"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_lp.nim",
+          "what": "createAccount / claimPinata over lez_core"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/docs/design/lez-wallet-delegation.md",
+          "what": "why delegation to the LEZ Wallet App is preferred"
+        }
+      ],
+      "unverified": [
+        "Activation, the local proof of work against the live faucet and the on-chain timing are read from lez_lp.nim and lez-adapter.md; tests run the fake core."
+      ]
+    },
+    {
+      "id": "wallet/lez-public",
+      "name": "Send LEZ publicly (public → public)",
+      "area": "wallet",
+      "status": "partial",
+      "summary": "Moves LEZ between two public accounts. Everything is on the public record: amount, payer and payee. It runs on the deterministic FakeLezCore by default. The real lez_core path (LpLezCore) is used only when MUSTER_LEZ_REAL is set and lez_core is loaded, and it falls back to the fake if lez_core cannot be reached. Only the fake path is exercised by tests; the live send against testnet.lez.logos.co has not been run. Nobody else approves a wallet send, so there is no agreement field.",
+      "requirements": [
+        {
+          "kind": "module",
+          "name": "lez_core",
+          "party": "instance",
+          "class": "capability",
+          "target": "lez_core (only when MUSTER_LEZ_REAL is set)",
+          "field": ""
+        },
+        {
+          "kind": "environment",
+          "name": "lez:testnet",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez:testnet",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "lez-sequencer",
+          "party": "instance",
+          "class": "infra",
+          "target": "the sequencer lez_core's own wallet config names (default https://testnet.lez.logos.co; muster does not write that config)",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "lez-account-key",
+          "party": "instance",
+          "class": "authority",
+          "target": "the source account's key, held inside lez_core — muster's keystore does not sign LEZ transfers",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "LEZ",
+          "party": "instance",
+          "class": "asset",
+          "target": "lez:testnet LEZ at the source account",
+          "field": "raw"
+        },
+        {
+          "kind": "address",
+          "name": "payee",
+          "party": "counterparty",
+          "class": "address",
+          "target": "lez:testnet — a public account id",
+          "field": "to"
+        }
+      ],
+      "touches": [
+        {
+          "target": "module:lez_core.transfer_public",
+          "mode": "write"
+        },
+        {
+          "target": "chain:lez:testnet",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "amount",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "amount",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payer",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payee",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "payee",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "timing",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "amount",
+          "observer": "target-module",
+          "when": "act"
+        },
+        {
+          "field": "payer",
+          "observer": "target-module",
+          "when": "act"
+        },
+        {
+          "field": "payee",
+          "observer": "target-module",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the payer",
+          "does": "wallet_estimate_fee(\"lez:testnet\", to, \"LEZ\", raw) previews the send before anything is committed: the rail and what it discloses {amount, payer, payee}, and a fee (a flat 0.001 LEZ in the model; the note says a shielded send pays a proof cost and takes minutes).",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "the payer",
+          "does": "wallet_send(\"lez:testnet\", from, to, \"LEZ\", raw). The rail follows from the pair: a public source and a public account id give the public rail. prepareTransfer builds {form, to, discloses}; submit calls lez_core's transfer_public with the amount as 16-byte little-endian hex. The result reports the rail and what it discloses.",
+          "signs": "lez_core signs inside its own wallet; muster's keystore signs nothing.",
+          "reveals": [
+            {
+              "field": "amount",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "payer",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "payee",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "amount",
+              "observer": "target-module"
+            },
+            {
+              "field": "payer",
+              "observer": "target-module"
+            },
+            {
+              "field": "payee",
+              "observer": "target-module"
+            }
+          ],
+          "evidence": [
+            "module/tests/wallet_lez_test.nim",
+            "module/tests/wallet_lez_encoding_test.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "lez_core and the zone",
+          "does": "On the real core the transfer runs in the background (lp_invoke_async, 900 s budget) so the module keeps dispatching; a shielded proof was measured at 6 min 41 s. The sequencer includes the transaction and the public record gains the amount, the payer and the payee.",
+          "signs": "nothing more",
+          "reveals": [
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payee",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "module/src/wallet/lez_lp.nim",
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "the payer",
+          "does": "wallet_finality(\"lez:testnet\", txId) polls; it never asserts. On the fake core a public transfer is final at once. On the real core it too runs async, and finality polls lez_core until the result lands.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a failed transfer read as sent — an envelope with success:false, an empty or unparseable one",
+          "why": "submit raises WalletError; never a false receipt",
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "what": "sending more than the source account holds",
+          "why": "the transfer raises",
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "what": "an empty destination, or a shielded destination not of the form priv:<npk>:<vpk>",
+          "why": "prepareTransfer raises",
+          "evidence": [
+            "module/src/wallet/lez_adapter.nim"
+          ]
+        },
+        {
+          "what": "a second proving transfer while one is in flight (real core only)",
+          "why": "lez_core runs one proof at a time: {error: a LEZ transfer is already proving — wait for it}",
+          "evidence": [
+            "module/src/wallet/lez_lp.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "wallet_estimate_fee",
+        "wallet_send",
+        "wallet_finality"
+      ],
+      "ui": "LezSend.qml (Main.qml 'lez' view): preview, then send",
+      "invariants": [
+        8
+      ],
+      "claims": [
+        {
+          "claim": "Amount, payer and payee all go on the public record.",
+          "credibility": "exposed"
+        },
+        {
+          "claim": "A failed transfer is an error, never a receipt.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "lez_core, which holds the keys and builds the transfer, sees amount, payer and payee.",
+          "credibility": "exposed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_lez_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_lez_encoding_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_adapter.nim",
+          "what": "the rails, the per-rail disclosure, delayed finality"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_core.nim",
+          "what": "disclosureOf: the education square"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_lp.nim",
+          "what": "LpLezCore: the real lez_core over lp_*, async proving, 900 s budget"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/docs/design/lez-adapter.md",
+          "what": "the LEZ model, the rails table, receive-by-scan, Mode A and Mode B"
+        }
+      ],
+      "unverified": [
+        "The per-rail disclosure is the LEZ's property as the demo's rails and the LEZ docs describe it; wallet_lez_test.nim checks muster's table, not the chain.",
+        "The async ~7-minute proof, the 900 s budget and the one-proof-at-a-time refusal are read from lez_lp.nim; LpLezCore links lp_* and is not run by any test.",
+        "What the sequencer sees is inferred from it receiving the transaction; no test observes it."
+      ]
+    },
+    {
+      "id": "wallet/lez-shield",
+      "name": "Shield LEZ (public → private)",
+      "area": "wallet",
+      "status": "partial",
+      "summary": "Moves LEZ from your public account to someone's shielded key node. The payee is kept off the public record; the amount and the payer are not. It runs on the deterministic FakeLezCore by default. The real lez_core path (LpLezCore) is used only when MUSTER_LEZ_REAL is set and lez_core is loaded, and it falls back to the fake if lez_core cannot be reached. Only the fake path is exercised by tests; the live send against testnet.lez.logos.co has not been run. Nobody else approves a wallet send, so there is no agreement field.",
+      "requirements": [
+        {
+          "kind": "module",
+          "name": "lez_core",
+          "party": "instance",
+          "class": "capability",
+          "target": "lez_core (only when MUSTER_LEZ_REAL is set)",
+          "field": ""
+        },
+        {
+          "kind": "environment",
+          "name": "lez:testnet",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez:testnet",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "lez-sequencer",
+          "party": "instance",
+          "class": "infra",
+          "target": "the sequencer lez_core's own wallet config names (default https://testnet.lez.logos.co; muster does not write that config)",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "lez-account-key",
+          "party": "instance",
+          "class": "authority",
+          "target": "the source account's key, held inside lez_core — muster's keystore does not sign LEZ transfers",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "LEZ",
+          "party": "instance",
+          "class": "asset",
+          "target": "lez:testnet LEZ at the source account",
+          "field": "raw"
+        },
+        {
+          "kind": "address",
+          "name": "payee",
+          "party": "counterparty",
+          "class": "address",
+          "target": "lez:testnet — a shielded key node priv:<npk>:<vpk>",
+          "field": "to"
+        }
+      ],
+      "touches": [
+        {
+          "target": "module:lez_core.transfer_shielded",
+          "mode": "write"
+        },
+        {
+          "target": "chain:lez:testnet",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "amount",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "amount",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payer",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "timing",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "amount",
+          "observer": "target-module",
+          "when": "act"
+        },
+        {
+          "field": "payer",
+          "observer": "target-module",
+          "when": "act"
+        },
+        {
+          "field": "payee",
+          "observer": "target-module",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the payer",
+          "does": "wallet_estimate_fee(\"lez:testnet\", to, \"LEZ\", raw) previews the send before anything is committed: the rail and what it discloses {amount, payer, payee}, and a fee (a flat 0.001 LEZ in the model; the note says a shielded send pays a proof cost and takes minutes).",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "the payer",
+          "does": "wallet_send(\"lez:testnet\", from, to, \"LEZ\", raw). The rail follows from the pair: a public source and a shielded key node (priv:<npk>:<vpk>) give the shield rail. prepareTransfer builds {form, to, discloses}; submit calls lez_core's transfer_shielded with the amount as 16-byte little-endian hex. The result reports the rail and what it discloses.",
+          "signs": "lez_core signs inside its own wallet and proves the transfer; muster's keystore signs nothing.",
+          "reveals": [
+            {
+              "field": "amount",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "payer",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "amount",
+              "observer": "target-module"
+            },
+            {
+              "field": "payer",
+              "observer": "target-module"
+            },
+            {
+              "field": "payee",
+              "observer": "target-module"
+            }
+          ],
+          "evidence": [
+            "module/tests/wallet_lez_test.nim",
+            "module/tests/wallet_lez_encoding_test.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "lez_core and the zone",
+          "does": "On the real core the transfer runs in the background (lp_invoke_async, 900 s budget) so the module keeps dispatching; a shielded proof was measured at 6 min 41 s. The sequencer includes the transaction and the public record gains the amount and the payer, not the payee.",
+          "signs": "nothing more",
+          "reveals": [
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "module/src/wallet/lez_lp.nim",
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "the payer",
+          "does": "wallet_finality(\"lez:testnet\", txId) polls; it never asserts. A shielded transfer is delayed: the first poll reports pending while the note is proved and scanned in; it is final only once settled.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a failed transfer read as sent — an envelope with success:false, an empty or unparseable one",
+          "why": "submit raises WalletError; never a false receipt",
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "what": "sending more than the source account holds",
+          "why": "the transfer raises",
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "what": "an empty destination, or a shielded destination not of the form priv:<npk>:<vpk>",
+          "why": "prepareTransfer raises",
+          "evidence": [
+            "module/src/wallet/lez_adapter.nim"
+          ]
+        },
+        {
+          "what": "a second proving transfer while one is in flight (real core only)",
+          "why": "lez_core runs one proof at a time: {error: a LEZ transfer is already proving — wait for it}",
+          "evidence": [
+            "module/src/wallet/lez_lp.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "wallet_estimate_fee",
+        "wallet_send",
+        "wallet_finality"
+      ],
+      "ui": "LezSend.qml (Main.qml 'lez' view): preview, then send",
+      "invariants": [
+        8
+      ],
+      "claims": [
+        {
+          "claim": "The payee is not named on the public record.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The amount and the payer are public.",
+          "credibility": "exposed"
+        },
+        {
+          "claim": "A failed transfer is an error, never a receipt.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "lez_core, which holds the keys and builds the transfer, sees amount, payer and payee.",
+          "credibility": "exposed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_lez_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_lez_encoding_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_adapter.nim",
+          "what": "the rails, the per-rail disclosure, delayed finality"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_core.nim",
+          "what": "disclosureOf: the education square"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_lp.nim",
+          "what": "LpLezCore: the real lez_core over lp_*, async proving, 900 s budget"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/docs/design/lez-adapter.md",
+          "what": "the LEZ model, the rails table, receive-by-scan, Mode A and Mode B"
+        }
+      ],
+      "unverified": [
+        "The per-rail disclosure is the LEZ's property as the demo's rails and the LEZ docs describe it; wallet_lez_test.nim checks muster's table, not the chain.",
+        "The async ~7-minute proof, the 900 s budget and the one-proof-at-a-time refusal are read from lez_lp.nim; LpLezCore links lp_* and is not run by any test.",
+        "What the sequencer sees is inferred from it receiving the transaction; no test observes it."
+      ]
+    },
+    {
+      "id": "wallet/lez-deshield",
+      "name": "Deshield LEZ (private → public)",
+      "area": "wallet",
+      "status": "partial",
+      "summary": "Moves LEZ from your shielded account to a public account id. The payer is kept off the public record; the amount and the payee are not. It runs on the deterministic FakeLezCore by default. The real lez_core path (LpLezCore) is used only when MUSTER_LEZ_REAL is set and lez_core is loaded, and it falls back to the fake if lez_core cannot be reached. Only the fake path is exercised by tests; the live send against testnet.lez.logos.co has not been run. Nobody else approves a wallet send, so there is no agreement field.",
+      "requirements": [
+        {
+          "kind": "module",
+          "name": "lez_core",
+          "party": "instance",
+          "class": "capability",
+          "target": "lez_core (only when MUSTER_LEZ_REAL is set)",
+          "field": ""
+        },
+        {
+          "kind": "environment",
+          "name": "lez:testnet",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez:testnet",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "lez-sequencer",
+          "party": "instance",
+          "class": "infra",
+          "target": "the sequencer lez_core's own wallet config names (default https://testnet.lez.logos.co; muster does not write that config)",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "lez-account-key",
+          "party": "instance",
+          "class": "authority",
+          "target": "the source account's key, held inside lez_core — muster's keystore does not sign LEZ transfers",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "LEZ",
+          "party": "instance",
+          "class": "asset",
+          "target": "lez:testnet LEZ at the source account",
+          "field": "raw"
+        },
+        {
+          "kind": "address",
+          "name": "payee",
+          "party": "counterparty",
+          "class": "address",
+          "target": "lez:testnet — a public account id",
+          "field": "to"
+        }
+      ],
+      "touches": [
+        {
+          "target": "module:lez_core.transfer_deshielded",
+          "mode": "write"
+        },
+        {
+          "target": "chain:lez:testnet",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "amount",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "amount",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payee",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "payee",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "timing",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "amount",
+          "observer": "target-module",
+          "when": "act"
+        },
+        {
+          "field": "payer",
+          "observer": "target-module",
+          "when": "act"
+        },
+        {
+          "field": "payee",
+          "observer": "target-module",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the payer",
+          "does": "wallet_estimate_fee(\"lez:testnet\", to, \"LEZ\", raw) previews the send before anything is committed: the rail and what it discloses {amount, payer, payee}, and a fee (a flat 0.001 LEZ in the model; the note says a shielded send pays a proof cost and takes minutes).",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "the payer",
+          "does": "wallet_send(\"lez:testnet\", from, to, \"LEZ\", raw). The rail follows from the pair: a shielded source and a public account id give the deshield rail. prepareTransfer builds {form, to, discloses}; submit calls lez_core's transfer_deshielded with the amount as 16-byte little-endian hex. The result reports the rail and what it discloses.",
+          "signs": "lez_core signs inside its own wallet and proves the transfer; muster's keystore signs nothing.",
+          "reveals": [
+            {
+              "field": "amount",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "payee",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "amount",
+              "observer": "target-module"
+            },
+            {
+              "field": "payer",
+              "observer": "target-module"
+            },
+            {
+              "field": "payee",
+              "observer": "target-module"
+            }
+          ],
+          "evidence": [
+            "module/tests/wallet_lez_test.nim",
+            "module/tests/wallet_lez_encoding_test.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "lez_core and the zone",
+          "does": "On the real core the transfer runs in the background (lp_invoke_async, 900 s budget) so the module keeps dispatching; a shielded proof was measured at 6 min 41 s. The sequencer includes the transaction and the public record gains the amount and the payee, not the payer.",
+          "signs": "nothing more",
+          "reveals": [
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payee",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "module/src/wallet/lez_lp.nim",
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "the payer",
+          "does": "wallet_finality(\"lez:testnet\", txId) polls; it never asserts. On the fake core a deshield lands public and is final at once. On the real core it proves first (minutes) and finality polls lez_core until the proof lands.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a failed transfer read as sent — an envelope with success:false, an empty or unparseable one",
+          "why": "submit raises WalletError; never a false receipt",
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "what": "sending more than the source account holds",
+          "why": "the transfer raises",
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "what": "an empty destination, or a shielded destination not of the form priv:<npk>:<vpk>",
+          "why": "prepareTransfer raises",
+          "evidence": [
+            "module/src/wallet/lez_adapter.nim"
+          ]
+        },
+        {
+          "what": "a second proving transfer while one is in flight (real core only)",
+          "why": "lez_core runs one proof at a time: {error: a LEZ transfer is already proving — wait for it}",
+          "evidence": [
+            "module/src/wallet/lez_lp.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "wallet_estimate_fee",
+        "wallet_send",
+        "wallet_finality"
+      ],
+      "ui": "LezSend.qml (Main.qml 'lez' view): preview, then send",
+      "invariants": [
+        8
+      ],
+      "claims": [
+        {
+          "claim": "The payer is not named on the public record.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The amount and the payee are public.",
+          "credibility": "exposed"
+        },
+        {
+          "claim": "A failed transfer is an error, never a receipt.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "lez_core, which holds the keys and builds the transfer, sees amount, payer and payee.",
+          "credibility": "exposed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_lez_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_lez_encoding_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_adapter.nim",
+          "what": "the rails, the per-rail disclosure, delayed finality"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_core.nim",
+          "what": "disclosureOf: the education square"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_lp.nim",
+          "what": "LpLezCore: the real lez_core over lp_*, async proving, 900 s budget"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/docs/design/lez-adapter.md",
+          "what": "the LEZ model, the rails table, receive-by-scan, Mode A and Mode B"
+        }
+      ],
+      "unverified": [
+        "The per-rail disclosure is the LEZ's property as the demo's rails and the LEZ docs describe it; wallet_lez_test.nim checks muster's table, not the chain.",
+        "The async ~7-minute proof, the 900 s budget and the one-proof-at-a-time refusal are read from lez_lp.nim; LpLezCore links lp_* and is not run by any test.",
+        "What the sequencer sees is inferred from it receiving the transaction; no test observes it."
+      ]
+    },
+    {
+      "id": "wallet/lez-private",
+      "name": "Send LEZ privately (private → private)",
+      "area": "wallet",
+      "status": "partial",
+      "summary": "Moves LEZ from your shielded account to someone's shielded key node. None of amount, payer or payee reaches the public record. It runs on the deterministic FakeLezCore by default. The real lez_core path (LpLezCore) is used only when MUSTER_LEZ_REAL is set and lez_core is loaded, and it falls back to the fake if lez_core cannot be reached. Only the fake path is exercised by tests; the live send against testnet.lez.logos.co has not been run. Nobody else approves a wallet send, so there is no agreement field.",
+      "requirements": [
+        {
+          "kind": "module",
+          "name": "lez_core",
+          "party": "instance",
+          "class": "capability",
+          "target": "lez_core (only when MUSTER_LEZ_REAL is set)",
+          "field": ""
+        },
+        {
+          "kind": "environment",
+          "name": "lez:testnet",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez:testnet",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "lez-sequencer",
+          "party": "instance",
+          "class": "infra",
+          "target": "the sequencer lez_core's own wallet config names (default https://testnet.lez.logos.co; muster does not write that config)",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "lez-account-key",
+          "party": "instance",
+          "class": "authority",
+          "target": "the source account's key, held inside lez_core — muster's keystore does not sign LEZ transfers",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "LEZ",
+          "party": "instance",
+          "class": "asset",
+          "target": "lez:testnet LEZ at the source account",
+          "field": "raw"
+        },
+        {
+          "kind": "address",
+          "name": "payee",
+          "party": "counterparty",
+          "class": "address",
+          "target": "lez:testnet — a shielded key node priv:<npk>:<vpk>",
+          "field": "to"
+        }
+      ],
+      "touches": [
+        {
+          "target": "module:lez_core.transfer_private",
+          "mode": "write"
+        },
+        {
+          "target": "chain:lez:testnet",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "timing",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "amount",
+          "observer": "target-module",
+          "when": "act"
+        },
+        {
+          "field": "payer",
+          "observer": "target-module",
+          "when": "act"
+        },
+        {
+          "field": "payee",
+          "observer": "target-module",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the payer",
+          "does": "wallet_estimate_fee(\"lez:testnet\", to, \"LEZ\", raw) previews the send before anything is committed: the rail and what it discloses {amount, payer, payee}, and a fee (a flat 0.001 LEZ in the model; the note says a shielded send pays a proof cost and takes minutes).",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "the payer",
+          "does": "wallet_send(\"lez:testnet\", from, to, \"LEZ\", raw). The rail follows from the pair: a shielded source and a shielded key node (priv:<npk>:<vpk>) give the private rail. prepareTransfer builds {form, to, discloses}; submit calls lez_core's transfer_private with the amount as 16-byte little-endian hex. The result reports the rail and what it discloses.",
+          "signs": "lez_core signs inside its own wallet and proves the transfer; muster's keystore signs nothing.",
+          "reveals": [
+            {
+              "field": "amount",
+              "observer": "target-module"
+            },
+            {
+              "field": "payer",
+              "observer": "target-module"
+            },
+            {
+              "field": "payee",
+              "observer": "target-module"
+            }
+          ],
+          "evidence": [
+            "module/tests/wallet_lez_test.nim",
+            "module/tests/wallet_lez_encoding_test.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "lez_core and the zone",
+          "does": "On the real core the transfer runs in the background (lp_invoke_async, 900 s budget) so the module keeps dispatching; a shielded proof was measured at 6 min 41 s. The sequencer includes the transaction and the public record gains none of amount, payer or payee.",
+          "signs": "nothing more",
+          "reveals": [],
+          "evidence": [
+            "module/src/wallet/lez_lp.nim",
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "the payer",
+          "does": "wallet_finality(\"lez:testnet\", txId) polls; it never asserts. A private transfer is delayed: pending while the note is proved and scanned in, final only once settled. The recipient finds the note by scanning (wallet/lez-receive).",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a failed transfer read as sent — an envelope with success:false, an empty or unparseable one",
+          "why": "submit raises WalletError; never a false receipt",
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "what": "sending more than the source account holds",
+          "why": "the transfer raises",
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "what": "an empty destination, or a shielded destination not of the form priv:<npk>:<vpk>",
+          "why": "prepareTransfer raises",
+          "evidence": [
+            "module/src/wallet/lez_adapter.nim"
+          ]
+        },
+        {
+          "what": "a second proving transfer while one is in flight (real core only)",
+          "why": "lez_core runs one proof at a time: {error: a LEZ transfer is already proving — wait for it}",
+          "evidence": [
+            "module/src/wallet/lez_lp.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "wallet_estimate_fee",
+        "wallet_send",
+        "wallet_finality"
+      ],
+      "ui": "LezSend.qml (Main.qml 'lez' view): preview, then send",
+      "invariants": [
+        8
+      ],
+      "claims": [
+        {
+          "claim": "None of amount, payer or payee is on the public record.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The sequencer sees that a transfer arrived from your connection, and when.",
+          "credibility": "exposed"
+        },
+        {
+          "claim": "A failed transfer is an error, never a receipt.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "lez_core, which holds the keys and builds the transfer, sees amount, payer and payee.",
+          "credibility": "exposed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_lez_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_lez_encoding_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_adapter.nim",
+          "what": "the rails, the per-rail disclosure, delayed finality"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_core.nim",
+          "what": "disclosureOf: the education square"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_lp.nim",
+          "what": "LpLezCore: the real lez_core over lp_*, async proving, 900 s budget"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/docs/design/lez-adapter.md",
+          "what": "the LEZ model, the rails table, receive-by-scan, Mode A and Mode B"
+        }
+      ],
+      "unverified": [
+        "The per-rail disclosure is the LEZ's property as the demo's rails and the LEZ docs describe it; wallet_lez_test.nim checks muster's table, not the chain.",
+        "The async ~7-minute proof, the 900 s budget and the one-proof-at-a-time refusal are read from lez_lp.nim; LpLezCore links lp_* and is not run by any test.",
+        "What the sequencer sees is inferred from it receiving the transaction; no test observes it."
+      ]
+    },
+    {
+      "id": "wallet/lez-receive",
+      "name": "Receive LEZ: share an address, find the note by scanning",
+      "area": "wallet",
+      "status": "partial",
+      "summary": "To be paid, you share a public account id (names you as payee) or your shielded key node (does not). A shielded payment lands at a fresh account derived from your key node and an identifier the sender picks, not at an id you published, so you find it by scanning. The scan is built and tested in the adapter on the fake core, but no hosted method calls it: wallet_accounts and wallet_balances list only the two accounts this instance created, so a note received from another instance does not appear through the hosted surface. It runs on the deterministic FakeLezCore by default. The real lez_core path (LpLezCore) is used only when MUSTER_LEZ_REAL is set and lez_core is loaded, and it falls back to the fake if lez_core cannot be reached. Only the fake path is exercised by tests; the live send against testnet.lez.logos.co has not been run. Nobody else approves a wallet send, so there is no agreement field.",
+      "requirements": [
+        {
+          "kind": "module",
+          "name": "lez_core",
+          "party": "instance",
+          "class": "capability",
+          "target": "lez_core (only when MUSTER_LEZ_REAL is set)",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "lez-sequencer",
+          "party": "instance",
+          "class": "infra",
+          "target": "the sequencer lez_core's wallet config names",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "chain:lez:testnet",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "payee (only if you shared your public id)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "timing",
+          "observer": "rpc-provider",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the recipient",
+          "does": "wallet_accounts gives each LEZ account a share field: the public account's id, or the private account's key node priv:<npk>:<vpk> (read with get_private_account_keys). Which one you hand out is your disclosure choice; LezSend.qml offers both to copy.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "the recipient's adapter",
+          "does": "syncPrivate() syncs lez_core to the chain tip (get_current_block_height, sync_to_block) and lists the private accounts now discoverable; a received note shows its balance against the discovered account. Polling the published id does not work for a shielded payment. No hosted method calls syncPrivate today.",
+          "signs": "nothing",
+          "reveals": [
+            {
+              "field": "timing",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/wallet_lez_test.nim",
+            "module/nim-lib/muster_module.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "reading a received shielded payment at the id the recipient published",
+          "why": "the note settles into a fresh account found by scanning (receive-by-scan)",
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "what": "a failed scan read as 'nothing received'",
+          "why": "syncPrivate raises WalletError",
+          "evidence": [
+            "module/src/wallet/lez_adapter.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "wallet_accounts",
+        "wallet_balances"
+      ],
+      "ui": "LezSend.qml share rows (copy your public id or your key node)",
+      "invariants": [
+        8,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "A shielded payment is found by scanning, at an account you did not name.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Sharing your key node keeps you off the public record as payee; sharing your public id does not.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Whoever you hand your address to learns it; the channel you use is your choice.",
+          "credibility": "motivational"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_lez_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_adapter.nim",
+          "what": "receiveAddresses / syncPrivate"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/nim-lib/muster_module.nim",
+          "what": "musterWalletAccounts / Balances: only the cached accounts are listed; syncPrivate is never called"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/demo/poc/BUG-private-transfer-recipient-identifier.md",
+          "what": "the sender picks the identifier; confirmed as the LEZ design"
+        }
+      ],
+      "unverified": [
+        "That the hosted surface never scans is read from source (no caller of syncPrivate in muster_module.nim).",
+        "Receive-by-scan against the live zone is described in lez-adapter.md and the demo; tests run the fake core."
+      ]
+    },
+    {
+      "id": "wallet/lez-request-share-send",
+      "name": "Pay someone on the LEZ: request, share, send (Mode A)",
+      "area": "wallet",
+      "status": "partial",
+      "summary": "The default LEZ payment. The payer asks, the recipient shares an address, the payer sends. No approval and no threshold: the coordination is the exchange of an address, and the form the recipient shares picks the rail and the privacy. When a room wants members to approve k-of-n before lez_core runs the transfer (Mode B), that is the family action room.invoke/lez-transfer, not this. It runs on the deterministic FakeLezCore by default. The real lez_core path (LpLezCore) is used only when MUSTER_LEZ_REAL is set and lez_core is loaded, and it falls back to the fake if lez_core cannot be reached. Only the fake path is exercised by tests; the live send against testnet.lez.logos.co has not been run. Nobody else approves a wallet send, so there is no agreement field.",
+      "requirements": [
+        {
+          "kind": "module",
+          "name": "lez_core",
+          "party": "instance",
+          "class": "capability",
+          "target": "lez_core (only when MUSTER_LEZ_REAL is set)",
+          "field": ""
+        },
+        {
+          "kind": "environment",
+          "name": "lez:testnet",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez:testnet",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "lez-sequencer",
+          "party": "instance",
+          "class": "infra",
+          "target": "the sequencer lez_core's own wallet config names (default https://testnet.lez.logos.co; muster does not write that config)",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "lez-account-key",
+          "party": "instance",
+          "class": "authority",
+          "target": "the source account's key, held inside lez_core — muster's keystore does not sign LEZ transfers",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "LEZ",
+          "party": "instance",
+          "class": "asset",
+          "target": "lez:testnet LEZ at the source account",
+          "field": "raw"
+        },
+        {
+          "kind": "address",
+          "name": "payee",
+          "party": "counterparty",
+          "class": "address",
+          "target": "lez:testnet — the recipient's public id or shielded key node, as they choose",
+          "field": "to"
+        }
+      ],
+      "touches": [
+        {
+          "target": "module:lez_core.transfer_*",
+          "mode": "write"
+        },
+        {
+          "target": "chain:lez:testnet",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "the shared address (when shared through a room message)",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "amount, payer, payee — as the rail allows (see the four wallet/lez-* rails)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "amount, payer, payee — as the rail allows",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "topic (when the request travels through a room)",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "timing (when the request travels through a room)",
+          "observer": "store-node",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the payer",
+          "does": "Asks for an address. In a room, starting a pay, request or split verb primes the thread with an address-request card (coordinate_post_message); outside a room the two people ask however they like.",
+          "signs": "In a room the card carries the payer's author signature (room/post-message).",
+          "reveals": [
+            {
+              "field": "the shared address (when shared through a room message)",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/tests/coordination_messages_test.nim",
+            "module/tests/authorship_test.nim",
+            "ui/src/qml/Main.qml"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "the recipient",
+          "does": "Shares an address from LezSend.qml: the public id (names them as payee) or the key node priv:<npk>:<vpk> (does not). The UI copies it; how it reaches the payer is the users' choice. Pasted into a room message it reaches every room member. The room's address-share card button shares an ETH address, not a LEZ one.",
+          "signs": "nothing (a room message carries its author signature)",
+          "reveals": [
+            {
+              "field": "the shared address (when shared through a room message)",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/tests/wallet_lez_test.nim",
+            "ui/src/qml/LezSend.qml",
+            "ui/src/qml/Room.qml"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "the payer",
+          "does": "Pastes the address into LezSend.qml, previews it (wallet_estimate_fee: the rail and what it discloses) and sends (wallet_send). The rail is the pair (the payer's source form, the form shared): public, shield, deshield or private — see those actions for what each discloses.",
+          "signs": "lez_core signs (and, on a shielded rail, proves) inside its own wallet; muster's keystore signs nothing.",
+          "reveals": [
+            {
+              "field": "amount, payer, payee — as the rail allows",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "the payer",
+          "does": "wallet_finality polls until final; a shielded note stays pending while it is proved and scanned in.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a failed transfer read as sent — an envelope with success:false, an empty or unparseable one",
+          "why": "submit raises WalletError; never a false receipt",
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "what": "sending more than the source account holds",
+          "why": "the transfer raises",
+          "evidence": [
+            "module/tests/wallet_lez_test.nim"
+          ]
+        },
+        {
+          "what": "an empty destination, or a shielded destination not of the form priv:<npk>:<vpk>",
+          "why": "prepareTransfer raises",
+          "evidence": [
+            "module/src/wallet/lez_adapter.nim"
+          ]
+        },
+        {
+          "what": "a second proving transfer while one is in flight (real core only)",
+          "why": "lez_core runs one proof at a time: {error: a LEZ transfer is already proving — wait for it}",
+          "evidence": [
+            "module/src/wallet/lez_lp.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "wallet_accounts",
+        "wallet_estimate_fee",
+        "wallet_send",
+        "wallet_finality",
+        "coordinate_post_message"
+      ],
+      "ui": "LezSend.qml (Main.qml 'lez' view); the room's address-request card (Main.qml, Room.qml)",
+      "invariants": [
+        8,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "What the recipient shares decides whether they are named on the public record.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The payer sees the rail and what it discloses before sending.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An address pasted into a room message is readable by every room member.",
+          "credibility": "exposed"
+        },
+        {
+          "claim": "Nobody approves a Mode A payment; there is nothing to agree.",
+          "credibility": "not-applicable"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_lez_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_lez_encoding_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_adapter.nim",
+          "what": "the rails, the per-rail disclosure, delayed finality"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_core.nim",
+          "what": "disclosureOf: the education square"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_lp.nim",
+          "what": "LpLezCore: the real lez_core over lp_*, async proving, 900 s budget"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/docs/design/lez-adapter.md",
+          "what": "the LEZ model, the rails table, receive-by-scan, Mode A and Mode B"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/coordination_messages_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/ui/src/qml/LezSend.qml",
+          "what": "Mode A: the share rows, the preview, the send"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/ui/src/qml/Room.qml",
+          "what": "the address-share card button posts an ETH address"
+        }
+      ],
+      "unverified": [
+        "The per-rail disclosure is the LEZ's property as the demo's rails and the LEZ docs describe it; wallet_lez_test.nim checks muster's table, not the chain.",
+        "The async ~7-minute proof, the 900 s budget and the one-proof-at-a-time refusal are read from lez_lp.nim; LpLezCore links lp_* and is not run by any test.",
+        "What the sequencer sees is inferred from it receiving the transaction; no test observes it.",
+        "No test drives the whole request → share → send flow; wallet_lez_test.nim covers the share forms and the rail each picks."
+      ]
+    }
+  ]
+}

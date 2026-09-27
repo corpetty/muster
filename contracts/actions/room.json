@@ -1,0 +1,2666 @@
+{
+  "actions": [
+    {
+      "id": "room/join",
+      "name": "Join or start a room",
+      "area": "room",
+      "status": "built",
+      "summary": "Opens a conversation on a content topic over encrypted transport. Starting and joining are the same call: the instance opens the topic holding a fresh epoch key that only it has. It reads nothing already in the room until an existing member admits it (room/admit-member). Nothing is agreed, so there is no agreement field.",
+      "requirements": [
+        {
+          "kind": "module",
+          "name": "delivery_module",
+          "party": "instance",
+          "class": "capability",
+          "target": "delivery_module",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "delivery-node",
+          "party": "instance",
+          "class": "infra",
+          "target": "the delivery createNode config in Settings (default: the logos.test fleet's entry nodes)",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "encryption-identity",
+          "party": "instance",
+          "class": "authority",
+          "target": "the keystore's Ed25519/X25519 identity (F-14)",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "topic:/muster/1/<room>/proto",
+          "mode": "write"
+        },
+        {
+          "target": "store:/muster/1/<room>/proto",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "epoch",
+          "observer": "store-node",
+          "when": "always"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the member joining or starting the room",
+          "does": "Normalizes the room name to a 4-segment Waku content topic, /muster/1/<name>/proto (an already valid topic passes through), so two peers who name the same room derive the same topic. If the instance already has a session on that topic it re-activates it. Otherwise it opens a CoordinationSession over the delivery transport with a fresh EpochCrypto: epoch 0, a new random key, members = this instance only. Joining also clears any stored invite to that topic.",
+          "signs": "nothing",
+          "reveals": [
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "scripts/two-instance-proof.sh",
+            "module/nim-lib/muster_module.nim",
+            "module/src/coordination/session.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "the same member, continuously",
+          "does": "Subscribes to the topic and polls the store every ~1 s (MUSTER_CATCHUP_MS, floor 200 ms) for a 60 s window (MUSTER_CATCHUP_LOOKBACK_MS), round-robin across the configured entry nodes; the first ticks per topic fetch deeper history. It ingests only envelopes it can open. An envelope sealed under an epoch it holds no key for is skipped. Every sealed frame carries its epoch number outside the seal.",
+          "signs": "nothing",
+          "reveals": [
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "epoch",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/coordination_test.nim",
+            "module/src/transport/delivery.nim",
+            "module/src/crypto/epoch_crypto.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "every instance holding the same events",
+          "does": "Reduces the log to state. Two instances that hold the same event set reach the same state digest, whatever the delivery order or duplication; a member who comes online late catches up from the store.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/coordination_test.nim",
+            "module/tests/two_instance_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "opening an envelope sealed under an epoch this instance was never granted",
+          "why": "it holds no key for that epoch; the envelope is skipped, never guessed (F-16, invariant 7)",
+          "evidence": [
+            "module/tests/coordination_test.nim",
+            "module/tests/membership_handshake_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_join",
+        "coordinate_conversations",
+        "coordinate_members"
+      ],
+      "ui": "Composer.qml → Main.qml enterRoom (a new room); Home.qml room list and the Room.qml topic field (an existing room)",
+      "invariants": [
+        4,
+        7,
+        8
+      ],
+      "claims": [
+        {
+          "claim": "An envelope from an epoch this instance holds no key for is never opened.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Instances holding the same events reach the same state, in any order.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The store node sees the room's topic in the clear, and when this instance publishes and polls.",
+          "credibility": "exposed"
+        },
+        {
+          "claim": "The composer's default room name contains the verb and the last six hex digits of the invited peer's chat id, so the store node reads both from the topic.",
+          "credibility": "exposed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/coordination_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/two_instance_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "scripts/two-instance-proof.sh"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/nim-lib/muster_module.nim",
+          "what": "musterCoordinateJoin + toContentTopic: topic normalization, one fresh epoch per session"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/transport/delivery.nim",
+          "what": "the store catch-up period, window and store-peer rotation"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/ui/src/qml/Composer.qml",
+          "what": "derivedTopic: muster.<verb>.<last 6 hex of the peer chat id>.<unique tail>"
+        }
+      ],
+      "unverified": [
+        "The topic normalization (toContentTopic) is read from source; invites_test.nim carries a simplified copy, not the module's function.",
+        "That the store node reads the epoch number and the composer's room name from each frame is read from source (epoch_crypto seal header, Composer.qml derivedTopic); no test inspects frames as a store node would."
+      ]
+    },
+    {
+      "id": "room/admit-member",
+      "name": "Ask to join a room, and admit a member",
+      "area": "room",
+      "status": "built",
+      "summary": "The membership handshake. A joiner announces a signed binding of its encryption identity; any existing member decides whether to admit it. Admission re-keys the room forward: the joiner gets the new epoch's key and nothing earlier (F-16). One member decides; nothing is agreed, so there is no agreement field.",
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "identity-binding",
+          "party": "counterparty",
+          "class": "authority",
+          "target": "the joiner's secp256k1 key vouching for its Ed25519/X25519 identity (F-9, F-14)",
+          "field": "identity_hex"
+        },
+        {
+          "kind": "authority",
+          "name": "room-member",
+          "party": "instance",
+          "class": "authority",
+          "target": "the current membership epoch key of the room",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "topic:/muster/1/<room>/proto",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "joiner-identity",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "joiner-address",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "joiner-identity",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "roster",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "epoch",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "membership",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "roster",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the joiner (it has joined the topic but holds no key the room uses)",
+          "does": "coordinate_request_join publishes a join-request frame (kind 0x01) on the topic. It is not sealed to any epoch. It carries the joiner's binding: its encryption identity (Ed25519 ‖ X25519, 64 bytes) and a context {account: the room topic, slot: \"0\", expiry: now + 1 day}, signed by the joiner's secp256k1 key. The UI re-sends it every 3 s, up to 20 times, until the roster grows, because a single send can miss every store node on a sparse shard. A request carries no authority.",
+          "signs": "secp256k1 recoverable signature over digest(hash-input \"muster.identity-binding.v1\" {ed25519, x25519, account, slot, expiry})",
+          "reveals": [
+            {
+              "field": "joiner-identity",
+              "observer": "store-node"
+            },
+            {
+              "field": "joiner-address",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/membership_handshake_test.nim",
+            "module/tests/binding_test.nim",
+            "module/src/crypto/binding.nim",
+            "ui/src/muster_ui_backend.cpp"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "any existing member (the admitter)",
+          "does": "coordinate_pending lists requests not yet admitted: each identity, its contact alias, and bindsOwner — whether the binding's recovered signer is a signer of an account disclosed in the room (F-9). The member decides. Admission is not gated on owning anything.",
+          "signs": "nothing",
+          "reveals": [
+            {
+              "field": "joiner-identity",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/tests/membership_handshake_test.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "the admitter",
+          "does": "coordinate_admit(identity) requires a pending binding for that identity that recovers a signer and has not expired. It then re-keys forward: a new epoch, a fresh random key, members = the old roster plus the joiner. For every member of the new epoch it publishes a control frame (kind 0x02, not sealed): the epoch number, every member's 64-byte identity, and the new key wrapped to that member's X25519 key in a libsodium sealed box. It then publishes membership/<epoch>/admit/<joiner> into the log, sealed under the new epoch. When the room was started by naming a person, Room.qml admits that identity as soon as its request arrives; the module still checks the binding.",
+          "signs": "nothing is signed. The wrapped keys are sealed boxes. The membership event names the joiner and no author, so the room cannot tell which member admitted.",
+          "reveals": [
+            {
+              "field": "roster",
+              "observer": "store-node"
+            },
+            {
+              "field": "epoch",
+              "observer": "store-node"
+            },
+            {
+              "field": "membership",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/tests/membership_handshake_test.nim",
+            "module/tests/two_instance_test.nim",
+            "scripts/two-instance-proof.sh",
+            "module/src/crypto/epoch_crypto.nim",
+            "module/src/coordination/session.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "the joiner, and every existing member",
+          "does": "Each opens the grant addressed to it; only its own X25519 key can. The joiner learns the new epoch's key and member list, then reads every envelope sealed at that epoch or later, starting with its own admission. Nothing sealed earlier opens for it. Existing members move to the new epoch too.",
+          "signs": "nothing",
+          "reveals": [
+            {
+              "field": "roster",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/tests/membership_handshake_test.nim",
+            "module/tests/epoch_crypto_test.nim",
+            "module/tests/probes/probe_epoch_new_member_disjoint.nim",
+            "module/tests/probes/probe_epoch_membership_stepper.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "treating a join request as entry",
+          "why": "a request admits nobody and grants no key; a member has to decide",
+          "evidence": [
+            "module/tests/membership_handshake_test.nim"
+          ]
+        },
+        {
+          "what": "admitting an identity whose binding has expired or does not recover a signer",
+          "why": "coordinate_admit returns \"unverified\"; bindingSigner raises on an expired binding (F-9)",
+          "evidence": [
+            "module/tests/binding_test.nim",
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "what": "admitting an identity that is not 64 bytes (Ed25519 ‖ X25519)",
+          "why": "coordinate_admit returns \"bad-key\"",
+          "evidence": [
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "what": "the joiner reading anything sealed before its admission",
+          "why": "it is granted only the new epoch's key; earlier keys are disjoint (F-16, invariant 7)",
+          "evidence": [
+            "module/tests/membership_handshake_test.nim",
+            "module/tests/epoch_crypto_test.nim",
+            "module/tests/probes/probe_epoch_new_member_disjoint.nim",
+            "module/tests/probes/probe_epoch_membership_stepper.nim"
+          ]
+        },
+        {
+          "what": "a member opening a grant wrapped to someone else",
+          "why": "a sealed box opens only for its recipient",
+          "evidence": [
+            "module/tests/epoch_crypto_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_request_join",
+        "coordinate_pending",
+        "coordinate_admit",
+        "coordinate_members"
+      ],
+      "ui": "ScopePanel.qml in Room.qml (Ask to join · pending requests · Admit); Room.qml auto-admits the peer named in Composer.qml",
+      "invariants": [
+        4,
+        5,
+        7,
+        8
+      ],
+      "claims": [
+        {
+          "claim": "A joiner reads from its own admission on, and nothing sealed before it.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A join request grants nothing until a member admits it.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Any member can admit anyone whose binding is valid; who gets in rests on each member's judgement.",
+          "credibility": "motivational"
+        },
+        {
+          "claim": "The store node sees each join request's identity and the secp address its signature recovers to, and on every admit the whole roster and the new epoch number.",
+          "credibility": "exposed"
+        },
+        {
+          "claim": "The admit event names the joiner, not the member who admitted them.",
+          "credibility": "exposed"
+        },
+        {
+          "claim": "No hosted method removes a member. The epoch layer supports removal, but nothing calls it, so an admitted member reads every later epoch.",
+          "credibility": "exposed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/membership_handshake_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/two_instance_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/binding_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/epoch_crypto_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_epoch_new_member_disjoint.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_epoch_membership_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "scripts/two-instance-proof.sh"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/coordination/session.nim",
+          "what": "frame kinds: join-request (0x01) and control (0x02) frames are published unsealed"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/crypto/epoch_crypto.nim",
+          "what": "encodeGrant: epoch ‖ member count ‖ every member identity ‖ sealed key"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/crypto/binding.nim",
+          "what": "encodeLink: the binding travels as identity ‖ context ‖ signature"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/docs/labbook/two-instance-live-wire-blockers.md",
+          "what": "the live two-instance handshake over the Logos fleet"
+        }
+      ],
+      "unverified": [
+        "What a store node reads from join-request and grant frames (identity, recoverable address, roster, epoch) is read from source; no test inspects the frames as a store node would.",
+        "The 3 s / 20-attempt re-send of a join request is UI behaviour (muster_ui_backend.cpp scheduleJoinRetry); no test covers it.",
+        "That no hosted method removes a member is read from muster.lidl; epoch_crypto_test.nim proves removal only at the crypto layer."
+      ]
+    },
+    {
+      "id": "room/reannounce",
+      "name": "Re-announce open proposals to a new member",
+      "area": "room",
+      "status": "built",
+      "summary": "After an admit, re-seals every open proposal into the current epoch so the new member can see and act on it. Approvals made before it arrived are not re-shared: they stay in their epoch. Nothing is agreed.",
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "room-member",
+          "party": "instance",
+          "class": "authority",
+          "target": "the current membership epoch key of the room",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "topic:/muster/1/<room>/proto",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "policy",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "context",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "a member, right after an admit (Room.qml calls it after every Admit)",
+          "does": "For each intent that is not submitted, settling or final, coordinate_reannounce re-publishes into the current epoch: its policy declaration, its propose event (the effect), its signing context and recorded reads, and a new intent-ref message {kind: intent-ref, intentId}. The events are content-addressed, so re-publishing yields the same ids and members who hold them fold nothing new. Returns {reannounced: count}.",
+          "signs": "Only the intent-ref message is signed, with the re-announcer's author signature. Ed25519, by the author's encryption identity (its signing half, F-14), over digest(hash-input \"muster.event.author.v1\" {room: the content topic, key: the event key, parents: sorted, author: the author's 64-byte identity hex, value: the event value as dCBOR without authorSig}). The signature is added to the value as authorSig (exo-f76).",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "policy",
+              "observer": "room-member"
+            },
+            {
+              "field": "context",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/tests/probes/probe_audit_epoch_scope_stepper.nim",
+            "module/tests/probes/audit_room.nim",
+            "module/src/coordination/live.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "the new member",
+          "does": "Folds the re-announced intents and sees their cards. It holds the context and reads, so it can attest its own approval. Approvals made before its epoch are not in its log.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/probes/probe_audit_epoch_scope_stepper.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "re-announcing an intent that is submitted, settling or final",
+          "why": "finished intents are skipped",
+          "evidence": [
+            "module/src/coordination/live.nim"
+          ]
+        },
+        {
+          "what": "handing the new member approvals made before its epoch",
+          "why": "approvals are not re-published; what members signed before the joiner arrived stays in its epoch (F-16)",
+          "evidence": [
+            "module/tests/probes/probe_audit_epoch_scope_stepper.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_reannounce"
+      ],
+      "ui": "Room.qml, after every Admit (ScopePanel.qml or the auto-admit); no button of its own",
+      "invariants": [
+        4,
+        7,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "A member admitted after a proposal can see and approve it without reading anything from before its epoch.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Approvals made before the new member's epoch stay unreadable to it.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A new member sees open proposals only if some member re-announces them; the UI does so after every admit, a headless host must call it itself.",
+          "credibility": "motivational"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_audit_epoch_scope_stepper.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/coordination/live.nim",
+          "what": "liveReannounce: what is re-published, what is skipped"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/ui/src/qml/Room.qml",
+          "what": "reannounce() after every admit"
+        }
+      ],
+      "unverified": [
+        "That the new member's card shows fewer approvals than older members' cards follows from the fold; no test renders it."
+      ]
+    },
+    {
+      "id": "room/invite",
+      "name": "Invite someone to a room",
+      "area": "room",
+      "status": "built",
+      "summary": "Drops a sealed invite on a peer's inbox topic, so they learn the room's topic without any prior contact. Only the named peer can open it; it grants nothing — they still have to be admitted. The room topic, the note and the inviter's claimed chat id reach only the recipient, a party the observer vocabulary has no class for. Nothing is agreed.",
+      "requirements": [
+        {
+          "kind": "address",
+          "name": "peer-chat-id",
+          "party": "counterparty",
+          "class": "address",
+          "target": "the peer's 64-byte encryption identity (Ed25519 ‖ X25519)",
+          "field": "peer_chat_id_hex"
+        },
+        {
+          "kind": "module",
+          "name": "delivery_module",
+          "party": "instance",
+          "class": "capability",
+          "target": "delivery_module",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "topic:/muster/1/muster.inbox.<16 hex>/proto (the peer's inbox)",
+          "mode": "write"
+        },
+        {
+          "target": "topic:/muster/1/muster.inbox.<16 hex>/proto (this instance's inbox)",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "inbox-topic",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the inviter",
+          "does": "coordinate_invite(peer chat id, room topic, note) builds {topic, from: the inviter's chat id, note, ts}, seals it to the peer's X25519 key in a libsodium sealed box, and publishes it as an invite frame (kind 0x03) on the peer's inbox topic: /muster/1/muster.inbox.<hex>/proto, where hex is the first 8 bytes of sha256(\"muster-inbox-v1\" ‖ the peer's chat id hex). The store retains it, so the peer need not be online. Main.qml sends one when the composer names a person by chat id.",
+          "signs": "nothing. A sealed box encrypts but does not authenticate the sender: 'from' is the inviter's claim.",
+          "reveals": [
+            {
+              "field": "inbox-topic",
+              "observer": "store-node"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/invites_test.nim",
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "the recipient",
+          "does": "coordinate_start_inbox subscribes to its own inbox topic and pulls what the store kept. coordinate_invites opens each frame with the keystore; frames that do not open or parse are skipped. It dedups by (from, topic) and hides invites for rooms already joined, invites the user dismissed (kept in dismissed_invites.json beside the keystore) and, when MUSTER_INVITES_SINCE is set, older ones.",
+          "signs": "nothing",
+          "reveals": [
+            {
+              "field": "inbox-topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/invites_test.nim",
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "the recipient",
+          "does": "Joins the room (room/join), then asks to be admitted (room/admit-member), or dismisses the invite (coordinate_dismiss_invite: local, persisted, nothing is sent).",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/membership_handshake_test.nim",
+            "module/nim-lib/muster_module.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a peer chat id that is not 64 bytes",
+          "why": "coordinate_invite returns {error: bad peer chat id}",
+          "evidence": [
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "what": "anyone but the named recipient opening the invite",
+          "why": "a sealed box opens only for the X25519 key it was sealed to",
+          "evidence": [
+            "module/tests/invites_test.nim"
+          ]
+        },
+        {
+          "what": "an invite letting the recipient read the room",
+          "why": "it names a topic and grants no key; a member must still admit the recipient",
+          "evidence": [
+            "module/tests/membership_handshake_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_invite",
+        "coordinate_start_inbox",
+        "coordinate_invites",
+        "coordinate_dismiss_invite"
+      ],
+      "ui": "Composer.qml (people step) → Main.qml sendInvite; Home.qml shows received invites (Join · Dismiss)",
+      "invariants": [
+        7,
+        8
+      ],
+      "claims": [
+        {
+          "claim": "Only the named recipient can open an invite.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An invite grants nothing; the recipient must still be admitted.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Anyone who knows a chat id can compute its inbox topic and watch invite traffic to it — count and timing, never contents.",
+          "credibility": "exposed"
+        },
+        {
+          "claim": "The inviter named in an invite is the sender's claim: a sealed box does not authenticate its sender.",
+          "credibility": "exposed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/invites_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/membership_handshake_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/nim-lib/muster_module.nim",
+          "what": "musterCoordinateInvite / Invites / StartInbox / DismissInvite; inboxTopicFor"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/coordination/session.nim",
+          "what": "sendInvite: the invite frame is published without epoch sealing"
+        }
+      ],
+      "unverified": [
+        "Delivery of an invite through the store to an offline recipient is not exercised by any test; invites_test.nim covers the topic derivation (a copy of it) and the sealed box.",
+        "That the 'from' field is unauthenticated is read from source (sealTo is an anonymous sealed box; nothing checks 'from')."
+      ]
+    },
+    {
+      "id": "room/post-message",
+      "name": "Post a chat message or card",
+      "area": "room",
+      "status": "built",
+      "summary": "Posts a chat line, or a typed card (address-request, address-share, receipt, fact, intent-ref) as JSON, into the room's sealed log. The author signs it; the room drops a message whose author did not sign it (exo-f76). Nothing is agreed.",
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "room-member",
+          "party": "instance",
+          "class": "authority",
+          "target": "the current membership epoch key of the room",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "topic:/muster/1/<room>/proto",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "body",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "author",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "ts",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the author",
+          "does": "coordinate_post_message(body) builds message/<id> with value {author: its encryption identity hex, ts: unix seconds, body}. The core never interprets body. id is the first 12 bytes of keccak256(author ‖ body ‖ ts as 8 little-endian bytes ‖ a per-instance counter as 8 little-endian bytes). The author signs; the event is sealed to the current epoch and published. Returns the id.",
+          "signs": "Ed25519, by the author's encryption identity (its signing half, F-14), over digest(hash-input \"muster.event.author.v1\" {room: the content topic, key: the event key, parents: sorted, author: the author's 64-byte identity hex, value: the event value as dCBOR without authorSig}). The signature is added to the value as authorSig (exo-f76).",
+          "reveals": [
+            {
+              "field": "body",
+              "observer": "room-member"
+            },
+            {
+              "field": "author",
+              "observer": "room-member"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/authorship_test.nim",
+            "module/tests/coordination_messages_test.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "every other member",
+          "does": "Opens the envelope and keeps the event in its log. The room's views read the authentic log: a message whose authorSig does not verify for the author it names, in this room, is dropped from every view but stays in the raw log. Messages fold oldest-first; JSON cards render through MusterCard.qml.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/authorship_test.nim",
+            "module/tests/coordination_messages_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a message naming a member who did not sign it, unsigned or signed by another member",
+          "why": "authenticEvents drops it; every view reads only the authentic log (invariant 9)",
+          "evidence": [
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "what": "signing a message in another member's name",
+          "why": "signAuthored refuses an event that names anyone but the keystore's own identity",
+          "evidence": [
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "what": "a genuine message replayed into another room",
+          "why": "the signature binds the room topic",
+          "evidence": [
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "what": "an edited body or re-parented message",
+          "why": "the signature binds the value and the parents",
+          "evidence": [
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "what": "a malformed signature or value",
+          "why": "rejected without raising (exo-cf7)",
+          "evidence": [
+            "module/tests/authorship_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_post_message",
+        "coordinate_messages"
+      ],
+      "ui": "Room.qml composer and card buttons (address-request, address-share, receipt); MusterCard.qml renders cards",
+      "invariants": [
+        4,
+        5,
+        7,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "A message names its author only if that author signed it, in this room.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Only members holding the epoch key can read a message.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The store node sees that something was posted, on which topic, and when.",
+          "credibility": "exposed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/authorship_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/coordination_messages_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/coordination_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/coordination/authorship.nim",
+          "what": "the author-signature record and the authentic read path"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/coordination/intent_events.nim",
+          "what": "newMessageEvent: the key, value and id"
+        }
+      ]
+    },
+    {
+      "id": "room/decline",
+      "name": "Decline a proposal (Deny)",
+      "area": "room",
+      "status": "built",
+      "summary": "The card's Deny. Publishes a signed decline so the room sees who is out. It is informational: the driver's threshold and the lifecycle are untouched. Nothing is agreed.",
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "room-member",
+          "party": "instance",
+          "class": "authority",
+          "target": "the current membership epoch key of the room",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "topic:/muster/1/<room>/proto",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "decliner",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "a member",
+          "does": "coordinate_decline(intentId) requires the intent to be in its log, then publishes intent/<id>/decline/<its encryption identity> with value {} plus its author signature, sealed to the current epoch. Returns {intentId, state, declines}.",
+          "signs": "Ed25519, by the author's encryption identity (its signing half, F-14), over digest(hash-input \"muster.event.author.v1\" {room: the content topic, key: the event key, parents: sorted, author: the author's 64-byte identity hex, value: the event value as dCBOR without authorSig}). The signature is added to the value as authorSig (exo-f76).",
+          "reveals": [
+            {
+              "field": "decliner",
+              "observer": "room-member"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/authorship_test.nim",
+            "scripts/card-self-test.sh"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "every member",
+          "does": "Folds the decline into the intent view (decliners listed once each, sorted) and the activity feed (\"Declined by …\"). Other members' approvals can still make the intent executable.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/decline_test.nim",
+            "scripts/card-self-test.sh"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "declining an intent not in this member's log",
+          "why": "coordinate_decline returns {error: unknown-intent}",
+          "evidence": [
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "what": "a decline in another member's name",
+          "why": "unsigned or wrongly signed, it is dropped from every view (exo-f76)",
+          "evidence": [
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "what": "counting a member's decline twice",
+          "why": "it folds once per member, under reorder and duplication (invariant 4)",
+          "evidence": [
+            "module/tests/decline_test.nim"
+          ]
+        },
+        {
+          "what": "a decline moving the threshold or the lifecycle",
+          "why": "declines are informational; dropping an intent is driver policy, not core policy",
+          "evidence": [
+            "module/tests/decline_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_decline"
+      ],
+      "ui": "MusterCard.qml Deny (Room.qml declineInRoom)",
+      "invariants": [
+        4,
+        5,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "The room knows exactly who declined; a decline in someone else's name is dropped.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A decline never changes the threshold and never blocks an approval.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Whether a required signer's decline should end a proposal is left to the members; no driver acts on declines.",
+          "credibility": "motivational"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/decline_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/authorship_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "scripts/card-self-test.sh"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/coordination/intent_events.nim",
+          "what": "declineEvent"
+        }
+      ],
+      "unverified": [
+        "That no driver acts on declines is read from source (no driver under module/src/drivers/ reads them)."
+      ]
+    },
+    {
+      "id": "room/share-material",
+      "name": "Share an address or holding into a proposal",
+      "area": "room",
+      "status": "built",
+      "summary": "Fills a slot a proposal asks of you — a payee's receiving address, say — with one of your own holdings (exo-45e K5). Only its public face, class and form travel, bound to the proposal and the effect field it fills; the sharer signs it. The hosted catalogue holds only EVM material today: your secp keys, an EVM receive address per key, the Safes disclosed in the room, and ETH. Nothing is agreed.",
+      "requirements": [
+        {
+          "kind": "address",
+          "name": "the slot the proposal asks of you",
+          "party": "counterparty",
+          "class": "address",
+          "target": "the chain the proposal's requirement names",
+          "field": "the requirement's effect field (e.g. to)"
+        },
+        {
+          "kind": "authority",
+          "name": "room-member",
+          "party": "instance",
+          "class": "authority",
+          "target": "the current membership epoch key of the room",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "topic:/muster/1/<room>/proto",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "the shared public face (the effect field it fills)",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "sharer",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "the shared field, if the proposal's driver discloses it",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the member asked for material (a contributor or counterparty)",
+          "does": "coordinate_offers(intentId) crosses the proposal's manifest requirements with this instance's own catalogue. For each slot it returns candidates as public faces with their F-10 grade and the disclosure rows choosing them would add. It reads only this instance's holdings; it never names another member's.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/offers_test.nim",
+            "module/tests/lez_modeb_test.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "the same member",
+          "does": "coordinate_share_material(intentId, requirement, public) requires the requirement to exist and name an effect field, and the public face to be one of this instance's holdings of that class. It publishes intent/<id>/material/<requirement>/<its identity> with {public, form, class, field} and its author signature. The handle never leaves the instance.",
+          "signs": "Ed25519, by the author's encryption identity (its signing half, F-14), over digest(hash-input \"muster.event.author.v1\" {room: the content topic, key: the event key, parents: sorted, author: the author's 64-byte identity hex, value: the event value as dCBOR without authorSig}). The signature is added to the value as authorSig (exo-f76).",
+          "reveals": [
+            {
+              "field": "the shared public face (the effect field it fills)",
+              "observer": "room-member"
+            },
+            {
+              "field": "sharer",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/tests/materialshare_test.nim",
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "every member",
+          "does": "Folds one share per (requirement, sharer). Provenance classes it a peer message naming the sharer; the flow view shows the value disclosed to the room. It reaches outside observers only when the proposal settles, through its driver's own disclosure rows.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/materialshare_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a requirement the proposal does not have, or one with no effect field",
+          "why": "coordinate_share_material returns {error: no such counterparty/proposer requirement}",
+          "evidence": [
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "what": "a public face that is not one of your holdings for that slot",
+          "why": "coordinate_share_material returns {error: not one of your holdings for this slot}",
+          "evidence": [
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "what": "a share in another member's name",
+          "why": "unsigned or wrongly signed, it is dropped from every view (exo-f76)",
+          "evidence": [
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "what": "publishing a holding's handle",
+          "why": "only the public face, class and form are published (rule s1)",
+          "evidence": [
+            "module/tests/materialshare_test.nim",
+            "module/tests/offers_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_offers",
+        "coordinate_share_material"
+      ],
+      "ui": "MusterCard.qml 'From you' (Room.qml loadOffers / shareMaterial)",
+      "invariants": [
+        4,
+        5,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Only the public face of a holding travels; its handle stays on the instance.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Offers are computed about you only; they never name another member's holdings.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The room knows who shared; a share in someone else's name is dropped.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The room learns the address the sharer chose, not that the sharer controls it; only a driver-verified signature proves control.",
+          "credibility": "motivational"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/materialshare_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/offers_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/authorship_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_modeb_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/nim-lib/muster_module.nim",
+          "what": "moduleCatalogue: the hosted catalogue holds EVM keys, EVM addresses, room Safes and ETH only"
+        }
+      ],
+      "unverified": [
+        "The hosted refusals (unknown requirement, not your holding) and the EVM-only catalogue are read from source; lez_modeb_test.nim fills a LEZ slot from a hand-built catalogue, not the hosted one."
+      ]
+    },
+    {
+      "id": "room/disclose-account",
+      "name": "Disclose an account into the room",
+      "area": "room",
+      "status": "built",
+      "summary": "Makes an account exist to the room: a Safe, a Bitcoin multisig or a LEZ multisig. The discloser signs it; every reader checks it against the chain itself. Account-bound policies (safe, eip191, the Bitcoin and LEZ kinds) act only from a disclosed account. Nothing is agreed.",
+      "requirements": [
+        {
+          "kind": "address",
+          "name": "account",
+          "party": "instance",
+          "class": "address",
+          "target": "a CAIP-10 account on a CAIP-2 chain",
+          "field": "address"
+        },
+        {
+          "kind": "infra",
+          "name": "rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "the chain's RPC in Settings (rpc for EVM, lez-rpc for a LEZ multisig; none for Bitcoin)",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "room-member",
+          "party": "instance",
+          "class": "authority",
+          "target": "the current membership epoch key of the room",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "topic:/muster/1/<room>/proto",
+          "mode": "write"
+        },
+        {
+          "target": "chain:<CAIP-2>",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "account (address, signers, threshold, label, config)",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "discloser",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "account address",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "account address",
+          "observer": "rpc-provider",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the discloser",
+          "does": "coordinate_disclose_account({family, chain, address, label, signers?, threshold?, config?}). evm.safe: omitted signers or threshold are read from the chain through the RPC, and the disclosure is refused if they cannot be; a threshold above the signer count is refused. Bitcoin (btc.p2wsh-sortedmulti, btc.tapscript-multi-a): signers (33-byte keys) and threshold are required, the address is derived from them, and a given address must match; no chain read. lez.multisig-program: config {program, createKey, pda, layout}; the address must be the state PDA the config derives; members and threshold are read from the chain and a disagreement is refused. It then publishes account/<CAIP-10>/disclose/<its identity> with the account and its author signature.",
+          "signs": "Ed25519, by the author's encryption identity (its signing half, F-14), over digest(hash-input \"muster.event.author.v1\" {room: the content topic, key: the event key, parents: sorted, author: the author's 64-byte identity hex, value: the event value as dCBOR without authorSig}). The signature is added to the value as authorSig (exo-f76).",
+          "reveals": [
+            {
+              "field": "account (address, signers, threshold, label, config)",
+              "observer": "room-member"
+            },
+            {
+              "field": "account address",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/accounts_test.nim",
+            "module/tests/btc_driver_test.nim",
+            "module/tests/lez_multisig_driver_test.nim",
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "every reader",
+          "does": "coordinate_accounts folds one account per CAIP-10 id, naming every discloser. If members disclosed different signers or thresholds, conflict is set and the first in canonical order governs. Each reader checks the disclosure itself: an EVM account through its own RPC, a Bitcoin account by re-deriving the address, a LEZ multisig by reading the PDA. The result is verified, disagrees (naming what differs) or unknown, never a false verified. For a Safe it also reads the enabled modules and guard — the ways around the threshold — and reports unknown when unread.",
+          "signs": "nothing",
+          "reveals": [
+            {
+              "field": "account address",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/accounts_test.nim",
+            "module/tests/lez_multisig_driver_test.nim",
+            "module/nim-lib/muster_module.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a Safe whose signers cannot be read and were not given",
+          "why": "never guessed: {error: cannot read the account's signers from the chain}",
+          "evidence": [
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "what": "a threshold above the number of signers",
+          "why": "{error: threshold exceeds signers}",
+          "evidence": [
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "what": "a Bitcoin address that does not match its keys and threshold",
+          "why": "the address is derived from the keys; a mismatch does not resolve",
+          "evidence": [
+            "module/tests/btc_driver_test.nim"
+          ]
+        },
+        {
+          "what": "a LEZ multisig whose address is not the PDA its config derives",
+          "why": "the disclosure must carry its config and the derived address",
+          "evidence": [
+            "module/tests/lez_multisig_driver_test.nim"
+          ]
+        },
+        {
+          "what": "an account family this client does not hold",
+          "why": "{error: unsupported account family}",
+          "evidence": [
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "what": "a disclosure in another member's name",
+          "why": "unsigned or wrongly signed, it is dropped from every view (exo-f76)",
+          "evidence": [
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "what": "a policy acting from an account nobody disclosed",
+          "why": "the intent folds as unsupported, never resolved to a fixture Safe",
+          "evidence": [
+            "module/tests/accounts_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_disclose_account",
+        "coordinate_accounts"
+      ],
+      "ui": "RoomAccounts.qml in Room.qml (Disclose; the suggested account)",
+      "invariants": [
+        4,
+        5,
+        8,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "An account exists to the room only once a named member discloses it.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Every reader checks a disclosure against the chain itself; a failed read is unknown, never verified.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A disclosure in someone else's name is dropped.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Each member's RPC provider learns which account that member's client checks, and when.",
+          "credibility": "exposed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/accounts_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/btc_driver_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_multisig_driver_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/authorship_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/nim-lib/muster_module.nim",
+          "what": "musterCoordinateDiscloseAccount / musterCoordinateAccounts"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/docs/design/multisig-landscape.md",
+          "what": "S1: accounts live in the room, disclosed by members"
+        }
+      ],
+      "unverified": [
+        "The Safe refusals (unreadable signers, threshold above signers) are hosted glue read from source; no test calls the hosted method.",
+        "coordinate_flow does not list account disclosures (flow.nim folds messages, intents and admits only), so the flow view omits this action's rows."
+      ]
+    },
+    {
+      "id": "room/frost-key-ceremony",
+      "name": "Run a FROST key ceremony in the room",
+      "area": "room",
+      "status": "built",
+      "summary": "ChillDKG with the room as its coordinator: members open a t-of-n ceremony, the first n to join are the participants, and each computes its steps from the log. The result is a t-of-n account (btc.frost-bip445, or a LEZ FROST account on a lez: network) disclosed into the room with its public recovery data. No share or nonce enters the log. Spending from the account is a family action.",
+      "agreement": {
+        "rounds": 2,
+        "threshold": "all n participants (the first n members to join) must complete both steps",
+        "finality": "in-room: done when each participant has finalized and disclosed the account",
+        "domain": "ChillDKG (bip-chilldkg draft) with a host key per ceremony"
+      },
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "frost-host-key",
+          "party": "instance",
+          "class": "authority",
+          "target": "a host key the keystore derives under the label frost/<ceremony id>",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "room-member",
+          "party": "instance",
+          "class": "authority",
+          "target": "the current membership epoch key of the room",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "topic:/muster/1/<room>/proto",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "ceremony (network, t, n)",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "host keys",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "step messages (commitments, encrypted shares, certifying signatures)",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "recovery data",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "account address",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "ceremony",
+          "who": "the member who opens it",
+          "does": "frost_ceremony_open(id, network, t, n) requires 1 ≤ t ≤ n, n ≥ 2 and an id without '/'. It publishes frost/<id>/open {network, t, n} (network defaults to regtest; a lez: network yields a LEZ account) and joins.",
+          "signs": "nothing. The open event names no author, so the room cannot tell who opened the ceremony.",
+          "reveals": [
+            {
+              "field": "ceremony (network, t, n)",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim",
+            "module/src/coordination/aggregate.nim"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "each member who joins",
+          "does": "frost_ceremony_join(id): the keystore derives a host key for this ceremony (never exported) and the member publishes frost/<id>/join/<its identity> {host: the 33-byte host public key} with its author signature. The first n joins in canonical order are the participants.",
+          "signs": "Ed25519, by the author's encryption identity (its signing half, F-14), over digest(hash-input \"muster.event.author.v1\" {room: the content topic, key: the event key, parents: sorted, author: the author's 64-byte identity hex, value: the event value as dCBOR without authorSig}). The signature is added to the value as authorSig (exo-f76).",
+          "reveals": [
+            {
+              "field": "host keys",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim",
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "each participant, on its client's coordinate_intents tick (at most every 2 s)",
+          "does": "Step 1: publishes frost/<id>/pmsg1/<host>: its VSS commitment, proof of possession, and shares encrypted to each participant's host key. Every member computes the coordinator's step from the log. Step 2: publishes frost/<id>/pmsg2/<host>, its CertEq certifying signature. Finalize: its keystore checks the certificate, and the participant discloses the t-of-n account (account/<CAIP-10>/disclose/<its identity>) with config {ceremony, recovery}.",
+          "signs": "Step 2 is the participant's CertEq signature with its host key. The account disclosure carries its author signature. Ed25519, by the author's encryption identity (its signing half, F-14), over digest(hash-input \"muster.event.author.v1\" {room: the content topic, key: the event key, parents: sorted, author: the author's 64-byte identity hex, value: the event value as dCBOR without authorSig}). The signature is added to the value as authorSig (exo-f76).",
+          "reveals": [
+            {
+              "field": "step messages (commitments, encrypted shares, certifying signatures)",
+              "observer": "room-member"
+            },
+            {
+              "field": "recovery data",
+              "observer": "room-member"
+            },
+            {
+              "field": "account address",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim",
+            "module/tests/frost_chilldkg_test.nim",
+            "module/nim-lib/muster_module.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "t or n out of range, or a ceremony id containing '/'",
+          "why": "frost_ceremony_open returns {error}",
+          "evidence": [
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "what": "joining a ceremony that is not open in this room",
+          "why": "frost_ceremony_join returns {error: not-open}",
+          "evidence": [
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "what": "a member beyond the first n taking part",
+          "why": "its step returns not-a-participant and it publishes nothing",
+          "evidence": [
+            "module/src/coordination/aggregate.nim"
+          ]
+        },
+        {
+          "what": "a join in another member's name",
+          "why": "unsigned or wrongly signed, it is dropped from every view (exo-f76)",
+          "evidence": [
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "what": "a bad commitment, proof, share or certifying signature, or a lying coordinator",
+          "why": "ChillDKG blames the faulty participant or the coordinator, as the draft's vectors require",
+          "evidence": [
+            "module/tests/frost_chilldkg_test.nim"
+          ]
+        },
+        {
+          "what": "a share or nonce entering the log",
+          "why": "the log holds only the open, the joins and the step messages",
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "frost_ceremony_open",
+        "frost_ceremony_join",
+        "frost_ceremonies",
+        "coordinate_intents"
+      ],
+      "ui": "RoomAccounts.qml in Room.qml (FROST ceremony: open · join)",
+      "invariants": [
+        4,
+        5,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "No share and no nonce enters the log.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "All participants reach the same account, and any reader can re-derive it from the recovery data.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Each join names its member by that member's signature.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The room cannot tell who opened a ceremony: the open event carries no author.",
+          "credibility": "exposed"
+        },
+        {
+          "claim": "The recovery data is public by the draft's design; every room member holds it.",
+          "credibility": "exposed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/frost_ceremony_room_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/frost_chilldkg_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/authorship_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/coordination/aggregate.nim",
+          "what": "the ceremony over the room's log"
+        }
+      ],
+      "unverified": [
+        "The hosted argument checks (t, n, id) and the not-a-participant refusal are read from source.",
+        "coordinate_flow does not list FROST ceremony entries (flow.nim folds messages, intents and admits only)."
+      ]
+    },
+    {
+      "id": "room/audit-trail",
+      "name": "Export a signature audit trail, and verify it from the file alone",
+      "area": "room",
+      "status": "built",
+      "summary": "One canonical-CBOR file of everything a proposal's approvals cover, signed by the member who exported it, and verifiable from its bytes alone (exo-403). Exporting writes and sends nothing; handing the file to anyone is the member's own act. Nothing is agreed.",
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "room-member",
+          "party": "instance",
+          "class": "authority",
+          "target": "the epoch keys for every event the proposal's history reaches",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "authorization-key",
+          "party": "instance",
+          "class": "authority",
+          "target": "the keystore's secp256k1 key",
+          "field": ""
+        }
+      ],
+      "touches": [],
+      "disclosure": [],
+      "steps": [
+        {
+          "step": "act",
+          "who": "any member",
+          "does": "coordinate_audit(intentId) reduces this member's log to one canonical-CBOR file: the effect and its re-derived materialization; the signing context; the provenance record and the parent-closed lineage it names; every approval with its grade (committed, unattested or rejected) and its signature and attestation events; settlement entries as external reads with the tx hash; and the claims the log alone cannot prove (threshold, stage, disclosure, first epoch). Returns the file as hex, a readable report rendered from it, and its digest.",
+          "signs": "The exporter's secp256k1 key signs digest(hash-input \"muster.signature-audit.v1\" {body: the file body as canonical CBOR}).",
+          "reveals": [],
+          "evidence": [
+            "module/tests/probes/probe_audit_completeness_stepper.nim",
+            "module/tests/probes/probe_audit_deterministic.nim",
+            "scripts/audit-download-self-test.sh"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "anyone holding the file",
+          "does": "coordinate_verify_audit(hex), or module/tools/muster_audit_verify.nim with no log, keys or network, re-derives the materialization, context, inputs and signing payload from the file; recomputes every content id, the canonical order and the parent closure; checks each approval is signed by the contributor it names and recomputes its grade; and checks the exporter's signature. The first discrepancy is named. Settlement is reported as an external read.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/probes/probe_audit_tamper_stepper.nim",
+            "module/tests/probes/probe_audit_settlement_stepper.nim",
+            "module/tests/probes/probe_audit_signer_names_stepper.nim",
+            "scripts/audit-download-self-test.sh"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "anyone reading the report",
+          "does": "The Markdown report is a pure rendering of the file and carries its digest. It is never authoritative: the file is what verifies.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/probes/probe_audit_report_derived.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "exporting when the proposal's history reaches an event this member cannot read",
+          "why": "refused with that reason, never truncated (invariant 7)",
+          "evidence": [
+            "module/tests/probes/probe_audit_epoch_scope_stepper.nim"
+          ]
+        },
+        {
+          "what": "any single change to the file",
+          "why": "refused, naming the discrepancy",
+          "evidence": [
+            "module/tests/probes/probe_audit_tamper_stepper.nim"
+          ]
+        },
+        {
+          "what": "reporting settlement as verified against the chain",
+          "why": "settlement is graded external-read, always",
+          "evidence": [
+            "module/tests/probes/probe_audit_settlement_stepper.nim"
+          ]
+        },
+        {
+          "what": "naming a signer who did not approve, or dropping one who did",
+          "why": "the file and the report name exactly the contributors the fold recognizes",
+          "evidence": [
+            "module/tests/probes/probe_audit_signer_names_stepper.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_audit",
+        "coordinate_verify_audit"
+      ],
+      "ui": "MusterCard.qml 'Download audit trail' (Room.qml downloadAudit); verifying is headless (coordinate_verify_audit or module/tools/muster_audit_verify.nim)",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        7,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The file verifies from its bytes alone; any edit is refused with a named reason.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An export never silently drops what the exporter cannot read; it refuses.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Exporting writes nothing and sends nothing.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Settlement in the file is the exporter's report of the chain; a verifier who needs it confirmed must read the chain.",
+          "credibility": "motivational"
+        },
+        {
+          "claim": "Whoever receives the file reads everything in it; sharing it is the member's choice.",
+          "credibility": "motivational"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_audit_completeness_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_audit_deterministic.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_audit_epoch_scope_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_audit_report_derived.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_audit_settlement_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_audit_signer_names_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_audit_tamper_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "scripts/audit-download-self-test.sh"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/coordination/audit.nim",
+          "what": "exportAudit / verifyAudit / renderAuditReport"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/contracts/specs/derived-exo-403.spec.json",
+          "what": "the audit-file spec and its oracles"
+        }
+      ]
+    },
+    {
+      "id": "room/log-proof",
+      "name": "Export a log proof, and verify one",
+      "area": "room",
+      "status": "built",
+      "summary": "Exports the room's whole raw log as a self-checking slice: every event in canonical order with its content id and the state digest reduce(log) reaches. Verification refuses any single edit. The proof is plaintext and unsigned: it shows the log is internally consistent, not who wrote it. Nothing is agreed.",
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "room-member",
+          "party": "instance",
+          "class": "authority",
+          "target": "the current membership epoch key of the room",
+          "field": ""
+        }
+      ],
+      "touches": [],
+      "disclosure": [],
+      "steps": [
+        {
+          "step": "act",
+          "who": "any member",
+          "does": "coordinate_proof() emits {format: muster.log-proof.v1, events: every event of the raw log — forged author-bearing events included — as {parents, key, value} in plaintext, ids: each event's content id, digest: the state digest, epochFrom: 0, epochTo: the current epoch, proofDigest: digest(hash-input \"muster.log-proof.v1\" {ids, digest, epochFrom, epochTo})}. Nothing is sent.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/log_proof_test.nim",
+            "module/src/log/proof.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "anyone holding the proof",
+          "does": "coordinate_verify_proof(json) recomputes every content id, requires every named parent to be in the proof, requires canonical order, requires the state digest, and requires epochFrom ≤ epochTo. Pure; the first discrepancy is named.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/log_proof_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a changed value, key, parent or digest; a dropped middle event; a re-sequenced slice; an inverted epoch range",
+          "why": "refused with a named reason",
+          "evidence": [
+            "module/tests/log_proof_test.nim"
+          ]
+        },
+        {
+          "what": "a document that is not a muster.log-proof.v1",
+          "why": "it does not parse as a proof",
+          "evidence": [
+            "module/tests/log_proof_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_proof",
+        "coordinate_verify_proof"
+      ],
+      "ui": "headless only",
+      "invariants": [
+        4,
+        5
+      ],
+      "claims": [
+        {
+          "claim": "Editing any event of a proof without recomputing it is refused with a named reason.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The same event set gives the same proof, whatever the order or duplication.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An exported proof is plaintext: whoever receives it reads every event in it.",
+          "credibility": "exposed"
+        },
+        {
+          "claim": "A proof is unsigned and verification checks no signature, so a fully recomputed fabricated proof also verifies. It proves consistency, not origin.",
+          "credibility": "exposed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/log_proof_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/log/proof.nim",
+          "what": "buildProof / verifyProof / toJson"
+        }
+      ],
+      "unverified": [
+        "That a proof is plaintext and that a recomputed fabrication verifies are read from source (proof.nim toJson and verifyProof); no test attempts either. The coordinate_proof description in muster.lidl says nobody outside the epochs can read or forge a proof, which the exported JSON does not bear out."
+      ]
+    },
+    {
+      "id": "room/authorization-grant",
+      "name": "Issue and check a replay-bound authorization",
+      "area": "room",
+      "status": "built",
+      "summary": "For a proposal the room has folded to executable, issues a grant a host hook can check before it lets a gated module call through (exo-002.7, muster's half). The host half — a broker that refuses a gated call without a matching grant — does not exist yet. Nothing new is agreed: the grant records the room's existing agreement.",
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "authorization-key",
+          "party": "instance",
+          "class": "authority",
+          "target": "the keystore's secp256k1 key",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "room-member",
+          "party": "instance",
+          "class": "authority",
+          "target": "the current membership epoch key of the room",
+          "field": ""
+        }
+      ],
+      "touches": [],
+      "disclosure": [],
+      "steps": [
+        {
+          "step": "act",
+          "who": "a member (the issuer)",
+          "does": "coordinate_authorization(intentId) issues a grant only if the intent is executable in this member's fold. The grant names the capability (invoke → <module>.<method>; safe → safe.execute; eip191 → eip191.attest; threshold, unanimous, frost → room.attest; otherwise room.<policy>), the materialization root the room agreed on, and a context: environment (chain:<id> for an account on an EVM chain, else room), account (safe:<address> for a Safe, else room), slot = the intent id, expiry = now + 600 s.",
+          "signs": "secp256k1 recoverable signature by this instance's authorization key over digest(hash-input \"muster.authorization.v1\" {intentId, capability, materialization, environment, account, slot, expiry})",
+          "reveals": [],
+          "evidence": [
+            "module/tests/authorization_test.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "a host hook, or any member",
+          "does": "coordinate_check_authorization(json) recovers the issuer from the signature and requires slot = intent id and now ≤ expiry. The host must also compare the root with the call it is about to dispatch and the issuer with the issuers its policy trusts; checkAuthorization supports both, but the hosted method passes neither.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/authorization_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a grant for an intent that is not executable",
+          "why": "{error: not-executable}; nothing is authorized before agreement",
+          "evidence": [
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "what": "an expired grant, a wrong root, an untrusted issuer, or a tampered capability, slot or issuer",
+          "why": "refused with a reason (invariant 2)",
+          "evidence": [
+            "module/tests/authorization_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_authorization",
+        "coordinate_check_authorization"
+      ],
+      "ui": "headless only",
+      "invariants": [
+        1,
+        2,
+        3,
+        5
+      ],
+      "claims": [
+        {
+          "claim": "A grant exists only for a proposal the room folded to executable.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A grant is worthless for any other root, slot or issuer, or after its expiry.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "No host checks grants yet; whether a gated call needs one is up to the host.",
+          "credibility": "motivational"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/authorization_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/intents/authorization.nim",
+          "what": "the grant, its digest and the pure check"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/docs/design/host-effect-policy.md",
+          "what": "the host-side proposal: gated effects and the hook's four steps"
+        }
+      ],
+      "unverified": [
+        "The not-executable refusal and the context the hosted method fills in are read from source (muster_module.nim)."
+      ]
+    },
+    {
+      "id": "room/readiness",
+      "name": "Check whether you are ready to take part in a proposal",
+      "area": "room",
+      "status": "built",
+      "summary": "The card's 'What this needs': the proposal's five questions plus this instance's readiness, each requirement graded met, missing or unknown with a remedy (exo-002.2). It grades your own keys and configuration only. The module installs nothing. Nothing is agreed.",
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "room-member",
+          "party": "instance",
+          "class": "authority",
+          "target": "the current membership epoch key of the room",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "chain:<the proposal's chain>",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "the Safe address the proposal names",
+          "observer": "rpc-provider",
+          "when": "act"
+        },
+        {
+          "field": "timing",
+          "observer": "rpc-provider",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "a member looking at a proposal",
+          "does": "coordinate_readiness(intentId) reads the proposal's policy and effect from the log, computes its driver's manifest, and grades each requirement for this instance only. module: asks the host whether the module is loaded. environment: probes the configured RPC (eth_chainId) or Bitcoin node (which chain it serves). authority: a Safe's owner set read from the chain (getOwners) and compared locally with your address; a Bitcoin key compared with the account's keys; a roster key with the room's roster. infra: configuration, or a funded LEZ account through lez_core. capability: unknown, since no host broker exists. The payload also carries the manifest (agreement, requirements, the full disclosure with the store node's rows, touches), the profile and the effect.",
+          "signs": "nothing",
+          "reveals": [
+            {
+              "field": "the Safe address the proposal names",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "timing",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/readiness_test.nim",
+            "module/tests/lez_readiness_test.nim",
+            "scripts/card-self-test.sh"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "reporting met for a check this instance cannot run",
+          "why": "no RPC, a failed read, or no probe is unknown, never met",
+          "evidence": [
+            "module/tests/readiness_test.nim",
+            "module/tests/lez_readiness_test.nim"
+          ]
+        },
+        {
+          "what": "grading another member's keys or holdings",
+          "why": "authority is graded against your own identity only (invariant 9)",
+          "evidence": [
+            "module/tests/readiness_test.nim"
+          ]
+        },
+        {
+          "what": "calling an undeclared manifest ready",
+          "why": "declared: false gives ready: false",
+          "evidence": [
+            "module/tests/readiness_test.nim"
+          ]
+        },
+        {
+          "what": "installing or fetching what is missing",
+          "why": "the module names a remedy; the host acts on it (invariant 3)",
+          "evidence": [
+            "module/src/coordination/readiness.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_readiness"
+      ],
+      "ui": "MusterCard.qml 'What this needs' (Room.qml loadReadiness)",
+      "invariants": [
+        3,
+        8,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "Readiness grades your own keys and configuration, never who else holds what.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A check this instance cannot run reports unknown, never met.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Your address is compared with the owner set on your instance; it is not sent to the RPC.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Your RPC provider sees which Safe your client asks about, and when.",
+          "credibility": "exposed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/readiness_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_readiness_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "scripts/card-self-test.sh"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/coordination/readiness.nim",
+          "what": "probeFromFacts: what each requirement kind asks, and of whom"
+        }
+      ],
+      "unverified": [
+        "That the owner-set read sends the Safe address and not yours is read from source (readiness.nim authorityHeld); readiness_test.nim injects the probe."
+      ]
+    },
+    {
+      "id": "room/connectivity",
+      "name": "Check the room's infrastructure",
+      "area": "room",
+      "status": "built",
+      "summary": "Shows the liveness of the infrastructure the room relies on, and only that: the delivery node always, and any RPC or chain a proposal's driver introduced (exo-428). A room that only talks never probes an RPC. Nothing is agreed.",
+      "requirements": [
+        {
+          "kind": "infra",
+          "name": "delivery-node",
+          "party": "instance",
+          "class": "infra",
+          "target": "the delivery node this instance runs",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "chain:<a chain a proposal introduced>",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "timing",
+          "observer": "rpc-provider",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "a member",
+          "does": "connectivity() reads the delivery node's own view (getNodeInfo, local), then every row a proposal in the room introduced through an instance-party infra or environment requirement: a Safe proposal introduces the RPC, probed with eth_chainId and checked against the chain it needs. Each row is ok, warn, down or unknown and names the proposals that introduced it. An undeclared driver shows as unknown.",
+          "signs": "nothing",
+          "reveals": [
+            {
+              "field": "timing",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/room_infra_test.nim",
+            "scripts/infra-self-test.sh"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "probing an RPC no proposal needs",
+          "why": "a room with no such proposal lists and probes none",
+          "evidence": [
+            "module/tests/room_infra_test.nim",
+            "scripts/infra-self-test.sh"
+          ]
+        },
+        {
+          "what": "showing an undeclared driver's needs as nothing",
+          "why": "it is shown as undeclared, never guessed",
+          "evidence": [
+            "module/tests/room_infra_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "connectivity"
+      ],
+      "ui": "ConnectionIndicators.qml in Room.qml",
+      "invariants": [
+        8
+      ],
+      "claims": [
+        {
+          "claim": "A room that only talks never contacts an RPC.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Each piece of infrastructure appears only once a proposal names it, and says which.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An introduced RPC provider sees the chain-id probe and its timing.",
+          "credibility": "exposed"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/room_infra_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "scripts/infra-self-test.sh"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/coordination/room_infra.nim",
+          "what": "the needs a room's proposals introduce"
+        }
+      ]
+    },
+    {
+      "id": "room/choose-policy",
+      "name": "Choose the driver for your next proposal",
+      "area": "room",
+      "status": "built",
+      "summary": "Sets this instance's default driver (policy) for the next proposal it makes. The kind must be one the room admits, and an account-bound kind must act from an account a member disclosed. Nothing is published until you propose, when the policy is declared in the log. Nothing is agreed.",
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "room-member",
+          "party": "instance",
+          "class": "authority",
+          "target": "the current membership epoch key of the room",
+          "field": ""
+        }
+      ],
+      "touches": [],
+      "disclosure": [
+        {
+          "field": "policy",
+          "observer": "room-member",
+          "when": "propose"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "a member about to propose",
+          "does": "coordinate_drivers lists every kind this client has and whether the room admits it: the founding kinds, or a kind an approved add-driver proposal granted. coordinate_set_policy(kind) sets the default. A room kind (threshold, frost, invoke, unanimous) is its bare name. An account-bound kind (for example safe or eip191) takes kind@<CAIP-10>, or the bare kind when the room holds exactly one account it can use.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/governance_test.nim",
+            "module/tests/kinds_test.nim",
+            "module/tests/accounts_test.nim",
+            "module/nim-lib/muster_module.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a kind the room has not admitted",
+          "why": "{error: policy not admitted in this room} (invariant 6: drivers are admitted by proposal)",
+          "evidence": [
+            "module/nim-lib/muster_module.nim",
+            "module/tests/governance_test.nim"
+          ]
+        },
+        {
+          "what": "an account-bound kind with no disclosed account, or several and none chosen",
+          "why": "{error: no-account} or {error: choose-account}; never a guess",
+          "evidence": [
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "what": "a policy resolving to an account nobody disclosed, or to the module's fixture Safe",
+          "why": "the intent folds as unsupported",
+          "evidence": [
+            "module/tests/accounts_test.nim"
+          ]
+        },
+        {
+          "what": "a kind not on the client's list",
+          "why": "never offered, never resolved to another family; its intents fold as unsupported",
+          "evidence": [
+            "module/tests/kinds_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_drivers",
+        "coordinate_set_policy",
+        "coordinate_policy"
+      ],
+      "ui": "Main.qml and Room.qml (the composer's chosen policy)",
+      "invariants": [
+        6
+      ],
+      "claims": [
+        {
+          "claim": "A proposal runs only under a driver the room admitted.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An account-bound proposal names its account, so an approval for one account never counts for another.",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/governance_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/kinds_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/accounts_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/nim-lib/muster_module.nim",
+          "what": "musterCoordinateSetPolicy"
+        }
+      ],
+      "unverified": [
+        "The hosted refusals (not admitted, no-account, choose-account) are read from source; the tests cover the fold's resolution, not the hosted method."
+      ]
+    },
+    {
+      "id": "room/read-history",
+      "name": "Read the room's history, provenance and flow",
+      "area": "room",
+      "status": "built",
+      "summary": "The education views, each folded from the same authentic log the cards use: the activity feed, the provenance of every entry, who could see what, and the room's security level. Reading sends nothing beyond the store polling the room already does. Nothing is agreed.",
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "room-member",
+          "party": "instance",
+          "class": "authority",
+          "target": "the current membership epoch key of the room",
+          "field": ""
+        }
+      ],
+      "touches": [],
+      "disclosure": [],
+      "steps": [
+        {
+          "step": "act",
+          "who": "any member",
+          "does": "coordinate_activity: every state transition (proposed, each approval with the running count and who, threshold reached, submitted, settled, declines, admits) in canonical order. coordinate_provenance: every entry classed by the F-20 vocabulary with the guarantee the code enforces and its epoch. coordinate_flow: per entry, which field reached which observer — inside rows name the members who held the key then, the store node's topic and timing rows are on every entry, a driver's outside rows appear at submit and final, an undeclared driver yields an 'undeclared' row. security_levels: the active rung on authentication, provenance and confidentiality.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/activity_test.nim",
+            "module/tests/provenance_all_test.nim",
+            "module/tests/flow_test.nim",
+            "module/tests/null_ladder_test.nim",
+            "module/tests/authorship_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "showing an undeclared driver's disclosure as silence",
+          "why": "an 'undeclared' row at the boundary",
+          "evidence": [
+            "module/tests/flow_test.nim"
+          ]
+        },
+        {
+          "what": "an author-bearing event its author did not sign",
+          "why": "dropped from every view (exo-f76)",
+          "evidence": [
+            "module/tests/authorship_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_activity",
+        "coordinate_provenance",
+        "coordinate_flow",
+        "coordinate_messages",
+        "coordinate_members",
+        "security_levels"
+      ],
+      "ui": "ActivityFeed.qml, FlowView.qml and ScopePanel.qml (security levels) in Room.qml; provenance is headless",
+      "invariants": [
+        4,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Every view is folded from the same log as the cards; reordering or duplicating events changes nothing.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The store node appears on every entry of the flow view.",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/activity_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/provenance_all_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/flow_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/null_ladder_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/coordination/flow.nim",
+          "what": "reduceFlow: which log entries the flow view folds"
+        }
+      ],
+      "unverified": [
+        "The flow view omits account disclosures and FROST ceremony entries (flow.nim folds messages, intents and admits only).",
+        "coordinate_provenance still describes a message's author as 'what the sender wrote … not a verified signature' (intents.nim logProvenance); since exo-f76 the room verifies it."
+      ]
+    },
+    {
+      "id": "room/contacts",
+      "name": "Name people in your address book",
+      "area": "room",
+      "status": "built",
+      "summary": "A local address book mapping encryption identities to aliases, so rosters, requests, messages and invites show names instead of hex. It stays on this instance. Nothing is agreed.",
+      "requirements": [],
+      "touches": [],
+      "disclosure": [],
+      "steps": [
+        {
+          "step": "act",
+          "who": "a member",
+          "does": "contact_add, contact_set_alias and contact_remove edit {identity (64-byte encryption identity hex, 0x and case normalized), alias, optional secp address}, persisted beside the keystore. An empty alias does not overwrite a stored one. coordinate_members, coordinate_pending, coordinate_messages, coordinate_invites and the account views resolve aliases against it.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/contacts_test.nim"
+          ]
+        }
+      ],
+      "refusals": [],
+      "hosted": [
+        "contacts",
+        "contact_add",
+        "contact_set_alias",
+        "contact_remove"
+      ],
+      "ui": "AddressBook.qml",
+      "invariants": [
+        8
+      ],
+      "claims": [
+        {
+          "claim": "Aliases stay on this instance; nothing is published.",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/contacts_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/coordination/contacts.nim",
+          "what": "the address book store"
+        }
+      ],
+      "unverified": [
+        "That no alias is ever published is read from source; contacts_test.nim covers the store, not the absence of publication."
+      ]
+    }
+  ]
+}

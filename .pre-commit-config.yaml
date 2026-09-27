@@ -79,6 +79,14 @@ repos:
     files: ^(contracts/families/|docs/design/multisig-(landscape\.md|atlas\.html)|module/src/drivers/)
 - repo: local
   hooks:
+  - id: action-corpus
+    name: The action corpus resolves and the atlas embeds it current (exo-661)
+    entry: scripts/check-action-corpus.py
+    language: system
+    pass_filenames: false
+    files: ^(contracts/actions/|contracts/families/|docs/design/multisig-atlas\.html|module/src/api/muster\.lidl|scripts/check-action-corpus\.py)
+- repo: local
+  hooks:
   - id: claims-qml-sync
     name: ClaimsRegistry.qml is regenerated from the claims registry
     entry: ui/tools/gen-claims-qml.py

@@ -1,0 +1,2628 @@
+{
+  "actions": [
+    {
+      "id": "dot.pallet-multisig/derive-account",
+      "name": "Derive a Polkadot multisig address",
+      "area": "family",
+      "family": "dot.pallet-multisig",
+      "status": "declared",
+      "summary": "Members agree on a signatory set and a threshold; the address is a hash of the two, so nothing is deployed or registered. The account exists on chain only once someone funds it to the existential deposit, and the chain learns the set and threshold only at the first approval.",
+      "effect": {
+        "schema": "muster.effect.dot.pallet-multisig.derive-account.v0",
+        "fields": [
+          {
+            "name": "signatories",
+            "means": "the n signatory account ids (32 bytes each), sorted bytewise ascending, no duplicates"
+          },
+          {
+            "name": "threshold",
+            "means": "k, a u16: at least 2 and at most n"
+          },
+          {
+            "name": "address",
+            "means": "the derived multisig account id: blake2_256(SCALE((\"modlpy/utilisuba\", signatories, threshold)))"
+          },
+          {
+            "name": "chain",
+            "means": "the chain the room means to use it on (e.g. Polkadot Asset Hub); the address itself is the same on every chain with 32-byte account ids"
+          },
+          {
+            "name": "funder",
+            "means": "the member whose own account sends the first funds"
+          },
+          {
+            "name": "amount",
+            "means": "the first funding, in plancks: at least the existential deposit (0.01 DOT on Polkadot Asset Hub)"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "none on chain: the address is a pure function of the set and k; funding is one member's own transfer",
+        "finality": "external",
+        "domain": "substrate.multisig.multi-account-id (derived, not signed) + polkadot.extrinsic.v4.signed-payload (the funding transfer)"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "polkadot:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "polkadot:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "substrate-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "polkadot:*",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "multisig-signatory",
+          "party": "contributor",
+          "class": "authority",
+          "target": "pallet-multisig:<multisig account>",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "dot-for-funding-and-fee",
+          "party": "contributor",
+          "class": "asset",
+          "target": "polkadot:<funder account>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "signatory-accounts",
+          "party": "proposer",
+          "class": "address",
+          "target": "pallet-multisig:<multisig account>",
+          "field": "signatories"
+        },
+        {
+          "kind": "asset",
+          "name": "first-funding",
+          "party": "proposer",
+          "class": "asset",
+          "target": "pallet-multisig:<multisig account>",
+          "field": "amount"
+        }
+      ],
+      "touches": [
+        {
+          "target": "polkadot:*",
+          "mode": "write"
+        },
+        {
+          "target": "pallet-multisig:<multisig account>",
+          "mode": "write"
+        },
+        {
+          "target": "polkadot:<funder account>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payee",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "amount",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Names the signatory accounts and k. Muster would sort the set bytewise, refuse duplicates, k below 2 and k above n, and derive the address exactly as the pallet does: SCALE-encode the tuple (the 16 bytes \"modlpy/utilisuba\", the sorted Vec<AccountId32> with its compact length, k as u16 little-endian), hash it with blake2_256, and read the 32 bytes as the account id. Nothing leaves the room.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "policy",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L641-L649",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L788-L808"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Each listed signatory's client would re-derive the address from the set and k and confirm that its own key is in the set. The chain is not involved and checks nothing; the account is the same on every chain with 32-byte account ids.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L641-L649",
+            "https://wiki.polkadot.com/learn/learn-account-multisig/"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "One member funds the address from their own account, e.g. with Balances.transfer_keep_alive, with at least the existential deposit. Until then the account does not exist on chain. The RPC provider and the block producers see the transfer first, then everyone: a payment to an address that nothing on chain links to the signatory set.",
+          "signs": "The approver's OWN v4 signed extrinsic, not a shared message: SCALE(Balances.transfer_keep_alive{dest: MultiAddress::Id(multisig address), value: Compact<u128>} ++ the explicit extension data (era: 1 byte immortal or 2 bytes mortal; the approver's account nonce as Compact<u32>; the tip as Compact<u128> and an Option fee-asset id (ChargeAssetTxPayment); the metadata-hash mode byte; the other Asset Hub extensions encode nothing) ++ the implicit data, never transmitted but signed (spec_version u32, transaction_version u32, the genesis hash, the era's birth block hash (the genesis hash when immortal), Option<metadata hash>)). If that is longer than 256 bytes, the signed message is its blake2_256 instead. Signed with sr25519, ed25519, or secp256k1 ECDSA (over blake2_256 of the message) by the approver's own key. The genesis hash is inside: the chain is named (binding explicit). The tip and the approver's nonce are inside (the chain computes the fee itself); the multisig account is implied by the sender plus other_signatories plus threshold.",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payee",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/balances/src/lib.rs#L667-L684",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/balances/src/lib.rs#L440-L444",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L340",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L925-L980",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L657-L678"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "Muster would read the account's balance from the chain and show the account as existing once the funding block is final. The signatory set and k stay off chain until the first approval, whose arguments name them.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L439-L501"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "A disclosed multisig address that is not multi_account_id(sorted signatories, k)",
+          "why": "invariant 1: the account is re-derived, never trusted; the pallet derives the multisig origin from the sender, other_signatories and k on every call, so a wrong address is one no approval can move",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L641-L649",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L651-L672"
+          ]
+        },
+        {
+          "what": "k below 2",
+          "why": "the chain's rule: as_multi, approve_as_multi and cancel_as_multi fail with MinimumThreshold; a threshold of 1 is a different, stateless call (as_multi_threshold_1) where any one signatory acts alone",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L225-L256",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L299-L365"
+          ]
+        },
+        {
+          "what": "k above n",
+          "why": "the chain does not check k <= n: such an address can be funded, but approvals stop at n and the call can never execute, so the funds are stuck",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L651-L747"
+          ]
+        },
+        {
+          "what": "Duplicate signatories, or more than MaxSignatories (100 on Polkadot Asset Hub)",
+          "why": "the chain's rule: SignatoriesOutOfOrder, SenderInSignatories and TooManySignatories; the derivation is defined over the sorted, duplicate-free set",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L788-L808",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L519-L536"
+          ]
+        },
+        {
+          "what": "A first funding below the existential deposit",
+          "why": "the chain's rule: an account below the existential deposit is not created (balances error ExistentialDeposit)",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/balances/src/lib.rs#L440-L444",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L340"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The address is a pure function of the sorted signatory set and k; any member can re-derive it, and muster would refuse a disclosed address that does not match.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The account cannot be edited: a different set or k is a different address.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Spends are bound to one chain: every approval signs that chain's genesis hash, even though the address is the same on every chain with 32-byte account ids.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Funding reveals only an unlinked address; from the first approval on, anyone reading the chain sees the full signatory set and k.",
+          "credibility": "exposed",
+          "party": "anyone reading the chain, from the first approval on"
+        },
+        {
+          "claim": "The chain does not check k <= n; an account with k above n can be funded but never spent, so muster would refuse to derive one.",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L641-L649",
+          "what": "multi_account_id: blake2_256 over SCALE((\"modlpy/utilisuba\", sorted signatories, threshold u16)), read as the account id"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L788-L808",
+          "what": "ensure_sorted_and_insert: other_signatories must be strictly ascending and must not contain the sender"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L299-L365",
+          "what": "as_multi_threshold_1: a threshold of 1 is a separate, stateless call any one signatory can make"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L519-L536",
+          "what": "Polkadot Asset Hub: DepositBase = system_para_deposit(1, 88), DepositFactor = system_para_deposit(0, 32), MaxSignatories = 100"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L340",
+          "what": "Polkadot Asset Hub existential deposit = SYSTEM_PARA_EXISTENTIAL_DEPOSIT / 10 (0.01 DOT)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/constants/src/polkadot.rs#L101-L116",
+          "what": "system-parachain constants: SYSTEM_PARA_EXISTENTIAL_DEPOSIT = relay ED / 10; system_para_deposit = relay deposit / 100"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/balances/src/lib.rs#L440-L444",
+          "what": "balances error ExistentialDeposit: value too low to create an account"
+        },
+        {
+          "kind": "source",
+          "url": "https://wiki.polkadot.com/learn/learn-account-multisig/",
+          "what": "multisig addresses are deterministic from members and threshold, and cannot be modified after creation"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/relay/polkadot/src/lib.rs#L1121-L1130",
+          "what": "the Polkadot relay runtime still includes pallet_multisig, alongside Asset Hub"
+        }
+      ],
+      "unverified": [
+        "The DOT amounts (existential deposit 0.01 DOT on Asset Hub) are computed from the fellowship runtime v2.5.0 constants, not read from the live chain."
+      ]
+    },
+    {
+      "id": "dot.pallet-multisig/transfer",
+      "name": "Send DOT from a Polkadot multisig",
+      "area": "family",
+      "family": "dot.pallet-multisig",
+      "status": "declared",
+      "summary": "k of the n signatories each approve with their own public extrinsic, and the chain counts them. Intermediate approvals carry only the call hash; the room carries the call, and the last approver submits the full call, which the pallet executes from the multisig account.",
+      "effect": {
+        "schema": "muster.effect.dot.pallet-multisig.transfer.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the multisig account id (see derive-account)"
+          },
+          {
+            "name": "signatories",
+            "means": "the n signatory accounts, sorted bytewise"
+          },
+          {
+            "name": "threshold",
+            "means": "k, a u16, 2 <= k <= n"
+          },
+          {
+            "name": "to",
+            "means": "the payee's account id"
+          },
+          {
+            "name": "amount",
+            "means": "the DOT amount in plancks (1 DOT = 10^10 plancks), a Compact<u128> in the call"
+          },
+          {
+            "name": "keepAlive",
+            "means": "Balances.transfer_keep_alive (refuses to take the multisig below the existential deposit) or transfer_allow_death"
+          },
+          {
+            "name": "call",
+            "means": "the SCALE-encoded runtime call (pallet index, call index, arguments), encoded under specVersion"
+          },
+          {
+            "name": "callHash",
+            "means": "blake2_256(call): all that intermediate approvals commit to"
+          },
+          {
+            "name": "specVersion",
+            "means": "the runtime spec_version and metadata hash the call was encoded and reviewed under"
+          },
+          {
+            "name": "maxWeight",
+            "means": "the weight limit (ref_time, proof_size) the final as_multi passes; must cover the call's dispatch weight"
+          },
+          {
+            "name": "timepoint",
+            "means": "(block height, extrinsic index) of the first approval; known only once it lands, read from the chain"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n signatories (the multisig's threshold; the chain counts the approvals)",
+        "finality": "external",
+        "domain": "polkadot.extrinsic.v4.signed-payload (Multisig.approve_as_multi, then Multisig.as_multi)"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "polkadot:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "polkadot:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "substrate-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "polkadot:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "runtime-metadata",
+          "party": "instance",
+          "class": "infra",
+          "target": "polkadot:*",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "multisig-signatory",
+          "party": "contributor",
+          "class": "authority",
+          "target": "pallet-multisig:<multisig account>",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "dot-for-fee-and-deposit",
+          "party": "contributor",
+          "class": "asset",
+          "target": "polkadot:<approver account>",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "multisig-balance",
+          "party": "proposer",
+          "class": "asset",
+          "target": "pallet-multisig:<multisig account>",
+          "field": "amount"
+        },
+        {
+          "kind": "address",
+          "name": "payee",
+          "party": "counterparty",
+          "class": "address",
+          "target": "polkadot:<payee account>",
+          "field": "to"
+        }
+      ],
+      "touches": [
+        {
+          "target": "polkadot:*",
+          "mode": "write"
+        },
+        {
+          "target": "pallet-multisig:<multisig account>",
+          "mode": "write"
+        },
+        {
+          "target": "polkadot:<approver account>",
+          "mode": "write"
+        },
+        {
+          "target": "polkadot:<payee account>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "payer",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "approve"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "approvals",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "effect",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "effect",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payee",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "amount",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Writes the effect: the multisig, the payee and the amount. Muster would encode the call (Balances.transfer_keep_alive{dest, value}) against the runtime metadata the RPC serves now, hash it with blake2_256, record the spec_version and metadata hash it used, and post the call bytes, the hash and the effect to the room: the room carries the call data, which the chain sees only as a hash until the last approval. It would also read the multisig's balance and Multisigs(multisig, call hash): if an operation with this hash is already open, this proposal is that operation, not a new one.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "policy",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            },
+            {
+              "field": "payer",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L214-L223",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L651-L676",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L439-L501"
+          ]
+        },
+        {
+          "step": "vote",
+          "who": "contributor",
+          "does": "The first approver's client re-derives the call hash from the reviewed effect under the live runtime, then the approver submits Multisig.approve_as_multi with no timepoint from their own account. The pallet checks k >= 2 and that other_signatories is sorted and excludes the sender, records the operation under (multisig, call hash) with the sender as depositor and the current (block, extrinsic index) as its timepoint, and reserves DepositBase + DepositFactor x k from the sender (0.20088 + 0.00032 x k DOT on Polkadot Asset Hub). The RPC provider and the block producers see the extrinsic first, then everyone: the approver, the multisig, k, every other signatory, and the call hash, not the call. If the first approver uses as_multi instead, the full call is in its public arguments; the pallet does not store it.",
+          "signs": "The approver's OWN v4 signed extrinsic, not a shared message: SCALE(Multisig.approve_as_multi{threshold: u16, other_signatories: Vec<AccountId32> sorted, without the sender, maybe_timepoint: None, call_hash: [u8; 32] = blake2_256(SCALE(inner call)), max_weight: Weight} ++ the explicit extension data (era: 1 byte immortal or 2 bytes mortal; the approver's account nonce as Compact<u32>; the tip as Compact<u128> and an Option fee-asset id (ChargeAssetTxPayment); the metadata-hash mode byte; the other Asset Hub extensions encode nothing) ++ the implicit data, never transmitted but signed (spec_version u32, transaction_version u32, the genesis hash, the era's birth block hash (the genesis hash when immortal), Option<metadata hash>)). If that is longer than 256 bytes, the signed message is its blake2_256 instead. Signed with sr25519, ed25519, or secp256k1 ECDSA (over blake2_256 of the message) by the approver's own key. The genesis hash is inside: the chain is named (binding explicit). The tip and the approver's nonce are inside (the chain computes the fee itself); the multisig account is implied by the sender plus other_signatories plus threshold.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "approvals",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L439-L501",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L749-L776",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L810-L815",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L519-L536",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/constants/src/polkadot.rs#L101-L116",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/relay/polkadot/constants/src/lib.rs#L30-L40",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L925-L980"
+          ]
+        },
+        {
+          "step": "vote",
+          "who": "contributor",
+          "does": "Each further approver's client reads Multisigs(multisig, call hash) from the chain (timepoint, depositor, approvals so far) and would re-derive the call hash from the reviewed effect under the live runtime before offering the approval. The approver submits approve_as_multi with that timepoint. The pallet refuses a missing timepoint (NoTimepoint), a different one (WrongTimepoint), or a second approval from the same account (AlreadyApproved). approve_as_multi never executes, even at k. The chain observer learns the same facts as at the first approval.",
+          "signs": "The approver's OWN v4 signed extrinsic, not a shared message: SCALE(Multisig.approve_as_multi{threshold, other_signatories (sorted, without the sender), maybe_timepoint: Some(Timepoint{height: block number, index: extrinsic index of the first approval}), call_hash, max_weight} ++ the explicit extension data (era: 1 byte immortal or 2 bytes mortal; the approver's account nonce as Compact<u32>; the tip as Compact<u128> and an Option fee-asset id (ChargeAssetTxPayment); the metadata-hash mode byte; the other Asset Hub extensions encode nothing) ++ the implicit data, never transmitted but signed (spec_version u32, transaction_version u32, the genesis hash, the era's birth block hash (the genesis hash when immortal), Option<metadata hash>)). If that is longer than 256 bytes, the signed message is its blake2_256 instead. Signed with sr25519, ed25519, or secp256k1 ECDSA (over blake2_256 of the message) by the approver's own key. The genesis hash is inside: the chain is named (binding explicit). The tip and the approver's nonce are inside (the chain computes the fee itself); the multisig account is implied by the sender plus other_signatories plus threshold.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "approvals",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L651-L747",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L925-L980",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L657-L678",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_genesis.rs#L56-L62",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_spec_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_tx_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_mortality.rs#L29-L72",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L1825-L1841"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "One signatory (the last approver, or any signatory once k approvals are recorded) submits Multisig.as_multi with the timepoint and the FULL call. The pallet hashes the call; if it matches an open operation that has k approvals counting this one, it checks the call's weight against max_weight (MaxWeightTooLow), removes the operation, returns the deposit to the depositor, then dispatches the transfer from the multisig account. The RPC provider and the block producers see the call first, then everyone: the payee and the amount become public.",
+          "signs": "The approver's OWN v4 signed extrinsic, not a shared message: SCALE(Multisig.as_multi{threshold, other_signatories (sorted, without the sender), maybe_timepoint: Some(timepoint of the first approval), call: the FULL inner call, max_weight: at least the inner call's dispatch weight} ++ the explicit extension data (era: 1 byte immortal or 2 bytes mortal; the approver's account nonce as Compact<u32>; the tip as Compact<u128> and an Option fee-asset id (ChargeAssetTxPayment); the metadata-hash mode byte; the other Asset Hub extensions encode nothing) ++ the implicit data, never transmitted but signed (spec_version u32, transaction_version u32, the genesis hash, the era's birth block hash (the genesis hash when immortal), Option<metadata hash>)). If that is longer than 256 bytes, the signed message is its blake2_256 instead. Signed with sr25519, ed25519, or secp256k1 ECDSA (over blake2_256 of the message) by the approver's own key. The genesis hash is inside: the chain is named (binding explicit). The tip and the approver's nonce are inside (the chain computes the fee itself); the multisig account is implied by the sender plus other_signatories plus threshold.",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payee",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L368-L436",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L678-L721",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/balances/src/lib.rs#L667-L684",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L925-L980"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "Muster would read the MultisigExecuted event for (multisig, call hash, timepoint) and report its result field, not the extrinsic's success, then wait for the block to be final. If the inner transfer failed (e.g. the multisig lacks the amount), the operation is gone and the room needs a new proposal.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L260-L296",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L700-L721"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "Offering an approval whose call hash is not blake2_256 of the call muster re-encodes from the reviewed effect under the runtime metadata live now",
+          "why": "invariant 1 / F-4: an intermediate approval is a pointer to a hash; the pallet decodes the call only at the final as_multi, under whatever runtime is live then. The Asset Hub migration did not carry pending multisigs over because a migrated hash's preimage could decode to something else",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L439-L501",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.0.1/pallets/rc-migrator/src/multisig.md"
+          ]
+        },
+        {
+          "what": "Offering an approval after the runtime's spec_version or metadata hash changed from the one the room reviewed under, until the call is re-encoded and re-reviewed",
+          "why": "invariant 1: the same effect can encode to different call bytes under a new runtime, so the reviewed hash no longer names the reviewed effect",
+          "evidence": [
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.0.1/pallets/rc-migrator/src/multisig.md",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_spec_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/metadata-hash-extension/src/lib.rs#L95-L165"
+          ]
+        },
+        {
+          "what": "An approval whose timepoint is not the one read from Multisigs(multisig, call hash), or an unrecorded read of it; a first approval when that entry already exists",
+          "why": "the chain's rule (NoTimepoint, WrongTimepoint, UnexpectedTimepoint; one open operation per (multisig, call hash)) and invariant 10: the timepoint is an external read that reaches the signed bytes",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L676-L682",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L749-L751",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L214-L223"
+          ]
+        },
+        {
+          "what": "An approval from an account that has already approved this operation",
+          "why": "the chain's rule: AlreadyApproved; the fee would be spent for nothing",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L684-L742"
+          ]
+        },
+        {
+          "what": "other_signatories that are not the account's sorted set minus the sender, or a k that does not re-derive the multisig named in the effect",
+          "why": "the chain's rule (SignatoriesOutOfOrder, SenderInSignatories, TooFewSignatories, TooManySignatories, MinimumThreshold) and invariant 1: a different list or k addresses a different multisig",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L788-L808",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L641-L672"
+          ]
+        },
+        {
+          "what": "A final as_multi whose max_weight is below the call's dispatch weight under the live runtime",
+          "why": "the chain's rule: MaxWeightTooLow",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L693-L699"
+          ]
+        },
+        {
+          "what": "A signing payload whose genesis hash, spec_version or transaction_version is not the room's environment",
+          "why": "invariant 2: binding is explicit here (CheckGenesis, CheckSpecVersion and CheckTxVersion put them in the signed bytes), so a payload for another chain is worthless there and must not be produced",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_genesis.rs#L56-L62",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_spec_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_tx_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L657-L678"
+          ]
+        },
+        {
+          "what": "A mortal approval whose era birth block hash, or an approval whose nonce, was read but not recorded",
+          "why": "invariant 10: the approver's nonce and the era's birth block hash are external reads that reach the signed bytes",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_mortality.rs#L29-L72",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_nonce.rs#L50-L52",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/era.rs#L31-L111"
+          ]
+        },
+        {
+          "what": "Marking the intent final when MultisigExecuted.result is an error",
+          "why": "the chain's rule: as_multi removes the operation and returns the deposit before dispatching, and succeeds even when the inner call fails; the failure is only in the event",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L693-L721"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Each approval is bound to one chain: its signed bytes include that chain's genesis hash, spec version and transaction version.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An intermediate approval covers only a 32-byte call hash. It is safe only because the room carries the call and muster would re-derive the hash from the reviewed effect, against runtime metadata and on-chain state that the RPC provider serves unverified.",
+          "credibility": "motivational",
+          "party": "the RPC provider"
+        },
+        {
+          "claim": "The chain counts the approvals: the call runs only after k distinct signatories of the sorted set have approved, and only with call bytes whose blake2_256 is the approved hash.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Every approval is a public extrinsic naming the approver, the multisig, k and all other signatories; the payee and amount become public at the final as_multi.",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        },
+        {
+          "claim": "Proxies registered on the multisig account act for it without the threshold (a bypass by design, for a stable address); muster would read the account's proxy list from the chain and show it.",
+          "credibility": "motivational",
+          "party": "the multisig account's proxy delegates"
+        },
+        {
+          "claim": "Approving costs each approver their own transaction fee; the first approver also locks DepositBase + DepositFactor x k until the call executes or they cancel.",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L641-L649",
+          "what": "multi_account_id: blake2_256 over SCALE((\"modlpy/utilisuba\", sorted signatories, threshold u16)), read as the account id"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L651-L778",
+          "what": "operate: threshold >= 2, sorted signatories, dedup on (multisig, call_hash), timepoint checks, AlreadyApproved, MaxWeightTooLow, deposit reserve, storage removed and deposit returned before the call is dispatched from the multisig origin"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L368-L501",
+          "what": "as_multi (full call; the only way to execute) and approve_as_multi (call hash only; never executes); first approval reserves DepositBase + threshold * DepositFactor"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L225-L256",
+          "what": "the pallet's errors: MinimumThreshold, AlreadyApproved, TooFewSignatories, TooManySignatories, SignatoriesOutOfOrder, SenderInSignatories, NotFound, NotOwner, NoTimepoint, WrongTimepoint, UnexpectedTimepoint, MaxWeightTooLow, AlreadyStored"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L925-L980",
+          "what": "SignedPayload = (call, extension explicit data, extension implicit data), replaced by its blake2_256 when longer than 256 bytes"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_genesis.rs#L56-L62",
+          "what": "CheckGenesis puts the genesis block hash in the signed implicit data"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L1825-L1841",
+          "what": "Polkadot Asset Hub's v0 transaction extension pipeline: CheckSpecVersion, CheckTxVersion, CheckGenesis, CheckEra, CheckNonce, ChargeAssetTxPayment, CheckMetadataHash, among others"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/balances/src/lib.rs#L667-L684",
+          "what": "Balances.transfer_keep_alive: a transfer that will not take the sender below the existential deposit"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L519-L536",
+          "what": "Polkadot Asset Hub multisig config: DepositBase = system_para_deposit(1, 88), DepositFactor = system_para_deposit(0, 32), MaxSignatories = 100, BlockNumberProvider = System"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/constants/src/polkadot.rs#L101-L116",
+          "what": "system_para_deposit = relay deposit / 100, so DepositBase = 0.20088 DOT and DepositFactor = 0.00032 DOT on Asset Hub"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/relay/polkadot/constants/src/lib.rs#L30-L40",
+          "what": "relay deposit(items, bytes) = items x 20 DOT + bytes x 0.001 DOT"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/polkadot-fellows/runtimes/blob/v2.0.1/pallets/rc-migrator/src/multisig.md",
+          "what": "pending multisigs were not migrated to Asset Hub (a migrated call hash could decode to something else); deposits were unlocked"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L230-L262",
+          "what": "Proxy.proxy: a registered delegate dispatches any call its proxy type allows as the delegating account, with no threshold"
+        },
+        {
+          "kind": "source",
+          "url": "https://wiki.polkadot.com/learn/how-to/asset-hub-migration/",
+          "what": "Polkadot's Asset Hub migration (4 November 2025): balances and multisig functionality moved to Asset Hub"
+        }
+      ],
+      "unverified": [
+        "That Polkadot Asset Hub blocks become final when the relay chain's GRANDPA finalizes them was not confirmed from a primary source in this pass.",
+        "polkadot-sdk master also defines an Eth (keccak-256) MultiSignature variant; whether Polkadot Asset Hub accepts it for these extrinsics was not checked.",
+        "Only the v4 signed-extrinsic payload is described; the v5 general-transaction pipeline (VerifySignature) signs a different message and was not traced.",
+        "The DOT amounts are computed from the fellowship runtime v2.5.0 constants, not read from the live chain."
+      ]
+    },
+    {
+      "id": "dot.pallet-multisig/runtime-call",
+      "name": "Make any runtime call from a Polkadot multisig",
+      "area": "family",
+      "family": "dot.pallet-multisig",
+      "status": "declared",
+      "summary": "The same k-of-n path as a transfer, for any call the multisig account may dispatch: a contract call through pallet-revive, staking, a governance vote, a batch. The chain sees only the call hash until the last approval; the room carries and decodes the call.",
+      "effect": {
+        "schema": "muster.effect.dot.pallet-multisig.runtime-call.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the multisig account id (see derive-account)"
+          },
+          {
+            "name": "signatories",
+            "means": "the n signatory accounts, sorted bytewise"
+          },
+          {
+            "name": "threshold",
+            "means": "k, a u16, 2 <= k <= n"
+          },
+          {
+            "name": "pallet",
+            "means": "the pallet the call reaches, by name and index (e.g. Revive = 90 on Polkadot Asset Hub)"
+          },
+          {
+            "name": "method",
+            "means": "the call's name and index within the pallet"
+          },
+          {
+            "name": "args",
+            "means": "the decoded arguments as reviewed, nested calls decoded to their leaves (Revive.call: dest H160, value, weight_limit, storage_deposit_limit, data)"
+          },
+          {
+            "name": "call",
+            "means": "the SCALE-encoded runtime call (pallet index, call index, arguments), encoded under specVersion"
+          },
+          {
+            "name": "callHash",
+            "means": "blake2_256(call): all that intermediate approvals commit to"
+          },
+          {
+            "name": "specVersion",
+            "means": "the runtime spec_version and metadata hash the call was encoded and reviewed under"
+          },
+          {
+            "name": "maxWeight",
+            "means": "the weight limit (ref_time, proof_size) the final as_multi passes; must cover the call's dispatch weight"
+          },
+          {
+            "name": "timepoint",
+            "means": "(block height, extrinsic index) of the first approval; known only once it lands, read from the chain"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n signatories (the multisig's threshold; the chain counts the approvals)",
+        "finality": "external",
+        "domain": "polkadot.extrinsic.v4.signed-payload (Multisig.approve_as_multi, then Multisig.as_multi)"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "polkadot:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "polkadot:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "substrate-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "polkadot:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "runtime-metadata",
+          "party": "instance",
+          "class": "infra",
+          "target": "polkadot:*",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "multisig-signatory",
+          "party": "contributor",
+          "class": "authority",
+          "target": "pallet-multisig:<multisig account>",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "dot-for-fee-and-deposit",
+          "party": "contributor",
+          "class": "asset",
+          "target": "polkadot:<approver account>",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "multisig-balance",
+          "party": "proposer",
+          "class": "asset",
+          "target": "pallet-multisig:<multisig account>",
+          "field": "args"
+        },
+        {
+          "kind": "address",
+          "name": "call-target",
+          "party": "counterparty",
+          "class": "address",
+          "target": "polkadot:<target named in args>",
+          "field": "args"
+        }
+      ],
+      "touches": [
+        {
+          "target": "polkadot:*",
+          "mode": "write"
+        },
+        {
+          "target": "pallet-multisig:<multisig account>",
+          "mode": "write"
+        },
+        {
+          "target": "polkadot:<approver account>",
+          "mode": "write"
+        },
+        {
+          "target": "polkadot:<target named in args>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "payer",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "approve"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "approvals",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "effect",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "effect",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "args",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Writes the effect: the multisig, the pallet, the method and the arguments. Muster would encode the call against the runtime metadata the RPC serves now, decode it back to every leaf (a Utility.batch_all or a Proxy.proxy carries further calls), hash it with blake2_256, and post the call bytes, the hash, the decoded tree and the runtime version to the room. It would compute max_weight from the call's dispatch weight, which for Revive.call includes its own weight_limit. It would also read Multisigs(multisig, call hash): if an operation with this hash is already open, this proposal is that operation.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "policy",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            },
+            {
+              "field": "payer",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L214-L223",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L651-L676",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L439-L501"
+          ]
+        },
+        {
+          "step": "vote",
+          "who": "contributor",
+          "does": "The first approver's client re-derives the call hash from the reviewed effect under the live runtime, then the approver submits Multisig.approve_as_multi with no timepoint from their own account. The pallet checks k >= 2 and that other_signatories is sorted and excludes the sender, records the operation under (multisig, call hash) with the sender as depositor and the current (block, extrinsic index) as its timepoint, and reserves DepositBase + DepositFactor x k from the sender (0.20088 + 0.00032 x k DOT on Polkadot Asset Hub). The RPC provider and the block producers see the extrinsic first, then everyone: the approver, the multisig, k, every other signatory, and the call hash, not the call. If the first approver uses as_multi instead, the full call is in its public arguments; the pallet does not store it.",
+          "signs": "The approver's OWN v4 signed extrinsic, not a shared message: SCALE(Multisig.approve_as_multi{threshold: u16, other_signatories: Vec<AccountId32> sorted, without the sender, maybe_timepoint: None, call_hash: [u8; 32] = blake2_256(SCALE(inner call)), max_weight: Weight} ++ the explicit extension data (era: 1 byte immortal or 2 bytes mortal; the approver's account nonce as Compact<u32>; the tip as Compact<u128> and an Option fee-asset id (ChargeAssetTxPayment); the metadata-hash mode byte; the other Asset Hub extensions encode nothing) ++ the implicit data, never transmitted but signed (spec_version u32, transaction_version u32, the genesis hash, the era's birth block hash (the genesis hash when immortal), Option<metadata hash>)). If that is longer than 256 bytes, the signed message is its blake2_256 instead. Signed with sr25519, ed25519, or secp256k1 ECDSA (over blake2_256 of the message) by the approver's own key. The genesis hash is inside: the chain is named (binding explicit). The tip and the approver's nonce are inside (the chain computes the fee itself); the multisig account is implied by the sender plus other_signatories plus threshold.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "approvals",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L439-L501",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L749-L776",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L810-L815",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L519-L536",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/constants/src/polkadot.rs#L101-L116",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/relay/polkadot/constants/src/lib.rs#L30-L40",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L925-L980"
+          ]
+        },
+        {
+          "step": "vote",
+          "who": "contributor",
+          "does": "Each further approver's client reads Multisigs(multisig, call hash) from the chain (timepoint, depositor, approvals so far) and would re-derive the call hash from the reviewed effect under the live runtime before offering the approval. The approver submits approve_as_multi with that timepoint. The pallet refuses a missing timepoint (NoTimepoint), a different one (WrongTimepoint), or a second approval from the same account (AlreadyApproved). approve_as_multi never executes, even at k. The chain observer learns the same facts as at the first approval.",
+          "signs": "The approver's OWN v4 signed extrinsic, not a shared message: SCALE(Multisig.approve_as_multi{threshold, other_signatories (sorted, without the sender), maybe_timepoint: Some(Timepoint{height: block number, index: extrinsic index of the first approval}), call_hash, max_weight} ++ the explicit extension data (era: 1 byte immortal or 2 bytes mortal; the approver's account nonce as Compact<u32>; the tip as Compact<u128> and an Option fee-asset id (ChargeAssetTxPayment); the metadata-hash mode byte; the other Asset Hub extensions encode nothing) ++ the implicit data, never transmitted but signed (spec_version u32, transaction_version u32, the genesis hash, the era's birth block hash (the genesis hash when immortal), Option<metadata hash>)). If that is longer than 256 bytes, the signed message is its blake2_256 instead. Signed with sr25519, ed25519, or secp256k1 ECDSA (over blake2_256 of the message) by the approver's own key. The genesis hash is inside: the chain is named (binding explicit). The tip and the approver's nonce are inside (the chain computes the fee itself); the multisig account is implied by the sender plus other_signatories plus threshold.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "approvals",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L651-L747",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L925-L980",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L657-L678",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_genesis.rs#L56-L62",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_spec_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_tx_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_mortality.rs#L29-L72",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L1825-L1841"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "One signatory (the last approver, or any signatory once k approvals are recorded) submits Multisig.as_multi with the timepoint and the FULL call. The pallet hashes the call, checks k approvals counting this one and the call's weight against max_weight, removes the operation, returns the deposit, then dispatches the call with the multisig as a Signed origin. A call that needs another origin (e.g. Root) fails inside. The RPC provider and the block producers see the call first, then everyone: every argument becomes public.",
+          "signs": "The approver's OWN v4 signed extrinsic, not a shared message: SCALE(Multisig.as_multi{threshold, other_signatories (sorted, without the sender), maybe_timepoint: Some(timepoint of the first approval), call: the FULL inner call, max_weight: at least the inner call's dispatch weight} ++ the explicit extension data (era: 1 byte immortal or 2 bytes mortal; the approver's account nonce as Compact<u32>; the tip as Compact<u128> and an Option fee-asset id (ChargeAssetTxPayment); the metadata-hash mode byte; the other Asset Hub extensions encode nothing) ++ the implicit data, never transmitted but signed (spec_version u32, transaction_version u32, the genesis hash, the era's birth block hash (the genesis hash when immortal), Option<metadata hash>)). If that is longer than 256 bytes, the signed message is its blake2_256 instead. Signed with sr25519, ed25519, or secp256k1 ECDSA (over blake2_256 of the message) by the approver's own key. The genesis hash is inside: the chain is named (binding explicit). The tip and the approver's nonce are inside (the chain computes the fee itself); the multisig account is implied by the sender plus other_signatories plus threshold.",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "args",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L368-L436",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L678-L721",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L925-L980"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "Muster would read MultisigExecuted.result, and the result events of any nested dispatch (Utility batch events, ProxyExecuted), not the extrinsic's success, then wait for the block to be final. A failed call spends the operation; the room needs a new proposal.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L260-L296",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L994-L1025",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/utility/src/lib.rs#L289-L330"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "Offering an approval whose call hash is not blake2_256 of the call muster re-encodes from the reviewed effect under the runtime metadata live now",
+          "why": "invariant 1 / F-4: an intermediate approval is a pointer to a hash; the pallet decodes the call only at the final as_multi, under whatever runtime is live then. The Asset Hub migration did not carry pending multisigs over because a migrated hash's preimage could decode to something else",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L439-L501",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.0.1/pallets/rc-migrator/src/multisig.md"
+          ]
+        },
+        {
+          "what": "Offering an approval after the runtime's spec_version or metadata hash changed from the one the room reviewed under, until the call is re-encoded and re-reviewed",
+          "why": "invariant 1: the same effect can encode to different call bytes under a new runtime, so the reviewed hash no longer names the reviewed effect",
+          "evidence": [
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.0.1/pallets/rc-migrator/src/multisig.md",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_spec_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/metadata-hash-extension/src/lib.rs#L95-L165"
+          ]
+        },
+        {
+          "what": "An approval whose timepoint is not the one read from Multisigs(multisig, call hash), or an unrecorded read of it; a first approval when that entry already exists",
+          "why": "the chain's rule (NoTimepoint, WrongTimepoint, UnexpectedTimepoint; one open operation per (multisig, call hash)) and invariant 10: the timepoint is an external read that reaches the signed bytes",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L676-L682",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L749-L751",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L214-L223"
+          ]
+        },
+        {
+          "what": "An approval from an account that has already approved this operation",
+          "why": "the chain's rule: AlreadyApproved; the fee would be spent for nothing",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L684-L742"
+          ]
+        },
+        {
+          "what": "other_signatories that are not the account's sorted set minus the sender, or a k that does not re-derive the multisig named in the effect",
+          "why": "the chain's rule (SignatoriesOutOfOrder, SenderInSignatories, TooFewSignatories, TooManySignatories, MinimumThreshold) and invariant 1: a different list or k addresses a different multisig",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L788-L808",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L641-L672"
+          ]
+        },
+        {
+          "what": "A final as_multi whose max_weight is below the call's dispatch weight under the live runtime",
+          "why": "the chain's rule: MaxWeightTooLow",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L693-L699"
+          ]
+        },
+        {
+          "what": "A signing payload whose genesis hash, spec_version or transaction_version is not the room's environment",
+          "why": "invariant 2: binding is explicit here (CheckGenesis, CheckSpecVersion and CheckTxVersion put them in the signed bytes), so a payload for another chain is worthless there and must not be produced",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_genesis.rs#L56-L62",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_spec_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_tx_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L657-L678"
+          ]
+        },
+        {
+          "what": "A mortal approval whose era birth block hash, or an approval whose nonce, was read but not recorded",
+          "why": "invariant 10: the approver's nonce and the era's birth block hash are external reads that reach the signed bytes",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_mortality.rs#L29-L72",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_nonce.rs#L50-L52",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/era.rs#L31-L111"
+          ]
+        },
+        {
+          "what": "Marking the intent final when MultisigExecuted.result is an error",
+          "why": "the chain's rule: as_multi removes the operation and returns the deposit before dispatching, and succeeds even when the inner call fails; the failure is only in the event",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L693-L721"
+          ]
+        },
+        {
+          "what": "A call muster cannot decode completely under the live metadata, down to every nested call",
+          "why": "invariant 1: the review must cover every leaf the multisig origin will dispatch; the chain decodes nested calls only at execution",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/utility/src/lib.rs#L289-L330",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L230-L262",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L700-L706"
+          ]
+        },
+        {
+          "what": "A Revive.call whose weight_limit is not inside max_weight",
+          "why": "the chain's rule: Revive.call's dispatch weight is its base weight plus weight_limit, and as_multi refuses a call heavier than max_weight (MaxWeightTooLow)",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/revive/src/lib.rs#L1160-L1185",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L693-L699"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Each approval is bound to one chain: its signed bytes include that chain's genesis hash, spec version and transaction version.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An intermediate approval covers only a 32-byte call hash. It is safe only because the room carries the call and muster would re-derive the hash from the reviewed effect, against runtime metadata and on-chain state that the RPC provider serves unverified.",
+          "credibility": "motivational",
+          "party": "the RPC provider"
+        },
+        {
+          "claim": "The chain counts the approvals: the call runs only after k distinct signatories of the sorted set have approved, and only with call bytes whose blake2_256 is the approved hash.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The final as_multi spends the operation and returns the deposit before the call runs; if the call fails, the failure is only in MultisigExecuted.result.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A contract call's outcome depends on the contract's code and state at execution, which the approvals do not commit to; the room reviews the call, not its result.",
+          "credibility": "motivational",
+          "party": "the called contract and anyone who can change its state before the final approval"
+        },
+        {
+          "claim": "Every approval is public (approver, multisig, k, all signatories); every argument of the call becomes public at the final as_multi.",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L641-L649",
+          "what": "multi_account_id: blake2_256 over SCALE((\"modlpy/utilisuba\", sorted signatories, threshold u16)), read as the account id"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L651-L778",
+          "what": "operate: threshold >= 2, sorted signatories, dedup on (multisig, call_hash), timepoint checks, AlreadyApproved, MaxWeightTooLow, deposit reserve, storage removed and deposit returned before the call is dispatched from the multisig origin"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L368-L501",
+          "what": "as_multi (full call; the only way to execute) and approve_as_multi (call hash only; never executes); first approval reserves DepositBase + threshold * DepositFactor"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L225-L256",
+          "what": "the pallet's errors: MinimumThreshold, AlreadyApproved, TooFewSignatories, TooManySignatories, SignatoriesOutOfOrder, SenderInSignatories, NotFound, NotOwner, NoTimepoint, WrongTimepoint, UnexpectedTimepoint, MaxWeightTooLow, AlreadyStored"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L925-L980",
+          "what": "SignedPayload = (call, extension explicit data, extension implicit data), replaced by its blake2_256 when longer than 256 bytes"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_genesis.rs#L56-L62",
+          "what": "CheckGenesis puts the genesis block hash in the signed implicit data"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L1825-L1841",
+          "what": "Polkadot Asset Hub's v0 transaction extension pipeline: CheckSpecVersion, CheckTxVersion, CheckGenesis, CheckEra, CheckNonce, ChargeAssetTxPayment, CheckMetadataHash, among others"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/revive/src/lib.rs#L1160-L1185",
+          "what": "Revive.call{dest: H160, value, weight_limit, storage_deposit_limit, data}; its weight is WeightInfo::call() + weight_limit"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L1755-L1797",
+          "what": "Polkadot Asset Hub pallet indices: Utility 40, Multisig 41, Proxy 42, Revive 90"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L1643-L1690",
+          "what": "Polkadot Asset Hub pallet_revive config: AccountId32Mapper with AutoMap = true, so a 32-byte account such as a multisig can call contracts without mapping first"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/utility/src/lib.rs#L289-L330",
+          "what": "Utility.batch_all: a call that carries further calls and executes them atomically"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/polkadot-fellows/runtimes/blob/v2.0.1/pallets/rc-migrator/src/multisig.md",
+          "what": "pending multisigs were not migrated to Asset Hub because a call hash's preimage may no longer decode, or decode to something else"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L230-L262",
+          "what": "Proxy.proxy: a delegate dispatches a call as the delegating account without the threshold"
+        }
+      ],
+      "unverified": [
+        "That Polkadot Asset Hub blocks become final when the relay chain's GRANDPA finalizes them was not confirmed from a primary source in this pass.",
+        "polkadot-sdk master also defines an Eth (keccak-256) MultiSignature variant; whether Polkadot Asset Hub accepts it for these extrinsics was not checked.",
+        "Only the v4 signed-extrinsic payload is described; the v5 general-transaction pipeline (VerifySignature) signs a different message and was not traced.",
+        "The DOT amounts are computed from the fellowship runtime v2.5.0 constants, not read from the live chain."
+      ]
+    },
+    {
+      "id": "dot.pallet-multisig/cancel",
+      "name": "Cancel a pending Polkadot multisig operation",
+      "area": "family",
+      "family": "dot.pallet-multisig",
+      "status": "declared",
+      "summary": "Only the depositor, the signatory whose approval opened the operation, can cancel it: cancel_as_multi names its timepoint and call hash, and the deposit comes back. No one else can, and a pending operation never expires on its own.",
+      "effect": {
+        "schema": "muster.effect.dot.pallet-multisig.cancel.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the multisig account id (see derive-account)"
+          },
+          {
+            "name": "signatories",
+            "means": "the n signatory accounts, sorted bytewise"
+          },
+          {
+            "name": "threshold",
+            "means": "k, a u16, 2 <= k <= n"
+          },
+          {
+            "name": "callHash",
+            "means": "the hash of the pending operation's call"
+          },
+          {
+            "name": "timepoint",
+            "means": "(block height, extrinsic index) of the first approval, read from Multisigs(account, callHash).when"
+          },
+          {
+            "name": "depositor",
+            "means": "the account that opened the operation and holds its deposit, read from the chain"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "1: the depositor alone; the chain lets no one else cancel and asks for no approvals",
+        "finality": "external",
+        "domain": "polkadot.extrinsic.v4.signed-payload (Multisig.cancel_as_multi)"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "polkadot:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "polkadot:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "substrate-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "polkadot:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "runtime-metadata",
+          "party": "instance",
+          "class": "infra",
+          "target": "polkadot:*",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "multisig-depositor",
+          "party": "contributor",
+          "class": "authority",
+          "target": "pallet-multisig:<multisig account>",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "dot-for-fee",
+          "party": "contributor",
+          "class": "asset",
+          "target": "polkadot:<depositor account>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "open-operation",
+          "party": "proposer",
+          "class": "address",
+          "target": "pallet-multisig:<multisig account>/<call hash>",
+          "field": "callHash"
+        }
+      ],
+      "touches": [
+        {
+          "target": "polkadot:*",
+          "mode": "write"
+        },
+        {
+          "target": "pallet-multisig:<multisig account>",
+          "mode": "write"
+        },
+        {
+          "target": "polkadot:<depositor account>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "approvals",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "approvals",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "A member proposes cancelling the open operation. Muster would read Multisigs(multisig, call hash) from the chain (timepoint, depositor, approvals) and name the depositor: only that account can cancel. The room can ask; it cannot make the depositor act.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            },
+            {
+              "field": "approvals",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L214-L223",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L106-L132",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L504-L557"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "The depositor submits Multisig.cancel_as_multi from their own account. The pallet re-derives the multisig from the sender, other_signatories and k, finds the operation (NotFound), checks the timepoint (WrongTimepoint) and that the sender is the depositor (NotOwner), unreserves the deposit and removes the operation. The RPC provider and the block producers see it first, then everyone: the canceller, the multisig, k, the other signatories and the call hash.",
+          "signs": "The approver's OWN v4 signed extrinsic, not a shared message: SCALE(Multisig.cancel_as_multi{threshold: u16, other_signatories: Vec<AccountId32> sorted, without the sender, timepoint: Timepoint{height, index}, call_hash: [u8; 32]} ++ the explicit extension data (era: 1 byte immortal or 2 bytes mortal; the approver's account nonce as Compact<u32>; the tip as Compact<u128> and an Option fee-asset id (ChargeAssetTxPayment); the metadata-hash mode byte; the other Asset Hub extensions encode nothing) ++ the implicit data, never transmitted but signed (spec_version u32, transaction_version u32, the genesis hash, the era's birth block hash (the genesis hash when immortal), Option<metadata hash>)). If that is longer than 256 bytes, the signed message is its blake2_256 instead. Signed with sr25519, ed25519, or secp256k1 ECDSA (over blake2_256 of the message) by the approver's own key. The genesis hash is inside: the chain is named (binding explicit). The tip and the approver's nonce are inside (the chain computes the fee itself); the multisig account is implied by the sender plus other_signatories plus threshold.",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "approvals",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L504-L557",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L925-L980",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L657-L678",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_genesis.rs#L56-L62",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_spec_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_tx_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_mortality.rs#L29-L72",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L1825-L1841"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "Muster would read the MultisigCancelled event and wait for the block to be final. The approvals recorded for that hash are gone; the same call can be proposed again as a new operation with a new timepoint and a new deposit.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L260-L296",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L543-L556"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "A cancel from any account other than the depositor read from the chain",
+          "why": "the chain's rule: NotOwner; the fee would be spent for nothing",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L543-L545"
+          ]
+        },
+        {
+          "what": "A cancel whose timepoint or call hash is not the one read from Multisigs(multisig, call hash), or whose read was not recorded",
+          "why": "the chain's rule (NotFound, WrongTimepoint) and invariant 10: both are external reads that reach the signed bytes",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L541-L544"
+          ]
+        },
+        {
+          "what": "A cancel whose threshold and other_signatories do not re-derive the multisig",
+          "why": "the chain's rule: the pallet derives the multisig from the sorted set and k, so a different set or k names another account and the cancel fails with NotFound (or SignatoriesOutOfOrder / SenderInSignatories)",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L534-L543",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L788-L808"
+          ]
+        },
+        {
+          "what": "A signing payload whose genesis hash, spec_version or transaction_version is not the room's environment",
+          "why": "invariant 2: binding is explicit here; the genesis hash and runtime versions are in the signed bytes",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_genesis.rs#L56-L62",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_spec_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_tx_version.rs#L57-L63"
+          ]
+        },
+        {
+          "what": "Showing an open operation as expired or abandoned",
+          "why": "the chain's rule: an open operation has no expiry field; it stays until it executes or its depositor cancels it",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L106-L132",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L214-L223"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Only the depositor can cancel an open operation; the chain enforces it (NotOwner).",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An open operation never expires; if its depositor does not cancel, it stays open with its deposit locked, and the other signatories can still complete it with the call data.",
+          "credibility": "motivational",
+          "party": "the depositor"
+        },
+        {
+          "claim": "The cancel is public: the canceller, the multisig, k, the other signatories and the call hash.",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        },
+        {
+          "claim": "Each approval is bound to one chain: its signed bytes include that chain's genesis hash, spec version and transaction version.",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L504-L557",
+          "what": "cancel_as_multi: re-derives the multisig; NotFound, WrongTimepoint, NotOwner; unreserves the deposit and removes the operation"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L106-L132",
+          "what": "an open operation is (when: timepoint, deposit, depositor, approvals), with no expiry"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L214-L223",
+          "what": "Multisigs: open operations keyed by (multisig account, call hash)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L260-L296",
+          "what": "events: NewMultisig, MultisigApproval, MultisigExecuted (with result), MultisigCancelled"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L925-L980",
+          "what": "SignedPayload = (call, extension explicit data, extension implicit data), replaced by its blake2_256 when longer than 256 bytes"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_genesis.rs#L56-L62",
+          "what": "CheckGenesis puts the genesis block hash in the signed implicit data"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L1825-L1841",
+          "what": "Polkadot Asset Hub's v0 transaction extension pipeline: CheckSpecVersion, CheckTxVersion, CheckGenesis, CheckEra, CheckNonce, ChargeAssetTxPayment, CheckMetadataHash, among others"
+        }
+      ]
+    },
+    {
+      "id": "dot.pallet-multisig/change-signers",
+      "name": "Change the signers of a Polkadot multisig",
+      "area": "family",
+      "family": "dot.pallet-multisig",
+      "status": "declared",
+      "summary": "A multisig's set and k cannot change: new signers mean a new address. Either the old multisig sweeps its funds to a newly derived one, or, when a pure proxy is the stable address, the old multisig acts through the proxy to add the new multisig as its delegate and remove itself, so the address people pay stays the same.",
+      "effect": {
+        "schema": "muster.effect.dot.pallet-multisig.change-signers.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the OLD multisig account id"
+          },
+          {
+            "name": "signatories",
+            "means": "the old signatory set, sorted"
+          },
+          {
+            "name": "threshold",
+            "means": "the old k"
+          },
+          {
+            "name": "newSignatories",
+            "means": "the new signatory set, sorted bytewise"
+          },
+          {
+            "name": "newThreshold",
+            "means": "the new k, 2 <= k <= n"
+          },
+          {
+            "name": "newAccount",
+            "means": "multi_account_id(newSignatories, newThreshold), derived as in derive-account"
+          },
+          {
+            "name": "path",
+            "means": "sweep (move the funds to newAccount) or pure-proxy (swap the delegate of the stable pure proxy)"
+          },
+          {
+            "name": "pureProxy",
+            "means": "for the pure-proxy path: the stable account made by Proxy.create_pure, whose delegate is the old multisig"
+          },
+          {
+            "name": "proxyType",
+            "means": "for the pure-proxy path: the delegate's proxy type (Any for full control) and delay, as reviewed"
+          },
+          {
+            "name": "call",
+            "means": "the SCALE-encoded runtime call (pallet index, call index, arguments), encoded under specVersion"
+          },
+          {
+            "name": "callHash",
+            "means": "blake2_256(call): all that intermediate approvals commit to"
+          },
+          {
+            "name": "specVersion",
+            "means": "the runtime spec_version and metadata hash the call was encoded and reviewed under"
+          },
+          {
+            "name": "maxWeight",
+            "means": "the weight limit (ref_time, proof_size) the final as_multi passes; must cover the call's dispatch weight"
+          },
+          {
+            "name": "timepoint",
+            "means": "(block height, extrinsic index) of the first approval; known only once it lands, read from the chain"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n signatories (the multisig's threshold; the chain counts the approvals)",
+        "finality": "external",
+        "domain": "polkadot.extrinsic.v4.signed-payload (Multisig.approve_as_multi, then Multisig.as_multi)"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "polkadot:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "polkadot:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "substrate-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "polkadot:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "runtime-metadata",
+          "party": "instance",
+          "class": "infra",
+          "target": "polkadot:*",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "multisig-signatory",
+          "party": "contributor",
+          "class": "authority",
+          "target": "pallet-multisig:<multisig account>",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "dot-for-fee-and-deposit",
+          "party": "contributor",
+          "class": "asset",
+          "target": "polkadot:<approver account>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "new-signatory-accounts",
+          "party": "counterparty",
+          "class": "address",
+          "target": "pallet-multisig:<new multisig account>",
+          "field": "newSignatories"
+        },
+        {
+          "kind": "authority",
+          "name": "pure-proxy-delegate",
+          "party": "proposer",
+          "class": "authority",
+          "target": "proxy:<pure proxy account>",
+          "field": "pureProxy"
+        }
+      ],
+      "touches": [
+        {
+          "target": "polkadot:*",
+          "mode": "write"
+        },
+        {
+          "target": "pallet-multisig:<multisig account>",
+          "mode": "write"
+        },
+        {
+          "target": "polkadot:<approver account>",
+          "mode": "write"
+        },
+        {
+          "target": "pallet-multisig:<new multisig account>",
+          "mode": "write"
+        },
+        {
+          "target": "proxy:<pure proxy account>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "payer",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "approve"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "approvals",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "effect",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "effect",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payee",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "args",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Names the new set and k. Muster would derive the new address (as in derive-account) and write the call for the path. Sweep: Balances.transfer_all{dest: newAccount, keep_alive: false}. Pure proxy: first read Proxies(pureProxy) to confirm the old multisig is its delegate, then Proxy.proxy{real: pureProxy, call: Utility.batch_all[Proxy.add_proxy{newAccount, proxyType, delay}, Proxy.remove_proxy{oldAccount, proxyType, delay}]}, adding before removing in one atomic batch so the proxy is never left without a delegate. The room carries the call, its hash and the runtime version.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "policy",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            },
+            {
+              "field": "payer",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L214-L223",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L651-L676",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L439-L501"
+          ]
+        },
+        {
+          "step": "vote",
+          "who": "contributor",
+          "does": "The first approver's client re-derives the call hash from the reviewed effect under the live runtime, then the approver submits Multisig.approve_as_multi with no timepoint from their own account. The pallet checks k >= 2 and that other_signatories is sorted and excludes the sender, records the operation under (multisig, call hash) with the sender as depositor and the current (block, extrinsic index) as its timepoint, and reserves DepositBase + DepositFactor x k from the sender (0.20088 + 0.00032 x k DOT on Polkadot Asset Hub). The RPC provider and the block producers see the extrinsic first, then everyone: the approver, the multisig, k, every other signatory, and the call hash, not the call. If the first approver uses as_multi instead, the full call is in its public arguments; the pallet does not store it.",
+          "signs": "The approver's OWN v4 signed extrinsic, not a shared message: SCALE(Multisig.approve_as_multi{threshold: u16, other_signatories: Vec<AccountId32> sorted, without the sender, maybe_timepoint: None, call_hash: [u8; 32] = blake2_256(SCALE(inner call)), max_weight: Weight} ++ the explicit extension data (era: 1 byte immortal or 2 bytes mortal; the approver's account nonce as Compact<u32>; the tip as Compact<u128> and an Option fee-asset id (ChargeAssetTxPayment); the metadata-hash mode byte; the other Asset Hub extensions encode nothing) ++ the implicit data, never transmitted but signed (spec_version u32, transaction_version u32, the genesis hash, the era's birth block hash (the genesis hash when immortal), Option<metadata hash>)). If that is longer than 256 bytes, the signed message is its blake2_256 instead. Signed with sr25519, ed25519, or secp256k1 ECDSA (over blake2_256 of the message) by the approver's own key. The genesis hash is inside: the chain is named (binding explicit). The tip and the approver's nonce are inside (the chain computes the fee itself); the multisig account is implied by the sender plus other_signatories plus threshold.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "approvals",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L439-L501",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L749-L776",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L810-L815",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L519-L536",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/constants/src/polkadot.rs#L101-L116",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/relay/polkadot/constants/src/lib.rs#L30-L40",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L925-L980"
+          ]
+        },
+        {
+          "step": "vote",
+          "who": "contributor",
+          "does": "Each further approver's client reads Multisigs(multisig, call hash) from the chain (timepoint, depositor, approvals so far) and would re-derive the call hash from the reviewed effect under the live runtime before offering the approval. The approver submits approve_as_multi with that timepoint. The pallet refuses a missing timepoint (NoTimepoint), a different one (WrongTimepoint), or a second approval from the same account (AlreadyApproved). approve_as_multi never executes, even at k. The chain observer learns the same facts as at the first approval.",
+          "signs": "The approver's OWN v4 signed extrinsic, not a shared message: SCALE(Multisig.approve_as_multi{threshold, other_signatories (sorted, without the sender), maybe_timepoint: Some(Timepoint{height: block number, index: extrinsic index of the first approval}), call_hash, max_weight} ++ the explicit extension data (era: 1 byte immortal or 2 bytes mortal; the approver's account nonce as Compact<u32>; the tip as Compact<u128> and an Option fee-asset id (ChargeAssetTxPayment); the metadata-hash mode byte; the other Asset Hub extensions encode nothing) ++ the implicit data, never transmitted but signed (spec_version u32, transaction_version u32, the genesis hash, the era's birth block hash (the genesis hash when immortal), Option<metadata hash>)). If that is longer than 256 bytes, the signed message is its blake2_256 instead. Signed with sr25519, ed25519, or secp256k1 ECDSA (over blake2_256 of the message) by the approver's own key. The genesis hash is inside: the chain is named (binding explicit). The tip and the approver's nonce are inside (the chain computes the fee itself); the multisig account is implied by the sender plus other_signatories plus threshold.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "approvals",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L651-L747",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L925-L980",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L657-L678",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_genesis.rs#L56-L62",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_spec_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_tx_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_mortality.rs#L29-L72",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L1825-L1841"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "One old signatory submits Multisig.as_multi with the timepoint and the FULL call. Sweep: the old multisig's transferable balance moves to the new address; anything reserved or locked there (a deposit for an open operation, a bond) stays and needs its own proposals. Pure proxy: the proxy's delegate becomes the new multisig, and the proxy's address, balance and history stay. The RPC provider and the block producers see it first, then everyone: the new address appears, but not the new set or k.",
+          "signs": "The approver's OWN v4 signed extrinsic, not a shared message: SCALE(Multisig.as_multi{threshold, other_signatories (sorted, without the sender), maybe_timepoint: Some(timepoint of the first approval), call: the FULL inner call, max_weight: at least the inner call's dispatch weight} ++ the explicit extension data (era: 1 byte immortal or 2 bytes mortal; the approver's account nonce as Compact<u32>; the tip as Compact<u128> and an Option fee-asset id (ChargeAssetTxPayment); the metadata-hash mode byte; the other Asset Hub extensions encode nothing) ++ the implicit data, never transmitted but signed (spec_version u32, transaction_version u32, the genesis hash, the era's birth block hash (the genesis hash when immortal), Option<metadata hash>)). If that is longer than 256 bytes, the signed message is its blake2_256 instead. Signed with sr25519, ed25519, or secp256k1 ECDSA (over blake2_256 of the message) by the approver's own key. The genesis hash is inside: the chain is named (binding explicit). The tip and the approver's nonce are inside (the chain computes the fee itself); the multisig account is implied by the sender plus other_signatories plus threshold.",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payee",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "args",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L678-L721",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/balances/src/lib.rs#L685-L725",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L264-L304",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L994-L1025",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L925-L980"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "Muster would read MultisigExecuted.result and, on the pure-proxy path, ProxyExecuted.result (Proxy.proxy succeeds even when the call inside fails) and Proxies(pureProxy), to confirm the new multisig is its only delegate; then the room's account moves to the new policy. The old multisig and any operations still open under it stay on chain until their depositors cancel them.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L260-L296",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L994-L1025",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L745-L760"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "Offering an approval whose call hash is not blake2_256 of the call muster re-encodes from the reviewed effect under the runtime metadata live now",
+          "why": "invariant 1 / F-4: an intermediate approval is a pointer to a hash; the pallet decodes the call only at the final as_multi, under whatever runtime is live then. The Asset Hub migration did not carry pending multisigs over because a migrated hash's preimage could decode to something else",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L439-L501",
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.0.1/pallets/rc-migrator/src/multisig.md"
+          ]
+        },
+        {
+          "what": "Offering an approval after the runtime's spec_version or metadata hash changed from the one the room reviewed under, until the call is re-encoded and re-reviewed",
+          "why": "invariant 1: the same effect can encode to different call bytes under a new runtime, so the reviewed hash no longer names the reviewed effect",
+          "evidence": [
+            "https://github.com/polkadot-fellows/runtimes/blob/v2.0.1/pallets/rc-migrator/src/multisig.md",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_spec_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/metadata-hash-extension/src/lib.rs#L95-L165"
+          ]
+        },
+        {
+          "what": "An approval whose timepoint is not the one read from Multisigs(multisig, call hash), or an unrecorded read of it; a first approval when that entry already exists",
+          "why": "the chain's rule (NoTimepoint, WrongTimepoint, UnexpectedTimepoint; one open operation per (multisig, call hash)) and invariant 10: the timepoint is an external read that reaches the signed bytes",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L676-L682",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L749-L751",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L214-L223"
+          ]
+        },
+        {
+          "what": "An approval from an account that has already approved this operation",
+          "why": "the chain's rule: AlreadyApproved; the fee would be spent for nothing",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L684-L742"
+          ]
+        },
+        {
+          "what": "other_signatories that are not the account's sorted set minus the sender, or a k that does not re-derive the multisig named in the effect",
+          "why": "the chain's rule (SignatoriesOutOfOrder, SenderInSignatories, TooFewSignatories, TooManySignatories, MinimumThreshold) and invariant 1: a different list or k addresses a different multisig",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L788-L808",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L641-L672"
+          ]
+        },
+        {
+          "what": "A final as_multi whose max_weight is below the call's dispatch weight under the live runtime",
+          "why": "the chain's rule: MaxWeightTooLow",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L693-L699"
+          ]
+        },
+        {
+          "what": "A signing payload whose genesis hash, spec_version or transaction_version is not the room's environment",
+          "why": "invariant 2: binding is explicit here (CheckGenesis, CheckSpecVersion and CheckTxVersion put them in the signed bytes), so a payload for another chain is worthless there and must not be produced",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_genesis.rs#L56-L62",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_spec_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_tx_version.rs#L57-L63",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L657-L678"
+          ]
+        },
+        {
+          "what": "A mortal approval whose era birth block hash, or an approval whose nonce, was read but not recorded",
+          "why": "invariant 10: the approver's nonce and the era's birth block hash are external reads that reach the signed bytes",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_mortality.rs#L29-L72",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_nonce.rs#L50-L52",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/era.rs#L31-L111"
+          ]
+        },
+        {
+          "what": "Marking the intent final when MultisigExecuted.result is an error",
+          "why": "the chain's rule: as_multi removes the operation and returns the deposit before dispatching, and succeeds even when the inner call fails; the failure is only in the event",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L693-L721"
+          ]
+        },
+        {
+          "what": "Removing the old multisig as the pure proxy's delegate before, or without, adding the new one; calling remove_proxies or kill_pure on the pure proxy",
+          "why": "the chain's rule: a pure proxy with no delegate is unreachable (\"All access to this account will be lost\")",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L306-L318",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L373-L391"
+          ]
+        },
+        {
+          "what": "A sweep or new delegate that is not multi_account_id(new sorted set, new k)",
+          "why": "invariant 1: the new account is re-derived, never trusted",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L641-L649"
+          ]
+        },
+        {
+          "what": "Adding a delegate whose proxy type is not covered by the old multisig's own proxy type on the pure proxy",
+          "why": "the chain's rule: a proxy call cannot add or remove a proxy with more permissions than its own; the call fails inside the batch after the approvals are spent",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L994-L1025"
+          ]
+        },
+        {
+          "what": "Marking the change final while any delegate other than the new multisig remains on the pure proxy, or while Proxies(pureProxy) was not read and recorded",
+          "why": "registry bypass (proxies): a leftover delegate acts without the new threshold; invariant 10: the proxy list is an external read the change depends on",
+          "evidence": [
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L230-L262",
+            "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L745-L760"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The set and k cannot change in place: a new set or k is a new address.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "With a pure proxy as the stable address, whoever is its delegate controls it; the threshold holds only while the only delegate is a multisig. Any other delegate acts alone (proxies are a bypass by design, for a stable address).",
+          "credibility": "motivational",
+          "party": "the pure proxy's delegates"
+        },
+        {
+          "claim": "A runtime upgrade can widen what a proxy type may do: the Asset Hub migration gave existing proxies new permissions.",
+          "credibility": "motivational",
+          "party": "Polkadot runtime governance"
+        },
+        {
+          "claim": "A sweep moves only the transferable balance; reserved deposits and locks stay at the old address until their own calls release them.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The change is public: the old policy at each approval and the new address at settlement; the new set and k stay private until the new multisig's first approval.",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        },
+        {
+          "claim": "Each approval is bound to one chain: its signed bytes include that chain's genesis hash, spec version and transaction version.",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L641-L649",
+          "what": "multi_account_id: blake2_256 over SCALE((\"modlpy/utilisuba\", sorted signatories, threshold u16)), read as the account id"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L651-L778",
+          "what": "operate: threshold >= 2, sorted signatories, dedup on (multisig, call_hash), timepoint checks, AlreadyApproved, MaxWeightTooLow, deposit reserve, storage removed and deposit returned before the call is dispatched from the multisig origin"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L368-L501",
+          "what": "as_multi (full call; the only way to execute) and approve_as_multi (call hash only; never executes); first approval reserves DepositBase + threshold * DepositFactor"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/multisig/src/lib.rs#L225-L256",
+          "what": "the pallet's errors: MinimumThreshold, AlreadyApproved, TooFewSignatories, TooManySignatories, SignatoriesOutOfOrder, SenderInSignatories, NotFound, NotOwner, NoTimepoint, WrongTimepoint, UnexpectedTimepoint, MaxWeightTooLow, AlreadyStored"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/primitives/runtime/src/generic/unchecked_extrinsic.rs#L925-L980",
+          "what": "SignedPayload = (call, extension explicit data, extension implicit data), replaced by its blake2_256 when longer than 256 bytes"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/system/src/extensions/check_genesis.rs#L56-L62",
+          "what": "CheckGenesis puts the genesis block hash in the signed implicit data"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/polkadot-fellows/runtimes/blob/v2.5.0/system-parachains/asset-hubs/asset-hub-polkadot/src/lib.rs#L1825-L1841",
+          "what": "Polkadot Asset Hub's v0 transaction extension pipeline: CheckSpecVersion, CheckTxVersion, CheckGenesis, CheckEra, CheckNonce, ChargeAssetTxPayment, CheckMetadataHash, among others"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L264-L304",
+          "what": "Proxy.add_proxy and remove_proxy: the delegating account registers or unregisters a delegate with a proxy type and delay"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L306-L318",
+          "what": "Proxy.remove_proxies: on a pure proxy, all access to the account is lost"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L320-L372",
+          "what": "Proxy.create_pure: a fresh account whose only way in is the spawner as its delegate"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L815-L843",
+          "what": "pure_account: blake2_256 over (\"modlpy/proxy____\", spawner, height, extrinsic index, proxy type, index)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/proxy/src/lib.rs#L994-L1025",
+          "what": "do_proxy: a delegate cannot add or remove a proxy of a wider type than its own; the call's result is only in ProxyExecuted"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/balances/src/lib.rs#L685-L725",
+          "what": "Balances.transfer_all: moves only the transferable balance; reserved and locked funds stay"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/paritytech/polkadot-sdk/blob/bd6b01028c6cfb9c010bbf6cb505d2330f8a0433/substrate/frame/utility/src/lib.rs#L289-L330",
+          "what": "Utility.batch_all: all calls or none"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/polkadot-fellows/runtimes/blob/v2.0.1/pallets/rc-migrator/src/proxy.md",
+          "what": "the Asset Hub migration moved proxy delegations and gave existing proxies new permissions on Asset Hub"
+        },
+        {
+          "kind": "source",
+          "url": "https://wiki.polkadot.com/learn/learn-account-multisig/",
+          "what": "a multisig cannot be modified after creation: changing members or threshold is not possible"
+        }
+      ],
+      "unverified": [
+        "That Polkadot Asset Hub blocks become final when the relay chain's GRANDPA finalizes them was not confirmed from a primary source in this pass.",
+        "polkadot-sdk master also defines an Eth (keccak-256) MultiSignature variant; whether Polkadot Asset Hub accepts it for these extrinsics was not checked.",
+        "Only the v4 signed-extrinsic payload is described; the v5 general-transaction pipeline (VerifySignature) signs a different message and was not traced."
+      ]
+    }
+  ]
+}

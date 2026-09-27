@@ -1,0 +1,635 @@
+{
+  "actions": [
+    {
+      "id": "zcash.frost-orchard/dkg",
+      "name": "Run a FROST key ceremony for an Orchard account",
+      "area": "family",
+      "family": "zcash.frost-orchard",
+      "status": "declared",
+      "summary": "The participants run FROST's distributed key generation over Pallas in the room. Each ends with a share of the spend authorizing key ask; no one holds ask itself. The group key becomes ak. One participant then generates nk and rivk and seals the full viewing key to the others, and each derives the same Orchard address.",
+      "effect": {
+        "schema": "muster.effect.zcash.frost-orchard.dkg.v0",
+        "fields": [
+          { "name": "network", "means": "the Zcash network (CAIP-2)" },
+          { "name": "t", "means": "how many participants must sign a spend" },
+          { "name": "n", "means": "how many participants hold a share" },
+          { "name": "participants", "means": "the members taking part, named by their room identity keys, which authenticate their packages" },
+          { "name": "ciphersuite", "means": "FROST(Pallas, BLAKE2b-512), the re-randomizable ciphersuite ZIP-312 defines for Orchard" }
+        ]
+      },
+      "agreement": {
+        "rounds": 2,
+        "threshold": "all n participants must finish (the DKG aborts on a fault); the key it makes is t of n",
+        "finality": "immediate",
+        "domain": "frost-pallas-blake2b512.dkg.v0"
+      },
+      "requirements": [
+        { "kind": "authority", "name": "room-identity", "party": "contributor", "class": "authority", "target": "the member's bound room identity, which authenticates their round-1 and round-2 packages", "field": "" }
+      ],
+      "touches": [],
+      "disclosure": [
+        { "field": "effect", "observer": "room-member", "when": "propose" },
+        { "field": "round1-commitments", "observer": "room-member", "when": "approve" },
+        { "field": "contributions", "observer": "room-member", "when": "approve" },
+        { "field": "group-key", "observer": "room-member", "when": "final" },
+        { "field": "verifying-shares", "observer": "room-member", "when": "final" },
+        { "field": "address", "observer": "room-member", "when": "final" },
+        { "field": "full-viewing-key", "observer": "room-member", "when": "final" },
+        { "field": "timing", "observer": "store-node", "when": "always" },
+        { "field": "topic", "observer": "store-node", "when": "always" }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "opens the ceremony: network, t, n and the participants.",
+          "signs": "",
+          "reveals": [
+            { "field": "effect", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://frost.zfnd.org/tutorial/dkg.html"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "contributor",
+          "does": "part 1: each participant's keystore draws a secret polynomial and posts its round-1 package (commitments to the coefficients and a proof of knowledge) to the room log. The room is the broadcast channel the DKG needs: every member reads the same log, so every participant sees the same commitments. The secret part stays in the keystore.",
+          "signs": "the member's muster attestation over the package; the proof of knowledge is FROST's own",
+          "reveals": [
+            { "field": "round1-commitments", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://frost.zfnd.org/tutorial/dkg.html"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "contributor",
+          "does": "part 2: each keystore checks every round-1 package and makes one secret share for each other participant. Each share is sealed to its recipient's encryption key before it enters the log. Only the recipient can open it; other members and the store node see only its size and timing. This replaces frostd, which relays but cannot enforce encryption.",
+          "signs": "the member's muster attestation over the sealed packages",
+          "reveals": [
+            { "field": "contributions", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://frost.zfnd.org/tutorial/dkg.html",
+            "https://frost.zfnd.org/zcash/server.html"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "contributor",
+          "does": "part 3, local: each keystore checks the shares it received against the senders' commitments and keeps its signing share (never in the log). All participants compute the same public key package: the group key and each verifying share. If the group key's ỹ bit is 1, the key and every share are negated, as Orchard key derivation requires.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "https://frost.zfnd.org/tutorial/dkg.html",
+            "https://github.com/ZcashFoundation/reddsa/blob/0.5.2/src/frost/redpallas.rs",
+            "https://zips.z.cash/protocol/protocol.pdf"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "contributor",
+          "does": "one participant generates nk and rivk at random and seals the full viewing key (ak, nk, rivk) to every participant. Each participant derives the default Orchard address from it and checks it. The account (address, ak, t, n) is disclosed into the room.",
+          "signs": "",
+          "reveals": [
+            { "field": "group-key", "observer": "room-member" },
+            { "field": "verifying-shares", "observer": "room-member" },
+            { "field": "address", "observer": "room-member" },
+            { "field": "full-viewing-key", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://frost.zfnd.org/zcash/technical-details.html",
+            "https://frost.zfnd.org/zcash/ywallet-demo.html",
+            "https://zips.z.cash/protocol/protocol.pdf"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a package from someone outside the participant list, or two different round-1 packages from one participant",
+          "why": "the DKG needs authenticated senders and one broadcast view; the FROST book says without a proper broadcast channel key generation is insecure",
+          "evidence": [ "https://frost.zfnd.org/tutorial/dkg.html" ]
+        },
+        {
+          "what": "a round-2 share posted in the clear",
+          "why": "anyone who reads the round-2 packages can recreate the secret; they MUST be encrypted",
+          "evidence": [ "https://frost.zfnd.org/tutorial/dkg.html" ]
+        },
+        {
+          "what": "a received share that does not match its sender's round-1 commitments",
+          "why": "part 3 fails and the ceremony aborts; the log names who sent it",
+          "evidence": [ "https://frost.zfnd.org/tutorial/dkg.html" ]
+        },
+        {
+          "what": "a group key used with its ỹ bit set to 1",
+          "why": "Orchard key derivation negates ask so that ak's ỹ bit is 0; the shares must be negated to match",
+          "evidence": [ "https://zips.z.cash/protocol/protocol.pdf", "https://github.com/ZcashFoundation/reddsa/blob/0.5.2/src/frost/redpallas.rs" ]
+        },
+        {
+          "what": "an address that does not derive from the disclosed ak and the shared nk and rivk",
+          "why": "invariant 1: the account is re-derived by every participant, never taken on trust",
+          "evidence": [ "https://zips.z.cash/protocol/protocol.pdf" ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [ 1, 4, 7, 8, 9 ],
+      "claims": [
+        { "claim": "no one ever holds the whole spend authorizing key", "credibility": "imperative" },
+        { "claim": "round-2 shares are sealed end to end and every sender is authenticated by the room; no relay server is involved", "credibility": "imperative" },
+        { "claim": "every participant holds the full viewing key and can see every transaction of the account, for as long as the account exists", "credibility": "exposed", "party": "every participant, and anyone they give the key to" },
+        { "claim": "a room member who is not a participant cannot check that the address belongs to ak without the viewing key", "credibility": "motivational", "party": "the participant who discloses the account" },
+        { "claim": "the chain learns nothing at setup", "credibility": "imperative" }
+      ],
+      "evidence": [
+        { "kind": "source", "url": "https://zips.z.cash/zip-0312", "what": "ZIP-312 (Draft): FROST for spend authorization; FROST(Pallas, BLAKE2b-512); key generation out of scope but must be consistent with FROST" },
+        { "kind": "source", "url": "https://frost.zfnd.org/tutorial/dkg.html", "what": "the ZF FROST DKG: part1 broadcast, part2 private and encrypted, part3 local; the broadcast and encryption requirements" },
+        { "kind": "source", "url": "https://frost.zfnd.org/zcash/technical-details.html", "what": "Zcash FROST: DKG yields ask shares and ak; nk and rivk come from an sk or are generated separately" },
+        { "kind": "source", "url": "https://zips.z.cash/protocol/protocol.pdf", "what": "Zcash protocol spec §4.2.3 Orchard key components: ak's ỹ bit is 0 (ask negated otherwise); ivk from ak, nk, rivk" },
+        { "kind": "source", "url": "https://github.com/ZcashFoundation/reddsa/blob/0.5.2/src/frost/redpallas.rs", "what": "reddsa 0.5.2 FROST(Pallas): the EvenY post-DKG step negates the group key and shares" },
+        { "kind": "source", "url": "https://frost.zfnd.org/zcash/ywallet-demo.html", "what": "the ZF demo: DKG with frost-client, then zcash-sign generate --ak to make the address and viewing key" },
+        { "kind": "source", "url": "https://frost.zfnd.org/zcash/server.html", "what": "frostd: a relay; messages MUST be end-to-end encrypted, which the server cannot enforce" },
+        { "kind": "source", "url": "https://github.com/ZcashFoundation/reddsa/blob/main/CHANGELOG.md", "what": "reddsa 0.6.0 (2026-09-25) removed the frost feature; the FROST ciphersuites will move to the frost repository" }
+      ],
+      "unverified": [
+        "who generates nk and rivk in deployed tools, and whether they can come from a DKG instead of one participant's randomness",
+        "where the FROST(Pallas) ciphersuite and its EvenY step live after reddsa 0.6.0 removed them",
+        "member-add path in frost v3"
+      ]
+    },
+    {
+      "id": "zcash.frost-orchard/spend",
+      "name": "Send a shielded payment (Orchard to Orchard)",
+      "area": "family",
+      "family": "zcash.frost-orchard",
+      "status": "declared",
+      "summary": "Any t participants authorize a fully shielded payment. The proposer builds the transaction; every signer recomputes its ZIP-244 SIGHASH before signing. The chain sees nullifiers, note commitments, randomized keys, the fee and the expiry height. It does not see the amount, the recipient, the group, or who signed.",
+      "effect": {
+        "schema": "muster.effect.zcash.frost-orchard.spend.v0",
+        "fields": [
+          { "name": "spends", "means": "each Orchard note spent: value, rho, rseed, its Merkle witness to the anchor, and α, the spend authorization randomizer the proposer chose for its action" },
+          { "name": "outputs", "means": "each recipient's Orchard receiver (from a Unified Address), value and memo, with the note randomness" },
+          { "name": "anchor", "means": "the Orchard note commitment tree root the witnesses prove membership in" },
+          { "name": "fee", "means": "the ZIP-317 fee; with no transparent parts it equals valueBalanceOrchard" },
+          { "name": "expiry_height", "means": "nExpiryHeight: the last height at which the transaction can be mined" },
+          { "name": "consensus_branch_id", "means": "the network upgrade the SIGHASH commits to" },
+          { "name": "openings", "means": "the value commitment trapdoors and output encryption randomness, so every signer can recompute the action descriptions and the SIGHASH" }
+        ]
+      },
+      "agreement": {
+        "rounds": 2,
+        "threshold": "t of n",
+        "finality": "external",
+        "domain": "zip244.orchard.frost-redpallas-rerandomized.v0"
+      },
+      "requirements": [
+        { "kind": "environment", "name": "bip122:00040fe8ec8471911baa1db1266ea15d", "party": "instance", "class": "infra", "target": "Zcash mainnet", "field": "" },
+        { "kind": "infra", "name": "lightwalletd", "party": "instance", "class": "infra", "target": "a lightwalletd or Zaino server the user configures: compact blocks, tree state, broadcast", "field": "" },
+        { "kind": "infra", "name": "halo2-prover", "party": "instance", "class": "infra", "target": "local Orchard proving (Halo 2)", "field": "" },
+        { "kind": "authority", "name": "orchard-full-viewing-key", "party": "instance", "class": "authority", "target": "the account's full viewing key; the prover needs it", "field": "" },
+        { "kind": "authority", "name": "orchard-frost-share", "party": "contributor", "class": "authority", "target": "a signing share from the account's ceremony", "field": "" },
+        { "kind": "address", "name": "payee", "party": "proposer", "class": "address", "target": "an Orchard receiver", "field": "outputs" },
+        { "kind": "asset", "name": "ZEC", "party": "proposer", "class": "asset", "target": "Orchard notes the account's viewing key decrypts", "field": "spends" }
+      ],
+      "touches": [
+        { "target": "bip122:00040fe8ec8471911baa1db1266ea15d", "mode": "write" },
+        { "target": "orchard-note:<nullifier>", "mode": "write" },
+        { "target": "lightwalletd", "mode": "read" }
+      ],
+      "disclosure": [
+        { "field": "effect", "observer": "room-member", "when": "propose" },
+        { "field": "contributions", "observer": "room-member", "when": "approve" },
+        { "field": "signed-tx", "observer": "rpc-provider", "when": "settle" },
+        { "field": "nullifiers", "observer": "chain-observer", "when": "settle" },
+        { "field": "note-commitments", "observer": "chain-observer", "when": "settle" },
+        { "field": "randomized-keys", "observer": "chain-observer", "when": "settle" },
+        { "field": "encrypted-notes", "observer": "chain-observer", "when": "settle" },
+        { "field": "action-count", "observer": "chain-observer", "when": "settle" },
+        { "field": "fee", "observer": "chain-observer", "when": "settle" },
+        { "field": "expiry-height", "observer": "chain-observer", "when": "settle" },
+        { "field": "timing", "observer": "store-node", "when": "always" },
+        { "field": "topic", "observer": "store-node", "when": "always" }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "as the Constructor: syncs through the user's lightwalletd, reads the anchor and each note's witness (external reads, invariant 10), picks notes, chooses a fresh α for each spend action, sets the expiry height (40 blocks ahead by default) and the ZIP-317 fee, and writes the effect. Every member's client recomputes each action and the SIGHASH from the openings, and checks each action's rk = ak + [α]G.",
+          "signs": "",
+          "reveals": [
+            { "field": "effect", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://docs.rs/orchard/latest/orchard/pczt/struct.Spend.html",
+            "https://zips.z.cash/zip-0203",
+            "https://zips.z.cash/zip-0317"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "round 1: each signer's keystore draws a hiding and a binding nonce for each spend action and keeps them; the member posts the commitments. Any t participants may take part.",
+          "signs": "nothing yet. The contribution carries the member's muster attestation over P.",
+          "reveals": [
+            { "field": "contributions", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://www.rfc-editor.org/rfc/rfc9591.html",
+            "https://zips.z.cash/zip-0312"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "round 2: once t commitments are in the log for an action, every member forms the same signing package in the log's canonical order. With that action's α as the randomizer, the keystore signs and erases the nonces.",
+          "signs": "the ZIP-244 signature digest for SIGHASH_ALL, not tied to any input: BLAKE2b-256 over the header (version, version group, consensus_branch_id, lock_time, expiry_height), the transparent and Sapling digests, and the Orchard digest (each action's nullifier, cmx, ephemeral key, ciphertexts, cv_net and rk; flags; valueBalanceOrchard; anchor). One re-randomized FROST(Pallas, BLAKE2b-512) signature share per spend action, under rsk = ask + α. Plus the member's muster attestation over P.",
+          "reveals": [
+            { "field": "contributions", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://zips.z.cash/zip-0244",
+            "https://zips.z.cash/zip-0312",
+            "https://zips.z.cash/protocol/protocol.pdf"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "a participant (the prover needs the full viewing key) combines the shares into one RedPallas spendAuthSig per action and checks each under its rk. It makes the Halo 2 proof and the binding signature from the value commitment trapdoors, then broadcasts through the user's lightwalletd.",
+          "signs": "",
+          "reveals": [
+            { "field": "signed-tx", "observer": "rpc-provider" },
+            { "field": "nullifiers", "observer": "chain-observer" },
+            { "field": "note-commitments", "observer": "chain-observer" },
+            { "field": "randomized-keys", "observer": "chain-observer" },
+            { "field": "encrypted-notes", "observer": "chain-observer" },
+            { "field": "action-count", "observer": "chain-observer" },
+            { "field": "fee", "observer": "chain-observer" },
+            { "field": "expiry-height", "observer": "chain-observer" }
+          ],
+          "evidence": [
+            "https://zips.z.cash/protocol/protocol.pdf",
+            "https://docs.rs/orchard/latest/orchard/pczt/struct.Spend.html"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "watches until the transaction is mined. If the expiry height passes first, the transaction is invalid everywhere, and the payment starts again with a new SIGHASH and fresh nonces.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "https://zips.z.cash/zip-0203"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a SIGHASH that is not the one recomputed from the transaction data",
+          "why": "invariant 1; ZIP-312: signers MUST check the SIGHASH against the data or compute it themselves",
+          "evidence": [ "https://zips.z.cash/zip-0312" ]
+        },
+        {
+          "what": "an action whose rk is not ak + [α]G",
+          "why": "the signature would authorize a key that is not the group's; α is also what the signers randomize with",
+          "evidence": [ "https://zips.z.cash/protocol/protocol.pdf", "https://docs.rs/orchard/latest/orchard/pczt/struct.Spend.html" ]
+        },
+        {
+          "what": "a note the account's viewing key does not decrypt (a foreign note)",
+          "why": "the room spends from this account only; the proof would fail for another key anyway",
+          "evidence": [ "https://zips.z.cash/protocol/protocol.pdf" ]
+        },
+        {
+          "what": "a transparent input",
+          "why": "transparent inputs use ECDSA; FROST cannot sign them",
+          "evidence": [ "https://frost.zfnd.org/zcash/technical-details.html" ]
+        },
+        {
+          "what": "an expiry height of 0 (never expires) or one at or below the current height",
+          "why": "invariant 2 needs an expiry; an expired transaction is invalid in any block (ZIP-203)",
+          "evidence": [ "https://zips.z.cash/zip-0203" ]
+        },
+        {
+          "what": "a consensus_branch_id that is not the network's current upgrade",
+          "why": "the SIGHASH commits to it, so the transaction would be invalid",
+          "evidence": [ "https://zips.z.cash/zip-0244" ]
+        },
+        {
+          "what": "a fee below the ZIP-317 conventional fee",
+          "why": "nodes may drop transactions with unpaid actions",
+          "evidence": [ "https://zips.z.cash/zip-0317" ]
+        },
+        {
+          "what": "a second signature with the same nonces, or nonces restored after a restart",
+          "why": "reusing FROST nonces reveals the signer's share; the keystore erases them on use, and a restart aborts the session",
+          "evidence": [ "https://www.rfc-editor.org/rfc/rfc9591.html" ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [ 1, 2, 4, 5, 8, 9, 10 ],
+      "claims": [
+        { "claim": "every signer recomputes the SIGHASH from the transaction data before signing; a mismatch is refused", "credibility": "imperative" },
+        { "claim": "the chain sees no amount, no recipient, no group and no signer", "credibility": "imperative" },
+        { "claim": "a collected signature is useless after the expiry height", "credibility": "imperative" },
+        { "claim": "every participant sees the payment through the full viewing key", "credibility": "exposed", "party": "every participant" },
+        { "claim": "the proposer, as the Constructor, chooses α; signers check rk but cannot check that α was random, and ZIP-312 says a rogue coordinator can break unlinkability", "credibility": "motivational", "party": "the proposer" },
+        { "claim": "the lightwalletd server sees the signed transaction before it is mined", "credibility": "exposed", "party": "the user-configured lightwalletd or Zaino server" }
+      ],
+      "evidence": [
+        { "kind": "source", "url": "https://zips.z.cash/zip-0312", "what": "ZIP-312 (Draft): re-randomized FROST for spend authorization; signers MUST check or compute the SIGHASH; a rogue coordinator can break unlinkability" },
+        { "kind": "source", "url": "https://zips.z.cash/zip-0244", "what": "ZIP-244: the v5 transaction digest; the header commits to consensus_branch_id and expiry_height; Orchard signatures use SIGHASH_ALL" },
+        { "kind": "source", "url": "https://zips.z.cash/protocol/protocol.pdf", "what": "Zcash protocol spec §4.15: a fresh α per Action, rk from ask + α, spendAuthSig over SigHash; §4.14 the Orchard binding signature" },
+        { "kind": "source", "url": "https://zips.z.cash/zip-0203", "what": "ZIP-203: nExpiryHeight; default 40 blocks since Blossom; 0 means no expiry; expired transactions are invalid" },
+        { "kind": "source", "url": "https://zips.z.cash/zip-0317", "what": "ZIP-317: conventional fee = 5000 zatoshis × max(2, logical actions)" },
+        { "kind": "source", "url": "https://www.rfc-editor.org/rfc/rfc9591.html", "what": "RFC 9591 FROST: two-round signing, nonces used once" },
+        { "kind": "source", "url": "https://docs.rs/orchard/latest/orchard/pczt/struct.Spend.html", "what": "orchard crate PCZT: α is chosen by the Constructor and needed by the Signer; the Prover needs the full viewing key" },
+        { "kind": "source", "url": "https://github.com/ZcashFoundation/frost/tree/main/frost-rerandomized", "what": "frost-rerandomized: re-randomized FROST signing; a randomizer sent over a confidential channel, or derived from the commitments and a seed" },
+        { "kind": "source", "url": "https://github.com/ZcashFoundation/frost-tools", "what": "frost-tools: frostd, frost-client, zcash-sign; demo only, not for production" }
+      ],
+      "unverified": [
+        "how deployed tools order the randomizer and the SIGHASH: ZIP-312 hashes the message into the randomizer, yet the ZIP-244 SIGHASH commits to each action's rk, which the randomizer determines",
+        "whether a PCZT can carry FROST round data to signers outside Muster",
+        "whether zcash-sign runs one signing session per spend action (the demo describes one randomizer per session)"
+      ]
+    },
+    {
+      "id": "zcash.frost-orchard/unshield",
+      "name": "Pay a transparent address from the shielded account",
+      "area": "family",
+      "family": "zcash.frost-orchard",
+      "status": "declared",
+      "summary": "The same t-of-n shielded spend, paying a transparent address. The chain now sees the amount and the recipient. It still does not see which notes paid, the group, or who signed.",
+      "effect": {
+        "schema": "muster.effect.zcash.frost-orchard.unshield.v0",
+        "fields": [
+          { "name": "spends", "means": "each Orchard note spent, with its witness and the α for its action" },
+          { "name": "transparent-outputs", "means": "each transparent address and value" },
+          { "name": "outputs", "means": "any Orchard change back to the account" },
+          { "name": "anchor", "means": "the Orchard note commitment tree root" },
+          { "name": "fee", "means": "the ZIP-317 fee" },
+          { "name": "expiry_height", "means": "nExpiryHeight" },
+          { "name": "consensus_branch_id", "means": "the network upgrade the SIGHASH commits to" },
+          { "name": "openings", "means": "the randomness every signer needs to recompute the actions and the SIGHASH" }
+        ]
+      },
+      "agreement": {
+        "rounds": 2,
+        "threshold": "t of n",
+        "finality": "external",
+        "domain": "zip244.orchard.frost-redpallas-rerandomized.v0"
+      },
+      "requirements": [
+        { "kind": "environment", "name": "bip122:00040fe8ec8471911baa1db1266ea15d", "party": "instance", "class": "infra", "target": "Zcash mainnet", "field": "" },
+        { "kind": "infra", "name": "lightwalletd", "party": "instance", "class": "infra", "target": "a lightwalletd or Zaino server the user configures", "field": "" },
+        { "kind": "infra", "name": "halo2-prover", "party": "instance", "class": "infra", "target": "local Orchard proving (Halo 2)", "field": "" },
+        { "kind": "authority", "name": "orchard-full-viewing-key", "party": "instance", "class": "authority", "target": "the account's full viewing key; the prover needs it", "field": "" },
+        { "kind": "authority", "name": "orchard-frost-share", "party": "contributor", "class": "authority", "target": "a signing share from the account's ceremony", "field": "" },
+        { "kind": "address", "name": "transparent-payee", "party": "proposer", "class": "address", "target": "a transparent Zcash address", "field": "transparent-outputs" },
+        { "kind": "asset", "name": "ZEC", "party": "proposer", "class": "asset", "target": "Orchard notes the account's viewing key decrypts", "field": "spends" }
+      ],
+      "touches": [
+        { "target": "bip122:00040fe8ec8471911baa1db1266ea15d", "mode": "write" },
+        { "target": "orchard-note:<nullifier>", "mode": "write" },
+        { "target": "lightwalletd", "mode": "read" }
+      ],
+      "disclosure": [
+        { "field": "effect", "observer": "room-member", "when": "propose" },
+        { "field": "contributions", "observer": "room-member", "when": "approve" },
+        { "field": "signed-tx", "observer": "rpc-provider", "when": "settle" },
+        { "field": "amount", "observer": "chain-observer", "when": "settle" },
+        { "field": "payee", "observer": "chain-observer", "when": "settle" },
+        { "field": "nullifiers", "observer": "chain-observer", "when": "settle" },
+        { "field": "note-commitments", "observer": "chain-observer", "when": "settle" },
+        { "field": "randomized-keys", "observer": "chain-observer", "when": "settle" },
+        { "field": "action-count", "observer": "chain-observer", "when": "settle" },
+        { "field": "fee", "observer": "chain-observer", "when": "settle" },
+        { "field": "expiry-height", "observer": "chain-observer", "when": "settle" },
+        { "field": "timing", "observer": "store-node", "when": "always" },
+        { "field": "topic", "observer": "store-node", "when": "always" }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "builds the transaction as for a shielded spend, with a transparent output. valueBalanceOrchard is positive: it carries the payment and the fee out of the Orchard pool. Every member's client recomputes the actions and the SIGHASH and checks each rk.",
+          "signs": "",
+          "reveals": [
+            { "field": "effect", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://zips.z.cash/protocol/protocol.pdf",
+            "https://zips.z.cash/zip-0244"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "round 1: each signer posts nonce commitments per spend action.",
+          "signs": "nothing yet. The contribution carries the member's muster attestation over P.",
+          "reveals": [
+            { "field": "contributions", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://www.rfc-editor.org/rfc/rfc9591.html"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "round 2: each signer makes one re-randomized share per spend action.",
+          "signs": "the ZIP-244 SIGHASH_ALL digest, which here also commits to the transparent outputs, as one FROST(Pallas, BLAKE2b-512) share per spend action under rsk = ask + α. Plus the member's muster attestation over P.",
+          "reveals": [
+            { "field": "contributions", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://zips.z.cash/zip-0244",
+            "https://zips.z.cash/zip-0312"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "a participant combines the shares, proves, adds the binding signature and broadcasts.",
+          "signs": "",
+          "reveals": [
+            { "field": "signed-tx", "observer": "rpc-provider" },
+            { "field": "amount", "observer": "chain-observer" },
+            { "field": "payee", "observer": "chain-observer" },
+            { "field": "nullifiers", "observer": "chain-observer" },
+            { "field": "note-commitments", "observer": "chain-observer" },
+            { "field": "randomized-keys", "observer": "chain-observer" },
+            { "field": "action-count", "observer": "chain-observer" },
+            { "field": "fee", "observer": "chain-observer" },
+            { "field": "expiry-height", "observer": "chain-observer" }
+          ],
+          "evidence": [
+            "https://zips.z.cash/protocol/protocol.pdf"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "watches until mined or expired.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "https://zips.z.cash/zip-0203"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a SIGHASH that is not the one recomputed from the transaction data",
+          "why": "invariant 1; ZIP-312",
+          "evidence": [ "https://zips.z.cash/zip-0312" ]
+        },
+        {
+          "what": "an action whose rk is not ak + [α]G, a foreign note, or a transparent input",
+          "why": "the same checks as a shielded spend",
+          "evidence": [ "https://zips.z.cash/protocol/protocol.pdf", "https://frost.zfnd.org/zcash/technical-details.html" ]
+        },
+        {
+          "what": "an expiry height of 0 or already passed, a stale consensus_branch_id, or a fee below ZIP-317",
+          "why": "the same checks as a shielded spend",
+          "evidence": [ "https://zips.z.cash/zip-0203", "https://zips.z.cash/zip-0244", "https://zips.z.cash/zip-0317" ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [ 1, 2, 4, 5, 8, 9, 10 ],
+      "claims": [
+        { "claim": "the chain learns the amount and the transparent recipient", "credibility": "exposed", "party": "chain observer" },
+        { "claim": "the chain does not learn which notes paid, the group, or who signed", "credibility": "imperative" },
+        { "claim": "every signer recomputes the SIGHASH, transparent outputs included, before signing", "credibility": "imperative" }
+      ],
+      "evidence": [
+        { "kind": "source", "url": "https://zips.z.cash/protocol/protocol.pdf", "what": "Zcash protocol spec §4.14: a positive Orchard balancing value moves value to the transparent pool" },
+        { "kind": "source", "url": "https://zips.z.cash/zip-0244", "what": "ZIP-244: the SIGHASH_ALL digest covers the transparent outputs and the Orchard bundle" },
+        { "kind": "source", "url": "https://zips.z.cash/zip-0312", "what": "ZIP-312: re-randomized FROST for spend authorization" },
+        { "kind": "source", "url": "https://frost.zfnd.org/zcash/technical-details.html", "what": "FROST works with Sapling and Orchard only; transparent addresses use ECDSA" }
+      ]
+    },
+    {
+      "id": "zcash.frost-orchard/refresh",
+      "name": "Refresh shares (remove a participant, keep the address)",
+      "area": "family",
+      "family": "zcash.frost-orchard",
+      "status": "declared",
+      "summary": "The continuing participants re-deal their shares with FROST's refresh DKG. The group key, the viewing key and the address stay the same. Anyone left out is removed as a signer. The threshold cannot change, and no one can be added this way: adding a member means a new ceremony and a new address.",
+      "effect": {
+        "schema": "muster.effect.zcash.frost-orchard.refresh.v0",
+        "fields": [
+          { "name": "participants", "means": "the continuing participants, at least t" },
+          { "name": "removed", "means": "the participants left out" },
+          { "name": "t", "means": "the threshold, unchanged" }
+        ]
+      },
+      "agreement": {
+        "rounds": 2,
+        "threshold": "every continuing participant must finish; the key stays t of the new n",
+        "finality": "immediate",
+        "domain": "frost-pallas-blake2b512.refresh-dkg.v0"
+      },
+      "requirements": [
+        { "kind": "authority", "name": "orchard-frost-share", "party": "contributor", "class": "authority", "target": "the participant's current signing share", "field": "" }
+      ],
+      "touches": [],
+      "disclosure": [
+        { "field": "effect", "observer": "room-member", "when": "propose" },
+        { "field": "contributions", "observer": "room-member", "when": "approve" },
+        { "field": "verifying-shares", "observer": "room-member", "when": "final" },
+        { "field": "timing", "observer": "store-node", "when": "always" },
+        { "field": "topic", "observer": "store-node", "when": "always" }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "names the continuing participants (at least t) and who is removed.",
+          "signs": "",
+          "reveals": [
+            { "field": "effect", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://github.com/ZcashFoundation/frost/blob/main/frost-core/src/keys/refresh.rs"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "contributor",
+          "does": "part 1: each continuing participant runs the refresh DKG's first part and posts its package to the log.",
+          "signs": "the member's muster attestation over the package",
+          "reveals": [
+            { "field": "contributions", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://github.com/ZcashFoundation/frost/blob/main/frost-core/src/keys/refresh.rs"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "contributor",
+          "does": "part 2: each makes one refreshing share per other continuing participant, sealed to its recipient.",
+          "signs": "the member's muster attestation over the sealed packages",
+          "reveals": [
+            { "field": "contributions", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://github.com/ZcashFoundation/frost/blob/main/frost-core/src/keys/refresh.rs"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "part 3, local: each keystore computes its refreshed share. The group key is unchanged; the verifying shares change. Each participant deletes its old share only after every continuing participant reports success.",
+          "signs": "",
+          "reveals": [
+            { "field": "verifying-shares", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://github.com/ZcashFoundation/frost/blob/main/frost-core/src/keys/refresh.rs",
+            "https://frost.zfnd.org/tutorial/refreshing-shares.html"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a refresh that changes the threshold",
+          "why": "the refresh procedure cannot change or reduce the threshold",
+          "evidence": [ "https://github.com/ZcashFoundation/frost/blob/main/frost-core/src/keys/refresh.rs" ]
+        },
+        {
+          "what": "fewer than t continuing participants",
+          "why": "the refresh needs at least t participants",
+          "evidence": [ "https://github.com/ZcashFoundation/frost/blob/main/frost-core/src/keys/refresh.rs" ]
+        },
+        {
+          "what": "adding a participant through a refresh",
+          "why": "refresh takes a subset of the current identifiers; a new member needs a new ceremony and a new address",
+          "evidence": [ "https://github.com/ZcashFoundation/frost/blob/main/frost-core/src/keys/refresh.rs" ]
+        },
+        {
+          "what": "deleting old shares before every continuing participant has refreshed",
+          "why": "the FROST book says to confirm everyone succeeded before deleting old key packages",
+          "evidence": [ "https://frost.zfnd.org/tutorial/refreshing-shares.html" ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [ 4, 7, 8, 9 ],
+      "claims": [
+        { "claim": "the chain learns nothing: the address and the key do not change", "credibility": "imperative" },
+        { "claim": "a removed participant can sign again only together with t−1 old shares, so removal holds only if the continuing participants delete theirs", "credibility": "motivational", "party": "the continuing participants" },
+        { "claim": "a removed participant keeps the full viewing key and still sees every transaction of the account", "credibility": "exposed", "party": "the removed participant" }
+      ],
+      "evidence": [
+        { "kind": "source", "url": "https://github.com/ZcashFoundation/frost/blob/main/frost-core/src/keys/refresh.rs", "what": "frost-core refresh: participants left out are removed; the threshold cannot change; the group key stays the same, the verifying shares change" },
+        { "kind": "source", "url": "https://frost.zfnd.org/tutorial/refreshing-shares.html", "what": "the FROST book: delete old key packages only after every participant has refreshed" },
+        { "kind": "source", "url": "https://zips.z.cash/protocol/protocol.pdf", "what": "Zcash protocol spec §4.2.3: the full viewing key (ak, nk, rivk) does not depend on the shares" }
+      ],
+      "unverified": [
+        "whether the refresh DKG keeps the Orchard even-Y normalization for FROST(Pallas)",
+        "member-add path in frost v3"
+      ]
+    }
+  ]
+}

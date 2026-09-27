@@ -1,0 +1,560 @@
+{
+  "actions": [
+    {
+      "id": "btc.miniscript-decay/setup",
+      "name": "Set up a decaying multisig (derive its descriptor)",
+      "area": "family",
+      "family": "btc.miniscript-decay",
+      "status": "declared",
+      "summary": "Each member brings one extended public key, and the room agrees on a miniscript policy: k of n now, fewer keys after a timelock (for example 2 of 3, then 1 of 3 after N blocks). Every member re-derives the descriptor and its first addresses. Nothing reaches the chain until coins are sent to it.",
+      "effect": {
+        "schema": "muster.effect.btc.miniscript-decay.setup.v0",
+        "fields": [
+          { "name": "network", "means": "the Bitcoin network (CAIP-2) the addresses are for" },
+          { "name": "keys", "means": "each member's extended public key with its key origin (master fingerprint and derivation path), ending in the BIP-389 multipath step <0;1>/*" },
+          { "name": "policy", "means": "the primary threshold k of n, and each recovery path's threshold and timelock: older(N) counts N blocks from each coin's confirmation (relative); after(H) opens at height H (absolute)" },
+          { "name": "script", "means": "wsh: the whole policy is one witnessScript. tr: each path is its own tapleaf under a provably unspendable internal key" },
+          { "name": "descriptor", "means": "the miniscript descriptor compiled from the policy and keys, with its checksum; for example wsh(thresh(2,pk(A),s:pk(B),s:pk(C),sln:older(N)))" }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "every key holder (n of n) confirms the descriptor",
+        "finality": "immediate",
+        "domain": "bip380.descriptor.miniscript-decay.v0"
+      },
+      "requirements": [
+        { "kind": "authority", "name": "bip32-xpub", "party": "contributor", "class": "authority", "target": "an extended public key whose private key the member's keystore or signing device holds", "field": "" }
+      ],
+      "touches": [],
+      "disclosure": [
+        { "field": "effect", "observer": "room-member", "when": "propose" },
+        { "field": "xpubs", "observer": "room-member", "when": "propose" },
+        { "field": "contributions", "observer": "room-member", "when": "approve" },
+        { "field": "descriptor", "observer": "room-member", "when": "final" },
+        { "field": "timing", "observer": "store-node", "when": "always" },
+        { "field": "topic", "observer": "store-node", "when": "always" }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "writes the policy (k of n now; each recovery path's threshold and timelock) and takes each member's xpub from that member's own disclosure. Compiles the policy to miniscript and wraps it in wsh() or tr() with multipath keys. Every member's client re-derives the descriptor from the policy and keys and refuses one that differs.",
+          "signs": "",
+          "reveals": [
+            { "field": "effect", "observer": "room-member" },
+            { "field": "xpubs", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0379.md",
+            "https://github.com/bitcoin/bips/blob/master/bip-0389.mediawiki",
+            "https://github.com/bitcoin/bitcoin/blob/master/doc/descriptors.md"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "each key holder re-derives the descriptor and the first receive and change addresses, checks that their own key and origin appear in it, and registers the policy on their signing device. A BIP-388 device shows the policy on its own screen once and keeps a proof of registration.",
+          "signs": "a muster attestation over the descriptor's canonical bytes; no chain signature exists at setup",
+          "reveals": [
+            { "field": "contributions", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0388.mediawiki"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "once every key holder has confirmed, the account is disclosed into the room: family, network, descriptor, k, n and each recovery path's timelock. Each member may import the watch-only descriptor into their own node to find the account's coins.",
+          "signs": "",
+          "reveals": [
+            { "field": "descriptor", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bitcoin/blob/master/test/functional/wallet_miniscript_decaying_multisig_descriptor_psbt.py",
+            "https://github.com/wizardsardine/liana/blob/master/doc/RECOVER.md"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a policy that is not sane miniscript: not type-correct, malleable, or mixing height-based and time-based timelocks in one threshold",
+          "why": "BIP-379's type system and its timelock-mixing rule; such a script may be unspendable or its witness malleable",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0379.md" ]
+        },
+        {
+          "what": "a relative timelock outside BIP-68's 16-bit value field (more than 65535 blocks or 512-second units)",
+          "why": "BIP-68 enforces only the low 16 bits of nSequence; a larger older(n) would not mean what the card says",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0068.mediawiki" ]
+        },
+        {
+          "what": "a descriptor whose derived addresses differ from what a member derives, or that leaves out a member's key",
+          "why": "invariant 1: the account is re-derived by every member, never taken on trust",
+          "evidence": [ "https://github.com/bitcoin/bitcoin/blob/master/doc/descriptors.md" ]
+        },
+        {
+          "what": "a tr() descriptor whose internal key is spendable by anyone outside the policy",
+          "why": "a key-path spend skips every leaf, the timelock included; BIP-341 describes committing to a provably unspendable internal key",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki" ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [ 1, 4, 5, 9 ],
+      "claims": [
+        { "claim": "every member checks the same descriptor and the same addresses before any coin is sent to it", "credibility": "imperative" },
+        { "claim": "nothing reaches the chain at setup", "credibility": "imperative" },
+        { "claim": "anyone who holds the descriptor or the xpubs can find every coin of the account on chain", "credibility": "exposed", "party": "every room member, and anyone they pass the descriptor to" }
+      ],
+      "evidence": [
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0379.md", "what": "Miniscript (Draft): fragments, older(n)/after(n), thresh, type system, timelock-mixing rule; P2WSH and tapscript contexts" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0389.mediawiki", "what": "multipath descriptors: one <0;1>/* expression for receive and change" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0388.mediawiki", "what": "wallet policies: registering a descriptor template (miniscript, tr) on a hardware signer's secure screen" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0068.mediawiki", "what": "relative lock-time in nSequence: 16-bit value, type flag, version >= 2" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bitcoin/blob/master/doc/descriptors.md", "what": "Bitcoin Core descriptors: miniscript inside wsh() and tr(); a 4-of-4 multisig that decays to 1-of-4 with thresh and after()" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bitcoin/blob/master/test/functional/wallet_miniscript_decaying_multisig_descriptor_psbt.py", "what": "Bitcoin Core functional test: a decaying multisig imported as one multipath descriptor into watch-only wallets and spent by PSBT" },
+        { "kind": "source", "url": "https://github.com/wizardsardine/liana/blob/master/doc/RECOVER.md", "what": "Liana descriptor form wsh(or_d(pk(primary), and_v(v:pkh(recovery), older(N)))) with multipath keys" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki", "what": "taproot: the key path, and committing to an unspendable internal key" }
+      ],
+      "unverified": [
+        "which BIP-48-style derivation path convention miniscript wallets use for their keys",
+        "whether every BIP-388 signing device accepts a decaying policy's fragments (thresh with sln:older or sln:after)"
+      ]
+    },
+    {
+      "id": "btc.miniscript-decay/spend",
+      "name": "Spend through the primary path",
+      "area": "family",
+      "family": "btc.miniscript-decay",
+      "status": "declared",
+      "summary": "k of n members pay from the account at any time. Each approver signs every input's hash, which Muster re-derives from the effect first. The spend signs an nSequence with the relative lock disabled, so no timelocked path can complete it.",
+      "effect": {
+        "schema": "muster.effect.btc.miniscript-decay.spend.v0",
+        "fields": [
+          { "name": "path", "means": "primary: the k-of-n path, open at any time" },
+          { "name": "inputs", "means": "each coin: txid, vout, value, scriptPubKey, the derivation index its script came from, and nSequence (the relative-lock disable flag set)" },
+          { "name": "outputs", "means": "each payee's address and value, and any change back to the descriptor's change branch" },
+          { "name": "locktime", "means": "nLockTime" },
+          { "name": "fee", "means": "inputs minus outputs, declared by the proposer and checked by every member" }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n on the primary path (for example 2 of 3)",
+        "finality": "external",
+        "domain": "bip143.p2wsh.miniscript-decay.v0 | bip341.tapscript.miniscript-decay.v0"
+      },
+      "requirements": [
+        { "kind": "environment", "name": "bip122:*", "party": "instance", "class": "infra", "target": "the Bitcoin network the descriptor names", "field": "" },
+        { "kind": "infra", "name": "bitcoind-rpc", "party": "instance", "class": "infra", "target": "a UTXO source, fee estimation and broadcast the user configures", "field": "" },
+        { "kind": "authority", "name": "miniscript-primary-key", "party": "contributor", "class": "authority", "target": "a key in the primary path", "field": "" },
+        { "kind": "address", "name": "payee", "party": "proposer", "class": "address", "target": "an address on the account's network", "field": "outputs" },
+        { "kind": "asset", "name": "BTC", "party": "proposer", "class": "asset", "target": "coins at the account's descriptor", "field": "inputs" }
+      ],
+      "touches": [
+        { "target": "bip122:*", "mode": "write" },
+        { "target": "utxo:<txid>:<vout>", "mode": "write" },
+        { "target": "bitcoind-rpc", "mode": "read" }
+      ],
+      "disclosure": [
+        { "field": "effect", "observer": "room-member", "when": "propose" },
+        { "field": "account-addresses", "observer": "rpc-provider", "when": "propose" },
+        { "field": "contributions", "observer": "room-member", "when": "approve" },
+        { "field": "signed-tx", "observer": "rpc-provider", "when": "settle" },
+        { "field": "inputs", "observer": "chain-observer", "when": "settle" },
+        { "field": "outputs", "observer": "chain-observer", "when": "settle" },
+        { "field": "fee", "observer": "chain-observer", "when": "settle" },
+        { "field": "policy", "observer": "chain-observer", "when": "settle" },
+        { "field": "signers", "observer": "chain-observer", "when": "settle" },
+        { "field": "timing", "observer": "store-node", "when": "always" },
+        { "field": "topic", "observer": "store-node", "when": "always" }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "reads the account's coins through the user's RPC (each read recorded as an external read, invariant 10), picks coins and writes the effect with path primary: every input's prevout amount, scriptPubKey and nSequence, the outputs and the fee. Every member's client re-derives each input's signature hash from the effect.",
+          "signs": "",
+          "reveals": [
+            { "field": "effect", "observer": "room-member" },
+            { "field": "account-addresses", "observer": "rpc-provider" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki",
+            "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "each primary-path key holder signs every input in the keystore, or signs the exported PSBT on a signing device that holds the registered policy. An imported signature is verified like a native one.",
+          "signs": "wsh: each input's BIP-143 hash (version, all prevouts, all nSequences, this outpoint, scriptCode = the whole witnessScript with every path in it, this input's amount and nSequence, the outputs, nLockTime, SIGHASH_ALL) as a DER ECDSA signature. tr: each input's BIP-341 SigMsg (every input's amount, scriptPubKey and nSequence, the outputs, nLockTime, SIGHASH_DEFAULT) extended by BIP-342 with the primary leaf's tapleaf hash, as a BIP-340 signature. Plus the member's muster attestation over P.",
+          "reveals": [
+            { "field": "contributions", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki",
+            "https://github.com/bitcoin/bips/blob/master/bip-0342.mediawiki",
+            "https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki",
+            "https://github.com/bitcoin/bips/blob/master/bip-0371.mediawiki"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "once k signatures are in, builds each input's witness for the primary path (BIP-379's non-malleable satisfaction; for tr, the primary leaf and its control block) and broadcasts through the user's RPC.",
+          "signs": "",
+          "reveals": [
+            { "field": "signed-tx", "observer": "rpc-provider" },
+            { "field": "inputs", "observer": "chain-observer" },
+            { "field": "outputs", "observer": "chain-observer" },
+            { "field": "fee", "observer": "chain-observer" },
+            { "field": "policy", "observer": "chain-observer" },
+            { "field": "signers", "observer": "chain-observer" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0379.md"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "watches for confirmations. Change is a new coin: its relative timelock counts from the block that confirms it.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0068.mediawiki"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an approval over a hash that is not the one re-derived from the effect",
+          "why": "invariant 1: refuse on mismatch",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki", "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki" ]
+        },
+        {
+          "what": "an input whose scriptPubKey is not derived from the account's descriptor (foreign coins)",
+          "why": "the room approves spends from this account only; the same rule the built Bitcoin drivers apply",
+          "evidence": [ "https://github.com/bitcoin/bitcoin/blob/master/doc/descriptors.md" ]
+        },
+        {
+          "what": "a declared fee that is not inputs minus outputs",
+          "why": "BIP-143 signs only this input's amount, so a wrong prevout amount silently changes the fee in wsh",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki" ]
+        },
+        {
+          "what": "an output below the dust limit",
+          "why": "nodes do not relay it; the same rule the built Bitcoin drivers apply",
+          "evidence": [ "https://github.com/bitcoin/bitcoin/blob/master/src/policy/policy.cpp" ]
+        },
+        {
+          "what": "a primary-path spend whose nSequence enables a relative lock of N or more",
+          "why": "in wsh, BIP-143 signs the whole script, not the branch; with such an nSequence on mature coins the recovery path could complete the same transaction with fewer signatures than the card promised",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki", "https://github.com/bitcoin/bips/blob/master/bip-0112.mediawiki" ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [ 1, 2, 4, 5, 8, 9, 10 ],
+      "claims": [
+        { "claim": "every signer signs only hashes Muster re-derived from the effect", "credibility": "imperative" },
+        { "claim": "the chain enforces k of n on the primary path", "credibility": "imperative" },
+        { "claim": "a wsh spend reveals the whole policy: every key and each recovery path's timelock; a tr spend reveals only the primary leaf and the hashes of the other leaves", "credibility": "exposed", "party": "chain observer" },
+        { "claim": "the RPC provider learns the account's addresses from the coin reads and sees the signed transaction before it is mined", "credibility": "exposed", "party": "the user-configured RPC provider" },
+        { "claim": "a collected signature never expires; to cancel, spend one of its inputs", "credibility": "imperative" }
+      ],
+      "evidence": [
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki", "what": "segwit v0 signature hash: scriptCode, this input's amount and nSequence, hashSequence, hashOutputs" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki", "what": "taproot SigMsg: every input's amount, scriptPubKey and nSequence; control blocks" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0342.mediawiki", "what": "tapscript: the tapleaf hash in the signature message" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0379.md", "what": "Miniscript: satisfaction and the non-malleable witness" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0112.mediawiki", "what": "CHECKSEQUENCEVERIFY: fails when the input's nSequence disables or does not meet the lock" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki", "what": "PSBT: how outside signers receive the spend and return signatures" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0371.mediawiki", "what": "PSBT taproot fields: tapleaf scripts and tapscript signatures" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bitcoin/blob/master/test/functional/wallet_miniscript_decaying_multisig_descriptor_psbt.py", "what": "Bitcoin Core: every signer signs one PSBT of a decaying multisig in turn, then it is broadcast" }
+      ]
+    },
+    {
+      "id": "btc.miniscript-decay/recover",
+      "name": "Spend through the recovery path after the timelock",
+      "area": "family",
+      "family": "btc.miniscript-decay",
+      "status": "declared",
+      "summary": "Once a coin's timelock has matured, fewer keys can spend it, for example 1 of 3 instead of 2 of 3. The spend must sign an nSequence (older) or nLockTime (after) that meets the lock; before then the chain refuses it.",
+      "effect": {
+        "schema": "muster.effect.btc.miniscript-decay.recover.v0",
+        "fields": [
+          { "name": "path", "means": "recovery: which recovery path, its threshold and its timelock" },
+          { "name": "inputs", "means": "each coin whose lock has matured: txid, vout, value, scriptPubKey, derivation index, and nSequence = N for older(N)" },
+          { "name": "outputs", "means": "where the coins go, usually a sweep to one address" },
+          { "name": "locktime", "means": "nLockTime; at least H for after(H)" },
+          { "name": "version", "means": "2 or more: BIP-68 applies only to version 2 transactions" },
+          { "name": "fee", "means": "inputs minus outputs, declared and checked" }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "m of n on the recovery path after its timelock (for example 1 of 3)",
+        "finality": "external",
+        "domain": "bip143.p2wsh.miniscript-decay.recovery.v0 | bip341.tapscript.miniscript-decay.recovery.v0"
+      },
+      "requirements": [
+        { "kind": "environment", "name": "bip122:*", "party": "instance", "class": "infra", "target": "the Bitcoin network the descriptor names", "field": "" },
+        { "kind": "infra", "name": "bitcoind-rpc", "party": "instance", "class": "infra", "target": "a UTXO source with each coin's confirmation height, fee estimation and broadcast", "field": "" },
+        { "kind": "authority", "name": "miniscript-recovery-key", "party": "contributor", "class": "authority", "target": "a key in the recovery path", "field": "" },
+        { "kind": "address", "name": "sweep-destination", "party": "proposer", "class": "address", "target": "an address on the account's network", "field": "outputs" },
+        { "kind": "asset", "name": "BTC", "party": "proposer", "class": "asset", "target": "coins at the account's descriptor whose timelock has matured", "field": "inputs" }
+      ],
+      "touches": [
+        { "target": "bip122:*", "mode": "write" },
+        { "target": "utxo:<txid>:<vout>", "mode": "write" },
+        { "target": "bitcoind-rpc", "mode": "read" }
+      ],
+      "disclosure": [
+        { "field": "effect", "observer": "room-member", "when": "propose" },
+        { "field": "account-addresses", "observer": "rpc-provider", "when": "propose" },
+        { "field": "contributions", "observer": "room-member", "when": "approve" },
+        { "field": "signed-tx", "observer": "rpc-provider", "when": "settle" },
+        { "field": "inputs", "observer": "chain-observer", "when": "settle" },
+        { "field": "outputs", "observer": "chain-observer", "when": "settle" },
+        { "field": "fee", "observer": "chain-observer", "when": "settle" },
+        { "field": "policy", "observer": "chain-observer", "when": "settle" },
+        { "field": "signers", "observer": "chain-observer", "when": "settle" },
+        { "field": "timelock", "observer": "chain-observer", "when": "settle" },
+        { "field": "timing", "observer": "store-node", "when": "always" },
+        { "field": "topic", "observer": "store-node", "when": "always" }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "reads the account's coins and each coin's confirmation height (external reads, invariant 10), keeps only coins whose lock has matured, and writes the effect with path recovery: nSequence = N on each input for older(N), or nLockTime >= H for after(H). Every member's client re-derives each input's hash.",
+          "signs": "",
+          "reveals": [
+            { "field": "effect", "observer": "room-member" },
+            { "field": "account-addresses", "observer": "rpc-provider" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0068.mediawiki",
+            "https://github.com/bitcoin/bips/blob/master/bip-0065.mediawiki"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "each recovery-path key holder signs every input in the keystore or on a signing device, as on the primary path. The signed nSequence or nLockTime is what the chain's timelock check reads.",
+          "signs": "wsh: each input's BIP-143 hash, which commits to this input's nSequence and to nLockTime (DER ECDSA, SIGHASH_ALL). tr: each input's BIP-341 SigMsg, which commits to every input's nSequence and to nLockTime, extended by BIP-342 with the recovery leaf's tapleaf hash (BIP-340, SIGHASH_DEFAULT). Plus the member's muster attestation over P.",
+          "reveals": [
+            { "field": "contributions", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki",
+            "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki",
+            "https://github.com/bitcoin/bips/blob/master/bip-0342.mediawiki"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "builds each input's witness for the recovery path (for tr, the recovery leaf and its control block) and broadcasts. The chain runs CHECKSEQUENCEVERIFY or CHECKLOCKTIMEVERIFY against the signed fields.",
+          "signs": "",
+          "reveals": [
+            { "field": "signed-tx", "observer": "rpc-provider" },
+            { "field": "inputs", "observer": "chain-observer" },
+            { "field": "outputs", "observer": "chain-observer" },
+            { "field": "fee", "observer": "chain-observer" },
+            { "field": "policy", "observer": "chain-observer" },
+            { "field": "signers", "observer": "chain-observer" },
+            { "field": "timelock", "observer": "chain-observer" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0112.mediawiki",
+            "https://github.com/bitcoin/bips/blob/master/bip-0065.mediawiki"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "watches for confirmations.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "https://github.com/wizardsardine/liana/blob/master/doc/USAGE.md"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a coin whose timelock has not matured: fewer than N confirmations for older(N), or the chain below height H for after(H)",
+          "why": "the transaction would be non-final; nodes neither relay nor mine it (BIP-68, BIP-65)",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0068.mediawiki", "https://github.com/bitcoin/bips/blob/master/bip-0065.mediawiki" ]
+        },
+        {
+          "what": "a recovery spend with transaction version below 2, an nSequence with the disable flag set, or a lock of the other type (blocks versus time)",
+          "why": "CHECKSEQUENCEVERIFY fails in each case",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0112.mediawiki" ]
+        },
+        {
+          "what": "an approval over a hash that is not the one re-derived from the effect",
+          "why": "invariant 1: refuse on mismatch",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki", "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki" ]
+        },
+        {
+          "what": "foreign coins, a declared fee that is not inputs minus outputs, or a dust output",
+          "why": "the same checks as the primary path",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki" ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [ 1, 2, 4, 5, 8, 9, 10 ],
+      "claims": [
+        { "claim": "no one can use the recovery path before a coin's lock matures: the chain refuses the transaction", "credibility": "imperative" },
+        { "claim": "after the lock matures, the recovery keys alone can move the coins; the primary key holders are not asked", "credibility": "motivational", "party": "the recovery-path key holders" },
+        { "claim": "the spend shows the chain that the account has a timelocked recovery path; in wsh it also shows every key and every timelock", "credibility": "exposed", "party": "chain observer" }
+      ],
+      "evidence": [
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0068.mediawiki", "what": "relative lock-time: nSequence encoding, version >= 2, measured from the block that mined the spent output" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0112.mediawiki", "what": "CHECKSEQUENCEVERIFY, which older(n) compiles to" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0065.mediawiki", "what": "CHECKLOCKTIMEVERIFY, which after(n) compiles to" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0379.md", "what": "Miniscript: older(n) requires nSequence >= n, after(n) requires nLockTime >= n" },
+        { "kind": "source", "url": "https://github.com/wizardsardine/liana/blob/master/doc/USAGE.md", "what": "Liana: the recovery path becomes available after the configured inactivity; sweeping through it" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bitcoin/blob/master/test/functional/wallet_miniscript_decaying_multisig_descriptor_psbt.py", "what": "Bitcoin Core: fewer signers needed at each locktime; a spend before the locktime is refused" }
+      ],
+      "unverified": [
+        "whether signing devices show which spending path (primary or recovery) a miniscript PSBT uses; BIP-388 does not require it"
+      ]
+    },
+    {
+      "id": "btc.miniscript-decay/refresh",
+      "name": "Refresh coins to restart the timelock",
+      "area": "family",
+      "family": "btc.miniscript-decay",
+      "status": "declared",
+      "summary": "A relative timelock counts from each coin's confirmation. To keep the recovery path closed, k of n spend coins back to the account before N blocks pass. An absolute timelock (after) cannot be refreshed this way: it opens at a fixed height, and only a new descriptor moves it.",
+      "effect": {
+        "schema": "muster.effect.btc.miniscript-decay.refresh.v0",
+        "fields": [
+          { "name": "path", "means": "primary" },
+          { "name": "inputs", "means": "the coins whose relative lock is close to maturing, with prevout amount, scriptPubKey, derivation index and nSequence" },
+          { "name": "outputs", "means": "only addresses on the account's own descriptor (the change branch); no payee" },
+          { "name": "fee", "means": "inputs minus outputs, declared and checked" }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n on the primary path",
+        "finality": "external",
+        "domain": "bip143.p2wsh.miniscript-decay.v0 | bip341.tapscript.miniscript-decay.v0"
+      },
+      "requirements": [
+        { "kind": "environment", "name": "bip122:*", "party": "instance", "class": "infra", "target": "the Bitcoin network the descriptor names", "field": "" },
+        { "kind": "infra", "name": "bitcoind-rpc", "party": "instance", "class": "infra", "target": "a UTXO source with each coin's confirmation height, fee estimation and broadcast", "field": "" },
+        { "kind": "authority", "name": "miniscript-primary-key", "party": "contributor", "class": "authority", "target": "a key in the primary path", "field": "" },
+        { "kind": "address", "name": "own-change-address", "party": "proposer", "class": "address", "target": "the account's own descriptor, change branch", "field": "outputs" },
+        { "kind": "asset", "name": "BTC", "party": "proposer", "class": "asset", "target": "coins at the account's descriptor whose relative lock is close to maturing", "field": "inputs" }
+      ],
+      "touches": [
+        { "target": "bip122:*", "mode": "write" },
+        { "target": "utxo:<txid>:<vout>", "mode": "write" },
+        { "target": "bitcoind-rpc", "mode": "read" }
+      ],
+      "disclosure": [
+        { "field": "effect", "observer": "room-member", "when": "propose" },
+        { "field": "account-addresses", "observer": "rpc-provider", "when": "propose" },
+        { "field": "contributions", "observer": "room-member", "when": "approve" },
+        { "field": "signed-tx", "observer": "rpc-provider", "when": "settle" },
+        { "field": "inputs", "observer": "chain-observer", "when": "settle" },
+        { "field": "outputs", "observer": "chain-observer", "when": "settle" },
+        { "field": "fee", "observer": "chain-observer", "when": "settle" },
+        { "field": "policy", "observer": "chain-observer", "when": "settle" },
+        { "field": "signers", "observer": "chain-observer", "when": "settle" },
+        { "field": "timing", "observer": "store-node", "when": "always" },
+        { "field": "topic", "observer": "store-node", "when": "always" }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "reads each coin's confirmation height (external reads), selects the coins whose lock matures soonest, and writes a spend of them to the account's own change branch.",
+          "signs": "",
+          "reveals": [
+            { "field": "effect", "observer": "room-member" },
+            { "field": "account-addresses", "observer": "rpc-provider" }
+          ],
+          "evidence": [
+            "https://github.com/wizardsardine/liana/blob/master/doc/USAGE.md"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "k primary-path key holders sign, exactly as for a primary-path spend.",
+          "signs": "the same bytes as the primary-path spend: BIP-143 per input (wsh) or BIP-341 SigMsg + BIP-342 tapleaf hash of the primary leaf (tr). Plus the member's muster attestation over P.",
+          "reveals": [
+            { "field": "contributions", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki",
+            "https://github.com/bitcoin/bips/blob/master/bip-0342.mediawiki"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "builds the primary-path witnesses and broadcasts.",
+          "signs": "",
+          "reveals": [
+            { "field": "signed-tx", "observer": "rpc-provider" },
+            { "field": "inputs", "observer": "chain-observer" },
+            { "field": "outputs", "observer": "chain-observer" },
+            { "field": "fee", "observer": "chain-observer" },
+            { "field": "policy", "observer": "chain-observer" },
+            { "field": "signers", "observer": "chain-observer" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0379.md"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "once confirmed, the refreshed coins are new outputs, and each one's relative lock starts again from its confirming block.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0068.mediawiki"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a refresh with an output that is not on the account's own descriptor",
+          "why": "that is a payment, and it belongs on the spend action and its card",
+          "evidence": [ "https://github.com/wizardsardine/liana/blob/master/doc/USAGE.md" ]
+        },
+        {
+          "what": "a refresh of an account whose recovery path uses an absolute timelock (after)",
+          "why": "after(H) opens at height H whatever the coins' age (BIP-65); a refresh cannot delay it",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0065.mediawiki" ]
+        },
+        {
+          "what": "an approval over a hash that is not the re-derived one; foreign coins; a wrong fee; dust",
+          "why": "invariant 1 and the primary-path checks",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki" ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [ 1, 2, 4, 5, 8, 9, 10 ],
+      "claims": [
+        { "claim": "a refresh restarts each refreshed coin's relative timelock", "credibility": "imperative" },
+        { "claim": "if no one refreshes in time, the recovery path opens; Muster can warn but never spends on its own", "credibility": "motivational", "party": "the primary key holders: someone must propose, and k must approve, before N blocks pass" },
+        { "claim": "each refresh is an ordinary on-chain spend: it pays a fee and, in wsh, reveals the policy again", "credibility": "exposed", "party": "chain observer" }
+      ],
+      "evidence": [
+        { "kind": "source", "url": "https://github.com/wizardsardine/liana/blob/master/doc/USAGE.md", "what": "Liana, 'On refreshing coins': time starts at receipt; each coin must be spent at least once every N blocks; a refresh is a transaction to yourself" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0068.mediawiki", "what": "a relative lock is measured from the block that mined the spent output" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0065.mediawiki", "what": "an absolute lock compares nLockTime to a fixed height or time" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,545 @@
+{
+  "actions": [
+    {
+      "id": "lez.frost-public-account/transfer",
+      "name": "Send a token from a FROST-owned LEZ account",
+      "area": "family",
+      "family": "lez.frost-public-account",
+      "kind": "lez-frost",
+      "status": "built",
+      "summary": "t of a FROST group's members send a token from the LEZ public account the group's key owns. Two rounds in the room; one BIP-340 signature on chain — to the zone it is a single-key account.",
+      "generated": "lez-frost/transfer",
+      "effect": {
+        "schema": "muster.effect.lez-call.v1",
+        "fields": [
+          {
+            "name": "program",
+            "means": "the token program's id, read from the user's sequencer"
+          },
+          {
+            "name": "accounts",
+            "means": "[the group's account, the recipient's token holding]"
+          },
+          {
+            "name": "instruction",
+            "means": "[0, amount low 32 bits, amount high 32 bits, 0, 0] — token Transfer, the amount a u128"
+          },
+          {
+            "name": "signers",
+            "means": "[the group's account] — the one signer"
+          },
+          {
+            "name": "nonces",
+            "means": "[the account's nonce, read from the sequencer at propose and recorded as an external read]"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the proposer",
+          "does": "Chooses the account ('lez-frost@<CAIP-10>') and calls coordinate_propose_lez_transfer(recipient, amount). The module reads the token program id and the account's nonce from the user's sequencer, builds the lez-call, and proposes it; the nonce read is recorded in the log (source 'lez:getAccount', invariant 10). The driver's gate: a well-formed call whose one signer is this account, at one nonce, with an instruction. The materialization is dCBOR ['lee.public.frost-bip340.v1', <zone>, [the LEZ message hash]].",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "the account (the nonce read)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_frost_room_e2e.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "each participant — Approve once",
+          "does": "As for the Bitcoin FROST account: round 1 public nonces from the keystore, then (automatically) round 2 partial signatures under the signer set the log fixes — the first t round-1 contributions — each attested by the member's host key over P. The two rounds are the same code as btc.frost-bip445's (drivers/frost_group.nim, coordination/aggregate.nim); only the message differs.",
+          "signs": "round 2: a partial signature over the LEZ public message hash = SHA-256('/LEE/v0.3/Message/Public/' padded to 32 ‖ borsh(the token program as 8 LE u32 words · [group account, recipient] · [nonce as u128] · Transfer words)) — no zone or chain id in it",
+          "reveals": [
+            {
+              "field": "contributions (public nonces, then partial signatures)",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_frost_room_e2e.nim",
+            "module/tests/lez_tx_test.nim",
+            "module/tests/frost_keystore_test.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "any member's instance",
+          "does": "coordinate_submit: the settlement re-reads the account's nonce from the chain — a signature for a nonce the chain has moved past can never land, so it refuses and the room proposes again — then aggregates one BIP-340 signature, verifies it under x(Q), and sends the call with that one witness through the user's sequencer. No member sends it as themselves.",
+          "signs": "nothing new — t partials aggregate into one BIP-340 signature under x(Q)",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "call (sender account, recipient, amount)",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_frost_room_e2e.nim",
+            "module/tests/lez_frost_account_e2e.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one — the chain is read",
+          "does": "The pump watches for inclusion and publishes the final event; the account's nonce advances.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/lez_frost_room_e2e.nim",
+            "module/tests/lez_frost_account_e2e.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "settling a proposal whose nonce the chain has moved past",
+          "why": "'the account's nonce moved … this signature can never land — propose again'; nothing is sent",
+          "evidence": [
+            "module/tests/lez_frost_room_e2e.nim"
+          ]
+        },
+        {
+          "what": "an aggregate over the wrong message",
+          "why": "the chain refuses it at submission (InvalidSignature); nothing moves",
+          "evidence": [
+            "module/tests/lez_frost_account_e2e.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_set_policy",
+        "coordinate_propose_lez_transfer",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_submit",
+        "lez_pending"
+      ],
+      "ui": "Room → + → Payment → Settles via LEZ (FROST) → From <account> → recipient token holding + amount → Propose. The card then renders '⚠ Schema unknown' — the card's schema list has no lez-call — so it offers no Approve or Deny; approving (coordinate_contribute) and settling (coordinate_submit) are headless.",
+      "invariants": [
+        1,
+        2,
+        4,
+        6,
+        8,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The zone sees one signature by one account: nothing on chain names the policy or who signed",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The group's account id is SHA-256('/LEE/v0.3/AccountId/Public/' ‖ x(Q)) with no tweak — the chain checks exactly that",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A signature for an old nonce can never land; settlement re-reads the nonce and refuses a stale one",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A LEZ public message commits to no zone or chain id: only the account's nonce and the program bind the signature; muster binds the environment in the room, the chain does not",
+          "credibility": "exposed",
+          "party": "anyone who can submit to another zone where the account exists at that nonce"
+        },
+        {
+          "claim": "The transfer itself is public on the zone: sender account, recipient, amount",
+          "credibility": "exposed",
+          "party": "anyone reading the zone"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/lez_frost_room_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_frost_account_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_tx_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/frost_keystore_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/profile_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/main/lee/state_machine/src/signature/private_key.rs",
+          "what": "LEZ: the public account id and signature check (the registry's source)"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/bitcoin/bips/master/bip-0340.mediawiki",
+          "what": "BIP-340: the one Schnorr signature the zone checks"
+        }
+      ],
+      "unverified": [
+        "Registry says this family is 'in the room UI (… Approve once)'. The code disagrees: effectSchema (coordination/intent_events.nim) does not list lez-call, so coordinate_intents marks it schemaKnown: false and MusterCard.qml shows 'Schema unknown' with no Approve or Deny.",
+        "The lez-frost driver is not run through checkConformance by any test (only its profile, in profile_test).",
+        "The token program id comes from the sequencer (getProgramIds) and is not recorded as an external read; only the nonce is.",
+        "The room's fold counts one approval per contributor NAME in the event key, not per verifying key, so the room can show 'executable' early if one signature is published under two names (seen in a scratch run against the threshold driver, not a repo test). The settlement re-counts by the key that signed, so nothing wrong settles."
+      ]
+    },
+    {
+      "id": "lez.frost-public-account/key-ceremony",
+      "name": "Make a FROST key for a LEZ account (ChillDKG in the room)",
+      "area": "family",
+      "family": "lez.frost-public-account",
+      "kind": "lez-frost",
+      "status": "built",
+      "setup": true,
+      "summary": "The setup for this family: t-of-n members run a ChillDKG key ceremony over the room's log. The room is the authenticated coordinator ChillDKG asks for, and every member computes the coordinator's steps from the log. The result is one threshold key; the LEZ public account it gives is disclosed into the room with the ceremony's public recovery data.",
+      "effect": {
+        "fields": [
+          {
+            "name": "ceremony_id",
+            "means": "a name for the key, without '/'"
+          },
+          {
+            "name": "network",
+            "means": "a LEZ zone written 'lez:<zone>' (e.g. lez:local, lez:testnet); a lez: network makes the ceremony disclose a LEZ account"
+          },
+          {
+            "name": "t",
+            "means": "signers needed, 1 ≤ t ≤ n"
+          },
+          {
+            "name": "n",
+            "means": "participants, n ≥ 2 — the first n members to join, in the log's order"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 2,
+        "threshold": "all n participants: the ceremony completes only when every participant's step-1 and step-2 messages are in the log; a fault aborts it (ChillDKG is not robust)",
+        "finality": "immediate — in the room, when each participant finalizes and discloses",
+        "domain": "ChillDKG (bip-frost-dkg draft, bitcoin/bips#2227) over secp256k1",
+        "evidence": [
+          "module/tests/frost_ceremony_room_test.nim",
+          "module/tests/frost_chilldkg_test.nim"
+        ]
+      },
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "frost-host-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "frost/<ceremony_id>",
+          "field": "",
+          "evidence": [
+            "module/tests/frost_keystore_test.nim",
+            "module/tests/frost_ceremony_room_test.nim"
+          ]
+        }
+      ],
+      "touches": [],
+      "disclosure": [
+        {
+          "field": "open (network, t, n)",
+          "observer": "room-member",
+          "when": "act",
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim"
+          ]
+        },
+        {
+          "field": "host keys (joins)",
+          "observer": "room-member",
+          "when": "act",
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim",
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "field": "step messages (encrypted shares, VSS commitments, certifying signatures)",
+          "observer": "room-member",
+          "when": "act",
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim"
+          ]
+        },
+        {
+          "field": "account + recovery data (host keys, t, threshold key, public shares)",
+          "observer": "room-member",
+          "when": "final",
+          "evidence": [
+            "module/tests/lez_frost_room_e2e.nim",
+            "module/tests/lez_frost_account_e2e.nim",
+            "module/tests/lez_tx_test.nim"
+          ]
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always",
+          "evidence": [
+            "module/tests/flow_test.nim"
+          ]
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always",
+          "evidence": [
+            "module/tests/flow_test.nim"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "step": "ceremony",
+          "who": "the opener (any member)",
+          "does": "frost_ceremony_open(ceremony_id, network, t, n): the module checks n ≥ 2, 1 ≤ t ≤ n and an id without '/', publishes frost/<id>/open {network, t, n}, and joins it.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "open (network, t, n)",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "each member who takes part",
+          "does": "frost_ceremony_join: the keystore derives a host key for label 'frost/<id>' from its own secret — never exported — and the member publishes frost/<id>/join/<member> {host}, author-signed. The first n joins in the log's canonical order are the participants.",
+          "signs": "an Ed25519 author signature (room identity) over the join event",
+          "reveals": [
+            {
+              "field": "host key",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/frost_keystore_test.nim",
+            "module/tests/frost_ceremony_room_test.nim",
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "each participant — automatically, on the room's tick",
+          "does": "Step 1: once n have joined, the keystore makes the participant's step-1 message — its secret shares for every participant, encrypted to their host keys, a VSS commitment and a proof of possession — published as frost/<id>/pmsg1/<host>. Step 2: once all n step-1 messages are in the log, each participant computes the coordinator's step 1 from the log itself (the room only relays) and its keystore makes the step-2 message: its certifying signature (CertEq) over the ceremony's transcript, published as frost/<id>/pmsg2/<host>.",
+          "signs": "step 2: the participant's certifying signature (CertEq) by its host key",
+          "reveals": [
+            {
+              "field": "step messages",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim",
+            "module/tests/frost_keystore_test.nim",
+            "module/tests/frost_chilldkg_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "each participant",
+          "does": "Once all n step-2 messages are in the log, each computes the coordinator's finalize from the log — the certificate and the recovery data — and its keystore checks the certificate. Then it discloses the account, author-signed, with config {ceremony, recovery}: the account id is SHA-256('/LEE/v0.3/AccountId/Public/' ‖ x(Q)) of the threshold key, with no tweak — exactly what the chain checks a BIP-340 signature against. Nothing is on the zone until the account is used. Any member re-derives the account from the recovery data, with no chain read; a member's share is recovered from the same public data by its keystore, never stored.",
+          "signs": "the disclosure event's author signature",
+          "reveals": [
+            {
+              "field": "account + recovery data",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_frost_room_e2e.nim",
+            "module/tests/lez_frost_account_e2e.nim",
+            "module/tests/lez_tx_test.nim",
+            "module/tests/frost_keystore_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a faulty ceremony message: a bad commitment, proof, share, or a coordinator's lie",
+          "why": "ChillDKG raises with the blamed participant; the ceremony does not complete",
+          "evidence": [
+            "module/tests/frost_chilldkg_test.nim"
+          ]
+        },
+        {
+          "what": "a join published in another member's name",
+          "why": "joins are author-signed; the room's read path drops a forged one",
+          "evidence": [
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "what": "a share or a nonce in the log",
+          "why": "none is ever published: the ceremony's entries are its open, joins and step messages",
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "frost_ceremony_open",
+        "frost_ceremony_join",
+        "frost_ceremonies",
+        "coordinate_accounts"
+      ],
+      "ui": "Room → Accounts → 'FROST key ceremony (Bitcoin taproot)' → a name, t, n, network 'lez:<zone>' → Open the ceremony and join it; other members → Join. It advances on the room's tick and the account appears under Accounts. The section's title says Bitcoin taproot; a lez: network makes a LEZ account.",
+      "invariants": [
+        4,
+        8,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "No share and no nonce enters the log; a share is recovered from the public recovery data by the member's own keystore",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The room coordinates: every member computes the coordinator's steps from the log — there is no coordinator server",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "To anyone outside the room the account is one key: its address names no policy and no signers",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "ChillDKG aborts on a fault; a participant who stops answering stops the ceremony",
+          "credibility": "motivational",
+          "party": "every participant"
+        },
+        {
+          "claim": "The participants are the first n members to join, in the log's order — the opener does not choose them",
+          "credibility": "motivational",
+          "party": "the room's members"
+        },
+        {
+          "claim": "Demo-grade: this FROST code is not constant time and sits behind the production gate",
+          "credibility": "not-applicable"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/frost_ceremony_room_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/frost_chilldkg_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/frost_keystore_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/frost_dkg_sign_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/authorship_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_frost_room_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_frost_account_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_tx_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/BlockstreamResearch/bip-frost-dkg",
+          "what": "ChillDKG: the draft this ports"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/bitcoin/bips/pull/2227",
+          "what": "bitcoin/bips#2227: the ChillDKG BIP draft"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/main/lee/state_machine/src/signature/private_key.rs",
+          "what": "LEZ: public account ids and the signature the chain checks"
+        }
+      ],
+      "unverified": [
+        "The hosted checks on t, n and the id, and 'not-a-participant' for a member who joins after the first n, are from reading nim-lib/muster_module.nim and coordination/aggregate.nim; no test covers them.",
+        "A disclosure whose account id does not derive from its recovery data is refused by lezFrostAccountOfDisclosure (drivers/lez_frost.nim); only the positive derivation is tested (lez_frost_room_e2e). The Bitcoin twin's refusal is tested (btc_frost_driver_test).",
+        "The ceremony's step-by-step checks (joins, step messages, no secret in the log, the room as coordinator) are tested on a regtest ceremony (frost_ceremony_room_test); a lez: ceremony runs the same code (coordination/aggregate.nim) with a different final disclosure, and is tested end to end for its outcome (lez_frost_room_e2e step 1)."
+      ]
+    }
+  ]
+}

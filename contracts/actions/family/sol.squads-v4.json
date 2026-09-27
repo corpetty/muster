@@ -1,0 +1,2319 @@
+{
+  "actions": [
+    {
+      "id": "sol.squads-v4/create-multisig",
+      "name": "Create a Squads v4 multisig",
+      "area": "family",
+      "family": "sol.squads-v4",
+      "status": "declared",
+      "summary": "The room agrees a policy (members and their Initiate/Vote/Execute permissions, threshold, time lock, config authority, rent collector); one creator signs multisig_create_v2 with a fresh createKey, and the Squads program stores that policy in a Multisig account on Solana.",
+      "effect": {
+        "schema": "muster.effect.sol.squads-v4.create-multisig.v0",
+        "fields": [
+          {
+            "name": "createKey",
+            "means": "a fresh one-time key; its public key seeds the Multisig PDA and it must sign the creation, so no one else can create at that address first"
+          },
+          {
+            "name": "multisig",
+            "means": "the Multisig PDA of (\"multisig\", \"multisig\", createKey) under the Squads v4 program"
+          },
+          {
+            "name": "vault",
+            "means": "the default vault PDA of (\"multisig\", multisig, \"vault\", 0): the address that holds and receives funds"
+          },
+          {
+            "name": "members",
+            "means": "each member's public key and permission mask: Initiate = 1, Vote = 2, Execute = 4"
+          },
+          {
+            "name": "threshold",
+            "means": "approvals needed: at least 1 and at most the number of members with Vote"
+          },
+          {
+            "name": "timeLock",
+            "means": "seconds that must pass after approval before execution; at most 7,776,000 (3 months)"
+          },
+          {
+            "name": "configAuthority",
+            "means": "none for an autonomous multisig (config changes are voted), or the one key that changes config alone (a controlled multisig)"
+          },
+          {
+            "name": "rentCollector",
+            "means": "where rent from closed transaction and proposal accounts goes; none turns reclaim off"
+          },
+          {
+            "name": "creator",
+            "means": "the key that signs as creator and pays the Multisig account's rent, the program-config creation fee and the transaction fee"
+          },
+          {
+            "name": "creationFee",
+            "means": "the lamports the global ProgramConfig charges, sent to its treasury; read from chain, not written by the room"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "the chain needs only the creator and the createKey; the room asks every listed member to confirm their own key and permissions first",
+        "finality": "external",
+        "domain": "solana.message.v0 (or legacy) · squads-v4.multisig_create_v2"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "solana:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "solana:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "solana-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "solana:*",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "squads-v4-member",
+          "party": "contributor",
+          "class": "authority",
+          "target": "squads-multisig:<multisig PDA>",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "create-key",
+          "party": "proposer",
+          "class": "authority",
+          "target": "solana:*",
+          "field": "createKey"
+        },
+        {
+          "kind": "asset",
+          "name": "sol-for-rent-and-creation-fee",
+          "party": "proposer",
+          "class": "asset",
+          "target": "solana:*",
+          "field": "creator"
+        },
+        {
+          "kind": "authority",
+          "name": "member-key",
+          "party": "counterparty",
+          "class": "authority",
+          "target": "squads-multisig:<multisig PDA>",
+          "field": "members"
+        }
+      ],
+      "touches": [
+        {
+          "target": "solana:*",
+          "mode": "write"
+        },
+        {
+          "target": "squads-multisig:<multisig PDA>",
+          "mode": "write"
+        },
+        {
+          "target": "squads-program-config:<ProgramConfig PDA>",
+          "mode": "read"
+        },
+        {
+          "target": "squads-treasury:<program-config treasury>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "The proposer writes the policy: each member's key and permission mask, the threshold, the time lock, the config authority (none = autonomous) and the rent collector. Muster would make a fresh createKey, derive the Multisig PDA and the vault PDA, and read the ProgramConfig account (creation fee, treasury) from the RPC, recording the read.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "policy",
+              "observer": "room-member"
+            },
+            {
+              "field": "effect",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/multisig_create.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/multisig.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/program_config.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/seeds.rs",
+            "https://docs.squads.so/main/development/reference/accounts"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Each listed member would check that the key and mask the policy lists for them are theirs, and confirm in the room. The chain never asks them: multisig_create_v2 takes the member list as plain arguments, with no member signature.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/multisig_create.rs"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "proposer",
+          "does": "The creator sends multisig_create_v2. The program sorts the members, checks the policy (at least one Initiate, one Vote and one Execute member; 1 ≤ threshold ≤ Vote members; no duplicates; time lock ≤ 3 months), stores it with transaction_index = 0 and stale_transaction_index = 0, and moves the creation fee (if above zero) from the creator to the treasury. The creator pays the Multisig account's rent. The RPC provider, then the leader validator, see the transaction before inclusion; from inclusion the whole policy is public.",
+          "signs": "The creator (fee payer, rent payer, fee source) and the createKey sign. The outer bytes are a Solana message, legacy (header: num_required_signatures, num_readonly_signed_accounts, num_readonly_unsigned_accounts ‖ account_keys ‖ recent_blockhash (32 bytes) ‖ compiled instructions) or v0 (the byte 0x80 ‖ the same ‖ address_table_lookups); each signer's 64-byte Ed25519 signature covers exactly those serialized bytes. The fee payer is the first signer. No cluster or chain id is in the bytes: the recent blockhash (valid ~150 slots, about 60-90 s) is the only tie to one cluster, unless a durable nonce replaces it. The base fee (5,000 lamports per signature) is set by the cluster, not by these bytes. Its instruction is multisig_create_v2: data = sha256(\"global:multisig_create_v2\")[0..8] ‖ borsh(MultisigCreateArgsV2{config_authority: Option<Pubkey>, threshold: u16, members: Vec<{key: Pubkey, permissions: u8 mask}>, time_lock: u32, rent_collector: Option<Pubkey>, memo: Option<String>}); accounts [program_config PDA (\"multisig\", \"program_config\"), treasury (writable), multisig PDA (\"multisig\", \"multisig\", createKey) (writable), create_key (signer), creator (signer, writable), system program]. The creation fee is NOT in the bytes: the program reads it from ProgramConfig when the transaction runs.",
+          "reveals": [
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "policy",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/multisig_create.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/multisig.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/program_config.rs",
+            "https://solana.com/docs/core/transactions/transaction-structure",
+            "https://solana.com/developers/guides/advanced/confirmation",
+            "https://www.anchor-lang.com/docs/basics/idl"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "Muster would read the Multisig account back at a finalized slot, re-derive its address from the createKey, and check every field against the reviewed policy. The vault PDA, not the Multisig address, is what the room shows as the account's receiving address. Squads v4 has the same program id on mainnet-beta and devnet, so only the blockhash in the signed transaction tied this creation to one cluster.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "policy",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/multisig_create.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/README.md",
+            "https://docs.squads.so/main/development/reference/accounts"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "composing a policy the program rejects: threshold 0 or above the Vote members, no Initiate, Vote or Execute member, a duplicate key, a mask of 8 or more, or a time lock over 7,776,000 s",
+          "why": "the chain's rule (Multisig::invariant); caught before anyone spends a fee",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/multisig.rs"
+          ]
+        },
+        {
+          "what": "signing a creation whose arguments differ from the reviewed policy (members, masks, threshold, time lock, config authority, rent collector), or whose multisig account is not the PDA of the createKey",
+          "why": "invariant 1 (F-4): re-derive the materialization from the reviewed effect and refuse on mismatch",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/multisig_create.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/seeds.rs"
+          ]
+        },
+        {
+          "what": "signing before the creation fee and treasury were read from ProgramConfig and recorded",
+          "why": "invariant 10: the program charges the fee it reads at execution; it is not in the signed bytes, so its origin must be accounted for",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/multisig_create.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/program_config.rs"
+          ]
+        },
+        {
+          "what": "signing or submitting a transaction whose recent blockhash is older than ~150 slots, or was read from an RPC whose genesis hash is not the room's cluster",
+          "why": "invariant 2: the signed bytes carry no cluster id, so the blockhash is the only binding (implicit) and it expires; muster would check the RPC's genesis hash against the room's environment and re-sign with a fresh blockhash rather than send a stale one",
+          "evidence": [
+            "https://solana.com/docs/core/transactions/transaction-structure",
+            "https://solana.com/developers/guides/advanced/confirmation",
+            "https://solana.com/docs/rpc/http/getgenesishash"
+          ]
+        },
+        {
+          "what": "offering the Multisig account address as a place to receive funds",
+          "why": "the chain's rule: funds belong at the vault PDA; the Squads README warns that funds sent to the multisig account may not be recoverable",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/README.md"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The program refuses a malformed policy: it needs a member with each of Initiate, Vote and Execute, 1 ≤ threshold ≤ Vote members, no duplicate keys, and a time lock of at most 3 months.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The multisig address is a PDA of a createKey that must sign, so no one else can create it first; the creation is tied to one cluster only by its recent blockhash.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The whole policy is public from creation: every member key and mask, the threshold, the time lock, the config authority and the rent collector.",
+          "credibility": "exposed",
+          "party": "anyone reading Solana"
+        },
+        {
+          "claim": "On a controlled multisig (config_authority set), that one key adds and removes members, changes the threshold and time lock, and adds spending limits with no vote.",
+          "credibility": "motivational",
+          "party": "the config authority"
+        },
+        {
+          "claim": "Listed members do not sign the creation; the chain accepts any key as a member. The room's confirmation is the only check that each key belongs to its person.",
+          "credibility": "motivational",
+          "party": "the creator"
+        },
+        {
+          "claim": "The creation fee is read from the program config at execution, not committed in the signed bytes.",
+          "credibility": "motivational",
+          "party": "the Squads program-config authority"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/core/transactions/transaction-structure",
+          "what": "Each signature is a 64-byte Ed25519 signature of the serialized message; the first signer is the fee payer; the message holds no cluster id; a blockhash expires after 150 slots."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/anza-xyz/solana-sdk/blob/6f74525ac8fba532017b379769549f4640c90e62/transaction/src/lib.rs",
+          "what": "Solana SDK: Transaction::message_data() is message.serialize(); signers sign those bytes."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/anza-xyz/solana-sdk/blob/6f74525ac8fba532017b379769549f4640c90e62/message/src/legacy.rs",
+          "what": "Legacy message layout (header, account_keys, recent_blockhash, instructions); the first account is always the fee payer; instructions commit atomically."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/anza-xyz/solana-sdk/blob/6f74525ac8fba532017b379769549f4640c90e62/message/src/versions/v0/mod.rs",
+          "what": "v0 message layout: the same fields plus address_table_lookups."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/developers/guides/advanced/confirmation",
+          "what": "A blockhash is usable for about 60-90 seconds (151 blockhashes); the RPC node forwards a transaction to the current block producer."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/core/transactions/durable-nonces",
+          "what": "A durable nonce replaces the recent blockhash; AdvanceNonceAccount must be the first instruction."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/core/fees",
+          "what": "Base fee is 5,000 lamports per signature; a prioritization fee is optional."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/rpc/http/getgenesishash",
+          "what": "getGenesisHash returns the connected cluster's genesis hash."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/rpc/http/getaccountinfo",
+          "what": "getAccountInfo returns account data with the slot it was read at; no proof is returned."
+        },
+        {
+          "kind": "source",
+          "url": "https://www.anchor-lang.com/docs/basics/idl",
+          "what": "An Anchor instruction discriminator is the first 8 bytes of sha256(\"global:<name>\")."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/README.md",
+          "what": "Program id SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf on both mainnet-beta and devnet; verifiable builds; the final audited commit is 64af733."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/seeds.rs",
+          "what": "PDA seed constants: multisig, program_config, transaction, proposal, vault, ephemeral_signer, spending_limit."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/multisig_create.rs",
+          "what": "multisig_create_v2: createKey signs; the Multisig PDA is (\"multisig\", \"multisig\", createKey); the creator pays rent and the creation fee to the program-config treasury."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/multisig.rs",
+          "what": "Multisig fields, the Initiate/Vote/Execute mask, the invariant (threshold, proposers, voters, executors, MAX_TIME_LOCK = 3 months)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/program_config.rs",
+          "what": "ProgramConfig: authority, multisig_creation_fee (lamports) and treasury."
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.squads.so/main/development/reference/accounts",
+          "what": "Squads docs: Multisig fields and PDA seeds."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/multisig_config.rs",
+          "what": "A controlled multisig's config_authority changes members, threshold, time lock, config authority and rent collector alone."
+        }
+      ],
+      "unverified": [
+        "whether the deployed program is immutable (the registry's notes say so; the README documents verifiable builds but does not state the upgrade authority)",
+        "the current multisig_creation_fee and treasury values (a live ProgramConfig read, not made here)"
+      ]
+    },
+    {
+      "id": "sol.squads-v4/transfer",
+      "name": "Send SOL from a Squads vault",
+      "area": "family",
+      "family": "sol.squads-v4",
+      "status": "declared",
+      "summary": "A member proposes a SOL transfer from the multisig's vault; the Squads program stores it on chain, k members each approve with their own transaction, and after the time lock a member with Execute permission runs it. The rule lives in the Squads v4 program on Solana.",
+      "effect": {
+        "schema": "muster.effect.sol.squads-v4.transfer.v0",
+        "fields": [
+          {
+            "name": "multisig",
+            "means": "the Multisig PDA the transaction is proposed under"
+          },
+          {
+            "name": "vaultIndex",
+            "means": "which vault acts; 0 is the default vault"
+          },
+          {
+            "name": "vault",
+            "means": "the vault PDA of (\"multisig\", multisig, \"vault\", vaultIndex as one byte); the program signs for it at execution"
+          },
+          {
+            "name": "transactionIndex",
+            "means": "the multisig's next transaction index (its transaction_index + 1 when created); it names both the VaultTransaction and the Proposal PDA"
+          },
+          {
+            "name": "to",
+            "means": "the payee's address"
+          },
+          {
+            "name": "amount",
+            "means": "lamports to send (1 SOL = 1,000,000,000 lamports)"
+          },
+          {
+            "name": "message",
+            "means": "the Squads TransactionMessage stored on chain: one System Program transfer from the vault to the payee, with its account keys and header counts; no blockhash"
+          },
+          {
+            "name": "creator",
+            "means": "the member with Initiate permission who creates the VaultTransaction; recorded on chain"
+          },
+          {
+            "name": "rentPayer",
+            "means": "the key that pays rent for the VaultTransaction and Proposal accounts"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of the members with Vote permission (the Multisig account's on-chain threshold); Rejected at voters − k + 1 rejections",
+        "finality": "external",
+        "domain": "solana.message.v0 (or legacy) · squads-v4.proposal_approve (pointer to Proposal PDA)"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "solana:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "solana:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "solana-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "solana:*",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "squads-v4-voter",
+          "party": "contributor",
+          "class": "authority",
+          "target": "squads-multisig:<multisig PDA>",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "sol-for-vote-fee",
+          "party": "contributor",
+          "class": "asset",
+          "target": "solana:*",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "squads-v4-initiator",
+          "party": "proposer",
+          "class": "authority",
+          "target": "squads-multisig:<multisig PDA>",
+          "field": "creator"
+        },
+        {
+          "kind": "asset",
+          "name": "sol-for-rent",
+          "party": "proposer",
+          "class": "asset",
+          "target": "solana:*",
+          "field": "rentPayer"
+        },
+        {
+          "kind": "asset",
+          "name": "amount",
+          "party": "proposer",
+          "class": "asset",
+          "target": "squads-vault:<vault PDA>",
+          "field": "amount"
+        },
+        {
+          "kind": "address",
+          "name": "payee",
+          "party": "counterparty",
+          "class": "address",
+          "target": "solana:*",
+          "field": "to"
+        },
+        {
+          "kind": "authority",
+          "name": "squads-v4-executor",
+          "party": "instance",
+          "class": "authority",
+          "target": "squads-multisig:<multisig PDA>",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "solana:*",
+          "mode": "write"
+        },
+        {
+          "target": "squads-multisig:<multisig PDA>",
+          "mode": "write"
+        },
+        {
+          "target": "squads-transaction:<VaultTransaction PDA>",
+          "mode": "write"
+        },
+        {
+          "target": "squads-proposal:<Proposal PDA>",
+          "mode": "write"
+        },
+        {
+          "target": "squads-vault:<vault PDA>",
+          "mode": "write"
+        },
+        {
+          "target": "solana:<payee address>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "effect",
+          "observer": "chain-observer",
+          "when": "propose"
+        },
+        {
+          "field": "effect",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "payee",
+          "observer": "chain-observer",
+          "when": "propose"
+        },
+        {
+          "field": "amount",
+          "observer": "chain-observer",
+          "when": "propose"
+        },
+        {
+          "field": "payer",
+          "observer": "chain-observer",
+          "when": "propose"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "always"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "approvals",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "propose"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "approve"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "The room would review the transfer: vault, payee, amount. The proposer's client would compile it into Squads' TransactionMessage: one System Program transfer from the vault PDA (marked signer) to the payee. It would then send one transaction with vault_transaction_create and proposal_create. The chain stores the message at the VaultTransaction PDA for the next index, bumps the multisig's transaction_index, and opens the Proposal as Active (or Draft until proposal_activate). The stored message cannot change after this. The rent payer funds both accounts. The RPC provider, then the leader validator, see it before inclusion; from inclusion the whole effect is public, before any approval.",
+          "signs": "The creator (a member with Initiate permission), the rent payer and the fee payer (often one key) sign one transaction. The outer bytes are a Solana message, legacy (header: num_required_signatures, num_readonly_signed_accounts, num_readonly_unsigned_accounts ‖ account_keys ‖ recent_blockhash (32 bytes) ‖ compiled instructions) or v0 (the byte 0x80 ‖ the same ‖ address_table_lookups); each signer's 64-byte Ed25519 signature covers exactly those serialized bytes. The fee payer is the first signer. No cluster or chain id is in the bytes: the recent blockhash (valid ~150 slots, about 60-90 s) is the only tie to one cluster, unless a durable nonce replaces it. The base fee (5,000 lamports per signature) is set by the cluster, not by these bytes. It usually holds two Squads instructions. vault_transaction_create: data = sha256(\"global:vault_transaction_create\")[0..8] ‖ borsh{vault_index: u8, ephemeral_signers: u8, transaction_message: bytes, memo: Option<String>}; accounts [multisig (writable), transaction PDA (\"multisig\", multisig, \"transaction\", index as u64 LE) (writable), creator (signer), rent_payer (signer, writable), system program]. transaction_message is Squads' own compact encoding of the inner message (one System Program transfer): num_signers, num_writable_signers, num_writable_non_signers (u8 each), account_keys, instructions (program_id_index, account_indexes, data) and address_table_lookups, with u8/u16 length prefixes. It carries no blockhash and no cluster id: the SDK drops the inner blockhash when it encodes it. proposal_create: data = sha256(\"global:proposal_create\")[0..8] ‖ borsh{transaction_index: u64, draft: bool}.",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payee",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "effect",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_create.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/vault_transaction.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_create.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/sdk/multisig/src/utils.ts",
+            "https://solana.com/docs/core/transactions/transaction-structure",
+            "https://solana.com/developers/guides/advanced/confirmation",
+            "https://www.anchor-lang.com/docs/basics/idl"
+          ]
+        },
+        {
+          "step": "vote",
+          "who": "contributor",
+          "does": "Before any vote, muster would read three accounts at one slot: the Multisig (threshold, members, stale_transaction_index), the VaultTransaction at the index, and the Proposal. It would re-derive the TransactionMessage bytes from the reviewed effect and compare them byte for byte, with the vault index and ephemeral-signer count. It would check the Proposal is Active and not stale, and record the reads in the room log. Only then would the member sign their own proposal_approve. The program adds the member to Proposal.approved; at k approvals it sets Approved with a timestamp. A member may instead send proposal_reject; at voters − k + 1 rejections the proposal is Rejected. The fee payer is the first signer: usually the member, but another key may pay and co-sign. A durable nonce can stand in for the blockhash; then the nonce account is one more recorded read.",
+          "signs": "Each member signs their OWN transaction. The outer bytes are a Solana message, legacy (header: num_required_signatures, num_readonly_signed_accounts, num_readonly_unsigned_accounts ‖ account_keys ‖ recent_blockhash (32 bytes) ‖ compiled instructions) or v0 (the byte 0x80 ‖ the same ‖ address_table_lookups); each signer's 64-byte Ed25519 signature covers exactly those serialized bytes. The fee payer is the first signer. No cluster or chain id is in the bytes: the recent blockhash (valid ~150 slots, about 60-90 s) is the only tie to one cluster, unless a durable nonce replaces it. The base fee (5,000 lamports per signature) is set by the cluster, not by these bytes. Its one instruction is proposal_approve (or proposal_reject) on program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf: accounts [multisig (readonly), member (signer, writable), proposal (writable)]; data = sha256(\"global:proposal_approve\") (or \"global:proposal_reject\"), first 8 bytes, ‖ borsh(ProposalVoteArgs{memo: Option<String>}). The proposal account is the PDA of (\"multisig\", multisig, \"transaction\", transaction_index as u64 LE, \"proposal\"): a POINTER. Not in the bytes: the stored transaction, its message or actions, or any hash of them.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "approvals",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "timing",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/proposal.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/vault_transaction.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/multisig.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/sdk/multisig/src/rpc/proposalApprove.ts",
+            "https://solana.com/docs/core/transactions/transaction-structure",
+            "https://solana.com/docs/core/transactions/durable-nonces",
+            "https://solana.com/docs/rpc/http/getaccountinfo",
+            "https://docs.squads.so/main/additional-resources/advanced-security-best-practices"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "After time_lock seconds have passed since the Approved timestamp, a member with Execute permission sends vault_transaction_execute. The program checks Approved and the time lock, not staleness. It checks each passed account against the stored message and invokes the transfer with the vault PDA as signer: the SOL moves from the vault to the payee. The RPC provider, then the leader validator, see the transaction before inclusion. During the time lock, members can stop it: proposal_cancel moves an Approved proposal to Cancelled at k cancel votes.",
+          "signs": "A member with Execute permission (and the fee payer) signs. The outer bytes are a Solana message, legacy (header: num_required_signatures, num_readonly_signed_accounts, num_readonly_unsigned_accounts ‖ account_keys ‖ recent_blockhash (32 bytes) ‖ compiled instructions) or v0 (the byte 0x80 ‖ the same ‖ address_table_lookups); each signer's 64-byte Ed25519 signature covers exactly those serialized bytes. The fee payer is the first signer. No cluster or chain id is in the bytes: the recent blockhash (valid ~150 slots, about 60-90 s) is the only tie to one cluster, unless a durable nonce replaces it. The base fee (5,000 lamports per signature) is set by the cluster, not by these bytes. Its instruction is vault_transaction_execute: data = sha256(\"global:vault_transaction_execute\")[0..8], no arguments; accounts [multisig, proposal (writable), transaction, member (signer)], then the remaining accounts: the lookup tables in message order, then every account the stored message names, in order. For a transfer that is the vault, the payee and the System Program. No member key signs for the vault: the program signs for the vault PDA with invoke_signed over its seeds (\"multisig\", multisig, \"vault\", vault_index as u8, bump).",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_execute.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/utils/executable_transaction_message.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/utils/ephemeral_signers.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs",
+            "https://docs.squads.so/main/development/reference/time-locks",
+            "https://solana.com/developers/guides/advanced/confirmation",
+            "https://github.com/anza-xyz/solana-sdk/blob/6f74525ac8fba532017b379769549f4640c90e62/message/src/legacy.rs"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "The same transaction marks the Proposal Executed. Muster would watch it reach finalized commitment, then read the Proposal status and the payee's balance, and record them. Rent comes back only through vault_transaction_accounts_close. Anyone may send it once the proposal is Executed, Rejected or Cancelled (or stale and not Approved). The rent goes to the multisig's rent_collector, not to whoever paid it; with no rent collector, reclaim is off. That close is an ordinary transaction; its signer only pays its fee.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "approvals",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_execute.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/proposal.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/transaction_accounts_close.rs",
+            "https://solana.com/developers/guides/advanced/confirmation"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a vote when the VaultTransaction stored at the index differs from what the room reviewed in any byte: account keys, header counts, the transfer instruction, lookups, vault index or ephemeral-signer count",
+          "why": "invariant 1, second half: proposal_approve names only the Proposal PDA, and the content lives in the VaultTransaction, so it is read and re-derived before any vote",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/vault_transaction.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_create.rs"
+          ]
+        },
+        {
+          "what": "signing a vote when the reads of the Multisig, the VaultTransaction and the Proposal are not in the room log as external reads, each with its slot and the RPC it came from",
+          "why": "invariant 10: these reads decide what the vote approves, and getAccountInfo returns data at a slot with no proof; an input of unknown origin must not reach signed bytes",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs",
+            "https://solana.com/docs/rpc/http/getaccountinfo"
+          ]
+        },
+        {
+          "what": "a vote on a vault transaction whose proposal is not Active, or whose index is at or below the multisig's stale_transaction_index",
+          "why": "the chain's rule (InvalidProposalStatus, StaleProposal): muster refuses before a fee is spent and marks the room's card stale",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/multisig.rs"
+          ]
+        },
+        {
+          "what": "signing or submitting a transaction whose recent blockhash is older than ~150 slots, or was read from an RPC whose genesis hash is not the room's cluster",
+          "why": "invariant 2: the signed bytes carry no cluster id, so the blockhash is the only binding (implicit) and it expires; muster would check the RPC's genesis hash against the room's environment and re-sign with a fresh blockhash rather than send a stale one",
+          "evidence": [
+            "https://solana.com/docs/core/transactions/transaction-structure",
+            "https://solana.com/developers/guides/advanced/confirmation",
+            "https://solana.com/docs/rpc/http/getgenesishash"
+          ]
+        },
+        {
+          "what": "an execute sent before the proposal's Approved timestamp plus the multisig's time_lock",
+          "why": "the chain's rule (TimeLockNotReleased): muster shows the countdown and refuses to spend a fee early",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_execute.rs",
+            "https://docs.squads.so/main/development/reference/time-locks"
+          ]
+        },
+        {
+          "what": "counting any approval that is not in the chain's Proposal.approved list, or from a key without Vote permission",
+          "why": "vote locus: the Squads program is the authority on the tally; a room message is never a vote",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/proposal.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Each approval is the member's own Solana transaction; the Squads program counts approvals from Vote members against the on-chain threshold and moves the SOL only after the time lock.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An approval points at proposal #i (a PDA of the multisig and the index), not at the content. Muster would read the stored content from the RPC and re-derive it before any vote; the read carries a slot but no proof, so the match holds only if the RPC answers truthfully.",
+          "credibility": "motivational",
+          "party": "the RPC provider"
+        },
+        {
+          "claim": "Every Squads transaction is tied to one Solana cluster by its recent blockhash, which expires after about 150 slots (60-90 s). No cluster id is in the signed bytes.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The transfer is public from the moment it is proposed, before any approval, and every vote names its voter and its time.",
+          "credibility": "exposed",
+          "party": "anyone reading Solana"
+        },
+        {
+          "claim": "A spending limit lets each key it lists (a member or not) send up to its amount from a vault with no proposal and no vote. Removing a member from the multisig does not remove them from a spending limit.",
+          "credibility": "motivational",
+          "party": "each key listed on a spending limit"
+        },
+        {
+          "claim": "A vault transaction approved before a membership, threshold or time-lock change still executes after it: vault_transaction_execute does not check staleness.",
+          "credibility": "motivational",
+          "party": "any member with Execute permission"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/core/transactions/transaction-structure",
+          "what": "Each signature is a 64-byte Ed25519 signature of the serialized message; the first signer is the fee payer; the message holds no cluster id; a blockhash expires after 150 slots."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/anza-xyz/solana-sdk/blob/6f74525ac8fba532017b379769549f4640c90e62/transaction/src/lib.rs",
+          "what": "Solana SDK: Transaction::message_data() is message.serialize(); signers sign those bytes."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/anza-xyz/solana-sdk/blob/6f74525ac8fba532017b379769549f4640c90e62/message/src/legacy.rs",
+          "what": "Legacy message layout (header, account_keys, recent_blockhash, instructions); the first account is always the fee payer; instructions commit atomically."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/anza-xyz/solana-sdk/blob/6f74525ac8fba532017b379769549f4640c90e62/message/src/versions/v0/mod.rs",
+          "what": "v0 message layout: the same fields plus address_table_lookups."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/developers/guides/advanced/confirmation",
+          "what": "A blockhash is usable for about 60-90 seconds (151 blockhashes); the RPC node forwards a transaction to the current block producer."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/core/transactions/durable-nonces",
+          "what": "A durable nonce replaces the recent blockhash; AdvanceNonceAccount must be the first instruction."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/core/fees",
+          "what": "Base fee is 5,000 lamports per signature; a prioritization fee is optional."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/rpc/http/getgenesishash",
+          "what": "getGenesisHash returns the connected cluster's genesis hash."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/rpc/http/getaccountinfo",
+          "what": "getAccountInfo returns account data with the slot it was read at; no proof is returned."
+        },
+        {
+          "kind": "source",
+          "url": "https://www.anchor-lang.com/docs/basics/idl",
+          "what": "An Anchor instruction discriminator is the first 8 bytes of sha256(\"global:<name>\")."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/README.md",
+          "what": "Program id SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf on both mainnet-beta and devnet; verifiable builds; the final audited commit is 64af733."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/seeds.rs",
+          "what": "PDA seed constants: multisig, program_config, transaction, proposal, vault, ephemeral_signer, spending_limit."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_create.rs",
+          "what": "proposal_create: Initiate or Vote member; refuses an index above transaction_index or at or below stale_transaction_index; Draft or Active; the creator's rent_payer pays rent."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs",
+          "what": "proposal_approve/reject take only [multisig, member, proposal]; Active and not stale required; cancel needs Approved and may be stale."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/proposal.rs",
+          "what": "Proposal holds approved/rejected/cancelled key lists; Approved at threshold, Rejected at cutoff, Cancelled at threshold cancels; statuses Draft/Active/Rejected/Approved/Executing/Executed/Cancelled."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/multisig.rs",
+          "what": "Multisig: create_key, config_authority, threshold, time_lock (≤ 3 months), transaction_index, stale_transaction_index, rent_collector, members with an Initiate/Vote/Execute mask; the invariant; cutoff = voters − threshold + 1."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/sdk/multisig/src/rpc/proposalApprove.ts",
+          "what": "The SDK's proposalApprove signs with a feePayer and a member that may be different keys."
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.squads.so/main/development/reference/accounts",
+          "what": "Squads docs: account layouts and PDA seeds for Multisig, Proposal, VaultTransaction, ConfigTransaction."
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.squads.so/main/additional-resources/advanced-security-best-practices",
+          "what": "Squads docs: transaction content becomes immutable once initiated; simulate before approving; use time locks."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/transaction_accounts_close.rs",
+          "what": "*_accounts_close is permissionless; rent goes to multisig.rent_collector; an Approved vault transaction cannot be closed even if stale; a stale config transaction always can."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_create.rs",
+          "what": "vault_transaction_create: Initiate member; stores the message at (\"multisig\", multisig, \"transaction\", index); bumps transaction_index; rent_payer pays."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/vault_transaction.rs",
+          "what": "VaultTransaction and its message (header counts, account_keys, instructions, address_table_lookups): no blockhash field; no instruction edits it after creation."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/sdk/multisig/src/utils.ts",
+          "what": "The SDK encodes the inner message without its recent blockhash."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_execute.rs",
+          "what": "vault_transaction_execute: Execute member; Approved and time lock required; staleness not checked (\"Stale vault transaction proposals CAN be executed if they were approved before becoming stale\")."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/utils/executable_transaction_message.rs",
+          "what": "Execution checks each passed account against the stored message and invokes it with the vault PDA as signer."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/spending_limit_use.rs",
+          "what": "spending_limit_use: only checks the signer is listed on the spending limit; no proposal or vote."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/spending_limit.rs",
+          "what": "Spending-limit members are any keys, not tied to multisig membership; a removed member still listed keeps using it."
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.squads.so/main/development/reference/spending-limits",
+          "what": "Squads docs: spending limits let members spend under the limit without a proposal."
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.squads.so/main/development/reference/time-locks",
+          "what": "Squads docs: a transaction is frozen for the time lock after reaching the threshold."
+        }
+      ],
+      "unverified": [
+        "that the deployed program matches the pinned source (program logic is unchanged since the audited commit 64af733 apart from comments and imports; a solana-verify hash check against the chain was not run)"
+      ]
+    },
+    {
+      "id": "sol.squads-v4/program-call",
+      "name": "Call a Solana program from a Squads vault",
+      "area": "family",
+      "family": "sol.squads-v4",
+      "status": "declared",
+      "summary": "A member proposes any set of Solana instructions for the vault to sign; the Squads program stores them on chain, k members each approve with their own transaction, and after the time lock a member with Execute permission runs them with the vault as signer.",
+      "effect": {
+        "schema": "muster.effect.sol.squads-v4.program-call.v0",
+        "fields": [
+          {
+            "name": "multisig",
+            "means": "the Multisig PDA the transaction is proposed under"
+          },
+          {
+            "name": "vaultIndex",
+            "means": "which vault acts; 0 is the default vault"
+          },
+          {
+            "name": "vault",
+            "means": "the vault PDA of (\"multisig\", multisig, \"vault\", vaultIndex as one byte); the program signs for it at execution"
+          },
+          {
+            "name": "transactionIndex",
+            "means": "the multisig's next transaction index (its transaction_index + 1 when created); it names both the VaultTransaction and the Proposal PDA"
+          },
+          {
+            "name": "instructions",
+            "means": "each inner instruction: its program id, its accounts with signer and writable flags, and its data bytes, as the vault will invoke them"
+          },
+          {
+            "name": "accountKeys",
+            "means": "the stored message's static keys, signers first (writable, then readonly), then non-signers (writable, then readonly), with the counts num_signers, num_writable_signers, num_writable_non_signers"
+          },
+          {
+            "name": "addressTableLookups",
+            "means": "each lookup table's address with its writable and readonly indexes, and the addresses they resolve to at review"
+          },
+          {
+            "name": "ephemeralSigners",
+            "means": "how many extra PDA signers the program derives from the VaultTransaction address (seed \"ephemeral_signer\", index) and signs for"
+          },
+          {
+            "name": "creator",
+            "means": "the member with Initiate permission who creates the VaultTransaction; recorded on chain"
+          },
+          {
+            "name": "rentPayer",
+            "means": "the key that pays rent for the VaultTransaction and Proposal accounts"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of the members with Vote permission (the Multisig account's on-chain threshold); Rejected at voters − k + 1 rejections",
+        "finality": "external",
+        "domain": "solana.message.v0 (or legacy) · squads-v4.proposal_approve (pointer to Proposal PDA)"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "solana:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "solana:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "solana-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "solana:*",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "squads-v4-voter",
+          "party": "contributor",
+          "class": "authority",
+          "target": "squads-multisig:<multisig PDA>",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "sol-for-vote-fee",
+          "party": "contributor",
+          "class": "asset",
+          "target": "solana:*",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "squads-v4-initiator",
+          "party": "proposer",
+          "class": "authority",
+          "target": "squads-multisig:<multisig PDA>",
+          "field": "creator"
+        },
+        {
+          "kind": "asset",
+          "name": "sol-for-rent",
+          "party": "proposer",
+          "class": "asset",
+          "target": "solana:*",
+          "field": "rentPayer"
+        },
+        {
+          "kind": "authority",
+          "name": "squads-v4-executor",
+          "party": "instance",
+          "class": "authority",
+          "target": "squads-multisig:<multisig PDA>",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "solana:*",
+          "mode": "write"
+        },
+        {
+          "target": "squads-multisig:<multisig PDA>",
+          "mode": "write"
+        },
+        {
+          "target": "squads-transaction:<VaultTransaction PDA>",
+          "mode": "write"
+        },
+        {
+          "target": "squads-proposal:<Proposal PDA>",
+          "mode": "write"
+        },
+        {
+          "target": "squads-vault:<vault PDA>",
+          "mode": "write"
+        },
+        {
+          "target": "solana-program:<each target program id>",
+          "mode": "write"
+        },
+        {
+          "target": "solana:<each writable account the message names>",
+          "mode": "write"
+        },
+        {
+          "target": "solana-alt:<each address lookup table>",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "effect",
+          "observer": "chain-observer",
+          "when": "propose"
+        },
+        {
+          "field": "effect",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "args",
+          "observer": "chain-observer",
+          "when": "propose"
+        },
+        {
+          "field": "payer",
+          "observer": "chain-observer",
+          "when": "propose"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "always"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "approvals",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "propose"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "approve"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "The room would review every inner instruction: target program, accounts with their signer and writable flags, and data. The proposer's client would compile them into Squads' TransactionMessage: static account keys with the vault PDA as a signer, optional address lookup tables, and a count of ephemeral signers — PDAs of the VaultTransaction address that stand in for one-time keypairs (for example, a new account). A message too large for one transaction goes through a transaction buffer first: transaction_buffer_create commits to its SHA-256, the creator extends it, and vault_transaction_create_from_buffer refuses a buffer whose hash differs. It would then send one transaction with vault_transaction_create and proposal_create. The chain stores the message at the VaultTransaction PDA for the next index, bumps the multisig's transaction_index, and opens the Proposal as Active (or Draft until proposal_activate). The stored message cannot change after this. The rent payer funds both accounts. The RPC provider, then the leader validator, see it before inclusion; from inclusion the whole effect is public, before any approval.",
+          "signs": "The creator (a member with Initiate permission), the rent payer and the fee payer (often one key) sign one transaction. The outer bytes are a Solana message, legacy (header: num_required_signatures, num_readonly_signed_accounts, num_readonly_unsigned_accounts ‖ account_keys ‖ recent_blockhash (32 bytes) ‖ compiled instructions) or v0 (the byte 0x80 ‖ the same ‖ address_table_lookups); each signer's 64-byte Ed25519 signature covers exactly those serialized bytes. The fee payer is the first signer. No cluster or chain id is in the bytes: the recent blockhash (valid ~150 slots, about 60-90 s) is the only tie to one cluster, unless a durable nonce replaces it. The base fee (5,000 lamports per signature) is set by the cluster, not by these bytes. It usually holds two Squads instructions. vault_transaction_create: data = sha256(\"global:vault_transaction_create\")[0..8] ‖ borsh{vault_index: u8, ephemeral_signers: u8, transaction_message: bytes, memo: Option<String>}; accounts [multisig (writable), transaction PDA (\"multisig\", multisig, \"transaction\", index as u64 LE) (writable), creator (signer), rent_payer (signer, writable), system program]. transaction_message is Squads' own compact encoding of the inner message (the reviewed instructions): num_signers, num_writable_signers, num_writable_non_signers (u8 each), account_keys, instructions (program_id_index, account_indexes, data) and address_table_lookups, with u8/u16 length prefixes. It carries no blockhash and no cluster id: the SDK drops the inner blockhash when it encodes it. proposal_create: data = sha256(\"global:proposal_create\")[0..8] ‖ borsh{transaction_index: u64, draft: bool}.",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "args",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "effect",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_create.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/vault_transaction.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/utils/ephemeral_signers.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_create_from_buffer.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/transaction_buffer.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_create.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/sdk/multisig/src/utils.ts",
+            "https://solana.com/docs/core/transactions/transaction-structure",
+            "https://www.anchor-lang.com/docs/basics/idl"
+          ]
+        },
+        {
+          "step": "vote",
+          "who": "contributor",
+          "does": "Before any vote, muster would read three accounts at one slot: the Multisig (threshold, members, stale_transaction_index), the VaultTransaction at the index, and the Proposal. It would re-derive the TransactionMessage bytes from the reviewed effect and compare them byte for byte, with the vault index and ephemeral-signer count. It would also read every address lookup table the message uses and resolve each index; an index that does not resolve, or resolves to an address the room did not review, would stop the vote. It would check the Proposal is Active and not stale, and record the reads in the room log. Only then would the member sign their own proposal_approve. The program adds the member to Proposal.approved; at k approvals it sets Approved with a timestamp. A member may instead send proposal_reject; at voters − k + 1 rejections the proposal is Rejected. The fee payer is the first signer: usually the member, but another key may pay and co-sign. A durable nonce can stand in for the blockhash; then the nonce account is one more recorded read.",
+          "signs": "Each member signs their OWN transaction. The outer bytes are a Solana message, legacy (header: num_required_signatures, num_readonly_signed_accounts, num_readonly_unsigned_accounts ‖ account_keys ‖ recent_blockhash (32 bytes) ‖ compiled instructions) or v0 (the byte 0x80 ‖ the same ‖ address_table_lookups); each signer's 64-byte Ed25519 signature covers exactly those serialized bytes. The fee payer is the first signer. No cluster or chain id is in the bytes: the recent blockhash (valid ~150 slots, about 60-90 s) is the only tie to one cluster, unless a durable nonce replaces it. The base fee (5,000 lamports per signature) is set by the cluster, not by these bytes. Its one instruction is proposal_approve (or proposal_reject) on program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf: accounts [multisig (readonly), member (signer, writable), proposal (writable)]; data = sha256(\"global:proposal_approve\") (or \"global:proposal_reject\"), first 8 bytes, ‖ borsh(ProposalVoteArgs{memo: Option<String>}). The proposal account is the PDA of (\"multisig\", multisig, \"transaction\", transaction_index as u64 LE, \"proposal\"): a POINTER. Not in the bytes: the stored transaction, its message or actions, or any hash of them.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "approvals",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "timing",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/proposal.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/vault_transaction.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/multisig.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/sdk/multisig/src/rpc/proposalApprove.ts",
+            "https://solana.com/docs/core/transactions/transaction-structure",
+            "https://solana.com/docs/core/transactions/durable-nonces",
+            "https://solana.com/docs/rpc/http/getaccountinfo",
+            "https://docs.squads.so/main/additional-resources/advanced-security-best-practices",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/utils/executable_transaction_message.rs",
+            "https://solana.com/developers/guides/advanced/lookup-tables"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "After time_lock seconds have passed since the Approved timestamp, a member with Execute permission sends vault_transaction_execute. The program checks Approved and the time lock, not staleness. It resolves lookup-table indexes from the tables as they are NOW, checks each passed account, and invokes every instruction with the vault and ephemeral PDAs as signers. If one instruction fails, the whole transaction fails and the proposal stays Approved. The RPC provider, then the leader validator, see the transaction before inclusion. During the time lock, members can stop it with proposal_cancel (k cancel votes).",
+          "signs": "A member with Execute permission (and the fee payer) signs. The outer bytes are a Solana message, legacy (header: num_required_signatures, num_readonly_signed_accounts, num_readonly_unsigned_accounts ‖ account_keys ‖ recent_blockhash (32 bytes) ‖ compiled instructions) or v0 (the byte 0x80 ‖ the same ‖ address_table_lookups); each signer's 64-byte Ed25519 signature covers exactly those serialized bytes. The fee payer is the first signer. No cluster or chain id is in the bytes: the recent blockhash (valid ~150 slots, about 60-90 s) is the only tie to one cluster, unless a durable nonce replaces it. The base fee (5,000 lamports per signature) is set by the cluster, not by these bytes. Its instruction is vault_transaction_execute: data = sha256(\"global:vault_transaction_execute\")[0..8], no arguments; accounts [multisig, proposal (writable), transaction, member (signer)], then the remaining accounts: the lookup tables in message order, then every account the stored message names, in order. The program checks every passed account against the stored keys and against the LIVE lookup tables, and refuses the Proposal account as writable in any inner call. No member key signs for the vault: the program signs for the vault PDA with invoke_signed over its seeds (\"multisig\", multisig, \"vault\", vault_index as u8, bump).",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_execute.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/utils/executable_transaction_message.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/utils/ephemeral_signers.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs",
+            "https://docs.squads.so/main/development/reference/time-locks",
+            "https://solana.com/developers/guides/advanced/confirmation",
+            "https://github.com/anza-xyz/solana-sdk/blob/6f74525ac8fba532017b379769549f4640c90e62/message/src/legacy.rs"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "The same transaction marks the Proposal Executed. Muster would watch it reach finalized commitment, then read the Proposal status and the accounts the call wrote, and record them. Rent comes back only through vault_transaction_accounts_close. Anyone may send it once the proposal is Executed, Rejected or Cancelled (or stale and not Approved). The rent goes to the multisig's rent_collector, not to whoever paid it; with no rent collector, reclaim is off. That close is an ordinary transaction; its signer only pays its fee.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "approvals",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_execute.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/proposal.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/transaction_accounts_close.rs",
+            "https://solana.com/developers/guides/advanced/confirmation"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a vote when the VaultTransaction stored at the index differs from what the room reviewed in any byte: account keys, header counts, instructions, lookups, vault index or ephemeral-signer count",
+          "why": "invariant 1, second half: proposal_approve names only the Proposal PDA, and the content lives in the VaultTransaction, so it is read and re-derived before any vote",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/vault_transaction.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_create.rs"
+          ]
+        },
+        {
+          "what": "a vote when any lookup-table index the message uses does not resolve at review, or resolves to an address the room did not review",
+          "why": "invariants 1 and 10: the program resolves lookup indexes against the live table at execution, not when the transaction is created, so the review must resolve and record them",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/utils/executable_transaction_message.rs",
+            "https://solana.com/developers/guides/advanced/lookup-tables"
+          ]
+        },
+        {
+          "what": "signing a vote when the reads of the Multisig, the VaultTransaction, the Proposal and every lookup table are not in the room log as external reads, each with its slot and the RPC it came from",
+          "why": "invariant 10: these reads decide what the vote approves, and getAccountInfo returns data at a slot with no proof; an input of unknown origin must not reach signed bytes",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs",
+            "https://solana.com/docs/rpc/http/getaccountinfo"
+          ]
+        },
+        {
+          "what": "a vote on a vault transaction whose proposal is not Active, or whose index is at or below the multisig's stale_transaction_index",
+          "why": "the chain's rule (InvalidProposalStatus, StaleProposal): muster refuses before a fee is spent and marks the room's card stale",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/multisig.rs"
+          ]
+        },
+        {
+          "what": "signing or submitting a transaction whose recent blockhash is older than ~150 slots, or was read from an RPC whose genesis hash is not the room's cluster",
+          "why": "invariant 2: the signed bytes carry no cluster id, so the blockhash is the only binding (implicit) and it expires; muster would check the RPC's genesis hash against the room's environment and re-sign with a fresh blockhash rather than send a stale one",
+          "evidence": [
+            "https://solana.com/docs/core/transactions/transaction-structure",
+            "https://solana.com/developers/guides/advanced/confirmation",
+            "https://solana.com/docs/rpc/http/getgenesishash"
+          ]
+        },
+        {
+          "what": "an execute sent before the proposal's Approved timestamp plus the multisig's time_lock",
+          "why": "the chain's rule (TimeLockNotReleased): muster shows the countdown and refuses to spend a fee early",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_execute.rs",
+            "https://docs.squads.so/main/development/reference/time-locks"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Each approval is the member's own Solana transaction; the program counts Vote members against the threshold, checks every passed account against the stored message at execution, and never lets an inner call write the Proposal account.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An approval points at proposal #i (a PDA of the multisig and the index), not at the content. Muster would read the stored content from the RPC and re-derive it before any vote; the read carries a slot but no proof, so the match holds only if the RPC answers truthfully.",
+          "credibility": "motivational",
+          "party": "the RPC provider"
+        },
+        {
+          "claim": "Addresses loaded through a lookup table are resolved from the live table at execution. The table's authority can extend it, so an index that does not resolve at review could resolve later; muster would refuse such a message.",
+          "credibility": "motivational",
+          "party": "each lookup table's authority"
+        },
+        {
+          "claim": "Every Squads transaction is tied to one Solana cluster by its recent blockhash, which expires after about 150 slots (60-90 s). No cluster id is in the signed bytes.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The target programs, accounts and instruction data are public from the moment the call is proposed, and every vote names its voter.",
+          "credibility": "exposed",
+          "party": "anyone reading Solana"
+        },
+        {
+          "claim": "A vault transaction approved before a membership, threshold or time-lock change still executes after it: vault_transaction_execute does not check staleness.",
+          "credibility": "motivational",
+          "party": "any member with Execute permission"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/core/transactions/transaction-structure",
+          "what": "Each signature is a 64-byte Ed25519 signature of the serialized message; the first signer is the fee payer; the message holds no cluster id; a blockhash expires after 150 slots."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/anza-xyz/solana-sdk/blob/6f74525ac8fba532017b379769549f4640c90e62/transaction/src/lib.rs",
+          "what": "Solana SDK: Transaction::message_data() is message.serialize(); signers sign those bytes."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/anza-xyz/solana-sdk/blob/6f74525ac8fba532017b379769549f4640c90e62/message/src/legacy.rs",
+          "what": "Legacy message layout (header, account_keys, recent_blockhash, instructions); the first account is always the fee payer; instructions commit atomically."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/anza-xyz/solana-sdk/blob/6f74525ac8fba532017b379769549f4640c90e62/message/src/versions/v0/mod.rs",
+          "what": "v0 message layout: the same fields plus address_table_lookups."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/developers/guides/advanced/confirmation",
+          "what": "A blockhash is usable for about 60-90 seconds (151 blockhashes); the RPC node forwards a transaction to the current block producer."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/core/transactions/durable-nonces",
+          "what": "A durable nonce replaces the recent blockhash; AdvanceNonceAccount must be the first instruction."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/core/fees",
+          "what": "Base fee is 5,000 lamports per signature; a prioritization fee is optional."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/rpc/http/getgenesishash",
+          "what": "getGenesisHash returns the connected cluster's genesis hash."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/rpc/http/getaccountinfo",
+          "what": "getAccountInfo returns account data with the slot it was read at; no proof is returned."
+        },
+        {
+          "kind": "source",
+          "url": "https://www.anchor-lang.com/docs/basics/idl",
+          "what": "An Anchor instruction discriminator is the first 8 bytes of sha256(\"global:<name>\")."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/README.md",
+          "what": "Program id SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf on both mainnet-beta and devnet; verifiable builds; the final audited commit is 64af733."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/seeds.rs",
+          "what": "PDA seed constants: multisig, program_config, transaction, proposal, vault, ephemeral_signer, spending_limit."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_create.rs",
+          "what": "proposal_create: Initiate or Vote member; refuses an index above transaction_index or at or below stale_transaction_index; Draft or Active; the creator's rent_payer pays rent."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs",
+          "what": "proposal_approve/reject take only [multisig, member, proposal]; Active and not stale required; cancel needs Approved and may be stale."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/proposal.rs",
+          "what": "Proposal holds approved/rejected/cancelled key lists; Approved at threshold, Rejected at cutoff, Cancelled at threshold cancels; statuses Draft/Active/Rejected/Approved/Executing/Executed/Cancelled."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/multisig.rs",
+          "what": "Multisig: create_key, config_authority, threshold, time_lock (≤ 3 months), transaction_index, stale_transaction_index, rent_collector, members with an Initiate/Vote/Execute mask; the invariant; cutoff = voters − threshold + 1."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/sdk/multisig/src/rpc/proposalApprove.ts",
+          "what": "The SDK's proposalApprove signs with a feePayer and a member that may be different keys."
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.squads.so/main/development/reference/accounts",
+          "what": "Squads docs: account layouts and PDA seeds for Multisig, Proposal, VaultTransaction, ConfigTransaction."
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.squads.so/main/additional-resources/advanced-security-best-practices",
+          "what": "Squads docs: transaction content becomes immutable once initiated; simulate before approving; use time locks."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/transaction_accounts_close.rs",
+          "what": "*_accounts_close is permissionless; rent goes to multisig.rent_collector; an Approved vault transaction cannot be closed even if stale; a stale config transaction always can."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_create.rs",
+          "what": "vault_transaction_create: Initiate member; stores the message; derives ephemeral-signer bumps from the transaction PDA; bumps transaction_index."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/vault_transaction.rs",
+          "what": "VaultTransactionMessage layout and its bounds checks; no instruction edits it after creation."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/sdk/multisig/src/utils.ts",
+          "what": "The SDK compiles the inner message (with lookup tables) and drops its recent blockhash."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_execute.rs",
+          "what": "vault_transaction_execute: Approved and time lock required; staleness not checked; the Proposal is a protected account."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/utils/executable_transaction_message.rs",
+          "what": "Lookup tables must be owned by the ALT program and match the message; each index is resolved from the live table; each account is checked; instructions run by invoke_signed."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/utils/ephemeral_signers.rs",
+          "what": "Ephemeral signer PDAs: (\"multisig\", transaction, \"ephemeral_signer\", index)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_create_from_buffer.rs",
+          "what": "vault_transaction_create_from_buffer: only the buffer's creator; the buffer's hash must match."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/transaction_buffer.rs",
+          "what": "TransactionBuffer stores final_buffer_hash and checks the SHA-256 of the buffer; max 10,128 bytes."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/developers/guides/advanced/lookup-tables",
+          "what": "Address lookup tables are on-chain accounts; transactions reference entries by a 1-byte index; the authority extends them."
+        }
+      ],
+      "unverified": [
+        "whether an address lookup table's existing entries can change, or the table be closed and re-created at the same address, between review and execution (the Solana guide documents only extension)",
+        "that the deployed program matches the pinned source (a solana-verify hash check was not run)"
+      ]
+    },
+    {
+      "id": "sol.squads-v4/config-change",
+      "name": "Change a Squads multisig's members or rules",
+      "area": "family",
+      "family": "sol.squads-v4",
+      "status": "declared",
+      "summary": "On an autonomous multisig a member proposes config actions (add or remove a member, change the threshold, time lock or rent collector, add or remove a spending limit); k members approve with their own transactions and a member with Execute permission applies them to the same address. On a controlled multisig the config authority does this alone.",
+      "effect": {
+        "schema": "muster.effect.sol.squads-v4.config-change.v0",
+        "fields": [
+          {
+            "name": "multisig",
+            "means": "the Multisig PDA being changed; its address stays"
+          },
+          {
+            "name": "mode",
+            "means": "autonomous (config_authority is the default key; changes are voted) or controlled (the program refuses config transactions; the config authority acts alone)"
+          },
+          {
+            "name": "transactionIndex",
+            "means": "the multisig's next transaction index; it names the ConfigTransaction and the Proposal PDA"
+          },
+          {
+            "name": "actions",
+            "means": "the ordered config actions: AddMember{key, mask}, RemoveMember{key}, ChangeThreshold{n}, SetTimeLock{seconds}, AddSpendingLimit{createKey, vaultIndex, mint, amount, period, members, destinations}, RemoveSpendingLimit{address}, SetRentCollector{address or none}"
+          },
+          {
+            "name": "newPolicy",
+            "means": "the policy the actions produce (members and masks, threshold, time lock, rent collector, spending limits), re-derived by muster and checked against the program's invariant"
+          },
+          {
+            "name": "staleFrom",
+            "means": "if any action is AddMember, RemoveMember, ChangeThreshold or SetTimeLock: the index up to which every earlier transaction becomes stale"
+          },
+          {
+            "name": "creator",
+            "means": "the member with Initiate permission who creates the ConfigTransaction"
+          },
+          {
+            "name": "rentPayer",
+            "means": "the key that pays rent for the ConfigTransaction and Proposal accounts"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of the members with Vote permission (the Multisig account's on-chain threshold); on a controlled multisig, the config authority alone",
+        "finality": "external",
+        "domain": "solana.message.v0 (or legacy) · squads-v4.proposal_approve (pointer to Proposal PDA)"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "solana:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "solana:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "solana-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "solana:*",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "squads-v4-voter",
+          "party": "contributor",
+          "class": "authority",
+          "target": "squads-multisig:<multisig PDA>",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "sol-for-vote-fee",
+          "party": "contributor",
+          "class": "asset",
+          "target": "solana:*",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "squads-v4-initiator",
+          "party": "proposer",
+          "class": "authority",
+          "target": "squads-multisig:<multisig PDA>",
+          "field": "creator"
+        },
+        {
+          "kind": "asset",
+          "name": "sol-for-rent",
+          "party": "proposer",
+          "class": "asset",
+          "target": "solana:*",
+          "field": "rentPayer"
+        },
+        {
+          "kind": "authority",
+          "name": "new-member-key",
+          "party": "counterparty",
+          "class": "authority",
+          "target": "squads-multisig:<multisig PDA>",
+          "field": "actions"
+        },
+        {
+          "kind": "authority",
+          "name": "squads-v4-executor",
+          "party": "instance",
+          "class": "authority",
+          "target": "squads-multisig:<multisig PDA>",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "sol-for-realloc-rent",
+          "party": "instance",
+          "class": "asset",
+          "target": "solana:*",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "solana:*",
+          "mode": "write"
+        },
+        {
+          "target": "squads-multisig:<multisig PDA>",
+          "mode": "write"
+        },
+        {
+          "target": "squads-multisig:<multisig PDA>:stale_transaction_index",
+          "mode": "write"
+        },
+        {
+          "target": "squads-transaction:<ConfigTransaction PDA>",
+          "mode": "write"
+        },
+        {
+          "target": "squads-proposal:<Proposal PDA>",
+          "mode": "write"
+        },
+        {
+          "target": "squads-spending-limit:<SpendingLimit PDA>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "effect",
+          "observer": "chain-observer",
+          "when": "propose"
+        },
+        {
+          "field": "effect",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "approvals",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "propose"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "approve"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "approve"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "The room would review the actions and the policy they produce. On an autonomous multisig, a member with Initiate permission sends config_transaction_create and proposal_create; the chain stores the actions at the ConfigTransaction PDA for the next index, public from inclusion. On a controlled multisig the program refuses this: the config authority changes config alone with multisig_add_member, multisig_remove_member, multisig_change_threshold, multisig_set_time_lock, multisig_set_config_authority, multisig_set_rent_collector and the spending-limit instructions, with no proposal and no vote. Muster would show such changes as read from the chain, never as the room's agreement.",
+          "signs": "The creator (a member with Initiate permission), the rent payer and the fee payer sign. The outer bytes are a Solana message, legacy (header: num_required_signatures, num_readonly_signed_accounts, num_readonly_unsigned_accounts ‖ account_keys ‖ recent_blockhash (32 bytes) ‖ compiled instructions) or v0 (the byte 0x80 ‖ the same ‖ address_table_lookups); each signer's 64-byte Ed25519 signature covers exactly those serialized bytes. The fee payer is the first signer. No cluster or chain id is in the bytes: the recent blockhash (valid ~150 slots, about 60-90 s) is the only tie to one cluster, unless a durable nonce replaces it. The base fee (5,000 lamports per signature) is set by the cluster, not by these bytes. config_transaction_create: data = sha256(\"global:config_transaction_create\")[0..8] ‖ borsh{actions: Vec<ConfigAction>, memo: Option<String>}; accounts [multisig (writable), transaction PDA (\"multisig\", multisig, \"transaction\", index as u64 LE) (writable), creator (signer), rent_payer (signer, writable), system program]. proposal_create: data = sha256(\"global:proposal_create\")[0..8] ‖ borsh{transaction_index: u64, draft: bool}.",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "effect",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/config_transaction_create.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/config_transaction.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_create.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/multisig_config.rs",
+            "https://docs.squads.so/main/development/typescript/instructions/create-config-transaction",
+            "https://www.anchor-lang.com/docs/basics/idl"
+          ]
+        },
+        {
+          "step": "vote",
+          "who": "contributor",
+          "does": "Before any vote, muster would read the Multisig, the ConfigTransaction at the index and the Proposal at one slot, re-derive the borsh bytes of the actions from the reviewed change, compare them byte for byte, check Active and not stale, and record the reads. Then the member would sign their own proposal_approve (or proposal_reject). At k approvals the proposal is Approved with a timestamp.",
+          "signs": "Each member signs their OWN transaction. The outer bytes are a Solana message, legacy (header: num_required_signatures, num_readonly_signed_accounts, num_readonly_unsigned_accounts ‖ account_keys ‖ recent_blockhash (32 bytes) ‖ compiled instructions) or v0 (the byte 0x80 ‖ the same ‖ address_table_lookups); each signer's 64-byte Ed25519 signature covers exactly those serialized bytes. The fee payer is the first signer. No cluster or chain id is in the bytes: the recent blockhash (valid ~150 slots, about 60-90 s) is the only tie to one cluster, unless a durable nonce replaces it. The base fee (5,000 lamports per signature) is set by the cluster, not by these bytes. Its one instruction is proposal_approve (or proposal_reject) on program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf: accounts [multisig (readonly), member (signer, writable), proposal (writable)]; data = sha256(\"global:proposal_approve\") (or \"global:proposal_reject\"), first 8 bytes, ‖ borsh(ProposalVoteArgs{memo: Option<String>}). The proposal account is the PDA of (\"multisig\", multisig, \"transaction\", transaction_index as u64 LE, \"proposal\"): a POINTER. Not in the bytes: the stored transaction, its message or actions, or any hash of them.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "approvals",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "timing",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/proposal.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/config_transaction.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/multisig.rs",
+            "https://solana.com/docs/core/transactions/transaction-structure",
+            "https://solana.com/docs/rpc/http/getaccountinfo"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "After the time lock, a member with Execute permission sends config_transaction_execute. Unlike a vault transaction, a stale config transaction cannot execute even when approved. The program applies the actions in order, grows the Multisig account (the rent_payer tops up rent) and creates or closes SpendingLimit accounts, then checks the multisig invariant. AddMember, RemoveMember, ChangeThreshold and SetTimeLock set stale_transaction_index to the current transaction_index: every earlier transaction not yet approved can no longer be approved, and earlier config transactions can no longer execute. AddSpendingLimit, RemoveSpendingLimit and SetRentCollector do not make anything stale.",
+          "signs": "A member with Execute permission (and the fee payer, and the rent payer when the account grows) signs. The outer bytes are a Solana message, legacy (header: num_required_signatures, num_readonly_signed_accounts, num_readonly_unsigned_accounts ‖ account_keys ‖ recent_blockhash (32 bytes) ‖ compiled instructions) or v0 (the byte 0x80 ‖ the same ‖ address_table_lookups); each signer's 64-byte Ed25519 signature covers exactly those serialized bytes. The fee payer is the first signer. No cluster or chain id is in the bytes: the recent blockhash (valid ~150 slots, about 60-90 s) is the only tie to one cluster, unless a durable nonce replaces it. The base fee (5,000 lamports per signature) is set by the cluster, not by these bytes. config_transaction_execute: data = sha256(\"global:config_transaction_execute\")[0..8], no arguments; accounts [multisig (writable), member (signer), proposal (writable), transaction, rent_payer (optional signer, writable), system program (optional)], then any SpendingLimit accounts to create or close.",
+          "reveals": [
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/config_transaction_execute.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/multisig.rs",
+            "https://docs.squads.so/main/development/typescript/instructions/create-config-transaction",
+            "https://docs.squads.so/main/development/reference/time-locks"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "The Proposal is Executed. Muster would read the Multisig back at a finalized slot and check its members, masks, threshold, time lock, rent collector and stale_transaction_index against the reviewed new policy, then mark every pending room proposal at or below the new stale index as stale; a vault proposal already Approved stays executable, and the card says so. A new Squads member is not a room member: room admission is separate and re-keys forward. A removed Squads member keeps any spending limit that lists them. Anyone may close the config accounts once the proposal is terminal or stale; the rent goes to the rent collector.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "policy",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/config_transaction_execute.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_execute.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/spending_limit.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/transaction_accounts_close.rs"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a vote when the ConfigTransaction stored at the index holds actions that differ from what the room reviewed",
+          "why": "invariant 1, second half: proposal_approve names only the Proposal PDA; the actions live in the ConfigTransaction and are read and re-derived before any vote",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/config_transaction.rs"
+          ]
+        },
+        {
+          "what": "composing a voted config change on a controlled multisig",
+          "why": "the chain's rule (NotSupportedForControlled): the config authority decides alone, and muster says so rather than stage an agreement the chain ignores",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/config_transaction_create.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/multisig_config.rs"
+          ]
+        },
+        {
+          "what": "a change whose resulting policy breaks the program's invariant: a threshold above the Vote members left, no Initiate, Vote or Execute member, a time lock over 3 months, or no member at all",
+          "why": "the chain's rule (Multisig::invariant, checked after the actions run); caught before anyone spends a fee",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/multisig.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/config_transaction_create.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/config_transaction_execute.rs"
+          ]
+        },
+        {
+          "what": "a vote or an execute on a config transaction at or below the stale index, even if it was approved",
+          "why": "the chain's rule (StaleProposal): stale config transactions never execute",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs",
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/config_transaction_execute.rs"
+          ]
+        },
+        {
+          "what": "signing a vote when the reads of the Multisig, the ConfigTransaction and the Proposal are not in the room log as external reads, each with its slot and the RPC it came from",
+          "why": "invariant 10: these reads decide what the vote approves, and getAccountInfo returns data at a slot with no proof; an input of unknown origin must not reach signed bytes",
+          "evidence": [
+            "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs",
+            "https://solana.com/docs/rpc/http/getaccountinfo"
+          ]
+        },
+        {
+          "what": "signing or submitting a transaction whose recent blockhash is older than ~150 slots, or was read from an RPC whose genesis hash is not the room's cluster",
+          "why": "invariant 2: the signed bytes carry no cluster id, so the blockhash is the only binding (implicit) and it expires; muster would check the RPC's genesis hash against the room's environment and re-sign with a fresh blockhash rather than send a stale one",
+          "evidence": [
+            "https://solana.com/docs/core/transactions/transaction-structure",
+            "https://solana.com/developers/guides/advanced/confirmation",
+            "https://solana.com/docs/rpc/http/getgenesishash"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Each approval is the member's own Solana transaction, tied to one cluster only by its recent blockhash; the program counts k Vote members and applies the change to the same address.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An approval points at proposal #i (a PDA of the multisig and the index), not at the content. Muster would read the stored content from the RPC and re-derive it before any vote; the read carries a slot but no proof, so the match holds only if the RPC answers truthfully.",
+          "credibility": "motivational",
+          "party": "the RPC provider"
+        },
+        {
+          "claim": "Adding or removing a member, or changing the threshold or time lock, makes every earlier transaction stale. Spending-limit and rent-collector changes do not.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A vault transaction approved before a membership, threshold or time-lock change still executes after it: vault_transaction_execute does not check staleness.",
+          "credibility": "motivational",
+          "party": "any member with Execute permission"
+        },
+        {
+          "claim": "On a controlled multisig (config_authority set), that one key adds and removes members, changes the threshold and time lock, and adds spending limits with no vote.",
+          "credibility": "motivational",
+          "party": "the config authority"
+        },
+        {
+          "claim": "A spending limit lets each key it lists (a member or not) send up to its amount from a vault with no proposal and no vote. Removing a member from the multisig does not remove them from a spending limit.",
+          "credibility": "motivational",
+          "party": "each key listed on a spending limit"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/core/transactions/transaction-structure",
+          "what": "Each signature is a 64-byte Ed25519 signature of the serialized message; the first signer is the fee payer; the message holds no cluster id; a blockhash expires after 150 slots."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/anza-xyz/solana-sdk/blob/6f74525ac8fba532017b379769549f4640c90e62/transaction/src/lib.rs",
+          "what": "Solana SDK: Transaction::message_data() is message.serialize(); signers sign those bytes."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/anza-xyz/solana-sdk/blob/6f74525ac8fba532017b379769549f4640c90e62/message/src/legacy.rs",
+          "what": "Legacy message layout (header, account_keys, recent_blockhash, instructions); the first account is always the fee payer; instructions commit atomically."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/anza-xyz/solana-sdk/blob/6f74525ac8fba532017b379769549f4640c90e62/message/src/versions/v0/mod.rs",
+          "what": "v0 message layout: the same fields plus address_table_lookups."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/developers/guides/advanced/confirmation",
+          "what": "A blockhash is usable for about 60-90 seconds (151 blockhashes); the RPC node forwards a transaction to the current block producer."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/core/transactions/durable-nonces",
+          "what": "A durable nonce replaces the recent blockhash; AdvanceNonceAccount must be the first instruction."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/core/fees",
+          "what": "Base fee is 5,000 lamports per signature; a prioritization fee is optional."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/rpc/http/getgenesishash",
+          "what": "getGenesisHash returns the connected cluster's genesis hash."
+        },
+        {
+          "kind": "source",
+          "url": "https://solana.com/docs/rpc/http/getaccountinfo",
+          "what": "getAccountInfo returns account data with the slot it was read at; no proof is returned."
+        },
+        {
+          "kind": "source",
+          "url": "https://www.anchor-lang.com/docs/basics/idl",
+          "what": "An Anchor instruction discriminator is the first 8 bytes of sha256(\"global:<name>\")."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/README.md",
+          "what": "Program id SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf on both mainnet-beta and devnet; verifiable builds; the final audited commit is 64af733."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/seeds.rs",
+          "what": "PDA seed constants: multisig, program_config, transaction, proposal, vault, ephemeral_signer, spending_limit."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_create.rs",
+          "what": "proposal_create: Initiate or Vote member; refuses an index above transaction_index or at or below stale_transaction_index; Draft or Active; the creator's rent_payer pays rent."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/proposal_vote.rs",
+          "what": "proposal_approve/reject take only [multisig, member, proposal]; Active and not stale required; cancel needs Approved and may be stale."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/proposal.rs",
+          "what": "Proposal holds approved/rejected/cancelled key lists; Approved at threshold, Rejected at cutoff, Cancelled at threshold cancels; statuses Draft/Active/Rejected/Approved/Executing/Executed/Cancelled."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/multisig.rs",
+          "what": "Multisig: create_key, config_authority, threshold, time_lock (≤ 3 months), transaction_index, stale_transaction_index, rent_collector, members with an Initiate/Vote/Execute mask; the invariant; cutoff = voters − threshold + 1."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/sdk/multisig/src/rpc/proposalApprove.ts",
+          "what": "The SDK's proposalApprove signs with a feePayer and a member that may be different keys."
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.squads.so/main/development/reference/accounts",
+          "what": "Squads docs: account layouts and PDA seeds for Multisig, Proposal, VaultTransaction, ConfigTransaction."
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.squads.so/main/additional-resources/advanced-security-best-practices",
+          "what": "Squads docs: transaction content becomes immutable once initiated; simulate before approving; use time locks."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/transaction_accounts_close.rs",
+          "what": "*_accounts_close is permissionless; rent goes to multisig.rent_collector; an Approved vault transaction cannot be closed even if stale; a stale config transaction always can."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/config_transaction_create.rs",
+          "what": "config_transaction_create: refused on a controlled multisig (NotSupportedForControlled); Initiate member; at least one action; time lock ≤ 3 months."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/config_transaction.rs",
+          "what": "ConfigAction: AddMember, RemoveMember, ChangeThreshold, SetTimeLock, AddSpendingLimit, RemoveSpendingLimit, SetRentCollector."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/config_transaction_execute.rs",
+          "what": "config_transaction_execute: stale config transactions cannot execute even if approved; which actions call invalidate_prior_transactions; realloc and invariant."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/multisig_config.rs",
+          "what": "Controlled mode: the config_authority adds/removes members, changes threshold, time lock, config authority and rent collector directly."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/multisig_add_spending_limit.rs",
+          "what": "Controlled mode: the config_authority adds a spending limit directly; its members need not be multisig members."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/state/spending_limit.rs",
+          "what": "Spending-limit members are tracked apart from multisig members; removal does not revoke."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/vault_transaction_execute.rs",
+          "what": "Approved vault transactions execute even when stale."
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.squads.so/main/development/typescript/instructions/create-config-transaction",
+          "what": "Squads docs: seven config actions; only AddMember, RemoveMember, ChangeThreshold and SetTimeLock invalidate other active transactions; applies to multisigs with no configAuthority."
+        }
+      ],
+      "unverified": [
+        "whether a controlled multisig may name its own vault PDA as config authority, so that config changes run as vault transactions through a CPI into the Squads program (not checked)"
+      ]
+    }
+  ]
+}

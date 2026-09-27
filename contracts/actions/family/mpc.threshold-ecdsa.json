@@ -1,0 +1,1548 @@
+{
+  "actions": [
+    {
+      "id": "mpc.threshold-ecdsa/keygen",
+      "name": "Create a threshold ECDSA key in the room",
+      "area": "family",
+      "family": "mpc.threshold-ecdsa",
+      "summary": "n members run a distributed key generation in the room. Each ends with a secret share; together they hold one ordinary secp256k1 public key, whose address on any chain looks single-sig. No one ever holds the whole key.",
+      "effect": {
+        "schema": "muster.effect.mpc.threshold-ecdsa.keygen.v0",
+        "fields": [
+          {
+            "name": "parties",
+            "means": "the n members, each by their bound encryption identity (F-14), in an agreed index order (sorted public keys)"
+          },
+          {
+            "name": "t",
+            "means": "the threshold: how many shares must take part in signing"
+          },
+          {
+            "name": "curve",
+            "means": "secp256k1"
+          },
+          {
+            "name": "executionId",
+            "means": "a session id unique to this run"
+          },
+          {
+            "name": "engine",
+            "means": "the library and version that runs the protocol"
+          },
+          {
+            "name": "publicKey",
+            "means": "the joint public key, the ceremony's output"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 3,
+        "threshold": "all n parties must complete the ceremony",
+        "finality": "immediate",
+        "domain": "the engine's execution id; nothing is signed for any chain"
+      },
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "mpc-party",
+          "party": "contributor",
+          "class": "authority",
+          "target": "a room member with a bound encryption identity (F-14) and a keystore that can hold a share",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "keystore:<own share>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "broadcast round messages: commitments, public shares, proofs",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "unicast round messages, sealed to one recipient's encryption key (only that member can open them)",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "joint public key and the addresses derived from it",
+          "observer": "room-member",
+          "when": "final"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "proposes the parties, their indices, t, the engine and a fresh execution id",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "contributor",
+          "does": "CGGMP engines first run auxiliary-info generation: each party makes Paillier moduli and zero-knowledge proofs (slow, prime generation); the output can be reused for later keys of the same group",
+          "signs": "nothing on any chain; each round message travels as a signed room log entry under the member's authorization key, which is the message authentication the libraries require",
+          "reveals": [
+            {
+              "field": "broadcast round messages",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md",
+            "https://eprint.iacr.org/2021/060"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "contributor",
+          "does": "the DKG: round 1 commits, round 2 opens the commitments and sends each party its share (sealed to that party), round 3 proves; every party checks every message and aborts on a bad one",
+          "signs": "nothing on any chain; each round message travels as a signed room log entry under the member's authorization key, which is the message authentication the libraries require",
+          "reveals": [
+            {
+              "field": "broadcast round messages",
+              "observer": "room-member"
+            },
+            {
+              "field": "unicast shares, sealed per recipient",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/cggmp24-keygen/src/threshold.rs",
+            "https://eprint.iacr.org/2023/765"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "each party stores its share in its own keystore; the joint public key is logged and the account is disclosed (S1) with its derived addresses (EVM: the last 20 bytes of keccak256 of the uncompressed key)",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "joint public key",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a round message that is not a signed log entry from the party it claims to come from",
+          "why": "the libraries require every message to be authenticated; the room log's author signature is that authentication (invariant 4)",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        },
+        {
+          "what": "a unicast share sent under the room's epoch key instead of sealed to its one recipient",
+          "why": "the libraries require point-to-point messages to be readable only by their recipient; the epoch key is shared by every member",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        },
+        {
+          "what": "an execution id that was used before",
+          "why": "each protocol run needs a unique execution id so messages cannot be replayed from another run",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        },
+        {
+          "what": "a secret share, presignature or nonce written to the room log",
+          "why": "invariant 4 and seam S7: secrets never enter the log; they live in each party's keystore",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md",
+            "https://github.com/coinbase/cb-mpc"
+          ]
+        },
+        {
+          "what": "a party set or t that differs from what the proposal named, or an index order the parties do not share",
+          "why": "invariant 1: the ceremony's inputs are the reviewed effect; all parties must agree on each other's indices",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        },
+        {
+          "what": "a share assigned because someone was admitted to the room",
+          "why": "invariant 7: a key share is per person and comes only from a ceremony that names them, never from room admission",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        4,
+        6,
+        7,
+        8,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "No single party ever holds the whole key, as long as fewer than t parties are corrupted.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The resulting address is an ordinary secp256k1 address; no chain can tell a group holds it.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A party who sends bad messages can stop the ceremony; with engines that lack identifiable abort (cggmp24), they are not named.",
+          "credibility": "motivational",
+          "party": "each ceremony party"
+        },
+        {
+          "claim": "Each party must keep its share safe; losing more than n − t shares loses the key.",
+          "credibility": "motivational",
+          "party": "each share holder"
+        },
+        {
+          "claim": "The engine is prototype-grade; before real funds the library is re-chosen for licence, CVE history and identifiable abort (no engine is built; the candidates are cggmp24 (LFDT-Lockness, formerly cggmp21), dkls23 (Silence Laboratories, non-commercial licence) and cb-mpc (Coinbase, MIT)).",
+          "credibility": "not-applicable"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://eprint.iacr.org/2021/060",
+          "what": "CGGMP: UC non-interactive, proactive threshold ECDSA with identifiable aborts (the protocol family)"
+        },
+        {
+          "kind": "source",
+          "url": "https://eprint.iacr.org/2023/765",
+          "what": "DKLs23: threshold ECDSA in three rounds, OT-based, dishonest majority"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md",
+          "what": "cggmp24 README: t-of-n keygen, (3+1)-round signing, aux-info generation; no key refresh and no identifiable abort; messages must be authenticated and p2p encrypted; unique execution ids"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/cggmp24-keygen/src/threshold.rs",
+          "what": "cggmp24 threshold keygen: Round1, Round2 (broadcast + unicast), Round3 messages"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/silence-laboratories/dkls23",
+          "what": "dkls23 library: DKG, DSG, refresh, quorum change; audit table"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/coinbase/cb-mpc",
+          "what": "cb-mpc: DKG, refresh, derivation and signing; the application owns peer authentication and share storage"
+        }
+      ],
+      "unverified": [
+        "DKLs23 identifiable abort (carried from the registry).",
+        "Round count of the dkls23 and cb-mpc DKGs; the 3 above is cggmp24's threshold keygen."
+      ],
+      "status": "declared",
+      "ui": "not built"
+    },
+    {
+      "id": "mpc.threshold-ecdsa/transfer",
+      "name": "Send the native asset from a threshold ECDSA account",
+      "area": "family",
+      "family": "mpc.threshold-ecdsa",
+      "summary": "t of n share holders jointly sign one ordinary transaction that sends the chain's native asset from the key's address. EVM is the worked example; any chain that verifies secp256k1 ECDSA works the same way with its own digest.",
+      "effect": {
+        "schema": "muster.effect.mpc.threshold-ecdsa.transfer.v0",
+        "fields": [
+          {
+            "name": "chain",
+            "means": "the CAIP-2 chain the transaction is for"
+          },
+          {
+            "name": "from",
+            "means": "the joint key's address on that chain"
+          },
+          {
+            "name": "to",
+            "means": "the payee's address"
+          },
+          {
+            "name": "value",
+            "means": "the amount, in the chain's base unit"
+          },
+          {
+            "name": "nonce",
+            "means": "the account's next nonce (EVM), read from the chain"
+          },
+          {
+            "name": "fees",
+            "means": "EVM: gasLimit, maxFeePerGas, maxPriorityFeePerGas"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 4,
+        "threshold": "t of n share holders",
+        "finality": "external",
+        "domain": "the target chain's signing digest (EVM: the EIP-1559 type-2 signing hash, chain id included); CGGMP: 3 presign rounds + 1 online"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "<CAIP-2 chain>",
+          "party": "instance",
+          "class": "infra",
+          "target": "<CAIP-2 chain>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "rpc",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "mpc-share",
+          "party": "contributor",
+          "class": "authority",
+          "target": "mpc:<joint public key>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "payee",
+          "party": "counterparty",
+          "class": "address",
+          "target": "<CAIP-2 chain>",
+          "field": "to"
+        },
+        {
+          "kind": "asset",
+          "name": "amount",
+          "party": "proposer",
+          "class": "asset",
+          "target": "<CAIP-2 chain>",
+          "field": "value"
+        },
+        {
+          "kind": "asset",
+          "name": "fee",
+          "party": "instance",
+          "class": "asset",
+          "target": "the key's address on the chain",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "account:<from>",
+          "mode": "write"
+        },
+        {
+          "target": "account:<from>:nonce,balance",
+          "mode": "read"
+        },
+        {
+          "target": "keystore:<own presignature>",
+          "mode": "write"
+        },
+        {
+          "target": "<CAIP-2 chain>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "presigning round messages",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "account address, nonce and balance reads",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed transaction",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "to",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "value",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "from (one ordinary address; the group is not visible)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee paid",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "composes the effect; reads the account's nonce, balance and fees through the RPC (external reads); the room re-derives the chain's signing digest from the effect",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "account address, nonce and balance reads (RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-1559",
+            "https://eips.ethereum.org/EIPS/eip-155"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "contributor",
+          "does": "t parties run presigning (CGGMP: 3 rounds, independent of the message); each keeps a one-time presignature in its keystore, marked consumed before it is used",
+          "signs": "nothing on any chain; each round message travels as a signed room log entry under the member's authorization key, which is the message authentication the libraries require",
+          "reveals": [
+            {
+              "field": "broadcast round messages",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://eprint.iacr.org/2021/060",
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "each of the t parties re-derives the digest from the effect and issues its partial signature over it (the online round)",
+          "signs": "a partial ECDSA signature share over the transaction's signing digest (EVM: keccak256(0x02 || rlp([chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gasLimit, to, value, \"\", []])))",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://eprint.iacr.org/2021/060",
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md",
+            "https://github.com/advisories/GHSA-8frv-q972-9rq5"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "any party combines t partials into one (r, s, v) signature, checks it against the joint public key, and broadcasts the signed transaction through its RPC",
+          "signs": "nothing new; the combined signature is an ordinary single ECDSA signature",
+          "reveals": [
+            {
+              "field": "signed transaction",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "to",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "value",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "from",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md",
+            "https://eips.ethereum.org/EIPS/eip-155"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "watches the transaction reach the chain's finality",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "transaction hash being watched (RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-1559"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a partial signature over a digest that is not the one the room re-derives from the effect",
+          "why": "invariant 1 (F-4); and CVE-2025-66017: signing a bare hash from a presignature enabled forgery, so the digest is always derived from the effect, never accepted as input",
+          "evidence": [
+            "https://github.com/advisories/GHSA-8frv-q972-9rq5",
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        },
+        {
+          "what": "using a presignature twice",
+          "why": "reusing a presignature for two messages leaks the key; seam S7 marks it consumed in the keystore before the partial is released",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        },
+        {
+          "what": "a transaction whose chain id differs from the disclosed account's environment",
+          "why": "invariant 2: the chain's own binding (EVM: the EIP-155 chain id in the signed transaction) must name the room's network",
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-155"
+          ]
+        },
+        {
+          "what": "a stale nonce: the account's nonce moved since the proposal, re-read at review and at settle",
+          "why": "invariant 10: the nonce is an external read that reached the digest",
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-1559"
+          ]
+        },
+        {
+          "what": "a signing session with other than t parties, or a party that does not hold a share of this key",
+          "why": "invariant 9: every contributor is named; the engines require exactly t signers with their keygen indices",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The chain sees one ordinary signature and cannot tell that a group signed, or which members did.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Any t share holders together can sign any transaction; the chain cannot check the room's policy.",
+          "credibility": "motivational",
+          "party": "any t share holders"
+        },
+        {
+          "claim": "The RPC provider sees the signed transaction before the mempool.",
+          "credibility": "exposed",
+          "party": "the configured RPC provider"
+        },
+        {
+          "claim": "A signed transaction never expires; to cancel it, use the same nonce for another transaction.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Chain binding is the target chain's own: explicit on EVM through the EIP-155 chain id.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "With engines that lack identifiable abort (cggmp24), one party can stall signing without being named.",
+          "credibility": "motivational",
+          "party": "each share holder"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://eprint.iacr.org/2021/060",
+          "what": "CGGMP: presigning independent of the message, then one online round"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md",
+          "what": "cggmp24 README: exactly t signers with their keygen indices; never reuse presignatures"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/advisories/GHSA-8frv-q972-9rq5",
+          "what": "CVE-2025-66017 (GHSA-8frv-q972-9rq5): altered presignatures and raw-hash signing allowed forgery in cggmp21 ≤ 0.6.3; fixed in cggmp24 0.7.0-alpha.2"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-1559",
+          "what": "EIP-1559: the type-2 transaction and its signing hash keccak256(0x02 || rlp([chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gasLimit, to, value, data, accessList]))"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-155",
+          "what": "EIP-155: the chain id in the signed transaction"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki",
+          "what": "BIP-143: a non-EVM example of a chain signing digest (segwit v0 sighash), which the same key could sign"
+        }
+      ],
+      "unverified": [
+        "DKLs23 identifiable abort (carried from the registry).",
+        "Binding and ordering are the target chain's own: explicit and sequence on EVM, but implicit and utxo on Bitcoin; the registry records explicit / sequence."
+      ],
+      "status": "declared",
+      "ui": "not built"
+    },
+    {
+      "id": "mpc.threshold-ecdsa/contract-call",
+      "name": "Call a contract from a threshold ECDSA account",
+      "area": "family",
+      "family": "mpc.threshold-ecdsa",
+      "summary": "On an EVM chain, t of n share holders jointly sign one ordinary transaction that calls a contract from the key's address.",
+      "effect": {
+        "schema": "muster.effect.mpc.threshold-ecdsa.contract-call.v0",
+        "fields": [
+          {
+            "name": "chain",
+            "means": "the CAIP-2 EVM chain"
+          },
+          {
+            "name": "from",
+            "means": "the joint key's address"
+          },
+          {
+            "name": "to",
+            "means": "the contract called"
+          },
+          {
+            "name": "value",
+            "means": "ETH sent with the call, in wei"
+          },
+          {
+            "name": "data",
+            "means": "the calldata, decoded on the card when its ABI is known"
+          },
+          {
+            "name": "nonce",
+            "means": "the account's next nonce, read from the chain"
+          },
+          {
+            "name": "fees",
+            "means": "gasLimit, maxFeePerGas, maxPriorityFeePerGas"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 4,
+        "threshold": "t of n share holders",
+        "finality": "external",
+        "domain": "the target chain's signing digest (EVM: the EIP-1559 type-2 signing hash, chain id included); CGGMP: 3 presign rounds + 1 online"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "<CAIP-2 chain>",
+          "party": "instance",
+          "class": "infra",
+          "target": "<CAIP-2 chain>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "rpc",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "mpc-share",
+          "party": "contributor",
+          "class": "authority",
+          "target": "mpc:<joint public key>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "target-contract",
+          "party": "proposer",
+          "class": "address",
+          "target": "<CAIP-2 chain>",
+          "field": "to"
+        },
+        {
+          "kind": "asset",
+          "name": "fee",
+          "party": "instance",
+          "class": "asset",
+          "target": "the key's address on the chain",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "account:<from>",
+          "mode": "write"
+        },
+        {
+          "target": "account:<from>:nonce,balance",
+          "mode": "read"
+        },
+        {
+          "target": "keystore:<own presignature>",
+          "mode": "write"
+        },
+        {
+          "target": "<CAIP-2 chain>",
+          "mode": "write"
+        },
+        {
+          "target": "contract:<to>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "presigning round messages",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "account address, nonce and balance reads",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed transaction",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "to",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "value",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "from (one ordinary address; the group is not visible)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee paid",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "data",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "composes the effect; reads the account's nonce, balance and fees through the RPC (external reads); the room re-derives the chain's signing digest from the effect",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "account address, nonce and balance reads (RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-1559",
+            "https://eips.ethereum.org/EIPS/eip-155"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "contributor",
+          "does": "t parties run presigning (CGGMP: 3 rounds, independent of the message); each keeps a one-time presignature in its keystore, marked consumed before it is used",
+          "signs": "nothing on any chain; each round message travels as a signed room log entry under the member's authorization key, which is the message authentication the libraries require",
+          "reveals": [
+            {
+              "field": "broadcast round messages",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://eprint.iacr.org/2021/060",
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "each of the t parties re-derives the digest from the effect and issues its partial signature over it (the online round)",
+          "signs": "a partial ECDSA signature share over the EIP-1559 signing digest keccak256(0x02 || rlp([chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gasLimit, to, value, data, accessList]))",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://eprint.iacr.org/2021/060",
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md",
+            "https://github.com/advisories/GHSA-8frv-q972-9rq5"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "any party combines t partials into one (r, s, v) signature, checks it against the joint public key, and broadcasts the signed transaction through its RPC",
+          "signs": "nothing new; the combined signature is an ordinary single ECDSA signature",
+          "reveals": [
+            {
+              "field": "signed transaction",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "to",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "data",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "from",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md",
+            "https://eips.ethereum.org/EIPS/eip-155"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "watches the transaction reach the chain's finality",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "transaction hash being watched (RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-1559"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a partial signature over a digest that is not the one the room re-derives from the effect",
+          "why": "invariant 1 (F-4); and CVE-2025-66017: signing a bare hash from a presignature enabled forgery, so the digest is always derived from the effect, never accepted as input",
+          "evidence": [
+            "https://github.com/advisories/GHSA-8frv-q972-9rq5",
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        },
+        {
+          "what": "using a presignature twice",
+          "why": "reusing a presignature for two messages leaks the key; seam S7 marks it consumed in the keystore before the partial is released",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        },
+        {
+          "what": "a transaction whose chain id differs from the disclosed account's environment",
+          "why": "invariant 2: the chain's own binding (EVM: the EIP-155 chain id in the signed transaction) must name the room's network",
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-155"
+          ]
+        },
+        {
+          "what": "a stale nonce: the account's nonce moved since the proposal, re-read at review and at settle",
+          "why": "invariant 10: the nonce is an external read that reached the digest",
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-1559"
+          ]
+        },
+        {
+          "what": "a signing session with other than t parties, or a party that does not hold a share of this key",
+          "why": "invariant 9: every contributor is named; the engines require exactly t signers with their keygen indices",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The chain sees one ordinary signature and cannot tell that a group signed, or which members did.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Any t share holders together can sign any transaction; the chain cannot check the room's policy.",
+          "credibility": "motivational",
+          "party": "any t share holders"
+        },
+        {
+          "claim": "The RPC provider sees the signed transaction before the mempool.",
+          "credibility": "exposed",
+          "party": "the configured RPC provider"
+        },
+        {
+          "claim": "A signed transaction never expires; to cancel it, use the same nonce for another transaction.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Chain binding is the target chain's own: explicit on EVM through the EIP-155 chain id.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "With engines that lack identifiable abort (cggmp24), one party can stall signing without being named.",
+          "credibility": "motivational",
+          "party": "each share holder"
+        },
+        {
+          "claim": "The called contract's code runs with the key's address as msg.sender; muster shows the decoded call but cannot vouch for the contract.",
+          "credibility": "motivational",
+          "party": "the called contract's author"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://eprint.iacr.org/2021/060",
+          "what": "CGGMP: presigning independent of the message, then one online round"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md",
+          "what": "cggmp24 README: exactly t signers with their keygen indices; never reuse presignatures"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/advisories/GHSA-8frv-q972-9rq5",
+          "what": "CVE-2025-66017 (GHSA-8frv-q972-9rq5): altered presignatures and raw-hash signing allowed forgery in cggmp21 ≤ 0.6.3; fixed in cggmp24 0.7.0-alpha.2"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-1559",
+          "what": "EIP-1559: the type-2 transaction and its signing hash keccak256(0x02 || rlp([chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gasLimit, to, value, data, accessList]))"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-155",
+          "what": "EIP-155: the chain id in the signed transaction"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki",
+          "what": "BIP-143: a non-EVM example of a chain signing digest (segwit v0 sighash), which the same key could sign"
+        }
+      ],
+      "unverified": [
+        "DKLs23 identifiable abort (carried from the registry).",
+        "Binding and ordering are the target chain's own: explicit and sequence on EVM, but implicit and utxo on Bitcoin; the registry records explicit / sequence."
+      ],
+      "status": "declared",
+      "ui": "not built"
+    },
+    {
+      "id": "mpc.threshold-ecdsa/refresh",
+      "name": "Refresh the shares of a threshold ECDSA key",
+      "area": "family",
+      "family": "mpc.threshold-ecdsa",
+      "summary": "The same parties run a ceremony that replaces every share with a new one for the same key. The address and threshold stay. Old shares become useless only once every party deletes theirs.",
+      "effect": {
+        "schema": "muster.effect.mpc.threshold-ecdsa.refresh.v0",
+        "fields": [
+          {
+            "name": "publicKey",
+            "means": "the joint key whose shares are refreshed (unchanged)"
+          },
+          {
+            "name": "parties",
+            "means": "the same n parties and indices"
+          },
+          {
+            "name": "t",
+            "means": "unchanged"
+          },
+          {
+            "name": "executionId",
+            "means": "a session id unique to this run"
+          },
+          {
+            "name": "engine",
+            "means": "an engine with refresh: dkls23 (audited) or cb-mpc; cggmp24 has none"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 3,
+        "threshold": "all n parties",
+        "finality": "immediate",
+        "domain": "the engine's execution id; nothing is signed for any chain"
+      },
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "mpc-share",
+          "party": "contributor",
+          "class": "authority",
+          "target": "mpc:<joint public key>",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "keystore:<own share>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "broadcast round messages: commitments, public shares, proofs",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "unicast round messages, sealed to one recipient's encryption key (only that member can open them)",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "confirmation that the joint public key is unchanged",
+          "observer": "room-member",
+          "when": "final"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "proposes a refresh of the named key with a fresh execution id",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/silence-laboratories/dkls23/blob/main/src/keygen/key_refresh.rs"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "contributor",
+          "does": "the parties run the engine's refresh protocol (dkls23 reuses its keygen protocol with the existing shares as input)",
+          "signs": "nothing on any chain; each round message travels as a signed room log entry under the member's authorization key, which is the message authentication the libraries require",
+          "reveals": [
+            {
+              "field": "broadcast round messages",
+              "observer": "room-member"
+            },
+            {
+              "field": "unicast shares, sealed per recipient",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/silence-laboratories/dkls23/blob/main/src/keygen/key_refresh.rs",
+            "https://github.com/coinbase/cb-mpc"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "each party checks the joint public key is unchanged, stores the new share, and deletes the old one",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "joint public key",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/coinbase/cb-mpc"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a round message that is not a signed log entry from the party it claims to come from",
+          "why": "the libraries require every message to be authenticated; the room log's author signature is that authentication (invariant 4)",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        },
+        {
+          "what": "a unicast share sent under the room's epoch key instead of sealed to its one recipient",
+          "why": "the libraries require point-to-point messages to be readable only by their recipient; the epoch key is shared by every member",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        },
+        {
+          "what": "an execution id that was used before",
+          "why": "each protocol run needs a unique execution id so messages cannot be replayed from another run",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        },
+        {
+          "what": "a secret share, presignature or nonce written to the room log",
+          "why": "invariant 4 and seam S7: secrets never enter the log; they live in each party's keystore",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md",
+            "https://github.com/coinbase/cb-mpc"
+          ]
+        },
+        {
+          "what": "a refresh whose output public key differs from the input key",
+          "why": "invariant 1: the effect names the key; a different key is a different account",
+          "evidence": [
+            "https://github.com/silence-laboratories/dkls23/blob/main/src/keygen/key_refresh.rs"
+          ]
+        },
+        {
+          "what": "signing with a share from before the refresh",
+          "why": "old and new shares do not combine; the keystore retires the old share when the refresh completes",
+          "evidence": [
+            "https://github.com/coinbase/cb-mpc"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        4,
+        6,
+        7,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "The address and the key stay the same.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Old shares are harmless only once every party deletes theirs; an attacker who gathered t old shares can still sign.",
+          "credibility": "motivational",
+          "party": "each share holder"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://eprint.iacr.org/2021/060",
+          "what": "CGGMP: a periodic refresh mechanism gives proactive security"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/silence-laboratories/dkls23/blob/main/src/keygen/key_refresh.rs",
+          "what": "dkls23 key_refresh.rs: refresh existing shares without changing the public key; can recover lost shares"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/coinbase/cb-mpc",
+          "what": "cb-mpc: refresh* APIs give fresh shares for the same key; a new key means a new dkg and migration"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md",
+          "what": "cggmp24 README: key refresh is not supported for threshold or non-threshold keys"
+        }
+      ],
+      "unverified": [
+        "Round count of refresh in dkls23 and cb-mpc; 3 is assumed from the keygen it reuses."
+      ],
+      "status": "declared",
+      "ui": "not built"
+    },
+    {
+      "id": "mpc.threshold-ecdsa/reshare",
+      "name": "Change the signers or threshold of a threshold ECDSA key",
+      "area": "family",
+      "family": "mpc.threshold-ecdsa",
+      "summary": "Old share holders and new parties run a ceremony that gives a new party set its own shares of the same key, possibly with a new threshold. The address stays; this is how signers change in this family.",
+      "effect": {
+        "schema": "muster.effect.mpc.threshold-ecdsa.reshare.v0",
+        "fields": [
+          {
+            "name": "publicKey",
+            "means": "the joint key (unchanged)"
+          },
+          {
+            "name": "oldParties",
+            "means": "the current share holders taking part (at least t_old)"
+          },
+          {
+            "name": "newParties",
+            "means": "the new party set, each by bound encryption identity"
+          },
+          {
+            "name": "newT",
+            "means": "the new threshold"
+          },
+          {
+            "name": "executionId",
+            "means": "a session id unique to this run"
+          },
+          {
+            "name": "engine",
+            "means": "an engine with quorum change: dkls23 (not audited)"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 3,
+        "threshold": "t_old of the old parties and all new parties",
+        "finality": "immediate",
+        "domain": "the engine's execution id; nothing is signed for any chain"
+      },
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "mpc-share",
+          "party": "contributor",
+          "class": "authority",
+          "target": "mpc:<joint public key>",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "mpc-party",
+          "party": "counterparty",
+          "class": "authority",
+          "target": "each new party's bound encryption identity",
+          "field": "newParties"
+        }
+      ],
+      "touches": [
+        {
+          "target": "keystore:<own share>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "broadcast round messages: commitments, public shares, proofs",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "unicast round messages, sealed to one recipient's encryption key (only that member can open them)",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "the new party set and threshold",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "confirmation that the joint public key is unchanged",
+          "observer": "room-member",
+          "when": "final"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "proposes the new party set and threshold for the named key",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/silence-laboratories/dkls23/blob/main/src/keygen/quorum_change.rs"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "contributor",
+          "does": "old share holders and new parties run the engine's quorum-change protocol; each new party receives a share sealed to it",
+          "signs": "nothing on any chain; each round message travels as a signed room log entry under the member's authorization key, which is the message authentication the libraries require",
+          "reveals": [
+            {
+              "field": "broadcast round messages",
+              "observer": "room-member"
+            },
+            {
+              "field": "unicast shares, sealed per recipient",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/silence-laboratories/dkls23/blob/main/src/keygen/quorum_change.rs",
+            "https://github.com/silence-laboratories/dkls23"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "every new party checks the joint public key is unchanged and stores its share; old parties delete theirs",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "joint public key",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/silence-laboratories/dkls23"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a round message that is not a signed log entry from the party it claims to come from",
+          "why": "the libraries require every message to be authenticated; the room log's author signature is that authentication (invariant 4)",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        },
+        {
+          "what": "a unicast share sent under the room's epoch key instead of sealed to its one recipient",
+          "why": "the libraries require point-to-point messages to be readable only by their recipient; the epoch key is shared by every member",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        },
+        {
+          "what": "an execution id that was used before",
+          "why": "each protocol run needs a unique execution id so messages cannot be replayed from another run",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md"
+          ]
+        },
+        {
+          "what": "a secret share, presignature or nonce written to the room log",
+          "why": "invariant 4 and seam S7: secrets never enter the log; they live in each party's keystore",
+          "evidence": [
+            "https://github.com/LFDT-Lockness/cggmp21/blob/cggmp24/m/README.md",
+            "https://github.com/coinbase/cb-mpc"
+          ]
+        },
+        {
+          "what": "a new threshold of 0 or above the new party count",
+          "why": "a threshold no party set can meet locks the key",
+          "evidence": [
+            "https://github.com/silence-laboratories/dkls23/blob/main/src/keygen/quorum_change.rs"
+          ]
+        },
+        {
+          "what": "giving a share to someone because they were admitted to the room",
+          "why": "invariant 7: a share is per person and comes only from a ceremony that names them",
+          "evidence": [
+            "https://github.com/silence-laboratories/dkls23/blob/main/src/keygen/quorum_change.rs"
+          ]
+        },
+        {
+          "what": "an output public key that differs from the input key",
+          "why": "invariant 1: the effect names the key",
+          "evidence": [
+            "https://github.com/silence-laboratories/dkls23/blob/main/src/keygen/quorum_change.rs"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        4,
+        6,
+        7,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "The address stays the same when the signers change.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A removed party's old share still signs together with t_old − 1 other old shares until those are deleted; resharing does not revoke on its own.",
+          "credibility": "motivational",
+          "party": "every old share holder"
+        },
+        {
+          "claim": "No chain ever learns that the signers changed.",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/silence-laboratories/dkls23",
+          "what": "dkls23 README: quorum change adds or removes participants; its audit table marks quorum change as not audited"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/silence-laboratories/dkls23/blob/main/src/keygen/quorum_change.rs",
+          "what": "dkls23 quorum_change.rs: the quorum-change protocol"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/silence-laboratories/dkls23/blob/main/LICENSE",
+          "what": "dkls23 is under the Silence Laboratories non-commercial licence"
+        },
+        {
+          "kind": "source",
+          "url": "https://eprint.iacr.org/2021/060",
+          "what": "CGGMP: proactive refresh (same party set), the base the registry's reshare row builds on"
+        }
+      ],
+      "unverified": [
+        "Whether cb-mpc can move a key to a new party set without a new DKG.",
+        "Round count of dkls23 quorum change; 3 is assumed.",
+        "A reshare in the registry sense (same address, new signers) is available only through dkls23's unaudited quorum change among the three named libraries."
+      ],
+      "status": "declared",
+      "ui": "not built"
+    }
+  ]
+}

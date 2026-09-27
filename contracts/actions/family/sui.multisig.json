@@ -1,0 +1,2056 @@
+{
+  "actions": [
+    {
+      "id": "sui.multisig/derive-account",
+      "name": "Derive a Sui MultiSig address",
+      "area": "family",
+      "family": "sui.multisig",
+      "status": "declared",
+      "summary": "The room agrees on a MultiSigPublicKey (up to 10 weighted keys of mixed schemes and a threshold) and every member re-derives the same address from it. Nothing reaches the chain until the address receives objects; the Sui protocol itself enforces the weights at every spend.",
+      "effect": {
+        "schema": "muster.effect.sui.multisig.derive-account.v0",
+        "fields": [
+          {
+            "name": "members",
+            "means": "the pk_map, in order: each member's scheme flag (0x00 Ed25519, 0x01 secp256k1, 0x02 secp256r1, 0x05 zkLogin identifier, 0x06 passkey), public key bytes (for zkLogin: iss length || iss || 32-byte padded address seed) and u8 weight (1-255)"
+          },
+          {
+            "name": "threshold",
+            "means": "the u16 threshold the signed members' weights must reach (1 to the sum of the weights)"
+          },
+          {
+            "name": "address",
+            "means": "the derived address: Blake2b-256(0x03 || threshold as u16 little-endian || for each member: flag || key bytes || weight)"
+          },
+          {
+            "name": "network",
+            "means": "the Sui network the room will use the account on (CAIP-2 sui:<network>); it is not part of the address"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "every listed key is confirmed by its own holder (n of n); nothing is signed on chain",
+        "finality": "immediate",
+        "domain": "sui.multisig.address.v0"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "sui:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "sui:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "sui-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "sui-rpc",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "sui-multisig-member-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "sui-multisig:<multisig address>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "multisig-address",
+          "party": "proposer",
+          "class": "address",
+          "target": "sui-multisig:<multisig address>",
+          "field": "address"
+        },
+        {
+          "kind": "authority",
+          "name": "member-keys-and-weights",
+          "party": "proposer",
+          "class": "authority",
+          "target": "sui-multisig:<multisig address>",
+          "field": "members"
+        }
+      ],
+      "touches": [
+        {
+          "target": "sui-multisig:<multisig address>",
+          "mode": "read"
+        },
+        {
+          "target": "sui-address-aliases:<multisig address>",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "address",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "address",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signers",
+          "observer": "room-member",
+          "when": "approve"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Proposes the key list, the weights and the threshold. Muster derives the address locally and checks the list the way the chain will: 1-10 keys, no duplicate key, no zero weight, the weights able to reach the threshold, and only Ed25519, secp256k1, secp256r1, zkLogin or passkey keys (no BLS key and no nested MultiSig). If the room imports an address that already exists, muster reads its owned objects and its AddressAliases object through the user's RPC, so the RPC provider learns the address.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "policy",
+              "observer": "room-member"
+            },
+            {
+              "field": "address",
+              "observer": "room-member"
+            },
+            {
+              "field": "address",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/base_types.rs#L978-L1008",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L498-L580",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L48-L63",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L263-L287",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L1714-L1765",
+            "https://docs.sui.io/develop/transactions/transaction-auth/multisig"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Each listed member confirms that their slot holds their own key, with the scheme and weight shown, and re-derives the address. A zkLogin member's slot holds an identifier (the OAuth issuer and an address seed), not a public key. A passkey member's slot holds a secp256r1 key under flag 0x06. Nothing is signed on chain.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "signers",
+              "observer": "room-member"
+            },
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/base_types.rs#L978-L1008",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L263-L287",
+            "https://docs.sui.io/sui-stack/zklogin-integration/zklogin",
+            "https://docs.sui.io/develop/cryptography/passkeys"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "The account enters the room log with its key list, weights, threshold, address and network. Nothing exists on chain until the address receives objects. The chain learns the policy only when the address first spends, from the signature on that transaction. The same key list gives the same address on every Sui network.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "policy",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/base_types.rs#L978-L1008",
+            "https://docs.sui.io/develop/transactions/transaction-auth/multisig"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a key list the chain would reject: threshold 0, no keys or more than 10, a zero weight, weights that cannot reach the threshold, a duplicate key, or a key type a MultiSig cannot hold (BLS12381, a nested MultiSig)",
+          "why": "the chain's rule: MultiSigPublicKey validation fails, so every signature under this policy would be rejected",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L498-L580",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L263-L287"
+          ]
+        },
+        {
+          "what": "a disclosed or imported address that differs from the address muster re-derives from the key list, weights and threshold",
+          "why": "invariant 1 (re-derive or refuse) applied to the account disclosure; the chain checks the same derivation at every spend",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/base_types.rs#L978-L1008",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L107-L145"
+          ]
+        },
+        {
+          "what": "a zkLogin slot whose identifier is not iss length || iss || a 32-byte padded address seed",
+          "why": "the chain's rule: the zkLogin public identifier inside a MultiSig is validated, and an invalid one fails verification",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L113-L124",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L263-L287"
+          ]
+        },
+        {
+          "what": "a slot whose key its holder has not disclosed and confirmed in the room",
+          "why": "invariant 9: what the client says about a member is only what that member disclosed. Each slot's key carries weight toward the threshold",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L146-L310"
+          ]
+        },
+        {
+          "what": "presenting an imported address as k of n when its AddressAliases object lists any address other than the multisig itself",
+          "why": "the chain's rule: every alias can sign for the address alone and take everything it owns. Muster shows the account as controlled by each alias",
+          "evidence": [
+            "https://docs.sui.io/develop/transactions/transaction-auth/address-aliases",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-framework/packages/sui-framework/sources/address_alias.move#L50-L101"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        4,
+        5,
+        7,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The address is Blake2b-256 of 0x03, the u16 threshold and each member's flag, key and weight. Anyone holding the key list re-derives it, and the chain checks the same derivation at every spend.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The chain rejects a policy with more than 10 keys, a zero weight, a duplicate key or a threshold the weights cannot reach. zkLogin and passkey members are accepted on mainnet.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Nothing is on chain until the address receives objects, and the same key list derives the same address on every Sui network. Which network holds the account is the room's disclosure, not the address's.",
+          "credibility": "not-applicable"
+        },
+        {
+          "claim": "At the first spend the whole policy becomes public, including each zkLogin member's OAuth issuer and which members use a passkey.",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        },
+        {
+          "claim": "A zkLogin member's salt and proving services see both the member's login token and salt, so they can link the member's OAuth identity to their key.",
+          "credibility": "exposed",
+          "party": "the zkLogin salt and proving services"
+        },
+        {
+          "claim": "An imported address may already have address aliases; each alias is a unilateral full owner. Muster would read the address's AddressAliases object before calling it k of n.",
+          "credibility": "motivational",
+          "party": "every address in the imported address's alias set"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/base_types.rs#L978-L1008",
+          "what": "the MultiSig address is Blake2b-256(0x03 || threshold u16 LE || flag_i || pk_i || weight_i for each member); zkLogin members use their iss-and-address-seed identifier. It is defined in base_types.rs, not multisig.rs"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L498-L580",
+          "what": "MultiSigPublicKey is pk_map: Vec<(PublicKey, u8 weight)> plus a u16 threshold; validation rejects threshold 0, empty or more than 10 keys, zero weights, weights below the threshold and duplicate keys"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L48-L63",
+          "what": "MAX_SIGNER_IN_MULTISIG = 10; weights are u8, the threshold u16, the bitmap u16"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L263-L287",
+          "what": "PublicKey inside a MultiSig is Ed25519, Secp256k1, Secp256r1, ZkLogin (iss length || iss || padded address seed) or Passkey (a secp256r1 key), so no BLS key and no nested MultiSig"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L1714-L1765",
+          "what": "scheme flags: Ed25519 0x00, Secp256k1 0x01, Secp256r1 0x02, MultiSig 0x03, BLS12381 0x04, zkLogin 0x05, passkey 0x06"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L113-L124",
+          "what": "a zkLogin identifier inside a MultiSig is validated when the flag is on"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-protocol-config/src/lib.rs#L3531-L3542",
+          "what": "protocol version 45 turns on accept_zklogin_in_multisig for every network, mainnet included"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-protocol-config/src/lib.rs#L4297-L4302",
+          "what": "protocol version 90 turns on accept_passkey_in_multisig and passkey_auth for every network"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/develop/transactions/transaction-auth/multisig",
+          "what": "the official multisig guide: k-of-n by weight, at most 10 parties, u8 weights and a u16 threshold, mixed key schemes, and a new address that holds nothing until it is funded"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/sui-stack/zklogin-integration/zklogin",
+          "what": "zkLogin: the address comes from iss, aud, sub and a user salt; a salt service and a proving service see the JWT and salt and can link the identity; iss, aud and kid are revealed on chain"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/develop/cryptography/passkeys",
+          "what": "passkeys can be combined with other key types in a multisig"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/develop/transactions/transaction-auth/address-aliases",
+          "what": "address aliases: every alias can unilaterally control or take everything the address owns; an address can hold up to 8 aliases"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-framework/packages/sui-framework/sources/address_alias.move#L50-L101",
+          "what": "sui::address_alias: enable is called by the address itself (ctx.sender()) and creates its AddressAliases object; add, replace_all and remove edit the set, at most 8"
+        }
+      ],
+      "unverified": [
+        "The docs' multisig guide still lists only Ed25519, secp256k1 and secp256r1 as valid participating keys; the source and protocol config accept zkLogin and passkey members too. The fields follow the source."
+      ]
+    },
+    {
+      "id": "sui.multisig/transfer",
+      "name": "Send SUI or a coin from a Sui MultiSig",
+      "area": "family",
+      "family": "sui.multisig",
+      "status": "declared",
+      "summary": "Members whose weights reach the threshold send SUI or another coin from the multisig address in one programmable transaction. Each member signs the same intent digest; one member combines the signatures into one MultiSig and submits it, and the Sui protocol checks the weights.",
+      "effect": {
+        "schema": "muster.effect.sui.multisig.transfer.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the multisig's Sui address, which is the transaction's sender"
+          },
+          {
+            "name": "recipient",
+            "means": "the payee's Sui address"
+          },
+          {
+            "name": "coin_type",
+            "means": "the coin sent: 0x2::sui::SUI or another Coin<T> type"
+          },
+          {
+            "name": "amount",
+            "means": "the amount in the coin's smallest unit (MIST for SUI)"
+          },
+          {
+            "name": "sources",
+            "means": "the owned Coin<T> ObjectRefs (id, version, digest) the amount is split from, or an address-balance withdrawal of the amount"
+          },
+          {
+            "name": "gas",
+            "means": "the gas payment: owned SUI coin ObjectRefs, or none to pay from the address balance"
+          },
+          {
+            "name": "gas_owner",
+            "means": "who pays gas: the multisig itself, or a sponsor address that must also sign"
+          },
+          {
+            "name": "gas_price",
+            "means": "the gas price in MIST per unit, at least the epoch's reference gas price"
+          },
+          {
+            "name": "gas_budget",
+            "means": "the most gas, in MIST, the transaction may spend"
+          },
+          {
+            "name": "expiration",
+            "means": "None, Epoch(e), or ValidDuring{min_epoch, max_epoch, chain, nonce}; muster would set Epoch(e) to its envelope's expiry"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "weighted: the included members' u8 weights must sum to at least the MultiSigPublicKey's u16 threshold (at most 10 members)",
+        "finality": "external",
+        "domain": "sui.intent.transaction-data.v0"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "sui:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "sui:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "sui-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "sui-rpc",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "sui-multisig-member-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "sui-multisig:<multisig address>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "zklogin-salt-and-prover",
+          "party": "contributor",
+          "class": "infra",
+          "target": "zklogin-prover",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "multisig-coins",
+          "party": "proposer",
+          "class": "asset",
+          "target": "sui-multisig:<multisig address>",
+          "field": "amount"
+        },
+        {
+          "kind": "asset",
+          "name": "sui-for-gas",
+          "party": "proposer",
+          "class": "asset",
+          "target": "sui-multisig:<multisig address>",
+          "field": "gas_budget"
+        },
+        {
+          "kind": "address",
+          "name": "payee",
+          "party": "counterparty",
+          "class": "address",
+          "target": "sui:<recipient>",
+          "field": "recipient"
+        },
+        {
+          "kind": "authority",
+          "name": "gas-sponsor-signature",
+          "party": "counterparty",
+          "class": "authority",
+          "target": "sui:<gas_owner>",
+          "field": "gas_owner"
+        }
+      ],
+      "touches": [
+        {
+          "target": "sui:*",
+          "mode": "write"
+        },
+        {
+          "target": "sui-multisig:<multisig address>",
+          "mode": "write"
+        },
+        {
+          "target": "sui-object:<each source coin id>",
+          "mode": "write"
+        },
+        {
+          "target": "sui-object:<gas coin id>",
+          "mode": "write"
+        },
+        {
+          "target": "sui-address-aliases:<multisig address>",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "inputs",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signers",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "amount",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payee",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Composes the transfer. Muster reads, through the user's RPC, the multisig's coins of coin_type and a gas coin (each as id, version, digest), the current epoch and the reference gas price, and records each read with its log position. It builds the programmable transaction: SplitCoins from a source coin (or from the gas coin, for SUI) and TransferObjects to the recipient, or an address-balance withdrawal redeemed to a coin. The room reviews the effect and muster re-derives the TransactionData. The RPC provider learns the address and its holdings from the reads.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "inputs",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L1015-L1021",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L1222-L1283",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/programmable_transaction_builder.rs#L271-L285",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2381-L2387",
+            "https://docs.sui.io/develop/transactions/ptbs/prog-txn-blocks",
+            "https://docs.sui.io/onchain-finance/asset-custody/address-balances"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Each member re-reads the object versions, re-derives the TransactionData from the effect and the recorded reads, checks that the bytes match, and signs. A sponsor, if one pays gas, signs the same TransactionData (GasData included) as a second signer outside the MultiSig; the sponsor sees the whole transaction first and can withhold it.",
+          "signs": "32 bytes: Blake2b-256 over BCS(IntentMessage{intent: [0x00 scope TransactionData, 0x00 version V0, 0x00 app Sui], value: TransactionData::V1{kind: ProgrammableTransaction{inputs: [Pure(recipient), Pure(amount), Object(ImmOrOwnedObject(source coin ObjectRef)) ...], commands: [SplitCoins(source coin or GasCoin, [amount]), TransferObjects([the new coin], recipient)]}, sender: the multisig address, gas_data: GasData{payment: [gas coin ObjectRef = (id, version, digest)] or [] when gas comes from the address balance, owner: the multisig or a sponsor, price, budget}, expiration: None | Epoch(e) | ValidDuring{min_epoch, max_epoch, min_timestamp, max_timestamp, chain, nonce} | Validity{the same fields plus allowed_proposers}}}). An Ed25519 member signs these 32 bytes (RFC 8032); a secp256k1 or secp256r1 member signs SHA-256 of them (ECDSA, 64-byte r||s, low s, not recoverable); a zkLogin member's ephemeral key signs them and attaches a zero-knowledge proof bound to its max_epoch; a passkey member signs WebAuthn authenticatorData || SHA-256(clientDataJSON), whose challenge is these 32 bytes. There is no account sequence number: the owned objects' versions and digests order the transaction. No chain id is inside unless the expiration is ValidDuring or Validity, whose chain field is the network's genesis checkpoint digest.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "signers",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L766-L778",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/shared-crypto/src/intent.rs#L55-L166",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2548-L2560",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2381-L2387",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2413-L2505",
+            "https://docs.sui.io/develop/transactions/transaction-auth/auth-overview",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/passkey_authenticator.rs#L253-L311",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/zk_login_authenticator.rs#L142-L172",
+            "https://docs.sui.io/develop/transaction-payment/sponsor-txn",
+            "https://github.com/MystenLabs/fastcrypto/blob/5c99edb95d138d95484f88af493670f23f480135/fastcrypto/src/secp256k1/mod.rs#L118-L122"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "Any member assembles the combined signature: 0x03 || BCS(MultiSig{sigs: one CompressedSignature per included member, in the policy's key order; bitmap: u16 with bit i set for member i; multisig_pk: {pk_map: [(PublicKey, weight)], threshold}}). Muster would include only as many signatures as reach the threshold, so no extra signer is named. It submits the TransactionData bytes and that signature (plus the sponsor's own signature when a sponsor pays gas) through the user's gRPC or GraphQL endpoint. The RPC provider sees the signed transaction first; validators see it next, before it executes. The chain re-derives the address from multisig_pk and checks it equals the sender, verifies every included signature against its key, and requires the weights to reach the threshold; one bad signature fails the whole transaction. The payee, the amount, the payer and the fee payer are public from then on.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payee",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L481-L495",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L342-L390",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L107-L145",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L146-L310",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L3994-L4003",
+            "https://docs.sui.io/develop/transactions/transaction-auth/multisig",
+            "https://docs.sui.io/develop/accessing-data/json-rpc-migration"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "Muster watches for the transaction's effects through the RPC; finality typically takes 400-700 ms. It watches the transaction digest, a Blake2b-256 over a type-name prefix and BCS(TransactionData), which differs from the digest the members signed. Once it executes, the gas coin and every mutated owned input move to a new version, so any other signature collected over the old versions is dead.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://docs.sui.io/develop/transactions/transaction-lifecycle",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L766-L778"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an approval over bytes that differ from the TransactionData muster re-derives from the effect and the recorded object reads",
+          "why": "invariant 1 / F-4: refuse on mismatch. Every member signs the same digest, so one different field is a different transaction",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L766-L778",
+            "https://docs.sui.io/develop/transactions/transaction-auth/intent-signing",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2548-L2560"
+          ]
+        },
+        {
+          "what": "a proposal whose source coin or gas-coin ObjectRef (id, version, digest) is no longer the object's live version when re-read at approve and again at settle",
+          "why": "the chain's rule: an owned input is named by its exact version and digest, and a stale reference is rejected, so signatures over it are worthless",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L122-L162",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2381-L2387",
+            "https://docs.sui.io/develop/transaction-payment/sponsor-txn"
+          ]
+        },
+        {
+          "what": "a second proposal that names an owned-object version (an input or the gas coin) already under collection in the room",
+          "why": "the chain's rule: two different transactions signed over the same owned-object version can equivocate and lock that object until the epoch ends. Muster refuses before anyone signs the second",
+          "evidence": [
+            "https://docs.sui.io/develop/transaction-payment/sponsor-txn"
+          ]
+        },
+        {
+          "what": "signing or submitting after the transaction's expiration epoch, or counting a zkLogin member's signature after its max_epoch",
+          "why": "the chain's rule (TransactionExpired; an expired zkLogin signature is invalid) and invariant 2's expiry",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L3392-L3401",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L3524-L3541",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/zk_login_authenticator.rs#L142-L172"
+          ]
+        },
+        {
+          "what": "calling a proposal ready while the included signatures' weights sum below the threshold, or while a signature's scheme differs from its member's key",
+          "why": "the chain's rule: MultiSig verification fails on insufficient weight and on a signature/key scheme mismatch. Muster counts weights, not heads",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L146-L310"
+          ]
+        },
+        {
+          "what": "signing when an ObjectRef, the epoch, the reference gas price or the chain identifier reached the bytes without a recorded external read naming its source and log position",
+          "why": "invariant 10: the gas coin and every object reference are external reads, and they are inside the signed bytes",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2381-L2387",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L122-L162",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2548-L2560"
+          ]
+        },
+        {
+          "what": "a proposal whose room envelope does not name the Sui network (its chain identifier, the genesis checkpoint digest), the multisig address, the owned-object versions it spends and an expiry",
+          "why": "invariant 2. The chain's bytes carry no chain id unless the expiration is ValidDuring; its binding is implicit, through object references that exist on one network only, so muster binds the network in its own envelope",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2413-L2505",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L3524-L3541",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/digests.rs#L162-L165"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Every member signs the same 32-byte digest of the intent message and the full TransactionData, gas and expiration included. Muster would re-derive it before offering a signature.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Only where these exact objects exist: the owned inputs' and gas coin's (id, version, digest) tie the signatures to one network and one moment. The bytes name no network unless the expiration is ValidDuring.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The chain counts weights, not heads: the signed members' weights must reach the threshold, and a member whose weight alone meets it can act alone.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Address aliases get around the threshold: each alias of the multisig address can take everything the address owns without the other members. Muster would read the address's AddressAliases object and show every alias.",
+          "credibility": "motivational",
+          "party": "every address in the multisig's alias set, if the multisig ever enabled aliases"
+        },
+        {
+          "claim": "At settle the chain publishes the whole policy (every key, its scheme, its weight, the threshold) and a bitmap of exactly who signed.",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        },
+        {
+          "claim": "The RPC provider sees every object read at propose and the signed transaction before the network; a gas sponsor sees the whole transaction before it signs and can withhold it.",
+          "credibility": "exposed",
+          "party": "the RPC provider and, when used, the gas sponsor"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/shared-crypto/src/intent.rs#L55-L166",
+          "what": "Intent is three bytes (scope, version, app id); TransactionData is scope 0, version V0, app Sui 0; IntentMessage is the intent followed by the value"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L766-L778",
+          "what": "a user signature is over Blake2b-256(BCS(IntentMessage)); this differs from the transaction digest"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2548-L2560",
+          "what": "TransactionData::V1 is {kind, sender, gas_data, expiration}; there is no sequence number"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2381-L2387",
+          "what": "GasData is {payment: Vec<ObjectRef>, owner, price, budget}"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2413-L2505",
+          "what": "TransactionExpiration is None, Epoch(e), ValidDuring{min_epoch, max_epoch, min/max_timestamp, chain: ChainIdentifier, nonce} or Validity (ValidDuring plus allowed proposers)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L3524-L3541",
+          "what": "a ValidDuring or Validity expiration's chain must equal the node's chain identifier"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/digests.rs#L162-L165",
+          "what": "ChainIdentifier is the genesis checkpoint digest; mainnet's is 4btiuiMPvEENsttpZC7CZ53DruC3MAgfznDbASZ7DR6S"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L3663-L3681",
+          "what": "gas paid from an address balance forbids GasCoin in commands and, under the legacy rule, requires a replay-protecting ValidDuring expiration"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-protocol-config/src/lib.rs#L4607-L4620",
+          "what": "protocol version 124 turns on address balances and address-balance gas payment on mainnet"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/develop/transactions/transaction-auth/auth-overview",
+          "what": "Ed25519 signs the 32-byte digest (SHA-512 inside); secp256k1 and secp256r1 use SHA-256 inside, 64-byte r||s with low s; scheme flags 0x00-0x06"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/fastcrypto/blob/5c99edb95d138d95484f88af493670f23f480135/fastcrypto/src/secp256k1/mod.rs#L118-L122",
+          "what": "fastcrypto's secp256k1 verify hashes the message with SHA-256 by default"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/passkey_authenticator.rs#L253-L311",
+          "what": "a passkey signature's WebAuthn challenge must equal Blake2b-256(BCS(IntentMessage)); the key signs authenticatorData || SHA-256(clientDataJSON)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/zk_login_authenticator.rs#L142-L172",
+          "what": "a zkLogin signature is invalid once the current epoch passes its max_epoch"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L481-L495",
+          "what": "the MultiSig signature is the flag 0x03 followed by BCS(MultiSig{sigs, bitmap, multisig_pk})"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L342-L390",
+          "what": "signatures are combined in the policy's key order; the bitmap marks which keys signed; a duplicate key is refused"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L146-L310",
+          "what": "verification requires the derived address to equal the sender, checks each signature's scheme against its key, fails on any bad signature, and needs the weight sum to reach the threshold"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L3994-L4003",
+          "what": "a signed transaction carries one signature per required signer (sender and, if different, the gas owner); a non-participant's signature must not be present"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/develop/transaction-payment/sponsor-txn",
+          "what": "a sponsor signs the whole TransactionData including GasData; two in-flight transactions over the same object version can equivocate that object until the next epoch; clients should not sign several transactions over the same owned inputs"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/programmable_transaction_builder.rs#L271-L285",
+          "what": "pay_sui and transfer_sui build SplitCoins from the gas coin plus TransferObjects; pay_all_sui transfers the gas coin itself"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/onchain-finance/asset-custody/address-balances",
+          "what": "an address balance is a per-address, per-coin-type value beside Coin<T> objects; paying gas from it uses a ValidDuring expiration and a nonce"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/develop/transactions/transaction-auth/address-aliases",
+          "what": "every alias of an address can unilaterally control or take everything the address owns"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/onchain-finance/asset-custody/address-aliases",
+          "what": "a multisig address can add a single-key alias, which then has full sender authority, reducing the address's security to that one key"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/develop/transactions/transaction-lifecycle",
+          "what": "finality typically takes 400-700 ms; epochs change about every 24 hours"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/develop/accessing-data/json-rpc-migration",
+          "what": "JSON-RPC is off on Sui Foundation mainnet full nodes and is being decommissioned; use gRPC or GraphQL"
+        }
+      ],
+      "unverified": [
+        "Whether a gas sponsor can be used together with a MultiSig sender: the source checks the sender and the gas owner independently, but no primary example of a sponsored MultiSig transaction was found."
+      ]
+    },
+    {
+      "id": "sui.multisig/move-call",
+      "name": "Call a Move function from a Sui MultiSig",
+      "area": "family",
+      "family": "sui.multisig",
+      "status": "declared",
+      "summary": "Members whose weights reach the threshold call a Move function as the multisig address, passing it owned, shared or receiving objects. The Sui protocol checks the weights; transactions on shared objects are ordered by consensus.",
+      "effect": {
+        "schema": "muster.effect.sui.multisig.move-call.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the multisig's Sui address, which is the transaction's sender and the function's ctx.sender()"
+          },
+          {
+            "name": "package",
+            "means": "the ID of the Move package called"
+          },
+          {
+            "name": "module",
+            "means": "the module name"
+          },
+          {
+            "name": "function",
+            "means": "the function name (an entry or public function)"
+          },
+          {
+            "name": "type_arguments",
+            "means": "the function's type arguments"
+          },
+          {
+            "name": "arguments",
+            "means": "the pure (non-object) arguments, BCS-encoded, as the room reviewed them"
+          },
+          {
+            "name": "owned_objects",
+            "means": "the multisig's owned objects passed in, each as an ObjectRef (id, version, digest)"
+          },
+          {
+            "name": "shared_objects",
+            "means": "shared objects passed in, each as (id, initial_shared_version, mutable or not)"
+          },
+          {
+            "name": "receiving",
+            "means": "objects sent to the multisig that the call receives, each as an ObjectRef"
+          },
+          {
+            "name": "gas",
+            "means": "the gas payment: owned SUI coin ObjectRefs, or none to pay from the address balance"
+          },
+          {
+            "name": "gas_owner",
+            "means": "who pays gas: the multisig itself, or a sponsor address that must also sign"
+          },
+          {
+            "name": "gas_budget",
+            "means": "the most gas, in MIST, the transaction may spend, at a price at least the epoch's reference gas price"
+          },
+          {
+            "name": "expiration",
+            "means": "None, Epoch(e), or ValidDuring{min_epoch, max_epoch, chain, nonce}; muster would set Epoch(e) to its envelope's expiry"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "weighted: the included members' u8 weights must sum to at least the MultiSigPublicKey's u16 threshold (at most 10 members)",
+        "finality": "external",
+        "domain": "sui.intent.transaction-data.v0"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "sui:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "sui:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "sui-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "sui-rpc",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "sui-multisig-member-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "sui-multisig:<multisig address>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "zklogin-salt-and-prover",
+          "party": "contributor",
+          "class": "infra",
+          "target": "zklogin-prover",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "move-package",
+          "party": "proposer",
+          "class": "address",
+          "target": "sui-package:<package id>",
+          "field": "package"
+        },
+        {
+          "kind": "asset",
+          "name": "owned-objects",
+          "party": "proposer",
+          "class": "asset",
+          "target": "sui-multisig:<multisig address>",
+          "field": "owned_objects"
+        },
+        {
+          "kind": "asset",
+          "name": "sui-for-gas",
+          "party": "proposer",
+          "class": "asset",
+          "target": "sui-multisig:<multisig address>",
+          "field": "gas_budget"
+        },
+        {
+          "kind": "authority",
+          "name": "gas-sponsor-signature",
+          "party": "counterparty",
+          "class": "authority",
+          "target": "sui:<gas_owner>",
+          "field": "gas_owner"
+        }
+      ],
+      "touches": [
+        {
+          "target": "sui:*",
+          "mode": "write"
+        },
+        {
+          "target": "sui-multisig:<multisig address>",
+          "mode": "write"
+        },
+        {
+          "target": "sui-object:<each owned object id>",
+          "mode": "write"
+        },
+        {
+          "target": "sui-shared-object:<each mutable shared object id>",
+          "mode": "write"
+        },
+        {
+          "target": "sui-shared-object:<each read-only shared object id>",
+          "mode": "read"
+        },
+        {
+          "target": "sui-package:<package id>",
+          "mode": "read"
+        },
+        {
+          "target": "sui-object:<gas coin id>",
+          "mode": "write"
+        },
+        {
+          "target": "sui-address-aliases:<multisig address>",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "inputs",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signers",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "args",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "inputs",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Composes the call. Muster reads, through the user's RPC, the package's function signature (so the room reviews typed arguments), each owned object's live ObjectRef, each shared object's initial_shared_version, a gas coin, the epoch and the reference gas price, and records every read with its log position. If the room simulates the call first (a dry run), the RPC provider sees the whole unsigned transaction.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "inputs",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L1222-L1283",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L122-L162",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L1015-L1021",
+            "https://docs.sui.io/develop/transactions/ptbs/prog-txn-blocks"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Each member re-derives the TransactionData from the effect and the recorded reads, checks the bytes match, and signs. A shared object is named by its ID and initial shared version, not its current version, so the signature does not fix the shared object's state at execution.",
+          "signs": "32 bytes: Blake2b-256 over BCS(IntentMessage{intent: [0x00 scope TransactionData, 0x00 version V0, 0x00 app Sui], value: TransactionData::V1{kind: ProgrammableTransaction{inputs: [Pure(each argument), Object(ImmOrOwnedObject(ObjectRef)) for each owned object, Object(SharedObject{id, initial_shared_version, mutability}) for each shared object, Object(Receiving(ObjectRef)) for each received object], commands: [MoveCall{package, module, function, type_arguments, arguments}]}, sender: the multisig address, gas_data: GasData{payment: [gas coin ObjectRef = (id, version, digest)] or [] when gas comes from the address balance, owner: the multisig or a sponsor, price, budget}, expiration: None | Epoch(e) | ValidDuring{min_epoch, max_epoch, min_timestamp, max_timestamp, chain, nonce} | Validity{the same fields plus allowed_proposers}}}). An Ed25519 member signs these 32 bytes (RFC 8032); a secp256k1 or secp256r1 member signs SHA-256 of them (ECDSA, 64-byte r||s, low s, not recoverable); a zkLogin member's ephemeral key signs them and attaches a zero-knowledge proof bound to its max_epoch; a passkey member signs WebAuthn authenticatorData || SHA-256(clientDataJSON), whose challenge is these 32 bytes. There is no account sequence number: the owned objects' versions and digests order the transaction. No chain id is inside unless the expiration is ValidDuring or Validity, whose chain field is the network's genesis checkpoint digest.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "signers",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L766-L778",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/shared-crypto/src/intent.rs#L55-L166",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2548-L2560",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2381-L2387",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2413-L2505",
+            "https://docs.sui.io/develop/transactions/transaction-auth/auth-overview",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/passkey_authenticator.rs#L253-L311",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/zk_login_authenticator.rs#L142-L172",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L122-L162",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L1222-L1283"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "Any member assembles the combined signature: 0x03 || BCS(MultiSig{sigs: one CompressedSignature per included member, in the policy's key order; bitmap: u16 with bit i set for member i; multisig_pk: {pk_map: [(PublicKey, weight)], threshold}}). Muster would include only as many signatures as reach the threshold, so no extra signer is named. It submits the TransactionData bytes and that signature (plus the sponsor's own signature when a sponsor pays gas) through the user's gRPC or GraphQL endpoint. The RPC provider sees the signed transaction first; validators see it next, before it executes. The chain re-derives the address from multisig_pk and checks it equals the sender, verifies every included signature against its key, and requires the weights to reach the threshold; one bad signature fails the whole transaction. A call on a shared object goes through consensus, which orders it among other transactions on that object and assigns the version it reads.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "args",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "inputs",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L481-L495",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L342-L390",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L107-L145",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L146-L310",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L3994-L4003",
+            "https://docs.sui.io/develop/transactions/transaction-auth/multisig",
+            "https://docs.sui.io/develop/accessing-data/json-rpc-migration",
+            "https://docs.sui.io/develop/objects/object-ownership/shared"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "Muster watches for the transaction's effects through the RPC; finality typically takes 400-700 ms. It watches the transaction digest, a Blake2b-256 over a type-name prefix and BCS(TransactionData), which differs from the digest the members signed. Once it executes, the gas coin and every mutated owned input move to a new version, so any other signature collected over the old versions is dead. Transactions on shared objects take longer to finalize than owned-object ones.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://docs.sui.io/develop/transactions/transaction-lifecycle",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L766-L778",
+            "https://docs.sui.io/develop/objects/object-ownership/shared"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an approval over bytes that differ from the TransactionData muster re-derives from the effect and the recorded object reads",
+          "why": "invariant 1 / F-4: refuse on mismatch. Every member signs the same digest, so one different field is a different transaction",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L766-L778",
+            "https://docs.sui.io/develop/transactions/transaction-auth/intent-signing",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2548-L2560"
+          ]
+        },
+        {
+          "what": "a proposal whose owned or receiving object or gas-coin ObjectRef (id, version, digest) is no longer the object's live version when re-read at approve and again at settle",
+          "why": "the chain's rule: an owned input is named by its exact version and digest, and a stale reference is rejected, so signatures over it are worthless",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L122-L162",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2381-L2387",
+            "https://docs.sui.io/develop/transaction-payment/sponsor-txn"
+          ]
+        },
+        {
+          "what": "a second proposal that names an owned-object version (an input or the gas coin) already under collection in the room",
+          "why": "the chain's rule: two different transactions signed over the same owned-object version can equivocate and lock that object until the epoch ends. Muster refuses before anyone signs the second",
+          "evidence": [
+            "https://docs.sui.io/develop/transaction-payment/sponsor-txn"
+          ]
+        },
+        {
+          "what": "signing or submitting after the transaction's expiration epoch, or counting a zkLogin member's signature after its max_epoch",
+          "why": "the chain's rule (TransactionExpired; an expired zkLogin signature is invalid) and invariant 2's expiry",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L3392-L3401",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L3524-L3541",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/zk_login_authenticator.rs#L142-L172"
+          ]
+        },
+        {
+          "what": "calling a proposal ready while the included signatures' weights sum below the threshold, or while a signature's scheme differs from its member's key",
+          "why": "the chain's rule: MultiSig verification fails on insufficient weight and on a signature/key scheme mismatch. Muster counts weights, not heads",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L146-L310"
+          ]
+        },
+        {
+          "what": "signing when an ObjectRef, the epoch, the reference gas price or the chain identifier reached the bytes without a recorded external read naming its source and log position",
+          "why": "invariant 10: the gas coin and every object reference are external reads, and they are inside the signed bytes",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2381-L2387",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L122-L162",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2548-L2560"
+          ]
+        },
+        {
+          "what": "a proposal whose room envelope does not name the Sui network (its chain identifier, the genesis checkpoint digest), the multisig address, the owned-object versions it spends and an expiry",
+          "why": "invariant 2. The chain's bytes carry no chain id unless the expiration is ValidDuring; its binding is implicit, through object references that exist on one network only, so muster binds the network in its own envelope",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2413-L2505",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L3524-L3541",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/digests.rs#L162-L165"
+          ]
+        },
+        {
+          "what": "signing a call whose function signature or shared objects' initial_shared_version was not read from the chain and recorded",
+          "why": "invariant 10 and invariant 1: without the recorded signature the room cannot review typed arguments, and a wrong initial_shared_version names a different object",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L122-L162",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L1222-L1283"
+          ]
+        },
+        {
+          "what": "a call into 0x2::address_alias (enable, add, replace_all) presented as an ordinary call, without the line that each alias it adds becomes a unilateral full owner",
+          "why": "the chain's rule: an alias can sign for the multisig address alone and take everything it owns, which removes the threshold",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-framework/packages/sui-framework/sources/address_alias.move#L50-L101",
+            "https://docs.sui.io/develop/transactions/transaction-auth/address-aliases",
+            "https://docs.sui.io/onchain-finance/asset-custody/address-aliases"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Every member signs the same 32-byte digest over the whole call, its objects, gas and expiration. Muster would re-derive it before offering a signature.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Only where these exact objects exist: the owned inputs' and gas coin's (id, version, digest) tie the signatures to one network and one moment. The bytes name no network unless the expiration is ValidDuring.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The chain counts weights, not heads: the signed members' weights must reach the threshold, and a member whose weight alone meets it can act alone.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Address aliases get around the threshold: each alias of the multisig address can take everything the address owns without the other members. Muster would read the address's AddressAliases object and show every alias.",
+          "credibility": "motivational",
+          "party": "every address in the multisig's alias set, if the multisig ever enabled aliases"
+        },
+        {
+          "claim": "At settle the chain publishes the whole policy (every key, its scheme, its weight, the threshold) and a bitmap of exactly who signed.",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        },
+        {
+          "claim": "The signed bytes fix which shared objects the call uses, not their state: the outcome depends on what consensus orders first on those objects, and on the called package's code.",
+          "credibility": "exposed",
+          "party": "whoever's transactions on the same shared objects consensus orders first, and the called package's author"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L1222-L1283",
+          "what": "Command::MoveCall carries package, module, function, type arguments and arguments; TransferObjects needs objects with store"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L122-L162",
+          "what": "an object input is ImmOrOwnedObject(ObjectRef), SharedObject{id, initial_shared_version, mutability} or Receiving(ObjectRef); a FundsWithdrawal input draws from an address balance"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L1015-L1021",
+          "what": "a ProgrammableTransaction is its inputs plus commands run in order; any command failing fails the whole transaction"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L487-L489",
+          "what": "TransactionKind::ProgrammableTransaction is the user transaction kind"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/shared-crypto/src/intent.rs#L55-L166",
+          "what": "the intent prefix for a user transaction is scope 0, version 0, app Sui 0"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L766-L778",
+          "what": "a user signature is over Blake2b-256(BCS(IntentMessage))"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2548-L2560",
+          "what": "TransactionData::V1 is {kind, sender, gas_data, expiration}"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2413-L2505",
+          "what": "the expiration variants; ValidDuring and Validity carry the chain identifier and a nonce"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/develop/objects/object-ownership/shared",
+          "what": "shared objects go through consensus ordering and take longer to finalize than address-owned objects"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/develop/transactions/ptbs/prog-txn-blocks",
+          "what": "PTB inputs are owned, shared or immutable objects or pure values; GasCoin is special and, with address-balance gas, is a synthetic coin"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L146-L310",
+          "what": "MultiSig verification: address from multisig_pk equals the sender, each signature verified, weights reach the threshold"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-framework/packages/sui-framework/sources/address_alias.move#L50-L101",
+          "what": "address_alias entry functions enable, add, replace_all and remove edit the address's alias set"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/onchain-finance/asset-custody/address-aliases",
+          "what": "a multisig address that adds a single-key alias reduces its effective security to that key"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/develop/transaction-payment/sponsor-txn",
+          "what": "same-version conflicts can equivocate an object until the next epoch"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/develop/transactions/transaction-auth/multisig",
+          "what": "the guide recommends holding privileged capabilities (AdminCap, UpgradeCap, TreasuryCap) under a multisig"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/develop/transactions/transaction-auth/auth-overview",
+          "what": "scheme flags and each scheme's internal hashing"
+        }
+      ]
+    },
+    {
+      "id": "sui.multisig/change-signers",
+      "name": "Move a Sui MultiSig to a new signer set",
+      "area": "family",
+      "family": "sui.multisig",
+      "status": "declared",
+      "summary": "A Sui MultiSig's signers cannot change in place under the registry's route: the room derives a new MultiSigPublicKey and address, and the old policy signs a transaction that moves every owned object and balance to it. Anything not moved stays with the old address, still under the old signers.",
+      "effect": {
+        "schema": "muster.effect.sui.multisig.change-signers.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the old multisig address, which signs the sweep under its old policy"
+          },
+          {
+            "name": "new_members",
+            "means": "the new pk_map: each new member's scheme flag, key (or zkLogin identifier) and u8 weight"
+          },
+          {
+            "name": "new_threshold",
+            "means": "the new u16 threshold"
+          },
+          {
+            "name": "new_address",
+            "means": "the new address, Blake2b-256(0x03 || new threshold || each new member's flag || key || weight)"
+          },
+          {
+            "name": "objects",
+            "means": "every owned object the old address holds, as ObjectRefs read at propose, each marked moved or left behind (and why)"
+          },
+          {
+            "name": "balances",
+            "means": "each coin type's address balance to move, withdrawn and sent to the new address"
+          },
+          {
+            "name": "gas",
+            "means": "the gas payment: an old-address SUI coin (whose remainder can itself be transferred), or its address balance"
+          },
+          {
+            "name": "gas_budget",
+            "means": "the most gas, in MIST, the sweep may spend"
+          },
+          {
+            "name": "expiration",
+            "means": "None, Epoch(e), or ValidDuring{min_epoch, max_epoch, chain, nonce}; muster would set Epoch(e) to its envelope's expiry"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "the OLD policy: the old members' u8 weights must reach the old u16 threshold; each new member discloses their own key",
+        "finality": "external",
+        "domain": "sui.intent.transaction-data.v0"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "sui:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "sui:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "sui-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "sui-rpc",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "sui-multisig-member-key-old",
+          "party": "contributor",
+          "class": "authority",
+          "target": "sui-multisig:<multisig address>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "zklogin-salt-and-prover",
+          "party": "contributor",
+          "class": "infra",
+          "target": "zklogin-prover",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "new-member-keys-and-weights",
+          "party": "counterparty",
+          "class": "authority",
+          "target": "sui-multisig:<new multisig address>",
+          "field": "new_members"
+        },
+        {
+          "kind": "address",
+          "name": "new-multisig-address",
+          "party": "proposer",
+          "class": "address",
+          "target": "sui-multisig:<new multisig address>",
+          "field": "new_address"
+        },
+        {
+          "kind": "asset",
+          "name": "old-address-objects",
+          "party": "proposer",
+          "class": "asset",
+          "target": "sui-multisig:<multisig address>",
+          "field": "objects"
+        },
+        {
+          "kind": "asset",
+          "name": "sui-for-gas",
+          "party": "proposer",
+          "class": "asset",
+          "target": "sui-multisig:<multisig address>",
+          "field": "gas_budget"
+        }
+      ],
+      "touches": [
+        {
+          "target": "sui:*",
+          "mode": "write"
+        },
+        {
+          "target": "sui-multisig:<multisig address>",
+          "mode": "write"
+        },
+        {
+          "target": "sui-multisig:<new multisig address>",
+          "mode": "write"
+        },
+        {
+          "target": "sui-object:<each moved object id>",
+          "mode": "write"
+        },
+        {
+          "target": "sui-object:<gas coin id>",
+          "mode": "write"
+        },
+        {
+          "target": "sui-address-aliases:<multisig address>",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "inputs",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signers",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "inputs",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payee",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Proposes the new key list and threshold; muster derives the new address and checks the list as the derive action does. Muster reads every object the old address owns, each coin type's address balance, and the old address's AddressAliases object, and records each read. It marks which objects TransferObjects can move (those with store) and which must stay or need their own module's transfer call. If the list is too long for one transaction, the sweep becomes several proposals, each over different objects.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "policy",
+              "observer": "room-member"
+            },
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "inputs",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/base_types.rs#L978-L1008",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L498-L580",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L1222-L1283",
+            "https://docs.sui.io/onchain-finance/asset-custody/address-balances",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/address_alias.rs"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Each new member confirms their own key and weight in the new list. Each old member re-derives the new address and the sweep's TransactionData from the effect and the recorded reads, checks the bytes match, and signs under the old policy. Room membership and the signer set are separate: a new signer admitted to the room reads only from the epoch they joined.",
+          "signs": "32 bytes: Blake2b-256 over BCS(IntentMessage{intent: [0x00 scope TransactionData, 0x00 version V0, 0x00 app Sui], value: TransactionData::V1{kind: ProgrammableTransaction{inputs: [Pure(new address), Object(ImmOrOwnedObject(ObjectRef)) for each object moved, FundsWithdrawal for each address balance moved], commands: [TransferObjects([every movable object, optionally GasCoin], new address), for each balance: 0x2::balance::redeem_funds then 0x2::balance::send_funds to the new address]}, sender: the multisig address, gas_data: GasData{payment: [gas coin ObjectRef = (id, version, digest)] or [] when gas comes from the address balance, owner: the multisig or a sponsor, price, budget}, expiration: None | Epoch(e) | ValidDuring{min_epoch, max_epoch, min_timestamp, max_timestamp, chain, nonce} | Validity{the same fields plus allowed_proposers}}}). An Ed25519 member signs these 32 bytes (RFC 8032); a secp256k1 or secp256r1 member signs SHA-256 of them (ECDSA, 64-byte r||s, low s, not recoverable); a zkLogin member's ephemeral key signs them and attaches a zero-knowledge proof bound to its max_epoch; a passkey member signs WebAuthn authenticatorData || SHA-256(clientDataJSON), whose challenge is these 32 bytes. There is no account sequence number: the owned objects' versions and digests order the transaction. No chain id is inside unless the expiration is ValidDuring or Validity, whose chain field is the network's genesis checkpoint digest.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "signers",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L766-L778",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/shared-crypto/src/intent.rs#L55-L166",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2548-L2560",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2381-L2387",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2413-L2505",
+            "https://docs.sui.io/develop/transactions/transaction-auth/auth-overview",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/passkey_authenticator.rs#L253-L311",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/zk_login_authenticator.rs#L142-L172",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L1222-L1283",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/programmable_transaction_builder.rs#L271-L285",
+            "https://docs.sui.io/onchain-finance/asset-custody/address-balances"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "Any member assembles the combined signature: 0x03 || BCS(MultiSig{sigs: one CompressedSignature per included member, in the policy's key order; bitmap: u16 with bit i set for member i; multisig_pk: {pk_map: [(PublicKey, weight)], threshold}}). Muster would include only as many signatures as reach the threshold, so no extra signer is named. It submits the TransactionData bytes and that signature (plus the sponsor's own signature when a sponsor pays gas) through the user's gRPC or GraphQL endpoint. The RPC provider sees the signed transaction first; validators see it next, before it executes. The chain re-derives the address from multisig_pk and checks it equals the sender, verifies every included signature against its key, and requires the weights to reach the threshold; one bad signature fails the whole transaction. The sweep publishes the old policy and who signed it, and links the old address to the new one in public. The new policy stays unpublished until the new address first spends.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "inputs",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payee",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L481-L495",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L342-L390",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L107-L145",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L146-L310",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L3994-L4003",
+            "https://docs.sui.io/develop/transactions/transaction-auth/multisig",
+            "https://docs.sui.io/develop/accessing-data/json-rpc-migration"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "Muster watches for the transaction's effects through the RPC; finality typically takes 400-700 ms. It watches the transaction digest, a Blake2b-256 over a type-name prefix and BCS(TransactionData), which differs from the digest the members signed. Once it executes, the gas coin and every mutated owned input move to a new version, so any other signature collected over the old versions is dead. The room then points its account at the new address. Objects left behind, and anything sent to the old address later, stay under the old policy. The old address's alias set, if it has one, stays with the old address.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://docs.sui.io/develop/transactions/transaction-lifecycle",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L766-L778",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-framework/packages/sui-framework/sources/address_alias.move#L50-L101"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a new address that differs from the address muster re-derives from the new key list, weights and threshold, or a new list the chain would reject (more than 10 keys, a zero weight, a duplicate key, a threshold the weights cannot reach)",
+          "why": "invariant 1 (re-derive or refuse) and the chain's MultiSigPublicKey validation: funds moved to a wrong or invalid policy are lost to the room",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/base_types.rs#L978-L1008",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L498-L580"
+          ]
+        },
+        {
+          "what": "a new member's slot whose key that member has not disclosed and confirmed in the room",
+          "why": "invariant 9: what the client says about a member is only what that member disclosed; each slot carries weight toward the new threshold",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L146-L310"
+          ]
+        },
+        {
+          "what": "a sweep that omits owned objects or balances read at propose without naming each as left behind, or that puts an object without store into TransferObjects",
+          "why": "invariant 1: the room reviews what stays under the old signers; the chain's rule: TransferObjects moves only objects with store, and one failing command fails the whole transaction",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L1222-L1283",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L1015-L1021"
+          ]
+        },
+        {
+          "what": "an approval over bytes that differ from the TransactionData muster re-derives from the effect and the recorded object reads",
+          "why": "invariant 1 / F-4: refuse on mismatch. Every member signs the same digest, so one different field is a different transaction",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L766-L778",
+            "https://docs.sui.io/develop/transactions/transaction-auth/intent-signing",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2548-L2560"
+          ]
+        },
+        {
+          "what": "a proposal whose moved object or gas-coin ObjectRef (id, version, digest) is no longer the object's live version when re-read at approve and again at settle",
+          "why": "the chain's rule: an owned input is named by its exact version and digest, and a stale reference is rejected, so signatures over it are worthless",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L122-L162",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2381-L2387",
+            "https://docs.sui.io/develop/transaction-payment/sponsor-txn"
+          ]
+        },
+        {
+          "what": "a second proposal that names an owned-object version (an input or the gas coin) already under collection in the room",
+          "why": "the chain's rule: two different transactions signed over the same owned-object version can equivocate and lock that object until the epoch ends. Muster refuses before anyone signs the second",
+          "evidence": [
+            "https://docs.sui.io/develop/transaction-payment/sponsor-txn"
+          ]
+        },
+        {
+          "what": "signing or submitting after the transaction's expiration epoch, or counting a zkLogin member's signature after its max_epoch",
+          "why": "the chain's rule (TransactionExpired; an expired zkLogin signature is invalid) and invariant 2's expiry",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L3392-L3401",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L3524-L3541",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/zk_login_authenticator.rs#L142-L172"
+          ]
+        },
+        {
+          "what": "calling a proposal ready while the included signatures' weights sum below the threshold, or while a signature's scheme differs from its member's key",
+          "why": "the chain's rule: MultiSig verification fails on insufficient weight and on a signature/key scheme mismatch. Muster counts weights, not heads",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L146-L310"
+          ]
+        },
+        {
+          "what": "signing when an ObjectRef, the epoch, the reference gas price or the chain identifier reached the bytes without a recorded external read naming its source and log position",
+          "why": "invariant 10: the gas coin and every object reference are external reads, and they are inside the signed bytes",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2381-L2387",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L122-L162",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2548-L2560"
+          ]
+        },
+        {
+          "what": "a proposal whose room envelope does not name the Sui network (its chain identifier, the genesis checkpoint digest), the multisig address, the owned-object versions it spends and an expiry",
+          "why": "invariant 2. The chain's bytes carry no chain id unless the expiration is ValidDuring; its binding is implicit, through object references that exist on one network only, so muster binds the network in its own envelope",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2413-L2505",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L3524-L3541",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/digests.rs#L162-L165"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The sweep is signed under the old policy, and the new address is only the hash of the new key list until objects arrive. Every member re-derives it before signing.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The old address still answers to the old policy: anything left behind, or sent to it later, stays under the old signers.",
+          "credibility": "exposed",
+          "party": "the old signer set"
+        },
+        {
+          "claim": "The sweep publishes the old policy, the old signers and a public link from the old address to the new one; the new policy becomes public at the new address's first spend.",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        },
+        {
+          "claim": "Objects without store cannot move by TransferObjects. Muster would list them as left behind, never imply they moved.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Aliases of the old address stay attached to it, so each alias keeps full control of whatever remains there.",
+          "credibility": "motivational",
+          "party": "every address in the old address's alias set"
+        },
+        {
+          "claim": "Sui also allows an in-place route: replace the old address's alias set with the new MultiSig address, which keeps the address. This action is the new-address route the registry declares; an alias change is a move call with its own bypass line.",
+          "credibility": "not-applicable"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/base_types.rs#L978-L1008",
+          "what": "a MultiSig address is the hash of its exact key list, weights and threshold, so a different signer set is a different address"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L498-L580",
+          "what": "MultiSigPublicKey validation rules the new list must pass"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L1222-L1283",
+          "what": "TransferObjects sends objects that have store to an address; SplitCoins and MergeCoins act on coins"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L1015-L1021",
+          "what": "commands run in order and one failure fails the whole transaction"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L122-L162",
+          "what": "owned inputs are named by ObjectRef; a FundsWithdrawal input draws from an address balance"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/programmable_transaction_builder.rs#L271-L285",
+          "what": "pay_all_sui transfers the gas coin itself (TransferObjects([GasCoin], recipient))"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/onchain-finance/asset-custody/address-balances",
+          "what": "an address balance is a per-address, per-coin-type value beside Coin<T> objects; balance::send_funds and redeem_funds move it"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/address_alias.rs",
+          "what": "an address's AddressAliases object lives at an ID derived from 0xa and the address, so muster can read it"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-framework/packages/sui-framework/sources/address_alias.move#L50-L101",
+          "what": "the alias set belongs to the address that enabled it; replace_all overwrites it"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/onchain-finance/asset-custody/address-aliases",
+          "what": "key rotation without asset migration: add the new key's address as an alias and optionally remove the old one"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-protocol-config/src/lib.rs#L4540-L4543",
+          "what": "protocol version 116 turns on address aliases on every network, mainnet included"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/shared-crypto/src/intent.rs#L55-L166",
+          "what": "the intent prefix for a user transaction is scope 0, version 0, app Sui 0"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L766-L778",
+          "what": "a user signature is over Blake2b-256(BCS(IntentMessage))"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L146-L310",
+          "what": "MultiSig verification: address equals sender, each signature verified, weights reach the threshold"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/develop/transaction-payment/sponsor-txn",
+          "what": "same-version conflicts can equivocate an object until the next epoch"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/develop/transactions/transaction-auth/multisig",
+          "what": "the official multisig guide: a multisig address comes from the keys, weights and threshold"
+        }
+      ],
+      "unverified": [
+        "The largest sweep one transaction can carry: the protocol config caps input objects and PTB commands per transaction, but the current mainnet values were not checked.",
+        "Whether party-owned and other consensus-owned objects held by the old address (the AddressAliases object is party-owned) can be moved by the same sweep."
+      ]
+    }
+  ]
+}
