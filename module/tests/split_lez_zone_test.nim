@@ -164,4 +164,47 @@ block:
   doAssert aliceW.receivedNotes(aliceKs).len == 1, "only Bob's payment ever arrived"
   echo "5. two notes that only together cover Carol's share: refused, since a transfer draws on one note OK"
 
+# ── 6. the scan keeps moving while a private split waits on me (exo-270a) ────────
+# A real wallet's scan is slow (lez_core stores after every block: ~15ms a block on
+# testnet), so it must not start only when a payment or a confirmation needs it. What a
+# pump keys on: the splits where a part still waits on ME — mine to pay, or mine to
+# confirm — and it steps the scan only while no proof is running in my wallet.
+block:
+  let ids = proc(ks: Keystore): seq[string] =
+    sync()
+    for v in partsAwaiting(r.alice.roomEvents(), splitFor, myIdentity(ks)): result.add v.id
+  doAssert ids(aliceKs) == @[id], "Alice still has Carol's share to confirm"
+  doAssert ids(bobKs).len == 0, "Bob's share is paid: nothing waits on him"
+  doAssert ids(room3CarolKs) == @[id], "Carol has hers to pay"
+  doAssert partsAwaiting(r.alice.roomEvents(), splitFor, "ff".repeat(32)).len == 0, "a stranger is awaited by nothing"
+  # a split every part of which is confirmed waits on no one
+  let solo = splitEffectJson(Chain, "LEZ", "200000000", alice, payTo,
+                             evenShares("200000000", alice, @[bob], distinctAmounts = true), "a coffee")
+  let sid = liveProposeIntent(r.alice, aliceKs, splitFor, Policy, solo, int64(Now), 2,
+                              account = Chain & ":" & alice, ttlSec = Ttl)
+  doAssert ids(bobKs) == @[sid], "a proposed split waits on its debtor from the start"
+  doAssert ids(aliceKs).len == 2, "…and on its creditor"
+  doAssert liveContribute(r.bob, bobKs, splitFor, sid, "", "", bindCtx(), Now) == "executable"
+  bobCore.asyncTransfers = false
+  let (o, pp) = liveSettlePartSend(r.bob, bobKs, splitFor, sid, newLezPartSeam(Chain, bobW, bobKs), Now)
+  doAssert o == "", o
+  var st = liveSettlePartComplete(r.bob, bobKs, splitFor, newLezPartSeam(Chain, bobW, bobKs), pp)
+  if st.startsWith("unconfirmed"): st = liveSettlePartComplete(r.bob, bobKs, splitFor, newLezPartSeam(Chain, bobW, bobKs), pp)
+  doAssert liveConfirmParts(r.alice, aliceKs, splitFor, newLezPartSeam(Chain, aliceW, aliceKs)) == @[sid & "/" & partName(bob)]
+  doAssert sid notin ids(aliceKs) and sid notin ids(bobKs), "a final split waits on no one"
+
+  # the step itself: bounded, and never behind a proof
+  bobCore.asyncTransfers = true
+  let pub = form(bobW, bobKs, afPublic)
+  doAssert bobCore.transfer(tfPublic, pub.id, form(aliceW, aliceKs, afPublic).id, "1").txHash == "pending"
+  bobCore.lagSyncs = 1
+  var step = bobW.scanStep()
+  doAssert not step.ran and bobCore.lagSyncs == 1, "no scan while a proof runs in the same wallet"
+  while not bobCore.pollTransfer().done: discard
+  step = bobW.scanStep()
+  doAssert step.ran and step.code == LezSyncBehind, "a step: still catching up"
+  step = bobW.scanStep()
+  doAssert step.ran and step.code == LezSyncOk, "…then at the tip"
+  echo "6. the scan follows the splits that wait on me — to pay or to confirm — and never runs behind a proof OK"
+
 echo "split_lez_zone_test: all OK"
