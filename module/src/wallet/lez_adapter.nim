@@ -23,6 +23,9 @@ import ./lez_readiness
 import ../crypto/keystore
 
 const ChainId* = "lez:testnet"
+const
+  PublicLabel* = "muster-public"       ## the wallet's name for the public account muster made
+  ShieldedLabel* = "muster-shielded"   ## …and for its shielded account (the key node it shares)
 
 type
   LezAdapter* = ref object of ChainAdapter
@@ -71,11 +74,25 @@ method securityLevel*(a: LezAdapter): SecurityLevel =
     axisLevel(rungReal, "shielded rail — private/shield/deshield hide amount and parties"))
 
 method accounts*(a: LezAdapter, ks: Keystore): seq[Account] =
-  ## One public + one private account from this identity. Created once and cached —
-  ## the LEZ wallet persists them; re-creating per call would mint new ids each time.
+  ## One public + one private account from this identity. The LEZ wallet persists, and
+  ## names them itself (PublicLabel / ShieldedLabel), so a relaunch finds the same two —
+  ## a creditor's payTo does not move, and no account is minted (or, public, registered
+  ## on chain) per start (exo-884). Only a missing one is created, then labelled.
   if a.cached.len == 0:
-    let pub = a.core.createAccount(lakPublic)
-    let prv = a.core.createAccount(lakPrivate)
+    let held = a.core.listAccounts()
+    proc own(label: string, kind: LezAccountKind): LezAccount =
+      let id = a.core.labelled(label)
+      if id.len > 0:
+        for la in held:
+          if la.id == id and la.kind == kind: return la
+    var pub = own(PublicLabel, lakPublic)
+    if pub.id.len == 0:
+      pub = a.core.createAccount(lakPublic)
+      discard a.core.labelAccount(PublicLabel, pub)
+    var prv = own(ShieldedLabel, lakPrivate)
+    if prv.id.len == 0:
+      prv = a.core.createAccount(lakPrivate)
+      discard a.core.labelAccount(ShieldedLabel, prv)
     a.keyNode[prv.id] = prv
     a.cached = @[
       Account(chain: ChainId, form: afPublic, id: pub.id),

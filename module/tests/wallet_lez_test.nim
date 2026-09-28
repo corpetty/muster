@@ -194,13 +194,14 @@ block:
 # not mint (and, for a public one, register on chain) a fresh pair each start, which
 # would move a creditor's payTo and grow the wallet by two accounts per launch.
 block:
-  let core = newFakeLezCore()
+  let chain = newFakeLezChain()
+  let core = newFakeLezCore(chain)
   let first = newLezAdapter(core)
   let accs = first.accounts(ks)
   let payTo = first.receiveAddresses(ks)
   doAssert core.labelled("muster-public") == accs[0].id and core.labelled("muster-shielded") == accs[1].id,
            "the wallet itself names muster's two accounts"
-  core.fund(accs[1].id, "700")
+  chain.fund(accs[1].id, "700")
   let relaunched = newLezAdapter(core)          # same wallet, a new process
   let again = relaunched.accounts(ks)
   doAssert again.len == 2 and again[0] == accs[0] and again[1] == accs[1],

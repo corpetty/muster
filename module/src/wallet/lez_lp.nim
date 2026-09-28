@@ -126,6 +126,20 @@ method listAccounts*(c: LpLezCore): seq[LezAccount] =
       if a.id.len > 0: result.add a
   except CatchableError: discard
 
+method labelled*(c: LpLezCore, label: string): string =
+  ## resolve_label answers "Public/<hex>" or "Private/<hex>", "" when the label is unknown.
+  let r = c.rawCall("resolve_label", args(%label), kReadMs)
+  for prefix in ["Public/", "Private/"]:
+    if r.startsWith(prefix): return r[prefix.len .. ^1]
+  ""
+
+method labelAccount*(c: LpLezCore, label: string, account: LezAccount): bool =
+  ## add_label answers success even when the wallet refused it (lez_core 0.4.0), so the
+  ## label counts only once it resolves to this account; saved, so it outlasts the process.
+  discard c.rawCall("add_label", args(%label, %account.id, %(account.kind == lakPrivate)), kReadMs)
+  c.save()
+  c.labelled(label) == account.id
+
 method getBalanceRaw*(c: LpLezCore, accountId: string, isPublic: bool): string =
   ## get_balance(id, is_public) → a DECIMAL string; "" on an unanswerable read.
   c.rawCall("get_balance", args(%accountId, %isPublic), kReadMs)

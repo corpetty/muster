@@ -109,6 +109,17 @@ method sync*(c: LezCore): int {.base, gcsafe.} =
   ## `synced` / `tip` say where it got to.
   raise newException(WalletError, "LezCore.sync is abstract")
 
+method labelled*(c: LezCore, label: string): string {.base, gcsafe.} =
+  ## The id of the account a label names in THIS wallet, "" if none. Labels live in the
+  ## wallet's own storage (lez_core add_label / resolve_label), so they outlast the
+  ## process — how a relaunch finds the accounts it made (exo-884). A core without labels
+  ## answers "", and the adapter creates accounts as before.
+  ""
+
+method labelAccount*(c: LezCore, label: string, account: LezAccount): bool {.base, gcsafe.} =
+  ## Name one of this wallet's accounts, persistently; true once the label resolves to it.
+  false
+
 method claimPinata*(c: LezCore, pinataId, account: string): LezResult {.base, gcsafe.} =
   ## The faucet. The real module takes a pre-solved 16-byte-LE PoW `solution` — the
   ## concrete impl reads the pinata challenge (difficulty+seed), solves it (pinataSolve),
@@ -176,6 +187,7 @@ type
     chain: FakeLezChain
     shared: bool                           ## true = a wallet on a shared chain
     accounts: seq[LezAccount]              ## created + discovered accounts (THIS wallet's)
+    labels: Table[string, string]          ## label -> account id, as the wallet stores them
     failNextTransfer*: bool                ## test hook: force a success:false envelope
     lagSyncs*: int                         ## test hook: the next n scans are still catching up
     asyncTransfers*: bool                  ## test hook: prove in the background, as LpLezCore does
@@ -220,6 +232,17 @@ method createAccount*(c: FakeLezCore, kind: LezAccountKind): LezAccount =
   a
 
 method listAccounts*(c: FakeLezCore): seq[LezAccount] = c.accounts
+
+method labelled*(c: FakeLezCore, label: string): string = c.labels.getOrDefault(label, "")
+
+method labelAccount*(c: FakeLezCore, label: string, account: LezAccount): bool =
+  ## As the wallet does: a label is taken once, and only for an account the wallet holds.
+  if label in c.labels: return c.labels[label] == account.id
+  for a in c.accounts:
+    if a.id == account.id:
+      c.labels[label] = account.id
+      return true
+  false
 
 method getBalanceRaw*(c: FakeLezCore, accountId: string, isPublic: bool): string =
   ## Sentinel: an account the ledger doesn't hold returns "" (an unanswerable read),
