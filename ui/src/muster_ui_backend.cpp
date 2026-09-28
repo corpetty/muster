@@ -923,13 +923,21 @@ void MusterUiBackend::onContextReady()
                 connect(ft, &QTimer::timeout, this, [this, ft, pinata]() {
                     static int stage = 0;
                     static QString pub, keyNode;
-                    static qint64 retryAt = 0;
+                    static qint64 retryAt = 0, claimedAt = 0;
                     const qint64 now = QDateTime::currentSecsSinceEpoch();
                     if (now < retryAt) return;
                     const QString lez = QStringLiteral("lez:testnet");
                     if (stage == 0) {                   // the accounts, and one faucet claim
-                        const QString r = modules().muster_module.wallet_lez_setup(pinata);
-                        qInfo() << "[muster_ui] LEZFUND setup ->" << r;
+                        // The claim solves the faucet's proof of work on the module thread
+                        // (seconds, sometimes more than this call waits): an EMPTY answer is a
+                        // claim still in flight, not a refusal — only an error is retried.
+                        QString r;
+                        if (claimedAt == 0) {
+                            r = modules().muster_module.wallet_lez_setup(pinata);
+                            qInfo() << "[muster_ui] LEZFUND setup ->" << r;
+                            if (r.contains("\"error\"")) { retryAt = now + 30; return; }
+                            claimedAt = now;
+                        }
                         for (const auto &v : QJsonDocument::fromJson(
                                  modules().muster_module.wallet_accounts().toUtf8()).array()) {
                             const QJsonObject a = v.toObject();
@@ -938,7 +946,7 @@ void MusterUiBackend::onContextReady()
                             if (a.value("form").toString() == "shielded") keyNode = a.value("share").toString();
                         }
                         qInfo() << "[muster_ui] LEZFUND public" << pub << "key node" << keyNode.left(24);
-                        if (r.contains("\"error\"") || pub.isEmpty() || keyNode.isEmpty()) { retryAt = now + 30; return; }
+                        if (pub.isEmpty() || keyNode.isEmpty()) return;
                         stage = 1;
                     } else if (stage == 1) {            // the claim lands when a block commits
                         QString raw;
@@ -949,7 +957,11 @@ void MusterUiBackend::onContextReady()
                                 raw = b.value("raw").toString();
                         }
                         qInfo() << "[muster_ui] LEZFUND public balance" << raw;
-                        if (raw.isEmpty() || raw == "0") return;
+                        if (raw.isEmpty() || raw == "0") {
+                            // a claim lands when a block commits; ten minutes of nothing is a lost one
+                            if (now - claimedAt > 600) { claimedAt = 0; stage = 0; }
+                            return;
+                        }
                         const QString r = modules().muster_module.wallet_send(lez, pub, keyNode, QStringLiteral("LEZ"), raw);
                         qInfo() << "[muster_ui] LEZFUND shield" << raw << "->" << r;
                         if (r.contains("\"error\"")) { retryAt = now + 30; return; }
