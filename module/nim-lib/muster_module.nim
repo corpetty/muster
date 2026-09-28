@@ -655,6 +655,9 @@ proc musterCoordinateJoin(topic: string): string =
     gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(ks), ctopic)
     gSessions[ctopic] = gSession
   gTopic = ctopic
+  # Announce the room's join key (exo-661.7), so someone who knows only the topic can
+  # ask to join without naming themselves on it. Rate-limited in the session.
+  gSession.announceBeacon()
   # Joining a room clears any invite to it, permanently (persisted): you're in it now,
   # so it should never show as a pending invitation again, this session or after a restart.
   clearInvite(ctopic)
@@ -690,10 +693,12 @@ proc inboxTopicFor(chatIdHex: string): string =
 proc inboxSessionFor(ctopic: string): CoordinationSession =
   ## Get/create a session on an inbox topic. Tracked in gSessions (so it shares the one
   ## delivery node) but flagged an inbox, so coordinate_conversations never lists it as
-  ## a room. Epoch crypto rides along unused — invites are sealed to a pubkey, not the epoch.
+  ## a room. Invites are sealed to a pubkey, not an epoch, so the session holds no epoch
+  ## key (a joiner's crypto): it never announces a join key or answers a beacon request,
+  ## which would tell the topic when its owner is online (exo-661.7).
   gInboxTopics.incl ctopic
   if ctopic in gSessions: return gSessions[ctopic]
-  let s = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(moduleKeystore()), ctopic)
+  let s = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochJoiner(moduleKeystore()), ctopic)
   gSessions[ctopic] = s
   s
 
@@ -2283,9 +2288,13 @@ proc musterCoordinateRequestJoin(): string =
   # A join request is scoped to the ROOM (no account yet — a joiner has disclosed
   # nothing); the admitter checks the binding's signer against the room's disclosed
   # accounts' signers (coordinate_pending.bindsOwner), never a module-global Safe.
-  gSession.requestJoin(moduleKeystore().bindingFor(
-    LinkContext(account: gTopic, slot: "0", expiry: uint64(epochTime()) + 86_400)))
-  "ok"
+  # Sealed to the room's announced join key (exo-661.7): only its members read who asks.
+  gSession.poll()
+  if gSession.requestJoin(moduleKeystore().bindingFor(
+      LinkContext(account: gTopic, slot: "0", expiry: uint64(epochTime()) + 86_400))):
+    "ok"
+  else:
+    "waiting-for-room-key"
 
 proc musterContacts(): string =
   ## The address book — [{identity, alias, address}].

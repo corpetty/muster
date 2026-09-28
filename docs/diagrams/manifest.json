@@ -23,7 +23,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
+          "sha256": "cacc17caf026dcb0b7f00231ce09afdb7eca3c79afd850cc73e03b6e10bc6dae",
           "note": "the specified build, the three hosts, ADR-008"
         },
         {
@@ -79,7 +79,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
+          "sha256": "cacc17caf026dcb0b7f00231ce09afdb7eca3c79afd850cc73e03b6e10bc6dae",
           "note": "F-4/FS-6 as specified-and-unbuilt, behind the contracting row's gap"
         }
       ],
@@ -147,7 +147,7 @@
         {
           "path": "docs/02-implementation-plan.md",
           "note": "F-4/FS-6 and F-20 as specified-and-unbuilt, behind the step-04 approval flag and the footer",
-          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030"
+          "sha256": "cacc17caf026dcb0b7f00231ce09afdb7eca3c79afd850cc73e03b6e10bc6dae"
         }
       ],
       "evidence": [
@@ -216,12 +216,12 @@
       "sources": [
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
+          "sha256": "cacc17caf026dcb0b7f00231ce09afdb7eca3c79afd850cc73e03b6e10bc6dae",
           "note": "ADR-008, the LIDL contract layer, the Nim gap and the four bridge functions"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
+          "sha256": "9242f09dffa1aa6df8f1b391604fb0c3a8ccd0e525ee4d18066be1a99c833027",
           "note": "the two rules the C header states, and the never-hand-write-what-the-contract-generates rule"
         },
         {
@@ -304,7 +304,7 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "5d01c2402657b5949b1f45abf2694af870366ec5f29ae75db63614b44100f0d6",
+          "sha256": "87872977e2d2573941f0841034d95693c74eee6c15d8726598f87396f563c63e",
           "note": "the normative requirement text and its ids"
         },
         {
@@ -314,7 +314,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
+          "sha256": "cacc17caf026dcb0b7f00231ce09afdb7eca3c79afd850cc73e03b6e10bc6dae",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -346,17 +346,17 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "5d01c2402657b5949b1f45abf2694af870366ec5f29ae75db63614b44100f0d6",
+          "sha256": "87872977e2d2573941f0841034d95693c74eee6c15d8726598f87396f563c63e",
           "note": "the normative requirement text and its ids"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
+          "sha256": "cacc17caf026dcb0b7f00231ce09afdb7eca3c79afd850cc73e03b6e10bc6dae",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
+          "sha256": "9242f09dffa1aa6df8f1b391604fb0c3a8ccd0e525ee4d18066be1a99c833027",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -388,12 +388,12 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "5d01c2402657b5949b1f45abf2694af870366ec5f29ae75db63614b44100f0d6",
+          "sha256": "87872977e2d2573941f0841034d95693c74eee6c15d8726598f87396f563c63e",
           "note": "the normative requirement text and its ids"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
+          "sha256": "cacc17caf026dcb0b7f00231ce09afdb7eca3c79afd850cc73e03b6e10bc6dae",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -438,12 +438,12 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "5d01c2402657b5949b1f45abf2694af870366ec5f29ae75db63614b44100f0d6",
+          "sha256": "87872977e2d2573941f0841034d95693c74eee6c15d8726598f87396f563c63e",
           "note": "F-20 and FS-10, the normative requirement text and its ids"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
+          "sha256": "9242f09dffa1aa6df8f1b391604fb0c3a8ccd0e525ee4d18066be1a99c833027",
           "note": "invariant 10, and invariant 1 whose blind spot the figure draws"
         },
         {
@@ -489,17 +489,17 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "5d01c2402657b5949b1f45abf2694af870366ec5f29ae75db63614b44100f0d6",
+          "sha256": "87872977e2d2573941f0841034d95693c74eee6c15d8726598f87396f563c63e",
           "note": "the normative requirement text and its ids"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
+          "sha256": "cacc17caf026dcb0b7f00231ce09afdb7eca3c79afd850cc73e03b6e10bc6dae",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
+          "sha256": "9242f09dffa1aa6df8f1b391604fb0c3a8ccd0e525ee4d18066be1a99c833027",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -514,7 +514,7 @@
         },
         {
           "path": "module/src/coordination/session.nim",
-          "sha256": "d17bb74a6ef678aa7641cc4b821c3950350f7626cbc81bd9efe57d7f04831b2c",
+          "sha256": "e808aeeb40f29a44be58b2d959416eb0de4e0e361715589a0b8cbbeb40ed3478",
           "note": "each event sealed to the room under the epoch key"
         },
         {
@@ -546,17 +546,17 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "5d01c2402657b5949b1f45abf2694af870366ec5f29ae75db63614b44100f0d6",
+          "sha256": "87872977e2d2573941f0841034d95693c74eee6c15d8726598f87396f563c63e",
           "note": "the normative requirement text and its ids"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
+          "sha256": "cacc17caf026dcb0b7f00231ce09afdb7eca3c79afd850cc73e03b6e10bc6dae",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "module/src/crypto/epoch_crypto.nim",
-          "sha256": "bb2c114bae579e7deb5c5c686c16b71323011ba98f517adee26767ce959446ca",
+          "sha256": "d33054892b31a8465b3ff9ef3c39f2b9bfc2496d932693e1075a9070496576bd",
           "note": "EpochCrypto: sealed-box key wrap; add, admit and removal each open a new epoch"
         }
       ],
@@ -583,17 +583,17 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "5d01c2402657b5949b1f45abf2694af870366ec5f29ae75db63614b44100f0d6",
+          "sha256": "87872977e2d2573941f0841034d95693c74eee6c15d8726598f87396f563c63e",
           "note": "the normative requirement text and its ids"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
+          "sha256": "cacc17caf026dcb0b7f00231ce09afdb7eca3c79afd850cc73e03b6e10bc6dae",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
+          "sha256": "9242f09dffa1aa6df8f1b391604fb0c3a8ccd0e525ee4d18066be1a99c833027",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -631,12 +631,12 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "5d01c2402657b5949b1f45abf2694af870366ec5f29ae75db63614b44100f0d6",
+          "sha256": "87872977e2d2573941f0841034d95693c74eee6c15d8726598f87396f563c63e",
           "note": "the normative requirement text and its ids"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
+          "sha256": "cacc17caf026dcb0b7f00231ce09afdb7eca3c79afd850cc73e03b6e10bc6dae",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -668,17 +668,17 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "5d01c2402657b5949b1f45abf2694af870366ec5f29ae75db63614b44100f0d6",
+          "sha256": "87872977e2d2573941f0841034d95693c74eee6c15d8726598f87396f563c63e",
           "note": "the normative requirement text and its ids"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
+          "sha256": "cacc17caf026dcb0b7f00231ce09afdb7eca3c79afd850cc73e03b6e10bc6dae",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
+          "sha256": "9242f09dffa1aa6df8f1b391604fb0c3a8ccd0e525ee4d18066be1a99c833027",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -1064,17 +1064,17 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "5d01c2402657b5949b1f45abf2694af870366ec5f29ae75db63614b44100f0d6",
+          "sha256": "87872977e2d2573941f0841034d95693c74eee6c15d8726598f87396f563c63e",
           "note": "F-Design chain-agnostic settlement, F-10, invariant 8, FS-4"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
+          "sha256": "cacc17caf026dcb0b7f00231ce09afdb7eca3c79afd850cc73e03b6e10bc6dae",
           "note": "where the wallet is built and its accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
+          "sha256": "9242f09dffa1aa6df8f1b391604fb0c3a8ccd0e525ee4d18066be1a99c833027",
           "note": "the src/wallet layout and the reuse posture"
         },
         {
@@ -1120,17 +1120,17 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "5d01c2402657b5949b1f45abf2694af870366ec5f29ae75db63614b44100f0d6",
+          "sha256": "87872977e2d2573941f0841034d95693c74eee6c15d8726598f87396f563c63e",
           "note": "invariant 8 (untrusted RPC), F-10 (facts render at the grade they can be checked to)"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
+          "sha256": "cacc17caf026dcb0b7f00231ce09afdb7eca3c79afd850cc73e03b6e10bc6dae",
           "note": "the verified-reads work and its status"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
+          "sha256": "9242f09dffa1aa6df8f1b391604fb0c3a8ccd0e525ee4d18066be1a99c833027",
           "note": "verify.nim reuse of nim-eth and the deferred sidecar"
         }
       ],
@@ -1162,12 +1162,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
+          "sha256": "cacc17caf026dcb0b7f00231ce09afdb7eca3c79afd850cc73e03b6e10bc6dae",
           "note": "ADR-014: the decision, the hook, reused vs kept-ours"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
+          "sha256": "9242f09dffa1aa6df8f1b391604fb0c3a8ccd0e525ee4d18066be1a99c833027",
           "note": "the reuse note and the src/wallet layout"
         },
         {
@@ -1203,17 +1203,17 @@
       "sources": [
         {
           "path": "docs/01-furps.md",
-          "sha256": "5d01c2402657b5949b1f45abf2694af870366ec5f29ae75db63614b44100f0d6",
+          "sha256": "87872977e2d2573941f0841034d95693c74eee6c15d8726598f87396f563c63e",
           "note": "F-6/F-7 driver-divergence axes; invariant 6 and invariant 1"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
+          "sha256": "cacc17caf026dcb0b7f00231ce09afdb7eca3c79afd850cc73e03b6e10bc6dae",
           "note": "the conformance suite, and the drivers the contract invites (FROST, LEZ)"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
+          "sha256": "9242f09dffa1aa6df8f1b391604fb0c3a8ccd0e525ee4d18066be1a99c833027",
           "note": "the working agreement and the Driver seam methods"
         },
         {

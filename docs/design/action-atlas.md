@@ -222,5 +222,8 @@ would otherwise have taught as fact:
   Each was re-verified against a pinned primary source or a live chain read, then
   corrected in the registry and the declared actions (among them a new declared action,
   `sui.multisig/rekey-by-alias`, for the in-place route the registry now declares).
-- **`exo-661.7`** (open, P1, moved out of this epic) — the store node sees more than
-  topic and timing.
+- **`exo-661.7`** (P1, moved out of this epic, then fixed) — the store node read who is in
+  a room off its topic: join requests carried the joiner's identity and a signature
+  recovering its address, every admit carried the whole roster, every envelope its epoch
+  number, and the composer's room names the peer's chat-id tail. Now `store_node_view_test`
+  finds none of it in any frame.

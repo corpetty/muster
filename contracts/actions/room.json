@@ -54,48 +54,50 @@
           "when": "always"
         },
         {
-          "field": "epoch",
+          "field": "join-key",
           "observer": "store-node",
-          "when": "always"
+          "when": "act"
         }
       ],
       "steps": [
         {
           "step": "act",
           "who": "the member joining or starting the room",
-          "does": "Normalizes the room name to a 4-segment Waku content topic, /muster/1/<name>/proto (an already valid topic passes through), so two peers who name the same room derive the same topic. If the instance already has a session on that topic it re-activates it. Otherwise it opens a CoordinationSession over the delivery transport with a fresh EpochCrypto: epoch 0, a new random key, members = this instance only. Joining also clears any stored invite to that topic.",
+          "does": "Normalizes the room name to a 4-segment Waku content topic, /muster/1/<name>/proto (an already valid topic passes through), so two peers who name the same room derive the same topic. If the instance already has a session on that topic it re-activates it. Otherwise it opens a CoordinationSession over the delivery transport with a fresh EpochCrypto: epoch 0, a new random key, members = this instance only. Joining also clears any stored invite to that topic. It then announces the room's join key on the topic (a beacon): 32 bytes derived from its current epoch key, naming no member, so someone who knows only the topic can ask to join without saying who they are in the clear.",
           "signs": "nothing",
           "reveals": [
             {
               "field": "topic",
+              "observer": "store-node"
+            },
+            {
+              "field": "join-key",
               "observer": "store-node"
             }
           ],
           "evidence": [
             "scripts/two-instance-proof.sh",
             "module/nim-lib/muster_module.nim",
-            "module/src/coordination/session.nim"
+            "module/src/coordination/session.nim",
+            "module/tests/store_node_view_test.nim"
           ]
         },
         {
           "step": "act",
           "who": "the same member, continuously",
-          "does": "Subscribes to the topic and polls the store every ~1 s (MUSTER_CATCHUP_MS, floor 200 ms) for a 60 s window (MUSTER_CATCHUP_LOOKBACK_MS), round-robin across the configured entry nodes; the first ticks per topic fetch deeper history. It ingests only envelopes it can open. An envelope sealed under an epoch it holds no key for is skipped. Every sealed frame carries its epoch number outside the seal.",
+          "does": "Subscribes to the topic and polls the store every ~1 s (MUSTER_CATCHUP_MS, floor 200 ms) for a 60 s window (MUSTER_CATCHUP_LOOKBACK_MS), round-robin across the configured entry nodes; the first ticks per topic fetch deeper history. It ingests only envelopes it can open: it tries each epoch key it holds, newest first, and the one whose MAC verifies is the envelope's epoch. An envelope sealed under an epoch it holds no key for is skipped. No epoch number rides outside the seal, so a store node sees the same shape in every epoch.",
           "signs": "nothing",
           "reveals": [
             {
               "field": "timing",
-              "observer": "store-node"
-            },
-            {
-              "field": "epoch",
               "observer": "store-node"
             }
           ],
           "evidence": [
             "module/tests/coordination_test.nim",
             "module/src/transport/delivery.nim",
-            "module/src/crypto/epoch_crypto.nim"
+            "module/src/crypto/epoch_crypto.nim",
+            "module/tests/store_node_view_test.nim"
           ]
         },
         {
@@ -141,15 +143,23 @@
           "credibility": "imperative"
         },
         {
-          "claim": "The store node sees the room's topic in the clear, and when this instance publishes and polls.",
+          "claim": "The store node sees the room's topic in the clear, when this instance publishes and polls, each frame's size and kind, and the room's join key. It sees no member identity and no epoch number (store_node_view_test).",
           "credibility": "exposed"
         },
         {
-          "claim": "The composer's default room name contains the verb and the last six hex digits of the invited peer's chat id, so the store node reads both from the topic.",
-          "credibility": "exposed"
+          "claim": "The composer names a new room with random bits only (muster.room.<16 hex>): not the activity, not the peer, not the time. What the room is for and who it is with travel inside the sealed invite and the room.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Home's titles for rooms this instance opened or was invited to live only in this session; after a restart the list shows each room's topic.",
+          "credibility": "not-applicable"
         }
       ],
       "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/store_node_view_test.nim"
+        },
         {
           "kind": "test",
           "path": "module/tests/coordination_test.nim"
@@ -175,12 +185,12 @@
         {
           "kind": "source",
           "url": "https://github.com/corpetty/muster/blob/main/ui/src/qml/Composer.qml",
-          "what": "derivedTopic: muster.<verb>.<last 6 hex of the peer chat id>.<unique tail>"
+          "what": "derivedTopic: muster.room.<16 random hex> — no verb, no peer, no time (exo-661.7)"
         }
       ],
       "unverified": [
         "The topic normalization (toContentTopic) is read from source; invites_test.nim carries a simplified copy, not the module's function.",
-        "That the store node reads the epoch number and the composer's room name from each frame is read from source (epoch_crypto seal header, Composer.qml derivedTopic); no test inspects frames as a store node would."
+        "The composer's random room name is QML (Composer.qml derivedTopic); no test reads a composed topic."
       ]
     },
     {
@@ -188,7 +198,7 @@
       "name": "Ask to join a room, and admit a member",
       "area": "room",
       "status": "built",
-      "summary": "The membership handshake. A joiner announces a signed binding of its encryption identity; any existing member decides whether to admit it. Admission re-keys the room forward: the joiner gets the new epoch's key and nothing earlier (F-16). One member decides; nothing is agreed, so there is no agreement field.",
+      "summary": "The membership handshake. A joiner sends a signed binding of its encryption identity, sealed to the room's announced join key so only members can read it; any existing member decides whether to admit it. Admission re-keys the room forward: the joiner gets the new epoch's key and nothing earlier (F-16). One member decides; nothing is agreed, so there is no agreement field.",
       "requirements": [
         {
           "kind": "authority",
@@ -216,27 +226,7 @@
       "disclosure": [
         {
           "field": "joiner-identity",
-          "observer": "store-node",
-          "when": "act"
-        },
-        {
-          "field": "joiner-address",
-          "observer": "store-node",
-          "when": "act"
-        },
-        {
-          "field": "joiner-identity",
           "observer": "room-member",
-          "when": "act"
-        },
-        {
-          "field": "roster",
-          "observer": "store-node",
-          "when": "act"
-        },
-        {
-          "field": "epoch",
-          "observer": "store-node",
           "when": "act"
         },
         {
@@ -258,35 +248,48 @@
           "field": "timing",
           "observer": "store-node",
           "when": "act"
+        },
+        {
+          "field": "join-request",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "grant-count",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "join-key",
+          "observer": "store-node",
+          "when": "act"
         }
       ],
       "steps": [
         {
           "step": "act",
           "who": "the joiner (it has joined the topic but holds no key the room uses)",
-          "does": "coordinate_request_join publishes a join-request frame (kind 0x01) on the topic. It is not sealed to any epoch. It carries the joiner's binding: its encryption identity (Ed25519 ‖ X25519, 64 bytes) and a context {account: the room topic, slot: \"0\", expiry: now + 1 day}, signed by the joiner's secp256k1 key. The UI re-sends it every 3 s, up to 20 times, until the roster grows, because a single send can miss every store node on a sparse shard. A request carries no authority.",
+          "does": "coordinate_request_join sends the joiner's binding: its encryption identity (Ed25519 ‖ X25519, 64 bytes) and a context {account: the room topic, slot: \"0\", expiry: now + 1 day}, signed by the joiner's secp256k1 key. It travels sealed (a libsodium sealed box) to each join key the room has announced on the topic, one join-request frame (kind 0x01) per key, at most 8. A join key is derived from an epoch key, so only a member holding that epoch can open the request. With no join key seen yet the joiner pulls the store's retained frames; if there is still none it publishes a beacon request (kind 0x05, a random nonce) that members answer with their current join key (kind 0x04), and the call returns \"waiting-for-room-key\". The UI re-sends every 3 s, up to 20 times, until the roster grows, because a single send can miss every store node on a sparse shard. A request carries no authority.",
           "signs": "secp256k1 recoverable signature over digest(hash-input \"muster.identity-binding.v1\" {ed25519, x25519, account, slot, expiry})",
           "reveals": [
             {
-              "field": "joiner-identity",
-              "observer": "store-node"
-            },
-            {
-              "field": "joiner-address",
+              "field": "join-request",
               "observer": "store-node"
             }
           ],
           "evidence": [
+            "module/tests/store_node_view_test.nim",
             "module/tests/membership_handshake_test.nim",
             "module/tests/binding_test.nim",
             "module/src/crypto/binding.nim",
+            "module/src/coordination/session.nim",
             "ui/src/muster_ui_backend.cpp"
           ]
         },
         {
           "step": "act",
           "who": "any existing member (the admitter)",
-          "does": "coordinate_pending lists requests not yet admitted: each identity, its contact alias, and bindsOwner — whether the binding's recovered signer is a signer of an account disclosed in the room (F-9). The member decides. Admission is not gated on owning anything.",
+          "does": "coordinate_pending opens each request with the join keys this member holds and lists those not yet admitted: each identity, its contact alias, and bindsOwner — whether the binding's recovered signer is a signer of an account disclosed in the room (F-9). The member decides. Admission is not gated on owning anything.",
           "signs": "nothing",
           "reveals": [
             {
@@ -301,15 +304,15 @@
         {
           "step": "act",
           "who": "the admitter",
-          "does": "coordinate_admit(identity) requires a pending binding for that identity that recovers a signer and has not expired. It then re-keys forward: a new epoch, a fresh random key, members = the old roster plus the joiner. For every member of the new epoch it publishes a control frame (kind 0x02, not sealed): the epoch number, every member's 64-byte identity, and the new key wrapped to that member's X25519 key in a libsodium sealed box. It then publishes membership/<epoch>/admit/<joiner> into the log, sealed under the new epoch. When the room was started by naming a person, Room.qml admits that identity as soon as its request arrives; the module still checks the binding.",
-          "signs": "nothing is signed. The wrapped keys are sealed boxes. The membership event names the joiner and no author, so the room cannot tell which member admitted.",
+          "does": "coordinate_admit(identity) requires a pending binding for that identity that recovers a signer and has not expired. It then re-keys forward: a new epoch, a fresh random key, members = the old roster plus the joiner. For every member of the new epoch it publishes a control frame (kind 0x02): the epoch number, every member's 64-byte identity and the new key, all sealed together to that member's X25519 key in a libsodium sealed box, so the topic carries one anonymous box per member and no roster. It then publishes membership/<epoch>/admit/<joiner> into the log, sealed under the new epoch, and announces the new epoch's join key. When the room was started by naming a person, Room.qml admits that identity as soon as its request arrives; the module still checks the binding.",
+          "signs": "nothing is signed. The grants are sealed boxes. The membership event names the joiner and no author, so the room cannot tell which member admitted.",
           "reveals": [
             {
-              "field": "roster",
+              "field": "grant-count",
               "observer": "store-node"
             },
             {
-              "field": "epoch",
+              "field": "join-key",
               "observer": "store-node"
             },
             {
@@ -318,6 +321,7 @@
             }
           ],
           "evidence": [
+            "module/tests/store_node_view_test.nim",
             "module/tests/membership_handshake_test.nim",
             "module/tests/two_instance_test.nim",
             "scripts/two-instance-proof.sh",
@@ -328,7 +332,7 @@
         {
           "step": "act",
           "who": "the joiner, and every existing member",
-          "does": "Each opens the grant addressed to it; only its own X25519 key can. The joiner learns the new epoch's key and member list, then reads every envelope sealed at that epoch or later, starting with its own admission. Nothing sealed earlier opens for it. Existing members move to the new epoch too.",
+          "does": "Each tries every grant; only the one sealed to its own X25519 key opens. The joiner learns the new epoch's number, key and member list, then reads every envelope sealed at that epoch or later, starting with its own admission. Nothing sealed earlier opens for it. Existing members move to the new epoch too.",
           "signs": "nothing",
           "reveals": [
             {
@@ -412,7 +416,7 @@
           "credibility": "motivational"
         },
         {
-          "claim": "The store node sees each join request's identity and the secp address its signature recovers to, and on every admit the whole roster and the new epoch number.",
+          "claim": "The store node sees that someone asked to join and when, and at every admit how many members received the new key (one grant each), so the room's size. It sees no identity, no address, no roster and no epoch number (store_node_view_test).",
           "credibility": "exposed"
         },
         {
@@ -422,9 +426,18 @@
         {
           "claim": "No hosted method removes a member. The epoch layer supports removal, but nothing calls it, so an admitted member reads every later epoch.",
           "credibility": "exposed"
+        },
+        {
+          "claim": "Anyone on the topic can announce a join key of their own; a joiner who knows the room only by name seals a copy of its request to every join key it has seen, so whoever announced a false one learns who is asking. The store node's passive view is unaffected; an invite names the inviter, but the join still follows the topic's announced keys.",
+          "credibility": "exposed",
+          "party": "anyone who publishes on the room's topic"
         }
       ],
       "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/store_node_view_test.nim"
+        },
         {
           "kind": "test",
           "path": "module/tests/membership_handshake_test.nim"
@@ -456,12 +469,12 @@
         {
           "kind": "source",
           "url": "https://github.com/corpetty/muster/blob/main/module/src/coordination/session.nim",
-          "what": "frame kinds: join-request (0x01) and control (0x02) frames are published unsealed"
+          "what": "frame kinds: a join request (0x01) is sealed to an announced join key (0x04, answered on a beacon request 0x05); a grant (0x02) is sealed whole to one member"
         },
         {
           "kind": "source",
           "url": "https://github.com/corpetty/muster/blob/main/module/src/crypto/epoch_crypto.nim",
-          "what": "encodeGrant: epoch ‖ member count ‖ every member identity ‖ sealed key"
+          "what": "admit: epoch ‖ member count ‖ every identity ‖ key, sealed to each member; envelopes carry no epoch header; join keys derived from epoch keys"
         },
         {
           "kind": "source",
@@ -475,7 +488,6 @@
         }
       ],
       "unverified": [
-        "What a store node reads from join-request and grant frames (identity, recoverable address, roster, epoch) is read from source; no test inspects the frames as a store node would.",
         "The 3 s / 20-attempt re-send of a join request is UI behaviour (muster_ui_backend.cpp scheduleJoinRetry); no test covers it.",
         "That no hosted method removes a member is read from muster.lidl; epoch_crypto_test.nim proves removal only at the crypto layer."
       ]
