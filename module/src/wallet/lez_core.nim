@@ -52,6 +52,13 @@ type
 
   LezCore* = ref object of RootObj
     ## The seam. Concrete impls: FakeLezCore (here), LpLezCore (real, P-L3).
+    synced*, tip*: int     ## where the last `sync` left this wallet's scan, and the chain's tip
+
+const
+  LezSyncOk* = 0           ## `sync`: the scan is at the chain tip
+  LezSyncFailed* = 1       ## `sync`: the scan failed (the module's int convention)
+  LezSyncBehind* = 2       ## `sync`: progress made, not yet at the tip — call again
+  LezProveBudgetMs* = 900_000   ## a proving transfer's budget (measured 6m41s–7.4m + headroom)
 
 proc disclosureOf*(f: TransferForm): Disclosure =
   ## What each rail leaks — verbatim from the demo's rails. The amount is public unless
@@ -95,8 +102,11 @@ method transfer*(c: LezCore, form: TransferForm, frm, to, amountRaw: string): Le
   raise newException(WalletError, "LezCore.transfer is abstract")
 
 method sync*(c: LezCore): int {.base, gcsafe.} =
-  ## Scan to the tip, discovering received private notes. Non-zero == failure (the
-  ## module's int convention). After this, a received note appears in listAccounts.
+  ## Advance the scan toward the tip, discovering received private notes: LezSyncOk once
+  ## at the tip (a received note then appears in listAccounts), LezSyncBehind when it made
+  ## progress but a call's budget ran out first — a fresh wallet on testnet starts at
+  ## block 0, tens of thousands of blocks away — and LezSyncFailed on a failed scan.
+  ## `synced` / `tip` say where it got to.
   raise newException(WalletError, "LezCore.sync is abstract")
 
 method claimPinata*(c: LezCore, pinataId, account: string): LezResult {.base, gcsafe.} =
@@ -112,6 +122,23 @@ method pollTransfer*(c: LezCore): tuple[done: bool, result: LezResult] {.base, g
   ## thread) and this reports completion. Sync cores (the fake) return their result from
   ## transfer directly and never mark it pending, so the default is "n/a, done".
   (done: true, result: LezResult(success: true))
+
+proc walkSync*(last, tip, chunk: int, budgetS: float, step: proc(toBlock: int): bool,
+               clock: proc(): float): tuple[code, reached: int] =
+  ## Walk a scan from `last` toward `tip` in steps of at most `chunk` blocks, while the
+  ## call's budget lasts — one sync_to_block to a far tip does not fit a call's timeout
+  ## (measured on testnet: ~1s per 250 blocks, 5000 blocks in 13.6s), and a timed-out
+  ## lez_core call keeps the wallet busy behind it. Returns LezSyncOk at the tip,
+  ## LezSyncBehind when the budget ran out first, LezSyncFailed when a step failed;
+  ## `reached` is the last block that did sync.
+  var at = last
+  let start = clock()
+  while at < tip:
+    if at > last and clock() - start >= budgetS: return (LezSyncBehind, at)
+    let next = min(at + chunk, tip)
+    if not step(next): return (LezSyncFailed, at)
+    at = next
+  (LezSyncOk, at)
 
 # ── envelope helper ────────────────────────────────────────────────────────────
 proc parseEnvelope*(s: string): LezResult =
@@ -150,6 +177,10 @@ type
     shared: bool                           ## true = a wallet on a shared chain
     accounts: seq[LezAccount]              ## created + discovered accounts (THIS wallet's)
     failNextTransfer*: bool                ## test hook: force a success:false envelope
+    lagSyncs*: int                         ## test hook: the next n scans are still catching up
+    asyncTransfers*: bool                  ## test hook: prove in the background, as LpLezCore does
+    proveTicks*: int                       ## …settling on the n-th pollTransfer (default 2)
+    proving: tuple[form: TransferForm, frm, to, amountRaw: string, ticks: int, live: bool]
 
 proc newFakeLezChain*(): FakeLezChain =
   FakeLezChain(balances: initTable[string, string](), seq: 0)
@@ -205,10 +236,30 @@ proc debitOrRaise(c: FakeLezCore, id, amountRaw: string) =
     raise newException(WalletError, "insufficient funds")
   c.chain.balances[id] = $(parseBiggestUInt(cur) - parseBiggestUInt(amountRaw))
 
+proc settle(c: FakeLezCore, form: TransferForm, frm, to, amountRaw: string): LezResult {.gcsafe.}
+
 method transfer*(c: FakeLezCore, form: TransferForm, frm, to, amountRaw: string): LezResult =
   if c.failNextTransfer:
     c.failNextTransfer = false
     return LezResult(success: false, error: "wallet FFI error 99")   # the envelope failure
+  if c.asyncTransfers:
+    # as LpLezCore: accepted at once, proved in the background, the result polled later —
+    # nothing moves on the chain until the proof lands
+    if c.proving.live:
+      return LezResult(success: false, error: "a LEZ transfer is already proving — wait for it")
+    c.proving = (form, frm, to, amountRaw, (if c.proveTicks > 0: c.proveTicks else: 2), true)
+    return LezResult(success: true, txHash: "pending")
+  c.settle(form, frm, to, amountRaw)
+
+method pollTransfer*(c: FakeLezCore): tuple[done: bool, result: LezResult] =
+  if not c.proving.live: return (true, LezResult(success: true))
+  dec c.proving.ticks
+  if c.proving.ticks > 0: return (false, LezResult())
+  c.proving.live = false
+  try: (true, c.settle(c.proving.form, c.proving.frm, c.proving.to, c.proving.amountRaw))
+  except WalletError as e: (true, LezResult(success: false, error: e.msg))
+
+proc settle(c: FakeLezCore, form: TransferForm, frm, to, amountRaw: string): LezResult {.gcsafe.} =
   c.debitOrRaise(frm, amountRaw)
   case form
   of tfPublic, tfDeshield:
@@ -226,7 +277,12 @@ method transfer*(c: FakeLezCore, form: TransferForm, frm, to, amountRaw: string)
 method sync*(c: FakeLezCore): int =
   ## Settle pending private notes into discoverable accounts under their key node. A
   ## standalone wallet takes every note; a wallet on a shared chain only the notes sent to
-  ## a key node it holds — the rest stay for their own recipients' scans.
+  ## a key node it holds — the rest stay for their own recipients' scans. With `lagSyncs`
+  ## set, the scan is still catching up: nothing is discovered yet.
+  if c.lagSyncs > 0:
+    dec c.lagSyncs
+    (c.synced, c.tip) = (1000, 29083)
+    return LezSyncBehind
   var keep: seq[PendingNote]
   for n in c.chain.pending:
     var mine = not c.shared
@@ -239,7 +295,8 @@ method sync*(c: FakeLezCore): int =
     c.accounts.add a
     c.chain.balances[a.id] = n.amountRaw
   c.chain.pending = keep
-  0
+  (c.synced, c.tip) = (29083, 29083)
+  LezSyncOk
 
 method claimPinata*(c: FakeLezCore, pinataId, account: string): LezResult =
   c.credit(account, "1000000000")   # fund with 1e9 base units

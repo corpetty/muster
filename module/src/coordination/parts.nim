@@ -57,6 +57,17 @@ method matchReceived*(s: PartSeam, t: PartTransfer, reported: string,
   let got = s.checkReceived(t, reported)
   if got.ok: (true, reported, "") else: (false, "", got.detail)
 
+method landedRef*(s: PartSeam, t: PartTransfer, tx: string): string {.base.} =
+  ## The reference the payer's "settled" report carries once `tx` landed. Default: `tx`
+  ## itself. A seam whose send returns a marker before the chain has answered (a proof
+  ## running in the background) overrides it with the chain's own transaction reference.
+  tx
+
+method payDeadlineS*(s: PartSeam): float {.base.} =
+  ## How long an in-flight payment may take to land before the host stops waiting for it.
+  ## A seam that proves (minutes) overrides it with more than its proving budget.
+  600.0
+
 # ── helpers ────────────────────────────────────────────────────────────────────
 proc hx(b: openArray[byte]): string =
   const d = "0123456789abcdef"
@@ -130,7 +141,8 @@ proc liveSettlePartComplete*(s: CoordinationSession, ks: Keystore, driverFor: Dr
   let landed = seam.partLanded(pp.transfer, pp.tx)
   if not landed.ok: return "unconfirmed: " & landed.detail
   s.poll()
-  s.publishAuthored(ks, partEvent(pp.intentId, pp.part, "settled", myIdentity(ks), pp.tx))
+  s.publishAuthored(ks, partEvent(pp.intentId, pp.part, "settled", myIdentity(ks),
+                                  seam.landedRef(pp.transfer, pp.tx)))
   intentState(s.roomEvents(), driverFor, pp.intentId)
 
 proc liveSettlePart*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, intentId: string,

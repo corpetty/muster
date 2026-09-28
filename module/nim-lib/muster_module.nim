@@ -1002,7 +1002,6 @@ type SplitPending = object
   pp: PendingPart
   started: float
 
-const SplitPendingDeadlineS = 600.0
 var gSplitPending: seq[SplitPending]
 var gSplitRecent: seq[JsonNode]  ## the last outcomes, newest last
 var gSplitPumpAt = 0.0
@@ -1044,12 +1043,14 @@ proc splitPump() =
       if not r.startsWith("unconfirmed") or "failed on" in r: outcome = r
     except CatchableError:
       discard                          # an unreachable RPC: try again next tick
-    if outcome.len == 0 and epochTime() - p.started > SplitPendingDeadlineS:
+    # the seam's own deadline: a private (LEZ) payment proves for minutes before it lands
+    if outcome.len == 0 and epochTime() - p.started > p.seam.payDeadlineS():
       outcome = "timed out: the payment never landed"
     if outcome.len == 0: keep.add p
     else:
       if gLpDebug: stderr.writeLine("MUSTER-LP split reported " & p.pp.intentId & " " & outcome)
-      gSplitRecent.add %*{"intentId": p.pp.intentId, "part": p.pp.part, "tx": p.pp.tx,
+      gSplitRecent.add %*{"intentId": p.pp.intentId, "part": p.pp.part,
+                          "tx": p.seam.landedRef(p.pp.transfer, p.pp.tx),
                           "outcome": outcome, "at": int64(epochTime())}
       if gSplitRecent.len > 20: gSplitRecent.delete(0)
   gSplitPending = keep

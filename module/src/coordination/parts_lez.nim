@@ -19,7 +19,7 @@ type LezPartSeam* = ref object of PartSeam
   chain*: string            ## CAIP-2, "lez:<zone>"
   adapter*: LezAdapter      ## this member's own LEZ wallet
   ks*: Keystore
-  payFrom*: Account         ## the account this member pays from; empty = their shielded account
+  payFrom*: Account         ## the account this member pays from; empty = the one note that covers the share
   lastRail*: TransferForm   ## the rail of the last payment sent (what the chain saw of it)
 
 proc newLezPartSeam*(chain: string, adapter: LezAdapter, ks: Keystore, payFrom = Account()): LezPartSeam =
@@ -34,6 +34,32 @@ proc noteRef*(noteId: string): string =
   var b: seq[byte]
   for c in noteId: b.add byte(c)
   "note:" & hx(sha256(b))[0 ..< 32]
+
+proc decAtLeast(a, b: string): bool =
+  ## a >= b for canonical decimal base units (u128 on the zone: no machine integer).
+  var x = a
+  var y = b
+  while x.len > 1 and x[0] == '0': x = x[1 .. ^1]
+  while y.len > 1 and y[0] == '0': y = y[1 .. ^1]
+  if x.len != y.len: x.len > y.len else: x >= y
+
+proc noteFor(s: LezPartSeam, amount: string): tuple[ok: bool, account: Account, detail: string] =
+  ## The one shielded note of mine a payment of `amount` draws on — a transfer spends ONE
+  ## note, never several. The account muster created when it covers it; otherwise the
+  ## largest note the scan discovered (money received privately, a shield to my own key
+  ## node included, lands at a discovered account). Raises LezScanBehind while the scan is
+  ## catching up.
+  let held = s.adapter.shieldedHoldings(s.ks)
+  if held.len > 0 and decAtLeast(held[0].raw, amount): return (true, held[0].account, "")
+  var pick = -1
+  for i in 1 ..< held.len:
+    if decAtLeast(held[i].raw, amount) and (pick < 0 or decAtLeast(held[i].raw, held[pick].raw)): pick = i
+  if pick >= 0: return (true, held[pick].account, "")
+  var largest = "0"
+  for h in held:
+    if decAtLeast(h.raw, largest): largest = h.raw
+  (false, Account(), "no one shielded note of yours covers " & amount & " — a private transfer draws on one note, " &
+                     "and your largest holds " & largest & " (across " & $held.len & " shielded accounts)")
 
 proc refuse(s: LezPartSeam, t: PartTransfer): string =
   let served = s.adapter.describe()
@@ -53,8 +79,9 @@ method sendPart*(s: LezPartSeam, t: PartTransfer): tuple[ok: bool, tx, detail: s
   try:
     var frm = s.payFrom
     if frm.id.len == 0:
-      for a in s.adapter.accounts(s.ks):
-        if a.form == afShielded: frm = a
+      let (ok, account, detail) = s.noteFor(t.amount)
+      if not ok: return (false, "", detail)
+      frm = account
     if frm.form != afShielded:
       return (false, "", "a private split pays only from a shielded account — paying from " & frm.id &
                          " would name you, and the amount, on the chain")
@@ -66,6 +93,8 @@ method sendPart*(s: LezPartSeam, t: PartTransfer): tuple[ok: bool, tx, detail: s
     let r = s.adapter.submit(prepared, s.ks)
     s.lastRail = rail
     (true, r.id, "")
+  except LezScanBehind as e:
+    (false, "", e.msg & " — pay once it has; it cannot yet see the note it would spend")
   except CatchableError as e:
     (false, "", e.msg)
 
@@ -94,5 +123,20 @@ method matchReceived*(s: LezPartSeam, t: PartTransfer, reported: string,
       return (true, r, "")
     (false, "", "no unclaimed private note of exactly " & t.amount & " has arrived at " & t.to[0 ..< min(t.to.len, 18)] &
                 "… yet — a private payment names no payer; its distinct amount is how it is matched to its share")
+  except LezScanBehind as e:
+    (false, "", e.msg & " — a note may be waiting in a block it has not read yet")
   except CatchableError as e:
     (false, "", "the scan failed: " & e.msg)
+
+method landedRef*(s: LezPartSeam, t: PartTransfer, tx: string): string =
+  ## A private payment proves in the background: its send returns a marker, and the
+  ## zone's own transaction hash is known once it lands. The report names that — the
+  ## payer's own disclosure, inside the room (a private transaction's hash shows no
+  ## payer, payee or amount on the chain).
+  let h = s.adapter.resolvedTx(tx)
+  if h.len > 0: h else: tx
+
+method payDeadlineS*(s: LezPartSeam): float =
+  ## The proving budget, then a block and a scan: a slow proof that still lands must
+  ## not be abandoned.
+  float(LezProveBudgetMs) / 1000.0 + 600.0

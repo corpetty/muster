@@ -9,13 +9,12 @@
 ## muster_module but does not `nim r` standalone, and its end-to-end behaviour is
 ## validated against the running zone, not headlessly (like DeliveryTransport).
 ##
-## v0 caveat: a proving transfer is a SYNCHRONOUS lp_invoke with a 900s timeout, so it
-## blocks the module thread for the ~7-minute proof. The demo used the async variant +
-## a queued deferral to keep the UI painting; muster's coordinate_execute path already
-## frames a coordinated LEZ send as a background job, so the async wallet-direct send is
-## a follow-up (see the plan). Reads use the 15s budget.
+## Nothing here holds the module thread for long: a proving transfer runs in the
+## background (lp_invoke_async, the 900s proving budget) and pollTransfer drains its
+## result; a scan walks toward the tip in bounded steps (sync, walkSync). Reads use the
+## 15s budget.
 
-import std/[json, strutils, os]
+import std/[json, strutils, os, times]
 import logos_sdk/ffi              # lp_* C-ABI (resolves at plugin link time, like delivery)
 import ../transport/inbound_queue # foreign-thread-safe result hand-off (as delivery uses)
 import ./types
@@ -24,7 +23,9 @@ import ./lez_encoding
 
 const
   kReadMs  = cint(15_000)         ## Zone.h: a read that doesn't prove
-  kProveMs = cint(900_000)        ## Zone.h: the proving budget (measured 6m41s + headroom)
+  kProveMs = cint(LezProveBudgetMs) ## Zone.h: the proving budget (measured 6m41s + headroom)
+  kSyncChunk = 500                ## blocks per sync_to_block: ~2s on testnet (measured ~1s / 250)
+  kSyncBudgetS = 4.0              ## one scan step's wall budget on the module thread
 
 type
   LpLezCore* = ref object of LezCore
@@ -183,13 +184,28 @@ method pollTransfer*(c: LpLezCore): tuple[done: bool, result: LezResult] =
   (true, c.lastResult)
 
 method sync*(c: LpLezCore): int =
-  ## Scan to the tip so received private notes become discoverable. sync_to_block +
-  ## get_current_block_height are int methods (non-zero == failure).
-  var height = 0
-  try: height = parseJson(c.rawCall("get_current_block_height", "[]", kReadMs)).getInt(0)
-  except CatchableError: return 1
-  try: return parseJson(c.rawCall("sync_to_block", args(%height), kReadMs)).getInt(1)
-  except CatchableError: return 1
+  ## Walk the scan toward the tip in bounded steps (walkSync), so received private notes
+  ## become discoverable. A fresh wallet starts at block 0, and one sync_to_block to a tip
+  ## tens of thousands of blocks away outlives the read budget — and a timed-out lez_core
+  ## call keeps the wallet busy behind it (labbook §4). So each call does what fits
+  ## kSyncBudgetS and returns LezSyncBehind until it arrives; the wallet is saved at the
+  ## tip. sync_to_block is an int method (non-zero == failure).
+  var tip = -1
+  try: tip = parseJson(c.rawCall("get_current_block_height", "[]", kReadMs)).getInt(-1)
+  except CatchableError: return LezSyncFailed
+  if tip < 0: return LezSyncFailed
+  var last = 0
+  try: last = parseJson(c.rawCall("get_last_synced_block", "[]", kReadMs)).getInt(0)
+  except CatchableError: last = 0
+  let step = proc(b: int): bool =
+    try: parseJson(c.rawCall("sync_to_block", args(%b), kReadMs)).getInt(1) == 0
+    except CatchableError: false
+  var (code, reached) = (LezSyncFailed, last)
+  {.cast(gcsafe).}:                 # the step closure touches only this core, on the module thread
+    (code, reached) = walkSync(last, tip, kSyncChunk, kSyncBudgetS, step, proc(): float = epochTime())
+  (c.synced, c.tip) = (reached, tip)
+  if code == LezSyncOk and reached > last: discard c.rawCall("save", "[]", kReadMs)
+  code
 
 method claimPinata*(c: LpLezCore, pinataId, account: string): LezResult =
   ## Faucet: read the pinata challenge (its 33-byte data = [difficulty, seed[0..32]]),
