@@ -9,6 +9,7 @@
 #include <QFile>
 #include <QStandardPaths>
 #include <QSet>
+#include <QDateTime>
 
 // Generated umbrella: LogosModules (behind modules()) built from
 // metadata.json#dependencies — the typed muster_module client the UI calls
@@ -624,6 +625,10 @@ static QString asObjectJson(const QString &r, const char *key)
 // ── a split (exo-a90) ──────────────────────────────────────────────────────────
 // Each outcome lands on splitJson, tagged with what was done and to which intent, so the
 // room can say why a button did nothing — never a silent no-op.
+// Self-test only (MUSTER_AUTOLEZFUND): true while this instance is still funding its
+// private LEZ balance, so MUSTER_AUTOPAYSPLIT does not try to pay before it can.
+static bool s_lezFunding = false;
+
 static QString splitOutcome(const QString &op, const QString &intentId, const QString &r)
 {
     QJsonObject o;
@@ -900,6 +905,69 @@ void MusterUiBackend::onContextReady()
                     qInfo() << "[muster_ui] AUTOINVITE: no contact named" << who;
                 });
             }
+            // LEZ testnet self-test (exo-14d): MUSTER_AUTOLEZFUND funds THIS instance's
+            // private balance the way a person would on testnet, through the module's own
+            // wallet path — claim the pinata faucet into the public account
+            // (wallet_lez_setup; MUSTER_LEZ_PINATA, hex, defaults to the testnet pinata),
+            // then shield all that arrived to MY OWN key node (wallet_send takes the shield
+            // rail) and wait for that proof to land. The note lands at an account the scan
+            // discovers — which is what a debtor then pays from. Needs MUSTER_LEZ_REAL.
+            if (!qgetenv("MUSTER_AUTOLEZFUND").isEmpty()) {
+                s_lezFunding = true;
+                const QByteArray p = qgetenv("MUSTER_LEZ_PINATA");
+                const QString pinata = p.isEmpty()
+                    ? QStringLiteral("cafecafecafecafecafecafecafecafecafecafecafecafecafecafecafecafe")
+                    : QString::fromUtf8(p);
+                auto *ft = new QTimer(this);
+                ft->setInterval(5000);
+                connect(ft, &QTimer::timeout, this, [this, ft, pinata]() {
+                    static int stage = 0;
+                    static QString pub, keyNode;
+                    static qint64 retryAt = 0;
+                    const qint64 now = QDateTime::currentSecsSinceEpoch();
+                    if (now < retryAt) return;
+                    const QString lez = QStringLiteral("lez:testnet");
+                    if (stage == 0) {                   // the accounts, and one faucet claim
+                        const QString r = modules().muster_module.wallet_lez_setup(pinata);
+                        qInfo() << "[muster_ui] LEZFUND setup ->" << r;
+                        for (const auto &v : QJsonDocument::fromJson(
+                                 modules().muster_module.wallet_accounts().toUtf8()).array()) {
+                            const QJsonObject a = v.toObject();
+                            if (a.value("chain").toString() != lez) continue;
+                            if (a.value("form").toString() == "public") pub = a.value("id").toString();
+                            if (a.value("form").toString() == "shielded") keyNode = a.value("share").toString();
+                        }
+                        qInfo() << "[muster_ui] LEZFUND public" << pub << "key node" << keyNode.left(24);
+                        if (r.contains("\"error\"") || pub.isEmpty() || keyNode.isEmpty()) { retryAt = now + 30; return; }
+                        stage = 1;
+                    } else if (stage == 1) {            // the claim lands when a block commits
+                        QString raw;
+                        for (const auto &v : QJsonDocument::fromJson(
+                                 modules().muster_module.wallet_balances().toUtf8()).array()) {
+                            const QJsonObject b = v.toObject();
+                            if (b.value("chain").toString() == lez && b.value("account").toString() == pub)
+                                raw = b.value("raw").toString();
+                        }
+                        qInfo() << "[muster_ui] LEZFUND public balance" << raw;
+                        if (raw.isEmpty() || raw == "0") return;
+                        const QString r = modules().muster_module.wallet_send(lez, pub, keyNode, QStringLiteral("LEZ"), raw);
+                        qInfo() << "[muster_ui] LEZFUND shield" << raw << "->" << r;
+                        if (r.contains("\"error\"")) { retryAt = now + 30; return; }
+                        stage = 2;
+                    } else if (stage == 2) {            // the shield proves in the background
+                        const QString f = modules().muster_module.wallet_finality(lez, QStringLiteral("pending"));
+                        qInfo() << "[muster_ui] LEZFUND shield finality ->" << f;
+                        if (f.contains("\"final\"")) {
+                            qInfo() << "[muster_ui] LEZFUND funded";
+                            s_lezFunding = false;
+                            ft->stop();
+                        } else if (f.contains("\"failed\"")) {
+                            stage = 1;                  // shield what is public again
+                        }
+                    }
+                });
+                ft->start();
+            }
             // Card self-test (exo-002.3): MUSTER_AUTOPROPOSE=<effect json> proposes it
             // once joined, then asks the module for that intent's readiness (the card's
             // "What this needs" round trip) and, with MUSTER_AUTODECLINE set, declines
@@ -952,16 +1020,19 @@ void MusterUiBackend::onContextReady()
                     static bool proposed = false;
                     if (!proposed && membersJson().contains("\"self\":false")) {
                         proposed = true;
-                        // Split self-test (exo-a90.8): MUSTER_AUTOSPLIT=<total wei> splits a
-                        // bill this founder fronted with the other member, on the chain the
-                        // configured RPC serves — the same slot the room's Split composer calls.
+                        // Split self-test (exo-a90.8): MUSTER_AUTOSPLIT=<total, base units>
+                        // splits a bill this founder fronted with the other member, on the
+                        // chain the configured RPC serves — or, with MUSTER_AUTOSPLIT_CHAIN
+                        // (e.g. lez:testnet), privately on the LEZ — the same slot the room's
+                        // Split composer calls.
                         const QByteArray autosplit = qgetenv("MUSTER_AUTOSPLIT");
                         if (!autosplit.isEmpty()) {
                             QJsonArray others;
                             for (const auto &m : QJsonDocument::fromJson(membersJson().toUtf8()).array())
                                 if (!m.toObject().value("self").toBool())
                                     others.append(m.toObject().value("identity").toString());
-                            proposeSplit(QString(), QString::fromUtf8(autosplit),
+                            proposeSplit(QString::fromUtf8(qgetenv("MUSTER_AUTOSPLIT_CHAIN")),
+                                         QString::fromUtf8(autosplit),
                                          QString::fromUtf8(QJsonDocument(others).toJson(QJsonDocument::Compact)),
                                          QStringLiteral("split self-test"));
                         } else {
@@ -971,9 +1042,12 @@ void MusterUiBackend::onContextReady()
                 }
                 // Split self-test, the debtor's side: MUSTER_AUTOPAYSPLIT agrees to MY share of
                 // any split that names me, then pays it once everyone has agreed — the card's
-                // "Agree to my share" and "Pay my share", each attempted once per split.
+                // "Agree to my share" and "Pay my share". Agreeing is attempted once; a pay
+                // the module refuses (a LEZ wallet still scanning the chain, say) is tried
+                // again after 10s, and none is tried while MUSTER_AUTOLEZFUND is funding.
                 if (!qgetenv("MUSTER_AUTOPAYSPLIT").isEmpty()) {
                     static QSet<QString> agreed, paid;
+                    static QHash<QString, qint64> payAgainAt;
                     for (const auto &v : QJsonDocument::fromJson(intentsJson().toUtf8()).array()) {
                         const QJsonObject it = v.toObject();
                         if (!it.contains("split")) continue;
@@ -987,11 +1061,15 @@ void MusterUiBackend::onContextReady()
                             && !agreed.contains(id)) {
                             agreed.insert(id);
                             contributeInRoom(id, QString(), QString());
-                        } else if ((st == "executable" || st == "submitted" || st == "settling")
+                        } else if (!s_lezFunding && (st == "executable" || st == "submitted" || st == "settling")
                                    && !mine.value("settled").toBool() && !mine.value("paying").toBool()
-                                   && !paid.contains(id)) {
-                            paid.insert(id);
+                                   && !paid.contains(id)
+                                   && QDateTime::currentSecsSinceEpoch() >= payAgainAt.value(id, 0)) {
                             settlePart(id);
+                            if (splitJson().contains("\"error\""))
+                                payAgainAt[id] = QDateTime::currentSecsSinceEpoch() + 10;
+                            else
+                                paid.insert(id);
                         }
                     }
                 }

@@ -188,6 +188,10 @@ method finality*(a: LezAdapter, txRef: TxRef): Finality =
     return Finality(status: fsPending, detail: "proving/settling — the note is being scanned in")
   Finality(status: fsFinal, detail: "shielded transfer settled")
 
+proc scanProgress*(a: LezAdapter): tuple[synced, tip: int] =
+  ## Where this wallet's scan last got to, and the chain's tip then (0, 0 before any scan).
+  (a.core.synced, a.core.tip)
+
 proc resolvedTx*(a: LezAdapter, txId: string): string =
   ## The zone's transaction hash for a send that proved in the background (its TxRef is
   ## the "pending" marker), once finality has seen it land; "" until then.

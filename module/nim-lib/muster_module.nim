@@ -1048,7 +1048,8 @@ proc splitPump() =
       outcome = "timed out: the payment never landed"
     if outcome.len == 0: keep.add p
     else:
-      if gLpDebug: stderr.writeLine("MUSTER-LP split reported " & p.pp.intentId & " " & outcome)
+      if gLpDebug: stderr.writeLine("MUSTER-LP split reported " & p.pp.intentId & " " & outcome &
+                                    " tx=" & p.seam.landedRef(p.pp.transfer, p.pp.tx))
       gSplitRecent.add %*{"intentId": p.pp.intentId, "part": p.pp.part,
                           "tx": p.seam.landedRef(p.pp.transfer, p.pp.tx),
                           "outcome": outcome, "at": int64(epochTime())}
@@ -1065,6 +1066,13 @@ proc splitPump() =
       let confirmed = liveConfirmParts(gSession, ks, driverFor, splitSeamFor(pol))
       if gLpDebug and confirmed.len > 0: stderr.writeLine("MUSTER-LP split confirmed " & $(%confirmed))
     except CatchableError: discard
+  if gLpDebug and policies.anyIt(splitPolicy(it).kind == "lez-split"):
+    # a private split's creditor scans their wallet: say how far the scan has got
+    let (synced, tip) = splitLezAdapter().scanProgress()
+    let line = $synced & "/" & $tip
+    if tip > 0 and gSplitLogged.getOrDefault("lez-scan", "") != line:
+      gSplitLogged["lez-scan"] = line
+      stderr.writeLine("MUSTER-LEZ scan " & line)
   if gLpDebug:
     # each split's state, once per change — what an offscreen self-test watches
     for v in reduceIntentViews(gSession.roomEvents(), driverFor):
@@ -1073,7 +1081,7 @@ proc splitPump() =
       for pv in v.parts:
         if pv.confirmed: inc done
       let line = v.id & " state=" & v.state & " agreed=" & $v.approvals & "/" & $v.threshold &
-                 " confirmed=" & $done & "/" & $v.parts.len
+                 " confirmed=" & $done & "/" & $v.parts.len & " refs=" & v.parts.mapIt(it.tx).join(",")
       if gSplitLogged.getOrDefault(v.id, "") != line:
         gSplitLogged[v.id] = line
         stderr.writeLine("MUSTER-LP split " & line)
