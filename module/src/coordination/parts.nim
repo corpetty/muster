@@ -131,7 +131,9 @@ proc liveSettlePartSend*(s: CoordinationSession, ks: Keystore, driverFor: Driver
   let t = drv.partTransfer(effect, me)
   if not t.ok: return ("refused: " & t.error, PendingPart())
   let sent = seam.sendPart(t)
-  if not sent.ok: return ("refused: the chain refused the payment: " & sent.detail, PendingPart())
+  # the wallet refused to send (a rail it will not take, no note that covers it, a scan
+  # still catching up) or the chain did: either way nothing was sent, and the detail says why
+  if not sent.ok: return ("refused: the payment was not sent: " & sent.detail, PendingPart())
   ("", PendingPart(intentId: intentId, part: me, tx: sent.tx, transfer: t))
 
 proc liveSettlePartComplete*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, seam: PartSeam,
