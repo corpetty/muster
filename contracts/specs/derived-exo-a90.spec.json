@@ -1,0 +1,222 @@
+{
+  "id": "derived-exo-a90",
+  "original_statement": "S9 exo-a90.10: split-the-bill typed spec. Split the bill (docs/design/split-the-bill.md, epic exo-a90): one member fronted a bill; the room agrees who owes what \u2014 each debtor signs their own share with their room key \u2014 then each pays their own share from their own wallet, and the creditor's client confirms each payment from its own read; the split is final when every share is confirmed. Two families: evm.split (public payments) and lez.split (the private split: shielded payee, private rail, every share a distinct amount, the creditor confirms by scan). The typed spec fixes the split's guarantees with an acceptance oracle each: (1) the payment is derived from the agreed effect, never supplied (invariant 1); (2) parts converge under reorder and duplication (invariant 4); (3) only the named party records 'settled' for its part and only the counterparty records 'confirmed' (invariant 9); (4) a split's finality is its parts' \u2014 a bare submit or final never finalizes a parts intent; (5) one on-chain reference or private note settles at most one part; (6) the private split: shares pairwise distinct, private rail only, a part confirmed only by the creditor's own scan finding a note of exactly that share.",
+  "restatement": "A split coordinates money between members' own wallets with no shared account, and whatever the input the client keeps six guarantees: (s1) The payment a debtor's wallet signs is exactly the transfer derived from the agreed split \u2014 their share, to payTo, in its asset, on its chain; no caller- or UI-supplied value changes it; nothing is paid before every named debtor agreed, twice, for another's share, or against an expired agreement; a malformed split is refused before anyone can agree. (s2) The split's state \u2014 who agreed, which parts are settled and confirmed, its lifecycle \u2014 is a pure function of the room's authentic log: the same event set in any order, with any duplication, folds to the identical state on every member. (s3) What the room says about a part is only what the named people disclosed: 'settled' counts only if the debtor it names authored and signed it, 'confirmed' only if the creditor did; another debtor's, an outsider's, a forged, or another room's report never moves it. (s4) A split is final exactly when every part is confirmed: any settled part moves an agreed split to submitted, any confirmed to settling, all confirmed to final; a submit or final naming no author never moves it, and no part report counts before every named debtor agreed. (s5) One payment reference settles at most one part in a room: the creditor's client never confirms a transaction hash or a private note it already confirmed for another share, in this split or another. (s6) The private split names no one on chain: every share is a distinct amount; a debtor pays only shielded to shielded (a public source is refused); a part is confirmed only when the creditor's own scan finds an unclaimed note of exactly that share at payTo \u2014 a payer's report alone never confirms it.",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "The payment a debtor's wallet signs is exactly the transfer derived from the agreed split \u2014 their share, to payTo, in its asset, on its chain; no caller- or UI-supplied value changes it; nothing is paid before every named debtor agreed, twice, for another's share, or against an expired agreement; a malformed split is refused before anyone can agree."
+    },
+    {
+      "id": "s2",
+      "text": "The split's state \u2014 who agreed, which parts are settled and confirmed, its lifecycle \u2014 is a pure function of the room's authentic log: the same event set in any order, with any duplication, folds to the identical state on every member."
+    },
+    {
+      "id": "s3",
+      "text": "What the room says about a part is only what the named people disclosed: 'settled' counts only if the debtor it names authored and signed it, 'confirmed' only if the creditor did; another debtor's, an outsider's, a forged, or another room's report never moves it."
+    },
+    {
+      "id": "s4",
+      "text": "A split is final exactly when every part is confirmed: any settled part moves an agreed split to submitted, any confirmed to settling, all confirmed to final; a submit or final naming no author never moves it, and no part report counts before every named debtor agreed."
+    },
+    {
+      "id": "s5",
+      "text": "One payment reference settles at most one part in a room: the creditor's client never confirms a transaction hash or a private note it already confirmed for another share, in this split or another."
+    },
+    {
+      "id": "s6",
+      "text": "The private split names no one on chain: every share is a distinct amount; a debtor pays only shielded to shielded (a public source is refused); a part is confirmed only when the creditor's own scan finds an unclaimed note of exactly that share at payTo \u2014 a payer's report alone never confirms it."
+    }
+  ],
+  "goal": "A typed spec, derived-exo-a90, with one acceptance oracle per guarantee, graded against the live code by scripts/grade-specs.sh: the split cannot regress on any guarantee without a spec going red.",
+  "acceptance_criteria": [
+    "The payment a debtor's wallet signs is exactly the transfer derived from the agreed split \u2014 their share, to payTo, in its asset, on its chain; no caller- or UI-supplied value changes it; nothing is paid before every named debtor agreed, twice, for another's share, or against an expired agreement; a malformed split is refused before anyone can agree.",
+    "The split's state \u2014 who agreed, which parts are settled and confirmed, its lifecycle \u2014 is a pure function of the room's authentic log: the same event set in any order, with any duplication, folds to the identical state on every member.",
+    "What the room says about a part is only what the named people disclosed: 'settled' counts only if the debtor it names authored and signed it, 'confirmed' only if the creditor did; another debtor's, an outsider's, a forged, or another room's report never moves it.",
+    "A split is final exactly when every part is confirmed: any settled part moves an agreed split to submitted, any confirmed to settling, all confirmed to final; a submit or final naming no author never moves it, and no part report counts before every named debtor agreed.",
+    "One payment reference settles at most one part in a room: the creditor's client never confirms a transaction hash or a private note it already confirmed for another share, in this split or another.",
+    "The private split names no one on chain: every share is a distinct amount; a debtor pays only shielded to shielded (a public source is refused); a part is confirmed only when the creditor's own scan finds an unclaimed note of exactly that share at payTo \u2014 a payer's report alone never confirms it."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The payment a debtor's wallet signs is exactly the transfer derived from the agreed split \u2014 their share, to payTo, in its asset, on its chain; no caller- or UI-supplied value changes it; nothing is paid before every named debtor agreed, twice, for another's share, or against an expired agreement; a malformed split is refused before anyone can agree."
+    },
+    {
+      "id": "c2",
+      "text": "The split's state \u2014 who agreed, which parts are settled and confirmed, its lifecycle \u2014 is a pure function of the room's authentic log: the same event set in any order, with any duplication, folds to the identical state on every member."
+    },
+    {
+      "id": "c3",
+      "text": "What the room says about a part is only what the named people disclosed: 'settled' counts only if the debtor it names authored and signed it, 'confirmed' only if the creditor did; another debtor's, an outsider's, a forged, or another room's report never moves it."
+    },
+    {
+      "id": "c4",
+      "text": "A split is final exactly when every part is confirmed: any settled part moves an agreed split to submitted, any confirmed to settling, all confirmed to final; a submit or final naming no author never moves it, and no part report counts before every named debtor agreed."
+    },
+    {
+      "id": "c5",
+      "text": "One payment reference settles at most one part in a room: the creditor's client never confirms a transaction hash or a private note it already confirmed for another share, in this split or another."
+    },
+    {
+      "id": "c6",
+      "text": "The private split names no one on chain: every share is a distinct amount; a debtor pays only shielded to shielded (a public source is refused); a part is confirmed only when the creditor's own scan finds an unclaimed note of exactly that share at payTo \u2014 a payer's report alone never confirms it."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s1",
+      "proves": "Each case runs the REAL live path in-process over a fake ledger, over payer {debtor A, debtor B, creditor, outsider} x stage {collecting, agreed, A already settled} x clock {before, after expiry} x split {well-formed, sum above total, repeated debtor, non-canonical amount}: a transfer is sent iff the payer is a debtor of a well-formed, agreed, unsettled, unexpired split, and when sent it equals (share, payTo, asset, chain) read from the agreed effect in the log; a malformed split is refused at propose. Catches paying before agreement, twice, another's share or after expiry; any drift of amount, address, asset or chain from the agreed split; a malformed split accepted (invariant 1).",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_split_payment_derived_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 120,
+      "description": "The payment a debtor's wallet signs is exactly the transfer derived from the agreed split \u2014 their share, to payTo, in its asset, on its chain; no caller- or UI-supplied value changes it; nothing is paid before every named debtor agreed, twice, for another's share, or against an expired agreement; a malformed split is refused before anyone can agree.",
+      "clause_id": "c1"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s2",
+      "proves": "Every order of a fixed split event set (propose, both agreements, A settled, A confirmed, a forged settled for B, a bare final \u2014 seven events, 5040 orders): each state is the event delivered first and folds every order of the other six, as-is and with every event duplicated, against the identity order's view (state, approvals, threshold, every part's settled/confirmed/tx/authors) \u2014 seven states x 720 orders = all 5040. Catches part counting by arrival rather than canonical order, a dedup that counts a duplicate twice, and forged or bare events whose effect depends on where they land (invariant 4).",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_split_convergence_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "head": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 10,
+      "description": "The split's state \u2014 who agreed, which parts are settled and confirmed, its lifecycle \u2014 is a pure function of the room's authentic log: the same event set in any order, with any duplication, folds to the identical state on every member.",
+      "clause_id": "c2"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s3",
+      "proves": "Each case publishes one part report into a fresh agreed split and folds the room's authentic view, over author {the named debtor, the other debtor, the creditor, an outsider member} x step {settled, confirmed} x signature {valid for this room, edited after signing, signed for another room}: the step counts iff the author is the one the step allows (settled: that debtor; confirmed: the creditor) and the signature is valid for this room. Catches counting a report by the name in its key rather than its signed author, a debtor confirming their own part, and forged or cross-room reports (invariant 9).",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_split_authorship_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 40,
+      "description": "What the room says about a part is only what the named people disclosed: 'settled' counts only if the debtor it names authored and signed it, 'confirmed' only if the creditor did; another debtor's, an outsider's, a forged, or another room's report never moves it.",
+      "clause_id": "c3"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s4",
+      "proves": "Every subset of {agree A, agree B, settled A, settled B, confirmed A, confirmed B, bare submit, bare final} is folded and compared to the rule alone: not all agreed -> proposed/collecting with reports ignored; all agreed -> executable; any settled -> submitted; any confirmed -> settling (confirmed implies settled); all confirmed -> final; a bare submit or final never has an effect. Catches a bare final finalizing, final with a part unconfirmed, reports counting before agreement, and confirmed not implying settled.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_split_finality_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "events": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 256,
+      "description": "A split is final exactly when every part is confirmed: any settled part moves an agreed split to submitted, any confirmed to settling, all confirmed to final; a submit or final naming no author never moves it, and no part report counts before every named debtor agreed.",
+      "clause_id": "c4"
+    },
+    {
+      "type": "metamorphic",
+      "restatement_clause_id": "s5",
+      "relation_class": "conservation",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_split_reference_once.nim"
+      ],
+      "cwd": "module",
+      "proves": "Seeded random rooms on both rails (the fake EVM ledger and the shared fake LEZ chain), several splits with overlapping debtors and equal shares: debtors pay some parts honestly with one fresh reference each, then claim those references for other parts, and the creditor's pump runs to quiescence. Payments in must equal confirmations out, one for one, and the flows are non-negative per item so none can cancel: per confirmed reference, (parts confirmed with it) - 1; per honest payment made, 1 - (confirmed at least once). Conservation at zero means no reference counted twice AND every honest payment settled a part. Catches confirming a reused hash or note, and a refuse-everything client that would pass the first term vacuously.",
+      "description": "One payment reference settles at most one part in a room: the creditor's client never confirms a transaction hash or a private note it already confirmed for another share, in this split or another.",
+      "clause_id": "c5"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s6",
+      "proves": "Three wallets on the shared fake LEZ chain and a lez.split with distinct shares, over payer source {shielded, public} x note {exact share at payTo, share+1, share-1, exact at another key node, none, exact but already claimed} x report {reported, not}, plus a lez.split with two equal shares: a payment is sent iff the source is shielded and it takes the private rail; the part is confirmed iff reported and the note is exact, at payTo and unclaimed; the room records a note hash, never the note's id; equal shares are refused at propose. Catches a public source taking the shield rail, confirming on a report alone, off-by-one or wrong-key-node matching, one note confirming two shares, and equal shares accepted.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_private_split_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 40,
+      "description": "The private split names no one on chain: every share is a distinct amount; a debtor pays only shielded to shielded (a public source is refused); a part is confirmed only when the creditor's own scan finds an unclaimed note of exactly that share at payTo \u2014 a payer's report alone never confirms it.",
+      "clause_id": "c6"
+    }
+  ],
+  "criticality": "catastrophic",
+  "declared_new_entrypoints": [
+    "tests/probes/probe_split_payment_derived_stepper.nim",
+    "tests/probes/probe_split_convergence_stepper.nim",
+    "tests/probes/probe_split_authorship_stepper.nim",
+    "tests/probes/probe_split_finality_stepper.nim",
+    "tests/probes/probe_split_reference_once.nim",
+    "tests/probes/probe_private_split_stepper.nim"
+  ]
+}
