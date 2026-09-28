@@ -128,6 +128,7 @@ type
                                    ## required amount) into this closure; nil = unknown.
                                    ## Muster only DETECTS; setup is the LEZ Wallet App's
                                    ## job (exo-44b), which the remedy names.
+    lezRpcUrl*: string             ## the user's LEZ sequencer JSON-RPC ("" = none configured)
     btcRpcUrl*: string             ## the user's Bitcoin node ("" = none configured)
     btcProbe*: proc(url: string): tuple[ok: bool, chain: string, detail: string] {.gcsafe.}
                                    ## which chain (CAIP-2) the node serves; nil = the real
