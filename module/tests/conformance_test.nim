@@ -218,7 +218,7 @@ block:
                       ("threshold", %*{"roster": roster, "k": 2}), ("frost", %*{"roster": roster, "k": 2}),
                       ("invoke", %*{"roster": roster, "k": 1}), ("eip191", %*{"signers": owners, "threshold": 1}),
                       ("stub", %*{"rounds": 2, "threshold": 2}),
-                      ("evm-split", %*{"chain": "eip155:31337"})]:
+                      ("evm-split", %*{"chain": "eip155:31337"}), ("lez-split", %*{"chain": "lez:testnet"})]:
     let r = checkProfileConformance(newDriver(kind, cfg))
     doAssert r.allPass(), kind & " must declare a consistent family profile: failed " & $r.failed()
   echo "10. every driver the registry builds declares a consistent family profile OK"
@@ -249,5 +249,17 @@ block:
   let r = checkConformance(drv, e, t, Contribution(bytes: @sig))
   doAssert r.allPass(), "split driver must conform: failed " & $r.failed()
   echo "11. a split conforms against its per-proposal policy (", r.checks.len, " checks) OK"
+  # the private split (exo-a90.9): a shielded payTo, LEZ, every share a distinct amount
+  let lezDrv = newSplitDriver(LezSplitFamily, "lez:testnet")
+  let kn = "priv:" & repeat("ab", 32) & ":02" & repeat("cd", 32)
+  let ls = evenShares("600", idHex(creditor), debtors.mapIt(idHex(it)), distinctAmounts = true)
+  let le = effectFromJson(splitEffectJson("lez:testnet", "LEZ", "600", idHex(creditor), kn, ls, "lunch"))
+  var lm = ls
+  lm[1].amount = "1"
+  let lt = effectFromJson(splitEffectJson("lez:testnet", "LEZ", "600", idHex(creditor), kn, lm, "lunch"))
+  doAssert lezDrv.signRefusal(le) == "", lezDrv.signRefusal(le)
+  let lr = checkConformance(lezDrv, le, lt, Contribution(bytes: @(edSign(debtors[0], canonicalize(lezDrv, le).bytes))))
+  doAssert lr.allPass(), "private split must conform: failed " & $lr.failed()
+  echo "11b. the private split conforms too (", lr.checks.len, " checks) OK"
 
 echo "conformance_test: all OK"
