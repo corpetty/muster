@@ -101,6 +101,7 @@ make help                                       # every target
 module/tests/run-suite.sh                       # every unit test + invariant probe, in parallel; the Nim closure at metadata.json's pins
 module/tests/run-suite.sh e2e <name>            # one chain-bound test (TEST_ARGS= for its args); bring its chain up first — module/tests/README.md
 scripts/card-self-test.sh                       # offscreen UI round trips; also infra-, audit-download-self-test.sh, two-instance-proof.sh, invite-proof.sh and split-self-test.sh (live fleet; the split also runs a throwaway anvil). One at a time: each `pkill -f`s logos_host_qt, which also kills any wrapping shell whose command line contains that string
+scripts/grade-specs.sh [exo-xxx]                 # grade the typed specs with exophial's own oracle (links the probes' closure into module/.probe-env, exo-a7b)
 python3 docs/diagrams/tools/check-manifest.py   # figure-provenance gate (--update, --stamp)
 python3 scripts/check-readme-rot.py             # entry-point README staleness gate vs the Current-phase section (--stamp)
 python3 scripts/check-claims-registry.py        # ADR-012 claims registry: every protects→requirement+test, every gap→fix+status

@@ -30,6 +30,26 @@ if [ ! -x "$VENV/bin/python" ]; then
 fi
 export SPEC_ORACLE_RTAMT_PYTHON="$VENV/bin/python"
 
+# The probes' Nim closure, reachable from inside the tree (exo-a7b). The oracle runs each
+# probe in an allowlisted env (a scratch HOME, no MUSTER_* vars), so the pinned packages
+# and libsodium are linked under module/.probe-env, where tests/probes/config.nims finds
+# them. Refreshed every run: the closure re-checks its pins, the link follows nixpkgs.
+PROBE_ENV="$REPO/module/.probe-env"
+mkdir -p "$PROBE_ENV"
+ln -sfn "$("$REPO/module/tools/nim-closure.sh")" "$PROBE_ENV/nimpkgs"
+SODIUM="${MUSTER_SODIUM:-$(nix build nixpkgs#libsodium --no-link --print-out-paths 2>/dev/null | tail -1)}"
+[ -f "$SODIUM/lib/libsodium.so" ] && ln -sfn "$SODIUM/lib" "$PROBE_ENV/sodium" \
+  || echo "warning: libsodium not found (set MUSTER_SODIUM); probes that need it will not build" >&2
+# exo-526's probe compiles a C++ host harness; like run-suite.sh, borrow nixpkgs' g++ when
+# the host has none, linked where the probe looks for it.
+CXX="$(command -v g++ || true)"
+if [ -z "$CXX" ]; then
+  GCC="$(nix build nixpkgs#gcc --no-link --print-out-paths 2>/dev/null | tail -1)"
+  [ -x "$GCC/bin/g++" ] && CXX="$GCC/bin/g++"
+fi
+[ -n "$CXX" ] && ln -sfn "$CXX" "$PROBE_ENV/g++" \
+  || echo "warning: no g++ (nor nixpkgs#gcc); exo-526's host harness will not build" >&2
+
 cd "$REPO"
 "$EXO_PY" - "${1:-}" <<'PY'
 import glob, json, pathlib, sys
