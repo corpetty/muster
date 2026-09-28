@@ -76,6 +76,9 @@ import ../src/wallet/lez_adapter       # the Logos Execution Zone chain (send as
 import ../src/wallet/lez_lp            # LpLezCore — the real lez_core over lp_* (P-L3)
 import ../src/wallet/btc_adapter       # the user's Bitcoin node (exo-a50.2.5/.6)
 import ../src/coordination/attest      # readEvent: the external read a Bitcoin spend's coins cite (inv 10)
+import ../src/drivers/split as splitdrv   # a split: each pays their own share (exo-a90)
+import ../src/coordination/parts        # paying and confirming a part (exo-a90.4)
+import ../src/coordination/parts_evm    # …on an EVM chain, through this member's own wallet and RPC
 
 proc hexToBytes(s: string): seq[byte] =
   var h = s
@@ -128,6 +131,7 @@ proc seedOf(n: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = n)
 proc thrRosterKey(n: byte): Ed25519Pub = encFromSeed(seedOf(n)).identity().ed
 
 proc currentRoster(): seq[Ed25519Pub]   ## forward — defined once gSession + the keystore are
+proc roomIdentities(): seq[string]       ## forward — every member's room identity (64-byte enc identity hex)
 proc myAddress(): Address                ## forward — this instance's secp account, defined below
 
 proc roomAccounts(): seq[RoomAccount]   ## forward — the room's disclosed accounts, folded from the log
@@ -151,6 +155,11 @@ proc roomDriver(kind: string): Driver =
   ## encryption identities, from the membership fold — so THIS instance's own identity
   ## IS a signer and it endorses in-app (no pasted fixture). k is the configured
   ## threshold capped at the roster size (a 1-member room needs 1); "unanimous" is n-of-n.
+  let (bare, chain) = splitPolicy(kind)
+  if bare == "evm-split":
+    # a split (exo-a90): the policy names the CAIP-2 chain the parties pay on; the room's
+    # members gate who may be named (the fold reads the parties from the effect alone)
+    return newSplitDriver(EvmSplitFamily, chain, roomIdentities())
   let roster = currentRoster()
   let n = max(1, roster.len)
   case kind
@@ -574,6 +583,14 @@ proc currentRoster(): seq[Ed25519Pub] =
   if result.len == 0:
     result.add moduleKeystore().encIdentity().ed
 
+proc roomIdentities(): seq[string] =
+  ## Every current member's room identity — the 64-byte encryption identity, lowercase
+  ## hex, the name a split gives its parties (exo-a90). Our own when no room is joined.
+  if gSession != nil:
+    for m in gSession.members(): result.add toHex(m.toBytes()).toLowerAscii()
+  if result.len == 0:
+    result.add toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
+
 proc roomAccounts(): seq[RoomAccount] =
   ## The accounts members have disclosed into the joined room, folded from its log
   ## (coordination/accounts.nim, exo-a50.1.3). None without a room. (Forward-declared
@@ -954,6 +971,139 @@ proc frostPump() =
       if id in folded and not folded[id].collection.complete: auto.add id
   gFrostAuto = auto
 
+# ── a split: each pays their own share (exo-a90; docs/design/split-the-bill.md) ─────
+# Paying SENDS and returns; the settled report follows on the intents tick once the
+# payment lands (a hosted call never waits on a block, exo-3c9). On the same tick, this
+# member — if they are a split's creditor — confirms every reported payment their own RPC
+# shows paying them the share (coordination/parts.nim). Nothing is published before the
+# chain has it.
+type SplitPending = object
+  session: CoordinationSession   ## the room the payment belongs to; it completes only there
+  seam: EvmPartSeam
+  pp: PendingPart
+  started: float
+
+const SplitPendingDeadlineS = 600.0
+var gSplitPending: seq[SplitPending]
+var gSplitRecent: seq[JsonNode]  ## the last outcomes, newest last
+var gSplitPumpAt = 0.0
+
+proc splitSeam(chain: string): EvmPartSeam =
+  ## THIS member's own wallet on `chain`: their key signs (client-side EIP-155, through the
+  ## keystore), their RPC sends and reads (invariant 8). The seam refuses a chain its RPC
+  ## does not serve.
+  let (_, cid) = evmChainId(chain)
+  let wchain = "evm:" & $cid
+  newEvmPartSeam(chain, gRpcUrl, newEvmAdapter(wchain, gRpcUrl, fromUnlocked = false), moduleKeystore(),
+                 Account(chain: wchain, form: afPublic, id: addrHex(myAddress())))
+
+proc splitPayingFor(intentId, part: string): bool =
+  for p in gSplitPending:
+    if p.pp.intentId == intentId and p.pp.part == part: return true
+  false
+
+proc splitPump() =
+  if gSession == nil or epochTime() - gSplitPumpAt < 2.0: return
+  gSplitPumpAt = epochTime()
+  let ks = moduleKeystore()
+  var keep: seq[SplitPending]
+  for p in gSplitPending:
+    if p.session != gSession:
+      keep.add p
+      continue
+    var outcome = ""
+    try:
+      let r = liveSettlePartComplete(p.session, ks, driverFor, p.seam, p.pp)
+      if not r.startsWith("unconfirmed") or "failed on" in r: outcome = r
+    except CatchableError:
+      discard                          # an unreachable RPC: try again next tick
+    if outcome.len == 0 and epochTime() - p.started > SplitPendingDeadlineS:
+      outcome = "timed out: the payment never landed"
+    if outcome.len == 0: keep.add p
+    else:
+      gSplitRecent.add %*{"intentId": p.pp.intentId, "part": p.pp.part, "tx": p.pp.tx,
+                          "outcome": outcome, "at": int64(epochTime())}
+      if gSplitRecent.len > 20: gSplitRecent.delete(0)
+  gSplitPending = keep
+  # the creditor's side: confirm what my own read shows, per chain the room's splits use
+  var chains: seq[string]
+  for v in reduceIntentViews(gSession.roomEvents(), driverFor):
+    if v.parts.len == 0 or v.state notin ["submitted", "settling"]: continue
+    let (k, c) = splitPolicy(v.policy)
+    if k == "evm-split" and c notin chains: chains.add c
+  for c in chains:
+    try: discard liveConfirmParts(gSession, ks, driverFor, splitSeam(c))
+    except CatchableError: discard
+
+proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): string =
+  ## Propose splitting a bill THIS member fronted: they are the creditor, paid at their own
+  ## address on `chain` (proposer material, written into the effect so it is reviewed and
+  ## signed). Returns the intent id, or {error}.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let (isEvm, _) = evmChainId(chain)
+  if not isCaip2(chain) or not isEvm: return $(%*{"error": "not-an-evm-chain", "chain": chain})
+  if "evm-split" notin roomKinds(): return $(%*{"error": "not-admitted", "kind": "evm-split"})
+  if not isCanonDec(total) or total == "0": return $(%*{"error": "bad-total", "total": total})
+  let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
+  var shares: seq[SplitShare]
+  try:
+    let j = parseJson(sharesJson)
+    if j.kind == JArray:
+      shares = evenShares(total, me, j.getElems().mapIt(it.getStr().toLowerAscii()))
+    elif j.kind == JObject and j.hasKey("shares"):
+      for x in j["shares"].getElems(): shares.add SplitShare(who: x{"who"}.getStr().toLowerAscii(), amount: x{"amount"}.getStr())
+    elif j.kind == JObject and j.hasKey("parties"):
+      shares = evenShares(total, me, j["parties"].getElems().mapIt(it.getStr().toLowerAscii()),
+                          creditorShares = j{"creditorShares"}.getBool(true))
+    else: return $(%*{"error": "bad-shares", "detail": "an array of room identities, {parties}, or {shares}"})
+  except CatchableError as e:
+    return $(%*{"error": "bad-shares", "detail": e.msg})
+  let payTo = addrHex(myAddress())
+  let effect = splitEffectJson(chain, "ETH", total, me, payTo, shares, memo)
+  var ttl = DefaultIntentTtl
+  try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
+  except ValueError: discard
+  inc gMsgSeq
+  let id = liveProposeIntent(gSession, moduleKeystore(), driverFor, "evm-split@" & chain, effect,
+                             int64(epochTime()), gMsgSeq, account = chain & ":" & payTo, ttlSec = ttl)
+  if id.startsWith("0x"): id else: $(%*{"error": id})
+
+proc musterCoordinateSettlePartImpl(intentId: string): string =
+  ## Pay THIS member's share of an agreed split from their own wallet — the transfer is
+  ## derived from the agreed effect (invariant 1); the report follows once it lands.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let (k, chain) = splitPolicy(intentPolicyOf(gSession.roomEvents(), intentId))
+  if k != "evm-split": return $(%*{"error": "not-a-split"})
+  let seam = splitSeam(chain)
+  let (outcome, pp) = liveSettlePartSend(gSession, moduleKeystore(), driverFor, intentId, seam,
+                                         uint64(epochTime()))
+  if outcome.len > 0: return $(%*{"error": outcome})
+  gSplitPending.add SplitPending(session: gSession, seam: seam, pp: pp, started: epochTime())
+  $(%*{"pending": pp.tx, "amount": pp.transfer.amount, "to": pp.transfer.to, "chain": pp.transfer.chain})
+
+proc musterCoordinateConfirmPartImpl(intentId, part, tx: string): string =
+  ## As the creditor, confirm one share: from this member's own read of `tx`, or — with no
+  ## reference — received outside muster.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let (k, chain) = splitPolicy(intentPolicyOf(gSession.roomEvents(), intentId))
+  if k != "evm-split": return $(%*{"error": "not-a-split"})
+  let r = liveConfirmPart(gSession, moduleKeystore(), driverFor, intentId, part, splitSeam(chain), tx)
+  if r in ["executable", "submitted", "settling", "final"]: $(%*{"state": r}) else: $(%*{"error": r})
+
+# The dispatch at the C ABI has no try/except at the pinned SDK rev (muster_gen.nim), so a
+# raise inside a handler would cross it: each split handler answers {error} instead.
+proc musterCoordinateProposeSplit(chain, total, sharesJson, memo: string): string =
+  try: musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo)
+  except CatchableError as e: $(%*{"error": "failed", "detail": e.msg})
+
+proc musterCoordinateSettlePart(intentId: string): string =
+  try: musterCoordinateSettlePartImpl(intentId)
+  except CatchableError as e: $(%*{"error": "failed", "detail": e.msg})
+
+proc musterCoordinateConfirmPart(intentId, part, tx: string): string =
+  try: musterCoordinateConfirmPartImpl(intentId, part, tx)
+  except CatchableError as e: $(%*{"error": "failed", "detail": e.msg})
+
 proc lezChainViewOf(a: RoomAccount): ChainView =
   if a.chain != gLezChain:
     return (known: false, signers: @[], threshold: 0,
@@ -1278,6 +1428,7 @@ proc musterCoordinateIntents(): string =
   gSession.poll()
   lezPump()                            # complete any LEZ step the chain has since included
   frostPump()                          # advance joined FROST ceremonies and round 2
+  splitPump()                          # report my landed payments; confirm what paid me (exo-a90)
   let events = gSession.roomEvents()
   let myEnc = moduleKeystore().encIdentity()
   let myEncHex = toHex(myEnc.toBytes()).toLowerAscii()
@@ -1290,7 +1441,7 @@ proc musterCoordinateIntents(): string =
     # the exact bytes a member signs (Safe's safeTxHash, or the threshold driver's
     # dCBOR materialization); threshold + domain come from describe(), never hardcoded.
     let drv = driverForKind(v.policy)
-    let desc = drv.describe()
+    let desc = describeFor(drv, effectFromJson(v.effectJson))   # THIS proposal's policy (exo-a90.2)
     var o = intentViewJson(v, desc)
     # n = how many could sign, so the card reads "M of N" honestly (e.g. 2 of 3), not
     # "threshold of threshold". It comes from the driver's family profile — never from
@@ -1363,6 +1514,28 @@ proc musterCoordinateIntents(): string =
     for d in v.decliners:
       decl.add %*{"who": d, "name": (if normId(d) == myEncHex: "you" else: contactBook().nameFor(d))}
     o["declinerNames"] = decl
+    if v.parts.len > 0 and prof.family == EvmSplitFamily:
+      # a split (exo-a90): each person's share and where it stands — only what each disclosed
+      # (their agreement, their payment report) and what the creditor confirmed (invariant 9)
+      try:
+        let sp = splitOf(effectFromJson(v.effectJson))
+        var sum = "0"
+        var parts = newJArray()
+        for pv in v.parts:
+          var who, amount = ""
+          for sh in sp.shares:
+            if partName(sh.who) == pv.part: (who = sh.who; amount = sh.amount)
+          sum = addDec(sum, (if amount.len > 0: amount else: "0"))
+          parts.add %*{"part": pv.part, "who": who,
+                       "name": (if who == myEncHex: "you" else: contactBook().nameFor(who)),
+                       "amount": amount, "settled": pv.settled, "confirmed": pv.confirmed,
+                       "tx": pv.tx, "mine": who == myEncHex, "paying": splitPayingFor(v.id, pv.part)}
+        o["parts"] = parts
+        o["split"] = %*{"total": sp.total, "asset": sp.asset, "payTo": sp.payTo, "memo": sp.memo,
+                        "creditor": sp.creditor, "iAmCreditor": sp.creditor == myEncHex,
+                        "creditorName": (if sp.creditor == myEncHex: "you" else: contactBook().nameFor(sp.creditor)),
+                        "creditorShare": subDec(sp.total, sum)}
+      except CatchableError: discard
     arr.add o
   $arr
 

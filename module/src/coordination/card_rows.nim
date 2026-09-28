@@ -58,7 +58,12 @@ proc cardRows*(p: FamilyProfile): seq[CardRow] =
       if p.revealsEffect == evTargetModule:
         "The room agrees (" & kn & "); then this device hands the action to the module it names."
       else: "Agreement is final in this room (" & kn & "). Nothing goes to a chain."
+    of loEach:
+      "No shared account: the room agrees who owes what, and each person pays their own share " &
+        "from their own wallet on " & chain & ". Nothing makes anyone pay; the room shows who has."
+  let each = p.locus == loEach
   if room: result.add row(0, whereText, "imperative")
+  elif each: result.add row(0, whereText, "motivational", "each person who owes")
   elif not p.bypassesKnown:
     result.add row(0, whereText, "motivational",
                    "whatever can act without the owners here (modules, a guard) — not read yet")
@@ -76,7 +81,11 @@ proc cardRows*(p: FamilyProfile): seq[CardRow] =
       else: "Your approval is your own transaction, and it covers the full action."
     of scAggregateNofN, scAggregateThreshold:
       "A partial signature over the same bytes as everyone else's; they combine into one."
-  if p.commits == cmPointer: result.add row(1, signText, "motivational", "your RPC provider, until the read is verified")
+  if each:
+    result.add row(1, "To agree, your room key signs the split. To pay, your own wallet signs a transfer " &
+                      "muster builds from the split — your share, to the address in it — and nothing else.",
+                   "imperative")
+  elif p.commits == cmPointer: result.add row(1, signText, "motivational", "your RPC provider, until the read is verified")
   else: result.add row(1, signText, "imperative")
 
   # 3. only valid on
@@ -104,7 +113,8 @@ proc cardRows*(p: FamilyProfile): seq[CardRow] =
     of exForced: "The chain forces a short validity window; collect before it closes.")
 
   # 6. collecting
-  result.add row(5, if p.rounds <= 1: "One signature from each signer."
+  result.add row(5, if each: "One agreement from each person named, then one payment from each."
+    elif p.rounds <= 1: "One signature from each signer."
     elif p.secretState: $p.rounds & " rounds: a commitment, then the signature. Your device keeps a one-time secret between them; reusing it would leak the key."
     else: $p.rounds & " rounds, each from the same signers.")
 
@@ -112,6 +122,13 @@ proc cardRows*(p: FamilyProfile): seq[CardRow] =
   if room:
     result.add row(6, (if p.revealsEffect == evTargetModule: "Nothing from the room; the module it calls sees the action."
                        else: "Nothing: it stays in the room."), "imperative")
+  elif each:
+    if p.revealsEffect == evPublic:
+      result.add row(6, "Each payment is public: who paid, whom, how much. Payments to one address, " &
+                        "close together, link the group.", "exposed", "anyone reading the chain")
+    else:
+      result.add row(6, "Nothing that names a payer, a payee or an amount: the payments are shielded.",
+                     "imperative")
   else:
     proc whenOf(r: Reveal): string =
       case r
@@ -130,21 +147,27 @@ proc cardRows*(p: FamilyProfile): seq[CardRow] =
     else: result.add row(6, t, "exposed", "anyone reading the chain")
 
   # 8. approving costs you
-  result.add row(7, case p.approverCost
-    of acNone: "Nothing; whoever submits pays once."
-    of acPerSignature: "Each signature adds a little to the one fee."
-    of acPerVote: "A transaction you pay for."
-    of acPerVoteDeposit: "A transaction you pay for, and the first approver locks a deposit.")
+  if each: result.add row(7, "Agreeing costs nothing; paying costs your own transaction's fee.")
+  else:
+    result.add row(7, case p.approverCost
+      of acNone: "Nothing; whoever submits pays once."
+      of acPerSignature: "Each signature adds a little to the one fee."
+      of acPerVote: "A transaction you pay for."
+      of acPerVoteDeposit: "A transaction you pay for, and the first approver locks a deposit.")
 
   # 9. changing signers
-  result.add row(8, case p.signerChange
-    of chInPlace: "A proposal on this account; the address stays."
-    of chNewAddress: "A new account, and a second proposal to move the funds."
-    of chReshare: "A key ceremony in the room; the address stays."
-    of chFixed: "Not possible; create a new account.")
+  if each: result.add row(8, "The people are named in each split; a different group is a new split.")
+  else:
+    result.add row(8, case p.signerChange
+      of chInPlace: "A proposal on this account; the address stays."
+      of chNewAddress: "A new account, and a second proposal to move the funds."
+      of chReshare: "A key ceremony in the room; the address stays."
+      of chFixed: "Not possible; create a new account.")
 
   # 10. ways around the rule
   if room: result.add row(9, "None: the room's log is the rule.")
+  elif each: result.add row(9, "None for the agreement. Paying is up to each person.", "motivational",
+                            "each person who owes")
   elif not p.bypassesKnown:
     result.add row(9, "Unknown until read from the chain (see Accounts).", "motivational",
                    "whatever the account allows beyond its owners")

@@ -25,7 +25,8 @@ import ./driver
 type
   Locus* = enum
     loNative = "native", loContract = "contract", loVote = "vote",
-    loAggregate = "aggregate", loRoom = "room"
+    loAggregate = "aggregate", loRoom = "room",
+    loEach = "each"   ## no shared account: the room agrees who owes what, each settles their own part (exo-a90.3)
   Scheme* = enum
     scSharedBytes = "shared-bytes", scPerSignerBytes = "per-signer-bytes",
     scOwnTransaction = "own-transaction", scAggregateNofN = "aggregate-n-of-n",
@@ -141,6 +142,14 @@ proc profileFailures*(p: FamilyProfile, desc: DriverDescriptor): seq[string] =
                p.revealsEffect notin {evRoomOnly, evTargetModule}):
     result.add "a room family reveals nothing to a chain"
   if p.revealsEffect == evTargetModule and not room: result.add "target-module visibility is a room family's"
+  if p.locus == loEach:
+    # docs/design/split-the-bill.md §3: every party agrees to the same bytes, for free;
+    # the parties are named per proposal (describeFor carries the threshold), and there is
+    # no account to hold — each pays from their own
+    if p.scheme != scSharedBytes: result.add "locus each iff every party agrees to the same bytes (shared-bytes)"
+    if p.commits != cmContent: result.add "locus each commits to content"
+    if p.approverCost != acNone: result.add "locus each: agreeing costs nothing (each payment is its payer's settlement)"
+    if p.k != 1 or p.n != 0: result.add "locus each names its parties per proposal: k 1, n 0 (describeFor carries the threshold)"
   if p.secretState and p.rounds < 2: result.add "secret round state implies at least 2 rounds"
   if p.setup == suDkg and p.scheme != scAggregateThreshold: result.add "a key ceremony is only for threshold aggregation"
   # agreement with the driver's own policy (invariant 6: describe() is the source)
@@ -153,7 +162,9 @@ proc profileFailures*(p: FamilyProfile, desc: DriverDescriptor): seq[string] =
     if p.chain.len > 0 or p.account.len > 0: result.add "a room family names no chain or account"
   else:
     if not isCaip2(p.chain): result.add "chain '" & p.chain & "' is not CAIP-2"
-    if not isCaip10(p.account, p.chain): result.add "account '" & p.account & "' is not CAIP-10 on " & p.chain
+    if p.locus == loEach:
+      if p.account.len > 0: result.add "locus each has no shared account (each party pays from their own)"
+    elif not isCaip10(p.account, p.chain): result.add "account '" & p.account & "' is not CAIP-10 on " & p.chain
   if p.k < 1: result.add "k must be at least 1"
   if p.n != 0 and p.n < p.k: result.add "n " & $p.n & " below k " & $p.k
   if p.bypassesKnown == false and p.bypasses.len > 0: result.add "bypasses listed but marked unknown"

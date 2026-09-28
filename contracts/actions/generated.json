@@ -586,6 +586,177 @@
       },
       "signRefusal": ""
     },
+    "evm-split/split": {
+      "kind": "evm-split",
+      "variant": "split",
+      "family": "evm.split",
+      "effectExample": {
+        "schema": "muster.effect.split.v1",
+        "fields": {
+          "chain": "eip155:31337",
+          "asset": "ETH",
+          "total": "900000000000000000",
+          "creditor": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+          "payTo": "0x1111111111111111111111111111111111111111",
+          "shares": [
+            [
+              "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+              "300000000000000000"
+            ],
+            [
+              "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2",
+              "300000000000000000"
+            ]
+          ],
+          "memo": "Dinner"
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 2,
+        "finality": "external",
+        "domain": "muster.split.v1"
+      },
+      "environment": "eip155:31337",
+      "profile": {
+        "declared": true,
+        "family": "evm.split",
+        "settlement": "evm",
+        "locus": "each",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "explicit",
+        "ordering": "none",
+        "expiry": "optional",
+        "setup": "none",
+        "membershipChange": "fixed",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "never",
+          "signers": "at-settle",
+          "effect": "public"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "demo",
+        "chain": "eip155:31337",
+        "account": "",
+        "k": 1,
+        "n": 0,
+        "bypassesKnown": true,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 2,
+          "finality": "external",
+          "domain": "muster.split.v1"
+        },
+        "requirements": [
+          {
+            "kind": "environment",
+            "name": "eip155:31337",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "eip155:31337",
+              "field": ""
+            }
+          },
+          {
+            "kind": "infra",
+            "name": "rpc",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "rpc",
+              "field": ""
+            }
+          },
+          {
+            "kind": "authority",
+            "name": "split-party",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "split-party",
+              "field": ""
+            }
+          },
+          {
+            "kind": "asset",
+            "name": "share",
+            "party": "contributor",
+            "needs": {
+              "class": "asset",
+              "target": "eip155:31337/ETH",
+              "field": ""
+            }
+          },
+          {
+            "kind": "address",
+            "name": "pay-to",
+            "party": "proposer",
+            "needs": {
+              "class": "address",
+              "target": "eip155:31337",
+              "field": "payTo"
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          },
+          {
+            "field": "payer",
+            "to": "chain-observer"
+          },
+          {
+            "field": "payee",
+            "to": "chain-observer"
+          },
+          {
+            "field": "amount",
+            "to": "chain-observer"
+          },
+          {
+            "field": "group-linkage",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signed-tx",
+            "to": "rpc-provider"
+          }
+        ],
+        "touches": [
+          {
+            "target": "eip155:31337",
+            "mode": "write"
+          },
+          {
+            "target": "eip155:31337:0x1111111111111111111111111111111111111111",
+            "mode": "write"
+          }
+        ]
+      },
+      "signRefusal": ""
+    },
     "frost/statement": {
       "kind": "frost",
       "variant": "statement",

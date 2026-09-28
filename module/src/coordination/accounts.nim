@@ -25,6 +25,7 @@ import std/[json, strutils, tables, algorithm, sequtils]
 import ../log/log
 import ../drivers/driver
 import ../drivers/kinds
+import ../drivers/profile        # isCaip2: a chain-qualified kind names a CAIP-2 chain (exo-a90.3)
 import ../drivers/safe
 import ../drivers/eip191
 import ../drivers/btc_multisig   # Bitcoin accounts (exo-a50.2.3)
@@ -143,10 +144,18 @@ proc driverForPolicy*(policy: string, accounts: seq[RoomAccount],
                       roomBuild: proc(kind: string): Driver,
                       delegatecallAllow: seq[Address] = @[]): Driver =
   ## Resolve an intent's policy against the room's disclosed accounts. A room kind is
-  ## built by the host (`roomBuild`, its roster wiring); an account-bound kind is built
-  ## FROM the disclosure. Anything that cannot be resolved honestly is unsupported.
+  ## built by the host (`roomBuild`, its roster wiring) from its bare kind, a
+  ## chain-qualified kind (a split, "<kind>@<CAIP-2>") from its whole policy; an
+  ## account-bound kind is built FROM the disclosure. Anything that cannot be resolved
+  ## honestly is unsupported.
   let (kind, acct) = splitPolicy(policy)
   if not isKnownKind(kind): return newUnsupportedDriver(policy)
+  if kindSettlesOnChain(kind):
+    # the each locus (exo-a90.3): the qualifier is the CAIP-2 chain the parties pay on —
+    # never an account, never guessed; the host builds it with the room (its roster)
+    if not isCaip2(acct) or acct.split(':')[0] notin kindInfo(kind).settlesOn:
+      return newUnsupportedDriver(policy)
+    return roomBuild(policy)
   if not kindNeedsAccount(kind):
     return (if acct.len > 0: newUnsupportedDriver(policy) else: roomBuild(kind))
   if acct.len == 0: return newUnsupportedDriver(policy)          # which account? never guessed

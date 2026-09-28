@@ -15,7 +15,7 @@ import ../bitcoin/[bech32, network, tx]
 type
   EffectSummary* = object
     kind*: string   ## payment | contract-call | delegatecall | statement | policy | action |
-                    ## btc-spend | lez-transfer | lez-call | lez-proposal | unknown
+                    ## btc-spend | lez-transfer | lez-call | lez-proposal | split | unknown
     amount*: string ## the decimal amount it moves, in `unit`; "" when it names none
     unit*: string   ## wei | sat | token units | ""
     to*: string     ## the payee or target, in full; "" when none
@@ -98,6 +98,16 @@ proc effectSummary*(effectJson: string): EffectSummary =
                          text: "an action: " & call & " (" & $n & (if n == 1: " arg)" else: " args)"))
   of "btc-spend":
     return btcSummary(j)
+  of "split":
+    # who owes the creditor what (exo-a90.3) — never dressed up as one payment
+    let n = j{"shares"}.getElems().len
+    let asset = j{"asset"}.getStr()
+    let unit = (if asset == "ETH": "wei" else: asset)
+    let total = numText(j{"total"})
+    let memo = j{"memo"}.getStr()
+    return EffectSummary(kind: "split", amount: total, unit: unit, to: j{"payTo"}.getStr(),
+      text: "a split" & (if memo.len > 0: " — " & memo else: "") & ": " & total & " " & unit & ", " &
+            $n & (if n == 1: " person owes " else: " people owe ") & short(j{"creditor"}.getStr()))
   else: discard
   if j.hasKey("program") and j.hasKey("instruction"):         # a LEZ call
     if isTokenTransfer(j["instruction"], j{"accounts"}):

@@ -75,6 +75,48 @@ method identifyContributor*(d: Driver, m: Materialization, c: Contribution): str
   ## cannot identify one (returns "").
   ""
 
+# ── parties named in the effect, and settlement in parts (exo-a90.2) ─────────────
+# docs/design/split-the-bill.md §4.2–§4.3. Every family before the split had ONE policy
+# for every proposal (describe()) and ONE submitter who settles the whole. A family whose
+# parties are named in the effect (a split's debtors) derives its threshold from the
+# effect, and each party settles its own part: still driver-described (invariant 6), so
+# the core's rule is generic — it never knows what a split is.
+
+method describeFor*(d: Driver, e: Effect): DriverDescriptor {.base, gcsafe.} =
+  ## The policy for ONE proposal. Default: describe() — the family's one policy. A
+  ## family whose parties are named in the effect overrides it (the threshold is how
+  ## many the effect names). The core reads this wherever it needs a proposal's policy:
+  ## the collection, the card's "M of N", the activity feed, the audit file.
+  d.describe()
+
+method settlementParts*(d: Driver, e: Effect): seq[string] {.base, gcsafe.} =
+  ## The parties who each settle their OWN part of `e`, named as the driver names a
+  ## contributor ("ed:<hex>"), in the driver's order. Default: none — one member
+  ## submits the whole, as every family before the each-locus does.
+  @[]
+
+method partAuthor*(d: Driver, e: Effect, part, step: string): string {.base, gcsafe.} =
+  ## Who may record `step` for `part` — "settled" (the party's own report of its
+  ## settlement) or "confirmed" (the counterparty's confirmation) — as a room identity
+  ## (hex, the encryption identity a report's author signature names). "" = nobody: a
+  ## report under this step for this part never counts.
+  ""
+
+type PartTransfer* = object
+  ## What a party does to settle its part: send `amount` of `asset` on `chain` to `to`.
+  ## Derived by the driver from the reviewed effect — never supplied by a caller — so a
+  ## payment is always the one the party agreed to (invariant 1).
+  ok*: bool
+  error*: string        ## why there is no transfer ("" when ok)
+  chain*: string        ## CAIP-2
+  asset*: string        ## the asset symbol the effect names
+  to*: string           ## the address to pay, as the effect carries it
+  amount*: string       ## canonical decimal, in the asset's smallest unit
+
+method partTransfer*(d: Driver, e: Effect, part: string): PartTransfer {.base, gcsafe.} =
+  ## The transfer that settles `part` of `e`. Default: none — nothing settles in parts.
+  PartTransfer(ok: false, error: "this family does not settle in parts")
+
 # ── The signing entry point, and a config surface that cannot bypass the check ─
 type
   Config* = object

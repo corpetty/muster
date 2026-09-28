@@ -17,7 +17,7 @@
 ## can have the same member contribute in each round. Single-round drivers pass round
 ## 1, so this is behaviour-preserving for Safe/threshold.
 
-import std/[json, tables, sets, strutils, algorithm]
+import std/[json, tables, sets, strutils, algorithm, sequtils]
 import ../log/log
 import ../intents/lifecycle
 import ../intents/materialization
@@ -46,6 +46,83 @@ proc bytesHex(b: openArray[byte]): string =
   const d = "0123456789abcdef"
   result = "0x"
   for x in b: (result.add d[int(x shr 4)]; result.add d[int(x and 0x0F)])
+
+# ── settlement in parts (exo-a90.2; docs/design/split-the-bill.md §4.3) ────────────
+# A family whose parties each settle their OWN part (a split's debtors paying their
+# shares) declares its parts (settlementParts) and who may record which step for each
+# (partAuthor). A report is "intent/<id>/part/<part>/<step>", author-signed and
+# room-bound (authorship.nim), so what reaches a fold is authentic; the fold then counts,
+# per (part, step), the first report in canonical order whose author the driver allows.
+# The rule is the core's and generic — it never knows what a split is: any part settled
+# → submitted, any confirmed → settling, every part confirmed → final. A report counts
+# only once the intent is agreed (the collection complete), and a bare submit / final —
+# which names no author — never moves a parts intent: its finality is its parts'.
+
+type PartView* = object
+  ## One party's part, as the log shows it: only what that party (settled) and the
+  ## counterparty (confirmed) disclosed (invariant 9).
+  part*: string          ## the party, as the driver names it ("ed:<hex>")
+  settled*: bool         ## the party reported settling it — or the counterparty confirmed it
+  confirmed*: bool       ## the counterparty confirmed it
+  tx*: string            ## the chain reference that settled it: the one the counterparty confirmed
+                         ## ("" = received outside muster), or, until then, the one the party reported
+  settledBy*: string     ## the author of the counted "settled" report ("" = none)
+  confirmedBy*: string   ## the author of the counted "confirmed" report ("" = none)
+
+proc normAuthor(s: string): string =
+  result = s.toLowerAscii()
+  if result.startsWith("0x"): result = result[2 .. ^1]
+
+proc agreed(s: LifecycleState): bool = s in {lsExecutable, lsSubmitted, lsSettling, lsFinal}
+
+proc countedParts(ordered: seq[Event], driver: Driver, effect: Effect, id: string):
+    tuple[views: seq[PartView], at: Table[string, int]] =
+  ## The part reports that count, over `ordered` (canonical order): per (part, step) the
+  ## first whose author is the one the driver allows. `at` maps "<part>/<step>" to that
+  ## report's index in `ordered`. Whether the intent is agreed enough for any of it to
+  ## count is the caller's question.
+  let parts = driver.settlementParts(effect)
+  result.at = initTable[string, int]()
+  var idx = initTable[string, int]()
+  for i, p in parts:
+    result.views.add PartView(part: p)
+    idx[p] = i
+  if parts.len == 0: return
+  let prefix = "intent/" & id & "/part/"
+  var settledTx, confirmedTx = initTable[string, string]()
+  for i, e in ordered:
+    if not e.key.startsWith(prefix): continue
+    let rest = e.key[prefix.len .. ^1]
+    let slash = rest.rfind('/')
+    if slash <= 0: continue
+    let part = rest[0 ..< slash]
+    let step = rest[slash + 1 .. ^1]
+    if part notin idx or step notin PartSteps: continue
+    let k = part & "/" & step
+    if k in result.at: continue
+    var author, tx = ""
+    try:
+      let j = parseJson(e.value)
+      if j.kind != JObject: continue
+      author = j{"author"}.getStr()
+      tx = j{"tx"}.getStr()
+    except CatchableError: continue
+    let allowed = driver.partAuthor(effect, part, step)
+    if allowed.len == 0 or normAuthor(author) != normAuthor(allowed): continue
+    result.at[k] = i
+    if step == "settled":
+      result.views[idx[part]].settled = true
+      result.views[idx[part]].settledBy = author
+      settledTx[part] = tx
+    else:
+      result.views[idx[part]].settled = true       # confirmed ⇒ settled: a part paid in cash
+      result.views[idx[part]].confirmed = true
+      result.views[idx[part]].confirmedBy = author
+      confirmedTx[part] = tx
+  for v in result.views.mitems:
+    # what settled it, as far as the room knows: the reference the counterparty CONFIRMED
+    # ("" = received outside muster), else the one the party reported
+    v.tx = (if v.confirmed: confirmedTx.getOrDefault(v.part, "") else: settledTx.getOrDefault(v.part, ""))
 
 # ── the fold: intent lifecycle = reduce(log) ──────────────────────────────────
 
@@ -134,9 +211,15 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
                                  contribution: Contribution(bytes: hexToBytes(s.value))))
     result[s.id] = it
 
+  # An intent whose family settles in parts moves past executable only on its parts
+  # (pass 5): a bare submit / final names no author, so it never settles one.
+  var inParts = initHashSet[string]()
+  for id, it in result:
+    if driverOf(id).settlementParts(it.effect).len > 0: inParts.incl id
+
   for e in ordered:                                    # pass 3 — submits
     let (id, op, _, _) = opOf(e)
-    if op != "submit" or id notin result: continue
+    if op != "submit" or id notin result or id in inParts: continue
     inc now
     let driver = driverOf(id)
     var it = result[id]
@@ -145,12 +228,31 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
 
   for e in ordered:                                    # pass 4 — finals (on-chain settled)
     let (id, op, _, _) = opOf(e)
-    if op != "final" or id notin result: continue
+    if op != "final" or id notin result or id in inParts: continue
     inc now
     let driver = driverOf(id)
     var it = result[id]
     it.apply(driver, IntentEvent(kind: ieFinal, now: now))   # submitted/settling → final ("paid")
     result[id] = it
+
+  var partIds: seq[string]                             # pass 5 — settlement in parts (exo-a90.2)
+  for id in inParts: partIds.add id
+  partIds.sort()
+  for id in partIds:
+    if result[id].state != lsExecutable: continue      # a report counts only once agreed
+    let driver = driverOf(id)
+    var intent = result[id]
+    let views = countedParts(ordered, driver, intent.effect, id).views
+    if views.anyIt(it.settled):
+      inc now
+      intent.apply(driver, IntentEvent(kind: ieSubmit, now: now))    # executable → submitted
+    if views.anyIt(it.confirmed):
+      inc now
+      intent.apply(driver, IntentEvent(kind: ieSettling, now: now))  # → settling
+    if views.allIt(it.confirmed):
+      inc now
+      intent.apply(driver, IntentEvent(kind: ieFinal, now: now))     # every part confirmed → final
+    result[id] = intent
 
 proc intentState*(events: seq[Event], driverFor: DriverFor, intentId: string): string =
   ## The lifecycle state of one intent as a string (draft/proposed/collecting/
@@ -206,6 +308,10 @@ type IntentView* = object
   unattested*: int        ## approvals pasted from outside muster — counted, never shown as committed
   schemaKnown*: bool      ## whether muster recognizes that schema — false ⇒ the card renders a
                           ## NAMED "schema unknown" failure, never the effect body (exo-1ec.3)
+  threshold*: int         ## this proposal's threshold — describeFor(effect), so a family whose
+                          ## parties are named in the effect shows "M of <how many it names>"
+  parts*: seq[PartView]   ## a parts-settled family's parts (exo-a90.2), in the driver's order;
+                          ## nothing counts until the intent is agreed. Empty for every other family
 
 proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentView] =
   ## Deterministic (sorted by id), so two instances render the identical list from
@@ -213,6 +319,7 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
   ## same dedup the fold applies — so a re-submitted owner signature never inflates
   ## the "M of N" a card shows. Each view carries the intent's own policy.
   let intents = reduceIntents(events, driverFor)
+  let ordered = canonicalOrder(events)
   var declined = initTable[string, HashSet[string]]()            # <id> -> distinct decliners
   for e in events:
     let p = e.key.split('/')
@@ -220,8 +327,12 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
       declined.mgetOrPut(p[1], initHashSet[string]()).incl(p[3])
   for id, it in intents:
     let pol = intentPolicyOf(events, id)
-    let desc = driverFor(pol).describe()
+    let drv = driverFor(pol)
+    let desc = describeFor(drv, it.effect)                       # THIS proposal's policy (exo-a90.2)
     let curRound = it.collection.round
+    var parts = countedParts(ordered, drv, it.effect, id).views
+    if not agreed(it.state):                                     # nothing counts before agreement
+      for p in parts.mitems: p = PartView(part: p.part)
     var decliners: seq[string]
     for w in declined.getOrDefault(id, initHashSet[string]()): decliners.add w
     decliners.sort()
@@ -249,8 +360,24 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
                           declines: declined.getOrDefault(id, initHashSet[string]()).len,
                           decliners: decliners,
                           schemaId: sch.id,
-                          schemaKnown: sch.known)
+                          schemaKnown: sch.known,
+                          threshold: desc.threshold,
+                          parts: parts)
   result.sort(proc (a, b: IntentView): int = cmp(a.id, b.id))
+
+proc intentDescriptor*(events: seq[Event], driverFor: DriverFor, intentId: string): DriverDescriptor =
+  ## The policy for ONE proposal (describeFor): its driver's, applied to its effect —
+  ## what the card's "M of N", the audit file and the activity feed must read, never the
+  ## family-wide describe() (a split names its own parties, exo-a90.2).
+  let drv = driverFor(intentPolicyOf(events, intentId))
+  let ej = effectJsonOf(events, intentId)
+  if ej.len == 0: drv.describe() else: describeFor(drv, effectFromJson(ej))
+
+proc partsJson*(parts: seq[PartView]): JsonNode =
+  result = newJArray()
+  for p in parts:
+    result.add %*{"part": p.part, "settled": p.settled, "confirmed": p.confirmed, "tx": p.tx,
+                  "settledBy": p.settledBy, "confirmedBy": p.confirmedBy}
 
 proc intentViewJson*(v: IntentView, desc: DriverDescriptor): JsonNode =
   ## The driver-generic part of a card's JSON (coordinate_intents): what every intent
@@ -270,7 +397,10 @@ proc intentViewJson*(v: IntentView, desc: DriverDescriptor): JsonNode =
      "schemaId": v.schemaId, "schemaKnown": v.schemaKnown,
      # how many approvals commit to their inputs (a verified muster attestation) vs
      # were signed outside muster and pasted in (exo-ef1) — never shown as committed.
-     "committed": v.committed, "unattested": v.unattested}
+     "committed": v.committed, "unattested": v.unattested,
+     # settlement in parts (exo-a90.2): each party's part — settled by them, confirmed by
+     # the counterparty. Empty for a family one member settles whole.
+     "parts": partsJson(v.parts)}
 
 # ── activity: how the room reached its state (the education seam) ──────────────
 # A human-readable narrative of every state transition on the coordination log, in
@@ -336,10 +466,21 @@ proc gradeLookup(events: seq[Event], driverFor: DriverFor): proc (id, who, round
       cache[id] = t
     cache[id].getOrDefault(who & "/" & round, "")
 
+proc countedPartsAt(ordered: seq[Event], folded: Table[string, Intent],
+                    driverFor: DriverFor, events: seq[Event]): Table[string, Table[string, int]] =
+  ## For every AGREED intent whose family settles in parts: "<part>/<step>" → the index
+  ## in `ordered` of the report that counts (exo-a90.2). Only those reach the story.
+  for id, it in folded:
+    if not agreed(it.state): continue
+    let drv = driverFor(intentPolicyOf(events, id))
+    if drv.settlementParts(it.effect).len == 0: continue
+    result[id] = countedParts(ordered, drv, it.effect, id).at
+
 proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntry] =
   ## The room's coordination history as reduce(log). See the section note above.
   let ordered = canonicalOrder(events)
   let folded = reduceIntents(events, driverFor)
+  let partsAt = countedPartsAt(ordered, folded, driverFor, events)
   let gradeOf = gradeLookup(events, driverFor)
   var approvers = initTable[string, HashSet[string]]()   # id -> {who/round} seen
   var lastSig = initTable[string, int]()                 # id -> index of its last sig
@@ -356,7 +497,8 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
     let id = p[1]
     let op = p[2]
     if op == "policy": continue        # the policy decl rides with the propose line
-    let desc = driverFor(intentPolicyOf(events, id)).describe()
+    let desc = (if id in folded: describeFor(driverFor(intentPolicyOf(events, id)), folded[id].effect)
+                else: driverFor(intentPolicyOf(events, id)).describe())
     case op
     of "propose":
       proposeSeq[id] = i
@@ -388,13 +530,34 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
         title: "Declined by " & shortId(p[3]),
         detail: "chose not to take part — the threshold is unchanged")
     of "submit":
+      if id in partsAt: continue         # a parts intent settles on its parts, never a bare submit
       let w = settleWords(events, driverFor, id)
       result.add ActivityEntry(seq: i, order: 0, kind: "submit", intentId: id,
         account: "", title: w.submit, detail: w.submitDetail)
     of "final":
+      if id in partsAt: continue
       let w = settleWords(events, driverFor, id)
       result.add ActivityEntry(seq: i, order: 0, kind: "settled", intentId: id,
         account: "", title: w.final, detail: w.finalDetail)
+    of "part":
+      # a part report the fold counted (exo-a90.2): the party's own "settled", or the
+      # counterparty's "confirmed" — named by who reported it (invariant 9)
+      if p.len < 5 or id notin partsAt: continue
+      let k = p[3] & "/" & p[4]
+      if partsAt[id].getOrDefault(k, -1) != i: continue
+      var author, tx = ""
+      try:
+        let j = parseJson(ordered[i].value)
+        author = j{"author"}.getStr(); tx = j{"tx"}.getStr()
+      except CatchableError: discard
+      if p[4] == "settled":
+        result.add ActivityEntry(seq: i, order: 0, kind: "part-settled", intentId: id,
+          account: author, title: shortId(p[3]) & " settled their part",
+          detail: (if tx.len > 0: "reported " & shortId(tx) & " on the chain" else: ""))
+      else:
+        result.add ActivityEntry(seq: i, order: 0, kind: "part-confirmed", intentId: id,
+          account: author, title: shortId(author) & " confirmed " & shortId(p[3]) & "'s part",
+          detail: (if tx.len > 0: "read " & shortId(tx) & " on the chain" else: "received outside muster"))
     else: discard
   # Derived "ready" line: narrate the threshold being met, positioned right after the
   # intent's last approval. Authoritative from the fold's own state — never a
@@ -418,8 +581,8 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
     of "propose": 0
     of "approve", "decline": 1
     of "ready": 2
-    of "submit": 3
-    of "settled": 4
+    of "submit", "part-settled": 3
+    of "settled", "part-confirmed": 4
     else: 0                       # admit / anything else: no intra-intent phase
   proc groupOrder(e: ActivityEntry): int =
     if e.intentId.len > 0 and e.intentId in proposeSeq: proposeSeq[e.intentId] else: e.seq
@@ -457,6 +620,10 @@ proc summarizeEffect*(effectJson: string): string =
     of "statement":  return "a statement: \"" & j{"text"}.getStr() & "\""
     of "invoke":     return "call " & j{"module"}.getStr() & "." & j{"method"}.getStr() & "(…)"
     of "add-driver": return "admit the driver kind: " & j{"kind"}.getStr()
+    of "split":
+      let n = j{"shares"}.getElems().len
+      return "split " & j{"total"}.getStr() & " " & j{"asset"}.getStr() & ": " & $n &
+             (if n == 1: " person owes the creditor" else: " people owe the creditor")
     else:
       if j.hasKey("to") or j.hasKey("value"):
         return "pay " & $j{"value"}.getInt() & " to " & j{"to"}.getStr()
@@ -527,6 +694,7 @@ proc membershipEvent*(epoch: int, joinerHex: string, parents: seq[EventId] = @[]
 proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] =
   let ordered = canonicalOrder(events)
   let gradeOf = gradeLookup(events, driverFor)
+  let partsAt = countedPartsAt(ordered, reduceIntents(events, driverFor), driverFor, events)
   var epoch = 0
   var seenSig = initHashSet[string]()
   var seenDecline = initHashSet[string]()
@@ -630,4 +798,24 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
         accountable: true, what: "settled outside the room",
         detail: "", guarantee: "an external read: observed from the chain (R-8), never asserted; graded attested unless proof-checked (F-10)",
         epoch: epoch)
+    of "part":
+      # a counted part report (exo-a90.2); an uncounted one never reached the decision
+      if p.len < 5 or id notin partsAt or partsAt[id].getOrDefault(p[3] & "/" & p[4], -1) != i: continue
+      var author, tx = ""
+      try:
+        let j = parseJson(e.value)
+        author = j{"author"}.getStr(); tx = j{"tx"}.getStr()
+      except CatchableError: discard
+      if p[4] == "settled":
+        result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "part-settled", intentId: id,
+          account: author, accountable: true, what: "a party's report that it settled its part",
+          detail: tx,
+          guarantee: "signed by the party it names, bound to this room (authorship); a claim until the counterparty confirms it — the room shows who reported paying, not that they did",
+          epoch: epoch)
+      else:
+        result.add LogProvItem(seq: i, cls: icExternalRead, kind: "part-confirmed", intentId: id,
+          account: author, accountable: true, what: "the counterparty's confirmation of a part",
+          detail: (if tx.len > 0: tx else: "received outside muster"),
+          guarantee: "an external read disclosed by the one party the part is owed to: their own read of their own infrastructure (F-10, attested), or their word that it arrived outside muster",
+          epoch: epoch)
     else: discard
