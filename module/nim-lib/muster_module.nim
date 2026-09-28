@@ -2916,7 +2916,7 @@ proc accountFormOf(w: Wallet, chain, id: string): AccountForm =
     if a.chain == chain and a.id == id: return a.form
   afPublic
 
-proc musterWalletSend(chain, fromId, to, assetSymbol, raw: string): string =
+proc musterWalletSendImpl(chain, fromId, to, assetSymbol, raw: string): string =
   let w = moduleWallet()
   try:
     let asset = assetBySymbol(w, chain, assetSymbol)
@@ -2935,6 +2935,10 @@ proc musterWalletSend(chain, fromId, to, assetSymbol, raw: string): string =
     $(%*{"txId": r.id, "chain": r.chain})
   except CatchableError as e:
     $(%*{"error": e.msg})
+
+proc musterWalletSend(chain, fromId, to, assetSymbol, raw: string): string =
+  result = musterWalletSendImpl(chain, fromId, to, assetSymbol, raw)
+  if gLpDebug: stderr.writeLine("MUSTER-LP wallet_send " & chain & " " & raw & " " & result)
 
 proc musterWalletLezSetup(pinataId: string): string =
   ## Headless LEZ provisioning FALLBACK (exo-44b, the no-broker path): ensure a public
@@ -2955,9 +2959,14 @@ proc musterWalletFinality(chain, txId: string): string =
   let w = moduleWallet()
   try:
     let f = w.finality(TxRef(chain: chain, id: txId))
-    $(%*{"status": $f.status, "detail": f.detail})
+    result = $(%*{"status": $f.status, "detail": f.detail})
   except CatchableError as e:
-    $(%*{"error": e.msg})
+    result = $(%*{"error": e.msg})
+  # a settled (or failed) transfer, once — what an offscreen self-test watches; pending
+  # is polled every few seconds and is not logged
+  if gLpDebug and "\"pending\"" notin result and gSplitLogged.getOrDefault("fin:" & txId, "") != result:
+    gSplitLogged["fin:" & txId] = result
+    stderr.writeLine("MUSTER-LP wallet_finality " & chain & " " & txId & " " & result)
 
 proc musterWalletVerifiedBalance(accountId, stateRootHex: string): string =
   ## The EVM balance verified against a trusted state root (F-10 verified-locally):

@@ -75,7 +75,7 @@ while [ $(( $(date +%s) - start )) -lt "$TIMEOUT" ]; do
   sleep 5
   final A && final B && { ok=1; break; }
   if [ $(( ($(date +%s) - start) % 60 )) -lt 5 ]; then
-    echo "[$(( $(date +%s) - start ))s] B: $(last 'LEZFUND|MUSTER-LP split (pay|reported)' B)"
+    echo "[$(( $(date +%s) - start ))s] B: $(last 'MUSTER-LP (wallet_lez_setup|wallet_send|wallet_finality|split (pay|reported))' B)"
     echo "        A: $(last 'MUSTER-LP split|MUSTER-LEZ scan' A)"
   fi
 done
@@ -83,9 +83,10 @@ elapsed=$(( $(date +%s) - start ))
 
 saw() { grep -aqE "$1" "$D/$2.log" 2>/dev/null && echo yes || echo no; }
 echo "A members=2: $(saw 'members=2' A) · A proposed: $(saw 'MUSTER-LP split propose 0x' A)" \
-     "· B funded: $(saw 'LEZFUND funded' B) · B paid: $(saw 'MUSTER-LP split pay .*pending' B)" \
+     "· B funded: $(saw 'MUSTER-LP wallet_finality lez:testnet .*"final"' B) · B paid: $(saw 'MUSTER-LP split pay .*pending' B)" \
      "· B reported: $(saw 'MUSTER-LP split reported' B) · A confirmed: $(saw 'MUSTER-LP split confirmed' A)"
-grep -ahE 'LEZFUND' "$D/B.log" | tail -5 | cut -c1-220 | sed 's/^/  B │ /'
+# (the UI backend's own log lines do not reach the runner's log; the module's MUSTER-LP ones do)
+grep -ahE 'MUSTER-LP (wallet_lez_setup|wallet_send|wallet_finality)' "$D/B.log" | tail -5 | cut -c1-220 | sed 's/^/  B │ /'
 grep -ahE 'MUSTER-LP split |MUSTER-LEZ' "$D/A.log" | tail -6 | cut -c1-220 | sed 's/^/  A │ /'
 grep -ahE 'MUSTER-LP split |MUSTER-LEZ' "$D/B.log" | tail -6 | cut -c1-220 | sed 's/^/  B │ /'
 
