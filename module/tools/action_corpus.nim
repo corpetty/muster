@@ -246,6 +246,14 @@ proc entry(kind, variant: string): JsonNode =
      "manifest": d.manifest(e).toJson(),
      "signRefusal": d.signRefusal(e)}
 
+proc proposedEffectJson*(key: string): string =
+  ## The effect JSON a room carries for the generated `<kind>/<variant>` — exactly what the
+  ## hosted composer would propose, so a test can hold the card's rendering gate
+  ## (effectSchema) to every effect a built driver canonicalizes.
+  let i = key.find('/')
+  let kind = key[0 ..< i]
+  effectJsonFor(kind, key[i + 1 .. ^1], newDriver(kind, configOf(kind)))
+
 proc corpus*(): JsonNode =
   ## The generated half of the action corpus: every built (kind, variant), keyed
   ## "<kind>/<variant>", in key order.
