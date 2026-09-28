@@ -63,6 +63,12 @@ proc rpcGasPrice*(url: string): uint64 =
   rpcTry(url, "eth_gasPrice"):
     q(waitFor c.eth_gasPrice())
 
+proc rpcChainId*(url: string): string =
+  ## The chain id this endpoint serves, decimal — so a payment is never sent, nor a
+  ## payment confirmed, through an RPC serving another chain than the one agreed (exo-a90.5).
+  rpcTry(url, "eth_chainId"):
+    $(waitFor c.eth_chainId())
+
 proc rpcNonce*(url, addrHex: string): uint64 =
   rpcTry(url, "eth_getTransactionCount"):
     q(waitFor c.eth_getTransactionCount(Address.fromHex(addrHex), "pending"))
@@ -83,6 +89,19 @@ proc rpcReceiptStatus*(url, txHashHex: string): int =
     if r.status.isSome: (if q(r.status.get) == 1: 1 else: 0) else: -1
   except CatchableError:
     evict(url); -1
+
+proc rpcTransferOf*(url, txHashHex: string):
+    tuple[found: bool, fromHex, toHex, valueDec: string, status: int, blockNumber: uint64] =
+  ## What a transaction moved, as THIS endpoint reports it (exo-a90.4: a creditor reading a
+  ## reported payment): sender, receiver ("" for a contract creation), native value in wei,
+  ## and its receipt status (1 success, 0 failed, -1 no receipt yet). found = false when the
+  ## node knows no such transaction. A transport error raises — never reads as "not found".
+  let tx = rpcTry(url, "eth_getTransactionByHash"):
+    waitFor c.eth_getTransactionByHash(Hash32.fromHex(txHashHex))
+  if tx.isNil: return (false, "", "", "0", -1, 0'u64)
+  let status = rpcReceiptStatus(url, txHashHex)
+  (true, tx.`from`.to0xHex, (if tx.to.isSome: tx.to.get.to0xHex else: ""), $tx.value, status,
+   (if tx.blockNumber.isSome: q(tx.blockNumber.get) else: 0'u64))
 
 proc rpcSendTransaction*(url, fromHex, toHex: string, value: UInt256,
                          data: seq[byte], gas: uint64): string =

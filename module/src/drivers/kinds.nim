@@ -23,12 +23,16 @@ type
     kind*: string             ## the policy word recorded on each intent
     family*: string           ## the registry family it instantiates
     label*: string            ## what a person calls it on the picker
-    composes*: seq[string]    ## the proposals it serves: "payment" | "statement" | "action"
+    composes*: seq[string]    ## the proposals it serves: "payment" | "statement" | "action" | "split"
     founding*: bool           ## admitted in every room from the start; else only by an approved add-driver
     accountFamilies*: seq[string]
       ## non-empty = the kind acts FROM an account a member disclosed into the room
       ## (exo-a50.1.3): its intents carry "<kind>@<CAIP-10>" and resolve to that
       ## account; these are the account families it can bind
+    settlesOn*: seq[string]
+      ## non-empty = the kind settles on a CHAIN with no shared account (the each locus,
+      ## exo-a90.3): its intents carry "<kind>@<CAIP-2>", and these are the CAIP-2
+      ## namespaces that chain may be in — the same effect on two chains is two intents
 
 const Kinds*: seq[KindInfo] = @[
   KindInfo(kind: "safe", family: "evm.safe", label: "Safe", composes: @["payment"], founding: true,
@@ -48,7 +52,11 @@ const Kinds*: seq[KindInfo] = @[
   KindInfo(kind: "btc-frost", family: "btc.frost-bip445", label: "Bitcoin (FROST)", composes: @["payment"],
            founding: true, accountFamilies: @["btc.frost-bip445"]),
   KindInfo(kind: "lez-frost", family: "lez.frost-public-account", label: "LEZ (FROST)", composes: @["payment"],
-           founding: true, accountFamilies: @["lez.frost-public-account"])]
+           founding: true, accountFamilies: @["lez.frost-public-account"]),
+  KindInfo(kind: "evm-split", family: "evm.split", label: "Split (Ethereum)", composes: @["split"],
+           founding: true, settlesOn: @["eip155"]),
+  KindInfo(kind: "lez-split", family: "lez.split", label: "Split privately (LEZ)", composes: @["split"],
+           founding: true, settlesOn: @["lez"])]
 
 # ── a policy is a kind, optionally bound to an account ─────────────────────────
 # An account-bound intent's policy is "<kind>@<CAIP-10 account>" (exo-a50.1.3), so the
@@ -75,12 +83,15 @@ proc kindInfo*(kind: string): KindInfo =
 
 proc kindNeedsAccount*(kind: string): bool = kindInfo(kind).accountFamilies.len > 0
 
+proc kindSettlesOnChain*(kind: string): bool = kindInfo(kind).settlesOn.len > 0
+  ## A chain-qualified kind (the each locus): its policy names a CAIP-2 chain, not an account.
+
 proc foundingKinds*(): seq[string] =
   for k in Kinds:
     if k.founding: result.add k.kind
 
 proc kindsFor*(proposal: string): seq[string] =
-  ## The kinds the composer may offer for a proposal kind (payment / statement / action),
+  ## The kinds the composer may offer for a proposal kind (payment / statement / action / split),
   ## in list order — "payment via FROST" is not a thing, so it is never offered.
   for k in Kinds:
     if proposal in k.composes: result.add k.kind
@@ -92,7 +103,7 @@ proc kindsJson*(admitted: seq[string]): JsonNode =
   for k in Kinds:
     result.add %*{"kind": k.kind, "family": k.family, "label": k.label,
                   "composes": k.composes, "founding": k.founding,
-                  "accountFamilies": k.accountFamilies,
+                  "accountFamilies": k.accountFamilies, "settlesOn": k.settlesOn,
                   "admitted": k.kind in admitted}
 
 # ── an unknown kind: shown, never guessed ────────────────────────────────────

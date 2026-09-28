@@ -246,6 +246,11 @@ proc liveSubmitPrecheck*(s: CoordinationSession, driverFor: DriverFor,
   # settles nowhere (a room family) has nothing to put on-chain — read, never a string
   if driverFor(policy).profile().settlement == "none" or not driverFor(policy).supported():
     return "not-onchain"
+  # a family whose parties settle their own parts (a split, exo-a90.3) has nothing for one
+  # member to submit: each party pays their own part (coordination/parts.nim)
+  let ej = effectJsonOf(events, intentId)
+  if ej.len > 0 and driverFor(policy).settlementParts(effectFromJson(ej)).len > 0:
+    return "settles-in-parts"
   if intentState(events, driverFor, intentId) != "executable": return "not-executable"
   let ctx = intentContext(events, intentId)
   if ctx.isPlaceholder: return "no-context"

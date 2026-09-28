@@ -1,0 +1,284 @@
+{
+  "actions": [
+    {
+      "id": "evm.split/split",
+      "name": "Split a bill: agree who owes what, each pays their own share",
+      "area": "family",
+      "family": "evm.split",
+      "kind": "evm-split",
+      "status": "built",
+      "summary": "One member fronted a bill; the split names every debtor, their share and the address to pay. Each debtor agrees to their own share with their room key; once everyone named has agreed, each pays their share from their own wallet, the creditor confirms each payment, and the split is final when every share is confirmed. No shared account: nothing on the chain counts or enforces the agreement.",
+      "generated": "evm-split/split",
+      "effect": {
+        "schema": "muster.effect.split.v1",
+        "fields": [
+          {
+            "name": "chain",
+            "means": "the CAIP-2 chain every share is paid on — the policy's qualifier (evm-split@<chain>)"
+          },
+          {
+            "name": "asset",
+            "means": "what is paid: ETH (native) in v1"
+          },
+          {
+            "name": "total",
+            "means": "the bill, canonical decimal in the smallest unit (wei); the creditor's own share is total minus the shares"
+          },
+          {
+            "name": "creditor",
+            "means": "who fronted the bill and is owed: their room identity (64-byte encryption identity, hex)"
+          },
+          {
+            "name": "payTo",
+            "means": "the creditor's receiving address, lowercase — proposer material, so it is reviewed and signed"
+          },
+          {
+            "name": "shares",
+            "means": "[{who, amount}] sorted by who, each debtor once, never the creditor, every amount above zero, the sum at most the total"
+          },
+          {
+            "name": "memo",
+            "means": "room-only text, at most 280 bytes"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the creditor (v1: the proposer is the person who fronted the bill)",
+          "does": "Composes the split — even shares round down and the creditor absorbs the remainder (evenShares), or explicit amounts — with their own receiving address as payTo, under the policy evm-split@<CAIP-2 chain>. The driver refuses anything not in the split's one spelling (non-canonical decimals, unsorted or repeated debtors, the creditor as a debtor, shares above the total, a chain other than the policy's), and on this client's propose path a party who is not a room member.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/split_driver_test.nim",
+            "scripts/split-self-test.sh"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "each debtor the split names",
+          "does": "Reviews their own share and agrees in-app: the keystore signs the re-derived materialization with the member's Ed25519 room key. The threshold is every debtor the effect names (describeFor), decoded from the materialization itself — never the room roster — so the creditor and members the split does not name can never agree, and a later joiner never moves it. A debtor may Deny instead ('that is not my share').",
+          "signs": "an Ed25519 signature by the debtor's room identity over dCBOR ['muster.split.v1', 'muster.effect.split.v1', chain, asset, total, creditor, payTo, [[who, amount]…], memo]; plus a muster attestation by the same key over P = (context, the materialization, the provenance record)",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/split_driver_test.nim",
+            "module/tests/parts_fold_test.nim",
+            "scripts/split-self-test.sh"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "each debtor, then the creditor",
+          "does": "Each debtor pays their own share from their own wallet: the transfer (share, payTo, asset, chain) is derived by the driver from the agreed effect, never typed, and sent through the debtor's own key and RPC; once it has landed, the debtor's author-signed 'settled' report carries its reference. The creditor's client reads each reported transaction from the creditor's own RPC and confirms it only if it succeeded, pays payTo and moves exactly the share; it never confirms a reference it already confirmed for another share. The creditor can also mark a share received outside muster. A report by anyone else, or before everyone agreed, never counts; paying against an expired agreement is refused.",
+          "signs": "each debtor's own EIP-155 transfer (their wallet); each report is signed by its author's room key, bound to the room (authorship)",
+          "reveals": [
+            {
+              "field": "payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payee",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "group-linkage",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/split_live_test.nim",
+            "module/tests/split_anvil_e2e.nim",
+            "module/tests/parts_fold_test.nim",
+            "scripts/split-self-test.sh"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one",
+          "does": "Every share confirmed by the creditor: the fold moves the split to final. A bare submit or final event, which names no author, never moves it — a split's finality is its parts'.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/parts_fold_test.nim",
+            "module/tests/split_live_test.nim",
+            "module/tests/split_anvil_e2e.nim",
+            "scripts/split-self-test.sh"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an agreement by anyone the split does not name as a debtor (the creditor, another member)",
+          "why": "the driver identifies no debtor for it; it never counts",
+          "evidence": [
+            "module/tests/split_driver_test.nim"
+          ]
+        },
+        {
+          "what": "a split whose shares add up to more than the total, repeat or are unsorted, name the creditor, or are not canonical decimals",
+          "why": "invariants 1 and 5: one spelling; refused with its reason, and it canonicalizes to a sentinel no agreement can name",
+          "evidence": [
+            "module/tests/split_driver_test.nim"
+          ]
+        },
+        {
+          "what": "a report that a part was settled, by anyone but that debtor; a confirmation by anyone but the creditor",
+          "why": "invariant 9: what the room says about a member is only what that member disclosed",
+          "evidence": [
+            "module/tests/parts_fold_test.nim",
+            "module/tests/split_driver_test.nim"
+          ]
+        },
+        {
+          "what": "moving a split to final with a bare submit or final event",
+          "why": "a split settles in parts; a bare event names no author",
+          "evidence": [
+            "module/tests/parts_fold_test.nim"
+          ]
+        },
+        {
+          "what": "submitting a split as one transaction",
+          "why": "coordinate_submit answers 'settles-in-parts': each debtor pays their own",
+          "evidence": [
+            "module/tests/split_live_test.nim"
+          ]
+        },
+        {
+          "what": "paying before every debtor agreed, paying twice, or paying a share that is not yours",
+          "why": "'not-agreed' / 'already-settled' / 'not-a-party', nothing sent",
+          "evidence": [
+            "module/tests/split_live_test.nim"
+          ]
+        },
+        {
+          "what": "paying against an expired agreement",
+          "why": "invariant 2: 'expired', nothing sent",
+          "evidence": [
+            "module/tests/split_live_test.nim"
+          ]
+        },
+        {
+          "what": "confirming a reported transaction that pays someone else, or the wrong amount",
+          "why": "the creditor's own read must show it paying payTo exactly the share",
+          "evidence": [
+            "module/tests/split_live_test.nim",
+            "module/tests/split_anvil_e2e.nim"
+          ]
+        },
+        {
+          "what": "one transaction settling two shares",
+          "why": "the creditor's client refuses a reference it already confirmed for another share",
+          "evidence": [
+            "module/tests/split_live_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_propose_split",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_decline",
+        "coordinate_readiness",
+        "coordinate_settle_part",
+        "coordinate_confirm_part"
+      ],
+      "ui": "Home → Split a bill (or Room → + → Split) → total in ETH, who's in, \"I'm in it too\" → Propose; the split card: each person's share and where it stands → Agree to my share → Pay my share (once everyone agreed; no amount or address to type); the creditor's card confirms payments from their own RPC read, or Mark received",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "You pay exactly the share you agreed, to the address in the split: the payment is derived from the agreed effect, never typed",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Only the people a split names can agree to it, and only each can agree to their own share",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Nothing makes anyone pay: the room shows who has",
+          "credibility": "motivational",
+          "party": "each person who owes"
+        },
+        {
+          "claim": "Every payment is public on the chain — payer, payee, amount — and several payments to one address close together link the group",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        },
+        {
+          "claim": "Who was at dinner stays in the room: muster never tags a payment on-chain with the split",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/split_driver_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/parts_fold_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/conformance_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/split_live_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/split_anvil_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "scripts/split-self-test.sh"
+        }
+      ],
+      "unverified": []
+    }
+  ]
+}

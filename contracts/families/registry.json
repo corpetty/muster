@@ -1,6 +1,6 @@
 {
   "about": {
-    "what": "The multisig family registry (exo-68f). One entry per FAMILY — a way a group can hold an account and authorize from it — across chains. A family is scheme x settlement x profile (docs/design/multisig-landscape.md §5). A DRIVER implements a family; an ACCOUNT is a family instantiated (chain, address/descriptor, signer set, policy). Checked by scripts/check-family-registry.py.",
+    "what": "The multisig family registry (exo-68f). One entry per FAMILY — a way a group can hold an account and authorize from it, or (the `each` locus, docs/design/split-the-bill.md) a way a group agrees who pays what with no account at all — across chains. A family is scheme x settlement x profile (docs/design/multisig-landscape.md §5). A DRIVER implements a family; an ACCOUNT is a family instantiated (chain, address/descriptor, signer set, policy). Checked by scripts/check-family-registry.py.",
     "verifiedAsOf": "2026-09-23",
     "honesty": "Every non-room entry names a primary source. Anything not confirmed from a primary source is listed under `unverified` on the entry, never folded into the fields. Muster classifies families; it never scores or ranks them for the user.",
     "vocabulary": {
@@ -9,7 +9,8 @@
         "contract": "a contract/program verifies signatures collected off-chain, in one transaction",
         "vote": "each approver sends their own on-chain transaction; the chain counts",
         "aggregate": "signers combine off-chain into one ordinary signature; the chain sees a single signer",
-        "room": "no chain: the room's own log is where agreement is final"
+        "room": "no chain: the room's own log is where agreement is final",
+        "each": "no shared account: the room agrees who owes what, and each party settles their own part with their own transaction; nothing on a chain counts or enforces the agreement"
       },
       "scheme": {
         "shared-bytes": "every signer signs the same bytes",
@@ -1304,6 +1305,62 @@
       "muster": {"status": "built", "driver": "module/src/drivers/lez_frost.nim", "why": "the same FROST-secp256k1 group as btc.frost-bip445 gives Logos a threshold account that looks single-sig: the ADR-015 aggregate-signature rail on our own chain. An aggregate key owns a public account untweaked (lez_frost_account_e2e), and the room drives it end to end on a real v0.2.4 chain (lez_frost_room_e2e): a ceremony on a lez: zone discloses the account, a lez-call at the account's chain-read nonce runs both rounds, and settlement re-reads the nonce, aggregates one signature and sends it; a stale nonce is refused. Hosted and in the room UI (open a lez: ceremony, the transfer composer, Approve once). Demo-grade (not constant time), behind the production gate."},
       "unverified": [],
       "sources": ["https://github.com/logos-blockchain/logos-execution-zone/blob/main/lee/state_machine/src/signature/private_key.rs"]
+    },
+    {
+      "id": "evm.split",
+      "name": "Split a bill, settled on an EVM chain",
+      "chains": ["eip155:*"],
+      "settlement": "evm",
+      "locus": "each",
+      "scheme": "shared-bytes",
+      "curves": ["ed25519", "secp256k1-ecdsa"],
+      "signs": "the agreement: each debtor's room key (Ed25519) over dCBOR [domain, schema, chain, asset, total, creditor, payTo, shares, memo]; the settlement: each debtor's own EIP-155 transfer of their share to payTo",
+      "commits": "content",
+      "binding": "explicit",
+      "rounds": 1,
+      "secretState": false,
+      "setup": "none",
+      "membershipChange": "fixed",
+      "ordering": "none",
+      "expiry": "optional",
+      "reveals": {"policy": "never", "signers": "at-settle", "effect": "public"},
+      "approverCost": "none",
+      "bypasses": [],
+      "interop": [],
+      "infra": ["rpc"],
+      "maturity": "demo",
+      "notes": "No shared account: one member fronted a bill, the split names every debtor and their share, and each debtor pays their own share from their own wallet. The room holds the agreement; nothing on the chain counts or enforces it, so settlement is motivational — the card names each person who owes. Every payment is an ordinary transfer: payer, payee and amount are public, and several payments to one address close together link the group. Muster never tags a payment on-chain with the split (that would publish the group); the link between a payment and a share lives in the room.",
+      "muster": {"status": "built", "driver": "module/src/drivers/split.nim", "why": "the driver, the parts seam and the room fold are built and conform (split_driver_test, parts_fold_test): the threshold is every debtor the effect names, only a named debtor's room key agrees, each debtor settles their own part and only the creditor confirms it, the payment is derived from the agreed effect. Paying from the member's own wallet and the creditor's confirmation from her own RPC read run end to end on anvil (split_anvil_e2e); the hosted methods (coordinate_propose_split / settle_part / confirm_part) are wired, and the UI (the Split composer and card) is driven end to end through the real runner by scripts/split-self-test.sh. The composer and card were looked at on a display (Xvfb) through a whole split and fixed (exo-9a4)."},
+      "sources": ["https://eips.ethereum.org/EIPS/eip-155"]
+    },
+    {
+      "id": "lez.split",
+      "name": "Split a bill privately on the LEZ (shielded payee, private rail)",
+      "chains": ["lez:*"],
+      "settlement": "lez",
+      "locus": "each",
+      "scheme": "shared-bytes",
+      "curves": ["ed25519"],
+      "signs": "the agreement: each debtor's room key (Ed25519) over the split's dCBOR; the settlement: each debtor's own private transfer (private rail) to the creditor's shielded key node",
+      "commits": "content",
+      "binding": "none",
+      "exposure": "LEZ public messages commit to no zone/chain id (see lez.multisig-program); whether a privacy-preserving transfer commits to one is unverified. Muster binds the environment in the room (invariant 2); the card must say whether the chain does.",
+      "rounds": 1,
+      "secretState": false,
+      "setup": "none",
+      "membershipChange": "fixed",
+      "ordering": "none",
+      "expiry": "optional",
+      "reveals": {"policy": "never", "signers": "never", "effect": "shielded"},
+      "approverCost": "none",
+      "bypasses": [],
+      "interop": [],
+      "infra": ["lez_core module"],
+      "maturity": "demo",
+      "notes": "The private split: payTo must be a shielded key node and each debtor pays on the private rail, so the chain names no payer, payee or amount (docs/design/lez-adapter.md, the four rails). The creditor confirms by scan: a private note carries no payer or transaction link, so every share of a private split is a DIFFERENT amount (a few base units apart, the creditor absorbing them) and a note is matched to its share by that exact amount, at payTo, claimed once. The room records a hash of the note's id, never the note.",
+      "muster": {"status": "built", "driver": "module/src/drivers/split.nim", "why": "the educational payoff of the split: the same agreement as evm.split, and the chain learns nothing that links the group. Built and tested on a shared fake chain (split_lez_test): a shielded payTo, every share a distinct amount, debtors pay shielded → shielded only (a public source is refused), and the creditor's own scan confirms a part only when a note of exactly that share arrived at payTo and is not already claimed. Hosted and in the UI, and run end to end on the LEZ testnet across two instances with real lez_core wallets (scripts/split-lez-testnet.sh, 2026-09-28): the debtor paid privately, the creditor's own scan found a note of exactly the share, final on both. The composer and card were looked at on a display (Xvfb) through a whole private split, and fixed (exo-9a4)."},
+      "unverified": ["whether a LEZ privacy-preserving transaction commits to a zone/chain id"],
+      "sources": ["https://github.com/logos-blockchain/logos-execution-zone"]
     }
   ]
 }

@@ -269,7 +269,7 @@ proc exportAudit*(events: seq[Event], driverFor: DriverFor, intentId: string,
     for r in drv.manifest(effect).fullDisclosure():
       disc.add cbArray(@[cbText(r.field), cbText($r.to)])
     let claims = cbMap(@[
-      (cbText("threshold"), cbUint(uint64(max(0, drv.describe().threshold)))),
+      (cbText("threshold"), cbUint(uint64(max(0, describeFor(drv, effect).threshold)))),
       (cbText("stage"), cbText(intentState(ordered, driverFor, intentId))),
       (cbText("disclosure"), cbArray(disc)),
       (cbText("firstEpoch"), cbUint(uint64(firstEpochOf(ordered, issuer.encIdentity()))))])

@@ -4,7 +4,7 @@
 ## A log event is sealed to the room under the membership epoch key, which proves a
 ## member sent it but not which one. Most kinds need no more: an approval is verified
 ## by its driver, an attestation and a key binding carry their own signatures, and the
-## rest (propose, policy, context, submit, final, membership) name no author. Five kinds
+## rest (propose, policy, context, submit, final, membership) name no author. Six kinds
 ## name their author with a plain string, and a view reads that string back as "who did
 ## it":
 ##
@@ -13,6 +13,7 @@
 ##   intent/<id>/material/<req>/<who>     a material share
 ##   account/<caip10>/disclose/<who>      an account disclosure
 ##   frost/<cid>/join/<who>               a FROST ceremony join
+##   intent/<id>/part/<part>/<step>       a part report (exo-a90.2): the value's "author"
 ##
 ## Each of those carries `authorSig`: the named author's Ed25519 signature (the
 ## encryption identity's signing half, F-14) over a domain-separated hash-input record
@@ -91,6 +92,15 @@ proc authorOf*(e: Event): tuple[authored: bool, author: string] =
   ## key is too short to name one — still author-bearing, so it can never verify).
   let p = e.key.split('/')
   if p[0] == "message":
+    var author = ""
+    try:
+      let j = parseJson(e.value)
+      if j.kind == JObject: author = j{"author"}.getStr()
+    except CatchableError: discard
+    return (true, author)
+  if p.len >= 3 and p[0] == "intent" and p[2] == "part":
+    # a part report (exo-a90.2): the author is the value's "author" — the debtor for a
+    # "settled", the creditor for a "confirmed" — never the part named in the key
     var author = ""
     try:
       let j = parseJson(e.value)

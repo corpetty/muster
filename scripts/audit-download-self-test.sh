@@ -29,8 +29,15 @@ RUNNER=".run/runner/bin/muster-ui"
 D=$(mktemp -d)
 
 # ── the standalone verifier (reads only the file) ─────────────────────────────
-P=$(module/tools/nim-closure.sh) || { say "could not materialize the Nim closure"; obs+=(0); emit; exit 1; }
-SODIUM=$(nix build nixpkgs#libsodium --no-link --print-out-paths 2>/dev/null | head -1)
+# Under the spec grader (a scratch HOME, no nix on PATH) the closure and libsodium come
+# from the links scripts/grade-specs.sh leaves in module/.probe-env (exo-a7b).
+PE=module/.probe-env
+if [ -d "$PE/nimpkgs" ]; then P=$(readlink -f "$PE/nimpkgs")
+else P=$(module/tools/nim-closure.sh) || { say "could not materialize the Nim closure"; obs+=(0); emit; exit 1; }
+fi
+if [ -f "$PE/sodium/libsodium.so" ]; then SODIUM=$(readlink -f "$PE/sodium")/..
+else SODIUM=$(nix build nixpkgs#libsodium --no-link --print-out-paths 2>/dev/null | head -1)
+fi
 if ! (cd module && nim c -d:release --hints:off --warnings:off --threads:on \
       --path:$P/nim-secp256k1 --path:$P/nim-stew --path:$P/nim-results --path:$P/nimcrypto \
       --path:$P/nim-stint --path:$P/nim-intops/src --passL:"$SODIUM/lib/libsodium.so" \

@@ -101,3 +101,38 @@ proc nameFor*(b: ContactBook, who: string): string =
     for _, c in b.byId:
       if c.address.len > 0 and normId(c.address) == id: return c.alias
   ""
+
+proc bareId(who: string): string =
+  ## An id as a member is known across drivers: no "ed:" / "frost:" prefix, no 0x, lowercase.
+  var w = who.strip()
+  for p in ["ed:", "frost:"]:
+    if w.startsWith(p): w = w[p.len .. ^1]
+  normId(w)
+
+proc sameMember(a, b: string): bool =
+  ## Two bare ids name the same member: equal, or one is the Ed25519 half (the first 64
+  ## hex) of the other's 64-byte identity.
+  if a.len == 0 or b.len == 0: return false
+  if a == b: return true
+  (a.len == 64 and b.len == 128 and b[0 ..< 64] == a) or
+    (b.len == 64 and a.len == 128 and a[0 ..< 64] == b)
+
+proc shortMember*(who: string): string =
+  ## One short form for a member no one has named, the same whichever form a driver used:
+  ## an identity (or its Ed25519 half) by its first 8 hex; an address by both ends.
+  let id = bareId(who)
+  if id.len == 40: "0x" & id[0 ..< 4] & "…" & id[^4 .. ^1]
+  elif id.len > 8: id[0 ..< 8] & "…"
+  else: id
+
+proc memberLabel*(b: ContactBook, who: string, mine: seq[string]): string =
+  ## The one name for a member on every surface — the card, the approval slots, the room
+  ## history (exo-221): "you" when `who` is any of `mine` (my identity, my address), the
+  ## contact alias when there is one, else shortMember. Whichever form the driver named
+  ## the member by — the 64-byte identity, "ed:" + its Ed25519 half, an address — the
+  ## answer is the same.
+  let id = bareId(who)
+  for m in mine:
+    if sameMember(id, bareId(m)): return "you"
+  let alias = b.nameFor(who)
+  if alias.len > 0: alias else: shortMember(who)
