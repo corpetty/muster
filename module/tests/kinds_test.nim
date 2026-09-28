@@ -52,6 +52,7 @@ proc configFor(kind: string): JsonNode =
        "threshold": 2, "members": [repeat("01", 32), repeat("02", 32), repeat("03", 32)]}
   of "btc-frost": %*{"network": "regtest", "recovery": frostTestRecoveryHex()}
   of "lez-frost": %*{"chain": "lez:local", "recovery": frostTestRecoveryHex()}
+  of "evm-split": %*{"chain": "eip155:31337"}
   else: %*{"roster": roster.mapIt(edHex(it)), "k": 2}
 
 # ── 1. the one list builds, and each kind is the family it says it is ─────────
@@ -66,7 +67,7 @@ block:
       k.kind & " builds a " & d.profile().family & " driver, the list says " & k.family
     doAssert status(k.family) in ["built", "partial"],
       k.kind & "'s family " & k.family & " is " & status(k.family) & " in the registry"
-    doAssert k.composes.len > 0 and k.composes.allIt(it in ["payment", "statement", "action"]),
+    doAssert k.composes.len > 0 and k.composes.allIt(it in ["payment", "statement", "action", "split"]),
       k.kind & " must say which proposals it serves"
     doAssert k.label.len > 0
   let u = newDriver("unanimous", configFor("unanimous"))
@@ -76,12 +77,13 @@ block:
 # ── 2. founding set + the composer's mapping come from the list ───────────────
 block:
   doAssert foundingKinds() == @["safe", "threshold", "frost", "invoke", "eip191", "btc-p2wsh", "btc-tapscript",
-                               "lez-multisig", "btc-frost", "lez-frost"], $foundingKinds()
+                               "lez-multisig", "btc-frost", "lez-frost", "evm-split"], $foundingKinds()
   doAssert "unanimous" notin foundingKinds(), "unanimous is admitted by proposal, not founded"
   doAssert kindsFor("payment") == @["safe", "btc-p2wsh", "btc-tapscript", "lez-multisig", "btc-frost", "lez-frost"],
            $kindsFor("payment")
   doAssert kindsFor("action") == @["invoke"], $kindsFor("action")
   doAssert kindsFor("statement") == @["threshold", "frost", "eip191", "unanimous"], $kindsFor("statement")
+  doAssert kindsFor("split") == @["evm-split"], $kindsFor("split")   # the each locus (exo-a90.3)
   let j = kindsJson(@["safe", "threshold"])
   doAssert j.len == Kinds.len
   for o in j:

@@ -4,7 +4,7 @@
 ## driver, so a chain-specific driver is a complete unit behind one interface.
 ## Needs libsecp256k1 (the Safe driver). See tests/README.md.
 
-import std/[strutils, json]
+import std/[strutils, json, sequtils]
 import ../src/dcbor/dcbor
 import ../src/intents/materialization
 import ../src/drivers/driver
@@ -217,9 +217,37 @@ block:
                                   "owners": owners, "threshold": 2}),
                       ("threshold", %*{"roster": roster, "k": 2}), ("frost", %*{"roster": roster, "k": 2}),
                       ("invoke", %*{"roster": roster, "k": 1}), ("eip191", %*{"signers": owners, "threshold": 1}),
-                      ("stub", %*{"rounds": 2, "threshold": 2})]:
+                      ("stub", %*{"rounds": 2, "threshold": 2}),
+                      ("evm-split", %*{"chain": "eip155:31337"})]:
     let r = checkProfileConformance(newDriver(kind, cfg))
     doAssert r.allPass(), kind & " must declare a consistent family profile: failed " & $r.failed()
   echo "10. every driver the registry builds declares a consistent family profile OK"
+
+# ── 11. a split conforms — the first driver whose parties are named in the effect ──
+# (exo-a90.3) The same checks, graded against THIS proposal's policy (describeFor): the
+# threshold is every debtor the split names, the valid contribution a debtor's room-key
+# agreement, the tampered effect a share moved by one wei.
+import ../src/drivers/split
+import ../src/coordination/intent_events   # effectFromJson
+block:
+  proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
+  proc idHex(k: EncKeys): string =
+    const d = "0123456789abcdef"
+    for b in k.identity().toBytes(): (result.add d[int(b shr 4)]; result.add d[int(b and 0x0F)])
+  let creditor = encFromSeed(seed(21))
+  let debtors = @[encFromSeed(seed(22)), encFromSeed(seed(23))]
+  let drv = newSplitDriver(EvmSplitFamily, "eip155:31337")
+  let shares = evenShares("600", idHex(creditor), debtors.mapIt(idHex(it)))
+  let e = effectFromJson(splitEffectJson("eip155:31337", "ETH", "600", idHex(creditor),
+                                         "0x1111111111111111111111111111111111111111", shares, "lunch"))
+  var moved = shares
+  moved[0].amount = "201"
+  let t = effectFromJson(splitEffectJson("eip155:31337", "ETH", "600", idHex(creditor),
+                                         "0x1111111111111111111111111111111111111111", moved, "lunch"))
+  doAssert describeFor(drv, e).threshold == 2 and drv.describe().threshold == 1
+  let sig = edSign(debtors[0], canonicalize(drv, e).bytes)
+  let r = checkConformance(drv, e, t, Contribution(bytes: @sig))
+  doAssert r.allPass(), "split driver must conform: failed " & $r.failed()
+  echo "11. a split conforms against its per-proposal policy (", r.checks.len, " checks) OK"
 
 echo "conformance_test: all OK"

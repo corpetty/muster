@@ -18,7 +18,8 @@ const Fixed = ["safe/transfer", "safe/contract-call", "safe/delegatecall",
                "frost/statement", "eip191/statement",
                "invoke/module-call", "invoke/lez-transfer",
                "btc-p2wsh/spend", "btc-tapscript/spend", "btc-frost/spend",
-               "lez-multisig/transfer", "lez-multisig/vault-init", "lez-frost/transfer"]
+               "lez-multisig/transfer", "lez-multisig/vault-init", "lez-frost/transfer",
+               "evm-split/split"]
 const EntryFields = ["kind", "variant", "family", "effectExample", "describe", "environment",
                      "profile", "manifest", "signRefusal"]
 

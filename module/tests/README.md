@@ -31,6 +31,7 @@ arguments), `MUSTER_NIMPKGS` (the closure dir).
 | `safe_anvil_e2e`, `safe_real_anvil_e2e`, `coordinate_submit_anvil` | anvil + the Safe fixture, `infra/anvil/devnet.sh` | `<safeAddr> [rpcUrl]` (`http://127.0.0.1:8545`) — the Safe address is required |
 | `btc_regtest_e2e`, `phase_d_exit_test` | a **fresh** Bitcoin Core regtest, `infra/bitcoind/regtest.sh` | `[rpcUrl] [user] [password]` (`http://127.0.0.1:18443`, `muster`, `muster`) |
 | `lez_multisig_live_e2e`, `lez_frost_account_e2e`, `lez_frost_room_e2e` | a LEZ v0.2.4 sequencer, `infra/lez/localnet.sh`, or the public testnet | `[sequencerUrl] [blockSeconds]` (`http://127.0.0.1:3040`, `15`); `lez_multisig_live_e2e` also reads `MUSTER_LEZ_MULTISIG_BIN` |
+| `split_anvil_e2e` | any fresh anvil (chain id 31337, its default funded accounts; no Safe) | `[rpcUrl]` (`http://127.0.0.1:8547`) |
 
 ```bash
 SAFE=$(infra/anvil/devnet.sh | grep -oE '0x[0-9a-fA-F]{40}' | tail -1)   # from the repo root
@@ -57,6 +58,9 @@ wants (below), which the runner supplies.
 - `card_words_test` (exo-59c — the card and the room history say what each family's intent does, over every generated (kind, variant): no proposal reads as "a payment: 0 →"; a Bitcoin spend names its payment output (change excluded) in sat, a LEZ transfer its amount in token units, a module action its call; submit/final lines follow the family's settlement; contributors are named from the address book by identity, Ed25519 key or secp address; "approved by me" is read from the log + this member's keys, and a key binding counts only when its own signer is that approver)
 - `store_node_view_test` (exo-661.7 — what a store node reads off a room's topic: over the app's join-by-name flow (two founders, one admits the other, a non-founding member admits a third), no member's Ed25519 key, X25519 key, secp256k1 address or binding signature appears in any retained frame, no data or grant frame carries an epoch tag at either end, and each asker still reads from its own epoch on, F-16)
 - `authorship_test` (exo-f76 — an author-bearing event counts only when its author signed it: forged, wrong-key, cross-room, tampered and malformed author events are dropped, genuine ones count, over the wire included; `$SECP` + `$STINT` + `$SODIUM`)
+- `parts_fold_test` (exo-a90.2 — settlement in parts, over a test driver that is not the split: the threshold comes from the parties the effect names (describeFor); a part is settled by its party and confirmed by the counterparty; any settled → submitted, any confirmed → settling, all confirmed → final; a report by a disallowed author, or before agreement, never counts; a bare submit / final never moves a parts intent; 200 reorder + duplicate trials converge)
+- `split_driver_test` (exo-a90.3 — the split's one spelling and every refusal, only a named debtor's room key agrees, the parts, conformance, the each-locus profile and card rows, evm-split@<CAIP-2> resolution, even shares, the room fold to final on the real driver)
+- `split_live_test` (exo-a90.4 — paying and confirming on the live room path over a fake ledger: no payment before agreement, the payment is the derived share, the report waits for the payer's tx, the creditor confirms only what her read shows, one tx settles one share, received outside muster, expiry refuses a payment)
 - `log_proof_test`
 - `malformed_sig_test` (exo-cf7 — a malformed signature is never fatal: the verifiers, both owner-signature drivers, the fold with a hostile approval in the log, join-request bindings, authorizations; needs `$SECP` + `$SODIUM`)
 - `decline_test`
