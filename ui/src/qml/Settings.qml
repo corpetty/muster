@@ -347,7 +347,7 @@ Item {
                         Layout.topMargin: 2
                         wrapMode: Text.WordWrap
                         text: qsTr("RPC applies to the wallet/Safe path on next use; delivery config applies to "
-                                 + "the next room you join. In-memory today — the real home persists these in basecamp.")
+                                 + "the next room you join. Saved beside your keystore (settings.json), so they survive a restart; inside basecamp the platform's own settings are the eventual home.")
                         color: Theme.palette.textTertiary
                         font.pixelSize: Theme.typography.badgeText
                     }

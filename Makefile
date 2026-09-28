@@ -82,12 +82,15 @@ build:
 # identity isn't a Safe owner and every secp-policy signature is silently rejected.
 # Honoured only on a FRESH identity: `make clean` (or clean-peer PEER=muster) once to
 # adopt the owner key if you've already launched. Override with SEED= to opt out.
-run: SEED ?= $(ANVIL_KEY0)
+# (A target-specific `run: SEED ?= …` never applied: the global `SEED ?=` above has
+# already defined it, empty. So decide by where SEED came from: given on the command
+# line or in the environment — even empty — it wins; otherwise owner 0.)
+RUN_SEED = $(if $(filter command line environment,$(origin SEED)),$(SEED),$(ANVIL_KEY0))
 run:
 	@mkdir -p $(RUN_DIR)
 	@echo "launching muster (standalone) with user-dir $(RUN_DIR)"
-	@[ -n "$(SEED)" ] && echo "  seeding as anvil Safe owner 0 (in-app Approve/Attest counts; 'make clean' to re-mint)" || true
-	cd $(UI) && MUSTER_DEV_SECP_KEY="$(SEED)" nix run 'path:.' $(CACHE) -- --user-dir $(RUN_DIR)
+	@[ -n "$(RUN_SEED)" ] && echo "  seeding as anvil Safe owner 0 (in-app Approve/Attest counts; 'make clean' to re-mint)" || true
+	cd $(UI) && MUSTER_DEV_SECP_KEY="$(RUN_SEED)" nix run 'path:.' $(CACHE) -- --user-dir $(RUN_DIR)
 
 # Launch one peer already pointed at the Logos delivery fleet, so its transport
 # joins a network with real bootstrap peers (the bundled preset ships none — see

@@ -2629,9 +2629,9 @@ proc musterCoordinateAdmit(identityHex: string): string =
 
 # ── settings: user-configurable infrastructure (invariant 8) ────────────────────
 # The endpoints and infra Muster points at are the user's to choose — "untrusted,
-# user-configurable infrastructure" is empty if they can't configure it. In-memory
-# today; a real deployment persists these beside the keystore, and inside basecamp
-# reads them from the platform's own settings (the shell we don't rebuild).
+# user-configurable infrastructure" is empty if they can't configure it. Persisted
+# beside the keystore (settings.json, saveSettingsFile); inside basecamp they would
+# come from the platform's own settings (the shell we don't rebuild).
 
 proc musterSettings(): string =
   ## The current settings + the module identity, for a settings surface: the RPC
