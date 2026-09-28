@@ -234,7 +234,7 @@
         "coordinate_submit",
         "lez_pending"
       ],
-      "ui": "Room → + → Payment → Settles via LEZ multisig → From <account> → recipient token holding + amount (token units) → Propose ('proposal #i is on its way to the chain'); card 'On-chain proposal #i: transfer N from the vault to …' → Approve ('⏳ Your vote is on its way to the chain'). Settle is headless (coordinate_submit).",
+      "ui": "Room → + → Payment → Settles via LEZ multisig → From <account> → recipient token holding + amount (token units) → Propose ('proposal #i is on its way to the chain'); card 'On-chain proposal #i: transfer N from the vault to …' → Approve ('⏳ Your vote is on its way to the chain'). Settle on-chain in the ready box (coordinate_submit) — shown because the family's profile settles on a chain.",
       "invariants": [
         1,
         2,
@@ -344,8 +344,8 @@
       "unverified": [
         "Registry approverCost is per-vote; on the live LEZ v0.2.4 chain a vote is still the member's own transaction, but LEZ v0.2.4 charges no fees (wallet/lez_multisig_live.nim: 'payer is unused'). The fee path exists only in the in-process model (lez_multisig_chain_test step 5).",
         "The token program id is read from the user's sequencer (getProgramIds) at compose and is not recorded as an external read; the card's summary is inferred from the instruction's shape, not from checking the target is the token program. From reading nim-lib/muster_module.nim and ui/src/qml/Room.qml.",
-        "The ready box shows no Settle button for this rail and reads 'Nothing settles on-chain'; settling is headless (coordinate_submit).",
-        "Header comments in drivers/lez_multisig.nim, lez_vote_test and phase_c_exit_test say the member's LEZ wallet signs, 'never muster'; the live path signs with a member key the muster keystore derives (lez_member_keys_test, lez_multisig_live_e2e). The registry says the latter."
+        "Header comments in drivers/lez_multisig.nim, lez_vote_test and phase_c_exit_test say the member's LEZ wallet signs, 'never muster'; the live path signs with a member key the muster keystore derives (lez_member_keys_test, lez_multisig_live_e2e). The registry says the latter.",
+        "The ready box's Settle on-chain for this family is wired from the profile's settlement, but has not been clicked through on screen."
       ]
     },
     {
@@ -582,7 +582,7 @@
         "coordinate_submit",
         "lez_pending"
       ],
-      "ui": "Room → + (with a LEZ multisig policy) → 'token definition account' → Propose vault setup; card 'On-chain proposal #i: set up the vault to hold token …' → Approve. Settle is headless (coordinate_submit).",
+      "ui": "Room → + (with a LEZ multisig policy) → 'token definition account' → Propose vault setup; card 'On-chain proposal #i: set up the vault to hold token …' → Approve. Settle on-chain in the ready box (coordinate_submit) — shown because the family's profile settles on a chain.",
       "invariants": [
         1,
         2,
@@ -692,8 +692,8 @@
       "unverified": [
         "Registry approverCost is per-vote; on the live LEZ v0.2.4 chain a vote is still the member's own transaction, but LEZ v0.2.4 charges no fees (wallet/lez_multisig_live.nim: 'payer is unused'). The fee path exists only in the in-process model (lez_multisig_chain_test step 5).",
         "The token program id is read from the user's sequencer (getProgramIds) at compose and is not recorded as an external read; the card's summary is inferred from the instruction's shape, not from checking the target is the token program. From reading nim-lib/muster_module.nim and ui/src/qml/Room.qml.",
-        "The ready box shows no Settle button for this rail and reads 'Nothing settles on-chain'; settling is headless (coordinate_submit).",
-        "Header comments in drivers/lez_multisig.nim, lez_vote_test and phase_c_exit_test say the member's LEZ wallet signs, 'never muster'; the live path signs with a member key the muster keystore derives (lez_member_keys_test, lez_multisig_live_e2e). The registry says the latter."
+        "Header comments in drivers/lez_multisig.nim, lez_vote_test and phase_c_exit_test say the member's LEZ wallet signs, 'never muster'; the live path signs with a member key the muster keystore derives (lez_member_keys_test, lez_multisig_live_e2e). The registry says the latter.",
+        "The ready box's Settle on-chain for this family is wired from the profile's settlement, but has not been clicked through on screen."
       ]
     },
     {

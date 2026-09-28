@@ -150,7 +150,7 @@
         "coordinate_submit",
         "lez_pending"
       ],
-      "ui": "Room → + → Payment → Settles via LEZ (FROST) → From <account> → recipient token holding + amount → Propose. The card then renders '⚠ Schema unknown' — the card's schema list has no lez-call — so it offers no Approve or Deny; approving (coordinate_contribute) and settling (coordinate_submit) are headless.",
+      "ui": "Room → + → Payment → Settles via LEZ (FROST) → From <account> → recipient token holding + amount → Propose; card → Approve once (round 2 follows on the tick); Settle on-chain in the ready box (coordinate_submit) — shown because the family's profile settles on a chain.",
       "invariants": [
         1,
         2,
@@ -217,12 +217,17 @@
         {
           "kind": "test",
           "path": "module/tests/distinct_signer_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/schema_coverage_test.nim"
         }
       ],
       "unverified": [
-        "Registry says this family is 'in the room UI (… Approve once)'. The code disagrees: effectSchema (coordination/intent_events.nim) does not list lez-call, so coordinate_intents marks it schemaKnown: false and MusterCard.qml shows 'Schema unknown' with no Approve or Deny.",
         "The lez-frost driver is not run through checkConformance by any test (only its profile, in profile_test).",
-        "The token program id comes from the sequencer (getProgramIds) and is not recorded as an external read; only the nonce is."
+        "The token program id comes from the sequencer (getProgramIds) and is not recorded as an external read; only the nonce is.",
+        "The card now recognizes the lez-call effect (effectSchema) and offers Approve, but it has not been clicked through on screen against a live sequencer.",
+        "The ready box's Settle on-chain for this family is wired from the profile's settlement, but has not been clicked through on screen."
       ]
     },
     {
