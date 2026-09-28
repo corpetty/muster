@@ -235,6 +235,14 @@ Rectangle {
     property string splitNote: ""
     readonly property var split: (cardRoot.card && cardRoot.card.split) ? cardRoot.card.split : null
     readonly property bool isSplit: cardRoot.split !== null
+    // A split's payTo, readable: an address stays whole; a shielded key node — ~200 hex
+    // characters that no one reads and that would run off the card — is named as one and
+    // shortened, the way the address-share card does.
+    function shortPayTo(p) {
+        if (p.indexOf("priv:") === 0)
+            return qsTr("a shielded key node, %1…%2").arg(p.slice(5, 17)).arg(p.slice(-8));
+        return p;
+    }
     readonly property var parts: (cardRoot.card && Array.isArray(cardRoot.card.parts)) ? cardRoot.card.parts : []
     readonly property var myPart: {
         for (var i = 0; i < cardRoot.parts.length; ++i) if (cardRoot.parts[i].mine) return cardRoot.parts[i];
@@ -591,11 +599,12 @@ Rectangle {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: cardRoot.split
-                          ? qsTr("%1 %2%3 — %4 paid; %5 owe a share%6")
+                          ? qsTr("%1 %2%3 — %4 paid; %5%6")
                                 .arg(cardRoot.eth(cardRoot.split.total)).arg(cardRoot.unit)
                                 .arg(String(cardRoot.split.memo || "").length > 0 ? " · " + String(cardRoot.split.memo) : "")
                                 .arg(cardRoot.creditorName)
-                                .arg(cardRoot.parts.length === 1 ? qsTr("1 person") : qsTr("%1 people").arg(cardRoot.parts.length))
+                                .arg(cardRoot.parts.length === 1 ? qsTr("1 person owes a share")
+                                                                 : qsTr("%1 people owe a share").arg(cardRoot.parts.length))
                                 .arg(cardRoot.split.private ? qsTr(" · private: the chain names no one") : "")
                           : ""
                     color: Theme.palette.text
@@ -651,7 +660,7 @@ Rectangle {
                           ? qsTr("%1 own share: %2 %3 (it absorbs any rounding). Paid to %4.")
                                 .arg(cardRoot.iAmCreditor ? qsTr("Your") : cardRoot.creditorName + qsTr("'s"))
                                 .arg(cardRoot.eth(cardRoot.split.creditorShare)).arg(cardRoot.unit)
-                                .arg(String(cardRoot.split.payTo || ""))
+                                .arg(cardRoot.shortPayTo(String(cardRoot.split.payTo || "")))
                           : ""
                     color: Theme.palette.textTertiary
                     font.pixelSize: Theme.typography.badgeText

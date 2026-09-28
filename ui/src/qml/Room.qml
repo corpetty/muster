@@ -318,6 +318,14 @@ Item {
         return qsTr("On-chain proposal #%1: call %2 with %3 words on %4 accounts")
                .arg(idx).arg(abbrev(eff.target)).arg(ins.length).arg(acc.length);
     }
+    // Whether MY share of a split has been reported paid (or confirmed) — then the card's own
+    // row says so, and a "sent … once it settles" note would only go stale.
+    function myPartSettled(it) {
+        var parts = (it && Array.isArray(it.parts)) ? it.parts : [];
+        for (var i = 0; i < parts.length; ++i)
+            if (parts[i].mine) return !!(parts[i].settled || parts[i].confirmed);
+        return false;
+    }
     function headingFor(kind) {
         return kind === "btc-spend" ? qsTr("Proposed a Bitcoin payment")
              : kind === "lez-transfer" ? qsTr("Proposed a LEZ transfer")
@@ -448,12 +456,13 @@ Item {
             amount: isSplit ? ""
                   : (!isStatement && eff.value !== undefined) ? String(eff.value)
                   : (it && it.summary && it.summary.amount) ? String(it.summary.amount) : "",
-            denom: (it && it.summary && it.summary.unit) ? String(it.summary.unit) : "",
+            denom: isSplit ? "" : (it && it.summary && it.summary.unit) ? String(it.summary.unit) : "",
             to: isSplit ? ""
               : (!isStatement && eff.to !== undefined) ? String(eff.to)
               : (it && it.summary && it.summary.to && !isInvoke && !isLez) ? String(it.summary.to) : "",
             // the heading, in the family's words (a Bitcoin payment, a LEZ transfer, a new policy…)
-            heading: room.headingFor(it && it.summary ? String(it.summary.kind || "") : ""),
+            heading: isSplit ? qsTr("Proposed a split")
+                   : room.headingFor(it && it.summary ? String(it.summary.kind || "") : ""),
             // who approved, named (or "you"), and whether I did (exo-59c)
             approvers: (it && Array.isArray(it.approvers)) ? it.approvers : [],
             approvedByMe: !!(it && it.approvedByMe),
@@ -941,11 +950,19 @@ Item {
                                        ? (room.splitResult.error
                                           ? qsTr("⚠ %1").arg(String(room.splitResult.error) + (room.splitResult.detail ? ": " + String(room.splitResult.detail) : ""))
                                           : room.splitResult.op === "pay"
-                                          ? qsTr("Sent %1 %2 from your wallet (%3) — it shows as paid once it settles.")
+                                          ? (room.myPartSettled(msg.liveIntent) ? ""
+                                             : String(room.splitResult.pending || "") === "pending"
+                                             // a private payment proves in the background: no
+                                             // reference exists until the zone answers
+                                             ? qsTr("Sending %1 %2 privately — your wallet is proving the transfer, which takes a few minutes; it shows as paid once it lands.")
                                                 .arg(room.weiToEth(String(room.splitResult.amount || "0"),
                                                                    Number(((msg.liveIntent && msg.liveIntent.split) || {}).decimals || 18)))
                                                 .arg(String(((msg.liveIntent && msg.liveIntent.split) || {}).asset || "ETH"))
-                                                .arg(String(room.splitResult.pending || "").slice(0, 12) + "…")
+                                             : qsTr("Sent %1 %2 from your wallet (%3) — it shows as paid once it settles.")
+                                                .arg(room.weiToEth(String(room.splitResult.amount || "0"),
+                                                                   Number(((msg.liveIntent && msg.liveIntent.split) || {}).decimals || 18)))
+                                                .arg(String(((msg.liveIntent && msg.liveIntent.split) || {}).asset || "ETH"))
+                                                .arg(String(room.splitResult.pending || "").slice(0, 12) + "…"))
                                           : qsTr("Marked received."))
                                        : ""
                             onOpenSettings: room.settingsRequested()
@@ -956,7 +973,10 @@ Item {
                         // toggle — one-click in-app Approve above is the primary path.
                         LogosButton {
                             objectName: "roomApprovePasteToggle"
+                            // a split is agreed with the debtor's room key — there is no
+                            // outside signature to paste (exo-a90)
                             visible: msg.isIntentRef && msg.liveIntent !== null && !msg.approving
+                                     && !msg.liveIntent.split
                             Layout.leftMargin: Theme.spacing.medium
                             text: qsTr("Paste a signature instead")
                             variant: LogosButton.Variant.Secondary
@@ -1512,6 +1532,11 @@ Item {
                     // has not admitted (e.g. "unanimous", n-of-n) is offered as a governance
                     // proposal to add it — driver-as-proposal (invariant 6). objectName
                     // keeps the roomPolicy<Kind> names the UI harness clicks.
+                    // each button as wide as its name ("Split privately (LEZ)", "Bitcoin
+                    // (P2WSH)"…), wrapping onto a second line rather than truncating a name
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
                     Repeater {
                         model: room.policiesForKind(room.composeType)
                         delegate: LogosButton {
@@ -1519,7 +1544,6 @@ Item {
                             readonly property var info: room.kindInfo(modelData)
                             readonly property string label: info && info.label ? String(info.label) : String(modelData)
                             objectName: "roomPolicy" + String(modelData).charAt(0).toUpperCase() + String(modelData).slice(1)
-                            Layout.preferredWidth: room.hasDriver(modelData) ? 110 : 170
                             text: room.hasDriver(modelData) ? label : qsTr("＋ Propose %1").arg(label.toLowerCase())
                             variant: room.policyKind === modelData
                                      ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
@@ -1532,8 +1556,7 @@ Item {
                             }
                         }
                     }
-
-                    Item { Layout.fillWidth: true }
+                    }
 
                     LogosText {
                         text: room.policy && room.policy.threshold !== undefined
@@ -1950,17 +1973,22 @@ Item {
                         readonly property var pv: room.splitPreview(splitTotal.text)
                         visible: splitTotal.text.length > 0
                         Layout.fillWidth: true
+                        Layout.preferredWidth: 0   // wrap within the column; never widen it
                         wrapMode: Text.WordWrap
                         text: room.ethToWei(splitTotal.text).length === 0
                               ? qsTr("⚠ Type the total in %1, e.g. 1.2 (at most %2 decimals).").arg(room.splitUnit).arg(room.splitDecimals)
                               : pv === null ? qsTr("Leave at least one person in.")
                               : room.splitPrivate
-                              ? qsTr("%1 %2 owe you about %3 LEZ each — every share a few base units apart, so your scan can tell whose payment arrived without the chain naming anyone; your own share absorbs the rest. Each pays privately from their own wallet: the chain learns only that private transfers happened.")
-                                    .arg(pv.n).arg(pv.n === 1 ? qsTr("person") : qsTr("people"))
-                                    .arg(room.weiToEth(pv.each))
-                              : qsTr("%1 %2 owe you %3 ETH each; your own share is %4 ETH (it absorbs any rounding). Each pays from their own wallet — every payment is public on the chain.")
-                                    .arg(pv.n).arg(pv.n === 1 ? qsTr("person") : qsTr("people"))
-                                    .arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine))
+                              ? (pv.n === 1
+                                 ? qsTr("1 person owes you about %1 LEZ. They pay privately from their own wallet: the chain learns only that a private transfer happened, and your own scan finds the note by its amount.")
+                                       .arg(room.weiToEth(pv.each))
+                                 : qsTr("%1 people owe you about %2 LEZ each — every share a few base units apart, so your scan can tell whose payment arrived without the chain naming anyone; your own share absorbs the rest. Each pays privately from their own wallet: the chain learns only that private transfers happened.")
+                                       .arg(pv.n).arg(room.weiToEth(pv.each)))
+                              : (pv.n === 1
+                                 ? qsTr("1 person owes you %1 ETH; your own share is %2 ETH (it absorbs any rounding). They pay from their own wallet — the payment is public on the chain.")
+                                       .arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine))
+                                 : qsTr("%1 people owe you %2 ETH each; your own share is %3 ETH (it absorbs any rounding). Each pays from their own wallet — every payment is public on the chain.")
+                                       .arg(pv.n).arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine)))
                         color: pv === null ? Theme.palette.warning : Theme.palette.textSecondary
                         font.pixelSize: Theme.typography.badgeText
                     }
@@ -2299,6 +2327,26 @@ Item {
             Layout.fillHeight: true
             spacing: Theme.spacing.large
 
+            // The connections and accounts block is taller than a window (Safe, Bitcoin,
+            // FROST and LEZ multisig sections), and it used to set the whole room's height —
+            // pushing the message row and its "+" below the bottom of a normal window
+            // (exo-9a4). It scrolls in its own share of the column now, as the history and
+            // the scope below it do; its width stays its natural width.
+            Flickable {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredHeight: 2
+                implicitWidth: topCol.implicitWidth
+                clip: true
+                contentWidth: width
+                contentHeight: topCol.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+
+            ColumnLayout {
+                id: topCol
+                width: parent.width
+                spacing: Theme.spacing.large
+
             // What the room depends on, and whether it's actually there (invariant 8).
             ConnectionIndicators {
                 Layout.fillWidth: true
@@ -2324,6 +2372,8 @@ Item {
                     if (room.backend) room.backend.lezCreateMultisig(threshold, members);
                 }
                 onDiscloseSuggested: if (room.backend) room.backend.discloseSuggestedAccount()
+            }
+            }
             }
 
             Rectangle {
