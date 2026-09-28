@@ -1005,6 +1005,7 @@ type SplitPending = object
 var gSplitPending: seq[SplitPending]
 var gSplitRecent: seq[JsonNode]  ## the last outcomes, newest last
 var gSplitPumpAt = 0.0
+var gLezScanNext = 0.0   ## when the private split's background scan steps next (exo-270a)
 var gSplitLogged = initTable[string, string]()   ## intent id → the last state line logged (debug)
 
 proc splitSeam(chain: string): EvmPartSeam =
@@ -1055,6 +1056,19 @@ proc splitPump() =
                           "outcome": outcome, "at": int64(epochTime())}
       if gSplitRecent.len > 20: gSplitRecent.delete(0)
   gSplitPending = keep
+  # a private split waiting on me — mine to pay or to confirm — keeps my LEZ wallet's scan
+  # moving from the proposal on, so it is at the tip when the payment has to be sent or
+  # found (a real scan is slow: lez_core stores after every block). One bounded step a
+  # tick while behind, one every 15s at the tip; none while my wallet proves (exo-270a).
+  var lezWaits = false
+  for v in partsAwaiting(gSession.roomEvents(), driverFor, myIdentity(ks)):
+    if splitPolicy(v.policy).kind == "lez-split": lezWaits = true
+  if lezWaits and epochTime() >= gLezScanNext:
+    try:
+      let (ran, code) = splitLezAdapter().scanStep(minGapS = 1.5)
+      if ran: gLezScanNext = epochTime() + (if code == LezSyncOk: 15.0 else: 0.0)
+    except CatchableError:
+      gLezScanNext = epochTime() + 15.0     # the zone unreachable: try again later
   # the creditor's side: confirm what my own read shows, per chain the room's splits use
   var policies: seq[string]
   for v in reduceIntentViews(gSession.roomEvents(), driverFor):
@@ -1066,8 +1080,8 @@ proc splitPump() =
       let confirmed = liveConfirmParts(gSession, ks, driverFor, splitSeamFor(pol))
       if gLpDebug and confirmed.len > 0: stderr.writeLine("MUSTER-LP split confirmed " & $(%confirmed))
     except CatchableError: discard
-  if gLpDebug and policies.anyIt(splitPolicy(it).kind == "lez-split"):
-    # a private split's creditor scans their wallet: say how far the scan has got
+  if gLpDebug and lezWaits:
+    # a private split waits on me: say how far my wallet's scan has got
     let (synced, tip) = splitLezAdapter().scanProgress()
     let line = $synced & "/" & $tip
     if tip > 0 and gSplitLogged.getOrDefault("lez-scan", "") != line:

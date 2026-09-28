@@ -208,6 +208,23 @@ proc liveConfirmParts*(s: CoordinationSession, ks: Keystore, driverFor: DriverFo
          ["submitted", "settling", "final"]:
         result.add v.id & "/" & p.part
 
+proc partsAwaiting*(events: seq[Event], driverFor: DriverFor, me: string): seq[IntentView] =
+  ## The live intents settling in parts where a part still waits on `me`: mine to pay (not
+  ## yet settled) or mine to confirm (not yet confirmed). What a seam that needs time to
+  ## get ready keys on — a LEZ wallet's scan, which is slow and must be at the tip before
+  ## a private payment can be sent or found (exo-270a). A final intent waits on no one.
+  let me = me.toLowerAscii()
+  for v in reduceIntentViews(events, driverFor):
+    if v.parts.len == 0 or v.state notin ["proposed", "collecting", "executable", "submitted", "settling"]: continue
+    let drv = driverFor(v.policy)
+    let effect = effectFromJson(v.effectJson)
+    for p in v.parts:
+      let payer = drv.partAuthor(effect, p.part, "settled").toLowerAscii() == me
+      let confirmer = drv.partAuthor(effect, p.part, "confirmed").toLowerAscii() == me
+      if (payer and not p.settled) or (confirmer and not p.confirmed):
+        result.add v
+        break
+
 # ── a ledger in memory: the no-chain seam tests and demos use ──────────────────────
 type
   FakeTransfer* = object

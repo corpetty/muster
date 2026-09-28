@@ -109,6 +109,12 @@ method sync*(c: LezCore): int {.base, gcsafe.} =
   ## `synced` / `tip` say where it got to.
   raise newException(WalletError, "LezCore.sync is abstract")
 
+method proving*(c: LezCore): bool {.base, gcsafe.} =
+  ## Is a transfer proving in the background in this wallet right now? lez_core serializes
+  ## the wallet, so any other call — a scan above all — waits behind a ~7-minute proof and
+  ## times out. A sync core never is.
+  false
+
 method labelled*(c: LezCore, label: string): string {.base, gcsafe.} =
   ## The id of the account a label names in THIS wallet, "" if none. Labels live in the
   ## wallet's own storage (lez_core add_label / resolve_label), so they outlast the
@@ -273,6 +279,8 @@ method transfer*(c: FakeLezCore, form: TransferForm, frm, to, amountRaw: string)
     c.proving = (form, frm, to, amountRaw, (if c.proveTicks > 0: c.proveTicks else: 2), true)
     return LezResult(success: true, txHash: "pending")
   c.settle(form, frm, to, amountRaw)
+
+method proving*(c: FakeLezCore): bool = c.proving.live
 
 method pollTransfer*(c: FakeLezCore): tuple[done: bool, result: LezResult] =
   if not c.proving.live: return (true, LezResult(success: true))

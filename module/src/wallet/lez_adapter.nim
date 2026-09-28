@@ -15,7 +15,7 @@
 ## Signing is internal to the LEZ wallet (`lez_core` holds it), so unlike the EVM
 ## adapter this one does not use muster's Keystore to sign — the seam still hands it in.
 
-import std/[json, tables, strutils]
+import std/[json, tables, strutils, times]
 import ./types
 import ./adapter
 import ./lez_core
@@ -35,6 +35,7 @@ type
     keyNode: Table[string, LezAccount]   ## our private account id -> its npk/vpk
     submitted: Table[string, tuple[priv: bool, polls: int, async: bool]]  ## txId -> finality state
     resolved: Table[string, string]      ## an async send's marker -> the zone's transaction hash
+    lastScanAt: float                    ## when this wallet's scan last stepped (epoch seconds)
 
   LezScanBehind* = object of WalletError
     ## The wallet's scan has not reached the chain tip yet — not a failure, and never
@@ -51,6 +52,7 @@ proc newLezAdapter*(core: LezCore): LezAdapter =
 proc scanToTip(a: LezAdapter) =
   ## One step of the scan (LezCore.sync): returns once it is at the tip; raises
   ## LezScanBehind while it is still catching up, WalletError on a failed scan.
+  a.lastScanAt = epochTime()
   case a.core.sync()
   of LezSyncOk: discard
   of LezSyncBehind:
@@ -204,6 +206,19 @@ method finality*(a: LezAdapter, txRef: TxRef): Finality =
       return Finality(status: fsFailed, detail: "sync failed")
     return Finality(status: fsPending, detail: "proving/settling — the note is being scanned in")
   Finality(status: fsFinal, detail: "shielded transfer settled")
+
+proc scanStep*(a: LezAdapter, minGapS = 0.0): tuple[ran: bool, code: int] =
+  ## One bounded step of this wallet's scan toward the tip (LezCore.sync): what a pump
+  ## runs while a private split waits on this member, so the scan is at the tip before a
+  ## payment has to be sent or found (exo-270a). Never while this wallet is proving —
+  ## lez_core serializes the wallet, and a scan queued behind a proof times out — then
+  ## (ran: false, LezSyncBehind). With `minGapS`, a step is skipped when a scan already
+  ## stepped that recently (a creditor's confirmation scans too) — so a pump's tick never
+  ## holds the module thread for two steps.
+  if a.core.proving(): return (false, LezSyncBehind)
+  if minGapS > 0 and epochTime() - a.lastScanAt < minGapS: return (false, LezSyncBehind)
+  a.lastScanAt = epochTime()
+  (true, a.core.sync())
 
 proc scanProgress*(a: LezAdapter): tuple[synced, tip: int] =
   ## Where this wallet's scan last got to, and the chain's tip then (0, 0 before any scan).

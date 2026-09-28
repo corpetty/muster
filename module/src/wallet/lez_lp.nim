@@ -24,8 +24,9 @@ import ./lez_encoding
 const
   kReadMs  = cint(15_000)         ## Zone.h: a read that doesn't prove
   kProveMs = cint(LezProveBudgetMs) ## Zone.h: the proving budget (measured 6m41s + headroom)
-  kSyncChunk = 500                ## blocks per sync_to_block: ~2s on testnet (measured ~1s / 250)
-  kSyncBudgetS = 4.0              ## one scan step's wall budget on the module thread
+  kSyncChunk = 250                ## blocks per sync_to_block: ~3.7s on testnet with accounts to
+                                  ## try (lez_core stores after every block, ~15ms each), less early on
+  kSyncBudgetS = 3.0              ## one scan step's wall budget on the module thread
 
 type
   LpLezCore* = ref object of LezCore
@@ -125,6 +126,8 @@ method listAccounts*(c: LpLezCore): seq[LezAccount] =
         a.npk = kn.npk; a.vpk = kn.vpk
       if a.id.len > 0: result.add a
   except CatchableError: discard
+
+method proving*(c: LpLezCore): bool = c.inflight
 
 method labelled*(c: LpLezCore, label: string): string =
   ## resolve_label answers "Public/<hex>" or "Private/<hex>", "" when the label is unknown.
