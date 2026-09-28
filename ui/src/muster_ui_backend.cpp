@@ -786,6 +786,23 @@ void MusterUiBackend::loadPolicy()
     setPolicyJson(modules().muster_module.coordinate_policy());
 }
 
+void MusterUiBackend::retryStartup(int attemptsLeft)
+{
+    // health() comes back empty while the module isn't answering yet; once it does,
+    // redo the startup reads. Bounded (~30 s); the module also starts its inbox on the
+    // first invite poll, so this is the first line of defence, not the only one.
+    if (!health().isEmpty() || attemptsLeft <= 0) return;
+    QTimer::singleShot(1500, this, [this, attemptsLeft]() {
+        checkHealth();
+        if (health().isEmpty()) { retryStartup(attemptsLeft - 1); return; }
+        qInfo() << "[muster_ui] module answered — re-running the startup reads";
+        loadAccount();
+        loadSettings();
+        loadDrivers();
+        startInbox();
+    });
+}
+
 void MusterUiBackend::onContextReady()
 {
     // Fires once ui-host hands the plugin its wired modules(); read liveness, the
@@ -799,6 +816,10 @@ void MusterUiBackend::onContextReady()
     // Begin listening on this identity's inbox so room invites (from "Start something
     // with someone") arrive even before any room is opened. Idempotent; safe on launch.
     startInbox();
+    // These calls can land before muster_module answers, and are then simply lost —
+    // found running the tour: the inbox never started, so Bob never saw an invitation.
+    // If the module hasn't answered, run them again until it does.
+    retryStartup(20);
 
     // Diagnostic/headless self-test hook: if MUSTER_AUTOJOIN_TOPIC is set, join that
     // room a few seconds after startup — no GUI click needed. Runs on the ui-host's
@@ -812,6 +833,26 @@ void MusterUiBackend::onContextReady()
             qInfo() << "[muster_ui] AUTOJOIN ->" << topic;
             joinRoom(topic);
             QTimer::singleShot(3000, this, [this]() { requestJoin(); });
+            // Invite self-test: MUSTER_AUTOINVITE=<contact alias> invites that contact to
+            // this room once joined, exactly as the composer's "Open the room with them"
+            // does (sendInvite with the contact's chat id). Seeded demo peers carry the
+            // other roles as contacts, so "Bob" resolves with no setup.
+            const QByteArray autoinvite = qgetenv("MUSTER_AUTOINVITE");
+            if (!autoinvite.isEmpty()) {
+                const QString who = QString::fromUtf8(autoinvite);
+                QTimer::singleShot(2000, this, [this, who, topic]() {
+                    loadContacts();
+                    const QJsonDocument d = QJsonDocument::fromJson(contactsJson().toUtf8());
+                    for (const auto &c : d.array()) {
+                        const QJsonObject o = c.toObject();
+                        if (o.value("alias").toString() == who) {
+                            sendInvite(o.value("identity").toString(), topic, QStringLiteral("talk"));
+                            return;
+                        }
+                    }
+                    qInfo() << "[muster_ui] AUTOINVITE: no contact named" << who;
+                });
+            }
             // Card self-test (exo-002.3): MUSTER_AUTOPROPOSE=<effect json> proposes it
             // once joined, then asks the module for that intent's readiness (the card's
             // "What this needs" round trip) and, with MUSTER_AUTODECLINE set, declines

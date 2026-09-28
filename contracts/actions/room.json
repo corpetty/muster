@@ -707,7 +707,7 @@
         {
           "step": "act",
           "who": "the recipient",
-          "does": "coordinate_start_inbox subscribes to its own inbox topic and pulls what the store kept. coordinate_invites opens each frame with the keystore; frames that do not open or parse are skipped. It dedups by (from, topic) and hides invites for rooms already joined, invites the user dismissed (kept in dismissed_invites.json beside the keystore) and, when MUSTER_INVITES_SINCE is set, older ones.",
+          "does": "coordinate_start_inbox subscribes to its own inbox topic and pulls what the store kept. The UI calls it at launch, and coordinate_invites starts it too if it isn't running (the launch call can land before the module answers and be lost), so Home's 2 s poll always brings the inbox up. coordinate_invites opens each frame with the keystore; frames that do not open or parse are skipped. It dedups by (from, topic) and hides invites for rooms already joined, invites the user dismissed (kept in dismissed_invites.json beside the keystore) and, when MUSTER_INVITES_SINCE is set, older ones.",
           "signs": "nothing",
           "reveals": [
             {
@@ -716,6 +716,7 @@
             }
           ],
           "evidence": [
+            "scripts/invite-proof.sh",
             "module/tests/invites_test.nim",
             "module/nim-lib/muster_module.nim"
           ]
@@ -782,9 +783,17 @@
         {
           "claim": "The inviter named in an invite is the sender's claim: a sealed box does not authenticate its sender.",
           "credibility": "exposed"
+        },
+        {
+          "claim": "An invite waits in the store until the recipient's inbox fetches it: an inbox that starts later still receives it (invite-proof.sh fetched an invite sent during an earlier run).",
+          "credibility": "imperative"
         }
       ],
       "evidence": [
+        {
+          "kind": "test",
+          "path": "scripts/invite-proof.sh"
+        },
         {
           "kind": "test",
           "path": "module/tests/invites_test.nim"
@@ -805,7 +814,6 @@
         }
       ],
       "unverified": [
-        "Delivery of an invite through the store to an offline recipient is not exercised by any test; invites_test.nim covers the topic derivation (a copy of it) and the sealed box.",
         "That the 'from' field is unauthenticated is read from source (sealTo is an anonymous sealed box; nothing checks 'from')."
       ]
     },

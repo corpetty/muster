@@ -221,7 +221,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6966befc10a9c36f1bb7000606eadd7bf8620a246837e2b23a6b858e1b426333",
+          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
           "note": "the two rules the C header states, and the never-hand-write-what-the-contract-generates rule"
         },
         {
@@ -240,7 +240,7 @@
         },
         {
           "path": "ui/src/muster_ui_backend.h",
-          "sha256": "254e67f173574ae772b49794c2362446a9978054e95a321925bcc85bfab5681e",
+          "sha256": "3bdeefaa2d1c9e3f1c5e3663d034f1d0ea2595e5476ac2a161d44887799a9d93",
           "note": "MusterUiBackend, the hand-written backend class"
         }
       ],
@@ -356,7 +356,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6966befc10a9c36f1bb7000606eadd7bf8620a246837e2b23a6b858e1b426333",
+          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -443,7 +443,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6966befc10a9c36f1bb7000606eadd7bf8620a246837e2b23a6b858e1b426333",
+          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
           "note": "invariant 10, and invariant 1 whose blind spot the figure draws"
         },
         {
@@ -499,7 +499,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6966befc10a9c36f1bb7000606eadd7bf8620a246837e2b23a6b858e1b426333",
+          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -593,7 +593,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6966befc10a9c36f1bb7000606eadd7bf8620a246837e2b23a6b858e1b426333",
+          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -678,7 +678,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6966befc10a9c36f1bb7000606eadd7bf8620a246837e2b23a6b858e1b426333",
+          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -1074,7 +1074,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6966befc10a9c36f1bb7000606eadd7bf8620a246837e2b23a6b858e1b426333",
+          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
           "note": "the src/wallet layout and the reuse posture"
         },
         {
@@ -1130,7 +1130,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6966befc10a9c36f1bb7000606eadd7bf8620a246837e2b23a6b858e1b426333",
+          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
           "note": "verify.nim reuse of nim-eth and the deferred sidecar"
         }
       ],
@@ -1167,7 +1167,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6966befc10a9c36f1bb7000606eadd7bf8620a246837e2b23a6b858e1b426333",
+          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
           "note": "the reuse note and the src/wallet layout"
         },
         {
@@ -1213,7 +1213,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "6966befc10a9c36f1bb7000606eadd7bf8620a246837e2b23a6b858e1b426333",
+          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
           "note": "the working agreement and the Driver seam methods"
         },
         {
