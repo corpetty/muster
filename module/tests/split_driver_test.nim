@@ -232,4 +232,19 @@ block:
   doAssert s.kind == "split" and s.amount == "1200000000000000000" and "3 people" in s.text, s.text
   echo "8. even shares round down; the creditor absorbs the remainder; one id per split OK"
 
+# ── 9. the history's words for a split: its own decimals, and people by name (exo-221) ──
+block:
+  let eth = splitEffectJson(Chain, "ETH", "600000000000000000", idOf(devon), PayTo,
+                            evenShares("600000000000000000", idOf(devon), @[idOf(ana)]), "Taxi")
+  let s = effectSummary(eth)
+  doAssert s.amount == "600000000000000000" and s.unit == "wei", "the raw amount stays for the card: " & s.amount
+  doAssert "0.6 ETH" in s.text and "wei" notin s.text, "the text reads in the asset's own decimals: " & s.text
+  doAssert "1 person owes " in s.text, s.text
+  let named = effectSummary(eth, proc(who: string): string = (if who == idOf(devon): "you" else: "Carol"))
+  doAssert named.text.endsWith("1 person owes you"), "the creditor named as the card names them: " & named.text
+  let lez = splitEffectJson("lez:testnet", "LEZ", "100", idOf(devon), "priv:" & "ab".repeat(32) & ":" & "02" & "cd".repeat(32),
+                            evenShares("100", idOf(devon), @[idOf(ana)], distinctAmounts = true), "")
+  doAssert "0.0000001 LEZ" in effectSummary(lez).text, effectSummary(lez).text
+  echo "9. a split's summary: its own decimals, the creditor by name OK"
+
 echo "split_driver_test: all OK"
