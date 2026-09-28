@@ -21,11 +21,17 @@
 #     LEZ_SPLIT_STATE   where the two LEZ wallets live between runs (default .run/lez-split):
 #                       kept, so a re-run skips the scan from block 0 and B's funding stays
 #     LEZ_SPLIT_TIMEOUT seconds to wait (default 2700: a faucet claim, two proofs, two scans)
+#     LEZ_SPLIT_FUND=0  skip B's funding: re-run over wallets a previous run funded (B pays
+#                       from the change its shielded note kept) — one proof, and the run
+#                       relaunches over wallets whose accounts are labelled (exo-884)
 #     KEEP_LOGS=1       keep the runners' logs on success too
 #
 # This spends testnet LEZ from the public pinata faucet and sends two private transfers on
 # the public testnet. Cleanup kills only this script's own processes (each runner's session).
 set -uo pipefail
+# One compound command: bash reads it whole before running any of it, so editing this file
+# while a run is under way cannot change the running copy (a run died that way, 2026-09-28).
+{
 cd "$(dirname "$0")/.."
 RUNNER=".run/runner/bin/muster-ui"
 [ -x "$RUNNER" ] || { echo "build the runner first: make build"; exit 1; }
@@ -53,7 +59,9 @@ launch() {  # name, extra env… — each runner in its own session, so cleanup 
 }
 launch A MUSTER_AUTOADMIT=1 MUSTER_AUTOSPLIT="$TOTAL" MUSTER_AUTOSPLIT_CHAIN=lez:testnet
 sleep 3
-launch B MUSTER_AUTOPAYSPLIT=1 MUSTER_AUTOLEZFUND=1
+if [ "${LEZ_SPLIT_FUND:-1}" = 0 ]; then launch B MUSTER_AUTOPAYSPLIT=1
+else launch B MUSTER_AUTOPAYSPLIT=1 MUSTER_AUTOLEZFUND=1
+fi
 
 cleanup() {
   for n in A B; do
@@ -83,7 +91,7 @@ elapsed=$(( $(date +%s) - start ))
 
 saw() { grep -aqE "$1" "$D/$2.log" 2>/dev/null && echo yes || echo no; }
 echo "A members=2: $(saw 'members=2' A) · A proposed: $(saw 'MUSTER-LP split propose 0x' A)" \
-     "· B funded: $(saw 'MUSTER-LP wallet_finality lez:testnet .*"final"' B) · B paid: $(saw 'MUSTER-LP split pay .*pending' B)" \
+     "· B funded: $( [ "${LEZ_SPLIT_FUND:-1}" = 0 ] && echo "skipped (LEZ_SPLIT_FUND=0)" || saw 'MUSTER-LP wallet_finality lez:testnet .*"final"' B) · B paid: $(saw 'MUSTER-LP split pay .*pending' B)" \
      "· B reported: $(saw 'MUSTER-LP split reported' B) · A confirmed: $(saw 'MUSTER-LP split confirmed' A)"
 # (the UI backend's own log lines do not reach the runner's log; the module's MUSTER-LP ones do)
 grep -ahE 'MUSTER-LP (wallet_lez_setup|wallet_send|wallet_finality)' "$D/B.log" | tail -5 | cut -c1-220 | sed 's/^/  B │ /'
@@ -100,3 +108,5 @@ else
   echo "FAIL after ${elapsed}s: final on both=$ok — logs kept in $D (LEZ wallets in $STATE)"
   exit 1
 fi
+exit
+}
