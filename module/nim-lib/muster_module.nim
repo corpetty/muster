@@ -80,6 +80,7 @@ import ../src/coordination/attest      # readEvent: the external read a Bitcoin 
 import ../src/drivers/split as splitdrv   # a split: each pays their own share (exo-a90)
 import ../src/coordination/parts        # paying and confirming a part (exo-a90.4)
 import ../src/coordination/parts_evm    # …on an EVM chain, through this member's own wallet and RPC
+import ../src/coordination/parts_lez    # …and privately on the LEZ, found by the creditor's scan (exo-a90.9)
 
 proc hexToBytes(s: string): seq[byte] =
   var h = s
@@ -157,10 +158,10 @@ proc roomDriver(kind: string): Driver =
   ## IS a signer and it endorses in-app (no pasted fixture). k is the configured
   ## threshold capped at the roster size (a 1-member room needs 1); "unanimous" is n-of-n.
   let (bare, chain) = splitPolicy(kind)
-  if bare == "evm-split":
+  if bare in ["evm-split", "lez-split"]:
     # a split (exo-a90): the policy names the CAIP-2 chain the parties pay on; the room's
     # members gate who may be named (the fold reads the parties from the effect alone)
-    return newSplitDriver(EvmSplitFamily, chain, roomIdentities())
+    return newSplitDriver((if bare == "lez-split": LezSplitFamily else: EvmSplitFamily), chain, roomIdentities())
   let roster = currentRoster()
   let n = max(1, roster.len)
   case kind
@@ -979,6 +980,16 @@ proc rpcChainCaip2(): tuple[ok: bool, chain, detail: string] =
   try: (true, "eip155:" & rpcChainId(gRpcUrl), "")
   except CatchableError as e: (false, "", "your RPC (" & gRpcUrl & ") did not answer: " & e.msg)
 
+proc splitLezAdapter(): LezAdapter   ## forward — the module's LEZ wallet (moduleWallet, below)
+
+proc splitChainFor(kind: string): tuple[ok: bool, chain, detail: string] =
+  ## The chain a split kind settles on when none is named: an EVM split, the chain this
+  ## member's RPC serves; the private split, the LEZ zone this member's wallet is on.
+  if "lez" in kindInfo(kind).settlesOn:
+    try: (true, splitLezAdapter().describe().chain, "")
+    except CatchableError as e: (false, "", "the LEZ wallet is unavailable: " & e.msg)
+  else: rpcChainCaip2()
+
 # ── a split: each pays their own share (exo-a90; docs/design/split-the-bill.md) ─────
 # Paying SENDS and returns; the settled report follows on the intents tick once the
 # payment lands (a hosted call never waits on a block, exo-3c9). On the same tick, this
@@ -987,7 +998,7 @@ proc rpcChainCaip2(): tuple[ok: bool, chain, detail: string] =
 # chain has it.
 type SplitPending = object
   session: CoordinationSession   ## the room the payment belongs to; it completes only there
-  seam: EvmPartSeam
+  seam: PartSeam
   pp: PendingPart
   started: float
 
@@ -1005,6 +1016,13 @@ proc splitSeam(chain: string): EvmPartSeam =
   let wchain = "evm:" & $cid
   newEvmPartSeam(chain, gRpcUrl, newEvmAdapter(wchain, gRpcUrl, fromUnlocked = false), moduleKeystore(),
                  Account(chain: wchain, form: afPublic, id: addrHex(myAddress())))
+
+proc splitSeamFor(policy: string): PartSeam =
+  ## The seam a split's policy settles through: this member's own EVM wallet + RPC, or —
+  ## for the private split — their own LEZ wallet on the private rail (exo-a90.9).
+  let (k, chain) = splitPolicy(policy)
+  if k == "lez-split": PartSeam(newLezPartSeam(chain, splitLezAdapter(), moduleKeystore()))
+  else: PartSeam(splitSeam(chain))
 
 proc splitPayingFor(intentId, part: string): bool =
   for p in gSplitPending:
@@ -1036,14 +1054,14 @@ proc splitPump() =
       if gSplitRecent.len > 20: gSplitRecent.delete(0)
   gSplitPending = keep
   # the creditor's side: confirm what my own read shows, per chain the room's splits use
-  var chains: seq[string]
+  var policies: seq[string]
   for v in reduceIntentViews(gSession.roomEvents(), driverFor):
     if v.parts.len == 0 or v.state notin ["submitted", "settling"]: continue
-    let (k, c) = splitPolicy(v.policy)
-    if k == "evm-split" and c notin chains: chains.add c
-  for c in chains:
+    if splitPolicy(v.policy).kind in ["evm-split", "lez-split"] and v.policy notin policies:
+      policies.add v.policy
+  for pol in policies:
     try:
-      let confirmed = liveConfirmParts(gSession, ks, driverFor, splitSeam(c))
+      let confirmed = liveConfirmParts(gSession, ks, driverFor, splitSeamFor(pol))
       if gLpDebug and confirmed.len > 0: stderr.writeLine("MUSTER-LP split confirmed " & $(%confirmed))
     except CatchableError: discard
   if gLpDebug:
@@ -1064,38 +1082,55 @@ proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): s
   ## address on `chain` (proposer material, written into the effect so it is reviewed and
   ## signed). Returns the intent id, or {error}.
   if gSession == nil: return $(%*{"error": "not-joined"})
+  # WHICH rail: the chain named, else the compose policy's (the Split composer's "Settles
+  # on" row — evm-split or lez-split), else an EVM split on the chain the RPC serves. The
+  # chain is written into the effect, so every member reviews it before agreeing.
   var chain = chain
+  let (ck, cq) = splitPolicy(gCoordKind)
+  var kind = (if chain.startsWith("lez:"): "lez-split"
+              elif chain.len == 0 and ck in ["evm-split", "lez-split"]: ck
+              else: "evm-split")
+  if chain.len == 0: chain = cq
   if chain.len == 0:
-    # none named: the chain this member's RPC serves — written into the effect, so every
-    # member reviews it before agreeing
-    let (ok, c, detail) = rpcChainCaip2()
-    if not ok: return $(%*{"error": "no-rpc", "detail": detail})
+    let (ok, c, detail) = splitChainFor(kind)
+    if not ok: return $(%*{"error": (if kind == "lez-split": "no-lez-wallet" else: "no-rpc"), "detail": detail})
     chain = c
+  let lez = kind == "lez-split"
   let (isEvm, _) = evmChainId(chain)
-  if not isCaip2(chain) or not isEvm: return $(%*{"error": "not-an-evm-chain", "chain": chain})
-  if "evm-split" notin roomKinds(): return $(%*{"error": "not-admitted", "kind": "evm-split"})
+  if not isCaip2(chain) or (not lez and not isEvm) or (lez and not chain.startsWith("lez:")):
+    return $(%*{"error": "not-a-" & (if lez: "lez" else: "evm") & "-chain", "chain": chain})
+  if kind notin roomKinds(): return $(%*{"error": "not-admitted", "kind": kind})
   if not isCanonDec(total) or total == "0": return $(%*{"error": "bad-total", "total": total})
   let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
   var shares: seq[SplitShare]
   try:
     let j = parseJson(sharesJson)
     if j.kind == JArray:
-      shares = evenShares(total, me, j.getElems().mapIt(it.getStr().toLowerAscii()))
+      # the private split needs every share distinct: its note is matched by amount (§4.7)
+      shares = evenShares(total, me, j.getElems().mapIt(it.getStr().toLowerAscii()), distinctAmounts = lez)
     elif j.kind == JObject and j.hasKey("shares"):
       for x in j["shares"].getElems(): shares.add SplitShare(who: x{"who"}.getStr().toLowerAscii(), amount: x{"amount"}.getStr())
     elif j.kind == JObject and j.hasKey("parties"):
       shares = evenShares(total, me, j["parties"].getElems().mapIt(it.getStr().toLowerAscii()),
-                          creditorShares = j{"creditorShares"}.getBool(true))
+                          creditorShares = j{"creditorShares"}.getBool(true), distinctAmounts = lez)
     else: return $(%*{"error": "bad-shares", "detail": "an array of room identities, {parties}, or {shares}"})
   except CatchableError as e:
     return $(%*{"error": "bad-shares", "detail": e.msg})
-  let payTo = addrHex(myAddress())
-  let effect = splitEffectJson(chain, "ETH", total, me, payTo, shares, memo)
+  # payTo: my own address on the rail — the private split's is my shielded key node
+  var payTo = addrHex(myAddress())
+  if lez:
+    payTo = ""
+    try:
+      for r in splitLezAdapter().receiveAddresses(moduleKeystore()):
+        if r.form == "shielded": payTo = r.address
+    except CatchableError as e: return $(%*{"error": "no-lez-wallet", "detail": e.msg})
+    if payTo.len == 0: return $(%*{"error": "no-lez-wallet", "detail": "no shielded account to be paid at"})
+  let effect = splitEffectJson(chain, (if lez: "LEZ" else: "ETH"), total, me, payTo, shares, memo)
   var ttl = DefaultIntentTtl
   try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
   except ValueError: discard
   inc gMsgSeq
-  let id = liveProposeIntent(gSession, moduleKeystore(), driverFor, "evm-split@" & chain, effect,
+  let id = liveProposeIntent(gSession, moduleKeystore(), driverFor, kind & "@" & chain, effect,
                              int64(epochTime()), gMsgSeq, account = chain & ":" & payTo, ttlSec = ttl)
   if id.startsWith("0x"): id else: $(%*{"error": id})
 
@@ -1103,9 +1138,9 @@ proc musterCoordinateSettlePartImpl(intentId: string): string =
   ## Pay THIS member's share of an agreed split from their own wallet — the transfer is
   ## derived from the agreed effect (invariant 1); the report follows once it lands.
   if gSession == nil: return $(%*{"error": "not-joined"})
-  let (k, chain) = splitPolicy(intentPolicyOf(gSession.roomEvents(), intentId))
-  if k != "evm-split": return $(%*{"error": "not-a-split"})
-  let seam = splitSeam(chain)
+  let policy = intentPolicyOf(gSession.roomEvents(), intentId)
+  if splitPolicy(policy).kind notin ["evm-split", "lez-split"]: return $(%*{"error": "not-a-split"})
+  let seam = splitSeamFor(policy)
   let (outcome, pp) = liveSettlePartSend(gSession, moduleKeystore(), driverFor, intentId, seam,
                                          uint64(epochTime()))
   if outcome.len > 0: return $(%*{"error": outcome})
@@ -1116,9 +1151,9 @@ proc musterCoordinateConfirmPartImpl(intentId, part, tx: string): string =
   ## As the creditor, confirm one share: from this member's own read of `tx`, or — with no
   ## reference — received outside muster.
   if gSession == nil: return $(%*{"error": "not-joined"})
-  let (k, chain) = splitPolicy(intentPolicyOf(gSession.roomEvents(), intentId))
-  if k != "evm-split": return $(%*{"error": "not-a-split"})
-  let r = liveConfirmPart(gSession, moduleKeystore(), driverFor, intentId, part, splitSeam(chain), tx)
+  let policy = intentPolicyOf(gSession.roomEvents(), intentId)
+  if splitPolicy(policy).kind notin ["evm-split", "lez-split"]: return $(%*{"error": "not-a-split"})
+  let r = liveConfirmPart(gSession, moduleKeystore(), driverFor, intentId, part, splitSeamFor(policy), tx)
   if r in ["executable", "submitted", "settling", "final"]: $(%*{"state": r}) else: $(%*{"error": r})
 
 # The dispatch at the C ABI has no try/except at the pinned SDK rev (muster_gen.nim), so a
@@ -1326,8 +1361,9 @@ proc musterCoordinateSetPolicy(kind: string): string =
     # parties pay on — the one named, or the one this member's RPC serves
     var chain = acct
     if chain.len == 0:
-      let (ok, c, detail) = rpcChainCaip2()
-      if not ok: return $(%*{"error": "no-rpc", "kind": k, "detail": detail})
+      let (ok, c, detail) = splitChainFor(k)
+      if not ok: return $(%*{"error": (if "lez" in kindInfo(k).settlesOn: "no-lez-wallet" else: "no-rpc"),
+                             "kind": k, "detail": detail})
       chain = c
     if not isCaip2(chain) or chain.split(':')[0] notin kindInfo(k).settlesOn:
       return $(%*{"error": "a " & k & " policy settles on " & kindInfo(k).settlesOn.join("/") &
@@ -1561,7 +1597,7 @@ proc musterCoordinateIntents(): string =
     for d in v.decliners:
       decl.add %*{"who": d, "name": (if normId(d) == myEncHex: "you" else: contactBook().nameFor(d))}
     o["declinerNames"] = decl
-    if v.parts.len > 0 and prof.family == EvmSplitFamily:
+    if v.parts.len > 0 and prof.family in [EvmSplitFamily, LezSplitFamily]:
       # a split (exo-a90): each person's share and where it stands — only what each disclosed
       # (their agreement, their payment report) and what the creditor confirmed (invariant 9)
       try:
@@ -1579,6 +1615,9 @@ proc musterCoordinateIntents(): string =
                        "tx": pv.tx, "mine": who == myEncHex, "paying": splitPayingFor(v.id, pv.part)}
         o["parts"] = parts
         o["split"] = %*{"total": sp.total, "asset": sp.asset, "payTo": sp.payTo, "memo": sp.memo,
+                        # the asset's decimals, so the card shows 0.3 LEZ, not 0.0000000003
+                        "decimals": (if sp.asset == "LEZ": 9 else: 18),
+                        "private": prof.family == LezSplitFamily,
                         "creditor": sp.creditor, "iAmCreditor": sp.creditor == myEncHex,
                         "creditorName": (if sp.creditor == myEncHex: "you" else: contactBook().nameFor(sp.creditor)),
                         "creditorShare": subDec(sp.total, sum)}
@@ -2757,6 +2796,10 @@ proc moduleWallet(): Wallet =
           except CatchableError: discard
     gWallet.register(gLez)
   gWallet
+
+proc splitLezAdapter(): LezAdapter =
+  discard moduleWallet()
+  gLez
 
 proc assetBySymbol(w: Wallet, chain, symbol: string): AssetId =
   for a in w.assets():

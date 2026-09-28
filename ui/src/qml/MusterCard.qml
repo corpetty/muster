@@ -245,19 +245,24 @@ Rectangle {
     readonly property string creditorName: cardRoot.split
         ? (String(cardRoot.split.creditorName || "").length > 0 ? String(cardRoot.split.creditorName)
            : String(cardRoot.split.creditor || "").slice(0, 10) + "…") : ""
-    // wei (canonical decimal text) → ETH, by string — never a float
+    // The split's asset and its decimals (ETH 18, LEZ 9): base units → a readable amount,
+    // by string — never a float.
+    readonly property string unit: cardRoot.split ? String(cardRoot.split.asset || "ETH") : "ETH"
+    readonly property int decimals: cardRoot.split ? Number(cardRoot.split.decimals || 18) : 18
     function eth(wei) {
+        var dec = cardRoot.decimals;
         var s = String(wei || "0").replace(/^0+/, "");
         if (s.length === 0) return "0";
-        while (s.length <= 18) s = "0" + s;
-        var whole = s.slice(0, s.length - 18), frac = s.slice(s.length - 18).replace(/0+$/, "");
+        while (s.length <= dec) s = "0" + s;
+        var whole = s.slice(0, s.length - dec), frac = s.slice(s.length - dec).replace(/0+$/, "");
         return frac.length > 0 ? whole + "." + frac : whole;
     }
     // Where one person's share stands — only what they disclosed (their agreement, their
     // payment report) and what the creditor confirmed (invariant 9).
     function partState(p) {
         if (!p) return "";
-        if (p.confirmed) return String(p.tx || "").length > 0 ? qsTr("✓ received") : qsTr("✓ received outside muster");
+        if (p.confirmed) return String(p.tx || "").indexOf("note:") === 0 ? qsTr("✓ received — a private note of exactly this share")
+                              : String(p.tx || "").length > 0 ? qsTr("✓ received") : qsTr("✓ received outside muster");
         if (p.settled) return qsTr("paid (%1) — %2 has not seen it yet").arg(String(p.tx || "").slice(0, 10) + "…")
                                                                      .arg(cardRoot.creditorName);
         if (p.paying) return qsTr("paying…");
@@ -586,11 +591,12 @@ Rectangle {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: cardRoot.split
-                          ? qsTr("%1 ETH%2 — %3 paid; %4 owe a share")
-                                .arg(cardRoot.eth(cardRoot.split.total))
+                          ? qsTr("%1 %2%3 — %4 paid; %5 owe a share%6")
+                                .arg(cardRoot.eth(cardRoot.split.total)).arg(cardRoot.unit)
                                 .arg(String(cardRoot.split.memo || "").length > 0 ? " · " + String(cardRoot.split.memo) : "")
                                 .arg(cardRoot.creditorName)
                                 .arg(cardRoot.parts.length === 1 ? qsTr("1 person") : qsTr("%1 people").arg(cardRoot.parts.length))
+                                .arg(cardRoot.split.private ? qsTr(" · private: the chain names no one") : "")
                           : ""
                     color: Theme.palette.text
                     font.family: Theme.typography.publicSans
@@ -613,7 +619,7 @@ Rectangle {
                             font.pixelSize: Theme.typography.secondaryText
                         }
                         LogosText {
-                            text: qsTr("%1 ETH").arg(cardRoot.eth(modelData.amount))
+                            text: qsTr("%1 %2").arg(cardRoot.eth(modelData.amount)).arg(cardRoot.unit)
                             color: Theme.palette.textSecondary
                             font.family: Theme.typography.mono
                             font.pixelSize: Theme.typography.badgeText
@@ -642,9 +648,9 @@ Rectangle {
                     wrapMode: Text.WordWrap
                     visible: cardRoot.split !== null
                     text: cardRoot.split
-                          ? qsTr("%1 own share: %2 ETH (it absorbs any rounding). Paid to %3.")
+                          ? qsTr("%1 own share: %2 %3 (it absorbs any rounding). Paid to %4.")
                                 .arg(cardRoot.iAmCreditor ? qsTr("Your") : cardRoot.creditorName + qsTr("'s"))
-                                .arg(cardRoot.eth(cardRoot.split.creditorShare))
+                                .arg(cardRoot.eth(cardRoot.split.creditorShare)).arg(cardRoot.unit)
                                 .arg(String(cardRoot.split.payTo || ""))
                           : ""
                     color: Theme.palette.textTertiary
@@ -657,8 +663,9 @@ Rectangle {
                     wrapMode: Text.WordWrap
                     visible: cardRoot.iAmDebtor
                     text: cardRoot.myPart
-                          ? qsTr("Your share: %1 ETH → %2, from your own wallet. Muster builds the payment from this split — nothing to type, and nothing else can be sent.")
-                                .arg(cardRoot.eth(cardRoot.myPart.amount)).arg(cardRoot.creditorName)
+                          ? qsTr("Your share: %1 %2 → %3, from your own wallet%4. Muster builds the payment from this split — nothing to type, and nothing else can be sent.")
+                                .arg(cardRoot.eth(cardRoot.myPart.amount)).arg(cardRoot.unit).arg(cardRoot.creditorName)
+                                .arg(cardRoot.split && cardRoot.split.private ? qsTr(", on the private rail") : "")
                           : ""
                     color: Theme.palette.textSecondary
                     font.pixelSize: Theme.typography.badgeText
@@ -1603,7 +1610,7 @@ Rectangle {
                 && cardRoot.ready && !cardRoot.paid
                 && cardRoot.myPart !== null && !cardRoot.myPart.settled && !cardRoot.myPart.paying
             Layout.fillWidth: true
-            text: cardRoot.myPart ? qsTr("Pay my share — %1 ETH").arg(cardRoot.eth(cardRoot.myPart.amount))
+            text: cardRoot.myPart ? qsTr("Pay my share — %1 %2").arg(cardRoot.eth(cardRoot.myPart.amount)).arg(cardRoot.unit)
                                   : qsTr("Pay my share")
             onClicked: cardRoot.settlePart()
         }

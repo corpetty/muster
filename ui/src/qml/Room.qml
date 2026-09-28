@@ -615,20 +615,27 @@ Item {
     // ETH ↔ wei is string arithmetic here — never a float, never a rounding surprise.
     property var splitOut: ({})              // members left OUT of the next split (identity → true)
     property bool splitCreditorShares: true  // "I'm in it too": the total is shared with you
-    function ethToWei(eth) {
+    // The rail the next split settles on (the "Settles on" row): its unit and decimals —
+    // ETH has 18, the LEZ 9 — and whether it is the private split (exo-a90.9).
+    readonly property bool splitPrivate: room.policyKind === "lez-split"
+    readonly property int splitDecimals: room.splitPrivate ? 9 : 18
+    readonly property string splitUnit: room.splitPrivate ? "LEZ" : "ETH"
+    function ethToWei(eth, decimals) {
+        var dec = (decimals === undefined) ? room.splitDecimals : decimals;
         var s = String(eth || "").trim();
-        if (!/^[0-9]+(\.[0-9]{0,18})?$/.test(s)) return "";
+        if (!new RegExp("^[0-9]+(\\.[0-9]{0," + dec + "})?$").test(s)) return "";
         var parts = s.split(".");
         var frac = (parts.length > 1 ? parts[1] : "");
-        while (frac.length < 18) frac += "0";
+        while (frac.length < dec) frac += "0";
         var w = String(parts[0] + frac).replace(/^0+/, "");
         return w.length > 0 ? w : "0";
     }
-    function weiToEth(wei) {
+    function weiToEth(wei, decimals) {
+        var dec = (decimals === undefined) ? room.splitDecimals : decimals;
         var s = String(wei || "0").replace(/^0+/, "");
         if (s.length === 0) return "0";
-        while (s.length <= 18) s = "0" + s;
-        var whole = s.slice(0, s.length - 18), frac = s.slice(s.length - 18).replace(/0+$/, "");
+        while (s.length <= dec) s = "0" + s;
+        var whole = s.slice(0, s.length - dec), frac = s.slice(s.length - dec).replace(/0+$/, "");
         return frac.length > 0 ? whole + "." + frac : whole;
     }
     // A canonical decimal string ÷ a small integer: [quotient, remainder] (long division).
@@ -934,8 +941,10 @@ Item {
                                        ? (room.splitResult.error
                                           ? qsTr("⚠ %1").arg(String(room.splitResult.error) + (room.splitResult.detail ? ": " + String(room.splitResult.detail) : ""))
                                           : room.splitResult.op === "pay"
-                                          ? qsTr("Sent %1 ETH from your wallet (%2) — it shows as paid once a block includes it.")
-                                                .arg(room.weiToEth(String(room.splitResult.amount || "0")))
+                                          ? qsTr("Sent %1 %2 from your wallet (%3) — it shows as paid once it settles.")
+                                                .arg(room.weiToEth(String(room.splitResult.amount || "0"),
+                                                                   Number(((msg.liveIntent && msg.liveIntent.split) || {}).decimals || 18)))
+                                                .arg(String(((msg.liveIntent && msg.liveIntent.split) || {}).asset || "ETH"))
                                                 .arg(String(room.splitResult.pending || "").slice(0, 12) + "…")
                                           : qsTr("Marked received."))
                                        : ""
@@ -1891,7 +1900,7 @@ Item {
                             id: splitTotal
                             objectName: "roomSplitTotal"
                             Layout.preferredWidth: 160
-                            placeholderText: qsTr("total (ETH)")
+                            placeholderText: qsTr("total (%1)").arg(room.splitUnit)
                             font.family: Theme.typography.mono
                         }
                         LogosTextField {
@@ -1943,8 +1952,12 @@ Item {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: room.ethToWei(splitTotal.text).length === 0
-                              ? qsTr("⚠ Type the total in ETH, e.g. 1.2 (at most 18 decimals).")
+                              ? qsTr("⚠ Type the total in %1, e.g. 1.2 (at most %2 decimals).").arg(room.splitUnit).arg(room.splitDecimals)
                               : pv === null ? qsTr("Leave at least one person in.")
+                              : room.splitPrivate
+                              ? qsTr("%1 %2 owe you about %3 LEZ each — every share a few base units apart, so your scan can tell whose payment arrived without the chain naming anyone; your own share absorbs the rest. Each pays privately from their own wallet: the chain learns only that private transfers happened.")
+                                    .arg(pv.n).arg(pv.n === 1 ? qsTr("person") : qsTr("people"))
+                                    .arg(room.weiToEth(pv.each))
                               : qsTr("%1 %2 owe you %3 ETH each; your own share is %4 ETH (it absorbs any rounding). Each pays from their own wallet — every payment is public on the chain.")
                                     .arg(pv.n).arg(pv.n === 1 ? qsTr("person") : qsTr("people"))
                                     .arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine))
