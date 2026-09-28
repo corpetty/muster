@@ -137,50 +137,73 @@ type
   PendingNote = object
     npk, vpk, amountRaw: string
 
-  FakeLezCore* = ref object of LezCore
+  FakeLezChain* = ref object
+    ## The pretend ledger. A standalone FakeLezCore owns one; several wallets can SHARE
+    ## one (newFakeLezCore(chain)) so a private payment from one member's wallet lands in
+    ## another's — found only by the recipient's own scan (exo-a90.9, the private split).
     balances: Table[string, string]        ## accountId -> raw balance
-    accounts: seq[LezAccount]              ## created + discovered accounts
-    pending: seq[PendingNote]              ## private notes not yet discovered by sync
+    pending: seq[PendingNote]              ## private notes not yet discovered by a scan
     seq: int                               ## deterministic id/tx counter
+
+  FakeLezCore* = ref object of LezCore
+    chain: FakeLezChain
+    shared: bool                           ## true = a wallet on a shared chain
+    accounts: seq[LezAccount]              ## created + discovered accounts (THIS wallet's)
     failNextTransfer*: bool                ## test hook: force a success:false envelope
 
+proc newFakeLezChain*(): FakeLezChain =
+  FakeLezChain(balances: initTable[string, string](), seq: 0)
+
 proc newFakeLezCore*(): FakeLezCore =
-  FakeLezCore(balances: initTable[string, string](), seq: 0)
+  ## A standalone wallet: its own ledger, and a scan settles every pending note into it.
+  FakeLezCore(chain: newFakeLezChain())
+
+proc newFakeLezCore*(chain: FakeLezChain): FakeLezCore =
+  ## One wallet on a SHARED chain: its scan discovers only the notes sent to a key node
+  ## this wallet holds — receive-by-scan across members, the way the real zone behaves.
+  FakeLezCore(chain: chain, shared: true)
+
+proc fund*(chain: FakeLezChain, accountId, raw: string) =
+  ## Test/demo funding: credit any account on the chain directly.
+  let cur = if accountId in chain.balances: chain.balances[accountId] else: "0"
+  chain.balances[accountId] = $(parseBiggestUInt(cur) + parseBiggestUInt(raw))
 
 proc nextId(c: FakeLezCore, prefix: string): string =
-  inc c.seq
-  prefix & "-" & $c.seq
+  inc c.chain.seq
+  prefix & "-" & $c.chain.seq
 
 method createAccount*(c: FakeLezCore, kind: LezAccountKind): LezAccount =
   let a =
     if kind == lakPublic:
       LezAccount(id: c.nextId("pub"), kind: lakPublic)
     else:
-      let n = c.nextId("npk"); let v = c.nextId("vpk")
+      # a key node shaped like the zone's: a 32-byte npk and a 33-byte vpk, lowercase hex
+      # (deterministic from the chain's counter, unique across the wallets that share it)
+      inc c.chain.seq
+      let n = toHex(c.chain.seq, 64).toLowerAscii()
+      let v = "02" & toHex(c.chain.seq, 64).toLowerAscii()
       # id derived from the key node (models SHA256(prefix‖npk‖identifier))
       LezAccount(id: c.nextId("priv"), kind: lakPrivate, npk: n, vpk: v)
   c.accounts.add a
-  c.balances[a.id] = "0"
+  c.chain.balances[a.id] = "0"
   a
 
 method listAccounts*(c: FakeLezCore): seq[LezAccount] = c.accounts
 
 method getBalanceRaw*(c: FakeLezCore, accountId: string, isPublic: bool): string =
-  ## Sentinel: an account the wallet doesn't hold returns "" (an unanswerable read),
+  ## Sentinel: an account the ledger doesn't hold returns "" (an unanswerable read),
   ## which the adapter turns into a raise — never a false zero. (The fake's ledger is
   ## keyed by id, so isPublic is unused here; the real module needs it.)
-  if accountId in c.balances: c.balances[accountId] else: ""
+  if accountId in c.chain.balances: c.chain.balances[accountId] else: ""
 
-proc credit(c: FakeLezCore, id, amountRaw: string) =
-  let cur = if id in c.balances: c.balances[id] else: "0"
-  c.balances[id] = $(parseBiggestUInt(cur) + parseBiggestUInt(amountRaw))
+proc credit(c: FakeLezCore, id, amountRaw: string) = c.chain.fund(id, amountRaw)
 
 proc debitOrRaise(c: FakeLezCore, id, amountRaw: string) =
-  let cur = if id in c.balances: c.balances[id] else: ""
+  let cur = if id in c.chain.balances: c.chain.balances[id] else: ""
   if cur.len == 0: raise newException(WalletError, "unknown account " & id)
   if parseBiggestUInt(cur) < parseBiggestUInt(amountRaw):
     raise newException(WalletError, "insufficient funds")
-  c.balances[id] = $(parseBiggestUInt(cur) - parseBiggestUInt(amountRaw))
+  c.chain.balances[id] = $(parseBiggestUInt(cur) - parseBiggestUInt(amountRaw))
 
 method transfer*(c: FakeLezCore, form: TransferForm, frm, to, amountRaw: string): LezResult =
   if c.failNextTransfer:
@@ -193,20 +216,29 @@ method transfer*(c: FakeLezCore, form: TransferForm, frm, to, amountRaw: string)
     c.credit(to, amountRaw)
   of tfShield, tfPrivate:
     # shielded destination (a "npk:vpk" key node) — the note is NOT yet discoverable;
-    # it settles into a fresh account on sync, found by scanning under its key node.
+    # it settles into a fresh account on a scan, found under its key node.
     let parts = to.split(':')
     let npk = (if parts.len > 0: parts[0] else: to)
     let vpk = (if parts.len > 1: parts[1] else: "")
-    c.pending.add PendingNote(npk: npk, vpk: vpk, amountRaw: amountRaw)
+    c.chain.pending.add PendingNote(npk: npk, vpk: vpk, amountRaw: amountRaw)
   LezResult(success: true, txHash: c.nextId("tx"))
 
 method sync*(c: FakeLezCore): int =
-  ## Settle pending private notes into discoverable accounts under their key node.
-  for n in c.pending:
+  ## Settle pending private notes into discoverable accounts under their key node. A
+  ## standalone wallet takes every note; a wallet on a shared chain only the notes sent to
+  ## a key node it holds — the rest stay for their own recipients' scans.
+  var keep: seq[PendingNote]
+  for n in c.chain.pending:
+    var mine = not c.shared
+    for a in c.accounts:
+      if a.kind == lakPrivate and a.npk == n.npk and a.vpk == n.vpk: mine = true
+    if not mine:
+      keep.add n
+      continue
     let a = LezAccount(id: c.nextId("recv"), kind: lakPrivate, npk: n.npk, vpk: n.vpk)
     c.accounts.add a
-    c.balances[a.id] = n.amountRaw
-  c.pending = @[]
+    c.chain.balances[a.id] = n.amountRaw
+  c.chain.pending = keep
   0
 
 method claimPinata*(c: FakeLezCore, pinataId, account: string): LezResult =

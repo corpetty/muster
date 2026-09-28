@@ -17,8 +17,9 @@
 ##   * each debtor is a PART (§4.3): settled by that debtor, confirmed by the creditor, and
 ##     the transfer that settles it is derived here from the reviewed effect (invariant 1);
 ##   * the PROFILE is the each locus; the manifest says what each rail discloses (§6).
-## One driver, two families, as btc_multisig.nim: evm.split (built) and lez.split (the
-## private rail, exo-a90.9 — declared, not constructed yet).
+## One driver, two families, as btc_multisig.nim: evm.split and lez.split — the private
+## split (exo-a90.9): a shielded payTo, the private rail, and every share a distinct amount
+## so the creditor's scan can attribute each note without the chain naming its payer.
 
 import std/[json, strutils, sequtils, algorithm]
 import stint
@@ -121,7 +122,8 @@ proc refusal(d: SplitDriver, sp: Split): string =
            "; its policy settles on " & d.chain
   if d.family == EvmSplitFamily and sp.asset != "ETH":
     return "only ETH is split on " & d.chain & " so far (asked: " & sp.asset & ")"
-  if d.family == LezSplitFamily and sp.asset.len == 0: return "no asset named"
+  if d.family == LezSplitFamily and sp.asset != "LEZ":
+    return "only LEZ is split privately on " & d.chain & " so far (asked: " & sp.asset & ")"
   if not isCanonDec(sp.total): return "the total is not a canonical decimal: " & sp.total
   if sp.total == "0": return "the total must be more than zero"
   if not isRoomIdentity(sp.creditor): return "the creditor is not a room identity (64 bytes, lowercase hex)"
@@ -139,6 +141,15 @@ proc refusal(d: SplitDriver, sp: Split): string =
     sum = sum + u256(s.amount)
     if sum < before: return "the shares overflow"
   if sum > u256(sp.total): return "the shares add up to more than the total"
+  if d.family == LezSplitFamily:
+    # the chain names no payer on the private rail, so the AMOUNT is what lets the
+    # creditor's scan tell whose note arrived (§4.7): no two shares may be equal
+    var seen: seq[string]
+    for s in sp.shares:
+      if s.amount in seen:
+        return "every share of a private split must differ, so the creditor can tell whose payment arrived " &
+               "without the chain naming anyone (" & s.amount & " twice)"
+      seen.add s.amount
   ""
 
 proc validSplit(d: SplitDriver, e: Effect): tuple[ok: bool, split: Split, why: string] =
@@ -271,11 +282,11 @@ method manifest*(d: SplitDriver, effect: Effect): ActionManifest =
   let lez = d.family == LezSplitFamily
   var touches = @[touch(d.chain, tmWrite)]
   if ok: touches.add touch(d.chain & ":" & sp.payTo, tmWrite)
-  let asset = (if ok: sp.asset else: "ETH")
+  let asset = (if ok: sp.asset elif lez: "LEZ" else: "ETH")
   ActionManifest(declared: true, agreement: d.describeFor(effect),
     requirements: @[
       req(rqEnvironment, d.chain),
-      req(rqInfra, (if lez: "lez-rpc" else: "rpc")),
+      (if lez: req(rqModule, "lez_core") else: req(rqInfra, "rpc")),
       req(rqAuthority, "split-party", rpContributor),
       req(rqAsset, "share", rpContributor, need(mcAsset, d.chain & "/" & asset)),
       req(rqAddress, "pay-to", rpProposer, need(mcAddress, d.chain, "payTo"))],
@@ -287,12 +298,15 @@ method manifest*(d: SplitDriver, effect: Effect): ActionManifest =
 
 # ── composing a split ──────────────────────────────────────────────────────────
 proc evenShares*(total, creditor: string, parties: seq[string],
-                 creditorShares = true): seq[SplitShare] =
+                 creditorShares = true, distinctAmounts = false): seq[SplitShare] =
   ## Split `total` evenly: among `parties` and the creditor (listed or not) — "I paid for
   ## dinner, split it" — or, with `creditorShares = false`, among `parties` alone — "chip
   ## in for the gift I bought". Every debtor owes total div n, rounded DOWN; the creditor
   ## absorbs the remainder — at most n−1 of the smallest unit, visible as total − sum
-  ## (§10.3). Sorted by who, each once: the one spelling the driver accepts.
+  ## (§10.3). Sorted by who, each once: the one spelling the driver accepts. With
+  ## `distinctAmounts` (the private split, §4.7) the i-th debtor owes i smallest units less, so
+  ## every share differs and a received note is attributable by its amount alone — the
+  ## creditor absorbs those few units too.
   var who: seq[string]
   for p in parties:
     let w = p.toLowerAscii()
@@ -300,7 +314,10 @@ proc evenShares*(total, creditor: string, parties: seq[string],
   who.sort()
   if who.len == 0: return
   let each = u256(total) div u256(who.len + (if creditorShares: 1 else: 0))
-  for w in who: result.add SplitShare(who: w, amount: $each)
+  for i, w in who:
+    let off = (if distinctAmounts: u256(i) else: 0.u256)
+    if distinctAmounts and off >= each: return @[]   # too small to tell apart: no valid private split
+    result.add SplitShare(who: w, amount: $(each - off))
 
 proc splitEffectJson*(chain, asset, total, creditor, payTo: string, shares: seq[SplitShare],
                       memo: string): string =

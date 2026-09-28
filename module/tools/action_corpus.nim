@@ -110,6 +110,7 @@ proc configOf(kind: string): JsonNode =
   of "btc-frost": %*{"network": "regtest", "recovery": frostRecovery}
   of "lez-frost": %*{"chain": "lez:local", "recovery": frostRecovery}
   of "evm-split": %*{"chain": "eip155:31337", "members": [SplitCreditor, SplitDebtors[0], SplitDebtors[1]]}
+  of "lez-split": %*{"chain": "lez:testnet", "members": [SplitCreditor, SplitDebtors[0], SplitDebtors[1]]}
   else: raise newException(ValueError, "no corpus fixture for kind " & kind)
 
 # ── the effects, built as the hosted composers build them ─────────────────────
@@ -203,6 +204,12 @@ proc effectJsonFor(kind, variant: string, d: Driver): string =
     # the creditor's own address (proposer material)
     splitEffectJson("eip155:31337", "ETH", "900000000000000000", SplitCreditor, Payee,
                     evenShares("900000000000000000", SplitCreditor, @SplitDebtors), "Dinner")
+  of "lez-split/split":
+    # the private split: 0.9 LEZ (9 decimals) paid to the creditor's shielded key node,
+    # every share a distinct amount so the creditor's scan can attribute each note
+    splitEffectJson("lez:testnet", "LEZ", "900000000", SplitCreditor,
+                    "priv:" & repeat("ab", 32) & ":02" & repeat("cd", 32),
+                    evenShares("900000000", SplitCreditor, @SplitDebtors, distinctAmounts = true), "Dinner")
   else: raise newException(ValueError, "no corpus effect for " & kind & "/" & variant)
 
 const Variants* = [
@@ -212,7 +219,7 @@ const Variants* = [
   ("invoke", "module-call"), ("invoke", "lez-transfer"),
   ("btc-p2wsh", "spend"), ("btc-tapscript", "spend"), ("btc-frost", "spend"),
   ("lez-multisig", "transfer"), ("lez-multisig", "vault-init"), ("lez-frost", "transfer"),
-  ("evm-split", "split")]
+  ("evm-split", "split"), ("lez-split", "split")]
 
 # ── JSON ──────────────────────────────────────────────────────────────────────
 proc cborJson(v: CborValue): JsonNode =

@@ -54,7 +54,9 @@ const Kinds*: seq[KindInfo] = @[
   KindInfo(kind: "lez-frost", family: "lez.frost-public-account", label: "LEZ (FROST)", composes: @["payment"],
            founding: true, accountFamilies: @["lez.frost-public-account"]),
   KindInfo(kind: "evm-split", family: "evm.split", label: "Split (Ethereum)", composes: @["split"],
-           founding: true, settlesOn: @["eip155"])]
+           founding: true, settlesOn: @["eip155"]),
+  KindInfo(kind: "lez-split", family: "lez.split", label: "Split privately (LEZ)", composes: @["split"],
+           founding: true, settlesOn: @["lez"])]
 
 # ── a policy is a kind, optionally bound to an account ─────────────────────────
 # An account-bound intent's policy is "<kind>@<CAIP-10 account>" (exo-a50.1.3), so the

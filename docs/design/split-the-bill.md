@@ -1,6 +1,6 @@
 # Split the bill: the room agrees who owes what, and each person pays their own share
 
-**Status:** design, 2026-09-28. Epic `exo-a90` (pebbles; `pb dep tree exo-a90` for live status; slices `exo-a90.1`–`.11`). **S0–S5 landed** (2026-09-28): the core seams, the `evm.split` driver, paying and confirming (end to end on anvil, `split_anvil_e2e`), the hosted methods, and the UI (§7), driven end to end through the real runner by `scripts/split-self-test.sh`. The rendered card awaits an on-display check; `lez.split` is S8.
+**Status:** design, 2026-09-28. Epic `exo-a90` (pebbles; `pb dep tree exo-a90` for live status; slices `exo-a90.1`–`.11`). **S0–S5 landed** (2026-09-28): the core seams, the `evm.split` driver, paying and confirming (end to end on anvil, `split_anvil_e2e`), the hosted methods, and the UI (§7), driven end to end through the real runner by `scripts/split-self-test.sh`. The rendered card awaits an on-display check. `lez.split` — the private split, §4.7 — is built and tested on a shared fake chain; its testnet run and hosted/UI wiring are next.
 **Reads with:** `multisig-landscape.md` (families, profiles, the card's fixed rows; this adds one locus to its vocabulary), `action-manifest.md` (the manifest and the credibility axis), `material-and-disclosure.md` (who supplies what; request-first), `lez-adapter.md` (the four LEZ rails and what each discloses), `docs/00-vision.md` (the education mission), FURPS F-3 / F-4 / F-5 / F-10 / F-16 / F-20 / FS-7 / FS-9.
 **Prototype:** `ui/prototype/coordination-prototype-v2.html`, the "Split the Lisbon offsite costs" room ("four wallets, no shared account — the room is the only thing holding this together") and the `split` plugin ("even shares, settles to personal wallets").
 
@@ -157,6 +157,17 @@ One driver (`drivers/split.nim`) implements two families, the way `btc_multisig.
 The policy is qualified by the **CAIP-2 chain** it settles on, in the same way an account-bound kind is qualified by its CAIP-10 account (`kinds.nim`). The intent id commits to the policy, so the same split on two chains is two intents. The driver instance then knows its chain, and its profile is complete. The kind list gains `settlesOn` (the CAIP-2 namespaces a kind's qualifier may name), and `driverForPolicy` resolves a chain-qualified kind through the host's room builder with the roster.
 
 `lez.split` is **the private split**: `payTo` must be a shielded key node, and each debtor pays on the private rail. That makes its profile honest and fixed: the chain reveals no policy, no signers, and the effect is shielded. A public LEZ split would just be `evm.split`'s story on another chain. The LEZ rails' disclosure square (`lez-adapter.md`) is exactly why the two families are worth showing side by side.
+
+### 4.7 Confirming a private payment
+
+On the private rail the creditor cannot do what §4.5 does. A shielded note carries no payer and no link to the payer's transaction, and the chain cannot look it up by the payer's reference. What the creditor *can* do is scan their own wallet: a received note is discovered under the key node it was sent to, and it has an amount. The private split is built so that those two facts are enough.
+
+- **Every share is a different amount.** `evenShares(…, distinctAmounts = true)` has the i-th debtor (sorted by who) owe i base units less than the even share, and the creditor absorbs those units too. At 9 decimals that is invisible money, but it makes each share unique. The driver refuses a `lez.split` with two equal shares. Nothing new reaches the chain, because the amounts are shielded.
+- **The creditor's scan is the proof, not the payer's report.** The seam's `matchReceived` (`coordination/parts_lez.nim`) looks for a note that arrived at the split's `payTo` key node, of exactly that part's amount, and not already claimed in this room. The confirmed report then carries `note:<16 bytes of sha256(note id)>`. That is enough to claim the note once, and it points at nothing. A debtor's report without a matching note never confirms.
+- **Paying is private-rail only.** The seam pays from the debtor's shielded account, and refuses a public source outright. The shield rail would put the payer and the amount on the chain, and a private split quietly degrading to that would make its card lie.
+- **The seam generalizes.** `PartSeam.matchReceived` defaults to §4.5's behaviour (the reported transaction, checked by the creditor's own read), so `evm.split` is unchanged. Only a rail that cannot look a payment up overrides it.
+
+This is proven on a shared fake chain, where each member's wallet discovers only the notes sent to its own key node (`split_lez_test`). Two things are unverified until a funded run on the LEZ testnet: whether the real `lez_core` scan exposes a note's key node and amount the way the fake does, and whether a privacy-preserving transaction commits to a zone id. A real private transfer also proves for minutes, which the send / complete split (§4.4) already absorbs.
 
 ## 5. The invariants, one by one
 

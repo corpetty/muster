@@ -46,6 +46,17 @@ method partLanded*(s: PartSeam, t: PartTransfer, tx: string): tuple[ok: bool, de
 method checkReceived*(s: PartSeam, t: PartTransfer, tx: string): tuple[ok: bool, detail: string] {.base.} =
   (false, "this seam reads nothing")
 
+method matchReceived*(s: PartSeam, t: PartTransfer, reported: string,
+                      claimed: HashSet[string]): tuple[ok: bool, reference, detail: string] {.base.} =
+  ## The reference that proves the counterparty received `t` — what its "confirmed" report
+  ## carries, and what one-reference-one-part dedups on (`claimed`: every reference already
+  ## confirmed in this room, lowercased). Default: the transaction the party reported,
+  ## checked by this member's own read (a public rail looks a payment up by its hash). A
+  ## seam whose chain cannot — a private rail names no payer — overrides it to find an
+  ## unclaimed receipt of exactly the part instead (parts_lez.nim).
+  let got = s.checkReceived(t, reported)
+  if got.ok: (true, reported, "") else: (false, "", got.detail)
+
 # ── helpers ────────────────────────────────────────────────────────────────────
 proc hx(b: openArray[byte]): string =
   const d = "0123456789abcdef"
@@ -132,10 +143,12 @@ proc liveSettlePart*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
 # ── confirming a part (the counterparty) ─────────────────────────────────────────
 proc liveConfirmPart*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, intentId, part: string,
                       seam: PartSeam, tx: string): string =
-  ## As the counterparty, confirm `part`. With a reference, only after MY OWN read shows it
-  ## paying the part exactly — and never a reference I already confirmed for another part.
-  ## With none, the part was received outside muster: my word, stated as such. Returns
-  ## the intent's state, or a refusal with nothing published.
+  ## As the counterparty, confirm `part`. With a reported reference, only after MY OWN read
+  ## shows the part received exactly (the seam's matchReceived — the reported transaction on
+  ## a public rail, an unclaimed note of exactly the share on a private one) — and never a
+  ## reference already confirmed for another part. With none, the part was received outside
+  ## muster: my word, stated as such. Returns the intent's state, or a refusal with nothing
+  ## published.
   s.poll()
   let events = s.roomEvents()
   let effectJson = effectJsonOf(events, intentId)
@@ -150,14 +163,17 @@ proc liveConfirmPart*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor
   if not found or v.state notin ["executable", "submitted", "settling"]:
     return (if found and v.state == "final": "already-confirmed" else: "not-agreed")
   if partViewOf(v, part).p.confirmed: return "already-confirmed"
+  var reference = ""                   # "" = received outside muster: my word, shown as such
   if tx.len > 0:
-    if normRef(tx) in confirmedRefs(events, driverFor):
+    let claimed = confirmedRefs(events, driverFor)
+    if normRef(tx) in claimed:
       return "refused: that payment already settled another share"
     let t = drv.partTransfer(effect, part)
     if not t.ok: return "refused: " & t.error
-    let got = seam.checkReceived(t, tx)
+    let got = seam.matchReceived(t, tx, claimed)
     if not got.ok: return "unconfirmed: " & got.detail
-  s.publishAuthored(ks, partEvent(intentId, part, "confirmed", myIdentity(ks), tx))
+    reference = got.reference
+  s.publishAuthored(ks, partEvent(intentId, part, "confirmed", myIdentity(ks), reference))
   intentState(s.roomEvents(), driverFor, intentId)
 
 proc liveConfirmParts*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, seam: PartSeam): seq[string] =

@@ -198,6 +198,23 @@ proc syncPrivate*(a: LezAdapter): seq[Account] =
     if la.kind == lakPrivate:
       result.add Account(chain: ChainId, form: afShielded, id: la.id)
 
+proc receivedNotes*(a: LezAdapter, ks: Keystore): seq[tuple[account: Account, keyNode, raw: string]] =
+  ## Scan, then every private note this wallet has RECEIVED — not the accounts it created —
+  ## with the key node it arrived at ("priv:<npk>:<vpk>") and its balance. What a creditor
+  ## matches a private payment against (exo-a90.9): the note names no payer, so the key
+  ## node says which request it answers and the amount says whose share it is. Raises on
+  ## a failed scan or an unanswerable balance — never a false "nothing arrived".
+  if a.core.sync() != 0:
+    raise newException(WalletError, "LEZ sync failed")
+  var created: seq[string]
+  for acc in a.accounts(ks): created.add acc.id
+  for la in a.core.listAccounts():
+    if la.kind != lakPrivate or la.id in created: continue
+    let raw = a.core.getBalanceRaw(la.id, false)
+    if raw.len == 0: raise newException(WalletError, "LEZ balance unavailable for " & la.id)
+    result.add (account: Account(chain: ChainId, form: afShielded, id: la.id),
+                keyNode: "priv:" & la.npk & ":" & la.vpk, raw: raw)
+
 proc lezStatusOf*(a: LezAdapter, minRaw = "0"): tuple[state, detail: string] {.gcsafe.} =
   ## LEZ account readiness for THIS adapter's zone (exo-44b L2): met/missing/unknown,
   ## for the readiness `lez-account` requirement. Keeps `core` private; the host wraps

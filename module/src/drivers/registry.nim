@@ -89,6 +89,11 @@ proc newDriver*(kind: string, config: JsonNode): Driver =
     var members: seq[string]
     for m in config{"members"}.getElems(): members.add m.getStr()
     newSplitDriver(EvmSplitFamily, config{"chain"}.getStr("eip155:31337"), members)
+  of "lez-split":
+    # The private split on a LEZ zone (exo-a90.9): {chain: CAIP-2, members: [room identity hex]}.
+    var members: seq[string]
+    for m in config{"members"}.getElems(): members.add m.getStr()
+    newSplitDriver(LezSplitFamily, config{"chain"}.getStr("lez:testnet"), members)
   of "stub":
     newStubDriver(rounds = config{"rounds"}.getInt(1),
                   threshold = config{"threshold"}.getInt(2),
