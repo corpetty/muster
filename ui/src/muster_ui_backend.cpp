@@ -786,6 +786,23 @@ void MusterUiBackend::loadPolicy()
     setPolicyJson(modules().muster_module.coordinate_policy());
 }
 
+void MusterUiBackend::retryStartup(int attemptsLeft)
+{
+    // health() comes back empty while the module isn't answering yet; once it does,
+    // redo the startup reads. Bounded (~30 s); the module also starts its inbox on the
+    // first invite poll, so this is the first line of defence, not the only one.
+    if (!health().isEmpty() || attemptsLeft <= 0) return;
+    QTimer::singleShot(1500, this, [this, attemptsLeft]() {
+        checkHealth();
+        if (health().isEmpty()) { retryStartup(attemptsLeft - 1); return; }
+        qInfo() << "[muster_ui] module answered — re-running the startup reads";
+        loadAccount();
+        loadSettings();
+        loadDrivers();
+        startInbox();
+    });
+}
+
 void MusterUiBackend::onContextReady()
 {
     // Fires once ui-host hands the plugin its wired modules(); read liveness, the
@@ -799,6 +816,10 @@ void MusterUiBackend::onContextReady()
     // Begin listening on this identity's inbox so room invites (from "Start something
     // with someone") arrive even before any room is opened. Idempotent; safe on launch.
     startInbox();
+    // These calls can land before muster_module answers, and are then simply lost —
+    // found running the tour: the inbox never started, so Bob never saw an invitation.
+    // If the module hasn't answered, run them again until it does.
+    retryStartup(20);
 
     // Diagnostic/headless self-test hook: if MUSTER_AUTOJOIN_TOPIC is set, join that
     // room a few seconds after startup — no GUI click needed. Runs on the ui-host's

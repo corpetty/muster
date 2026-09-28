@@ -739,8 +739,18 @@ proc musterCoordinateInvite(peerChatIdHex, roomTopic, note: string): string =
 proc musterCoordinateInvites(): string =
   ## The room invites this identity has received, newest-first, as [{topic, from,
   ## fromAlias, note, ts}]. Each is sealed to us; ones we can't open (not ours, or
-  ## malformed) are skipped. Deduped by (from, topic). Empty until start_inbox is called.
-  if gInbox == nil: return "[]"
+  ## malformed) are skipped. Deduped by (from, topic).
+  ##
+  ## Starts the inbox itself when it isn't running yet. The UI calls start_inbox once at
+  ## launch, but that call can land before the module is up and never arrive — found
+  ## running the tour: Bob's inbox never started, so no invitation ever showed. Home polls
+  ## this every 2 s, so the first poll that reaches the module brings the inbox up, and
+  ## its deep store catch-up then fetches any invite left while it was down.
+  if gInbox == nil:
+    try: discard musterCoordinateStartInbox()
+    except CatchableError as e:
+      if gLpDebug: stderr.writeLine("MUSTER-LP inbox not started: " & e.msg)
+      return "[]"
   gInbox.poll()
   loadDismissedInvites()
   let ks = moduleKeystore()

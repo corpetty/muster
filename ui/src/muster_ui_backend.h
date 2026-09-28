@@ -93,6 +93,9 @@ public:
     void onContextReady() override;
 
 private:
+    // Re-run the startup reads (health, account, settings, drivers, inbox) until the
+    // module answers — onContextReady can fire before it does, and those calls are lost.
+    void retryStartup(int attemptsLeft);
     // Re-announce a pending join request until admitted (best-effort delivery over
     // the fleet). Guarded so only one retry chain runs at a time.
     void scheduleJoinRetry();
