@@ -407,6 +407,18 @@ proc contactBook(): ContactBook =
     seedDemoContacts(gContacts)
   gContacts
 
+
+proc myIds(): seq[string] =
+  ## Every form under which a surface may name THIS member: the 64-byte identity and the
+  ## names its keys give its approvals (addresses, the Bitcoin key, "ed:" / "frost:").
+  let ks = moduleKeystore()
+  @[toHex(ks.encIdentity().toBytes()).toLowerAscii()] & myContributorNames(ks)
+
+proc memberName(who: string, mine: seq[string]): string =
+  ## The one name for a member on every surface (exo-221): "you", the contact alias, or
+  ## one short id — the card, the approval slots and the room history all ask this.
+  contactBook().memberLabel(who, mine)
+
 proc musterIdentity(): string =
   ## The module's persistent coordination identity (FS-4, two-identity model,
   ## F-14). The secp256k1 authorization address that signs Safe transactions, and
@@ -1539,6 +1551,7 @@ proc musterCoordinateIntents(): string =
   let myEnc = moduleKeystore().encIdentity()
   let myEncHex = toHex(myEnc.toBytes()).toLowerAscii()
   let myNames = myContributorNames(moduleKeystore())
+  let mine = @[myEncHex] & myNames
   var arr = newJArray()
   for v in reduceIntentViews(events, driverFor):
     # Each intent renders under ITS OWN driver — the policy it was proposed with
@@ -1611,14 +1624,14 @@ proc musterCoordinateIntents(): string =
     var approvers = newJArray()
     for w in whos:
       let me = approvedByMe(events, v.id, @[w], myEnc, myNames)
-      let name = (if me: "you" else: contactBook().nameFor(w))
+      let name = (if me: "you" else: memberName(w, mine))
       approvers.add %*{"who": w, "name": name, "mine": me,
                        "initials": initialsOf(if name.len > 0: name else: w)}
     o["approvers"] = approvers
     o["approvedByMe"] = %(approvedByMe(events, v.id, whos, myEnc, myNames) or v.id in gApprovedHere)
     var decl = newJArray()
     for d in v.decliners:
-      decl.add %*{"who": d, "name": (if normId(d) == myEncHex: "you" else: contactBook().nameFor(d))}
+      decl.add %*{"who": d, "name": memberName(d, mine)}
     o["declinerNames"] = decl
     if v.parts.len > 0 and prof.family in [EvmSplitFamily, LezSplitFamily]:
       # a split (exo-a90): each person's share and where it stands — only what each disclosed
@@ -1633,7 +1646,7 @@ proc musterCoordinateIntents(): string =
             if partName(sh.who) == pv.part: (who = sh.who; amount = sh.amount)
           sum = addDec(sum, (if amount.len > 0: amount else: "0"))
           parts.add %*{"part": pv.part, "who": who,
-                       "name": (if who == myEncHex: "you" else: contactBook().nameFor(who)),
+                       "name": memberName(who, mine),
                        "amount": amount, "settled": pv.settled, "confirmed": pv.confirmed,
                        "tx": pv.tx, "mine": who == myEncHex, "paying": splitPayingFor(v.id, pv.part)}
         o["parts"] = parts
@@ -1642,7 +1655,7 @@ proc musterCoordinateIntents(): string =
                         "decimals": (if sp.asset == "LEZ": 9 else: 18),
                         "private": prof.family == LezSplitFamily,
                         "creditor": sp.creditor, "iAmCreditor": sp.creditor == myEncHex,
-                        "creditorName": (if sp.creditor == myEncHex: "you" else: contactBook().nameFor(sp.creditor)),
+                        "creditorName": memberName(sp.creditor, mine),
                         "creditorShare": subDec(sp.total, sum)}
       except CatchableError: discard
     arr.add o
@@ -1964,14 +1977,15 @@ proc musterCoordinateActivity(): string =
   let events = gSession.roomEvents()
   let myEnc = moduleKeystore().encIdentity()
   let myNames = myContributorNames(moduleKeystore())
+  let mine = @[toHex(myEnc.toBytes()).toLowerAscii()] & myNames
   for a in reduceActivity(events, driverFor):
-    var title = a.title
-    # "Approved by 0x1234…abcd" → "Approved by Bob" / "Approved by you" when known (exo-59c)
-    if a.kind in ["approve", "decline"] and a.account.len > 0:
-      let mine = (if a.kind == "approve": approvedByMe(events, a.intentId, @[a.account], myEnc, myNames)
-                  else: normId(a.account) == toHex(myEnc.toBytes()).toLowerAscii())
-      let name = (if mine: "you" else: contactBook().nameFor(a.account))
-      if name.len > 0: title = (if a.kind == "approve": "Approved by " else: "Declined by ") & name
+    # every line with a person in it — an approval, a decline, a part paid or confirmed —
+    # names them as the card does: "you", the alias, or one short id (exo-59c, exo-221).
+    # An approval this member made under a key the list misses is still "you".
+    let title =
+      if a.kind == "approve" and a.account.len > 0 and
+         approvedByMe(events, a.intentId, @[a.account], myEnc, myNames): "Approved by you"
+      else: activityTitle(a, proc(who: string): string = memberName(who, mine))
     arr.add %*{"seq": a.seq, "kind": a.kind, "intentId": a.intentId,
                "account": a.account, "title": title, "detail": a.detail}
   $arr

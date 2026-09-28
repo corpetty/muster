@@ -418,7 +418,8 @@ type
     order*: int          ## tiebreak within one index (a derived line after its trigger)
     kind*: string        ## "propose" | "approve" | "decline" | "ready" | "submit" | "settled" | "admit"
     intentId*: string    ## the intent this concerns
-    account*: string     ## the contributor (approve / decline), else ""
+    account*: string     ## who acted: the contributor (approve / decline), a part's reporter, else ""
+    subject*: string     ## whose part a part-settled / part-confirmed line concerns, else ""
     title*: string       ## the plain-language headline
     detail*: string      ## a supporting line (may be "")
     attestation*: string ## approve entries: "committed" | "unattested" (exo-ef1); "" otherwise
@@ -426,6 +427,23 @@ type
 proc shortId(s: string): string =
   ## A short, stable handle for a long hex id (an owner address / identity).
   if s.len > 12: s[0 ..< 6] & "…" & s[^4 .. ^1] else: s
+
+proc activityTitle*(a: ActivityEntry, label: proc (who: string): string): string =
+  ## A history line with its people named the way the card names them (exo-221): `label`
+  ## answers "you", an alias, or a short id for a member id. Lines without a person keep
+  ## the fold's own title.
+  proc cap(s: string): string = (if s.len > 0: s[0 .. 0].toUpperAscii() & s[1 .. ^1] else: s)
+  case a.kind
+  of "approve": (if a.account.len > 0: "Approved by " & label(a.account) else: a.title)
+  of "decline": (if a.account.len > 0: "Declined by " & label(a.account) else: a.title)
+  of "part-settled":
+    let who = label(a.subject)
+    if who == "you": "You settled your part" else: cap(who) & " settled their part"
+  of "part-confirmed":
+    let by = label(a.account)
+    let whose = label(a.subject)
+    cap(by) & " confirmed " & (if whose == "you": "your part" else: whose & "'s part")
+  else: a.title
 
 proc activityEffectLabel(events: seq[Event], id: string): string =
   ## A short summary of an intent's effect for the activity feed — the same reading the
@@ -552,11 +570,11 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
       except CatchableError: discard
       if p[4] == "settled":
         result.add ActivityEntry(seq: i, order: 0, kind: "part-settled", intentId: id,
-          account: author, title: shortId(p[3]) & " settled their part",
+          account: author, subject: p[3], title: shortId(p[3]) & " settled their part",
           detail: (if tx.len > 0: "reported " & shortId(tx) & " on the chain" else: ""))
       else:
         result.add ActivityEntry(seq: i, order: 0, kind: "part-confirmed", intentId: id,
-          account: author, title: shortId(author) & " confirmed " & shortId(p[3]) & "'s part",
+          account: author, subject: p[3], title: shortId(author) & " confirmed " & shortId(p[3]) & "'s part",
           detail: (if tx.len > 0: "read " & shortId(tx) & " on the chain" else: "received outside muster"))
     else: discard
   # Derived "ready" line: narrate the threshold being met, positioned right after the
