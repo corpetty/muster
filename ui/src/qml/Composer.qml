@@ -90,6 +90,8 @@ Item {
           note: qsTr("The room agrees on something — a k-of-n group sign-off. No chain, nothing on a public ledger; just the people who agreed.") },
         { id: "pay",    proposal: "payment",   name: qsTr("Send a payment"),
           note: qsTr("Money moves from a shared account, coordinated by the room. Each person's address stays in the room — the transaction is signed off together.") },
+        { id: "split",  proposal: "split",     name: qsTr("Split a bill"),
+          note: qsTr("You paid for something shared. Everyone named agrees to their own share, then each pays you back from their own wallet. No shared account — the room holds the agreement, and nothing makes anyone pay.") },
         { id: "talk",   proposal: "statement", name: qsTr("Just talk"),
           note: qsTr("A private conversation. Only the people in the room can read it — the room is the boundary.") }
     ]

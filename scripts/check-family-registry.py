@@ -75,6 +75,15 @@ def check_consistency(f: dict) -> list[str]:
         errs.append("a room family reveals nothing to a chain")
     if rv.get("effect") == "target-module" and not room:
         errs.append("target-module visibility is a room family's")
+    if locus == "each":
+        # no shared account (docs/design/split-the-bill.md §3): every party agrees to the
+        # same bytes, for free; each settles their own part with their own transaction
+        if scheme != "shared-bytes":
+            errs.append("locus=each iff every party agrees to the same bytes (shared-bytes)")
+        if f.get("commits") != "content":
+            errs.append("locus=each commits to content")
+        if f.get("approverCost") != "none":
+            errs.append("locus=each: agreeing costs nothing (each payment is its payer's settlement)")
     if f.get("secretState") and int(f.get("rounds", 1)) < 2:
         errs.append("secret nonce state implies at least 2 rounds")
     if f.get("setup") == "dkg" and scheme != "aggregate-threshold":

@@ -79,6 +79,9 @@ public:
     void exportOutside(const QString &intentId) override;
     void importOutside(const QString &intentId, const QString &encoded) override;
     void proposeBtcSpend(const QString &payTo, const QString &amountSat, const QString &feeRate) override;
+    void proposeSplit(const QString &chain, const QString &totalWei, const QString &sharesJson, const QString &memo) override;
+    void settlePart(const QString &intentId) override;
+    void confirmPart(const QString &intentId, const QString &part, const QString &tx) override;
     void proposeLezTransfer(const QString &recipient, const QString &amount) override;
     void proposeLezVaultInit(const QString &definition) override;
     void lezMemberAccount(const QString &index) override;

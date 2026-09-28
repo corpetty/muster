@@ -34,6 +34,7 @@ import ../src/drivers/btc_multisig
 import ../src/drivers/btc_frost
 import ../src/drivers/lez_multisig
 import ../src/drivers/lez_frost
+import ../src/drivers/split                  # evenShares / splitEffectJson (exo-a90.3)
 import ../src/coordination/readiness        # toJson(ActionManifest), toJson(DriverDescriptor)
 import ../src/coordination/intent_events    # effectFromJson — the hosted propose path's parser
 import ../src/lez/multisig                  # vaultPda / vaultSeed / LezAction
@@ -62,6 +63,8 @@ let lezMultisigCfg = %*{"chain": "lez:local", "pda": "lee-v0.2", "program": repe
 
 # ── the fixtures for what the hosted composers read from a chain ──────────────
 const Payee = "0x1111111111111111111111111111111111111111"        ## a Safe transfer's payee
+const SplitCreditor = repeat("c1", 64)   ## a split's room identities (64 bytes, hex): who fronted…
+const SplitDebtors = [repeat("d1", 64), repeat("d2", 64)]   ## …and who owes
 const Erc20Token = "0x2222222222222222222222222222222222222222"   ## a contract-call target
 const MultiSendCallOnly = "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D"  ## Safe's MultiSendCallOnly (safe_fidelity_test's)
 ## the LEZ token program's id: the v0.2.4 build's image id, as the public testnet serves it
@@ -106,6 +109,8 @@ proc configOf(kind: string): JsonNode =
   of "lez-multisig": lezMultisigCfg
   of "btc-frost": %*{"network": "regtest", "recovery": frostRecovery}
   of "lez-frost": %*{"chain": "lez:local", "recovery": frostRecovery}
+  of "evm-split": %*{"chain": "eip155:31337", "members": [SplitCreditor, SplitDebtors[0], SplitDebtors[1]]}
+  of "lez-split": %*{"chain": "lez:testnet", "members": [SplitCreditor, SplitDebtors[0], SplitDebtors[1]]}
   else: raise newException(ValueError, "no corpus fixture for kind " & kind)
 
 # ── the effects, built as the hosted composers build them ─────────────────────
@@ -194,6 +199,17 @@ proc effectJsonFor(kind, variant: string, d: Driver): string =
     let a = LezFrostDriver(d).account
     lezFrostCallEffect(hexToBytes(LezTokenProgram), @[a.accountId, hexToBytes(LezRecipient)],
                        tokenTransferWords(200), a.accountId, default(UInt128))
+  of "evm-split/split":
+    # the split composer: 0.9 ETH among the creditor and two debtors, even shares, paid to
+    # the creditor's own address (proposer material)
+    splitEffectJson("eip155:31337", "ETH", "900000000000000000", SplitCreditor, Payee,
+                    evenShares("900000000000000000", SplitCreditor, @SplitDebtors), "Dinner")
+  of "lez-split/split":
+    # the private split: 0.9 LEZ (9 decimals) paid to the creditor's shielded key node,
+    # every share a distinct amount so the creditor's scan can attribute each note
+    splitEffectJson("lez:testnet", "LEZ", "900000000", SplitCreditor,
+                    "priv:" & repeat("ab", 32) & ":02" & repeat("cd", 32),
+                    evenShares("900000000", SplitCreditor, @SplitDebtors, distinctAmounts = true), "Dinner")
   else: raise newException(ValueError, "no corpus effect for " & kind & "/" & variant)
 
 const Variants* = [
@@ -202,7 +218,8 @@ const Variants* = [
   ("frost", "statement"), ("eip191", "statement"),
   ("invoke", "module-call"), ("invoke", "lez-transfer"),
   ("btc-p2wsh", "spend"), ("btc-tapscript", "spend"), ("btc-frost", "spend"),
-  ("lez-multisig", "transfer"), ("lez-multisig", "vault-init"), ("lez-frost", "transfer")]
+  ("lez-multisig", "transfer"), ("lez-multisig", "vault-init"), ("lez-frost", "transfer"),
+  ("evm-split", "split"), ("lez-split", "split")]
 
 # ── JSON ──────────────────────────────────────────────────────────────────────
 proc cborJson(v: CborValue): JsonNode =
@@ -240,7 +257,7 @@ proc entry(kind, variant: string): JsonNode =
   doAssert family == p.family, kind & ": kinds.nim names " & family & ", the profile " & p.family
   %*{"kind": kind, "variant": variant, "family": family,
      "effectExample": effectJson(e),
-     "describe": d.describe().toJson(),
+     "describe": describeFor(d, e).toJson(),   # THIS proposal's policy: describe() but for a split (exo-a90.3)
      "environment": d.environment(),
      "profile": p.toJson(),
      "manifest": d.manifest(e).toJson(),

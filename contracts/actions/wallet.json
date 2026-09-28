@@ -1950,7 +1950,7 @@
       "name": "Receive LEZ: share an address, find the note by scanning",
       "area": "wallet",
       "status": "partial",
-      "summary": "To be paid, you share a public account id (names you as payee) or your shielded key node (does not). A shielded payment lands at a fresh account derived from your key node and an identifier the sender picks, not at an id you published, so you find it by scanning. The scan is built and tested in the adapter on the fake core, but no hosted method calls it: wallet_accounts and wallet_balances list only the two accounts this instance created, so a note received from another instance does not appear through the hosted surface. It runs on the deterministic FakeLezCore by default. The real lez_core path (LpLezCore) is used only when MUSTER_LEZ_REAL is set and lez_core is loaded, and it falls back to the fake if lez_core cannot be reached. Only the fake path is exercised by tests; the live send against testnet.lez.logos.co has not been run. Nobody else approves a wallet send, so there is no agreement field.",
+      "summary": "To be paid, you share a public account id (names you as payee) or your shielded key node (does not). A shielded payment lands at a fresh account derived from your key node and an identifier the sender picks, not at an id you published, so you find it by scanning. The scan is built and tested in the adapter, but no hosted wallet method calls it: wallet_accounts and wallet_balances list only the two accounts this instance created, so a note received from another instance does not appear through the wallet surface. The private split's pump does scan, and on the LEZ testnet it found a note another instance sent (scripts/split-lez-testnet.sh, 2026-09-28). It runs on the deterministic FakeLezCore by default. The real lez_core path (LpLezCore) is used only when MUSTER_LEZ_REAL is set and lez_core is loaded, and it falls back to the fake if lez_core cannot be reached. Tests run the fake core; the real path has run on testnet.lez.logos.co in scripts/split-lez-testnet.sh. Nobody else approves a wallet send, so there is no agreement field.",
       "requirements": [
         {
           "kind": "module",
@@ -2001,7 +2001,7 @@
         {
           "step": "act",
           "who": "the recipient's adapter",
-          "does": "syncPrivate() syncs lez_core to the chain tip (get_current_block_height, sync_to_block) and lists the private accounts now discoverable; a received note shows its balance against the discovered account. Polling the published id does not work for a shielded payment. No hosted method calls syncPrivate today.",
+          "does": "syncPrivate() walks lez_core's scan toward the chain tip in bounded steps (get_current_block_height, get_last_synced_block, sync_to_block of at most 250 blocks per call — a fresh wallet starts at block 0, and one jump to the tip outlives the call) and lists the private accounts now discoverable; a received note shows its balance, at exactly the amount sent, against the discovered account, under the key node it was sent to. Polling the published id does not work for a shielded payment. No hosted wallet method calls syncPrivate; the private split's pump scans through the same adapter.",
           "signs": "nothing",
           "reveals": [
             {
@@ -2011,7 +2011,8 @@
           ],
           "evidence": [
             "module/tests/wallet_lez_test.nim",
-            "module/nim-lib/muster_module.nim"
+            "module/nim-lib/muster_module.nim",
+            "scripts/split-lez-testnet.sh"
           ]
         }
       ],
@@ -2076,8 +2077,7 @@
         }
       ],
       "unverified": [
-        "That the hosted surface never scans is read from source (no caller of syncPrivate in muster_module.nim).",
-        "Receive-by-scan against the live zone is described in lez-adapter.md and the demo; tests run the fake core."
+        "That the hosted wallet surface never scans is read from source (no caller of syncPrivate in muster_module.nim); the split's pump does scan."
       ]
     },
     {
@@ -2085,7 +2085,7 @@
       "name": "Pay someone on the LEZ: request, share, send (Mode A)",
       "area": "wallet",
       "status": "partial",
-      "summary": "The default LEZ payment. The payer asks, the recipient shares an address, the payer sends. No approval and no threshold: the coordination is the exchange of an address, and the form the recipient shares picks the rail and the privacy. When a room wants members to approve k-of-n before lez_core runs the transfer (Mode B), that is the family action room.invoke/lez-transfer, not this. It runs on the deterministic FakeLezCore by default. The real lez_core path (LpLezCore) is used only when MUSTER_LEZ_REAL is set and lez_core is loaded, and it falls back to the fake if lez_core cannot be reached. Only the fake path is exercised by tests; the live send against testnet.lez.logos.co has not been run. Nobody else approves a wallet send, so there is no agreement field.",
+      "summary": "The default LEZ payment. The payer asks, the recipient shares an address, the payer sends. No approval and no threshold: the coordination is the exchange of an address, and the form the recipient shares picks the rail and the privacy. When a room wants members to approve k-of-n before lez_core runs the transfer (Mode B), that is the family action room.invoke/lez-transfer, not this. It runs on the deterministic FakeLezCore by default. The real lez_core path (LpLezCore) is used only when MUSTER_LEZ_REAL is set and lez_core is loaded, and it falls back to the fake if lez_core cannot be reached. Tests run the fake core. The real path has run on testnet.lez.logos.co: wallet_send shielded a faucet claim to the sender's own key node (a ~6-minute proof) in scripts/split-lez-testnet.sh. Nobody else approves a wallet send, so there is no agreement field.",
       "requirements": [
         {
           "kind": "module",
@@ -2340,7 +2340,7 @@
       ],
       "unverified": [
         "The per-rail disclosure is the LEZ's property as the demo's rails and the LEZ docs describe it; wallet_lez_test.nim checks muster's table, not the chain.",
-        "The async ~7-minute proof, the 900 s budget and the one-proof-at-a-time refusal are read from lez_lp.nim; LpLezCore links lp_* and is not run by any test.",
+        "The async proof ran on the testnet — ~6 minutes for a shield, ~8 for a private transfer, the lez_core host holding ~10 cores (scripts/split-lez-testnet.sh); the 900 s budget and the one-proof-at-a-time refusal are read from lez_lp.nim.",
         "What the sequencer sees is inferred from it receiving the transaction; no test observes it.",
         "No test drives the whole request → share → send flow; wallet_lez_test.nim covers the share forms and the rail each picks."
       ]

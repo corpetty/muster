@@ -62,13 +62,19 @@ type Collection* = object
   acceptedThisRound*: int
   complete*: bool
 
-proc startCollection*(driver: Driver): Collection =
+proc startCollection*(driver: Driver, desc: DriverDescriptor): Collection =
   ## The core snapshots the driver's declared policy once; everything downstream
-  ## reads from this descriptor, never from a hardcoded constant.
-  result.descriptor = driver.describe()
+  ## reads from this descriptor, never from a hardcoded constant. `desc` is the policy
+  ## for the proposal being collected (describeFor, exo-a90.2): a family whose parties
+  ## are named in the effect declares its threshold per proposal.
+  result.descriptor = desc
   result.round = 1
   result.acceptedThisRound = 0
   result.complete = false
+
+proc startCollection*(driver: Driver): Collection =
+  ## The family's one policy (describe()).
+  startCollection(driver, driver.describe())
 
 proc submit*(col: var Collection, driver: Driver, c: Contribution) =
   ## Core routing. It does NOT read c.bytes. It asks the driver whether the

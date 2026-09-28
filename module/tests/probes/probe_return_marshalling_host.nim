@@ -16,11 +16,13 @@
 ## a null/dropped return surfaces as empty. The harness judges nothing; this probe
 ## and the spec's `always(client_return_typed)` own the verdict.
 ##
-## Emits one {"client_return_typed": ...} object per observed call. `always`
-## requires every call — health, propose across a valid/edge family, and status
-## of each resulting id — to be observed as its typed string.
+## Emits ONE trace (the grader's envelope, oracle_emit) whose every state is one observed
+## call's {"client_return_typed": ...}. `always` requires every call — health, propose
+## across a valid/edge family, and status of each resulting id — to be observed as its
+## typed string.
 
 import std/[json, os, osproc, strutils]
+import ./oracle_emit
 
 const
   moduleRoot = currentSourcePath().parentDir().parentDir().parentDir()  # module/
@@ -30,7 +32,7 @@ const
 proc fail(msg: string) =
   ## A build/link/run failure is INCONCLUSIVE, never a silent pass: emit a loud
   ## false observation (so `always` fails) and abort with a diagnosis.
-  echo "{\"client_return_typed\": false, \"inconclusive\": \"", msg, "\"}"
+  emitTrials(@[%*{"client_return_typed": false, "inconclusive": msg}])
   quit("probe_return_marshalling_host: " & msg, 1)
 
 proc run(cmd: string, args: seq[string]): tuple[output: string, code: int] =
@@ -77,10 +79,12 @@ proc sodiumTokens(): seq[string] = libTokens("MUSTER_SODIUM_LIB", "libsodium", "
 #    probe's own `nim r` flags do not reach the inner `nim c`. Read the packages
 #    metadata.json pins (codegen.nim.packages) and put each one's import root on the
 #    path, from the closure dir tests/run-suite.sh materializes ($MUSTER_NIMPKGS,
-#    else ~/.cache/muster/nimpkgs). File reads only, so it survives a scrubbed env
-#    as far as $HOME does. A missing closure adds nothing, and the build fails loudly. ──
+#    else module/.probe-env/nimpkgs — the spec grader's link, exo-a7b — else
+#    ~/.cache/muster/nimpkgs). File reads only, so it survives a scrubbed env. A missing closure adds nothing, and the build fails loudly. ──
 proc closurePaths(): seq[string] =
   var root = getEnv("MUSTER_NIMPKGS")
+  if root.len == 0 and dirExists(moduleRoot / ".probe-env" / "nimpkgs"):
+    root = moduleRoot / ".probe-env" / "nimpkgs"   # the spec grader's link (exo-a7b)
   if root.len == 0:
     let home = getEnv("HOME")
     if home.len == 0: return
@@ -119,7 +123,10 @@ block buildHarness:
   var args = @[harnessCpp, staticLib, "-O2", "-o", harnessBin]
   args.add secpTokens()
   args.add sodiumTokens()
-  let (o, c) = run("g++", args)
+  # the grader's allowlisted PATH may hold no g++: grade-specs.sh links one here (exo-a7b)
+  let cxx = (if findExe("g++").len == 0 and fileExists(moduleRoot / ".probe-env" / "g++"):
+               moduleRoot / ".probe-env" / "g++" else: "g++")
+  let (o, c) = run(cxx, args)
   if c != 0 or not fileExists(harnessBin):
     fail("g++ harness link failed:\n" & o)
 
@@ -128,20 +135,22 @@ let (harnessOut, code) = run(harnessBin, @[])
 if code != 0:
   fail("host harness exited non-zero (" & $code & "):\n" & harnessOut)
 
-var observed = 0
+var observations: seq[JsonNode]
 var allTyped = true
 for line in harnessOut.splitLines():
   let s = line.strip()
   if not s.startsWith("{"): continue
-  if "\"lp_stub_calls\"" in s: echo s        # diagnostic, not an observation
+  if "\"lp_stub_calls\"" in s: stderr.writeLine s   # diagnostic, not an observation
   if "\"client_return_typed\"" notin s: continue
-  echo s                                   # surface every observation to the runner
-  inc observed
-  if "\"client_return_typed\": true" notin s:
+  let o = parseJson(s)
+  observations.add o
+  if not o{"client_return_typed"}.getBool(false):
     allTyped = false
+let observed = observations.len
 
 if observed == 0:
   fail("harness produced no client observations")
+emitTrials(observations)   # one trace, every observed call a state (the grader's envelope)
 
 doAssert allTyped,
   "a host client observed a non-typed (bool/empty/default) return — the " &

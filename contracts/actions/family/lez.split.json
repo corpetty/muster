@@ -1,0 +1,235 @@
+{
+  "actions": [
+    {
+      "id": "lez.split/split",
+      "name": "Split a bill privately: agree who owes what, each pays their share on the private rail",
+      "area": "family",
+      "family": "lez.split",
+      "kind": "lez-split",
+      "status": "built",
+      "summary": "The same agreement as evm.split — each debtor signs their own share with their room key — settled so the chain names no payer, no payee and no amount: the creditor shares a shielded key node, each debtor pays shielded → shielded from their own LEZ wallet, and the creditor's own scan confirms each share when a note of exactly that amount arrives. Every share is a different amount, a few base units apart, so a note can be attributed to its share without the chain naming anyone.",
+      "generated": "lez-split/split",
+      "effect": {
+        "schema": "muster.effect.split.v1",
+        "fields": [
+          {
+            "name": "chain",
+            "means": "the LEZ zone (CAIP-2) every share is paid on — the policy's qualifier (lez-split@<CAIP-2>)"
+          },
+          {
+            "name": "asset",
+            "means": "LEZ"
+          },
+          {
+            "name": "total",
+            "means": "the bill, canonical decimal in base units (9 decimals); the creditor's own share is total minus the shares"
+          },
+          {
+            "name": "creditor",
+            "means": "who fronted the bill and is owed: their room identity"
+          },
+          {
+            "name": "payTo",
+            "means": "the creditor's shielded key node, priv:<npk>:<vpk> — where each private note lands; never a public account"
+          },
+          {
+            "name": "shares",
+            "means": "[{who, amount}] sorted by who, each debtor once, never the creditor, and NO TWO AMOUNTS EQUAL — the amount is how a note is matched to its share"
+          },
+          {
+            "name": "memo",
+            "means": "room-only text"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the creditor",
+          "does": "Composes the split with their shielded key node as payTo and distinct shares (evenShares(distinctAmounts = true): the i-th debtor owes i base units less, the creditor absorbing them). A public payTo, an asset other than LEZ, or two equal shares is refused with its reason.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/split_lez_test.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "each debtor the split names",
+          "does": "Agrees to their own share in-app with their room key, exactly as for evm.split; only a named debtor's key counts.",
+          "signs": "an Ed25519 signature by the debtor's room identity over the split's dCBOR materialization; plus a muster attestation over P",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/tests/split_lez_test.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "each debtor, then the creditor",
+          "does": "Each debtor pays their derived share on the private rail from their OWN LEZ wallet — from the one shielded note that covers it (money received privately, a shield to yourself included, lands at an account the scan discovers; a transfer draws on one note) — and reports it, with the zone's transaction, once the proof lands (minutes). A public source is refused: the shield rail would name the payer and the amount. The creditor's own wallet scans: a note that arrived at payTo, of exactly one share's amount, not already claimed, confirms that share; the room records a hash of the note's id. A report without a note never confirms. Neither side acts on a scan still behind the chain tip; each member's scan keeps moving while a split waits on them.",
+          "signs": "each debtor's own private LEZ transfer (their wallet proves and signs it); each report is signed by its author's room key",
+          "reveals": [
+            {
+              "field": "a-private-transfer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/split_lez_test.nim",
+            "module/tests/split_lez_zone_test.nim",
+            "scripts/split-lez-testnet.sh"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one",
+          "does": "Every share confirmed by the creditor's scan (or marked received outside muster): the split is final on every member.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/split_lez_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a private split whose payTo is a public account, whose asset is not LEZ, or two of whose shares are equal",
+          "why": "the private split pays only a shielded key node, and equal shares could not be told apart by amount",
+          "evidence": [
+            "module/tests/split_lez_test.nim"
+          ]
+        },
+        {
+          "what": "paying a share from a public LEZ account",
+          "why": "the shield rail would name the payer and the amount on the chain; a private split takes only the private rail",
+          "evidence": [
+            "module/tests/split_lez_test.nim"
+          ]
+        },
+        {
+          "what": "confirming a share with no note of exactly that amount at payTo",
+          "why": "a private payment names no payer: the note is the proof, not the payer's report",
+          "evidence": [
+            "module/tests/split_lez_test.nim"
+          ]
+        },
+        {
+          "what": "one note settling two shares",
+          "why": "the creditor's client refuses a note it already claimed",
+          "evidence": [
+            "module/tests/split_lez_test.nim"
+          ]
+        },
+        {
+          "what": "paying a share no single shielded note of the debtor's covers",
+          "why": "a private transfer draws on one note; the debtor is told so, and nothing moves",
+          "evidence": [
+            "module/tests/split_lez_zone_test.nim"
+          ]
+        },
+        {
+          "what": "paying, or matching a note, on a wallet whose scan has not reached the chain tip",
+          "why": "a note may sit in a block not yet read: behind is reported as 'still scanning', never as 'nothing arrived'",
+          "evidence": [
+            "module/tests/split_lez_zone_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_propose_split",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_decline",
+        "coordinate_readiness",
+        "coordinate_settle_part",
+        "coordinate_confirm_part"
+      ],
+      "ui": "Room → + → Split with \"Settles on\" the private split: the total in LEZ (9 decimals), who's in, a preview of each share (a few base units apart, so the creditor's scan can tell whose payment arrived) → Propose; the split card → Agree to my share → Pay my share (once everyone agreed; paid privately from your own LEZ wallet) → the creditor's card confirms each share when their scan finds its note (\"received — a private note of exactly this share\"), or Mark received",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The chain learns only that private transfers happened: no payer, no payee, no amount",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Each debtor pays from their own shielded account; a public source is refused, never quietly allowed",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A share is confirmed only by the creditor's own scan finding a note of exactly that amount — never by the payer's word",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "No payment is sent and no note matched on a wallet whose scan is behind the chain tip",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Nothing makes anyone pay: the room shows who has",
+          "credibility": "motivational",
+          "party": "each person who owes"
+        },
+        {
+          "claim": "Whether a LEZ privacy-preserving transaction commits to a zone id is unverified",
+          "credibility": "exposed",
+          "party": "anyone holding the transaction, on another zone"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/split_lez_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/conformance_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/profile_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/split_lez_zone_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "scripts/split-lez-testnet.sh"
+        }
+      ],
+      "unverified": [
+        "whether a LEZ privacy-preserving transaction commits to a zone/chain id"
+      ]
+    }
+  ]
+}

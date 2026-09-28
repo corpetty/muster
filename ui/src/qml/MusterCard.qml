@@ -227,6 +227,58 @@ Rectangle {
         if (Number(r.unknown || 0) > 0) parts.push(qsTr("%1 unknown").arg(r.unknown));
         return parts.join(" · ");
     }
+    // A split (exo-a90): pay MY share (the module derives it from the agreed split), or — as
+    // the creditor — mark one person's share received outside muster.
+    signal settlePart()
+    signal confirmPart(string part)
+    // The last pay / confirm outcome for THIS split, set by the room ("" = none).
+    property string splitNote: ""
+    readonly property var split: (cardRoot.card && cardRoot.card.split) ? cardRoot.card.split : null
+    readonly property bool isSplit: cardRoot.split !== null
+    // A split's payTo, readable: an address stays whole; a shielded key node — ~200 hex
+    // characters that no one reads and that would run off the card — is named as one and
+    // shortened, the way the address-share card does.
+    function shortPayTo(p) {
+        if (p.indexOf("priv:") === 0)
+            return qsTr("a shielded key node, %1…%2").arg(p.slice(5, 17)).arg(p.slice(-8));
+        return p;
+    }
+    readonly property var parts: (cardRoot.card && Array.isArray(cardRoot.card.parts)) ? cardRoot.card.parts : []
+    readonly property var myPart: {
+        for (var i = 0; i < cardRoot.parts.length; ++i) if (cardRoot.parts[i].mine) return cardRoot.parts[i];
+        return null;
+    }
+    readonly property bool iAmDebtor: cardRoot.myPart !== null
+    readonly property bool iAmCreditor: !!(cardRoot.split && cardRoot.split.iAmCreditor)
+    readonly property string creditorName: cardRoot.split
+        ? (String(cardRoot.split.creditorName || "").length > 0 ? String(cardRoot.split.creditorName)
+           : String(cardRoot.split.creditor || "").slice(0, 10) + "…") : ""
+    // The split's asset and its decimals (ETH 18, LEZ 9): base units → a readable amount,
+    // by string — never a float.
+    readonly property string unit: cardRoot.split ? String(cardRoot.split.asset || "ETH") : "ETH"
+    readonly property int decimals: cardRoot.split ? Number(cardRoot.split.decimals || 18) : 18
+    function eth(wei) {
+        var dec = cardRoot.decimals;
+        var s = String(wei || "0").replace(/^0+/, "");
+        if (s.length === 0) return "0";
+        while (s.length <= dec) s = "0" + s;
+        var whole = s.slice(0, s.length - dec), frac = s.slice(s.length - dec).replace(/0+$/, "");
+        return frac.length > 0 ? whole + "." + frac : whole;
+    }
+    // Where one person's share stands — only what they disclosed (their agreement, their
+    // payment report) and what the creditor confirmed (invariant 9).
+    function partState(p) {
+        if (!p) return "";
+        if (p.confirmed) return String(p.tx || "").indexOf("note:") === 0 ? qsTr("✓ received — a private note of exactly this share")
+                              : String(p.tx || "").length > 0 ? qsTr("✓ received") : qsTr("✓ received outside muster");
+        if (p.settled) return qsTr("paid (%1) — %2 has not seen it yet").arg(String(p.tx || "").slice(0, 10) + "…")
+                                                                     .arg(cardRoot.creditorName);
+        if (p.paying) return qsTr("paying…");
+        var agreed = false;
+        var ap = (cardRoot.card && Array.isArray(cardRoot.card.approvers)) ? cardRoot.card.approvers : [];
+        for (var i = 0; i < ap.length; ++i) if (String(ap[i].who) === String(p.part)) agreed = true;
+        return agreed ? (cardRoot.ready ? qsTr("agreed — to pay") : qsTr("agreed")) : qsTr("to agree");
+    }
     signal shareAddress()
     // Use a disclosed public address as the recipient of a payment being composed —
     // closes the ask→disclose→use loop so the proposer never retypes what a peer just
@@ -534,6 +586,99 @@ Rectangle {
                 font.family: Theme.typography.publicSans
                 font.pixelSize: Theme.typography.subtitleText
                 font.weight: Theme.typography.weightMedium
+            }
+
+            // ── a split (exo-a90): who owes whom what, and where each share stands ──
+            ColumnLayout {
+                objectName: "cardSplit"
+                visible: cardRoot.isSplit
+                Layout.fillWidth: true
+                spacing: 2
+
+                LogosText {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: cardRoot.split
+                          ? qsTr("%1 %2%3 — %4 paid; %5%6")
+                                .arg(cardRoot.eth(cardRoot.split.total)).arg(cardRoot.unit)
+                                .arg(String(cardRoot.split.memo || "").length > 0 ? " · " + String(cardRoot.split.memo) : "")
+                                .arg(cardRoot.creditorName)
+                                .arg(cardRoot.parts.length === 1 ? qsTr("1 person owes a share")
+                                                                 : qsTr("%1 people owe a share").arg(cardRoot.parts.length))
+                                .arg(cardRoot.split.private ? qsTr(" · private: the chain names no one") : "")
+                          : ""
+                    color: Theme.palette.text
+                    font.family: Theme.typography.publicSans
+                    font.pixelSize: Theme.typography.subtitleText
+                    font.weight: Theme.typography.weightMedium
+                }
+
+                Repeater {
+                    model: cardRoot.parts
+                    delegate: RowLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        LogosText {
+                            Layout.preferredWidth: 110
+                            elide: Text.ElideRight
+                            text: String(modelData.name || "").length > 0 ? String(modelData.name)
+                                  : String(modelData.who || "").slice(0, 10) + "…"
+                            color: Theme.palette.text
+                            font.pixelSize: Theme.typography.secondaryText
+                        }
+                        LogosText {
+                            text: qsTr("%1 %2").arg(cardRoot.eth(modelData.amount)).arg(cardRoot.unit)
+                            color: Theme.palette.textSecondary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        LogosText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: cardRoot.partState(modelData)
+                            color: modelData.confirmed ? Theme.palette.success
+                                 : modelData.settled ? Theme.palette.textSecondary : Theme.palette.textTertiary
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        // the creditor's word: a share paid in cash, or anywhere muster cannot see
+                        LogosButton {
+                            objectName: "cardMarkReceived"
+                            visible: cardRoot.iAmCreditor && cardRoot.ready && !cardRoot.paid && !modelData.confirmed
+                            text: qsTr("Mark received")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: cardRoot.confirmPart(String(modelData.part || ""))
+                        }
+                    }
+                }
+
+                LogosText {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    visible: cardRoot.split !== null
+                    text: cardRoot.split
+                          ? qsTr("%1 own share: %2 %3 (it absorbs any rounding). Paid to %4.")
+                                .arg(cardRoot.iAmCreditor ? qsTr("Your") : cardRoot.creditorName + qsTr("'s"))
+                                .arg(cardRoot.eth(cardRoot.split.creditorShare)).arg(cardRoot.unit)
+                                .arg(cardRoot.shortPayTo(String(cardRoot.split.payTo || "")))
+                          : ""
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: Theme.typography.badgeText
+                }
+
+                LogosText {
+                    objectName: "cardMyShare"
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    visible: cardRoot.iAmDebtor
+                    text: cardRoot.myPart
+                          ? qsTr("Your share: %1 %2 → %3, from your own wallet%4. Muster builds the payment from this split — nothing to type, and nothing else can be sent.")
+                                .arg(cardRoot.eth(cardRoot.myPart.amount)).arg(cardRoot.unit).arg(cardRoot.creditorName)
+                                .arg(cardRoot.split && cardRoot.split.private ? qsTr(", on the private rail") : "")
+                          : ""
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: Theme.typography.badgeText
+                }
             }
 
             // What a Safe transaction CALLS and HOW (exo-a50.1.4): the data it carries, and
@@ -1444,8 +1589,9 @@ Rectangle {
             visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
                 && !(cardRoot.card && cardRoot.card.approvedByMe)
                 && !cardRoot.ready
+                && (!cardRoot.isSplit || cardRoot.iAmDebtor)   // a split: only who it names agrees
             Layout.fillWidth: true
-            text: qsTr("Approve")
+            text: cardRoot.isSplit ? qsTr("Agree to my share") : qsTr("Approve")
             onClicked: cardRoot.approve()
         }
 
@@ -1457,10 +1603,34 @@ Rectangle {
                 && !(cardRoot.card && cardRoot.card.approvedByMe)
                 && !cardRoot.declinedByMe
                 && !cardRoot.ready
+                && (!cardRoot.isSplit || cardRoot.iAmDebtor)
             Layout.fillWidth: true
             text: qsTr("Deny")
             variant: LogosButton.Variant.Secondary
             onClicked: cardRoot.deny()
+        }
+
+        // A split (exo-a90): once everyone named has agreed, each pays their OWN share from
+        // their own wallet. The module derives the payment from the agreed split — this
+        // button carries no amount and no address.
+        LogosButton {
+            objectName: "cardPayShare"
+            visible: cardRoot.kind === "intent-propose" && cardRoot.isSplit && cardRoot.iAmDebtor
+                && cardRoot.ready && !cardRoot.paid
+                && cardRoot.myPart !== null && !cardRoot.myPart.settled && !cardRoot.myPart.paying
+            Layout.fillWidth: true
+            text: cardRoot.myPart ? qsTr("Pay my share — %1 %2").arg(cardRoot.eth(cardRoot.myPart.amount)).arg(cardRoot.unit)
+                                  : qsTr("Pay my share")
+            onClicked: cardRoot.settlePart()
+        }
+        LogosText {
+            objectName: "cardSplitNote"
+            visible: cardRoot.isSplit && cardRoot.splitNote.length > 0
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: cardRoot.splitNote
+            color: cardRoot.splitNote.indexOf("⚠") === 0 ? Theme.palette.warning : Theme.palette.textSecondary
+            font.pixelSize: Theme.typography.badgeText
         }
 
         // Download audit trail (exo-403): one self-verifying file of everything this

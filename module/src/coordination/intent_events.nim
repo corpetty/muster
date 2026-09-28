@@ -150,6 +150,21 @@ proc effectFromJson*(effectJson: string): Effect =
           ("inputs", cbArray(ins)), ("outputs", cbArray(outs)),
           ("locktime", cbUint(uint64(j{"locktime"}.getBiggestInt(0)))),
           ("fee", cbUint(uint64(j{"fee"}.getBiggestInt(0))))])
+      of "split":
+        # A split (exo-a90.3, docs/design/split-the-bill.md §4.1): who owes the creditor how
+        # much, the address to pay, the chain and asset. Carried exactly as proposed — the
+        # split driver refuses anything not in its one spelling (canonical decimal amounts,
+        # shares sorted by who) rather than this parser normalizing it, so what the room
+        # reviewed is what reaches the materialization.
+        var shares: seq[CborValue]
+        for sh in j{"shares"}.getElems():
+          shares.add cbArray(@[cbText(sh{"who"}.getStr()), cbText(sh{"amount"}.getStr())])
+        var fields: seq[(string, CborValue)]
+        for k in ["chain", "asset", "total", "creditor", "payTo"]:
+          fields.add (k, cbText(j{k}.getStr()))
+        fields.add ("shares", cbArray(shares))
+        fields.add ("memo", cbText(j{"memo"}.getStr()))
+        return Effect(schemaId: "muster.effect.split.v1", fields: fields)
       of "safe-tx":
         # A full Safe transaction (exo-a50.1.4): a transfer's to / value / nonce plus
         # data, operation (0 CALL, 1 DELEGATECALL), the gas fields, the gas token and the
@@ -191,6 +206,7 @@ proc effectSchema*(effectJson: string): tuple[id: string, known: bool] =
     of "lez-multisig-proposal": return ("muster.effect.lez-multisig-proposal.v1", true)
     of "lez-call": return ("muster.effect.lez-call.v1", true)   # a LEZ FROST group's call (exo-55e)
     of "statement": return ("muster.effect.statement.v1", true)
+    of "split": return ("muster.effect.split.v1", true)      # who owes the creditor what (exo-a90.3)
     of "add-driver": return ("muster.effect.governance.add-driver.v1", true)
     of "invoke":
       let m = j{"module"}.getStr()
@@ -296,6 +312,21 @@ proc finalEvent*(intentId: string, parents: seq[EventId] = @[], chainRef = ""): 
   ## to `final` so every member's card converges on "paid", not just "submitted".
   Event(parents: parents, key: "intent/" & intentId & "/final",
         value: (if chainRef.len > 0: chainRef else: "1"))
+
+const PartSteps* = ["settled", "confirmed"]
+  ## The two steps of settling a part (exo-a90.2): the party's own report that it
+  ## settled ("I paid my share", with its chain reference), and the counterparty's
+  ## confirmation ("I received it"). Who may record which is the driver's (partAuthor).
+
+proc partEvent*(intentId, part, step, author, tx: string,
+                parents: seq[EventId] = @[]): Event =
+  ## A report on one part of a parts-settled intent (docs/design/split-the-bill.md §4.3).
+  ## Author-bearing (authorship.nim): the value names its `author` (a room identity, the
+  ## 64-byte encryption identity hex) and carries that author's signature, bound to the
+  ## room, so a forged, edited or replayed report is dropped before any fold reads it.
+  ## `tx` is the chain reference the report is about ("" = none: received outside muster).
+  Event(parents: parents, key: "intent/" & intentId & "/part/" & part & "/" & step,
+        value: $(%*{"author": author, "tx": tx}))
 
 proc materialShareEvent*(intentId, reqName, who, public, form, class, field: string,
                          parents: seq[EventId] = @[]): Event =

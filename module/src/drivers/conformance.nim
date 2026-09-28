@@ -16,7 +16,8 @@
 ##   5. the collection converges at the declared threshold/rounds, driven only by
 ##      describe() — no hardcoded constant in the core.
 ##   6. the action manifest is stable, DECLARED, consistent with describe(), and its
-##      agreement half IS describe() (exo-002.1) — a driver that does not say what it
+##      agreement half IS describeFor(effect) — describe() for every family whose parties
+##      are not named in the effect (exo-002.1, exo-a90.2) — a driver that does not say what it
 ##      needs, touches, and discloses, or contradicts its own policy, does not ship.
 ##   7. the family profile (exo-a50.1.1, checkProfileConformance) is stable, DECLARED,
 ##      and consistent with describe() — a driver that does not say what kind of
@@ -69,9 +70,12 @@ proc checkConformance*(d: Driver, effect, tampered: Effect,
              d.verifyContribution(validContribution, 1) ==
                d.verifyContribution(validContribution, 1))
 
-  let desc = d.describe()
+  # The policy for THIS proposal (describeFor, exo-a90.2): the family's describe() for
+  # every driver whose parties are not named in the effect, so the checks are unchanged
+  # for them; a split's threshold is how many debtors the effect names.
+  let desc = d.describeFor(effect)
   if d.verifyContribution(validContribution, 1):
-    var col = startCollection(d)
+    var col = startCollection(d, desc)
     for _ in 0 ..< desc.threshold * max(1, desc.rounds):
       submit(col, d, validContribution)
     result.add("collection converges at the declared threshold (inv 6)", col.complete)
@@ -81,7 +85,7 @@ proc checkConformance*(d: Driver, effect, tampered: Effect,
   # ── 6. the action manifest (docs/design/action-manifest.md) ─────────────────
   let m = d.manifest(effect)
   result.add("manifest is stable", m == d.manifest(effect))
-  result.add("manifest agreement is describe()", m.agreement == desc)
+  result.add("manifest agreement is describeFor(effect)", m.agreement == desc)
   let fails = consistencyFailures(m, effect)
   result.add("manifest is declared and consistent" &
              (if fails.len > 0: " (" & $fails & ")" else: ""), fails.len == 0)

@@ -9,13 +9,12 @@
 ## muster_module but does not `nim r` standalone, and its end-to-end behaviour is
 ## validated against the running zone, not headlessly (like DeliveryTransport).
 ##
-## v0 caveat: a proving transfer is a SYNCHRONOUS lp_invoke with a 900s timeout, so it
-## blocks the module thread for the ~7-minute proof. The demo used the async variant +
-## a queued deferral to keep the UI painting; muster's coordinate_execute path already
-## frames a coordinated LEZ send as a background job, so the async wallet-direct send is
-## a follow-up (see the plan). Reads use the 15s budget.
+## Nothing here holds the module thread for long: a proving transfer runs in the
+## background (lp_invoke_async, the 900s proving budget) and pollTransfer drains its
+## result; a scan walks toward the tip in bounded steps (sync, walkSync). Reads use the
+## 15s budget.
 
-import std/[json, strutils, os]
+import std/[json, strutils, os, times]
 import logos_sdk/ffi              # lp_* C-ABI (resolves at plugin link time, like delivery)
 import ../transport/inbound_queue # foreign-thread-safe result hand-off (as delivery uses)
 import ./types
@@ -24,7 +23,10 @@ import ./lez_encoding
 
 const
   kReadMs  = cint(15_000)         ## Zone.h: a read that doesn't prove
-  kProveMs = cint(900_000)        ## Zone.h: the proving budget (measured 6m41s + headroom)
+  kProveMs = cint(LezProveBudgetMs) ## Zone.h: the proving budget (measured 6m41s + headroom)
+  kSyncChunk = 250                ## blocks per sync_to_block: ~3.7s on testnet with accounts to
+                                  ## try (lez_core stores after every block, ~15ms each), less early on
+  kSyncBudgetS = 3.0              ## one scan step's wall budget on the module thread
 
 type
   LpLezCore* = ref object of LezCore
@@ -84,6 +86,13 @@ proc newLpLezCore*(instancePath: string, origin = "muster_module"): LpLezCore =
   if not openOk:
     discard result.rawCall("create_new", args(%cfg, %sto, %sta, %""), kReadMs)
 
+proc save(c: LpLezCore) =
+  ## Persist the wallet (its keys, accounts and scan position) — lez_core holds them in
+  ## memory until told to. Without this a new account, funded or not, dies with the
+  ## process: its keys were never written (found on the testnet run, exo-14d; the demo
+  ## saved after every change). Best effort: a failed save is logged by rawCall.
+  discard c.rawCall("save", "[]", kReadMs)
+
 # ── the seam ───────────────────────────────────────────────────────────────────
 
 method createAccount*(c: LpLezCore, kind: LezAccountKind): LezAccount =
@@ -93,6 +102,7 @@ method createAccount*(c: LpLezCore, kind: LezAccountKind): LezAccount =
     # ACTIVATE a fresh public account on-chain, or the sequencer silently drops txns
     # to it (labbook §9 / the atomic-swap POC). Registering is safe for public accounts.
     discard c.rawCall("register_public_account", args(%id), kReadMs)
+    c.save()
     LezAccount(id: id, kind: lakPublic)
   else:
     let id = c.rawCall("create_account_private", "[]", kReadMs)
@@ -100,6 +110,7 @@ method createAccount*(c: LpLezCore, kind: LezAccountKind): LezAccount =
     # Read the key node to publish (npk/vpk). Do NOT register a private RECEIVE
     # account — initializing it makes it permanently uncreditable by foreign senders.
     let kn = parseKeyNode(c.rawCall("get_private_account_keys", args(%id), kReadMs))
+    c.save()
     LezAccount(id: id, kind: lakPrivate, npk: kn.npk, vpk: kn.vpk)
 
 method listAccounts*(c: LpLezCore): seq[LezAccount] =
@@ -115,6 +126,22 @@ method listAccounts*(c: LpLezCore): seq[LezAccount] =
         a.npk = kn.npk; a.vpk = kn.vpk
       if a.id.len > 0: result.add a
   except CatchableError: discard
+
+method proving*(c: LpLezCore): bool = c.inflight
+
+method labelled*(c: LpLezCore, label: string): string =
+  ## resolve_label answers "Public/<hex>" or "Private/<hex>", "" when the label is unknown.
+  let r = c.rawCall("resolve_label", args(%label), kReadMs)
+  for prefix in ["Public/", "Private/"]:
+    if r.startsWith(prefix): return r[prefix.len .. ^1]
+  ""
+
+method labelAccount*(c: LpLezCore, label: string, account: LezAccount): bool =
+  ## add_label answers success even when the wallet refused it (lez_core 0.4.0), so the
+  ## label counts only once it resolves to this account; saved, so it outlasts the process.
+  discard c.rawCall("add_label", args(%label, %account.id, %(account.kind == lakPrivate)), kReadMs)
+  c.save()
+  c.labelled(label) == account.id
 
 method getBalanceRaw*(c: LpLezCore, accountId: string, isPublic: bool): string =
   ## get_balance(id, is_public) → a DECIMAL string; "" on an unanswerable read.
@@ -180,16 +207,32 @@ method pollTransfer*(c: LpLezCore): tuple[done: bool, result: LezResult] =
       if j.kind == JString: s = j.getStr()
     except CatchableError: discard
     c.lastResult = parseEnvelope(s)
+  c.save()                                            # the spent note, the change, the nonce
   (true, c.lastResult)
 
 method sync*(c: LpLezCore): int =
-  ## Scan to the tip so received private notes become discoverable. sync_to_block +
-  ## get_current_block_height are int methods (non-zero == failure).
-  var height = 0
-  try: height = parseJson(c.rawCall("get_current_block_height", "[]", kReadMs)).getInt(0)
-  except CatchableError: return 1
-  try: return parseJson(c.rawCall("sync_to_block", args(%height), kReadMs)).getInt(1)
-  except CatchableError: return 1
+  ## Walk the scan toward the tip in bounded steps (walkSync), so received private notes
+  ## become discoverable. A fresh wallet starts at block 0, and one sync_to_block to a tip
+  ## tens of thousands of blocks away outlives the read budget — and a timed-out lez_core
+  ## call keeps the wallet busy behind it (labbook §4). So each call does what fits
+  ## kSyncBudgetS and returns LezSyncBehind until it arrives; the wallet is saved at the
+  ## tip. sync_to_block is an int method (non-zero == failure).
+  var tip = -1
+  try: tip = parseJson(c.rawCall("get_current_block_height", "[]", kReadMs)).getInt(-1)
+  except CatchableError: return LezSyncFailed
+  if tip < 0: return LezSyncFailed
+  var last = 0
+  try: last = parseJson(c.rawCall("get_last_synced_block", "[]", kReadMs)).getInt(0)
+  except CatchableError: last = 0
+  let step = proc(b: int): bool =
+    try: parseJson(c.rawCall("sync_to_block", args(%b), kReadMs)).getInt(1) == 0
+    except CatchableError: false
+  var (code, reached) = (LezSyncFailed, last)
+  {.cast(gcsafe).}:                 # the step closure touches only this core, on the module thread
+    (code, reached) = walkSync(last, tip, kSyncChunk, kSyncBudgetS, step, proc(): float = epochTime())
+  (c.synced, c.tip) = (reached, tip)
+  if code == LezSyncOk and reached > last: c.save()
+  code
 
 method claimPinata*(c: LpLezCore, pinataId, account: string): LezResult =
   ## Faucet: read the pinata challenge (its 33-byte data = [difficulty, seed[0..32]]),
@@ -197,8 +240,14 @@ method claimPinata*(c: LpLezCore, pinataId, account: string): LezResult =
   ## claim is accepted on send; the credit lands only when a block commits (minutes).
   let acct = c.rawCall("get_account_public", args(%pinataId), kReadMs)
   if acct.len == 0: return LezResult(success: false, error: "pinata account unreadable")
+  # `data` as hex text, or — the sequencer's own shape, which the demo read — an array of
+  # byte values; either way 33 bytes
   var dataHex = ""
-  try: dataHex = parseJson(acct){"data"}.getStr("")
+  try:
+    let d = parseJson(acct){"data"}
+    if d != nil and d.kind == JString: dataHex = d.getStr()
+    elif d != nil and d.kind == JArray:
+      for b in d: dataHex.add toHex(b.getInt(), 2).toLowerAscii()
   except CatchableError: discard
   if dataHex.len < 2: return LezResult(success: false, error: "pinata challenge missing")
   let difficulty = parseHexInt(dataHex[0 .. 1])          # first byte = difficulty
@@ -206,4 +255,5 @@ method claimPinata*(c: LpLezCore, pinataId, account: string): LezResult =
   var solution = ""
   try: solution = pinataSolve(seedHex, difficulty)
   except CatchableError as e: return LezResult(success: false, error: "PoW: " & e.msg)
-  parseEnvelope(c.rawCall("claim_pinata", args(%pinataId, %account, %solution), kReadMs))
+  result = parseEnvelope(c.rawCall("claim_pinata", args(%pinataId, %account, %solution), kReadMs))
+  if result.success: c.save()

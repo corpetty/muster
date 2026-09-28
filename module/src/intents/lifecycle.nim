@@ -47,7 +47,7 @@ proc newIntent*(driver: Driver, effect: Effect, context: SigningContext): Intent
   result.effect = effect
   result.context = context
   result.materialization = canonicalize(driver, effect)   # invariant 1: reviewed effect
-  result.collection = startCollection(driver)             # invariant 6: rounds from describe()
+  result.collection = startCollection(driver, describeFor(driver, effect))  # invariant 6: this proposal's policy, driver-described
   result.state = lsDraft
 
 proc apply*(intent: var Intent, driver: Driver, ev: IntentEvent) =

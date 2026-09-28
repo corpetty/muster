@@ -18,6 +18,7 @@ import ./btc_multisig
 import ./lez_multisig      # the LEZ multisig program (exo-6cbe)
 import ./btc_frost         # FROST: the aggregate locus (Phase D)
 import ./lez_frost         # a FROST group acting on LEZ (exo-55e)
+import ./split             # a split: each pays their own share (exo-a90.3)
 import ../bitcoin/tx       # hexToBytes
 import ../crypto/secp256k1    # Address
 import ../crypto/curve25519   # Ed25519Pub (the roster)
@@ -82,6 +83,17 @@ proc newDriver*(kind: string, config: JsonNode): Driver =
   of "lez-frost":
     # A LEZ FROST account (exo-55e): {chain, recovery: the ceremony's recovery data, hex}.
     newLezFrostDriver(lezFrostAccount(config{"chain"}.getStr("lez:testnet"), hexToBytes(config{"recovery"}.getStr())))
+  of "evm-split":
+    # A split settling on an EVM chain (exo-a90.3): {chain: CAIP-2, members: [room identity hex]}.
+    # No account — the parties are named in each split's effect; members only gate proposing.
+    var members: seq[string]
+    for m in config{"members"}.getElems(): members.add m.getStr()
+    newSplitDriver(EvmSplitFamily, config{"chain"}.getStr("eip155:31337"), members)
+  of "lez-split":
+    # The private split on a LEZ zone (exo-a90.9): {chain: CAIP-2, members: [room identity hex]}.
+    var members: seq[string]
+    for m in config{"members"}.getElems(): members.add m.getStr()
+    newSplitDriver(LezSplitFamily, config{"chain"}.getStr("lez:testnet"), members)
   of "stub":
     newStubDriver(rounds = config{"rounds"}.getInt(1),
                   threshold = config{"threshold"}.getInt(2),

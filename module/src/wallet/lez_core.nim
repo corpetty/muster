@@ -52,6 +52,13 @@ type
 
   LezCore* = ref object of RootObj
     ## The seam. Concrete impls: FakeLezCore (here), LpLezCore (real, P-L3).
+    synced*, tip*: int     ## where the last `sync` left this wallet's scan, and the chain's tip
+
+const
+  LezSyncOk* = 0           ## `sync`: the scan is at the chain tip
+  LezSyncFailed* = 1       ## `sync`: the scan failed (the module's int convention)
+  LezSyncBehind* = 2       ## `sync`: progress made, not yet at the tip — call again
+  LezProveBudgetMs* = 900_000   ## a proving transfer's budget (measured 6m41s–7.4m + headroom)
 
 proc disclosureOf*(f: TransferForm): Disclosure =
   ## What each rail leaks — verbatim from the demo's rails. The amount is public unless
@@ -95,9 +102,29 @@ method transfer*(c: LezCore, form: TransferForm, frm, to, amountRaw: string): Le
   raise newException(WalletError, "LezCore.transfer is abstract")
 
 method sync*(c: LezCore): int {.base, gcsafe.} =
-  ## Scan to the tip, discovering received private notes. Non-zero == failure (the
-  ## module's int convention). After this, a received note appears in listAccounts.
+  ## Advance the scan toward the tip, discovering received private notes: LezSyncOk once
+  ## at the tip (a received note then appears in listAccounts), LezSyncBehind when it made
+  ## progress but a call's budget ran out first — a fresh wallet on testnet starts at
+  ## block 0, tens of thousands of blocks away — and LezSyncFailed on a failed scan.
+  ## `synced` / `tip` say where it got to.
   raise newException(WalletError, "LezCore.sync is abstract")
+
+method proving*(c: LezCore): bool {.base, gcsafe.} =
+  ## Is a transfer proving in the background in this wallet right now? lez_core serializes
+  ## the wallet, so any other call — a scan above all — waits behind a ~7-minute proof and
+  ## times out. A sync core never is.
+  false
+
+method labelled*(c: LezCore, label: string): string {.base, gcsafe.} =
+  ## The id of the account a label names in THIS wallet, "" if none. Labels live in the
+  ## wallet's own storage (lez_core add_label / resolve_label), so they outlast the
+  ## process — how a relaunch finds the accounts it made (exo-884). A core without labels
+  ## answers "", and the adapter creates accounts as before.
+  ""
+
+method labelAccount*(c: LezCore, label: string, account: LezAccount): bool {.base, gcsafe.} =
+  ## Name one of this wallet's accounts, persistently; true once the label resolves to it.
+  false
 
 method claimPinata*(c: LezCore, pinataId, account: string): LezResult {.base, gcsafe.} =
   ## The faucet. The real module takes a pre-solved 16-byte-LE PoW `solution` — the
@@ -112,6 +139,23 @@ method pollTransfer*(c: LezCore): tuple[done: bool, result: LezResult] {.base, g
   ## thread) and this reports completion. Sync cores (the fake) return their result from
   ## transfer directly and never mark it pending, so the default is "n/a, done".
   (done: true, result: LezResult(success: true))
+
+proc walkSync*(last, tip, chunk: int, budgetS: float, step: proc(toBlock: int): bool,
+               clock: proc(): float): tuple[code, reached: int] =
+  ## Walk a scan from `last` toward `tip` in steps of at most `chunk` blocks, while the
+  ## call's budget lasts — one sync_to_block to a far tip does not fit a call's timeout
+  ## (measured on testnet: ~1s per 250 blocks, 5000 blocks in 13.6s), and a timed-out
+  ## lez_core call keeps the wallet busy behind it. Returns LezSyncOk at the tip,
+  ## LezSyncBehind when the budget ran out first, LezSyncFailed when a step failed;
+  ## `reached` is the last block that did sync.
+  var at = last
+  let start = clock()
+  while at < tip:
+    if at > last and clock() - start >= budgetS: return (LezSyncBehind, at)
+    let next = min(at + chunk, tip)
+    if not step(next): return (LezSyncFailed, at)
+    at = next
+  (LezSyncOk, at)
 
 # ── envelope helper ────────────────────────────────────────────────────────────
 proc parseEnvelope*(s: string): LezResult =
@@ -137,55 +181,116 @@ type
   PendingNote = object
     npk, vpk, amountRaw: string
 
-  FakeLezCore* = ref object of LezCore
+  FakeLezChain* = ref object
+    ## The pretend ledger. A standalone FakeLezCore owns one; several wallets can SHARE
+    ## one (newFakeLezCore(chain)) so a private payment from one member's wallet lands in
+    ## another's — found only by the recipient's own scan (exo-a90.9, the private split).
     balances: Table[string, string]        ## accountId -> raw balance
-    accounts: seq[LezAccount]              ## created + discovered accounts
-    pending: seq[PendingNote]              ## private notes not yet discovered by sync
+    pending: seq[PendingNote]              ## private notes not yet discovered by a scan
     seq: int                               ## deterministic id/tx counter
+
+  FakeLezCore* = ref object of LezCore
+    chain: FakeLezChain
+    shared: bool                           ## true = a wallet on a shared chain
+    accounts: seq[LezAccount]              ## created + discovered accounts (THIS wallet's)
+    labels: Table[string, string]          ## label -> account id, as the wallet stores them
     failNextTransfer*: bool                ## test hook: force a success:false envelope
+    lagSyncs*: int                         ## test hook: the next n scans are still catching up
+    asyncTransfers*: bool                  ## test hook: prove in the background, as LpLezCore does
+    proveTicks*: int                       ## …settling on the n-th pollTransfer (default 2)
+    proving: tuple[form: TransferForm, frm, to, amountRaw: string, ticks: int, live: bool]
+
+proc newFakeLezChain*(): FakeLezChain =
+  FakeLezChain(balances: initTable[string, string](), seq: 0)
 
 proc newFakeLezCore*(): FakeLezCore =
-  FakeLezCore(balances: initTable[string, string](), seq: 0)
+  ## A standalone wallet: its own ledger, and a scan settles every pending note into it.
+  FakeLezCore(chain: newFakeLezChain())
+
+proc newFakeLezCore*(chain: FakeLezChain): FakeLezCore =
+  ## One wallet on a SHARED chain: its scan discovers only the notes sent to a key node
+  ## this wallet holds — receive-by-scan across members, the way the real zone behaves.
+  FakeLezCore(chain: chain, shared: true)
+
+proc fund*(chain: FakeLezChain, accountId, raw: string) =
+  ## Test/demo funding: credit any account on the chain directly.
+  let cur = if accountId in chain.balances: chain.balances[accountId] else: "0"
+  chain.balances[accountId] = $(parseBiggestUInt(cur) + parseBiggestUInt(raw))
 
 proc nextId(c: FakeLezCore, prefix: string): string =
-  inc c.seq
-  prefix & "-" & $c.seq
+  inc c.chain.seq
+  prefix & "-" & $c.chain.seq
 
 method createAccount*(c: FakeLezCore, kind: LezAccountKind): LezAccount =
   let a =
     if kind == lakPublic:
       LezAccount(id: c.nextId("pub"), kind: lakPublic)
     else:
-      let n = c.nextId("npk"); let v = c.nextId("vpk")
+      # a key node shaped like the zone's: a 32-byte npk and a 33-byte vpk, lowercase hex
+      # (deterministic from the chain's counter, unique across the wallets that share it)
+      inc c.chain.seq
+      let n = toHex(c.chain.seq, 64).toLowerAscii()
+      let v = "02" & toHex(c.chain.seq, 64).toLowerAscii()
       # id derived from the key node (models SHA256(prefix‖npk‖identifier))
       LezAccount(id: c.nextId("priv"), kind: lakPrivate, npk: n, vpk: v)
   c.accounts.add a
-  c.balances[a.id] = "0"
+  c.chain.balances[a.id] = "0"
   a
 
 method listAccounts*(c: FakeLezCore): seq[LezAccount] = c.accounts
 
+method labelled*(c: FakeLezCore, label: string): string = c.labels.getOrDefault(label, "")
+
+method labelAccount*(c: FakeLezCore, label: string, account: LezAccount): bool =
+  ## As the wallet does: a label is taken once, and only for an account the wallet holds.
+  if label in c.labels: return c.labels[label] == account.id
+  for a in c.accounts:
+    if a.id == account.id:
+      c.labels[label] = account.id
+      return true
+  false
+
 method getBalanceRaw*(c: FakeLezCore, accountId: string, isPublic: bool): string =
-  ## Sentinel: an account the wallet doesn't hold returns "" (an unanswerable read),
+  ## Sentinel: an account the ledger doesn't hold returns "" (an unanswerable read),
   ## which the adapter turns into a raise — never a false zero. (The fake's ledger is
   ## keyed by id, so isPublic is unused here; the real module needs it.)
-  if accountId in c.balances: c.balances[accountId] else: ""
+  if accountId in c.chain.balances: c.chain.balances[accountId] else: ""
 
-proc credit(c: FakeLezCore, id, amountRaw: string) =
-  let cur = if id in c.balances: c.balances[id] else: "0"
-  c.balances[id] = $(parseBiggestUInt(cur) + parseBiggestUInt(amountRaw))
+proc credit(c: FakeLezCore, id, amountRaw: string) = c.chain.fund(id, amountRaw)
 
 proc debitOrRaise(c: FakeLezCore, id, amountRaw: string) =
-  let cur = if id in c.balances: c.balances[id] else: ""
+  let cur = if id in c.chain.balances: c.chain.balances[id] else: ""
   if cur.len == 0: raise newException(WalletError, "unknown account " & id)
   if parseBiggestUInt(cur) < parseBiggestUInt(amountRaw):
     raise newException(WalletError, "insufficient funds")
-  c.balances[id] = $(parseBiggestUInt(cur) - parseBiggestUInt(amountRaw))
+  c.chain.balances[id] = $(parseBiggestUInt(cur) - parseBiggestUInt(amountRaw))
+
+proc settle(c: FakeLezCore, form: TransferForm, frm, to, amountRaw: string): LezResult {.gcsafe.}
 
 method transfer*(c: FakeLezCore, form: TransferForm, frm, to, amountRaw: string): LezResult =
   if c.failNextTransfer:
     c.failNextTransfer = false
     return LezResult(success: false, error: "wallet FFI error 99")   # the envelope failure
+  if c.asyncTransfers:
+    # as LpLezCore: accepted at once, proved in the background, the result polled later —
+    # nothing moves on the chain until the proof lands
+    if c.proving.live:
+      return LezResult(success: false, error: "a LEZ transfer is already proving — wait for it")
+    c.proving = (form, frm, to, amountRaw, (if c.proveTicks > 0: c.proveTicks else: 2), true)
+    return LezResult(success: true, txHash: "pending")
+  c.settle(form, frm, to, amountRaw)
+
+method proving*(c: FakeLezCore): bool = c.proving.live
+
+method pollTransfer*(c: FakeLezCore): tuple[done: bool, result: LezResult] =
+  if not c.proving.live: return (true, LezResult(success: true))
+  dec c.proving.ticks
+  if c.proving.ticks > 0: return (false, LezResult())
+  c.proving.live = false
+  try: (true, c.settle(c.proving.form, c.proving.frm, c.proving.to, c.proving.amountRaw))
+  except WalletError as e: (true, LezResult(success: false, error: e.msg))
+
+proc settle(c: FakeLezCore, form: TransferForm, frm, to, amountRaw: string): LezResult {.gcsafe.} =
   c.debitOrRaise(frm, amountRaw)
   case form
   of tfPublic, tfDeshield:
@@ -193,21 +298,36 @@ method transfer*(c: FakeLezCore, form: TransferForm, frm, to, amountRaw: string)
     c.credit(to, amountRaw)
   of tfShield, tfPrivate:
     # shielded destination (a "npk:vpk" key node) — the note is NOT yet discoverable;
-    # it settles into a fresh account on sync, found by scanning under its key node.
+    # it settles into a fresh account on a scan, found under its key node.
     let parts = to.split(':')
     let npk = (if parts.len > 0: parts[0] else: to)
     let vpk = (if parts.len > 1: parts[1] else: "")
-    c.pending.add PendingNote(npk: npk, vpk: vpk, amountRaw: amountRaw)
+    c.chain.pending.add PendingNote(npk: npk, vpk: vpk, amountRaw: amountRaw)
   LezResult(success: true, txHash: c.nextId("tx"))
 
 method sync*(c: FakeLezCore): int =
-  ## Settle pending private notes into discoverable accounts under their key node.
-  for n in c.pending:
+  ## Settle pending private notes into discoverable accounts under their key node. A
+  ## standalone wallet takes every note; a wallet on a shared chain only the notes sent to
+  ## a key node it holds — the rest stay for their own recipients' scans. With `lagSyncs`
+  ## set, the scan is still catching up: nothing is discovered yet.
+  if c.lagSyncs > 0:
+    dec c.lagSyncs
+    (c.synced, c.tip) = (1000, 29083)
+    return LezSyncBehind
+  var keep: seq[PendingNote]
+  for n in c.chain.pending:
+    var mine = not c.shared
+    for a in c.accounts:
+      if a.kind == lakPrivate and a.npk == n.npk and a.vpk == n.vpk: mine = true
+    if not mine:
+      keep.add n
+      continue
     let a = LezAccount(id: c.nextId("recv"), kind: lakPrivate, npk: n.npk, vpk: n.vpk)
     c.accounts.add a
-    c.balances[a.id] = n.amountRaw
-  c.pending = @[]
-  0
+    c.chain.balances[a.id] = n.amountRaw
+  c.chain.pending = keep
+  (c.synced, c.tip) = (29083, 29083)
+  LezSyncOk
 
 method claimPinata*(c: FakeLezCore, pinataId, account: string): LezResult =
   c.credit(account, "1000000000")   # fund with 1e9 base units
