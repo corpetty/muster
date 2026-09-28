@@ -187,3 +187,32 @@ block:
     doAssert rows.outsideBoundary().len == rows.len
     doAssert baselineDisclosure().visibleTo(obChainObserver).len == 0
   echo "lez: the four rails map onto action-manifest disclosure rows OK"
+
+# ── 8. a relaunch reuses the wallet's accounts (exo-884) ─────────────────────────
+# The LEZ wallet persists (lez_core's storage); the adapter over it is new on every
+# launch. It must find the accounts it made before — named in the wallet by a label —
+# not mint (and, for a public one, register on chain) a fresh pair each start, which
+# would move a creditor's payTo and grow the wallet by two accounts per launch.
+block:
+  let core = newFakeLezCore()
+  let first = newLezAdapter(core)
+  let accs = first.accounts(ks)
+  let payTo = first.receiveAddresses(ks)
+  doAssert core.labelled("muster-public") == accs[0].id and core.labelled("muster-shielded") == accs[1].id,
+           "the wallet itself names muster's two accounts"
+  core.fund(accs[1].id, "700")
+  let relaunched = newLezAdapter(core)          # same wallet, a new process
+  let again = relaunched.accounts(ks)
+  doAssert again.len == 2 and again[0] == accs[0] and again[1] == accs[1],
+           "a relaunch finds the same two accounts: " & $again
+  doAssert core.listAccounts().len == 2, "nothing new minted"
+  doAssert relaunched.receiveAddresses(ks) == payTo, "the shielded key node — a creditor's payTo — does not move"
+  doAssert relaunched.balance(again[1], relaunched.describe().nativeAsset).raw == "700"
+  doAssert relaunched.receivedNotes(ks).len == 0, "the account muster made is never read as a received note"
+  # a wallet that lost one of them (restored, or labelled elsewhere) gets that one anew
+  let partial = newFakeLezCore()
+  discard partial.createAccount(lakPublic)                  # an unlabelled stranger
+  let fresh = newLezAdapter(partial).accounts(ks)
+  doAssert fresh.len == 2 and partial.labelled("muster-public") == fresh[0].id and
+           partial.listAccounts().len == 3, "an account muster did not label is not taken for its own"
+  echo "8. a relaunch reuses the accounts the wallet labels as muster's; nothing new is minted OK"
