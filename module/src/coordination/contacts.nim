@@ -83,3 +83,5 @@ proc asJson*(b: ContactBook): JsonNode =
   result = newJArray()
   for id, c in b.byId:
     result.add %*{"identity": c.identity, "alias": c.alias, "address": c.address}
+
+proc nameFor*(b: ContactBook, who: string): string = ""   # exo-59c stub

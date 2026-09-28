@@ -35,6 +35,7 @@ import ../intents/materialization
 import ../intents/signing_payload
 import ../intents/provenance
 import ./intent_events
+import ../crypto/keystore
 export provenance.SignedInput, signing_payload.SigningContext
 
 type
@@ -301,3 +302,8 @@ proc expired*(ctx: SigningContext, nowSec: uint64): bool =
   ## Checked at sign time and at submit time — never inside the fold, which stays a
   ## pure function of the log (invariant 4).
   nowSec > ctx.expiry
+
+# exo-59c stubs — see the green commit
+proc myContributorNames*(ks: Keystore): seq[string] = @[]
+proc approvedByMe*(events: seq[Event], intentId: string, approvers: seq[string],
+                   me: EncIdentity, myNames: seq[string]): bool = false
