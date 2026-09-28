@@ -30,6 +30,8 @@ const addDriverJson = """{"effect":"add-driver","kind":"unanimous"}"""
 let id = intentIdFor(addDriverJson, "threshold")
 let m = canonicalize(drv, effectFromJson(addDriverJson))
 proc endorse(k: EncKeys): string = hex(edSign(k, m.bytes))
+# Published as the hosted path does: under the name its signer is identified by (exo-a5a).
+proc named(k: EncKeys): string = contributorOf(drv, addDriverJson, endorse(k))
 
 # 1. The add-driver effect is schema-bound governance, not a payment (F-5).
 doAssert effectFromJson(addDriverJson).schemaId == "muster.effect.governance.add-driver.v1",
@@ -41,7 +43,7 @@ echo "1. add-driver is schema-bound governance OK"
 
 # 2. Before the room approves it, only the FOUNDING kinds are admitted.
 block:
-  let ev = @[proposeEvent(id, addDriverJson), contributeEvent(id, "A", endorse(a))]
+  let ev = @[proposeEvent(id, addDriverJson), contributeEvent(id, named(a), endorse(a))]
   let kinds = roomDriverKinds(ev, foldDrv)
   doAssert "safe" in kinds and "threshold" in kinds, "the founding set is always present"
   doAssert "unanimous" notin kinds,
@@ -51,8 +53,8 @@ echo "2. a collecting add-driver admits no new capability OK"
 # 3. The group APPROVES it (threshold met) → "unanimous" is admitted to the room.
 block:
   let ev = @[proposeEvent(id, addDriverJson),
-             contributeEvent(id, "A", endorse(a)),
-             contributeEvent(id, "B", endorse(b))]
+             contributeEvent(id, named(a), endorse(a)),
+             contributeEvent(id, named(b), endorse(b))]
   doAssert intentState(ev, foldDrv, id) == "executable",
            "two endorsements approve the governance proposal"
   let kinds = roomDriverKinds(ev, foldDrv)
@@ -70,7 +72,7 @@ block:
   let mal = encFromSeed(seed(9))
   proc endorseMal(): string = hex(edSign(mal, m.bytes))
   let ev = @[proposeEvent(id, addDriverJson),
-             contributeEvent(id, "A", endorse(a)),
+             contributeEvent(id, named(a), endorse(a)),
              contributeEvent(id, "mallory", endorseMal())]
   doAssert intentState(ev, foldDrv, id) != "executable",
            "a non-member cannot push the proposal to approved"

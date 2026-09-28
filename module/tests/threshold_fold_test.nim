@@ -34,16 +34,18 @@ let id = intentIdFor(effectJson)
 # does not override canonicalize), exactly what reduceIntents will verify against.
 let m = canonicalize(drv, effectFromJson(effectJson))
 proc endorse(k: EncKeys): string = hex(edSign(k, m.bytes))
+# Published as the hosted path does: under the name its signer is identified by (exo-a5a).
+proc named(k: EncKeys): string = contributorOf(drv, effectJson, endorse(k))
 
 # Propose, then one endorsement → collecting (1 of 2).
-var events = @[proposeEvent(id, effectJson), contributeEvent(id, "A", endorse(a))]
+var events = @[proposeEvent(id, effectJson), contributeEvent(id, named(a), endorse(a))]
 doAssert intentState(events, foldDrv, id) == "collecting",
          "one roster endorsement -> collecting"
 echo "1. propose + one endorsement -> collecting OK"
 
 # A second distinct endorsement → executable (threshold met), through the SAME
 # generic reduceIntents — no Safe, no secp.
-events.add contributeEvent(id, "B", endorse(b))
+events.add contributeEvent(id, named(b), endorse(b))
 doAssert intentState(events, foldDrv, id) == "executable",
          "two distinct roster endorsements -> executable"
 echo "2. two endorsements -> executable (generic fold, non-Safe driver) OK"
@@ -89,7 +91,7 @@ echo "2b. render path generic (views + provenance) with the threshold driver OK"
 
 # A non-roster endorsement never counts toward the threshold.
 var ev2 = @[proposeEvent("2", effectJson),
-            contributeEvent("2", "A", endorse(a)),
+            contributeEvent("2", named(a), endorse(a)),
             contributeEvent("2", "mallory", endorse(mal))]
 doAssert intentState(ev2, foldDrv, "2") != "executable",
          "a non-member endorsement must not reach the threshold"
@@ -149,10 +151,10 @@ block:
   var ev: seq[Event]
   ev.add policyDeclEvent(idX, "threshold")
   ev.add proposeEvent(idX, effectJson)
-  ev.add contributeEvent(idX, "A", endorse(a))
+  ev.add contributeEvent(idX, named(a), endorse(a))
   ev.add policyDeclEvent(idY, "solo")
   ev.add proposeEvent(idY, effectJson)
-  ev.add contributeEvent(idY, "A", endorse(a))
+  ev.add contributeEvent(idY, named(a), endorse(a))
   doAssert intentState(ev, resolve, idX) == "collecting",
            "the k=2 intent: one endorsement -> still collecting"
   doAssert intentState(ev, resolve, idY) == "executable",

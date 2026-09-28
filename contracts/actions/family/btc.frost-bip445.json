@@ -181,6 +181,13 @@
             "module/tests/btc_frost_driver_test.nim",
             "module/tests/frost_dkg_sign_test.nim"
           ]
+        },
+        {
+          "what": "a contribution published under a name that is not its signer's",
+          "why": "it is nobody's approval: the fold and every view drop it before dedup, so one signer never counts twice and a forgery never takes a member's slot (exo-a5a)",
+          "evidence": [
+            "module/tests/distinct_signer_test.nim"
+          ]
         }
       ],
       "hosted": [
@@ -273,13 +280,16 @@
           "kind": "source",
           "url": "https://raw.githubusercontent.com/bitcoin/bips/master/bip-0340.mediawiki",
           "what": "BIP-340: the one Schnorr signature the chain checks"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/distinct_signer_test.nim"
         }
       ],
       "unverified": [
         "The btc-frost driver is not run through checkConformance by any test (only its profile, in profile_test); CLAUDE.md's working agreement says conformance grades every driver.",
         "The card body draws only to / value, so it shows no outputs for a btc-spend (Room.qml cardFor), and the ready box's 'Nothing settles on-chain' is wrong for this rail.",
-        "coordinate_submit polls the node for about four seconds; if the spend is not final by then it returns pending, and nothing later publishes the final event for a Bitcoin intent (only LEZ settles are re-watched by the pump). From reading nim-lib/muster_module.nim, not a test.",
-        "The room's fold counts one approval per contributor NAME in the event key, not per verifying key, so the room can show 'executable' early if one signature is published under two names (seen in a scratch run against the threshold driver, not a repo test). The settlement re-counts by the key that signed, so nothing wrong settles."
+        "coordinate_submit polls the node for about four seconds; if the spend is not final by then it returns pending, and nothing later publishes the final event for a Bitcoin intent (only LEZ settles are re-watched by the pump). From reading nim-lib/muster_module.nim, not a test."
       ]
     },
     {

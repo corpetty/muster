@@ -264,11 +264,21 @@ proc approvalGrades*(events: seq[Event], driverFor: DriverFor,
                      intentId: string): seq[ApprovalGrade] =
   ## One grade per (contributor, round) approval on this intent, in canonical order.
   let p0 = attestationPayload(events, driverFor, intentId)
+  # exo-a5a: the same attribution rule the fold applies — a contribution under a name that
+  # is not its signer's is no one's approval, so it gets no grade and no slot.
+  let ej = effectJsonOf(events, intentId)
+  let drv = driverFor(intentPolicyOf(events, intentId))
+  var m: Materialization
+  var haveM = false
+  if ej.len > 0:
+    try: (m = canonicalize(drv, effectFromJson(ej)); haveM = true)
+    except CatchableError: discard
   var seen = initHashSet[string]()
   let ordered = canonicalOrder(events)
   for e in ordered:
     let p = e.key.split('/')
     if p.len < 4 or p[0] != "intent" or p[1] != intentId or p[2] != "sig": continue
+    if haveM and not signedByNamed(drv, m, p[3], e.value): continue
     let round = (if p.len >= 5: (try: parseInt(p[4]) except CatchableError: 1) else: 1)
     let k = p[3] & "/" & $round
     if k in seen: continue
