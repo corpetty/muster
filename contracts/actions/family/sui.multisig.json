@@ -725,7 +725,7 @@
         },
         {
           "what": "a second proposal that names an owned-object version (an input or the gas coin) already under collection in the room",
-          "why": "the chain's rule: two different transactions signed over the same owned-object version can equivocate and lock that object until the epoch ends. Muster refuses before anyone signs the second",
+          "why": "the chain's rule: an owned-object version is consumed by one transaction, so two different transactions signed over it conflict and at most one executes. The Sui docs also warn the object can lock until the epoch ends; whether that still holds since protocol 105 disabled pre-consensus locking is unverified. Muster refuses before anyone signs the second",
           "evidence": [
             "https://docs.sui.io/develop/transaction-payment/sponsor-txn"
           ]
@@ -782,6 +782,10 @@
         },
         {
           "claim": "Only where these exact objects exist: the owned inputs' and gas coin's (id, version, digest) tie the signatures to one network and one moment. The bytes name no network unless the expiration is ValidDuring.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "When gas comes from an address balance and no owned object is an input, the chain requires a ValidDuring expiration of at most two epochs that names the chain, and deduplicates the transaction by digest within that window instead of ordering it by object versions.",
           "credibility": "imperative"
         },
         {
@@ -924,10 +928,16 @@
           "kind": "source",
           "url": "https://docs.sui.io/develop/accessing-data/json-rpc-migration",
           "what": "JSON-RPC is off on Sui Foundation mainnet full nodes and is being decommissioned; use gRPC or GraphQL"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-protocol-config/src/lib.rs",
+          "what": "protocol version 105 sets disable_preconsensus_locking on every network; address aliases require it"
         }
       ],
       "unverified": [
-        "Whether a gas sponsor can be used together with a MultiSig sender: the source checks the sender and the gas owner independently, but no primary example of a sponsored MultiSig transaction was found."
+        "Whether a gas sponsor can be used together with a MultiSig sender: the source checks the sender and the gas owner independently, but no primary example of a sponsored MultiSig transaction was found.",
+        "Whether signing two transactions over the same owned-object version still locks the object until the epoch ends: protocol 105 disabled pre-consensus locking on every network, mainnet included (owned-object conflicts are detected after consensus)."
       ]
     },
     {
@@ -1316,7 +1326,7 @@
         },
         {
           "what": "a second proposal that names an owned-object version (an input or the gas coin) already under collection in the room",
-          "why": "the chain's rule: two different transactions signed over the same owned-object version can equivocate and lock that object until the epoch ends. Muster refuses before anyone signs the second",
+          "why": "the chain's rule: an owned-object version is consumed by one transaction, so two different transactions signed over it conflict and at most one executes. The Sui docs also warn the object can lock until the epoch ends; whether that still holds since protocol 105 disabled pre-consensus locking is unverified. Muster refuses before anyone signs the second",
           "evidence": [
             "https://docs.sui.io/develop/transaction-payment/sponsor-txn"
           ]
@@ -1390,6 +1400,10 @@
         },
         {
           "claim": "Only where these exact objects exist: the owned inputs' and gas coin's (id, version, digest) tie the signatures to one network and one moment. The bytes name no network unless the expiration is ValidDuring.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "When gas comes from an address balance and no owned object is an input, the chain requires a ValidDuring expiration of at most two epochs that names the chain, and deduplicates the transaction by digest within that window instead of ordering it by object versions.",
           "credibility": "imperative"
         },
         {
@@ -1481,7 +1495,7 @@
         {
           "kind": "source",
           "url": "https://docs.sui.io/develop/transaction-payment/sponsor-txn",
-          "what": "same-version conflicts can equivocate an object until the next epoch"
+          "what": "the sponsored-transaction docs warn that same-version conflicts can equivocate an object until the next epoch"
         },
         {
           "kind": "source",
@@ -1492,16 +1506,24 @@
           "kind": "source",
           "url": "https://docs.sui.io/develop/transactions/transaction-auth/auth-overview",
           "what": "scheme flags and each scheme's internal hashing"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-protocol-config/src/lib.rs",
+          "what": "protocol version 105 sets disable_preconsensus_locking on every network; address aliases require it"
         }
+      ],
+      "unverified": [
+        "Whether signing two transactions over the same owned-object version still locks the object until the epoch ends: protocol 105 disabled pre-consensus locking on every network, mainnet included (owned-object conflicts are detected after consensus)."
       ]
     },
     {
       "id": "sui.multisig/change-signers",
-      "name": "Move a Sui MultiSig to a new signer set",
+      "name": "Move a Sui MultiSig to a new signer set at a new address",
       "area": "family",
       "family": "sui.multisig",
       "status": "declared",
-      "summary": "A Sui MultiSig's signers cannot change in place under the registry's route: the room derives a new MultiSigPublicKey and address, and the old policy signs a transaction that moves every owned object and balance to it. Anything not moved stays with the old address, still under the old signers.",
+      "summary": "One of two routes to new signers; the other, sui.multisig/rekey-by-alias, keeps the address. Here the room derives a new MultiSigPublicKey and address, and the old policy signs a transaction that moves every owned object and balance to it. Anything not moved stays with the old address, still under the old signers.",
       "effect": {
         "schema": "muster.effect.sui.multisig.change-signers.v0",
         "fields": [
@@ -1885,7 +1907,7 @@
         },
         {
           "what": "a second proposal that names an owned-object version (an input or the gas coin) already under collection in the room",
-          "why": "the chain's rule: two different transactions signed over the same owned-object version can equivocate and lock that object until the epoch ends. Muster refuses before anyone signs the second",
+          "why": "the chain's rule: an owned-object version is consumed by one transaction, so two different transactions signed over it conflict and at most one executes. The Sui docs also warn the object can lock until the epoch ends; whether that still holds since protocol 105 disabled pre-consensus locking is unverified. Muster refuses before anyone signs the second",
           "evidence": [
             "https://docs.sui.io/develop/transaction-payment/sponsor-txn"
           ]
@@ -1961,7 +1983,7 @@
           "party": "every address in the old address's alias set"
         },
         {
-          "claim": "Sui also allows an in-place route: replace the old address's alias set with the new MultiSig address, which keeps the address. This action is the new-address route the registry declares; an alias change is a move call with its own bypass line.",
+          "claim": "The registry declares the in-place route (sui.multisig/rekey-by-alias): the old address makes the new MultiSig address its only alias and keeps every object. This action is the other route: everything moves to the new policy's own address, which again re-derives from its signers.",
           "credibility": "not-applicable"
         }
       ],
@@ -2039,17 +2061,463 @@
         {
           "kind": "source",
           "url": "https://docs.sui.io/develop/transaction-payment/sponsor-txn",
-          "what": "same-version conflicts can equivocate an object until the next epoch"
+          "what": "the sponsored-transaction docs warn that same-version conflicts can equivocate an object until the next epoch"
         },
         {
           "kind": "source",
           "url": "https://docs.sui.io/develop/transactions/transaction-auth/multisig",
           "what": "the official multisig guide: a multisig address comes from the keys, weights and threshold"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-protocol-config/src/lib.rs",
+          "what": "protocol version 105 sets disable_preconsensus_locking on every network; address aliases require it"
         }
       ],
       "unverified": [
         "The largest sweep one transaction can carry: the protocol config caps input objects and PTB commands per transaction, but the current mainnet values were not checked.",
-        "Whether party-owned and other consensus-owned objects held by the old address (the AddressAliases object is party-owned) can be moved by the same sweep."
+        "Whether party-owned and other consensus-owned objects held by the old address (the AddressAliases object is party-owned) can be moved by the same sweep.",
+        "Whether signing two transactions over the same owned-object version still locks the object until the epoch ends: protocol 105 disabled pre-consensus locking on every network, mainnet included (owned-object conflicts are detected after consensus)."
+      ]
+    },
+    {
+      "id": "sui.multisig/rekey-by-alias",
+      "name": "Change a Sui MultiSig's signers in place (address alias)",
+      "area": "family",
+      "family": "sui.multisig",
+      "status": "declared",
+      "summary": "The room keeps its address and changes who signs for it. Signing under the old policy, the multisig enables address aliases (if it has not) and replaces its alias set with a new MultiSig address. From then on only the new policy signs as the address; the old policy no longer does, and nothing moves. The address stops re-deriving from its signers, so whoever names its controllers must read its AddressAliases object.",
+      "effect": {
+        "schema": "muster.effect.sui.multisig.rekey-by-alias.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the multisig address whose signers change; it keeps its address and everything it owns"
+          },
+          {
+            "name": "new_members",
+            "means": "the new pk_map: each new member's scheme flag, key (or zkLogin identifier) and u8 weight"
+          },
+          {
+            "name": "new_threshold",
+            "means": "the new u16 threshold"
+          },
+          {
+            "name": "new_address",
+            "means": "the new MultiSig address, Blake2b-256(0x03 || new threshold || each new member's flag || key || weight); it will sign as the account and holds nothing itself"
+          },
+          {
+            "name": "aliases",
+            "means": "the account's AddressAliases object (an ID derived from 0xa and the account, owned by the account as a party object) as read at propose, or absent when aliases are not enabled yet"
+          },
+          {
+            "name": "new_alias_set",
+            "means": "the whole set replace_all writes: exactly [new_address], so neither the old policy nor any earlier alias still signs as the account"
+          },
+          {
+            "name": "gas",
+            "means": "the gas payment: an account-owned SUI coin, or the account's address balance"
+          },
+          {
+            "name": "gas_budget",
+            "means": "the most gas, in MIST, each transaction may spend"
+          },
+          {
+            "name": "expiration",
+            "means": "None, Epoch(e), or ValidDuring{min_epoch, max_epoch, chain, nonce}; muster would set Epoch(e) to its envelope's expiry"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "the OLD policy: the old members' u8 weights must reach the old u16 threshold, once per transaction (two when aliases are not enabled yet); each new member discloses their own key",
+        "finality": "external",
+        "domain": "sui.intent.transaction-data.v0"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "sui:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "sui:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "sui-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "sui-rpc",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "sui-multisig-member-key-old",
+          "party": "contributor",
+          "class": "authority",
+          "target": "sui-multisig:<multisig address>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "zklogin-salt-and-prover",
+          "party": "contributor",
+          "class": "infra",
+          "target": "zklogin-prover",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "new-member-keys-and-weights",
+          "party": "counterparty",
+          "class": "authority",
+          "target": "sui-multisig:<new multisig address>",
+          "field": "new_members"
+        },
+        {
+          "kind": "address",
+          "name": "new-multisig-address",
+          "party": "proposer",
+          "class": "address",
+          "target": "sui-multisig:<new multisig address>",
+          "field": "new_address"
+        },
+        {
+          "kind": "asset",
+          "name": "sui-for-gas",
+          "party": "proposer",
+          "class": "asset",
+          "target": "sui-multisig:<multisig address>",
+          "field": "gas_budget"
+        }
+      ],
+      "touches": [
+        {
+          "target": "sui:*",
+          "mode": "write"
+        },
+        {
+          "target": "sui-multisig:<multisig address>",
+          "mode": "write"
+        },
+        {
+          "target": "sui-address-aliases:<multisig address>",
+          "mode": "write"
+        },
+        {
+          "target": "sui-object:0xa (AddressAliasState, only when enabling)",
+          "mode": "write"
+        },
+        {
+          "target": "sui-object:<gas coin id>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "inputs",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signers",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "inputs",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "new_address",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Proposes the new key list and threshold; muster derives the new address and checks the list as the derive action does. It reads the account's AddressAliases object (at the ID derived from 0xa and the account) and records the read. If there is none, the change is two transactions under the old policy: 0x2::address_alias::enable, which creates the set {account}, then replace_all; enable creates the object and hands it to the account, so the same transaction cannot also replace it. If the object exists, the change is replace_all alone.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "policy",
+              "observer": "room-member"
+            },
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "inputs",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-framework/packages/sui-framework/sources/address_alias.move#L63-L94",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/address_alias.rs",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/base_types.rs#L978-L1008"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Each new member confirms their own key and weight in the new list. Each old member re-derives the new address and the TransactionData from the effect and the recorded reads, checks the bytes match, and signs under the old policy. Room membership and the signer set are separate: a new signer admitted to the room reads only from the epoch they joined.",
+          "signs": "32 bytes: Blake2b-256 over BCS(IntentMessage{intent: [0x00, 0x00, 0x00], value: TransactionData::V1{kind: ProgrammableTransaction{commands: [MoveCall 0x2::address_alias::enable(the shared AddressAliasState 0xa)] or [MoveCall 0x2::address_alias::replace_all(the account's AddressAliases, vector[new address])]}, sender: the multisig address, gas_data, expiration}}), signed by each old member exactly as for a transfer (sui.multisig/transfer).",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "signers",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L766-L778",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/shared-crypto/src/intent.rs#L55-L166"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "Any member assembles the old policy's MultiSig signature (only as many signatures as reach the threshold) and submits through the user's endpoint; the chain checks the weights as for any spend. The transaction publishes the old policy, who signed, and the new MultiSig address in the account's alias set. The new policy's keys stay unpublished until the new address first signs.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "new_address",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L146-L310"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "Muster re-reads the AddressAliases object and checks it holds exactly the new address. From then on the chain accepts a transaction from the account only with a signature from an address in that set, so the room counts the new policy's weights for the account and the old members' keys no longer sign as it. Nothing moved.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/signature_verification.rs#L158-L186"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a new address that differs from the address muster re-derives from the new key list, weights and threshold, or a new list the chain would reject (more than 10 keys, a zero weight, a duplicate key, a threshold the weights cannot reach)",
+          "why": "invariant 1 (re-derive or refuse) and the chain's MultiSigPublicKey validation: an alias no member's signature can produce locks the account, and a wrong one hands it to whoever controls that address",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/base_types.rs#L978-L1008",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L498-L580"
+          ]
+        },
+        {
+          "what": "a new alias set other than exactly [new_address]: keeping the account itself or any other address",
+          "why": "the chain accepts a signature from any one address in the set, so each extra entry signs alone as the account (the registry's alias bypass); invariant 1: the room reviews exactly who signs",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/signature_verification.rs#L158-L186",
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-framework/packages/sui-framework/sources/address_alias.move#L63-L94"
+          ]
+        },
+        {
+          "what": "a new member's slot whose key that member has not disclosed and confirmed in the room",
+          "why": "invariant 9: what the client says about a member is only what that member disclosed; each slot carries weight toward the new threshold",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/multisig.rs#L146-L310"
+          ]
+        },
+        {
+          "what": "an enable when the AddressAliases object already exists, or a replace_all when it does not",
+          "why": "the chain's rule: enable aborts with EAliasAlreadyExists, and replace_all needs the object; muster reads it first (invariant 10) and proposes the right transaction",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-framework/packages/sui-framework/sources/address_alias.move#L63-L94"
+          ]
+        },
+        {
+          "what": "an approval over bytes that differ from the TransactionData muster re-derives from the effect and the recorded reads",
+          "why": "invariant 1 / F-4: refuse on mismatch",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/crypto.rs#L766-L778"
+          ]
+        },
+        {
+          "what": "signing when the AddressAliases read, an ObjectRef, the epoch, the reference gas price or the chain identifier reached the bytes without a recorded external read naming its source and log position",
+          "why": "invariant 10: they are external reads, and they decide what is signed",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/address_alias.rs"
+          ]
+        },
+        {
+          "what": "a proposal whose room envelope does not name the Sui network (its chain identifier, the genesis checkpoint digest), the multisig address and an expiry",
+          "why": "invariant 2. The chain's bytes carry no chain id unless the expiration is ValidDuring, so muster binds the network in its own envelope",
+          "evidence": [
+            "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/transaction.rs#L2413-L2505"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "After replace_all the account signs only through the new MultiSig address: the chain checks each signature against the account's alias set, and the old policy is no longer in it.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Nothing moves: every object, balance and on-chain reference to the account stays where it is.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The change publishes the old policy, who signed it, and the new MultiSig address; the new policy's keys become public at its first signature.",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        },
+        {
+          "claim": "The account no longer re-derives from its signers: anyone who checks it against a key list gets the old list. Muster would read the AddressAliases object whenever it names who controls the account.",
+          "credibility": "motivational",
+          "party": "anyone who derives the account's control from its address alone"
+        },
+        {
+          "claim": "The new policy now governs the alias set too: it can add aliases (up to 8), and each alias signs alone as the account.",
+          "credibility": "motivational",
+          "party": "the new signer set"
+        },
+        {
+          "claim": "The other route is sui.multisig/change-signers, which moves everything to the new policy's own address.",
+          "credibility": "not-applicable"
+        }
+      ],
+      "unverified": [
+        "No primary example of a MultiSig address rotating its signers through aliases was found; the steps follow the framework source and the docs' single-key rotation example."
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-framework/packages/sui-framework/sources/address_alias.move#L63-L94",
+          "what": "address_alias: enable creates the account's alias set {account} (party-owned by it); replace_all overwrites the set (never empty, at most MAX_ALIASES = 8)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/signature_verification.rs#L158-L186",
+          "what": "each required signer must be satisfied by a signature from one address in its alias set, which replaces the default of the signer itself"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/address_alias.rs",
+          "what": "an address's AddressAliases object lives at an ID derived from 0xa and the address, so muster can read it"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-protocol-config/src/lib.rs#L4540-L4543",
+          "what": "protocol version 116 turns on address aliases on every network, mainnet included"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/MystenLabs/sui/blob/d79a998f32bfedac63e7d3f1dbdc9e41c14adf38/crates/sui-types/src/base_types.rs#L978-L1008",
+          "what": "a MultiSig address is the hash of its exact key list, weights and threshold"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.sui.io/onchain-finance/asset-custody/address-aliases",
+          "what": "key rotation without asset migration: add the new key's address as an alias and optionally remove the old one"
+        }
       ]
     }
   ]

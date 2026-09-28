@@ -277,6 +277,10 @@
           "claim": "The room's count is receipts, which are not signed by the voter's LEZ key; settlement re-counts on chain, so an overstated room count cannot settle",
           "credibility": "motivational",
           "party": "every room member"
+        },
+        {
+          "claim": "On LEZ v0.2.4, the line the public testnet runs, a vote is the member's own transaction but costs no fee: v0.2.4's public message has no fee field, so the live path's payer is unused. A fee field arrives with v0.2.5-rc1's FeeDeclaration; the fee path is modelled only in-process (lez_multisig_chain_test step 5).",
+          "credibility": "imperative"
         }
       ],
       "evidence": [
@@ -339,10 +343,13 @@
           "kind": "source",
           "url": "https://github.com/logos-co/lez-multisig/pull/45",
           "what": "lez-multisig#45: the SPEL v0.7.0 / LEZ v0.2.4 rebuild deployed on the public testnet"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_multisig_chain_test.nim"
         }
       ],
       "unverified": [
-        "Registry approverCost is per-vote; on the live LEZ v0.2.4 chain a vote is still the member's own transaction, but LEZ v0.2.4 charges no fees (wallet/lez_multisig_live.nim: 'payer is unused'). The fee path exists only in the in-process model (lez_multisig_chain_test step 5).",
         "The token program id is read from the user's sequencer (getProgramIds) at compose and is not recorded as an external read; the card's summary is inferred from the instruction's shape, not from checking the target is the token program. From reading nim-lib/muster_module.nim and ui/src/qml/Room.qml.",
         "Header comments in drivers/lez_multisig.nim, lez_vote_test and phase_c_exit_test say the member's LEZ wallet signs, 'never muster'; the live path signs with a member key the muster keystore derives (lez_member_keys_test, lez_multisig_live_e2e). The registry says the latter.",
         "The ready box's Settle on-chain for this family is wired from the profile's settlement, but has not been clicked through on screen."
@@ -625,6 +632,10 @@
           "claim": "The room's count is receipts, which are not signed by the voter's LEZ key; settlement re-counts on chain, so an overstated room count cannot settle",
           "credibility": "motivational",
           "party": "every room member"
+        },
+        {
+          "claim": "On LEZ v0.2.4, the line the public testnet runs, a vote is the member's own transaction but costs no fee: v0.2.4's public message has no fee field, so the live path's payer is unused. A fee field arrives with v0.2.5-rc1's FeeDeclaration; the fee path is modelled only in-process (lez_multisig_chain_test step 5).",
+          "credibility": "imperative"
         }
       ],
       "evidence": [
@@ -687,10 +698,13 @@
           "kind": "source",
           "url": "https://github.com/logos-co/lez-multisig/pull/45",
           "what": "lez-multisig#45: the SPEL v0.7.0 / LEZ v0.2.4 rebuild deployed on the public testnet"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_multisig_chain_test.nim"
         }
       ],
       "unverified": [
-        "Registry approverCost is per-vote; on the live LEZ v0.2.4 chain a vote is still the member's own transaction, but LEZ v0.2.4 charges no fees (wallet/lez_multisig_live.nim: 'payer is unused'). The fee path exists only in the in-process model (lez_multisig_chain_test step 5).",
         "The token program id is read from the user's sequencer (getProgramIds) at compose and is not recorded as an external read; the card's summary is inferred from the instruction's shape, not from checking the target is the token program. From reading nim-lib/muster_module.nim and ui/src/qml/Room.qml.",
         "Header comments in drivers/lez_multisig.nim, lez_vote_test and phase_c_exit_test say the member's LEZ wallet signs, 'never muster'; the live path signs with a member key the muster keystore derives (lez_member_keys_test, lez_multisig_live_e2e). The registry says the latter.",
         "The ready box's Settle on-chain for this family is wired from the profile's settlement, but has not been clicked through on screen."

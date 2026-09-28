@@ -81,7 +81,7 @@ One row per family, generated from the registry (`contracts/families/registry.js
 | `room.frost-scaffold` | room | same bytes | room | 2 · none | in-place | – / – / room only | none · optional | – | demo | partial |
 | `evm.safe` | contract | same bytes | explicit | 1 · deploy | in-place | setup / spend / public | sequence · none | – | production | built |
 | `evm.safe-4337` | contract | same bytes | explicit | 1 · deploy | in-place | setup / spend / public | lanes · optional | – | production | candidate |
-| `evm.erc7579-ownable` | contract | same bytes | explicit | 1 · deploy | in-place | setup / spend / public | lanes · optional | – | early | candidate |
+| `evm.erc7579-ownable` | contract | same bytes | explicit | 1 · deploy | in-place | setup / spend / public | lanes · none | – | early | candidate |
 | `evm.kernel-weighted` | contract | same bytes | explicit | 1 · deploy | in-place | setup / spend / public | lanes · optional | – | early | watch |
 | `evm.eip7702-delegate` | contract | same bytes | **none** | 1 · register | in-place | setup / spend / public | sequence · none | – | early | reject |
 | `evm.gnosis-multisigwallet` | vote | own tx → **pointer** | explicit | 1 · deploy | in-place | setup / each vote / public | none · none | a tx | deprecated | reject |
@@ -103,7 +103,7 @@ One row per family, generated from the registry (`contracts/families/registry.js
 | `algorand.msig` | native | same bytes | explicit | 1 · derive | in-place | spend / spend / public | dedup · forced (<= 1000 rounds) | – | production | watch |
 | `tron.permissions` | native | same bytes | implicit | 1 · register | in-place | setup / spend / public | dedup · forced (<= 24h) | per sig | production | watch |
 | `hedera.threshold-key` | native | **own blob each** | **none** | 1 · register | in-place | setup / spend / public | dedup · forced (<= 180s) | per sig | production | watch |
-| `sui.multisig` | native | same bytes | implicit | 1 · derive | new-address | spend / spend / public | objects · optional | – | production | candidate |
+| `sui.multisig` | native | same bytes | implicit | 1 · derive | in-place | spend / spend / public | objects · optional | – | production | candidate |
 | `aptos.multikey` | native | same bytes | explicit | 1 · derive | in-place | spend / spend / public | sequence · forced (expiration_timestamp_secs) | – | production | watch |
 | `aptos.multisig-account` | vote | own tx → **pointer** | explicit | 1 · deploy | in-place | setup / each vote / public | sequence · none | a tx | production | watch |
 | `cardano.native-script` | native | same bytes | implicit | 1 · derive | new-address | spend / spend / public | utxo · optional | per sig | production | watch |
@@ -111,7 +111,7 @@ One row per family, generated from the registry (`contracts/families/registry.js
 | `near.multisig` | vote | own tx → **pointer** | implicit | 1 · deploy | in-place | setup / each vote / public | index · none | a tx | deprecated | reject |
 | `starknet.multisig` | contract | same bytes | explicit | 1 · deploy | in-place | setup / spend / public | sequence · none | – | production | watch |
 | `zksync.native-aa` | contract | same bytes | explicit | 1 · deploy | in-place | setup / spend / public | lanes · none | – | sunsetting | reject |
-| `zcash.frost-orchard` | aggregate | partial (t-of-n) | explicit | 2 ⚿ · dkg | reshare | – / – / **shielded** | dedup · forced (nExpiryHeight defaults to 40 blocks) | – | demo | candidate |
+| `zcash.frost-orchard` | aggregate | partial (t-of-n) | explicit | 2 ⚿ · dkg | reshare | – / – / **shielded** | dedup · optional | – | demo | candidate |
 | `penumbra.threshold` | aggregate | partial (t-of-n) | explicit | 2 ⚿ · dkg | new-address | – / – / **shielded** | dedup · optional | – | production | watch |
 | `monero.multisig` | aggregate | partial (t-of-n) | **none** | 2 ⚿ · dkg | new-address | – / – / **shielded** | dedup · none | – | experimental | reject |
 | `aztec.account-contract` | contract | same bytes | explicit | 1 · deploy | in-place | – / – / **shielded** | dedup · optional | – | experimental | watch |
