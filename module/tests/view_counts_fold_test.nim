@@ -15,7 +15,8 @@
 ## counted iff removing its contribution lowers the number the fold accepted. Each surface
 ## must name exactly that set, for every driver family with its own verify rule — a room
 ## threshold, a Safe, the room FROST scaffold, a real two-round FROST (btc.frost-bip445,
-## whose contributions carry their round), and the vote-locus LEZ receipt.
+## whose contributions carry their round), the vote-locus LEZ receipt, and the split (whose
+## threshold is the debtors its effect names, and only a debtor's room key agrees).
 ##
 ## Needs the secp closure + stint + libsodium (tests/README.md; run-suite.sh supplies them).
 
@@ -24,7 +25,7 @@ import ../src/log/log
 import ../src/hashing/sha256
 import ../src/intents/materialization
 import ../src/intents/provenance
-import ../src/drivers/[driver, threshold, frost, safe, frost_group, btc_frost, lez_multisig]
+import ../src/drivers/[driver, threshold, frost, safe, frost_group, btc_frost, lez_multisig, split]
 import ../src/crypto/[curve25519, secp256k1, keystore]
 import ../src/frost/chilldkg
 import ../src/bitcoin/tx
@@ -242,5 +243,33 @@ block:
              contributeEvent(id, "lez:" & hx(C), hx(voteReceipt(C, 2, "ab".repeat(32), m2).bytes))]   # another pointer
   check("LEZ vote receipts: a non-member, a vote for another pointer", ev, dFor, id, 1, 1)
   echo "5. LEZ: a non-member's receipt and a receipt for another pointer are on no surface OK"
+
+# ── 6. the split (evm.split): every debtor it names must agree, and only a debtor can ──
+# On ef16319 (#171 merged, #172 not yet) the card counted the creditor's agreement and a
+# room member's who is not a debtor; split_driver_test checks only the fold's state.
+block:
+  proc idOf(k: EncKeys): string = hx(k.identity().toBytes())   # the room identity a split names
+  proc edName(k: EncKeys): string = "ed:" & hx(k.identity().ed)
+  let devon = encFromSeed(seed(21))       # fronted the bill: the creditor
+  let ana = encFromSeed(seed(22))
+  let jb = encFromSeed(seed(23))
+  let you = encFromSeed(seed(24))
+  let outsider = encFromSeed(seed(29))    # in the room, not at dinner
+  const Chain = "eip155:31337"
+  let drv = newSplitDriver(EvmSplitFamily, Chain, @[devon, ana, jb, you, outsider].mapIt(idOf(it)))
+  let dFor: DriverFor = proc(kind: string): Driver = drv
+  let ej = splitEffectJson(Chain, "ETH", "1200000000000000000", idOf(devon),
+    "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+    @[ana, jb, you].mapIt(SplitShare(who: idOf(it), amount: "300000000000000000")), "Dinner")
+  let policy = "evm-split@" & Chain
+  let id = intentIdFor(ej, policy)
+  let m = canonicalize(drv, effectFromJson(ej))
+  proc agree(k: EncKeys): Event = contributeEvent(id, edName(k), hx(edSign(k, m.bytes)))
+  let prop = @[policyDeclEvent(id, policy), proposeEvent(id, ej)]
+  check("split: a debtor, the creditor, a member who is not a debtor",
+        prop & @[agree(ana), agree(devon), agree(outsider)], dFor, id, wantApprovals = 1, wantRound = 1)
+  check("split: every debtor agrees; the outsider still isn't counted",
+        prop & @[agree(ana), agree(jb), agree(outsider), agree(you)], dFor, id, 3, 3)
+  echo "6. split: the creditor's and a non-debtor's agreement are on no surface OK"
 
 echo "view_counts_fold_test: all OK"
