@@ -153,9 +153,6 @@
           "what": "a missing account's nonce reads as the default (0)"
         }
       ],
-      "unverified": [
-        "The registry's sources point at the repo's `main` branch (stale, 2026-08-07); the Message shape it records matches the default branch `dev` (commit f7fda38a, 2026-09-26), which these sources pin."
-      ],
       "status": "declared",
       "ui": "not built"
     },
@@ -529,6 +526,10 @@
         {
           "claim": "The recipient does not sign and cannot block the transfer; the native program needs only the sender's authorization.",
           "credibility": "imperative"
+        },
+        {
+          "claim": "Written against LEZ v0.3.0-rc1 (commit f7fda38a, which the sources pin): the message's fee field arrived in v0.2.5-rc1 and its shard selectors in v0.3.0-rc1. The public testnet runs v0.2.4, whose message has neither, so this action cannot run there yet.",
+          "credibility": "not-applicable"
         }
       ],
       "evidence": [
@@ -581,11 +582,15 @@
           "kind": "source",
           "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lez/wallet/src/program_facades/native_token_transfer/public.rs",
           "what": "the LEZ wallet's public native transfer: shard selectors for sender and recipient under NATIVE_TOKEN_PROGRAM_ID"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/47eba256479f6f785acbd138834340703cd03401/lee/state_machine/src/public_transaction/message.rs",
+          "what": "LEZ v0.2.4 public Message {program_id, account_ids, nonces, instruction_data}: no fee, no shard selectors"
         }
       ],
       "unverified": [
-        "Whether the sequencer accepts a fee-exempt (fee: none) user transaction, or only system transactions.",
-        "The registry's sources point at the repo's `main` branch (stale, 2026-08-07); the Message shape it records matches the default branch `dev` (commit f7fda38a, 2026-09-26), which these sources pin."
+        "Whether the sequencer accepts a fee-exempt (fee: none) user transaction, or only system transactions."
       ],
       "status": "declared",
       "ui": "not built"
@@ -944,6 +949,10 @@
         {
           "claim": "A program may return a block or timestamp validity window, which the sequencer enforces; the witnesses themselves carry none.",
           "credibility": "imperative"
+        },
+        {
+          "claim": "Written against LEZ v0.3.0-rc1 (commit f7fda38a, which the sources pin): the message's fee field arrived in v0.2.5-rc1 and its shard selectors in v0.3.0-rc1. The public testnet runs v0.2.4, whose message has neither, so this action cannot run there yet.",
+          "credibility": "not-applicable"
         }
       ],
       "evidence": [
@@ -991,11 +1000,15 @@
           "kind": "source",
           "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/validated_state_diff/public_backend.rs",
           "what": "public execution: an unknown program is rejected; a program's block and timestamp validity windows are checked (OutOfValidityWindow)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/47eba256479f6f785acbd138834340703cd03401/lee/state_machine/src/public_transaction/message.rs",
+          "what": "LEZ v0.2.4 public Message {program_id, account_ids, nonces, instruction_data}: no fee, no shard selectors"
         }
       ],
       "unverified": [
-        "Whether the sequencer accepts a fee-exempt (fee: none) user transaction, or only system transactions.",
-        "The registry's sources point at the repo's `main` branch (stale, 2026-08-07); the Message shape it records matches the default branch `dev` (commit f7fda38a, 2026-09-26), which these sources pin."
+        "Whether the sequencer accepts a fee-exempt (fee: none) user transaction, or only system transactions."
       ],
       "status": "declared",
       "ui": "not built"

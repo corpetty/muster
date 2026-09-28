@@ -238,18 +238,27 @@ method profile*(d: LezMultisigDriver): FamilyProfile =
                        "(logos-co/lez-multisig#40)"]))
 
 method manifest*(d: LezMultisigDriver, effect: Effect): ActionManifest =
-  ## Needs the zone reachable through lez_core, a funded account to pay each vote, and a
-  ## member account of the multisig; every approval is a public transaction the chain
-  ## (and the sequencer first) sees — who voted, on what, when.
-  var touches = @[touch(d.account.chain, tmWrite)]
+  ## Needs the user's LEZ sequencer (JSON-RPC, the `lez-rpc` setting — the live path,
+  ## wallet/lez_multisig_live.nim; it does not go through lez_core) and a member key of the
+  ## multisig, derived per membership in the keystore. LEZ v0.2.4 charges no fee, so no
+  ## funded account is needed. Every approval is a public transaction the chain (and the
+  ## sequencer first) sees — who voted, on what, when. When the proposal executes, the
+  ## program it targets runs over the accounts it passes: each may be written, and which
+  ## ones are is the program's business, so every one is named (exo-ec8). Chains are
+  ## CAIP-2, accounts CAIP-10.
+  let chain = d.account.chain
+  var touches = @[touch(chain, tmWrite)]
+  proc add(t: Touch) =
+    if not touches.anyIt(it.target == t.target): touches.add t
   try:
-    let (idx, _) = lezActionOf(effect)
-    touches.add touch("lez-proposal:" & hx(proposalPda(d.account.scheme, d.account.program,
-                                                       d.account.createKey, idx)), tmWrite)
+    let (idx, a) = lezActionOf(effect)
+    add touch(chain & ":" & hx(proposalPda(d.account.scheme, d.account.program,
+                                           d.account.createKey, idx)), tmWrite)
+    add touch(chain & ":" & hx(a.target), tmRead)          # the program it calls
+    for acc in a.accounts: add touch(chain & ":" & hx(acc), tmWrite)
   except ValueError: discard
   ActionManifest(declared: true, agreement: d.describe(),
-    requirements: @[req(rqEnvironment, d.account.chain), req(rqModule, "lez_core"),
-                    req(rqInfra, "lez-account"),
+    requirements: @[req(rqEnvironment, chain), req(rqInfra, "lez-rpc"),
                     req(rqAuthority, "lez-multisig-member", rpContributor)],
     discloses: @[row("approvals", obChainObserver), row("effect", obChainObserver),
                  row("policy", obChainObserver), row("signed-tx", obRpcProvider)],

@@ -323,7 +323,7 @@
       "evidence": [
         {
           "kind": "source",
-          "url": "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+          "url": "https://github.com/rhinestonewtf/core-modules/blob/2eda90a7cd81d3726bb0ac76b6a9401eda09b1dc/src/OwnableValidator/OwnableValidator.sol",
           "what": "OwnableValidator.onInstall: abi.decode(data, (uint256 threshold, address[] owners)); sorted and unique; at most 32; threshold ≤ owners"
         },
         {
@@ -711,7 +711,7 @@
       ],
       "claims": [
         {
-          "claim": "Owners sign userOpHash, which covers every UserOp field except the signature, the EntryPoint and the chain id.",
+          "claim": "Owners sign userOpHash, which covers every UserOp field except the signature, and also the EntryPoint's address and the chain id.",
           "credibility": "imperative"
         },
         {
@@ -752,7 +752,7 @@
         },
         {
           "kind": "source",
-          "url": "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+          "url": "https://github.com/rhinestonewtf/core-modules/blob/2eda90a7cd81d3726bb0ac76b6a9401eda09b1dc/src/OwnableValidator/OwnableValidator.sol",
           "what": "OwnableValidator: onInstall(abi.encode(threshold, owners)), MAX_OWNERS = 32, validateUserOp over ECDSA.toEthSignedMessageHash(userOpHash)"
         },
         {
@@ -762,7 +762,7 @@
         },
         {
           "kind": "source",
-          "url": "https://github.com/rhinestonewtf/modulekit/blob/main/src/module-bases/ERC7579ValidatorBase.sol",
+          "url": "https://github.com/rhinestonewtf/modulekit/blob/2210e2b756d5a316bac18ca42b6a64f043847ead/src/module-bases/ERC7579ValidatorBase.sol",
           "what": "modulekit ERC7579ValidatorBase: VALIDATION_SUCCESS = 0, VALIDATION_FAILED = 1 (no validity window)"
         },
         {
@@ -802,7 +802,6 @@
         }
       ],
       "unverified": [
-        "Registry lists expiry as optional (ERC-4337 validationData can carry validUntil/validAfter), but OwnableValidator.validateUserOp returns VALIDATION_SUCCESS (0) or VALIDATION_FAILED (1) with no window; only a paymaster or a pre-validation hook could bound the owners' signatures.",
         "Which EntryPoint version (v0.7 or v0.8+) a given ERC-7579 account implementation targets; the signed hash differs between them.",
         "Validator selection is account-specific (ERC-7579 does not dictate it); only Safe7579's nonce-key encoding was checked here, not Nexus or Kernel.",
         "Production maturity and audit scope of OwnableValidator (carried from the registry)."
@@ -1165,7 +1164,7 @@
       ],
       "claims": [
         {
-          "claim": "Owners sign userOpHash, which covers every UserOp field except the signature, the EntryPoint and the chain id.",
+          "claim": "Owners sign userOpHash, which covers every UserOp field except the signature, and also the EntryPoint's address and the chain id.",
           "credibility": "imperative"
         },
         {
@@ -1211,7 +1210,7 @@
         },
         {
           "kind": "source",
-          "url": "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+          "url": "https://github.com/rhinestonewtf/core-modules/blob/2eda90a7cd81d3726bb0ac76b6a9401eda09b1dc/src/OwnableValidator/OwnableValidator.sol",
           "what": "OwnableValidator: onInstall(abi.encode(threshold, owners)), MAX_OWNERS = 32, validateUserOp over ECDSA.toEthSignedMessageHash(userOpHash)"
         },
         {
@@ -1221,7 +1220,7 @@
         },
         {
           "kind": "source",
-          "url": "https://github.com/rhinestonewtf/modulekit/blob/main/src/module-bases/ERC7579ValidatorBase.sol",
+          "url": "https://github.com/rhinestonewtf/modulekit/blob/2210e2b756d5a316bac18ca42b6a64f043847ead/src/module-bases/ERC7579ValidatorBase.sol",
           "what": "modulekit ERC7579ValidatorBase: VALIDATION_SUCCESS = 0, VALIDATION_FAILED = 1 (no validity window)"
         },
         {
@@ -1261,7 +1260,6 @@
         }
       ],
       "unverified": [
-        "Registry lists expiry as optional (ERC-4337 validationData can carry validUntil/validAfter), but OwnableValidator.validateUserOp returns VALIDATION_SUCCESS (0) or VALIDATION_FAILED (1) with no window; only a paymaster or a pre-validation hook could bound the owners' signatures.",
         "Which EntryPoint version (v0.7 or v0.8+) a given ERC-7579 account implementation targets; the signed hash differs between them.",
         "Validator selection is account-specific (ERC-7579 does not dictate it); only Safe7579's nonce-key encoding was checked here, not Nexus or Kernel.",
         "Production maturity and audit scope of OwnableValidator (carried from the registry)."
@@ -1641,7 +1639,7 @@
       ],
       "claims": [
         {
-          "claim": "Owners sign userOpHash, which covers every UserOp field except the signature, the EntryPoint and the chain id.",
+          "claim": "Owners sign userOpHash, which covers every UserOp field except the signature, and also the EntryPoint's address and the chain id.",
           "credibility": "imperative"
         },
         {
@@ -1695,7 +1693,7 @@
         },
         {
           "kind": "source",
-          "url": "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+          "url": "https://github.com/rhinestonewtf/core-modules/blob/2eda90a7cd81d3726bb0ac76b6a9401eda09b1dc/src/OwnableValidator/OwnableValidator.sol",
           "what": "OwnableValidator: onInstall(abi.encode(threshold, owners)), MAX_OWNERS = 32, validateUserOp over ECDSA.toEthSignedMessageHash(userOpHash)"
         },
         {
@@ -1705,7 +1703,7 @@
         },
         {
           "kind": "source",
-          "url": "https://github.com/rhinestonewtf/modulekit/blob/main/src/module-bases/ERC7579ValidatorBase.sol",
+          "url": "https://github.com/rhinestonewtf/modulekit/blob/2210e2b756d5a316bac18ca42b6a64f043847ead/src/module-bases/ERC7579ValidatorBase.sol",
           "what": "modulekit ERC7579ValidatorBase: VALIDATION_SUCCESS = 0, VALIDATION_FAILED = 1 (no validity window)"
         },
         {
@@ -1745,7 +1743,6 @@
         }
       ],
       "unverified": [
-        "Registry lists expiry as optional (ERC-4337 validationData can carry validUntil/validAfter), but OwnableValidator.validateUserOp returns VALIDATION_SUCCESS (0) or VALIDATION_FAILED (1) with no window; only a paymaster or a pre-validation hook could bound the owners' signatures.",
         "Which EntryPoint version (v0.7 or v0.8+) a given ERC-7579 account implementation targets; the signed hash differs between them.",
         "Validator selection is account-specific (ERC-7579 does not dictate it); only Safe7579's nonce-key encoding was checked here, not Nexus or Kernel.",
         "Production maturity and audit scope of OwnableValidator (carried from the registry)."
@@ -2138,7 +2135,7 @@
       ],
       "claims": [
         {
-          "claim": "Owners sign userOpHash, which covers every UserOp field except the signature, the EntryPoint and the chain id.",
+          "claim": "Owners sign userOpHash, which covers every UserOp field except the signature, and also the EntryPoint's address and the chain id.",
           "credibility": "imperative"
         },
         {
@@ -2193,7 +2190,7 @@
         },
         {
           "kind": "source",
-          "url": "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+          "url": "https://github.com/rhinestonewtf/core-modules/blob/2eda90a7cd81d3726bb0ac76b6a9401eda09b1dc/src/OwnableValidator/OwnableValidator.sol",
           "what": "OwnableValidator: onInstall(abi.encode(threshold, owners)), MAX_OWNERS = 32, validateUserOp over ECDSA.toEthSignedMessageHash(userOpHash)"
         },
         {
@@ -2203,7 +2200,7 @@
         },
         {
           "kind": "source",
-          "url": "https://github.com/rhinestonewtf/modulekit/blob/main/src/module-bases/ERC7579ValidatorBase.sol",
+          "url": "https://github.com/rhinestonewtf/modulekit/blob/2210e2b756d5a316bac18ca42b6a64f043847ead/src/module-bases/ERC7579ValidatorBase.sol",
           "what": "modulekit ERC7579ValidatorBase: VALIDATION_SUCCESS = 0, VALIDATION_FAILED = 1 (no validity window)"
         },
         {
@@ -2243,7 +2240,6 @@
         }
       ],
       "unverified": [
-        "Registry lists expiry as optional (ERC-4337 validationData can carry validUntil/validAfter), but OwnableValidator.validateUserOp returns VALIDATION_SUCCESS (0) or VALIDATION_FAILED (1) with no window; only a paymaster or a pre-validation hook could bound the owners' signatures.",
         "Which EntryPoint version (v0.7 or v0.8+) a given ERC-7579 account implementation targets; the signed hash differs between them.",
         "Validator selection is account-specific (ERC-7579 does not dictate it); only Safe7579's nonce-key encoding was checked here, not Nexus or Kernel.",
         "Production maturity and audit scope of OwnableValidator (carried from the registry)."

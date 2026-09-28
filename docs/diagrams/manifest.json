@@ -23,7 +23,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "0c1933388be973deaf20048fe44d08091869d5cdf14fe58a0c21f5e013e09baa",
+          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
           "note": "the specified build, the three hosts, ADR-008"
         },
         {
@@ -79,7 +79,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "0c1933388be973deaf20048fe44d08091869d5cdf14fe58a0c21f5e013e09baa",
+          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
           "note": "F-4/FS-6 as specified-and-unbuilt, behind the contracting row's gap"
         }
       ],
@@ -147,7 +147,7 @@
         {
           "path": "docs/02-implementation-plan.md",
           "note": "F-4/FS-6 and F-20 as specified-and-unbuilt, behind the step-04 approval flag and the footer",
-          "sha256": "0c1933388be973deaf20048fe44d08091869d5cdf14fe58a0c21f5e013e09baa"
+          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030"
         }
       ],
       "evidence": [
@@ -216,12 +216,12 @@
       "sources": [
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "0c1933388be973deaf20048fe44d08091869d5cdf14fe58a0c21f5e013e09baa",
+          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
           "note": "ADR-008, the LIDL contract layer, the Nim gap and the four bridge functions"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "9193f27702662d4e9c6ab6c7599f17bc9549be38fc8e8aee088b9a0a4fa0c9c7",
+          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
           "note": "the two rules the C header states, and the never-hand-write-what-the-contract-generates rule"
         },
         {
@@ -314,7 +314,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "0c1933388be973deaf20048fe44d08091869d5cdf14fe58a0c21f5e013e09baa",
+          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -351,12 +351,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "0c1933388be973deaf20048fe44d08091869d5cdf14fe58a0c21f5e013e09baa",
+          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "9193f27702662d4e9c6ab6c7599f17bc9549be38fc8e8aee088b9a0a4fa0c9c7",
+          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -393,7 +393,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "0c1933388be973deaf20048fe44d08091869d5cdf14fe58a0c21f5e013e09baa",
+          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -443,7 +443,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "9193f27702662d4e9c6ab6c7599f17bc9549be38fc8e8aee088b9a0a4fa0c9c7",
+          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
           "note": "invariant 10, and invariant 1 whose blind spot the figure draws"
         },
         {
@@ -494,12 +494,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "0c1933388be973deaf20048fe44d08091869d5cdf14fe58a0c21f5e013e09baa",
+          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "9193f27702662d4e9c6ab6c7599f17bc9549be38fc8e8aee088b9a0a4fa0c9c7",
+          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -551,7 +551,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "0c1933388be973deaf20048fe44d08091869d5cdf14fe58a0c21f5e013e09baa",
+          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -588,12 +588,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "0c1933388be973deaf20048fe44d08091869d5cdf14fe58a0c21f5e013e09baa",
+          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "9193f27702662d4e9c6ab6c7599f17bc9549be38fc8e8aee088b9a0a4fa0c9c7",
+          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -636,7 +636,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "0c1933388be973deaf20048fe44d08091869d5cdf14fe58a0c21f5e013e09baa",
+          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -673,12 +673,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "0c1933388be973deaf20048fe44d08091869d5cdf14fe58a0c21f5e013e09baa",
+          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "9193f27702662d4e9c6ab6c7599f17bc9549be38fc8e8aee088b9a0a4fa0c9c7",
+          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -1069,12 +1069,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "0c1933388be973deaf20048fe44d08091869d5cdf14fe58a0c21f5e013e09baa",
+          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
           "note": "where the wallet is built and its accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "9193f27702662d4e9c6ab6c7599f17bc9549be38fc8e8aee088b9a0a4fa0c9c7",
+          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
           "note": "the src/wallet layout and the reuse posture"
         },
         {
@@ -1125,12 +1125,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "0c1933388be973deaf20048fe44d08091869d5cdf14fe58a0c21f5e013e09baa",
+          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
           "note": "the verified-reads work and its status"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "9193f27702662d4e9c6ab6c7599f17bc9549be38fc8e8aee088b9a0a4fa0c9c7",
+          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
           "note": "verify.nim reuse of nim-eth and the deferred sidecar"
         }
       ],
@@ -1162,12 +1162,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "0c1933388be973deaf20048fe44d08091869d5cdf14fe58a0c21f5e013e09baa",
+          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
           "note": "ADR-014: the decision, the hook, reused vs kept-ours"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "9193f27702662d4e9c6ab6c7599f17bc9549be38fc8e8aee088b9a0a4fa0c9c7",
+          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
           "note": "the reuse note and the src/wallet layout"
         },
         {
@@ -1208,12 +1208,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "0c1933388be973deaf20048fe44d08091869d5cdf14fe58a0c21f5e013e09baa",
+          "sha256": "47296f2b009ea81263c3d0190700850362fd1c755669f28a25041ab8cbbe8030",
           "note": "the conformance suite, and the drivers the contract invites (FROST, LEZ)"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "9193f27702662d4e9c6ab6c7599f17bc9549be38fc8e8aee088b9a0a4fa0c9c7",
+          "sha256": "cff46bcd28b3723d17f1c932aa3c30bfc849c5dda4daee68f1b527c57fc7f7b6",
           "note": "the working agreement and the Driver seam methods"
         },
         {
@@ -1223,7 +1223,7 @@
         },
         {
           "path": "module/src/drivers/manifest.nim",
-          "sha256": "7332bc6d9db9edc6bcdadf0eeba18b3b77883032453f47290d8f051906388352",
+          "sha256": "ad2c4a4766b1540eb8d9e33d896dfdbe7abc0aea3527f3e67aebbb9f0f1e7387",
           "note": "manifest(effect), UNDECLARED by default"
         },
         {

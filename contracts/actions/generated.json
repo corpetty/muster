@@ -999,11 +999,11 @@
           },
           {
             "kind": "infra",
-            "name": "lez-account",
+            "name": "lez-rpc",
             "party": "instance",
             "needs": {
               "class": "infra",
-              "target": "lez-account",
+              "target": "lez-rpc",
               "field": ""
             }
           },
@@ -1050,15 +1050,15 @@
             "mode": "write"
           },
           {
-            "target": "lez:551580c62764657708fd965bb42a5ff698ba7fc46c6a3a2fbf64ac2e7270282f",
+            "target": "lez:local:551580c62764657708fd965bb42a5ff698ba7fc46c6a3a2fbf64ac2e7270282f",
             "mode": "write"
           },
           {
-            "target": "lez:551580c62764657708fd965bb42a5ff698ba7fc46c6a3a2fbf64ac2e7270282f",
-            "mode": "write"
+            "target": "lez:local:ccc4713e2b5ecdff37b0c67c295369effc04b7e8994eb11c3f410bb226b82e9b",
+            "mode": "read"
           },
           {
-            "target": "lez:0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+            "target": "lez:local:0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
             "mode": "write"
           }
         ]
@@ -1150,22 +1150,12 @@
             }
           },
           {
-            "kind": "module",
-            "name": "lez_core",
-            "party": "instance",
-            "needs": {
-              "class": "capability",
-              "target": "lez_core",
-              "field": ""
-            }
-          },
-          {
             "kind": "infra",
-            "name": "lez-account",
+            "name": "lez-rpc",
             "party": "instance",
             "needs": {
               "class": "infra",
-              "target": "lez-account",
+              "target": "lez-rpc",
               "field": ""
             }
           },
@@ -1220,7 +1210,19 @@
             "mode": "write"
           },
           {
-            "target": "lez-proposal:9a0a419381d59c3ea67cf820e747f76e9fe6723206987eeeb2538444374be203",
+            "target": "lez:local:9a0a419381d59c3ea67cf820e747f76e9fe6723206987eeeb2538444374be203",
+            "mode": "write"
+          },
+          {
+            "target": "lez:local:ccc4713e2b5ecdff37b0c67c295369effc04b7e8994eb11c3f410bb226b82e9b",
+            "mode": "read"
+          },
+          {
+            "target": "lez:local:f97aa8602aec30ceb5a1e6ac8e9d6d8b9079255e49dbad002e3e25b03e02ff0c",
+            "mode": "write"
+          },
+          {
+            "target": "lez:local:0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
             "mode": "write"
           }
         ]
@@ -1308,22 +1310,12 @@
             }
           },
           {
-            "kind": "module",
-            "name": "lez_core",
-            "party": "instance",
-            "needs": {
-              "class": "capability",
-              "target": "lez_core",
-              "field": ""
-            }
-          },
-          {
             "kind": "infra",
-            "name": "lez-account",
+            "name": "lez-rpc",
             "party": "instance",
             "needs": {
               "class": "infra",
-              "target": "lez-account",
+              "target": "lez-rpc",
               "field": ""
             }
           },
@@ -1378,7 +1370,19 @@
             "mode": "write"
           },
           {
-            "target": "lez-proposal:9a0a419381d59c3ea67cf820e747f76e9fe6723206987eeeb2538444374be203",
+            "target": "lez:local:9a0a419381d59c3ea67cf820e747f76e9fe6723206987eeeb2538444374be203",
+            "mode": "write"
+          },
+          {
+            "target": "lez:local:ccc4713e2b5ecdff37b0c67c295369effc04b7e8994eb11c3f410bb226b82e9b",
+            "mode": "read"
+          },
+          {
+            "target": "lez:local:0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d",
+            "mode": "write"
+          },
+          {
+            "target": "lez:local:f97aa8602aec30ceb5a1e6ac8e9d6d8b9079255e49dbad002e3e25b03e02ff0c",
             "mode": "write"
           }
         ]
@@ -1445,11 +1449,11 @@
         "requirements": [
           {
             "kind": "environment",
-            "name": "chain:31337",
+            "name": "eip155:31337",
             "party": "instance",
             "needs": {
               "class": "infra",
-              "target": "chain:31337",
+              "target": "eip155:31337",
               "field": ""
             }
           },
@@ -1471,26 +1475,6 @@
               "class": "authority",
               "target": "safe-owner",
               "field": ""
-            }
-          },
-          {
-            "kind": "address",
-            "name": "payee",
-            "party": "counterparty",
-            "needs": {
-              "class": "address",
-              "target": "chain:31337",
-              "field": "to"
-            }
-          },
-          {
-            "kind": "asset",
-            "name": "amount",
-            "party": "proposer",
-            "needs": {
-              "class": "asset",
-              "target": "chain:31337",
-              "field": "value"
             }
           }
         ],
@@ -1528,7 +1512,23 @@
             "to": "chain-observer"
           },
           {
+            "field": "nonce",
+            "to": "chain-observer"
+          },
+          {
+            "field": "gas",
+            "to": "chain-observer"
+          },
+          {
             "field": "payer",
+            "to": "chain-observer"
+          },
+          {
+            "field": "policy",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signers",
             "to": "chain-observer"
           },
           {
@@ -1538,15 +1538,15 @@
         ],
         "touches": [
           {
-            "target": "safe:0x5fbdb2315678afecb367f032d93f642f64180aa3",
+            "target": "eip155:31337:0x5fbdb2315678afecb367f032d93f642f64180aa3",
             "mode": "write"
           },
           {
-            "target": "safe:0x5fbdb2315678afecb367f032d93f642f64180aa3:nonce",
+            "target": "eip155:31337:0x5fbdb2315678afecb367f032d93f642f64180aa3/nonce",
             "mode": "write"
           },
           {
-            "target": "chain:31337",
+            "target": "eip155:31337",
             "mode": "write"
           }
         ]
@@ -1613,11 +1613,11 @@
         "requirements": [
           {
             "kind": "environment",
-            "name": "chain:31337",
+            "name": "eip155:31337",
             "party": "instance",
             "needs": {
               "class": "infra",
-              "target": "chain:31337",
+              "target": "eip155:31337",
               "field": ""
             }
           },
@@ -1639,26 +1639,6 @@
               "class": "authority",
               "target": "safe-owner",
               "field": ""
-            }
-          },
-          {
-            "kind": "address",
-            "name": "payee",
-            "party": "counterparty",
-            "needs": {
-              "class": "address",
-              "target": "chain:31337",
-              "field": "to"
-            }
-          },
-          {
-            "kind": "asset",
-            "name": "amount",
-            "party": "proposer",
-            "needs": {
-              "class": "asset",
-              "target": "chain:31337",
-              "field": "value"
             }
           }
         ],
@@ -1696,7 +1676,23 @@
             "to": "chain-observer"
           },
           {
+            "field": "nonce",
+            "to": "chain-observer"
+          },
+          {
+            "field": "gas",
+            "to": "chain-observer"
+          },
+          {
             "field": "payer",
+            "to": "chain-observer"
+          },
+          {
+            "field": "policy",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signers",
             "to": "chain-observer"
           },
           {
@@ -1706,19 +1702,19 @@
         ],
         "touches": [
           {
-            "target": "safe:0x5fbdb2315678afecb367f032d93f642f64180aa3",
+            "target": "eip155:31337:0x5fbdb2315678afecb367f032d93f642f64180aa3",
             "mode": "write"
           },
           {
-            "target": "safe:0x5fbdb2315678afecb367f032d93f642f64180aa3:nonce",
+            "target": "eip155:31337:0x5fbdb2315678afecb367f032d93f642f64180aa3/nonce",
             "mode": "write"
           },
           {
-            "target": "chain:31337",
+            "target": "eip155:31337",
             "mode": "write"
           },
           {
-            "target": "safe:0x5fbdb2315678afecb367f032d93f642f64180aa3:storage",
+            "target": "eip155:31337:0x5fbdb2315678afecb367f032d93f642f64180aa3/storage",
             "mode": "write"
           }
         ]
@@ -1783,11 +1779,11 @@
         "requirements": [
           {
             "kind": "environment",
-            "name": "chain:31337",
+            "name": "eip155:31337",
             "party": "instance",
             "needs": {
               "class": "infra",
-              "target": "chain:31337",
+              "target": "eip155:31337",
               "field": ""
             }
           },
@@ -1817,7 +1813,7 @@
             "party": "counterparty",
             "needs": {
               "class": "address",
-              "target": "chain:31337",
+              "target": "eip155:31337",
               "field": "to"
             }
           },
@@ -1827,7 +1823,7 @@
             "party": "proposer",
             "needs": {
               "class": "asset",
-              "target": "chain:31337",
+              "target": "eip155:31337",
               "field": "value"
             }
           }
@@ -1866,7 +1862,23 @@
             "to": "chain-observer"
           },
           {
+            "field": "nonce",
+            "to": "chain-observer"
+          },
+          {
+            "field": "gas",
+            "to": "chain-observer"
+          },
+          {
             "field": "payer",
+            "to": "chain-observer"
+          },
+          {
+            "field": "policy",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signers",
             "to": "chain-observer"
           },
           {
@@ -1876,15 +1888,15 @@
         ],
         "touches": [
           {
-            "target": "safe:0x5fbdb2315678afecb367f032d93f642f64180aa3",
+            "target": "eip155:31337:0x5fbdb2315678afecb367f032d93f642f64180aa3",
             "mode": "write"
           },
           {
-            "target": "safe:0x5fbdb2315678afecb367f032d93f642f64180aa3:nonce",
+            "target": "eip155:31337:0x5fbdb2315678afecb367f032d93f642f64180aa3/nonce",
             "mode": "write"
           },
           {
-            "target": "chain:31337",
+            "target": "eip155:31337",
             "mode": "write"
           }
         ]

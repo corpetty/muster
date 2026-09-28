@@ -57,7 +57,7 @@ type
   MaterialNeed* = object
     ## The material that satisfies a requirement, and where a party-supplied one lands.
     class*: MaterialClass
-    target*: string   ## the constraint: "safe:0x…", "chain:31337", "lez:*", "ETH", ""
+    target*: string   ## the constraint: a CAIP-2 chain ("eip155:31337", "lez:*"), "safe-owner", "ETH", ""
     field*: string    ## the effect field this material binds to (proposer/counterparty); "" otherwise
 
   Requirement* = object
@@ -71,7 +71,9 @@ type
     tmWrite = "write"
 
   Touch* = object
-    target*: string   ## "safe:0x…", "module:lez_core.transfer_private", "chain:31337"
+    target*: string   ## a chain in CAIP-2 ("eip155:31337"), an account in CAIP-10 ("eip155:31337:0x…",
+                      ## "lez:local:<id>") with a path for a part of its state ("…/nonce"), a UTXO
+                      ## ("utxo:<txid>:<vout>"), or a module method ("module:lez_core.transfer_private")
     mode*: TouchMode
 
   ActionManifest* = object

@@ -190,35 +190,50 @@ proc addrHex(a: Address): string =
 method manifest*(d: SafeDriver, effect: Effect): ActionManifest =
   ## A Safe execTransaction: needs the chain reachable and an RPC to submit through
   ## (instance), and a Safe-owner key to contribute (each contributor). It writes the
-  ## Safe's state (nonce + the transfer). What leaves the room: the whole transaction
-  ## (to / value / data) becomes public on-chain, and the signed tx reaches the RPC
-  ## provider BEFORE the mempool — the "named intermediary" the PriFi article warns
-  ## about, named here rather than hidden.
-  let safeId = "safe:" & addrHex(d.safe)
-  var touches = @[touch(safeId, tmWrite), touch(safeId & ":nonce", tmWrite),
-                  touch("chain:" & $d.chainId, tmWrite)]
+  ## Safe's state (nonce + whatever the call does). What leaves the room: execTransaction
+  ## carries EVERY SafeTx field and the owners' signatures in public calldata, so the
+  ## chain learns the action, the nonce, the gas terms and who signed — and the owner
+  ## policy is readable from the Safe itself. The signed tx reaches the RPC provider
+  ## BEFORE the mempool — the "named intermediary" the PriFi article warns about, named
+  ## here rather than hidden.
+  ##
+  ## One name for one thing (exo-ec8): the chain is its CAIP-2 environment(), the Safe
+  ## its CAIP-10 account, a part of the Safe's state a path under it.
+  let tx = toSafeTx(effect)
+  let env = d.environment()                           # "eip155:<chainId>"
+  let acct = env & ":" & addrHex(d.safe)               # CAIP-10 (addrHex carries the 0x)
+  var touches = @[touch(acct, tmWrite), touch(acct & "/nonce", tmWrite), touch(env, tmWrite)]
   # A DELEGATECALL runs the target's code AS the Safe: it can rewrite the Safe's own
   # storage — its owners, threshold, modules, guard. Said here, not hidden (the Bybit
   # vector was a delegatecall its signers never saw, exo-a50.1.4).
-  if toSafeTx(effect).operation == 1: touches.add touch(safeId & ":storage", tmWrite)
+  if tx.operation == 1: touches.add touch(acct & "/storage", tmWrite)
+  # A non-zero gasPrice makes the Safe pay the relayer's gas refund (in gasToken, to
+  # refundReceiver — or to tx.origin when that is zero) from its own balance.
+  if tx.gasPrice > 0: touches.add touch(acct & "/gas-refund", tmWrite)
+  var reqs = @[req(rqEnvironment, env), req(rqInfra, "rpc"), req(rqAuthority, "safe-owner", rpContributor)]
+  if tx.operation == 0 and tx.data.len == 0:
+    # A plain transfer. `to` is the payee's receiving address — counterparty material: in
+    # the request-first flow (docs/design/material-and-disclosure.md §3.4) the recipient
+    # shares it before the effect completes; the proposer may also supply it directly.
+    # The amount is PROPOSER material bound to `value`, picked from the Safe's real
+    # holdings (exo-45e K6 step three / exo-bf9). A transfer moves value by definition, so
+    # it asks for both even on a template whose value is not chosen yet — that is how the
+    # composer learns which slots to offer.
+    reqs.add req(rqAddress, "payee", rpCounterparty, need(mcAddress, env, "to"))
+    reqs.add req(rqAsset, "amount", rpProposer, need(mcAsset, env, "value"))
+  elif tx.operation == 0 and tx.value > 0:
+    # A call that also sends ETH: the amount is the proposer's to choose. A call's `to` is
+    # the contract the proposer chose — nobody's material — and any payee it names is
+    # inside `data`, where no requirement can bind it. A DELEGATECALL moves no value
+    # (Safe's executor passes none), so it asks for neither.
+    reqs.add req(rqAsset, "amount", rpProposer, need(mcAsset, env, "value"))
   ActionManifest(declared: true, agreement: d.describe(),
-    requirements: @[req(rqEnvironment, "chain:" & $d.chainId),
-                    req(rqInfra, "rpc"),
-                    req(rqAuthority, "safe-owner", rpContributor),
-                    # the payee's receiving address is counterparty material: in the
-                    # request-first flow (docs/design/material-and-disclosure.md §3.4)
-                    # the recipient shares it before the effect completes; the proposer
-                    # may also supply it directly. It lands in the effect's "to" field.
-                    req(rqAddress, "payee", rpCounterparty,
-                        need(mcAddress, "chain:" & $d.chainId, "to")),
-                    # the amount is PROPOSER material bound to the effect's "value" — the
-                    # composer picks the asset + amount from real holdings (exo-45e K6 step
-                    # three / exo-bf9). It is disclosed on-chain (the row below).
-                    req(rqAsset, "amount", rpProposer,
-                        need(mcAsset, "chain:" & $d.chainId, "value"))],
+    requirements: reqs,
     discloses: @[row("to", obChainObserver), row("value", obChainObserver),
                  row("data", obChainObserver), row("operation", obChainObserver),
-                 row("payer", obChainObserver), row("signed-tx", obRpcProvider)],
+                 row("nonce", obChainObserver), row("gas", obChainObserver),
+                 row("payer", obChainObserver), row("policy", obChainObserver),
+                 row("signers", obChainObserver), row("signed-tx", obRpcProvider)],
     touches: touches)
 
 method profile*(d: SafeDriver): FamilyProfile =

@@ -651,9 +651,9 @@
           "credibility": "imperative"
         },
         {
-          "claim": "The chain itself checks that k of the n keys signed. The one way around it is an x/authz grant the account itself signed: the grantee can then execute the granted message types for the account with no multisig signatures.",
+          "claim": "The chain itself checks that k of the n keys signed. The ways around it are grants the account itself made, each signed k of n: an x/authz grant lets the grantee execute the granted message types for the account with no multisig signatures, and an x/feegrant allowance lets the grantee's transaction fees be paid from the account, up to the allowance.",
           "credibility": "motivational",
-          "party": "a grantee the multisig authorized through x/authz"
+          "party": "a grantee the multisig authorized through x/authz or x/feegrant"
         },
         {
           "claim": "At settlement anyone reading the chain learns all n keys and k (first spend), which keys signed, the payee, the amount and the memo.",
@@ -770,11 +770,16 @@
           "kind": "source",
           "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/CHANGELOG.md",
           "what": "cosmos-sdk v0.55.0 CHANGELOG: SIGN_MODE_TEXTUAL removed (#26456); ML-DSA-65 account keys with multisig support; unordered transactions (#23708)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/fee.go",
+          "what": "DeductFeeDecorator: when fee.granter is set and is not the payer, UseGrantedFees must allow it, and the fee is deducted from the granter"
         }
       ],
       "unverified": [
         "Unordered transactions (cosmos-sdk v0.53+) with a multisig: the amino-json sign doc does carry unordered and timeout_timestamp, and the ante handler then requires sequence 0. But tx sign --multisig and tx multisign fill in the multisig's on-chain sequence when online, so an unordered multisig transaction appears to need --offline with sequence 0, and the chain must enable unordered transactions. Not confirmed end to end.",
-        "Using fee.granter (x/feegrant) or a separate fee.payer with a multisig was not examined."
+        "The multisig as a fee grantee (fee.granter naming another account's allowance to it) or with a separate fee.payer was not examined; the multisig as granter is covered above."
       ]
     },
     {
@@ -1193,9 +1198,9 @@
           "party": "the user-configured RPC provider"
         },
         {
-          "claim": "The chain itself checks that k of the n keys signed. The one way around it is an x/authz grant the account itself signed: the grantee can then execute the granted message types for the account with no multisig signatures.",
+          "claim": "The chain itself checks that k of the n keys signed. The ways around it are grants the account itself made, each signed k of n: an x/authz grant lets the grantee execute the granted message types for the account with no multisig signatures, and an x/feegrant allowance lets the grantee's transaction fees be paid from the account, up to the allowance.",
           "credibility": "motivational",
-          "party": "a grantee the multisig authorized through x/authz"
+          "party": "a grantee the multisig authorized through x/authz or x/feegrant"
         }
       ],
       "evidence": [
@@ -1308,6 +1313,11 @@
           "kind": "source",
           "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/CHANGELOG.md",
           "what": "cosmos-sdk v0.55.0 CHANGELOG: SIGN_MODE_TEXTUAL removed (#26456); ML-DSA-65 account keys with multisig support; unordered transactions (#23708)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/cosmos/cosmos-sdk/blob/v0.55.0/x/auth/ante/fee.go",
+          "what": "DeductFeeDecorator: when fee.granter is set and is not the payer, UseGrantedFees must allow it, and the fee is deducted from the granter"
         }
       ],
       "unverified": [

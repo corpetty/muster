@@ -150,7 +150,7 @@
         { "kind": "source", "url": "https://github.com/ZcashFoundation/reddsa/blob/0.5.2/src/frost/redpallas.rs", "what": "reddsa 0.5.2 FROST(Pallas): the EvenY post-DKG step negates the group key and shares" },
         { "kind": "source", "url": "https://frost.zfnd.org/zcash/ywallet-demo.html", "what": "the ZF demo: DKG with frost-client, then zcash-sign generate --ak to make the address and viewing key" },
         { "kind": "source", "url": "https://frost.zfnd.org/zcash/server.html", "what": "frostd: a relay; messages MUST be end-to-end encrypted, which the server cannot enforce" },
-        { "kind": "source", "url": "https://github.com/ZcashFoundation/reddsa/blob/main/CHANGELOG.md", "what": "reddsa 0.6.0 (2026-09-25) removed the frost feature; the FROST ciphersuites will move to the frost repository" }
+        { "kind": "source", "url": "https://github.com/ZcashFoundation/reddsa/blob/04e973bcf8d46819db055ebd0d44304c24a156a4/CHANGELOG.md", "what": "reddsa 0.6.0 (2026-09-25) removed the frost feature; the FROST ciphersuites will move to the frost repository" }
       ],
       "unverified": [
         "who generates nk and rivk in deployed tools, and whether they can come from a DKG instead of one participant's randomness",
@@ -331,7 +331,7 @@
       "claims": [
         { "claim": "every signer recomputes the SIGHASH from the transaction data before signing; a mismatch is refused", "credibility": "imperative" },
         { "claim": "the chain sees no amount, no recipient, no group and no signer", "credibility": "imperative" },
-        { "claim": "a collected signature is useless after the expiry height", "credibility": "imperative" },
+        { "claim": "a collected signature is useless after the expiry height, which muster never leaves at 0 (no expiry)", "credibility": "imperative" },
         { "claim": "every participant sees the payment through the full viewing key", "credibility": "exposed", "party": "every participant" },
         { "claim": "the proposer, as the Constructor, chooses α; signers check rk but cannot check that α was random, and ZIP-312 says a rogue coordinator can break unlinkability", "credibility": "motivational", "party": "the proposer" },
         { "claim": "the lightwalletd server sees the signed transaction before it is mined", "credibility": "exposed", "party": "the user-configured lightwalletd or Zaino server" }

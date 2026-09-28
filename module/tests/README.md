@@ -2,7 +2,7 @@
 
 ## Run them
 
-One command runs every test that needs no chain — 95 unit tests and the 55 invariant
+One command runs every test that needs no chain — 97 unit tests and the 55 invariant
 probes under `probes/`, in parallel:
 
 ```bash
@@ -51,6 +51,8 @@ wants (below), which the runner supplies.
 
 - `dcbor_golden_test` (known-answer bytes for invariant 5, hand-computed from RFC 8949: width boundaries, the CDE-vs-length-first ordering discriminator, hash-input framing; it catches a byte-order flip the property probes pass)
 - `manifest_test`
+- `schema_coverage_test` (the card recognizes every effect a built driver canonicalizes, under the schema id the driver signs over — so no built family's card is schema-unknown with its Approve hidden; found: LEZ-FROST's lez-call)
+- `manifest_precision_test` (exo-ec8 — every generated manifest says exactly what its action needs, touches and discloses: unique touches, chains in CAIP-2 and accounts in CAIP-10, the environment requirement named as environment(); a Safe payee only on a transfer, an amount on a transfer (even a template), on a call only when ETH moves, never on a delegatecall; a Safe's signers, policy, nonce and gas public; a LEZ action naming every account it passes and the program it calls; `lez-rpc`, not `lez_core`, on the live LEZ paths)
 - `distinct_signer_test` (exo-a5a — a k-of-n decision needs k distinct signers: a contribution counts only under the name of the signer the driver identifies, checked before dedup; one signature under two names is one approval, a forgery never takes a member's slot, governance cannot be completed alone; threshold and Safe; `$SECP` + `$SODIUM`)
 - `authorship_test` (exo-f76 — an author-bearing event counts only when its author signed it: forged, wrong-key, cross-room, tampered and malformed author events are dropped, genuine ones count, over the wire included; `$SECP` + `$STINT` + `$SODIUM`)
 - `log_proof_test`

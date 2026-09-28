@@ -189,6 +189,7 @@ proc effectSchema*(effectJson: string): tuple[id: string, known: bool] =
     of "safe-tx": return ("muster.effect.safe-tx.v1", true)
     of "btc-spend": return ("muster.effect.btc-spend.v1", true)
     of "lez-multisig-proposal": return ("muster.effect.lez-multisig-proposal.v1", true)
+    of "lez-call": return ("muster.effect.lez-call.v1", true)   # a LEZ FROST group's call (exo-55e)
     of "statement": return ("muster.effect.statement.v1", true)
     of "add-driver": return ("muster.effect.governance.add-driver.v1", true)
     of "invoke":

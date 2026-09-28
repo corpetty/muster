@@ -1495,11 +1495,14 @@ proc musterCoordinateAuthorization(intentId: string): string =
   let policy = intentPolicyOf(events, intentId)
   let folded = reduceIntents(events, driverFor)
   let root = folded[intentId].materialization.bytes
-  let (akind, aacct) = splitPolicy(policy)
-  let (achain, aaddr) = splitAccountId(aacct)
-  let (isEvm, acid) = evmChainId(achain)
-  let environment = (if aacct.len > 0 and isEvm: "chain:" & $acid else: "room")
-  let account = (if akind == "safe" and aacct.len > 0: "safe:" & aaddr else: "room")
+  let akind = splitPolicy(policy).kind
+  # The grant binds to exactly the context the approvals were attested under (invariant 2,
+  # exo-ef1): the intent's DECLARED context — its environment() (CAIP-2) and account —
+  # never a second spelling of it rebuilt here (exo-ec8). A legacy proposal that declared
+  # no context binds to this room, as before.
+  let ctx = intentContext(events, intentId)
+  let (environment, account) =
+    if ctx.isPlaceholder: ("room", "room") else: (ctx.environment, ctx.account)
   let a = issueAuthorization(moduleKeystore(), intentId, capabilityOf(akind, effectJson),
                              environment, account, root, uint64(epochTime()) + 600)
   result = $a.toJson()
@@ -1534,7 +1537,7 @@ proc hostFacts(policy = ""): HostFacts =
   ## policy's expected chain, Safe and signer set come from the account a member
   ## disclosed (exo-a50.1.3); the roster is the membership fold. No policy (the room's
   ## connectivity) → no account facts, so an account requirement grades unknown.
-  var facts = HostFacts(rpcUrl: gRpcUrl, myAddress: myAddress(),
+  var facts = HostFacts(rpcUrl: gRpcUrl, lezRpcUrl: gLezRpc, myAddress: myAddress(),
                         myEd: moduleKeystore().encIdentity().ed, roster: currentRoster())
   let (_, pacct) = splitPolicy(policy)
   if pacct.len > 0:
@@ -1655,7 +1658,7 @@ proc musterConnectivity(): string =
   gSession.poll()
   let needs = roomInfraNeeds(gSession.roomEvents(), driverFor)
   # ── the RPC: one endpoint serves both an `infra:rpc` need and every `environment:
-  # chain:<id>` need, so they fold into ONE row, probed once (eth_chainId) against the
+  # eip155:<id>` need, so they fold into ONE row, probed once (eth_chainId) against the
   # chain(s) the introducing proposals need.
   var rpcWho: seq[Introducer]
   var chains: seq[int]
@@ -1663,10 +1666,10 @@ proc musterConnectivity(): string =
     if not n.declared: continue
     let r = n.requirement
     if (r.kind == rqInfra and r.name == "rpc") or
-       (r.kind == rqEnvironment and r.name.startsWith("chain:")):
+       (r.kind == rqEnvironment and r.name.startsWith("eip155:")):
       for w in n.introducedBy: (if w notin rpcWho: rpcWho.add w)
       if r.kind == rqEnvironment:
-        try: (let c = parseInt(r.name[6 .. ^1]); (if c notin chains: chains.add c))
+        try: (let c = parseInt(r.name[7 .. ^1]); (if c notin chains: chains.add c))
         except ValueError: discard
   if rpcWho.len > 0:
     var level, detail: string
@@ -1695,7 +1698,7 @@ proc musterConnectivity(): string =
       continue
     let r = n.requirement
     if (r.kind == rqInfra and r.name == "rpc") or
-       (r.kind == rqEnvironment and r.name.startsWith("chain:")): continue
+       (r.kind == rqEnvironment and r.name.startsWith("eip155:")): continue
     if not probed: (probe = probeFromFacts(hostFacts()); probed = true)
     let f = if r.kind == rqInfra: probe.infraConfigured else: probe.environmentReachable
     var g: Grade = (rdUnknown, "this host cannot check " & r.name)

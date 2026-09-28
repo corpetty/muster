@@ -341,6 +341,10 @@
           "claim": "The creation fee is read from the program config at execution, not committed in the signed bytes.",
           "credibility": "motivational",
           "party": "the Squads program-config authority"
+        },
+        {
+          "claim": "The mainnet program cannot be upgraded: its ProgramData account has no upgrade authority (last deployed at slot 302,582,236). That fixes the code; it does not prove the code is the pinned source.",
+          "credibility": "imperative"
         }
       ],
       "evidence": [
@@ -428,10 +432,14 @@
           "kind": "source",
           "url": "https://github.com/Squads-Protocol/v4/blob/af94153ff77a28b6effe46b9c94baaa93742b48c/programs/squads_multisig_program/src/instructions/multisig_config.rs",
           "what": "A controlled multisig's config_authority changes members, threshold, time lock, config authority and rent collector alone."
+        },
+        {
+          "kind": "source",
+          "url": "https://explorer.solana.com/address/Fy3YMJCvwbAXUgUM5b91ucUVA3jYzwWLHL3MwBqKsh8n",
+          "what": "getAccountInfo(Fy3YMJCv…, the ProgramData of SQDS4ep6…) on mainnet-beta, 2026-09-28: upgrade authority null, slot 302,582,236"
         }
       ],
       "unverified": [
-        "whether the deployed program is immutable (the registry's notes say so; the README documents verifiable builds but does not state the upgrade authority)",
         "the current multisig_creation_fee and treasury values (a live ProgramConfig read, not made here)"
       ]
     },
@@ -2150,7 +2158,7 @@
           "party": "the RPC provider"
         },
         {
-          "claim": "Adding or removing a member, or changing the threshold or time lock, makes every earlier transaction stale. Spending-limit and rent-collector changes do not.",
+          "claim": "Adding or removing a member, or changing the threshold or time lock, makes every earlier transaction stale; on a controlled multisig, so does changing the config authority. Spending-limit and rent-collector changes do not.",
           "credibility": "imperative"
         },
         {

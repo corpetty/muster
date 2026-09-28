@@ -1004,11 +1004,12 @@ Item {
                             }
                         }
 
-                        // ready (executable) — settle it on-chain FROM the room. For a
-                        // Safe intent, a Submit button assembles the execTransaction
-                        // from the folded owner signatures (coordinate_submit); for a
-                        // threshold endorsement there is nothing on-chain to settle, so
-                        // it says so. The outcome is reported honestly from the module —
+                        // ready (executable) — settle it on-chain FROM the room. For an
+                        // intent whose family settles on a chain (a Safe, Bitcoin, the LEZ
+                        // multisig, FROST — its profile's `settlement`), Settle runs
+                        // coordinate_submit, which assembles the settlement from the log;
+                        // for a room family (threshold, attest) nothing settles on-chain,
+                        // so it says so. The outcome is reported honestly from the module —
                         // never a false "landed".
                         ColumnLayout {
                             id: readyBox
@@ -1032,6 +1033,11 @@ Item {
 
                             readonly property string rail: String((msg.liveIntent && msg.liveIntent.rail) || "safe")
                             readonly property string st: String((msg.liveIntent && msg.liveIntent.state) || "")
+                            // Whether this intent settles on a chain at all: its family's
+                            // settlement, from the driver profile (evm / bitcoin / lez …, or
+                            // "none" for a room family) — never a guess from the rail. Every
+                            // family that settles goes through coordinate_submit.
+                            readonly property bool settles: String(((msg.liveIntent && msg.liveIntent.profile) || {}).settlement || "none") !== "none"
                             // an invoke intent settles by RUNNING the action (coordinate_execute),
                             // not by an on-chain Safe settle — the policy tells them apart.
                             readonly property bool isInvoke:
@@ -1059,10 +1065,10 @@ Item {
                                              : readyBox.st === "submitted"
                                              ? qsTr("Running the action…")
                                              : qsTr("✓ Ready — endorsed. Run the action."))
-                                          : readyBox.rail !== "safe"
+                                          : !readyBox.settles
                                           ? qsTr("✓ Endorsed — a signed group decision. Nothing settles on-chain.")
                                           : readyBox.st === "final"
-                                          ? qsTr("✓ Paid — settled on-chain.")
+                                          ? qsTr("✓ Settled on-chain.")
                                           : (readyBox.st === "submitted" || readyBox.st === "settling")
                                           ? qsTr("Submitted — awaiting finality…")
                                           : qsTr("✓ Ready — the approvals are collected.")
@@ -1083,7 +1089,7 @@ Item {
                                     objectName: "roomSubmitButton"
                                     // only while it is actually executable — once it is
                                     // submitted/final there is nothing left to settle.
-                                    visible: !readyBox.isInvoke && readyBox.rail === "safe" && readyBox.st === "executable"
+                                    visible: !readyBox.isInvoke && readyBox.settles && readyBox.st === "executable"
                                     text: qsTr("Settle on-chain")
                                     onClicked: if (room.backend)
                                                    room.backend.submitInRoom(String((msg.liveIntent && msg.liveIntent.id) || ""));
@@ -1102,8 +1108,10 @@ Item {
                                         // spell out the cases the module reports so the
                                         // reader sees *why*, not just a slug.
                                         if (err === "insufficient-signatures")
-                                            return qsTr("⚠ Not enough owner signatures — have %1 of %2. "
-                                                     + "The approvers must be real Safe owners.")
+                                            return (readyBox.rail === "safe"
+                                                    ? qsTr("⚠ Not enough owner signatures — have %1 of %2. "
+                                                           + "The approvers must be real Safe owners.")
+                                                    : qsTr("⚠ Not enough signatures — have %1 of %2."))
                                                    .arg(String(o.have)).arg(String(o.need));
                                         if (err === "rpc-unreachable")
                                             return qsTr("⚠ Couldn't reach the chain (RPC). Is your node running? — %1")
@@ -1119,7 +1127,9 @@ Item {
                                     var oc = String(o.onchain || "");
                                     var tx = o.txHash ? "  ·  " + String(o.txHash) : "";
                                     return (oc === "final" ? qsTr("✓ Settled on-chain (final)")
-                                          : oc === "failed" ? qsTr("⚠ On-chain execution reverted — the Safe rejected it")
+                                          : oc === "failed" ? (readyBox.rail === "safe"
+                                                               ? qsTr("⚠ On-chain execution reverted — the Safe rejected it")
+                                                               : qsTr("⚠ The chain rejected it"))
                                           : qsTr("Submitted — awaiting finality")) + tx;
                                 }
                                 color: {

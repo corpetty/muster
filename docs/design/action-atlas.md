@@ -1,8 +1,8 @@
 # The action atlas: every action a person can take in Muster, in full detail
 
-**Status:** design, 2026-09-27. Epic `exo-661` (A1–A5 below). Served at
-<https://corpetty.github.io/muster/atlas/> (since #162), which today shows the multisig
-family registry only.
+**Status:** landed, 2026-09-28. Epic `exo-661` (A1–A5 below), closed. Served at
+<https://corpetty.github.io/muster/atlas/>: the multisig family registry and, for each
+family, room and wallet, its actions (#162, #163; the corrections in §8).
 
 ## 1. What was asked
 
@@ -198,10 +198,29 @@ status pills are, so a screenshot cannot lose the caveat.
 
 ## 7. Plan
 
+All five slices landed. The pebbles were renamed under the epic (the earlier ids are in
+parentheses).
+
 | slice | pebble | what |
 |---|---|---|
-| A1 | `exo-dc7` | this document |
-| A2 | `exo-3b8` | the generator + `generated.json` + the golden test |
-| A3 | `exo-009` | `family/*.json` for every built family, `room.json`, `wallet.json`; the checker |
-| A4 | `exo-6bd` | the atlas shows actions (the new views; embedded corpus; the Pages gate) |
-| A5 | `exo-889` | declared actions for the 13 candidate families, each with primary sources |
+| A1 | `exo-661.1` (`exo-dc7`) | this document |
+| A2 | `exo-661.2` (`exo-3b8`) | the generator + `generated.json` + the golden test |
+| A3 | `exo-661.3` (`exo-009`) | `family/*.json` for every built family, `room.json`, `wallet.json`; the checker |
+| A4 | `exo-661.4` (`exo-6bd`) | the atlas shows actions (the new views; embedded corpus; the Pages gate) |
+| A5 | `exo-661.5` (`exo-889`) | declared actions for the 13 candidate families, each with primary sources |
+
+## 8. What writing it found
+
+Authoring the corpus against the code and the primary sources surfaced defects the atlas
+would otherwise have taught as fact:
+
+- **`exo-661.6`** (closed) — built manifests were imprecise: a Safe call asked a
+  counterparty for a payee; chains and accounts had several names; LEZ actions left out
+  the accounts and program they touch. Now a chain is CAIP-2, an account CAIP-10, and
+  `manifest_precision_test` holds every generated (kind, variant) to it.
+- **`exo-661.8`** (closed) — the family registry kept values the A5 research contradicted.
+  Each was re-verified against a pinned primary source or a live chain read, then
+  corrected in the registry and the declared actions (among them a new declared action,
+  `sui.multisig/rekey-by-alias`, for the in-place route the registry now declares).
+- **`exo-661.7`** (open, P1, moved out of this epic) — the store node sees more than
+  topic and timing.

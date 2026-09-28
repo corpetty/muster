@@ -559,7 +559,7 @@
           ]
         },
         {
-          "what": "a transaction whose chain id differs from the disclosed account's environment",
+          "what": "a transaction that names no chain id (a legacy transaction without EIP-155), or whose chain id differs from the disclosed account's environment",
           "why": "invariant 2: the chain's own binding (EVM: the EIP-155 chain id in the signed transaction) must name the room's network",
           "evidence": [
             "https://eips.ethereum.org/EIPS/eip-155"
@@ -606,7 +606,7 @@
           "party": "the configured RPC provider"
         },
         {
-          "claim": "A signed transaction never expires; to cancel it, use the same nonce for another transaction.",
+          "claim": "On EVM a signed transaction never expires; to cancel it, use the same nonce for another transaction. An Ed25519 target such as Solana forces expiry through its recent blockhash.",
           "credibility": "imperative"
         },
         {
@@ -652,8 +652,7 @@
         }
       ],
       "unverified": [
-        "DKLs23 identifiable abort (carried from the registry).",
-        "Binding and ordering are the target chain's own: explicit and sequence on EVM, but implicit and utxo on Bitcoin; the registry records explicit / sequence."
+        "DKLs23 identifiable abort (carried from the registry)."
       ],
       "status": "declared",
       "ui": "not built"
@@ -944,7 +943,7 @@
           ]
         },
         {
-          "what": "a transaction whose chain id differs from the disclosed account's environment",
+          "what": "a transaction that names no chain id (a legacy transaction without EIP-155), or whose chain id differs from the disclosed account's environment",
           "why": "invariant 2: the chain's own binding (EVM: the EIP-155 chain id in the signed transaction) must name the room's network",
           "evidence": [
             "https://eips.ethereum.org/EIPS/eip-155"
@@ -991,7 +990,7 @@
           "party": "the configured RPC provider"
         },
         {
-          "claim": "A signed transaction never expires; to cancel it, use the same nonce for another transaction.",
+          "claim": "On EVM a signed transaction never expires; to cancel it, use the same nonce for another transaction. An Ed25519 target such as Solana forces expiry through its recent blockhash.",
           "credibility": "imperative"
         },
         {
@@ -1042,8 +1041,7 @@
         }
       ],
       "unverified": [
-        "DKLs23 identifiable abort (carried from the registry).",
-        "Binding and ordering are the target chain's own: explicit and sequence on EVM, but implicit and utxo on Bitcoin; the registry records explicit / sequence."
+        "DKLs23 identifiable abort (carried from the registry)."
       ],
       "status": "declared",
       "ui": "not built"
@@ -1512,6 +1510,11 @@
         {
           "claim": "No chain ever learns that the signers changed.",
           "credibility": "imperative"
+        },
+        {
+          "claim": "Of the three named libraries, only dkls23 implements a quorum change (same key, new signers), and its README lists that code as not audited (its refresh is audited); cggmp24 has no refresh or reshare. Whether cb-mpc can is unverified.",
+          "credibility": "motivational",
+          "party": "the dkls23 quorum-change implementation (Silence Laboratories), which no audit covers"
         }
       ],
       "evidence": [
@@ -1534,12 +1537,16 @@
           "kind": "source",
           "url": "https://eprint.iacr.org/2021/060",
           "what": "CGGMP: proactive refresh (same party set), the base the registry's reshare row builds on"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/silence-laboratories/dkls23/blob/af5ada2a2e573c2c8eac5b01f9bbc4bf1c331ac7/README.md",
+          "what": "dkls23 feature table: DKG, DSG and Refresh audited; Import, Export, Quorum Change and Migration not audited"
         }
       ],
       "unverified": [
         "Whether cb-mpc can move a key to a new party set without a new DKG.",
-        "Round count of dkls23 quorum change; 3 is assumed.",
-        "A reshare in the registry sense (same address, new signers) is available only through dkls23's unaudited quorum change among the three named libraries."
+        "Round count of dkls23 quorum change; 3 is assumed."
       ],
       "status": "declared",
       "ui": "not built"

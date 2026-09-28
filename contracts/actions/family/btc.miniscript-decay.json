@@ -13,7 +13,7 @@
           { "name": "network", "means": "the Bitcoin network (CAIP-2) the addresses are for" },
           { "name": "keys", "means": "each member's extended public key with its key origin (master fingerprint and derivation path), ending in the BIP-389 multipath step <0;1>/*" },
           { "name": "policy", "means": "the primary threshold k of n, and each recovery path's threshold and timelock: older(N) counts N blocks from each coin's confirmation (relative); after(H) opens at height H (absolute)" },
-          { "name": "script", "means": "wsh: the whole policy is one witnessScript. tr: each path is its own tapleaf under a provably unspendable internal key" },
+          { "name": "script", "means": "wsh: the whole policy is one witnessScript. tr: each other path is its own tapleaf; the internal key is the primary path's key when that path is a single key (a key-path spend, as Liana compiles it), and otherwise provably unspendable (BIP-341's NUMS point)" },
           { "name": "descriptor", "means": "the miniscript descriptor compiled from the policy and keys, with its checksum; for example wsh(thresh(2,pk(A),s:pk(B),s:pk(C),sln:older(N)))" }
         ]
       },
@@ -94,9 +94,9 @@
           "evidence": [ "https://github.com/bitcoin/bitcoin/blob/master/doc/descriptors.md" ]
         },
         {
-          "what": "a tr() descriptor whose internal key is spendable by anyone outside the policy",
-          "why": "a key-path spend skips every leaf, the timelock included; BIP-341 describes committing to a provably unspendable internal key",
-          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki" ]
+          "what": "a tr() descriptor whose internal key is neither provably unspendable nor the key of a single-key primary path",
+          "why": "a key-path spend skips every leaf, the timelock included, so the internal key may only be one that could spend without a timelock anyway (the primary path's sole key, as Liana compiles it) or no one's (BIP-341 describes committing to a provably unspendable key)",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki", "https://github.com/wizardsardine/liana/blob/b8d834891e9d3ec8cccde9a5932346d5f1a3780e/liana/src/descriptors/analysis.rs" ]
         }
       ],
       "ui": "not built",
@@ -114,7 +114,8 @@
         { "kind": "source", "url": "https://github.com/bitcoin/bitcoin/blob/master/doc/descriptors.md", "what": "Bitcoin Core descriptors: miniscript inside wsh() and tr(); a 4-of-4 multisig that decays to 1-of-4 with thresh and after()" },
         { "kind": "source", "url": "https://github.com/bitcoin/bitcoin/blob/master/test/functional/wallet_miniscript_decaying_multisig_descriptor_psbt.py", "what": "Bitcoin Core functional test: a decaying multisig imported as one multipath descriptor into watch-only wallets and spent by PSBT" },
         { "kind": "source", "url": "https://github.com/wizardsardine/liana/blob/master/doc/RECOVER.md", "what": "Liana descriptor form wsh(or_d(pk(primary), and_v(v:pkh(recovery), older(N)))) with multipath keys" },
-        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki", "what": "taproot: the key path, and committing to an unspendable internal key" }
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki", "what": "taproot: the key path, and committing to an unspendable internal key" },
+        { "kind": "source", "url": "https://github.com/wizardsardine/liana/blob/b8d834891e9d3ec8cccde9a5932346d5f1a3780e/liana/src/descriptors/analysis.rs", "what": "Liana's taproot compile (compile_tr): a key from the policy becomes the internal key when one can; otherwise a deterministic unspendable key derived from BIP-341's NUMS point" }
       ],
       "unverified": [
         "which BIP-48-style derivation path convention miniscript wallets use for their keys",
@@ -188,7 +189,7 @@
           "step": "approve",
           "who": "contributor",
           "does": "each primary-path key holder signs every input in the keystore, or signs the exported PSBT on a signing device that holds the registered policy. An imported signature is verified like a native one.",
-          "signs": "wsh: each input's BIP-143 hash (version, all prevouts, all nSequences, this outpoint, scriptCode = the whole witnessScript with every path in it, this input's amount and nSequence, the outputs, nLockTime, SIGHASH_ALL) as a DER ECDSA signature. tr: each input's BIP-341 SigMsg (every input's amount, scriptPubKey and nSequence, the outputs, nLockTime, SIGHASH_DEFAULT) extended by BIP-342 with the primary leaf's tapleaf hash, as a BIP-340 signature. Plus the member's muster attestation over P.",
+          "signs": "wsh: each input's BIP-143 hash (version, all prevouts, all nSequences, this outpoint, scriptCode = the whole witnessScript with every path in it, this input's amount and nSequence, the outputs, nLockTime, SIGHASH_ALL) as a DER ECDSA signature. tr: each input's BIP-341 SigMsg (every input's amount, scriptPubKey and nSequence, the outputs, nLockTime, SIGHASH_DEFAULT) extended by BIP-342 with the primary leaf's tapleaf hash, as a BIP-340 signature; when the primary path is a single key it is the key path, and the SigMsg carries no tapleaf hash. Plus the member's muster attestation over P.",
           "reveals": [
             { "field": "contributions", "observer": "room-member" }
           ],
@@ -202,7 +203,7 @@
         {
           "step": "settle",
           "who": "instance",
-          "does": "once k signatures are in, builds each input's witness for the primary path (BIP-379's non-malleable satisfaction; for tr, the primary leaf and its control block) and broadcasts through the user's RPC.",
+          "does": "once k signatures are in, builds each input's witness for the primary path (BIP-379's non-malleable satisfaction; for tr, the primary leaf and its control block, or the signature alone when the primary path is the key path) and broadcasts through the user's RPC.",
           "signs": "",
           "reveals": [
             { "field": "signed-tx", "observer": "rpc-provider" },
@@ -259,7 +260,7 @@
       "claims": [
         { "claim": "every signer signs only hashes Muster re-derived from the effect", "credibility": "imperative" },
         { "claim": "the chain enforces k of n on the primary path", "credibility": "imperative" },
-        { "claim": "a wsh spend reveals the whole policy: every key and each recovery path's timelock; a tr spend reveals only the primary leaf and the hashes of the other leaves", "credibility": "exposed", "party": "chain observer" },
+        { "claim": "a wsh spend reveals the whole policy: every key and each recovery path's timelock; a tr key-path spend reveals no script at all, and a tr script-path spend reveals only the leaf it runs plus its control block's Merkle path (the hashes of sibling branches, not of each other leaf)", "credibility": "exposed", "party": "chain observer" },
         { "claim": "the RPC provider learns the account's addresses from the coin reads and sees the signed transaction before it is mined", "credibility": "exposed", "party": "the user-configured RPC provider" },
         { "claim": "a collected signature never expires; to cancel, spend one of its inputs", "credibility": "imperative" }
       ],
@@ -489,7 +490,7 @@
           "step": "approve",
           "who": "contributor",
           "does": "k primary-path key holders sign, exactly as for a primary-path spend.",
-          "signs": "the same bytes as the primary-path spend: BIP-143 per input (wsh) or BIP-341 SigMsg + BIP-342 tapleaf hash of the primary leaf (tr). Plus the member's muster attestation over P.",
+          "signs": "the same bytes as the primary-path spend: BIP-143 per input (wsh) or BIP-341 SigMsg + BIP-342 tapleaf hash of the primary leaf (tr; the SigMsg alone when the primary path is the key path). Plus the member's muster attestation over P.",
           "reveals": [
             { "field": "contributions", "observer": "room-member" }
           ],
