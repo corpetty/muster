@@ -267,6 +267,12 @@ Item {
         try { return JSON.parse(backend ? backend.btcProposeJson : "{}"); }
         catch (e) { return ({}); }
     }
+    // The last split action's outcome (exo-a90): {op: propose|pay|confirm, id, …} or
+    // {op, id, error} — so a Pay / Propose that did nothing says why.
+    readonly property var splitResult: {
+        try { return JSON.parse(backend ? backend.splitJson : "{}"); }
+        catch (e) { return ({}); }
+    }
     // a Bitcoin multisig policy: a payment in sat from the account's own coins, read
     // from the user's node — no Safe balance, no nonce (exo-a50.2.6)
     readonly property bool isBtcPolicy: room.policyKind.indexOf("btc-") === 0
@@ -402,7 +408,8 @@ Item {
     // from the module's summary, the same reading the room history uses.
     function intentToCard(it) {
         var st = String((it && it.state) || "proposed");
-        var cardState = (st === "executable" || st === "submitted") ? "ready"
+        // settling (some of a split's shares confirmed, exo-a90) is past agreement, like submitted
+        var cardState = (st === "executable" || st === "submitted" || st === "settling") ? "ready"
                       : st === "final" ? "paid"
                       : st === "collecting" ? "collecting" : "proposed";
         var eff = (it && it.effect) ? it.effect : ({});
@@ -416,9 +423,14 @@ Item {
         var isInvoke = effKind === "invoke";
         var invokeArgs = (isInvoke && eff.args) ? eff.args : [];
         var isLez = effKind === "lez-multisig-proposal";
+        // a split (exo-a90): its own body on the card — who owes what, and where each stands
+        var isSplit = effKind === "split";
         return {
             kind: "intent-propose",
-            label: isGovernance ? qsTr("Add policy")
+            split: (isSplit && it && it.split) ? it.split : null,
+            parts: (isSplit && it && Array.isArray(it.parts)) ? it.parts : [],
+            label: isSplit ? qsTr("Split")
+                 : isGovernance ? qsTr("Add policy")
                  : isLez ? qsTr("LEZ multisig")
                  : isInvoke ? qsTr("Action")
                  : isStatement ? qsTr("Statement") : qsTr("Payment"),
@@ -433,10 +445,12 @@ Item {
                      : isStatement ? String(eff.text || "") : "",
             // a LEZ step the chain has not included yet: "vote" | "settle" (exo-3c9)
             chainPending: (it && it.chainPending) ? String(it.chainPending) : "",
-            amount: (!isStatement && eff.value !== undefined) ? String(eff.value)
+            amount: isSplit ? ""
+                  : (!isStatement && eff.value !== undefined) ? String(eff.value)
                   : (it && it.summary && it.summary.amount) ? String(it.summary.amount) : "",
             denom: (it && it.summary && it.summary.unit) ? String(it.summary.unit) : "",
-            to: (!isStatement && eff.to !== undefined) ? String(eff.to)
+            to: isSplit ? ""
+              : (!isStatement && eff.to !== undefined) ? String(eff.to)
               : (it && it.summary && it.summary.to && !isInvoke && !isLez) ? String(it.summary.to) : "",
             // the heading, in the family's words (a Bitcoin payment, a LEZ transfer, a new policy…)
             heading: room.headingFor(it && it.summary ? String(it.summary.kind || "") : ""),
@@ -593,6 +607,85 @@ Item {
         room.backend.proposeInRoom(JSON.stringify({
             to: String(toAddr), value: v, nonce: n
         }));
+        room.composing = false;
+    }
+
+    // ── a split (exo-a90): you fronted a bill; the people named each owe you a share ──
+    // Money is decimal TEXT end to end (the module's amounts are canonical decimal wei), so
+    // ETH ↔ wei is string arithmetic here — never a float, never a rounding surprise.
+    property var splitOut: ({})              // members left OUT of the next split (identity → true)
+    property bool splitCreditorShares: true  // "I'm in it too": the total is shared with you
+    function ethToWei(eth) {
+        var s = String(eth || "").trim();
+        if (!/^[0-9]+(\.[0-9]{0,18})?$/.test(s)) return "";
+        var parts = s.split(".");
+        var frac = (parts.length > 1 ? parts[1] : "");
+        while (frac.length < 18) frac += "0";
+        var w = String(parts[0] + frac).replace(/^0+/, "");
+        return w.length > 0 ? w : "0";
+    }
+    function weiToEth(wei) {
+        var s = String(wei || "0").replace(/^0+/, "");
+        if (s.length === 0) return "0";
+        while (s.length <= 18) s = "0" + s;
+        var whole = s.slice(0, s.length - 18), frac = s.slice(s.length - 18).replace(/0+$/, "");
+        return frac.length > 0 ? whole + "." + frac : whole;
+    }
+    // A canonical decimal string ÷ a small integer: [quotient, remainder] (long division).
+    function divSmall(dec, n) {
+        var q = "", r = 0, s = String(dec || "0");
+        for (var i = 0; i < s.length; ++i) {
+            var cur = r * 10 + Number(s.charAt(i));
+            q += String(Math.floor(cur / n));
+            r = cur % n;
+        }
+        q = q.replace(/^0+/, "");
+        return [q.length > 0 ? q : "0", r];
+    }
+    // A canonical decimal string + a small integer.
+    function addSmall(dec, k) {
+        var s = String(dec || "0"), out = "", carry = k;
+        for (var i = s.length - 1; i >= 0; --i) {
+            var d = Number(s.charAt(i)) + carry;
+            out = String(d % 10) + out;
+            carry = Math.floor(d / 10);
+        }
+        while (carry > 0) { out = String(carry % 10) + out; carry = Math.floor(carry / 10); }
+        return out.replace(/^0+/, "") || "0";
+    }
+    // Who owes you in the next split: every other member you left in.
+    function splitDebtors() {
+        var out = [];
+        for (var i = 0; i < room.members.length; ++i) {
+            var m = room.members[i];
+            if (m && !m.self && !room.splitOut[String(m.identity)]) out.push(String(m.identity));
+        }
+        return out;
+    }
+    function splitToggle(identity) {
+        var o = Object.assign({}, room.splitOut);
+        if (o[identity]) delete o[identity]; else o[identity] = true;
+        room.splitOut = o;
+    }
+    // What each debtor owes and what stays yours, rounded down the way the module
+    // rounds (evenShares): {each, mine} in wei, or null when there is nothing to split.
+    function splitPreview(totalEth) {
+        var total = room.ethToWei(totalEth);
+        var n = room.splitDebtors().length;
+        if (total.length === 0 || total === "0" || n === 0) return null;
+        var parts = n + (room.splitCreditorShares ? 1 : 0);
+        var qr = room.divSmall(total, parts);
+        return { each: qr[0], mine: room.addSmall(room.splitCreditorShares ? qr[0] : "0", qr[1]), total: total, n: n };
+    }
+    function proposeSplit(totalEth, memo) {
+        if (!room.backend) return;
+        var total = room.ethToWei(totalEth);
+        var who = room.splitDebtors();
+        if (total.length === 0 || who.length === 0) return;
+        var spec = room.splitCreditorShares ? who : { parties: who, creditorShares: false };
+        // chain "" = the chain your configured RPC serves; it is written into the split,
+        // so everyone reviews it before agreeing.
+        room.backend.proposeSplit("", total, JSON.stringify(spec), String(memo || ""));
         room.composing = false;
     }
 
@@ -825,6 +918,27 @@ Item {
                                 if (room.backend && msg.liveIntent)
                                     room.backend.shareMaterial(String(msg.liveIntent.id || ""), requirement, pub);
                             }
+                            // a split (exo-a90): pay MY share (derived by the module from the
+                            // agreed split), or — as the creditor — mark a share received
+                            // outside muster. Payments the creditor's own RPC shows are
+                            // confirmed on the intents tick without a click.
+                            onSettlePart: if (room.backend && msg.liveIntent)
+                                              room.backend.settlePart(String(msg.liveIntent.id || ""))
+                            onConfirmPart: function(part) {
+                                if (room.backend && msg.liveIntent)
+                                    room.backend.confirmPart(String(msg.liveIntent.id || ""), part, "");
+                            }
+                            splitNote: (room.splitResult && room.splitResult.id && msg.liveIntent
+                                        && String(room.splitResult.id) === String(msg.liveIntent.id || "")
+                                        && room.splitResult.op !== "propose")
+                                       ? (room.splitResult.error
+                                          ? qsTr("⚠ %1").arg(String(room.splitResult.error) + (room.splitResult.detail ? ": " + String(room.splitResult.detail) : ""))
+                                          : room.splitResult.op === "pay"
+                                          ? qsTr("Sent %1 ETH from your wallet (%2) — it shows as paid once a block includes it.")
+                                                .arg(room.weiToEth(String(room.splitResult.amount || "0")))
+                                                .arg(String(room.splitResult.pending || "").slice(0, 12) + "…")
+                                          : qsTr("Marked received."))
+                                       : ""
                             onOpenSettings: room.settingsRequested()
                         }
 
@@ -1065,6 +1179,15 @@ Item {
                             // not by an on-chain Safe settle — the policy tells them apart.
                             readonly property bool isInvoke:
                                 String((msg.liveIntent && msg.liveIntent.policy) || "") === "invoke"
+                            // a split settles in PARTS — each person pays their own share — so
+                            // there is nothing for one member to submit (exo-a90)
+                            readonly property bool isSplit: !!(msg.liveIntent && msg.liveIntent.split)
+                            readonly property int partsDone: {
+                                var ps = (msg.liveIntent && msg.liveIntent.parts) || [];
+                                var n = 0;
+                                for (var i = 0; i < ps.length; ++i) if (ps[i].confirmed) ++n;
+                                return n;
+                            }
                             // the submit outcome, only when it names THIS intent
                             readonly property var outcome: (room.roomSubmit
                                 && String(room.roomSubmit.id || "") === String((msg.liveIntent && msg.liveIntent.id) || ""))
@@ -1082,7 +1205,15 @@ Item {
                                     wrapMode: Text.WordWrap
                                     // Track the folded state so the line doesn't keep
                                     // saying "Ready" after the intent has been settled.
-                                    text: readyBox.isInvoke
+                                    text: readyBox.isSplit
+                                          ? (readyBox.st === "final"
+                                             ? qsTr("✓ Settled — every share confirmed by who it was owed to.")
+                                             : readyBox.st === "executable"
+                                             ? qsTr("✓ Agreed — each person now pays their own share.")
+                                             : qsTr("Settling — %1 of %2 shares confirmed.")
+                                                   .arg(readyBox.partsDone)
+                                                   .arg(((msg.liveIntent && msg.liveIntent.parts) || []).length))
+                                          : readyBox.isInvoke
                                           ? (readyBox.st === "final"
                                              ? qsTr("✓ Ran — the action executed.")
                                              : readyBox.st === "submitted"
@@ -1112,7 +1243,7 @@ Item {
                                     objectName: "roomSubmitButton"
                                     // only while it is actually executable — once it is
                                     // submitted/final there is nothing left to settle.
-                                    visible: !readyBox.isInvoke && readyBox.settles && readyBox.st === "executable"
+                                    visible: !readyBox.isInvoke && !readyBox.isSplit && readyBox.settles && readyBox.st === "executable"
                                     text: qsTr("Settle on-chain")
                                     onClicked: if (room.backend)
                                                    room.backend.submitInRoom(String((msg.liveIntent && msg.liveIntent.id) || ""));
@@ -1280,6 +1411,7 @@ Item {
                 LogosText {
                     text: room.composeType === "statement" ? qsTr("Propose a statement")
                         : room.composeType === "action" ? qsTr("Propose an action")
+                        : room.composeType === "split" ? qsTr("Split a bill you paid")
                         : qsTr("Propose a payment")
                     color: Theme.palette.text
                     font.family: Theme.typography.publicSans
@@ -1331,6 +1463,17 @@ Item {
                         onClicked: room.composeType = "action"
                     }
 
+                    // a split (exo-a90): you fronted a bill; each person named pays you back
+                    // their own share from their own wallet — no shared account.
+                    LogosButton {
+                        objectName: "roomKindSplit"
+                        Layout.preferredWidth: 90
+                        text: qsTr("Split")
+                        variant: room.composeType === "split"
+                                 ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                        onClicked: room.composeType = "split"
+                    }
+
                     Item { Layout.fillWidth: true }
                 }
 
@@ -1347,7 +1490,8 @@ Item {
 
                     LogosText {
                         text: room.composeType === "payment" ? qsTr("Settles via")
-                                                             : qsTr("Endorse with")
+                            : room.composeType === "split" ? qsTr("Settles on")
+                            : qsTr("Endorse with")
                         color: Theme.palette.textTertiary
                         font.family: Theme.typography.mono
                         font.pixelSize: Theme.typography.badgeText
@@ -1435,6 +1579,10 @@ Item {
                                 return qsTr("No one has disclosed an account this can act from. Disclose one under Accounts, beside the room.");
                             if (e.error === "choose-account")
                                 return qsTr("Several accounts are disclosed. Choose which one this acts from.");
+                            // a split settles on the chain YOUR RPC serves, read — never assumed (exo-a90)
+                            if (e.error === "no-rpc")
+                                return qsTr("A split settles on the chain your RPC serves, and it did not answer — check Settings → RPC. %1")
+                                       .arg(String(e.detail || ""));
                             return e.error ? String(e.error) : "";
                         }
                         color: Theme.palette.warning
@@ -1727,6 +1875,84 @@ Item {
                     }
                 }
 
+                // ── split (exo-a90): the total, who's in, and what each owes ──────────
+                // You are the creditor, paid at your own address; every person named must
+                // agree to their own share before anyone pays. Amounts are ETH here and
+                // exact wei on the card (string arithmetic — no floats).
+                ColumnLayout {
+                    visible: room.composeType === "split"
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.tiny
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        LogosTextField {
+                            id: splitTotal
+                            objectName: "roomSplitTotal"
+                            Layout.preferredWidth: 160
+                            placeholderText: qsTr("total (ETH)")
+                            font.family: Theme.typography.mono
+                        }
+                        LogosTextField {
+                            id: splitMemo
+                            objectName: "roomSplitMemo"
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("what for (only the room sees this)")
+                        }
+                    }
+
+                    LogosText {
+                        text: room.members.length > 1
+                              ? qsTr("Who owes you a share — tap to leave someone out:")
+                              : qsTr("Nobody here owes you yet: invite and admit the people who shared it, then split.")
+                        color: room.members.length > 1 ? Theme.palette.textTertiary : Theme.palette.warning
+                        font.pixelSize: Theme.typography.badgeText
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.tiny
+                        Repeater {
+                            model: room.members.filter(function (m) { return m && !m.self; })
+                            delegate: LogosButton {
+                                required property var modelData
+                                readonly property string ident: String(modelData.identity || "")
+                                objectName: "roomSplitWho_" + ident.slice(0, 8)
+                                text: (modelData.alias && String(modelData.alias).length > 0)
+                                      ? String(modelData.alias) : ident.slice(0, 10) + "…"
+                                variant: room.splitOut[ident]
+                                         ? LogosButton.Variant.Secondary : LogosButton.Variant.Primary
+                                onClicked: room.splitToggle(ident)
+                            }
+                        }
+                        LogosButton {
+                            objectName: "roomSplitMine"
+                            text: room.splitCreditorShares ? qsTr("✓ I'm in it too") : qsTr("I'm not in it (chip in)")
+                            variant: room.splitCreditorShares ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                            onClicked: room.splitCreditorShares = !room.splitCreditorShares
+                        }
+                    }
+
+                    LogosText {
+                        objectName: "roomSplitPreview"
+                        readonly property var pv: room.splitPreview(splitTotal.text)
+                        visible: splitTotal.text.length > 0
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: room.ethToWei(splitTotal.text).length === 0
+                              ? qsTr("⚠ Type the total in ETH, e.g. 1.2 (at most 18 decimals).")
+                              : pv === null ? qsTr("Leave at least one person in.")
+                              : qsTr("%1 %2 owe you %3 ETH each; your own share is %4 ETH (it absorbs any rounding). Each pays from their own wallet — every payment is public on the chain.")
+                                    .arg(pv.n).arg(pv.n === 1 ? qsTr("person") : qsTr("people"))
+                                    .arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine))
+                        color: pv === null ? Theme.palette.warning : Theme.palette.textSecondary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                }
+
                 // payment: recipient (+ amount below). You can type it, or ask the room —
                 // the counterparty answers with their own address (ask-then-disclose), so
                 // the demo shows the Safe's recipient being DISCLOSED, not pre-known.
@@ -1838,14 +2064,19 @@ Item {
                         // balance — can't over-send (exo-bf9); the ⚠ above says why it's off.
                         // AND the room must have enough people to act on it (see the hint):
                         // don't submit a proposal into a room that can't yet agree to it.
-                        enabled: room.enoughToPropose && (
+                        enabled: room.composeType === "split" ? room.splitPreview(splitTotal.text) !== null
+                               : room.enoughToPropose && (
                                  room.composeType === "statement" ? proposeText.text.length > 0
                                : room.composeType === "action" ? room.chosenAction !== null
                                : room.isBtcPolicy ? proposeTo.text.length > 0 && proposeValue.text.length > 0
                                : room.isLezPolicy ? proposeTo.text.length > 0 && proposeValue.text.length > 0
                                : proposeTo.text.length > 0 && !room.overSends(proposeValue.text))
                         onClicked: {
-                            if (room.composeType === "statement") {
+                            if (room.composeType === "split") {
+                                room.proposeSplit(splitTotal.text, splitMemo.text);
+                                splitTotal.text = "";
+                                splitMemo.text = "";
+                            } else if (room.composeType === "statement") {
                                 room.proposeStatement(proposeText.text);
                                 proposeText.text = "";
                             } else if (room.composeType === "action") {
@@ -1885,6 +2116,24 @@ Item {
                         onClicked: room.composing = false
                     }
                 }
+            }
+
+            // a split action that did nothing says why — never a silent no-op (exo-a90)
+            LogosText {
+                objectName: "roomSplitFeedback"
+                visible: !!(room.splitResult && room.splitResult.error)
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: {
+                    var r = room.splitResult || {};
+                    var what = r.op === "pay" ? qsTr("Your share was not paid")
+                             : r.op === "confirm" ? qsTr("The share was not confirmed")
+                             : qsTr("The split was not proposed");
+                    return qsTr("⚠ %1 — %2%3").arg(what).arg(String(r.error || ""))
+                               .arg(r.detail ? ": " + String(r.detail) : "");
+                }
+                color: Theme.palette.warning
+                font.pixelSize: Theme.typography.badgeText
             }
 
             // a Bitcoin payment that could not be proposed says why (no node configured,

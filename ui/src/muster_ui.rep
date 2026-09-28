@@ -228,6 +228,15 @@ class MusterUi
     // from the user's node (Settings → Bitcoin node). Lands on btcProposeJson {id} or
     // {error, detail}; intents + messages reload after.
     SLOT(void proposeBtcSpend(const QString &payTo, const QString &amountSat, const QString &feeRate))
+    // A split (exo-a90): propose splitting a bill THIS member fronted (chain "" = the chain
+    // the configured RPC serves; total in wei; sharesJson an array of room identities for
+    // even shares, or {parties, creditorShares} / {shares}); pay MY share of an agreed split
+    // (derived from the split — nothing typed); as the creditor, confirm a share (tx "" =
+    // received outside muster). Each lands on splitJson {op, id, …} or {op, id, error};
+    // intents reload after.
+    SLOT(void proposeSplit(const QString &chain, const QString &totalWei, const QString &sharesJson, const QString &memo))
+    SLOT(void settlePart(const QString &intentId))
+    SLOT(void confirmPart(const QString &intentId, const QString &part, const QString &tx))
     // The LEZ multisig (exo-3c9). A LEZ step is SENT at once and completes on a later
     // intents tick once the chain includes it (the module's pump), so none of these waits
     // on a block. Propose a token transfer out of the room's LEZ multisig vault, or the
@@ -348,6 +357,7 @@ class MusterUi
     PROP(QString outsideJson="{}" READONLY)
     PROP(QString outsideImportJson="{}" READONLY)
     PROP(QString btcProposeJson="{}" READONLY)
+    PROP(QString splitJson="{}" READONLY)
     PROP(QString lezProposeJson="{}" READONLY)
     PROP(QString lezMemberJson="{}" READONLY)
     PROP(QString lezCreateJson="{}" READONLY)

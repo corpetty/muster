@@ -78,6 +78,8 @@ Item {
             roomSurface.composeType = "payment";
         else if (v === "decide")
             roomSurface.composeType = "statement";
+        else if (v === "split")
+            roomSurface.composeType = "split";   // you fronted it: the split composer (exo-a90)
         // Auto-ask to join UNLESS this is a fresh composer creation (a verb): a joiner
         // entering a room someone else already founded can't see them (their epoch is
         // sealed), so without this they'd have no idea they must ask. Requesting is
@@ -86,9 +88,10 @@ Item {
         // The founder (verb present) doesn't ask itself in; it admits the joiner.
         if (v.length === 0)
             root.backend.requestJoin();
+        // A split asks nobody for an address: the person who fronted the bill is paid at
+        // their own, which the split carries (exo-a90). Only a payment primes an ask.
         var purpose = v === "pay" ? qsTr("Pay someone")
-                    : v === "request" ? qsTr("Ask to be paid")
-                    : v === "split" ? qsTr("Split a cost") : "";
+                    : v === "request" ? qsTr("Ask to be paid") : "";
         if (purpose.length > 0)
             root.backend.postMessage(JSON.stringify({
                 kind: "address-request", intent: v, purpose: purpose
@@ -106,7 +109,7 @@ Item {
                 roomSurface.prefillPayment(String(o.to || ""),
                                            (o.value !== undefined ? String(o.value) : ""));
             } catch (e) { roomSurface.composing = true; }
-        } else if (v === "pay" || v === "decide") {
+        } else if (v === "pay" || v === "decide" || v === "split") {
             roomSurface.composing = true;
         }
     }

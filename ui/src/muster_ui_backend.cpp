@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QFile>
 #include <QStandardPaths>
+#include <QSet>
 
 // Generated umbrella: LogosModules (behind modules()) built from
 // metadata.json#dependencies — the typed muster_module client the UI calls
@@ -620,6 +621,52 @@ static QString asObjectJson(const QString &r, const char *key)
     return QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));
 }
 
+// ── a split (exo-a90) ──────────────────────────────────────────────────────────
+// Each outcome lands on splitJson, tagged with what was done and to which intent, so the
+// room can say why a button did nothing — never a silent no-op.
+static QString splitOutcome(const QString &op, const QString &intentId, const QString &r)
+{
+    QJsonObject o;
+    if (r.startsWith("{")) o = QJsonDocument::fromJson(r.toUtf8()).object();
+    else if (r.startsWith("0x")) o.insert("id", r);           // propose → the intent id
+    else o.insert("error", r);
+    o.insert("op", op);
+    if (!intentId.isEmpty() && !o.contains("id")) o.insert("id", intentId);
+    return QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));
+}
+
+void MusterUiBackend::proposeSplit(const QString &chain, const QString &totalWei, const QString &sharesJson, const QString &memo)
+{
+    // coordinate_propose_split: you are the creditor, paid at your own address; every
+    // person named agrees to their own share before anyone pays.
+    const QString r = modules().muster_module.coordinate_propose_split(chain.trimmed(), totalWei.trimmed(),
+                                                                       sharesJson, memo);
+    qInfo() << "[muster_ui] coordinate_propose_split" << chain << totalWei << sharesJson << "->" << r;
+    setSplitJson(splitOutcome("propose", "", r));
+    loadIntents();
+    loadMessages();
+}
+
+void MusterUiBackend::settlePart(const QString &intentId)
+{
+    // coordinate_settle_part: MY share, from my own wallet — the module derives the
+    // transfer from the agreed split; the report follows once it lands (the intents tick).
+    const QString r = modules().muster_module.coordinate_settle_part(intentId);
+    qInfo() << "[muster_ui] coordinate_settle_part" << intentId << "->" << r;
+    setSplitJson(splitOutcome("pay", intentId, r));
+    loadIntents();
+}
+
+void MusterUiBackend::confirmPart(const QString &intentId, const QString &part, const QString &tx)
+{
+    // coordinate_confirm_part: the creditor confirms a share — from her own read of tx,
+    // or (tx empty) received outside muster.
+    const QString r = modules().muster_module.coordinate_confirm_part(intentId, part, tx);
+    qInfo() << "[muster_ui] coordinate_confirm_part" << intentId << part << tx << "->" << r;
+    setSplitJson(splitOutcome("confirm", intentId, r));
+    loadIntents();
+}
+
 void MusterUiBackend::proposeLezTransfer(const QString &recipient, const QString &amount)
 {
     // coordinate_propose_lez_transfer → the proposer's own Propose, sent (not awaited);
@@ -905,7 +952,47 @@ void MusterUiBackend::onContextReady()
                     static bool proposed = false;
                     if (!proposed && membersJson().contains("\"self\":false")) {
                         proposed = true;
-                        proposeInRoom(QStringLiteral("{\"to\":\"0x1111111111111111111111111111111111111111\",\"value\":1000,\"nonce\":0}"));
+                        // Split self-test (exo-a90.8): MUSTER_AUTOSPLIT=<total wei> splits a
+                        // bill this founder fronted with the other member, on the chain the
+                        // configured RPC serves — the same slot the room's Split composer calls.
+                        const QByteArray autosplit = qgetenv("MUSTER_AUTOSPLIT");
+                        if (!autosplit.isEmpty()) {
+                            QJsonArray others;
+                            for (const auto &m : QJsonDocument::fromJson(membersJson().toUtf8()).array())
+                                if (!m.toObject().value("self").toBool())
+                                    others.append(m.toObject().value("identity").toString());
+                            proposeSplit(QString(), QString::fromUtf8(autosplit),
+                                         QString::fromUtf8(QJsonDocument(others).toJson(QJsonDocument::Compact)),
+                                         QStringLiteral("split self-test"));
+                        } else {
+                            proposeInRoom(QStringLiteral("{\"to\":\"0x1111111111111111111111111111111111111111\",\"value\":1000,\"nonce\":0}"));
+                        }
+                    }
+                }
+                // Split self-test, the debtor's side: MUSTER_AUTOPAYSPLIT agrees to MY share of
+                // any split that names me, then pays it once everyone has agreed — the card's
+                // "Agree to my share" and "Pay my share", each attempted once per split.
+                if (!qgetenv("MUSTER_AUTOPAYSPLIT").isEmpty()) {
+                    static QSet<QString> agreed, paid;
+                    for (const auto &v : QJsonDocument::fromJson(intentsJson().toUtf8()).array()) {
+                        const QJsonObject it = v.toObject();
+                        if (!it.contains("split")) continue;
+                        const QString id = it.value("id").toString();
+                        const QString st = it.value("state").toString();
+                        QJsonObject mine;
+                        for (const auto &p : it.value("parts").toArray())
+                            if (p.toObject().value("mine").toBool()) mine = p.toObject();
+                        if (mine.isEmpty()) continue;
+                        if ((st == "proposed" || st == "collecting") && !it.value("approvedByMe").toBool()
+                            && !agreed.contains(id)) {
+                            agreed.insert(id);
+                            contributeInRoom(id, QString(), QString());
+                        } else if ((st == "executable" || st == "submitted" || st == "settling")
+                                   && !mine.value("settled").toBool() && !mine.value("paying").toBool()
+                                   && !paid.contains(id)) {
+                            paid.insert(id);
+                            settlePart(id);
+                        }
                     }
                 }
                 qInfo() << "[muster_ui] SELFTEST pending=" << pendingJson()
