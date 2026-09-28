@@ -1,0 +1,1035 @@
+{
+  "actions": [
+    {
+      "id": "evm.safe/transfer",
+      "name": "Send ETH from a Safe",
+      "area": "family",
+      "family": "evm.safe",
+      "kind": "safe",
+      "status": "built",
+      "summary": "k of a Safe's owners send ETH from it. A member disclosed the Safe into the room; each owner signs its EIP-712 safeTxHash in the room, and any member settles it on chain with the collected signatures.",
+      "generated": "safe/transfer",
+      "effect": {
+        "schema": "muster.effect.transfer.v1",
+        "fields": [
+          {
+            "name": "to",
+            "means": "the payee's address — counterparty material: typed by the proposer, or shared by the payee into the room (coordinate_share_material)"
+          },
+          {
+            "name": "value",
+            "means": "the amount in wei — proposer material, picked against the Safe's balance as read through the user's RPC"
+          },
+          {
+            "name": "nonce",
+            "means": "the Safe nonce this transaction will run at; the composer fills the Safe's live nonce (coordinate_account → eth_call nonce()). It reaches the signed hash"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the proposer (any room member)",
+          "does": "Chooses a Safe the room holds — coordinate_set_policy('safe@<CAIP-10>'), so the intent id commits to WHICH account — fills to / value / nonce and proposes. The module refuses a kind not on the one list or an account not disclosed in this room, runs the driver's own gate (a CALL is never refused), then publishes the policy, the effect, and the signing context: environment eip155:<chainId>, account = the Safe's address, slot = the intent id, expiry = now + MUSTER_INTENT_TTL_S (7 days by default). The intent id is content-addressed from the effect and the policy, so every member derives the same id without a round trip. An intent-ref card is posted into the thread.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/coordination_surface_test.nim",
+            "module/tests/accounts_test.nim",
+            "module/tests/phase_a_exit_test.nim",
+            "module/tests/composer_step_test.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "each owner (a room member whose secp256k1 key is one of the Safe's owners)",
+          "does": "Re-derives the safeTxHash from the effect in the room's log with the Safe's chainId and address — never a hash someone sent. coordinate_readiness first grades THIS member only: is my key an owner, is the RPC on the expected chain (never who else holds a key). Approve signs in-app: the keystore signs the 32-byte hash (key_ref picks which held key, so one instance holding two owner keys can sign as each) and signs the attestation digest over P with the same key; the secret never leaves the keystore. Before anything is published the signature is recovered and must be a configured owner, and the attestation must verify. A signature made elsewhere (a hardware wallet) may be pasted instead: it counts toward the threshold and every member sees it graded 'unattested', never 'committed'.",
+          "signs": "the EIP-712 safeTxHash = keccak256(0x19 ‖ 0x01 ‖ domainSeparator(chainId, the Safe's address) ‖ hashStruct(SafeTx{to, value, keccak256(data), operation, safeTxGas, baseGas, gasPrice, gasToken, refundReceiver, nonce})), as a 65-byte recoverable secp256k1 signature by an owner key; plus a muster attestation by the SAME key over P = (the signing context, the safeTxHash, the provenance record)",
+          "reveals": [
+            {
+              "field": "contributions (the owner signature and its attestation)",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/accounts_test.nim",
+            "module/tests/keyed_contribute_test.nim",
+            "module/tests/safe_collect_test.nim",
+            "module/tests/readiness_test.nim",
+            "module/tests/probes/probe_live_attestation_binds.nim",
+            "module/tests/probes/probe_live_unattested_grade_stepper.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "any member, through the relayer they configured (Settings → relayer)",
+          "does": "coordinate_submit, once the room's fold says executable. The Safe settlement re-derives the safeTxHash from the logged effect, keeps only signatures that recover to one of the Safe's owners, one per owner, sorts them ascending by owner address (what Safe.checkSignatures requires), refuses below the threshold, and ABI-encodes the real ten-argument execTransaction (selector 0x6a761202) with every SafeTx field. The relayer sends it to the Safe through the user's RPC: by default this instance's own secp256k1 key signs the outer EIP-155 transaction in the keystore and pays the gas; 'unlocked:<addr>' uses a node-unlocked account instead. Past the intent's expiry nothing is submitted. A submit event moves every member's fold to 'submitted'.",
+          "signs": "the relayer's EIP-155 Ethereum transaction calling execTransaction on the Safe — not an owner act; any funded account can send it, and the Safe checks the owner signatures inside it",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "to",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "value",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "data",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "operation",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers (the owner signatures in the calldata)",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payer (the Safe)",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "module/tests/coordinate_submit_anvil.nim",
+            "module/tests/settlement_test.nim",
+            "module/tests/safe_anvil_e2e.nim",
+            "module/tests/probes/probe_live_context_stepper.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one — the module reads the chain",
+          "does": "After submitting, coordinate_submit polls the receipt through the user's RPC for about four seconds: status 1 publishes a final event and every member's card reads 'Paid — settled on-chain'; a revert reads failed; not yet mined reads pending. Finality is read from the chain, never asserted.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/final_fold_test.nim",
+            "module/tests/coordinate_submit_anvil.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an approval over any bytes other than the safeTxHash this member re-derives from the logged effect",
+          "why": "invariant 1: every member's fold canonicalizes the effect itself; a signature over another hash recovers to no owner, names no contributor and counts for nothing",
+          "evidence": [
+            "module/tests/probes/probe_materialization_mismatch_refused.nim",
+            "module/tests/safe_test.nim",
+            "module/tests/conformance_test.nim"
+          ]
+        },
+        {
+          "what": "a signature from a key that is not one of the Safe's disclosed owners",
+          "why": "the driver counts only signatures that recover to a configured owner; the live path answers 'rejected' and publishes nothing",
+          "evidence": [
+            "module/tests/safe_collect_test.nim",
+            "module/tests/coordination_surface_test.nim",
+            "module/tests/multiparty_intent_test.nim"
+          ]
+        },
+        {
+          "what": "a signature made for another chain, another Safe, or another nonce",
+          "why": "invariant 2: the EIP-712 domain carries the chainId and the Safe's address, and the struct carries the nonce, so each is a different hash",
+          "evidence": [
+            "module/tests/safe_test.nim",
+            "module/tests/safe_collect_test.nim"
+          ]
+        },
+        {
+          "what": "an in-app approval, or a submit, after the intent's expiry",
+          "why": "invariant 2: the context every attestation binds to carries the expiry; the live path answers 'expired' and publishes nothing, and submit is refused",
+          "evidence": [
+            "module/tests/probes/probe_live_context_stepper.nim"
+          ]
+        },
+        {
+          "what": "an in-app approval when an input that reached the signed bytes has no source record in the log",
+          "why": "invariant 10: 'unaccountable-input' — nothing is signed or published",
+          "evidence": [
+            "module/tests/probes/probe_live_refusal_stepper.nim",
+            "module/tests/probes/probe_provenance_refusal_stepper.nim"
+          ]
+        },
+        {
+          "what": "a policy that names a Safe no member disclosed in this room, a bare 'safe', or a kind not on the one list",
+          "why": "the account is never guessed and never a module-wide default: the policy resolves to an unsupported driver, which verifies nothing, and propose / contribute answer 'unsupported-driver'",
+          "evidence": [
+            "module/tests/accounts_test.nim",
+            "module/tests/phase_a_exit_test.nim",
+            "module/tests/kinds_test.nim"
+          ]
+        },
+        {
+          "what": "a key_ref this instance does not hold",
+          "why": "'unknown-key' — never a silent fall-through to a different key than the caller chose",
+          "evidence": [
+            "module/tests/keyed_contribute_test.nim"
+          ]
+        },
+        {
+          "what": "a malformed 65-byte signature in the log (a recovery id outside 0..3)",
+          "why": "it is not a valid signature: the verifier returns false, the fold leaves it uncounted, and the room still converges (invariant 4) — never a crash",
+          "evidence": [
+            "module/tests/malformed_sig_test.nim"
+          ]
+        },
+        {
+          "what": "settling with fewer owner signatures than the threshold",
+          "why": "'insufficient-signatures', naming have and need; a stranger's signature and a repeated owner's second signature do not count toward it",
+          "evidence": [
+            "module/tests/settlement_test.nim"
+          ]
+        },
+        {
+          "what": "an account disclosure published in another member's name",
+          "why": "disclosures are author-signed events; the room's read path drops one whose signature does not verify (exo-f76)",
+          "evidence": [
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "what": "a signature collected for a nonce the Safe has already used",
+          "why": "the hash commits to the nonce, and the Safe hashes with its current nonce, so the signatures no longer verify and execTransaction reverts. The refusal is the Safe's, not muster's: muster fills the live nonce at compose (two settles in a row each use it) but does not re-read it before submit",
+          "evidence": [
+            "module/tests/safe_test.nim",
+            "module/tests/coordinate_submit_anvil.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_disclose_account",
+        "coordinate_accounts",
+        "coordinate_set_policy",
+        "coordinate_account",
+        "compose_offers",
+        "coordinate_propose",
+        "coordinate_readiness",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_decline",
+        "coordinate_submit"
+      ],
+      "ui": "Room → Accounts → Disclose this Safe (chain id + address); Room → + → Payment → Settles via Safe → From <account> → to + amount (wei) → Propose — Propose is off while the amount exceeds the Safe's balance as read. Card → Approve, or 'Paste a signature instead'; Deny to decline. Ready → Settle on-chain.",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "What an owner signs in muster is exactly the hash the Safe v1.4.1 contract checks — equal to its own getTransactionHash for a transaction that uses every field",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An owner signature is worthless on another chain, another Safe, or at another nonce",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "k owners are enough only if no module or guard gets around the threshold. Muster reads the Safe's modules and guard through the user's RPC when the room lists its accounts; until they are read the card says the ways around the rule are unknown",
+          "credibility": "motivational",
+          "party": "the Safe's enabled modules and guard, as read through the user's RPC"
+        },
+        {
+          "claim": "The user's RPC provider sees the signed execTransaction before it reaches the mempool",
+          "credibility": "exposed",
+          "party": "the configured RPC provider"
+        },
+        {
+          "claim": "At settlement anyone reading the chain sees the target, the value, the calldata, the operation and which owners signed; the owner set is public from deployment",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/safe_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/safe_collect_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/safe_fidelity_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/safe_real_anvil_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/coordinate_submit_anvil.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/settlement_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/accounts_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/keyed_contribute_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/coordination_surface_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/multiparty_intent_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/final_fold_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/phase_a_exit_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/readiness_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/malformed_sig_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/two_instance_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/safe-global/safe-smart-account/v1.4.1/contracts/Safe.sol",
+          "what": "Safe v1.4.1: execTransaction, getTransactionHash (EIP-712 domain = chainId + the Safe), checkSignatures (owners strictly ascending, GS026), nonce++ per execution, handlePayment (gas refund to refundReceiver, or tx.origin when zero)"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-712",
+          "what": "EIP-712 typed structured data hashing: 0x19 0x01 ‖ domainSeparator ‖ hashStruct"
+        }
+      ],
+      "unverified": [
+        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per recovered owner: one owner's signature published under two names reaches 'executable' in the room. Seen by a scratch run against the threshold driver while writing this corpus; no repo test covers it. For a Safe the settlement re-dedups by the recovered owner (settlement_test) and the Safe checks on chain, so nothing wrong settles — but the card can show 'ready' early.",
+        "coordinate_submit polls the receipt for about four seconds. If the chain has not mined it by then, it returns pending, and nothing later publishes the final event for a Safe intent (a LEZ settle is re-watched by the pump; a Safe one is not). From reading nim-lib/muster_module.nim, not a test."
+      ]
+    },
+    {
+      "id": "evm.safe/contract-call",
+      "name": "Call a contract from a Safe",
+      "area": "family",
+      "family": "evm.safe",
+      "kind": "safe",
+      "status": "built",
+      "summary": "k of a Safe's owners have the Safe CALL a contract with calldata — an ERC-20 transfer, say. Changing the Safe's own owners or threshold is this action too: a CALL whose target is the Safe itself. Every SafeTx field reaches the hash the owners sign.",
+      "generated": "safe/contract-call",
+      "effect": {
+        "schema": "muster.effect.safe-tx.v1",
+        "fields": [
+          {
+            "name": "to",
+            "means": "the contract the Safe calls; the Safe's own address to change its owners or threshold"
+          },
+          {
+            "name": "value",
+            "means": "wei sent with the call (0 for a token transfer)"
+          },
+          {
+            "name": "data",
+            "means": "the calldata, hex — e.g. transfer(address,uint256), or addOwnerWithThreshold / removeOwner / swapOwner / changeThreshold on the Safe. keccak256(data) is in the hash"
+          },
+          {
+            "name": "operation",
+            "means": "0 = CALL. Any other value is a different action (1 = DELEGATECALL) or refused"
+          },
+          {
+            "name": "safeTxGas",
+            "means": "gas the Safe gives the inner call; 0 = all available"
+          },
+          {
+            "name": "baseGas",
+            "means": "gas counted for the refund outside the inner call"
+          },
+          {
+            "name": "gasPrice",
+            "means": "if above 0, the Safe refunds gas out of its own balance to refundReceiver"
+          },
+          {
+            "name": "gasToken",
+            "means": "the token the refund is paid in; the zero address = ETH"
+          },
+          {
+            "name": "refundReceiver",
+            "means": "who receives the refund; the zero address = tx.origin (the relayer)"
+          },
+          {
+            "name": "nonce",
+            "means": "the Safe nonce this transaction runs at"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the proposer (any room member)",
+          "does": "Proposes a full Safe transaction: coordinate_propose with {\"effect\":\"safe-tx\", to, value, data, operation: 0, …} under a 'safe@<CAIP-10>' policy. Only the keys present are carried; an absent field is the Safe's zero value. The room composer builds only to / value / nonce, so this is proposed through the hosted surface. The rest is the transfer's path: policy, effect, and context (environment eip155:<chainId>, account = the Safe, slot = the intent id, expiry) are published, and the id is content-addressed. The card draws the target, the value, and the calldata as its first bytes and length ('with data 0xa9059cbb… (68 bytes)'); it does not decode the call, and it does not draw the gas fields.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/safe_fidelity_test.nim",
+            "module/tests/coordination_surface_test.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "each owner (a room member whose secp256k1 key is one of the Safe's owners)",
+          "does": "Re-derives the safeTxHash from the effect in the room's log with the Safe's chainId and address — never a hash someone sent. coordinate_readiness first grades THIS member only: is my key an owner, is the RPC on the expected chain (never who else holds a key). Approve signs in-app: the keystore signs the 32-byte hash (key_ref picks which held key, so one instance holding two owner keys can sign as each) and signs the attestation digest over P with the same key; the secret never leaves the keystore. Before anything is published the signature is recovered and must be a configured owner, and the attestation must verify. A signature made elsewhere (a hardware wallet) may be pasted instead: it counts toward the threshold and every member sees it graded 'unattested', never 'committed'. Changing data, the operation, any gas field, the gas token or the refund receiver changes the hash an owner signs.",
+          "signs": "the EIP-712 safeTxHash = keccak256(0x19 ‖ 0x01 ‖ domainSeparator(chainId, the Safe's address) ‖ hashStruct(SafeTx{to, value, keccak256(data), operation, safeTxGas, baseGas, gasPrice, gasToken, refundReceiver, nonce})), as a 65-byte recoverable secp256k1 signature by an owner key; plus a muster attestation by the SAME key over P = (the signing context, the safeTxHash, the provenance record)",
+          "reveals": [
+            {
+              "field": "contributions (the owner signature and its attestation)",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/accounts_test.nim",
+            "module/tests/keyed_contribute_test.nim",
+            "module/tests/safe_collect_test.nim",
+            "module/tests/readiness_test.nim",
+            "module/tests/probes/probe_live_attestation_binds.nim",
+            "module/tests/probes/probe_live_unattested_grade_stepper.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "any member, through the relayer they configured (Settings → relayer)",
+          "does": "coordinate_submit, once the room's fold says executable. The Safe settlement re-derives the safeTxHash from the logged effect, keeps only signatures that recover to one of the Safe's owners, one per owner, sorts them ascending by owner address (what Safe.checkSignatures requires), refuses below the threshold, and ABI-encodes the real ten-argument execTransaction (selector 0x6a761202) with every SafeTx field. The relayer sends it to the Safe through the user's RPC: by default this instance's own secp256k1 key signs the outer EIP-155 transaction in the keystore and pays the gas; 'unlocked:<addr>' uses a node-unlocked account instead. Past the intent's expiry nothing is submitted. A submit event moves every member's fold to 'submitted'.",
+          "signs": "the relayer's EIP-155 Ethereum transaction calling execTransaction on the Safe — not an owner act; any funded account can send it, and the Safe checks the owner signatures inside it",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "to",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "value",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "data",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "operation",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers (the owner signatures in the calldata)",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payer (the Safe)",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "module/tests/coordinate_submit_anvil.nim",
+            "module/tests/settlement_test.nim",
+            "module/tests/safe_anvil_e2e.nim",
+            "module/tests/probes/probe_live_context_stepper.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one — the module reads the chain",
+          "does": "After submitting, coordinate_submit polls the receipt through the user's RPC for about four seconds: status 1 publishes a final event and every member's card reads 'Paid — settled on-chain'; a revert reads failed; not yet mined reads pending. Finality is read from the chain, never asserted.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/final_fold_test.nim",
+            "module/tests/coordinate_submit_anvil.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an approval over any bytes other than the safeTxHash this member re-derives from the logged effect",
+          "why": "invariant 1: every member's fold canonicalizes the effect itself; a signature over another hash recovers to no owner, names no contributor and counts for nothing",
+          "evidence": [
+            "module/tests/probes/probe_materialization_mismatch_refused.nim",
+            "module/tests/safe_test.nim",
+            "module/tests/conformance_test.nim"
+          ]
+        },
+        {
+          "what": "a signature from a key that is not one of the Safe's disclosed owners",
+          "why": "the driver counts only signatures that recover to a configured owner; the live path answers 'rejected' and publishes nothing",
+          "evidence": [
+            "module/tests/safe_collect_test.nim",
+            "module/tests/coordination_surface_test.nim",
+            "module/tests/multiparty_intent_test.nim"
+          ]
+        },
+        {
+          "what": "a signature made for another chain, another Safe, or another nonce",
+          "why": "invariant 2: the EIP-712 domain carries the chainId and the Safe's address, and the struct carries the nonce, so each is a different hash",
+          "evidence": [
+            "module/tests/safe_test.nim",
+            "module/tests/safe_collect_test.nim"
+          ]
+        },
+        {
+          "what": "an in-app approval, or a submit, after the intent's expiry",
+          "why": "invariant 2: the context every attestation binds to carries the expiry; the live path answers 'expired' and publishes nothing, and submit is refused",
+          "evidence": [
+            "module/tests/probes/probe_live_context_stepper.nim"
+          ]
+        },
+        {
+          "what": "an in-app approval when an input that reached the signed bytes has no source record in the log",
+          "why": "invariant 10: 'unaccountable-input' — nothing is signed or published",
+          "evidence": [
+            "module/tests/probes/probe_live_refusal_stepper.nim",
+            "module/tests/probes/probe_provenance_refusal_stepper.nim"
+          ]
+        },
+        {
+          "what": "a policy that names a Safe no member disclosed in this room, a bare 'safe', or a kind not on the one list",
+          "why": "the account is never guessed and never a module-wide default: the policy resolves to an unsupported driver, which verifies nothing, and propose / contribute answer 'unsupported-driver'",
+          "evidence": [
+            "module/tests/accounts_test.nim",
+            "module/tests/phase_a_exit_test.nim",
+            "module/tests/kinds_test.nim"
+          ]
+        },
+        {
+          "what": "a key_ref this instance does not hold",
+          "why": "'unknown-key' — never a silent fall-through to a different key than the caller chose",
+          "evidence": [
+            "module/tests/keyed_contribute_test.nim"
+          ]
+        },
+        {
+          "what": "a malformed 65-byte signature in the log (a recovery id outside 0..3)",
+          "why": "it is not a valid signature: the verifier returns false, the fold leaves it uncounted, and the room still converges (invariant 4) — never a crash",
+          "evidence": [
+            "module/tests/malformed_sig_test.nim"
+          ]
+        },
+        {
+          "what": "settling with fewer owner signatures than the threshold",
+          "why": "'insufficient-signatures', naming have and need; a stranger's signature and a repeated owner's second signature do not count toward it",
+          "evidence": [
+            "module/tests/settlement_test.nim"
+          ]
+        },
+        {
+          "what": "an account disclosure published in another member's name",
+          "why": "disclosures are author-signed events; the room's read path drops one whose signature does not verify (exo-f76)",
+          "evidence": [
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "what": "a signature collected for a nonce the Safe has already used",
+          "why": "the hash commits to the nonce, and the Safe hashes with its current nonce, so the signatures no longer verify and execTransaction reverts. The refusal is the Safe's, not muster's: muster fills the live nonce at compose (two settles in a row each use it) but does not re-read it before submit",
+          "evidence": [
+            "module/tests/safe_test.nim",
+            "module/tests/coordinate_submit_anvil.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_set_policy",
+        "coordinate_propose",
+        "coordinate_readiness",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_decline",
+        "coordinate_submit"
+      ],
+      "ui": "Headless to propose (coordinate_propose with a safe-tx effect): the room composer has no calldata field. The card then shows the target and 'with data <selector>… (<n> bytes)'; Approve / Deny and Settle on-chain work as for a transfer.",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "What an owner signs in muster is exactly the hash the Safe v1.4.1 contract checks — equal to its own getTransactionHash for a transaction that uses every field",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An owner signature is worthless on another chain, another Safe, or at another nonce",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Every SafeTx field — data, operation, the gas fields, the gas token, the refund receiver — changes the hash an owner signs, and settlement encodes every one where the real Safe reads it",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The card draws the calldata's selector and length, not a decoded call, and does not draw safeTxGas, baseGas, gasPrice, gasToken or refundReceiver; an owner must read the effect to see a gas refund to someone",
+          "credibility": "motivational",
+          "party": "each owner reviewing the proposal"
+        },
+        {
+          "claim": "An owner or threshold change is an ordinary CALL to the Safe itself. Once it executes, the room still folds the Safe with a disclosed signer set: a new, different disclosure is flagged as a conflict and ONE disclosure governs by the log's canonical order — not necessarily the newer. The room's chain check names the difference; approvals and settlement use the governing set",
+          "credibility": "motivational",
+          "party": "the room's members, who must notice the disagreement"
+        },
+        {
+          "claim": "k owners are enough only if no module or guard gets around the threshold. Muster reads the Safe's modules and guard through the user's RPC when the room lists its accounts; until they are read the card says the ways around the rule are unknown",
+          "credibility": "motivational",
+          "party": "the Safe's enabled modules and guard, as read through the user's RPC"
+        },
+        {
+          "claim": "The user's RPC provider sees the signed execTransaction before it reaches the mempool",
+          "credibility": "exposed",
+          "party": "the configured RPC provider"
+        },
+        {
+          "claim": "At settlement anyone reading the chain sees the target, the value, the calldata, the operation and which owners signed; the owner set is public from deployment",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/safe_fidelity_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/safe_real_anvil_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/coordinate_submit_anvil.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/settlement_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/safe_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/safe_collect_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/accounts_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/final_fold_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/safe-global/safe-smart-account/v1.4.1/contracts/Safe.sol",
+          "what": "Safe v1.4.1: execTransaction, getTransactionHash (EIP-712 domain = chainId + the Safe), checkSignatures (owners strictly ascending, GS026), nonce++ per execution, handlePayment (gas refund to refundReceiver, or tx.origin when zero)"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/safe-global/safe-smart-account/v1.4.1/contracts/base/OwnerManager.sol",
+          "what": "addOwnerWithThreshold / removeOwner / swapOwner / changeThreshold are `authorized`: only the Safe itself may call them, i.e. through an execTransaction whose `to` is the Safe"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-712",
+          "what": "EIP-712 typed structured data hashing: 0x19 0x01 ‖ domainSeparator ‖ hashStruct"
+        }
+      ],
+      "unverified": [
+        "No muster test proposes an owner or threshold change; that it is a CALL to the Safe is the Safe's own rule (OwnerManager functions are `authorized`). The data-carrying CALL path itself is proven on the real Safe (safe_real_anvil_e2e step 3).",
+        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per recovered owner: one owner's signature published under two names reaches 'executable' in the room. Seen by a scratch run against the threshold driver while writing this corpus; no repo test covers it. For a Safe the settlement re-dedups by the recovered owner (settlement_test) and the Safe checks on chain, so nothing wrong settles — but the card can show 'ready' early.",
+        "coordinate_submit polls the receipt for about four seconds. If the chain has not mined it by then, it returns pending, and nothing later publishes the final event for a Safe intent (a LEZ settle is re-watched by the pump; a Safe one is not). From reading nim-lib/muster_module.nim, not a test."
+      ]
+    },
+    {
+      "id": "evm.safe/delegatecall",
+      "name": "Delegatecall from a Safe (gated)",
+      "area": "family",
+      "family": "evm.safe",
+      "kind": "safe",
+      "status": "built",
+      "summary": "A Safe transaction with operation = 1 runs the target's code AS the Safe, in the Safe's own storage: it can rewrite the owners, the threshold, the modules, the guard. Muster shows it and refuses to propose or sign one unless this client has allowlisted the target.",
+      "generated": "safe/delegatecall",
+      "effect": {
+        "schema": "muster.effect.safe-tx.v1",
+        "fields": [
+          {
+            "name": "to",
+            "means": "the contract whose code runs as the Safe — e.g. MultiSendCallOnly to batch calls"
+          },
+          {
+            "name": "value",
+            "means": "wei"
+          },
+          {
+            "name": "data",
+            "means": "the calldata the target's code runs with, hex (e.g. multiSend(bytes) of packed calls)"
+          },
+          {
+            "name": "operation",
+            "means": "1 = DELEGATECALL. The card prints a red warning for it"
+          },
+          {
+            "name": "safeTxGas / baseGas / gasPrice / gasToken / refundReceiver",
+            "means": "as for a contract call"
+          },
+          {
+            "name": "nonce",
+            "means": "the Safe nonce this transaction runs at"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the proposer",
+          "does": "Proposes a safe-tx effect with operation 1 through coordinate_propose. Before anything is published the Safe driver's gate runs: operation 0 is never refused; operation 1 is refused unless `to` is on THIS client's allowlist; any other operation is refused outright. The allowlist is the environment variable MUSTER_SAFE_DELEGATECALL_ALLOW — comma-separated 42-character addresses, read once, empty by default — so a delegatecall needs a deliberate local opt-in by the operator, never a default. Refused, the answer is 'refused: delegatecall to <to> runs its code as the Safe and can rewrite its owners; it is not on this client's delegatecall allowlist (MUSTER_SAFE_DELEGATECALL_ALLOW)', and nothing is published. Allowed, the manifest adds a write touch on the Safe's own storage and the card prints 'DELEGATECALL: this runs <to>'s code as the Safe itself. It can change the Safe's owners, threshold and modules.'",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect (with operation = 1)",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/safe_fidelity_test.nim",
+            "module/tests/safe_real_anvil_e2e.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "each owner (a room member whose secp256k1 key is one of the Safe's owners)",
+          "does": "Re-derives the safeTxHash from the effect in the room's log with the Safe's chainId and address — never a hash someone sent. coordinate_readiness first grades THIS member only: is my key an owner, is the RPC on the expected chain (never who else holds a key). Approve signs in-app: the keystore signs the 32-byte hash (key_ref picks which held key, so one instance holding two owner keys can sign as each) and signs the attestation digest over P with the same key; the secret never leaves the keystore. Before anything is published the signature is recovered and must be a configured owner, and the attestation must verify. A signature made elsewhere (a hardware wallet) may be pasted instead: it counts toward the threshold and every member sees it graded 'unattested', never 'committed'. For a delegatecall the same gate runs again on the signing member's own client: an in-app approval is refused, publishing nothing, unless THAT client allowlists the target. A pasted signature (made elsewhere) is folded and graded as usual.",
+          "signs": "the EIP-712 safeTxHash = keccak256(0x19 ‖ 0x01 ‖ domainSeparator(chainId, the Safe's address) ‖ hashStruct(SafeTx{to, value, keccak256(data), operation, safeTxGas, baseGas, gasPrice, gasToken, refundReceiver, nonce})), as a 65-byte recoverable secp256k1 signature by an owner key; plus a muster attestation by the SAME key over P = (the signing context, the safeTxHash, the provenance record)",
+          "reveals": [
+            {
+              "field": "contributions (the owner signature and its attestation)",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/accounts_test.nim",
+            "module/tests/keyed_contribute_test.nim",
+            "module/tests/safe_collect_test.nim",
+            "module/tests/readiness_test.nim",
+            "module/tests/probes/probe_live_attestation_binds.nim",
+            "module/tests/probes/probe_live_unattested_grade_stepper.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "any member, through the relayer they configured (Settings → relayer)",
+          "does": "coordinate_submit, once the room's fold says executable. The Safe settlement re-derives the safeTxHash from the logged effect, keeps only signatures that recover to one of the Safe's owners, one per owner, sorts them ascending by owner address (what Safe.checkSignatures requires), refuses below the threshold, and ABI-encodes the real ten-argument execTransaction (selector 0x6a761202) with every SafeTx field. The relayer sends it to the Safe through the user's RPC: by default this instance's own secp256k1 key signs the outer EIP-155 transaction in the keystore and pays the gas; 'unlocked:<addr>' uses a node-unlocked account instead. Past the intent's expiry nothing is submitted. A submit event moves every member's fold to 'submitted'.",
+          "signs": "the relayer's EIP-155 Ethereum transaction calling execTransaction on the Safe — not an owner act; any funded account can send it, and the Safe checks the owner signatures inside it",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "to",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "value",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "data",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "operation",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers (the owner signatures in the calldata)",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payer (the Safe)",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "module/tests/coordinate_submit_anvil.nim",
+            "module/tests/settlement_test.nim",
+            "module/tests/safe_anvil_e2e.nim",
+            "module/tests/probes/probe_live_context_stepper.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one — the module reads the chain",
+          "does": "After submitting, coordinate_submit polls the receipt through the user's RPC for about four seconds: status 1 publishes a final event and every member's card reads 'Paid — settled on-chain'; a revert reads failed; not yet mined reads pending. Finality is read from the chain, never asserted.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/final_fold_test.nim",
+            "module/tests/coordinate_submit_anvil.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "proposing or signing in-app a DELEGATECALL whose target this client has not allowlisted",
+          "why": "a delegatecall runs foreign code as the Safe and can take it — the Bybit loss (Feb 2025) was a delegatecall its signers never saw. Muster refuses unless the operator opted the target in with MUSTER_SAFE_DELEGATECALL_ALLOW",
+          "evidence": [
+            "module/tests/safe_fidelity_test.nim",
+            "module/tests/safe_real_anvil_e2e.nim"
+          ]
+        },
+        {
+          "what": "an approval over any bytes other than the safeTxHash this member re-derives from the logged effect",
+          "why": "invariant 1: every member's fold canonicalizes the effect itself; a signature over another hash recovers to no owner, names no contributor and counts for nothing",
+          "evidence": [
+            "module/tests/probes/probe_materialization_mismatch_refused.nim",
+            "module/tests/safe_test.nim",
+            "module/tests/conformance_test.nim"
+          ]
+        },
+        {
+          "what": "a signature from a key that is not one of the Safe's disclosed owners",
+          "why": "the driver counts only signatures that recover to a configured owner; the live path answers 'rejected' and publishes nothing",
+          "evidence": [
+            "module/tests/safe_collect_test.nim",
+            "module/tests/coordination_surface_test.nim",
+            "module/tests/multiparty_intent_test.nim"
+          ]
+        },
+        {
+          "what": "a signature made for another chain, another Safe, or another nonce",
+          "why": "invariant 2: the EIP-712 domain carries the chainId and the Safe's address, and the struct carries the nonce, so each is a different hash",
+          "evidence": [
+            "module/tests/safe_test.nim",
+            "module/tests/safe_collect_test.nim"
+          ]
+        },
+        {
+          "what": "an in-app approval, or a submit, after the intent's expiry",
+          "why": "invariant 2: the context every attestation binds to carries the expiry; the live path answers 'expired' and publishes nothing, and submit is refused",
+          "evidence": [
+            "module/tests/probes/probe_live_context_stepper.nim"
+          ]
+        },
+        {
+          "what": "an in-app approval when an input that reached the signed bytes has no source record in the log",
+          "why": "invariant 10: 'unaccountable-input' — nothing is signed or published",
+          "evidence": [
+            "module/tests/probes/probe_live_refusal_stepper.nim",
+            "module/tests/probes/probe_provenance_refusal_stepper.nim"
+          ]
+        },
+        {
+          "what": "a policy that names a Safe no member disclosed in this room, a bare 'safe', or a kind not on the one list",
+          "why": "the account is never guessed and never a module-wide default: the policy resolves to an unsupported driver, which verifies nothing, and propose / contribute answer 'unsupported-driver'",
+          "evidence": [
+            "module/tests/accounts_test.nim",
+            "module/tests/phase_a_exit_test.nim",
+            "module/tests/kinds_test.nim"
+          ]
+        },
+        {
+          "what": "settling with fewer owner signatures than the threshold",
+          "why": "'insufficient-signatures', naming have and need; a stranger's signature and a repeated owner's second signature do not count toward it",
+          "evidence": [
+            "module/tests/settlement_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_set_policy",
+        "coordinate_propose",
+        "coordinate_readiness",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_submit"
+      ],
+      "ui": "Headless to propose (coordinate_propose with a safe-tx effect, operation 1): the room composer has no operation field. The card prints the DELEGATECALL warning in red; Approve on a client that has not allowlisted the target answers 'refused: …'.",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "A client that has not allowlisted the target never proposes or signs a delegatecall in-app",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The allowlist is per client and per operator: it gates what THIS instance proposes and signs, not what other members' clients do",
+          "credibility": "motivational",
+          "party": "each member's operator"
+        },
+        {
+          "claim": "coordinate_submit does not re-run the allowlist gate: a delegatecall another member's client proposed (it allowlisted the target) and owners signed can be settled from any member's client",
+          "credibility": "motivational",
+          "party": "the member who settles"
+        },
+        {
+          "claim": "The operation is shown on the card and disclosed to the chain; the manifest names the write to the Safe's own storage",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "What an owner signs in muster is exactly the hash the Safe v1.4.1 contract checks — equal to its own getTransactionHash for a transaction that uses every field",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An owner signature is worthless on another chain, another Safe, or at another nonce",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The user's RPC provider sees the signed execTransaction before it reaches the mempool",
+          "credibility": "exposed",
+          "party": "the configured RPC provider"
+        },
+        {
+          "claim": "At settlement anyone reading the chain sees the target, the value, the calldata, the operation and which owners signed; the owner set is public from deployment",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/safe_fidelity_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/safe_real_anvil_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/safe_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/settlement_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/safe_collect_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/safe-global/safe-smart-account/v1.4.1/contracts/Safe.sol",
+          "what": "Safe v1.4.1: execTransaction, getTransactionHash (EIP-712 domain = chainId + the Safe), checkSignatures (owners strictly ascending, GS026), nonce++ per execution, handlePayment (gas refund to refundReceiver, or tx.origin when zero)"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/safe-global/safe-smart-account/v1.4.1/contracts/base/Executor.sol",
+          "what": "operation 1 runs `delegatecall(to, data)`: the target's code executes in the Safe's own storage"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/libraries/MultiSendCallOnly.sol",
+          "what": "MultiSendCallOnly: the usual delegatecall target, which itself refuses nested delegatecalls"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-712",
+          "what": "EIP-712 typed structured data hashing: 0x19 0x01 ‖ domainSeparator ‖ hashStruct"
+        }
+      ],
+      "unverified": [
+        "That settlement does not re-check the delegatecall allowlist is from reading settlement/settlement.nim (SafeSettlement.assemble calls no signRefusal); no test settles an allowlisted delegatecall on chain — the real-Safe run checks only its hash (safe_real_anvil_e2e step 1).",
+        "The gate itself (signRefusal) is what the tests call; that the live propose and in-app contribute paths call it before publishing is from reading coordination/live.nim.",
+        "An operation above 1 is refused by signRefusal ('unknown Safe operation <n>'); no test covers it.",
+        "The Bybit attribution is the driver's and the test's own wording (safe.nim, safe_fidelity_test.nim); no primary source for the incident is cited here.",
+        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per recovered owner: one owner's signature published under two names reaches 'executable' in the room. Seen by a scratch run against the threshold driver while writing this corpus; no repo test covers it. For a Safe the settlement re-dedups by the recovered owner (settlement_test) and the Safe checks on chain, so nothing wrong settles — but the card can show 'ready' early."
+      ]
+    }
+  ]
+}

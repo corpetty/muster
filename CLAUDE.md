@@ -79,6 +79,7 @@ docs/            00-vision · 01-furps · 02-implementation-plan
   labbook/       traps found the expensive way
   posts/         campaign write-ups
 contracts/specs/ typed specs with acceptance oracles, one per invariant (derived-exo-*)
+contracts/families/ the multisig family registry · actions/ the action corpus (exo-661): generated.json (built drivers' describe/profile/manifest, from module/tools/action_corpus.nim, held by action_corpus_test) + family/<id>.json, room.json, wallet.json (authored, checked by scripts/check-action-corpus.py) — rendered by docs/design/multisig-atlas.html, served at https://corpetty.github.io/muster/atlas/
 ui/prototype/    coordination-prototype-v2.html — the standalone HTML reference build
 scripts/         git hooks
 ```
@@ -104,6 +105,8 @@ python3 docs/diagrams/tools/check-manifest.py   # figure-provenance gate (--upda
 python3 scripts/check-readme-rot.py             # entry-point README staleness gate vs the Current-phase section (--stamp)
 python3 scripts/check-claims-registry.py        # ADR-012 claims registry: every protects→requirement+test, every gap→fix+status
 python3 scripts/check-family-registry.py        # multisig family registry + the landscape table (exo-68f)
+python3 scripts/check-action-corpus.py [--write] # the action corpus resolves; --write re-embeds it into the atlas (exo-661)
+TEST_ARGS=--write module/tests/run-suite.sh action_corpus   # regenerate contracts/actions/generated.json after a driver change
 python3 ui/tools/gen-claims-qml.py [--check]    # regen ui/src/qml/ClaimsRegistry.qml from the registry (CI checks drift)
 python3 scripts/check-run-targets.py            # run instructions resolve (make run / nix runner / README agree)
 cd demo && make app && make alice               # the speed build (demo/README.md); `make bob` for the second peer
@@ -130,7 +133,7 @@ nix run  '.#anvil'               # local chain with Safe fixture (infra/anvil/de
 
 ## Current phase
 
-**P3 — real transport + encryption; two instances converge over the live Logos fleet (membership handshake end to end, 2026-09-01); latency polish + room-side submit + multi-room landed; the multisig families (epic exo-a50, Phases A–D: Safe fidelity, Bitcoin via PSBT, the LEZ multisig program, FROST) landed 2026-09-24/25. What remains: the multi-party runs across two machines — the cross-host Safe-txn settle *over the live wire* + R-4/R-6 resilience, the LEZ multisig propose → vote → settle, a FROST ceremony.** P0–P2 and all 11 invariant pebbles landed by hand (55 probes + 93 unit tests green, `module/tests/run-suite.sh`; verified on a second machine 2026-09-25); **P4 shipped**; P3's core is done and the two-instance live wire works for membership (join → ask → admit → both at two members, over the public fleet). The whole transaction lifecycle runs in the UI, multi-party coordination of real intents works end to end, and the room settles Safe intents on-chain (`coordinate_submit`, proven on anvil) at the Safe's live nonce.
+**P3 — real transport + encryption; two instances converge over the live Logos fleet (membership handshake end to end, 2026-09-01); latency polish + room-side submit + multi-room landed; the multisig families (epic exo-a50, Phases A–D: Safe fidelity, Bitcoin via PSBT, the LEZ multisig program, FROST) landed 2026-09-24/25. What remains: the multi-party runs across two machines — the cross-host Safe-txn settle *over the live wire* + R-4/R-6 resilience, the LEZ multisig propose → vote → settle, a FROST ceremony.** P0–P2 and all 11 invariant pebbles landed by hand (55 probes + 94 unit tests green, `module/tests/run-suite.sh`; verified on a second machine 2026-09-25); **P4 shipped**; P3's core is done and the two-instance live wire works for membership (join → ask → admit → both at two members, over the public fleet). The whole transaction lifecycle runs in the UI, multi-party coordination of real intents works end to end, and the room settles Safe intents on-chain (`coordinate_submit`, proven on anvil) at the Safe's live nonce.
 
 **Shipped since P4:** a public demo — the AppImage release [`v0.1.0-demo`](https://github.com/corpetty/muster/releases/tag/v0.1.0-demo), the two-party Safe+FROST runbook [`docs/two-party-demo-runbook.md`](docs/two-party-demo-runbook.md), and `scripts/demo-peer.sh` (seeds a peer as an anvil owner). The Nim SDK was built, consumed, and **extracted to [`corpetty/logos-nim-sdk`](https://github.com/corpetty/logos-nim-sdk)** (see "The Nim gap is filled" above). FROST is a real in-room driver (`roomPolicyFrost`); Safe proposals commit to the live on-chain nonce (`safeNonce`). Design note for turning any Logos module into a driver: [`docs/design/driver-derivation.md`](docs/design/driver-derivation.md) (epic exo-fa4).
 

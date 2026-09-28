@@ -1,5 +1,5 @@
-# Publish docs/diagrams/ — plus the multisig family atlas at /atlas/, and nothing
-# else — as the Pages site.
+# Publish docs/diagrams/ — plus the action atlas at /atlas/, and nothing else — as the
+# Pages site.
 #
 # The interactive substrates need a page that permits <script>, which forum
 # software does not (docs/diagrams/README.md §3.2). Posts embed the exported
@@ -23,6 +23,7 @@ on:
     paths:
       - 'docs/diagrams/**'
       - 'docs/design/multisig-atlas.html'
+      - 'contracts/actions/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -58,8 +59,10 @@ jobs:
 
       # The atlas embeds contracts/families/registry.json; publish it only when that
       # copy is current (the same gate the pre-commit hook applies).
-      - name: Check the atlas's embedded registry
-        run: python3 scripts/check-family-registry.py
+      - name: Check the atlas's embedded registry and action corpus
+        run: |
+          python3 scripts/check-family-registry.py
+          python3 scripts/check-action-corpus.py
 
       - name: Assemble the site
         run: |

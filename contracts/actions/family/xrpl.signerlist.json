@@ -1,0 +1,1913 @@
+{
+  "actions": [
+    {
+      "id": "xrpl.signerlist/register-signer-list",
+      "name": "Register a signer list on an XRPL account",
+      "area": "family",
+      "family": "xrpl.signerlist",
+      "status": "declared",
+      "summary": "The holder of an existing, funded XRPL account's master or regular key registers a SignerList: signer accounts, their weights and a quorum. From then on the XRP Ledger itself accepts transactions from that account when signers whose weights reach the quorum sign them.",
+      "effect": {
+        "schema": "muster.effect.xrpl.signerlist.register-signer-list.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the existing, funded XRPL account (classic address) that will accept multi-signatures"
+          },
+          {
+            "name": "signerQuorum",
+            "means": "SignerQuorum: the minimum sum of signer weights that authorizes a transaction; above 0 and no more than the sum of the weights"
+          },
+          {
+            "name": "signerEntries",
+            "means": "SignerEntries: 1 to 32 signer AccountIDs (which need not be funded accounts), each with a SignerWeight of 1 to 65535; the optional WalletLocator stays empty"
+          },
+          {
+            "name": "sequence",
+            "means": "the account's Sequence this transaction uses, read from the ledger; 0 when ticketSequence is set"
+          },
+          {
+            "name": "ticketSequence",
+            "means": "optional TicketSequence: a Ticket set aside earlier, so this transaction need not wait its turn in the Sequence order"
+          },
+          {
+            "name": "fee",
+            "means": "the Fee in drops, destroyed on inclusion: one base fee for a single-signed transaction (more under load)"
+          },
+          {
+            "name": "lastLedgerSequence",
+            "means": "optional expiry: the highest ledger index the transaction may be included in"
+          },
+          {
+            "name": "network",
+            "means": "the XRPL network the room binds this to (CAIP-2 xrpl:<network id>); for network ids <= 1024 no NetworkID is in the signed bytes"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "1 of 1: the account's master key or regular key signs alone; the room reviews first",
+        "finality": "external",
+        "domain": "xrpl.tx.single-sign.stx.v1"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "xrpl:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "xrpl:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "xrpl-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "xrpl:*",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "xrpl-signer-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "xrpl-signerlist:<account>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "xrpl-signer-account",
+          "party": "contributor",
+          "class": "address",
+          "target": "xrpl-account:<signer account>",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "xrpl-account-key",
+          "party": "proposer",
+          "class": "authority",
+          "target": "xrpl-account:<account>",
+          "field": "account"
+        },
+        {
+          "kind": "asset",
+          "name": "xrp-owner-reserve",
+          "party": "proposer",
+          "class": "asset",
+          "target": "xrpl-account:<account>",
+          "field": "account"
+        }
+      ],
+      "touches": [
+        {
+          "target": "xrpl:*",
+          "mode": "write"
+        },
+        {
+          "target": "xrpl-account:<account>",
+          "mode": "write"
+        },
+        {
+          "target": "xrpl-signerlist:<account>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "effect",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "The account holder composes the SignerListSet from signer AccountIDs that members disclosed in the room, with weights and a quorum. The instance reads the account's Sequence, balance and the current base fee from the configured server, and records each read (invariant 10). Muster would rebuild the signing bytes from the effect and show the list, the quorum and the owner reserve it will lock.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "policy",
+              "observer": "room-member"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://xrpl.org/docs/references/protocol/transactions/types/signerlistset",
+            "https://xrpl.org/docs/references/protocol/transactions/common-fields",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SignerListSet.cpp#L298-L354"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Each named signer confirms that the AccountID listed for them is theirs and that they hold a key it accepts: its master key, its regular key if it is a funded account with one, or the master key of an unfunded address. Nothing is signed on the chain; the confirmation is a room contribution.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://xrpl.org/docs/references/protocol/transactions/common-fields#signers-field",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L1050-L1206"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "proposer",
+          "does": "The account holder signs the SignerListSet once with the account's master key or regular key, and the instance submits it to the configured server. The server sees the signed transaction first; validators see it before it is included.",
+          "signs": "One single signature by the account's master key or regular key: the 4 bytes 0x53545800 (ASCII 'STX' + a zero byte, HashPrefix::TxSign) || the transaction's canonical binary serialization of its signing fields — TransactionType SignerListSet, Flags, Account, Fee, Sequence (or Sequence 0 and TicketSequence), optional LastLedgerSequence, SignerQuorum, SignerEntries [{Account, SignerWeight}], and SigningPubKey = the signing key's public key; TxnSignature is left out and no AccountID is appended. A secp256k1 key signs SHA-512Half of those bytes with ECDSA (RFC 6979 nonce, DER); an Ed25519 key signs the raw bytes. No NetworkID on network ids <= 1024, so the bytes name no network.",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/STTx.cpp#L171-L224",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/include/xrpl/protocol/HashPrefix.h#L61-L69",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/SecretKey.cpp#L232-L271",
+            "https://xrpl.org/docs/references/protocol/binary-format",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L1018-L1048"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "The instance waits for the transaction in a validated ledger, then reads the SignerList entry back and checks its quorum and entries against the effect. The list costs one owner-reserve increment whatever its size (lsfOneOwnerCount, since MultiSignReserve). A tec result is final too: it destroys the fee and consumes the Sequence.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SignerListSet.cpp#L298-L354",
+            "https://xrpl.org/docs/references/protocol/ledger-data/ledger-entry-types/signerlist",
+            "https://xrpl.org/docs/concepts/accounts/reserves",
+            "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tec-codes"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a SignerListSet whose signing bytes differ from the list the room reviewed (entries, weights, quorum, Fee, Sequence)",
+          "why": "invariant 1 / F-4: the instance re-derives the single-signing bytes from the effect and refuses on mismatch",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/STTx.cpp#L171-L224",
+            "https://xrpl.org/docs/references/protocol/binary-format"
+          ]
+        },
+        {
+          "what": "a list whose quorum the weights cannot reach, with fewer than 1 or more than 32 entries, a duplicate entry, a zero weight, or the account itself as a signer",
+          "why": "the chain's rule (temBAD_QUORUM in rippled's source, temMALFORMED on the SignerListSet page; temBAD_SIGNER; temBAD_WEIGHT); muster refuses before anyone signs",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SignerListSet.cpp#L239-L296",
+            "https://xrpl.org/docs/references/protocol/transactions/types/signerlistset"
+          ]
+        },
+        {
+          "what": "a signer AccountID that its member did not disclose in the room",
+          "why": "invariant 9: what the client says about a member is only what that member disclosed; the chain does not check who controls a signer account, or even that it exists",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SignerListSet.cpp#L239-L296",
+            "https://xrpl.org/docs/references/protocol/transactions/common-fields#signers-field"
+          ]
+        },
+        {
+          "what": "any data in a SignerEntry's WalletLocator",
+          "why": "invariant 9 / FS-7: the WalletLocator is arbitrary data the network does not use, and it is public on the ledger with the list",
+          "evidence": [
+            "https://xrpl.org/docs/concepts/accounts/multi-signing",
+            "https://xrpl.org/docs/references/protocol/ledger-data/ledger-entry-types/signerlist"
+          ]
+        },
+        {
+          "what": "an account whose balance would not cover one more owner-reserve increment",
+          "why": "the chain's rule: tecINSUFFICIENT_RESERVE, which still destroys the fee and consumes the Sequence",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SignerListSet.cpp#L298-L354",
+            "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tec-codes"
+          ]
+        },
+        {
+          "what": "signing when the Sequence, Fee or balance that reached the bytes was read but not recorded",
+          "why": "invariant 10: these are external reads that reach the signed bytes",
+          "evidence": [
+            "https://xrpl.org/docs/references/protocol/transactions/common-fields",
+            "https://xrpl.org/docs/concepts/transactions/transaction-cost"
+          ]
+        },
+        {
+          "what": "submitting to any network other than the one the room bound, or with a NetworkID on a network whose id is <= 1024 (or without one above 1024)",
+          "why": "invariant 2: on mainnet, testnet and devnet the chain's signed bytes carry no network id (binding: none), so muster's envelope is the only binding; the chain itself refuses telNETWORK_ID_MAKES_TX_NON_CANONICAL / telREQUIRES_NETWORK_ID / telWRONG_NETWORK",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L63-L97",
+            "https://xrpl.org/docs/references/protocol/transactions/common-fields#networkid-field",
+            "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tel-codes"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Once the list validates, the XRP Ledger itself checks the quorum on every multi-signed transaction from this account.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The list costs one owner-reserve increment, whatever its size.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The whole signer list — every signer AccountID, each weight and the quorum — is public on the ledger from this transaction on.",
+          "credibility": "exposed",
+          "party": "every chain observer"
+        },
+        {
+          "claim": "Registering a list removes nothing: the master key and any regular key can still sign any transaction alone until they are disabled and removed (disable-master-key).",
+          "credibility": "motivational",
+          "party": "the holder of the account's master key or regular key"
+        },
+        {
+          "claim": "The signed bytes name no network on mainnet, testnet or devnet (NetworkID must be omitted for ids <= 1024). Any XRPL network with id <= 1024 where the account exists at that Sequence would accept them. Muster binds the network in the room; the chain does not.",
+          "credibility": "exposed",
+          "party": "anyone holding the signed transaction (the RPC provider, a relaying node, any chain observer after settle) who submits it on another XRPL network with id <= 1024"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/types/signerlistset",
+          "what": "XRPL docs: SignerListSet fields, delete with SignerQuorum 0 and no SignerEntries, 1-32 members, set by the master key, regular key or the current list, and no deleting the last way to sign (tecNO_ALTERNATIVE_KEY)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SignerListSet.cpp#L239-L296",
+          "what": "rippled: a SignerListSet needs 1-32 entries, no duplicates, no zero weight, not the account itself, and a quorum the weights can reach; signer accounts need not exist"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SignerListSet.cpp#L298-L354",
+          "what": "rippled: creating or replacing a list removes the old one and adds one OwnerCount (lsfOneOwnerCount), checked against the pre-fee balance"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/ledger-data/ledger-entry-types/signerlist",
+          "what": "XRPL docs: the SignerList ledger entry (SignerQuorum, SignerEntries, optional WalletLocator) and lsfOneOwnerCount: a list counts as one owner-reserve item since MultiSignReserve"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/concepts/accounts/reserves",
+          "what": "XRPL docs: each owned object, including a signer list, adds one owner reserve; pre-MultiSignReserve lists count as several"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/concepts/accounts/multi-signing",
+          "what": "XRPL docs: a signer list holds 1-32 addresses with weights and a quorum; multi-signing coexists with the master and regular keys; all fields are fixed before signatures are collected; Fee >= (N+1) x base; Signers sorted by address"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/common-fields#signers-field",
+          "what": "XRPL docs: each Signer is {Account, TxnSignature, SigningPubKey}; the key may be the signer account's regular key or its master key unless disabled, or the master key of an unfunded address"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/STTx.cpp#L171-L224",
+          "what": "rippled: single-signing data is HashPrefix::TxSign + the transaction without its non-signing fields; no AccountID suffix"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/include/xrpl/protocol/HashPrefix.h#L61-L69",
+          "what": "rippled: HashPrefix::TxSign = 'STX'+0x00 (single-signing) and HashPrefix::TxMultiSign = 'SMT'+0x00 (multi-signing)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/SecretKey.cpp#L232-L271",
+          "what": "rippled: a secp256k1 key signs SHA-512Half of the message with ECDSA (RFC 6979 nonce, DER); an Ed25519 key signs the raw message"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/binary-format",
+          "what": "XRPL docs: signing data is the canonical binary serialization (fields sorted, non-signing fields left out) under prefix 0x53545800 (single) or 0x534D5400 (multi)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L1018-L1048",
+          "what": "rippled: a single signature is accepted from the regular key, or the master key unless lsfDisableMaster is set (tefMASTER_DISABLED); any other key is tefBAD_AUTH — checked against ledger state when the transaction applies"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/common-fields#networkid-field",
+          "what": "XRPL docs: NetworkID must be omitted on networks with id <= 1024 (Mainnet 0, Testnet 1, Devnet 2: Disallowed) and required above; the conditions under which a transaction replays on another network"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L63-L97",
+          "what": "rippled: on a network whose id is <= 1024 a NetworkID field is refused (telNETWORK_ID_MAKES_TX_NON_CANONICAL); above 1024 it is required (telREQUIRES_NETWORK_ID) and must match (telWRONG_NETWORK)"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tec-codes",
+          "what": "XRPL docs: a tec result destroys the fee and consumes the Sequence; tecNEED_MASTER_KEY, tecNO_ALTERNATIVE_KEY, tecINSUFFICIENT_RESERVE"
+        }
+      ],
+      "unverified": [
+        "The CAIP-2 form for XRPL networks (xrpl:<network id>) was not confirmed from a primary source; the registry's xrpl:* is used.",
+        "The current base and owner reserve amounts are not stated: the XRPL docs render them from live values."
+      ]
+    },
+    {
+      "id": "xrpl.signerlist/payment",
+      "name": "Send XRP from a multi-signed XRPL account",
+      "area": "family",
+      "family": "xrpl.signerlist",
+      "status": "declared",
+      "summary": "Signers on the account's SignerList each sign their own copy of an XRP Payment until their weights reach the quorum; the instance assembles the Signers array and submits it. The XRP Ledger checks every signature and the quorum itself.",
+      "effect": {
+        "schema": "muster.effect.xrpl.signerlist.payment.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the multi-signed XRPL account (classic address); it pays the fee"
+          },
+          {
+            "name": "destination",
+            "means": "the payee's XRPL account (Destination)"
+          },
+          {
+            "name": "amount",
+            "means": "the XRP to deliver, in drops (Amount / DeliverMax); no SendMax for XRP-to-XRP"
+          },
+          {
+            "name": "destinationTag",
+            "means": "optional DestinationTag the payee asked for"
+          },
+          {
+            "name": "sequence",
+            "means": "the account's Sequence this transaction uses, read from the ledger; 0 when ticketSequence is set"
+          },
+          {
+            "name": "ticketSequence",
+            "means": "optional TicketSequence: a Ticket set aside earlier, so this transaction need not wait its turn in the Sequence order"
+          },
+          {
+            "name": "signerCount",
+            "means": "N, the number of signatures the fee is sized for; fixed before anyone signs"
+          },
+          {
+            "name": "fee",
+            "means": "the Fee in drops, destroyed on inclusion: at least (N+1) x the base fee, more under load; it is signed, so raising it means collecting again"
+          },
+          {
+            "name": "lastLedgerSequence",
+            "means": "optional expiry: the highest ledger index the transaction may be included in"
+          },
+          {
+            "name": "network",
+            "means": "the XRPL network the room binds this to (CAIP-2 xrpl:<network id>); for network ids <= 1024 no NetworkID is in the signed bytes"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "signer weights >= SignerQuorum (the account's on-chain SignerList, up to 32 signers)",
+        "finality": "external",
+        "domain": "xrpl.tx.multi-sign.smt.v1"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "xrpl:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "xrpl:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "xrpl-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "xrpl:*",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "xrpl-signer-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "xrpl-signerlist:<account>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "xrpl-multisig-account",
+          "party": "proposer",
+          "class": "address",
+          "target": "xrpl-account:<account>",
+          "field": "account"
+        },
+        {
+          "kind": "asset",
+          "name": "xrp",
+          "party": "proposer",
+          "class": "asset",
+          "target": "xrpl-account:<account>",
+          "field": "amount"
+        },
+        {
+          "kind": "address",
+          "name": "payee",
+          "party": "counterparty",
+          "class": "address",
+          "target": "xrpl-account:<destination>",
+          "field": "destination"
+        }
+      ],
+      "touches": [
+        {
+          "target": "xrpl:*",
+          "mode": "write"
+        },
+        {
+          "target": "xrpl-account:<account>",
+          "mode": "write"
+        },
+        {
+          "target": "xrpl-account:<destination>",
+          "mode": "write"
+        },
+        {
+          "target": "xrpl-signerlist:<account>",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "effect",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "amount",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payee",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "A member composes the payment. The instance reads the account's Sequence (or an unused Ticket), its SignerList and the current base fee from the configured server, and records each read (invariant 10). Every field is fixed before anyone signs: the XRPL docs forbid auto-filling while multi-signing, and the Fee must already cover the N signatures it will carry. Muster would show the payment, the signer count the fee covers, and the ledger it expires at.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "policy",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://xrpl.org/docs/concepts/accounts/multi-signing",
+            "https://xrpl.org/docs/tutorials/best-practices/key-management/send-a-multi-signed-transaction",
+            "https://xrpl.org/docs/concepts/transactions/transaction-cost",
+            "https://xrpl.org/docs/references/protocol/transactions/common-fields"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Each signer's instance re-derives its own signing blob from the effect and refuses on mismatch (invariant 1), then signs. Each signer signs a different blob, because it ends in that signer's AccountID, so muster needs one materialization per contributor. The driver, not the core, checks each contribution against that signer's blob and key (invariant 6). Any transaction type can be multi-signed except the few only the master key may authorize; a Payment is an ordinary one.",
+          "signs": "Per signer, a different blob: the 4 bytes 0x534D5400 (ASCII 'SMT' + a zero byte, HashPrefix::TxMultiSign) || the transaction's canonical binary serialization of its signing fields only (fields sorted by type code, then field code) — TransactionType Payment, Flags, Account, Destination, Amount (drops), optional DestinationTag, Fee, Sequence (or Sequence 0 and TicketSequence), optional LastLedgerSequence, and SigningPubKey present but empty; TxnSignature and the Signers array are non-signing fields and are left out || that signer's own 20-byte AccountID. A secp256k1 key signs SHA-512Half of those bytes with ECDSA (RFC 6979 nonce, DER); an Ed25519 key signs the raw bytes. Inside: the account, the Sequence or Ticket, the Fee (so the signature count it covers) and, if set, LastLedgerSequence. Not inside on network ids <= 1024 (mainnet, testnet, devnet): any network id.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/Sign.cpp#L100-L147",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/include/xrpl/protocol/Sign.h#L124-L131",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/include/xrpl/protocol/HashPrefix.h#L61-L69",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/SecretKey.cpp#L232-L271",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/include/xrpl/protocol/detail/sfields.macro#L429",
+            "https://xrpl.org/docs/concepts/accounts/cryptographic-keys#special-permissions",
+            "https://xrpl.org/docs/tutorials/best-practices/key-management/send-a-multi-signed-transaction"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "Once the collected weights reach the quorum, the instance builds the Signers array — one {Account, SigningPubKey, TxnSignature} per signer, sorted by AccountID with the lowest first, no duplicates, never the account itself — and submits the blob to the configured server. Submitting adds no signature. The server sees the whole signed transaction first; validators see it before it is included. The XRP Ledger then checks every signature, that each signer is on the current list with a key it accepts, and that the weights reach the quorum.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payee",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/STTx.cpp#L480-L595",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L1050-L1206",
+            "https://xrpl.org/docs/concepts/accounts/multi-signing",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L449-L474"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "The instance waits for the payment in a validated ledger; the result is final there. A tes result delivered the XRP. A tec result (for example tecNO_DST_INSUF_XRP, an unfunded destination sent too little to create it) is final too: it destroys the fee and consumes the Sequence or Ticket. Once a validated ledger passes LastLedgerSequence without it, it can never be included.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tec-codes",
+            "https://xrpl.org/docs/references/protocol/transactions/common-fields",
+            "https://xrpl.org/docs/concepts/accounts/tickets"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a signature over any bytes other than this signer's re-derived blob (the shared prefix and signing fields plus its own AccountID)",
+          "why": "invariant 1 / F-4: the materialization is per contributor; a signature made for one AccountID never verifies for another",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/Sign.cpp#L100-L147",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/STTx.cpp#L480-L595"
+          ]
+        },
+        {
+          "what": "submitting to any network other than the one the room bound, or with a NetworkID on a network whose id is <= 1024 (or without one above 1024)",
+          "why": "invariant 2: on mainnet, testnet and devnet the chain's signed bytes carry no network id (binding: none), so muster's envelope is the only binding; the chain itself refuses telNETWORK_ID_MAKES_TX_NON_CANONICAL / telREQUIRES_NETWORK_ID / telWRONG_NETWORK",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L63-L97",
+            "https://xrpl.org/docs/references/protocol/transactions/common-fields#networkid-field",
+            "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tel-codes"
+          ]
+        },
+        {
+          "what": "collecting or submitting after the account's Sequence has moved past the effect's Sequence, or after its Ticket was used",
+          "why": "the chain's rule: tefPAST_SEQ / tefNO_TICKET; the collected signatures become worthless",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L698-L761",
+            "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tef-codes",
+            "https://xrpl.org/docs/tutorials/best-practices/key-management/send-a-multi-signed-transaction"
+          ]
+        },
+        {
+          "what": "submitting after a validated ledger passed LastLedgerSequence",
+          "why": "the chain's rule: tefMAX_LEDGER; the expiry is inside the signed bytes",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L763-L789",
+            "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tef-codes"
+          ]
+        },
+        {
+          "what": "submitting with weights below SignerQuorum, a signature from an account not on the current SignerList, or a key that account no longer accepts (a disabled master key, a replaced regular key)",
+          "why": "the chain checks the list when the transaction applies: tefBAD_QUORUM / tefBAD_SIGNATURE / tefMASTER_DISABLED; muster reads the list before collecting and again before submitting, and records both reads (invariant 10)",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L1050-L1206",
+            "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tef-codes"
+          ]
+        },
+        {
+          "what": "a Signers array that is unsorted, repeats a signer, includes the account itself, or holds more than 32 entries",
+          "why": "the chain's rule (multiSignHelper: 'Unsorted Signers array', duplicates, 'Invalid multisigner'); invariant 5: muster sorts by AccountID itself",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/STTx.cpp#L480-L595",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/include/xrpl/protocol/STTx.h#L48-L49",
+            "https://xrpl.org/docs/concepts/accounts/multi-signing"
+          ]
+        },
+        {
+          "what": "attaching more signatures than the signed Fee covers, or submitting when the Fee is below the current cost",
+          "why": "the chain's rule: the minimum is (N+1) x the base fee, scaled for load, else telINSUF_FEE_P; the Fee is signed, so raising it means collecting every signature again",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L449-L474",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L516-L550",
+            "https://xrpl.org/docs/concepts/transactions/transaction-cost"
+          ]
+        },
+        {
+          "what": "signing when the Sequence, Ticket, Fee, LastLedgerSequence or SignerList that reached the bytes was read but not recorded",
+          "why": "invariant 10: each is an external read that reached the signed bytes",
+          "evidence": [
+            "https://xrpl.org/docs/concepts/accounts/multi-signing",
+            "https://xrpl.org/docs/references/protocol/transactions/common-fields"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The XRP Ledger counts the signer weights itself and refuses a payment below the quorum.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Each signature covers the whole payment plus the signer's own AccountID, so it cannot be moved to another signer's slot.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The Sequence or Ticket makes a collected payment single-use: anything else that uses it first makes the signatures worthless.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "At settle the ledger shows which signer accounts signed, beside the public signer list, the amount, the payer and the payee.",
+          "credibility": "exposed",
+          "party": "every chain observer"
+        },
+        {
+          "claim": "The master key and a regular key coexist with the signer list: unless the master key is disabled and no regular key is set, one key can send this transaction, or any other, without the quorum.",
+          "credibility": "motivational",
+          "party": "the holder of the account's master key or regular key"
+        },
+        {
+          "claim": "The signed bytes name no network on mainnet, testnet or devnet (NetworkID must be omitted for ids <= 1024). Any XRPL network with id <= 1024 where the account exists at that Sequence would accept them. Muster binds the network in the room; the chain does not.",
+          "credibility": "exposed",
+          "party": "anyone holding the signed transaction (the RPC provider, a relaying node, any chain observer after settle) who submits it on another XRPL network with id <= 1024"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/concepts/accounts/multi-signing",
+          "what": "XRPL docs: a signer list holds 1-32 addresses with weights and a quorum; multi-signing coexists with the master and regular keys; all fields are fixed before signatures are collected; Fee >= (N+1) x base; Signers sorted by address"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/tutorials/best-practices/key-management/send-a-multi-signed-transaction",
+          "what": "XRPL docs: fix Fee, Sequence and LastLedgerSequence before collecting; almost any transaction type can be multi-signed; use a Ticket if collecting takes a while"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/Sign.cpp#L100-L147",
+          "what": "rippled: buildMultiSigningData = startMultiSigningData (prefix + the signing fields) + finishMultiSigningData (the signer's AccountID); the comment explains why the AccountID is inside"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/include/xrpl/protocol/Sign.h#L124-L131",
+          "what": "rippled: finishMultiSigningData appends the signer's 20-byte AccountID to the shared signing data"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/include/xrpl/protocol/HashPrefix.h#L61-L69",
+          "what": "rippled: HashPrefix::TxSign = 'STX'+0x00 (single-signing) and HashPrefix::TxMultiSign = 'SMT'+0x00 (multi-signing)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/SecretKey.cpp#L232-L271",
+          "what": "rippled: a secp256k1 key signs SHA-512Half of the message with ECDSA (RFC 6979 nonce, DER); an Ed25519 key signs the raw message"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/PublicKey.cpp#L271-L293",
+          "what": "rippled: verification mirrors it — secp256k1 over sha512Half(m), Ed25519 over m"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/include/xrpl/protocol/detail/sfields.macro#L429",
+          "what": "rippled: Signers is a kNotSigning field (as is TxnSignature, line 290), so neither is in the signed bytes"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/STTx.cpp#L480-L595",
+          "what": "rippled: multiSignHelper refuses a Signers array that is out of bounds, unsorted by AccountID, duplicated, or names the account itself; each signer's signature is checked over its own blob"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/include/xrpl/protocol/STTx.h#L48-L49",
+          "what": "rippled: kMinMultiSigners = 1, kMaxMultiSigners = 32"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L1050-L1206",
+          "what": "rippled: checkMultiSign reads the account's current SignerList, matches each Signer to an entry (tefBAD_SIGNATURE otherwise), accepts a signer's master key (unless disabled) or regular key or an unfunded 'phantom' account's master key, and refuses weights below SignerQuorum (tefBAD_QUORUM)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L449-L474",
+          "what": "rippled: the base fee of a multi-signed transaction is baseFee + (number of Signers) x baseFee"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L516-L550",
+          "what": "rippled: a Fee below the (load-scaled) minimum is refused with telINSUF_FEE_P"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L698-L761",
+          "what": "rippled: a past Sequence is refused (tefPAST_SEQ), a future one retried (terPRE_SEQ); a used or never-created Ticket is refused (tefNO_TICKET)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L763-L789",
+          "what": "rippled: a transaction whose LastLedgerSequence is below the current ledger is refused (tefMAX_LEDGER)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L63-L97",
+          "what": "rippled: on a network whose id is <= 1024 a NetworkID field is refused (telNETWORK_ID_MAKES_TX_NON_CANONICAL); above 1024 it is required (telREQUIRES_NETWORK_ID) and must match (telWRONG_NETWORK)"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/common-fields",
+          "what": "XRPL docs: the common fields — Sequence / TicketSequence, Fee, LastLedgerSequence (a strict upper limit), SigningPubKey empty for a multi-signature, Signers"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/common-fields#networkid-field",
+          "what": "XRPL docs: NetworkID must be omitted on networks with id <= 1024 (Mainnet 0, Testnet 1, Devnet 2: Disallowed) and required above; the conditions under which a transaction replays on another network"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/concepts/transactions/transaction-cost",
+          "what": "XRPL docs: a multi-signed transaction costs base fee x (1 + number of signatures); the Fee cannot change without invalidating the signature; no auto-fill when multi-signing"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/concepts/accounts/tickets",
+          "what": "XRPL docs: Tickets set aside Sequence numbers so multi-signed transactions can be collected out of order; each Ticket is single-use and holds an owner reserve"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/types/payment",
+          "what": "XRPL docs: Payment fields — Destination, Amount/DeliverMax (XRP in drops), optional DestinationTag; SendMax omitted for XRP-to-XRP"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/concepts/accounts/cryptographic-keys#special-permissions",
+          "what": "XRPL docs: only the master key can send an account's first transaction or disable the master key; a regular key or multi-signature can do anything else, including re-enabling the master key"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/concepts/accounts/permission-delegation",
+          "what": "XRPL docs: multi-signing can send any transaction except the cases that need the master key; signers can be key pairs with no funded account"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tef-codes",
+          "what": "XRPL docs: tefBAD_QUORUM, tefBAD_SIGNATURE, tefMASTER_DISABLED, tefMAX_LEDGER, tefNO_TICKET, tefNOT_MULTI_SIGNING, tefPAST_SEQ"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tel-codes",
+          "what": "XRPL docs: telINSUF_FEE_P, telNETWORK_ID_MAKES_TX_NON_CANONICAL, telREQUIRES_NETWORK_ID, telWRONG_NETWORK"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tec-codes",
+          "what": "XRPL docs: a tec result destroys the fee and consumes the Sequence; tecNEED_MASTER_KEY, tecNO_ALTERNATIVE_KEY, tecINSUFFICIENT_RESERVE"
+        }
+      ],
+      "unverified": [
+        "The rippled source is cited at develop commit d6df33ff; it was not cross-checked against the release that mainnet validators run. The multi-signing rules cited long predate that commit."
+      ]
+    },
+    {
+      "id": "xrpl.signerlist/change-signers",
+      "name": "Change or delete an XRPL account's signer list",
+      "area": "family",
+      "family": "xrpl.signerlist",
+      "status": "declared",
+      "summary": "The current signers multi-sign a SignerListSet that replaces the account's signer list in place (the address stays), or deletes it with SignerQuorum 0. The XRP Ledger checks the old list's quorum; the new list applies to every transaction checked after it.",
+      "effect": {
+        "schema": "muster.effect.xrpl.signerlist.change-signers.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the multi-signed XRPL account (classic address); it pays the fee"
+          },
+          {
+            "name": "signerQuorum",
+            "means": "the new SignerQuorum, or 0 to delete the list"
+          },
+          {
+            "name": "signerEntries",
+            "means": "the new SignerEntries (1 to 32 AccountIDs, each with a weight); omitted when deleting"
+          },
+          {
+            "name": "sequence",
+            "means": "the account's Sequence this transaction uses, read from the ledger; 0 when ticketSequence is set"
+          },
+          {
+            "name": "ticketSequence",
+            "means": "optional TicketSequence: a Ticket set aside earlier, so this transaction need not wait its turn in the Sequence order"
+          },
+          {
+            "name": "signerCount",
+            "means": "N, the number of signatures the fee is sized for; fixed before anyone signs"
+          },
+          {
+            "name": "fee",
+            "means": "the Fee in drops, destroyed on inclusion: at least (N+1) x the base fee, more under load; it is signed, so raising it means collecting again"
+          },
+          {
+            "name": "lastLedgerSequence",
+            "means": "optional expiry: the highest ledger index the transaction may be included in"
+          },
+          {
+            "name": "network",
+            "means": "the XRPL network the room binds this to (CAIP-2 xrpl:<network id>); for network ids <= 1024 no NetworkID is in the signed bytes"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "signer weights >= the CURRENT SignerQuorum (the list being replaced)",
+        "finality": "external",
+        "domain": "xrpl.tx.multi-sign.smt.v1"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "xrpl:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "xrpl:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "xrpl-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "xrpl:*",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "xrpl-signer-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "xrpl-signerlist:<account>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "xrpl-multisig-account",
+          "party": "proposer",
+          "class": "address",
+          "target": "xrpl-account:<account>",
+          "field": "account"
+        },
+        {
+          "kind": "asset",
+          "name": "xrp-fee",
+          "party": "proposer",
+          "class": "asset",
+          "target": "xrpl-account:<account>",
+          "field": "fee"
+        },
+        {
+          "kind": "address",
+          "name": "new-signer-account",
+          "party": "counterparty",
+          "class": "address",
+          "target": "xrpl-account:<new signer account>",
+          "field": "signerEntries"
+        }
+      ],
+      "touches": [
+        {
+          "target": "xrpl:*",
+          "mode": "write"
+        },
+        {
+          "target": "xrpl-account:<account>",
+          "mode": "write"
+        },
+        {
+          "target": "xrpl-signerlist:<account>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "effect",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "A member proposes the new list, or its deletion. New signer AccountIDs come only from what those people disclosed. The instance reads the current SignerList, the account's flags (is the master key disabled? is a regular key set?), its Sequence and the fee, and records each read. For a deletion it checks that the master key is enabled or a regular key exists; otherwise the chain would refuse, so muster refuses first.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "policy",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://xrpl.org/docs/references/protocol/transactions/types/signerlistset",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SignerListSet.cpp#L356-L373",
+            "https://xrpl.org/docs/concepts/accounts/multi-signing"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Signers on the CURRENT list each re-derive and sign their own blob (invariant 1). The new list counts for nothing until this transaction validates.",
+          "signs": "Per signer, a different blob: the 4 bytes 0x534D5400 (ASCII 'SMT' + a zero byte, HashPrefix::TxMultiSign) || the transaction's canonical binary serialization of its signing fields only (fields sorted by type code, then field code) — TransactionType SignerListSet, Flags, Account, Fee, Sequence (or Sequence 0 and TicketSequence), optional LastLedgerSequence, SignerQuorum, SignerEntries (absent when deleting), and SigningPubKey present but empty; TxnSignature and the Signers array are non-signing fields and are left out || that signer's own 20-byte AccountID. A secp256k1 key signs SHA-512Half of those bytes with ECDSA (RFC 6979 nonce, DER); an Ed25519 key signs the raw bytes. Inside: the account, the Sequence or Ticket, the Fee (so the signature count it covers) and, if set, LastLedgerSequence. Not inside on network ids <= 1024 (mainnet, testnet, devnet): any network id.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/Sign.cpp#L100-L147",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/include/xrpl/protocol/Sign.h#L124-L131",
+            "https://xrpl.org/docs/references/protocol/transactions/types/signerlistset"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "The instance assembles the Signers array sorted by AccountID and submits it. The chain checks the signatures against the current list, then removes the old SignerList and writes the new one (one owner-reserve increment), or deletes it and frees the reserve. The server sees the signed transaction first; validators see it before it is included.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SignerListSet.cpp#L298-L354",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SignerListSet.cpp#L356-L373",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L1050-L1206"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "The instance waits for a validated ledger and reads the SignerList back. Every other proposal whose signatures were collected under the old list is graded again: a signature from a removed signer now fails (tefBAD_SIGNATURE), and the remaining weights may not reach the new quorum.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L1050-L1206",
+            "https://xrpl.org/docs/references/protocol/ledger-data/ledger-entry-types/signerlist",
+            "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tec-codes"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a signature over any bytes other than this signer's re-derived blob",
+          "why": "invariant 1 / F-4: the materialization is per contributor",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/Sign.cpp#L100-L147",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/STTx.cpp#L480-L595"
+          ]
+        },
+        {
+          "what": "deleting the list while the master key is disabled and no regular key is set",
+          "why": "the chain's rule: tecNO_ALTERNATIVE_KEY, since the account must keep one way to sign; muster refuses before collecting, because a tec result still burns the fee and the Sequence",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SignerListSet.cpp#L356-L373",
+            "https://xrpl.org/docs/references/protocol/transactions/types/signerlistset",
+            "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tec-codes"
+          ]
+        },
+        {
+          "what": "a new list whose quorum the weights cannot reach, with fewer than 1 or more than 32 entries, a duplicate, a zero weight, or the account itself",
+          "why": "the chain's rule (temBAD_QUORUM / temMALFORMED, temBAD_SIGNER, temBAD_WEIGHT)",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SignerListSet.cpp#L239-L296",
+            "https://xrpl.org/docs/references/protocol/transactions/types/signerlistset"
+          ]
+        },
+        {
+          "what": "a new signer AccountID that its holder did not disclose in the room",
+          "why": "invariant 9; the chain does not check who controls a signer account",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SignerListSet.cpp#L239-L296"
+          ]
+        },
+        {
+          "what": "submitting a pending proposal whose signatures were collected under a list this change replaced",
+          "why": "the chain checks signatures against the SignerList in force when the transaction applies (tefBAD_SIGNATURE / tefBAD_QUORUM)",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L1050-L1206",
+            "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tef-codes"
+          ]
+        },
+        {
+          "what": "submitting with a stale Sequence or a used Ticket, after LastLedgerSequence, below the current quorum, or with more signatures than the signed Fee covers",
+          "why": "the chain's rules: tefPAST_SEQ / tefNO_TICKET, tefMAX_LEDGER, tefBAD_QUORUM, telINSUF_FEE_P",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L698-L761",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L763-L789",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L1050-L1206",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L449-L474"
+          ]
+        },
+        {
+          "what": "submitting to any network other than the one the room bound, or with a NetworkID on a network whose id is <= 1024 (or without one above 1024)",
+          "why": "invariant 2: on mainnet, testnet and devnet the chain's signed bytes carry no network id (binding: none), so muster's envelope is the only binding; the chain itself refuses telNETWORK_ID_MAKES_TX_NON_CANONICAL / telREQUIRES_NETWORK_ID / telWRONG_NETWORK",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L63-L97",
+            "https://xrpl.org/docs/references/protocol/transactions/common-fields#networkid-field",
+            "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tel-codes"
+          ]
+        },
+        {
+          "what": "signing when the current list, the account's flags, the Sequence or the Fee was read but not recorded",
+          "why": "invariant 10: each reached the signed bytes or the decision to offer the action",
+          "evidence": [
+            "https://xrpl.org/docs/concepts/accounts/multi-signing",
+            "https://xrpl.org/docs/references/protocol/transactions/common-fields"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The current list's quorum must approve its own replacement, and the account's address stays the same.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The chain refuses to delete the last way to sign (tecNO_ALTERNATIVE_KEY).",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Adding a signer on the ledger does not admit them to the room. Room admission re-keys forward, so a new signer who joins reads only from their epoch on (invariant 7); the room shows signers and members as two sets.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The old list stays in ledger history; the new list and which signers approved the change are public.",
+          "credibility": "exposed",
+          "party": "every chain observer"
+        },
+        {
+          "claim": "Unless disabled, the master key or a regular key can replace or delete the list alone, without the quorum.",
+          "credibility": "motivational",
+          "party": "the holder of the account's master key or regular key"
+        },
+        {
+          "claim": "The signed bytes name no network on mainnet, testnet or devnet (NetworkID must be omitted for ids <= 1024). Any XRPL network with id <= 1024 where the account exists at that Sequence would accept them. Muster binds the network in the room; the chain does not.",
+          "credibility": "exposed",
+          "party": "anyone holding the signed transaction (the RPC provider, a relaying node, any chain observer after settle) who submits it on another XRPL network with id <= 1024"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/types/signerlistset",
+          "what": "XRPL docs: SignerListSet fields, delete with SignerQuorum 0 and no SignerEntries, 1-32 members, set by the master key, regular key or the current list, and no deleting the last way to sign (tecNO_ALTERNATIVE_KEY)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SignerListSet.cpp#L239-L296",
+          "what": "rippled: a SignerListSet needs 1-32 entries, no duplicates, no zero weight, not the account itself, and a quorum the weights can reach; signer accounts need not exist"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SignerListSet.cpp#L298-L354",
+          "what": "rippled: creating or replacing a list removes the old one and adds one OwnerCount (lsfOneOwnerCount), checked against the pre-fee balance"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SignerListSet.cpp#L356-L373",
+          "what": "rippled: deleting the list is refused with tecNO_ALTERNATIVE_KEY when the master key is disabled and no regular key is set"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/ledger-data/ledger-entry-types/signerlist",
+          "what": "XRPL docs: the SignerList ledger entry (SignerQuorum, SignerEntries, optional WalletLocator) and lsfOneOwnerCount: a list counts as one owner-reserve item since MultiSignReserve"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/concepts/accounts/multi-signing",
+          "what": "XRPL docs: a signer list holds 1-32 addresses with weights and a quorum; multi-signing coexists with the master and regular keys; all fields are fixed before signatures are collected; Fee >= (N+1) x base; Signers sorted by address"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/Sign.cpp#L100-L147",
+          "what": "rippled: buildMultiSigningData = startMultiSigningData (prefix + the signing fields) + finishMultiSigningData (the signer's AccountID); the comment explains why the AccountID is inside"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/include/xrpl/protocol/Sign.h#L124-L131",
+          "what": "rippled: finishMultiSigningData appends the signer's 20-byte AccountID to the shared signing data"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/STTx.cpp#L480-L595",
+          "what": "rippled: multiSignHelper refuses a Signers array that is out of bounds, unsorted by AccountID, duplicated, or names the account itself; each signer's signature is checked over its own blob"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L1050-L1206",
+          "what": "rippled: checkMultiSign reads the account's current SignerList, matches each Signer to an entry (tefBAD_SIGNATURE otherwise), accepts a signer's master key (unless disabled) or regular key or an unfunded 'phantom' account's master key, and refuses weights below SignerQuorum (tefBAD_QUORUM)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L698-L761",
+          "what": "rippled: a past Sequence is refused (tefPAST_SEQ), a future one retried (terPRE_SEQ); a used or never-created Ticket is refused (tefNO_TICKET)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L763-L789",
+          "what": "rippled: a transaction whose LastLedgerSequence is below the current ledger is refused (tefMAX_LEDGER)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L449-L474",
+          "what": "rippled: the base fee of a multi-signed transaction is baseFee + (number of Signers) x baseFee"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L63-L97",
+          "what": "rippled: on a network whose id is <= 1024 a NetworkID field is refused (telNETWORK_ID_MAKES_TX_NON_CANONICAL); above 1024 it is required (telREQUIRES_NETWORK_ID) and must match (telWRONG_NETWORK)"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/common-fields#networkid-field",
+          "what": "XRPL docs: NetworkID must be omitted on networks with id <= 1024 (Mainnet 0, Testnet 1, Devnet 2: Disallowed) and required above; the conditions under which a transaction replays on another network"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tef-codes",
+          "what": "XRPL docs: tefBAD_QUORUM, tefBAD_SIGNATURE, tefMASTER_DISABLED, tefMAX_LEDGER, tefNO_TICKET, tefNOT_MULTI_SIGNING, tefPAST_SEQ"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tec-codes",
+          "what": "XRPL docs: a tec result destroys the fee and consumes the Sequence; tecNEED_MASTER_KEY, tecNO_ALTERNATIVE_KEY, tecINSUFFICIENT_RESERVE"
+        }
+      ]
+    },
+    {
+      "id": "xrpl.signerlist/disable-master-key",
+      "name": "Make the signer list an XRPL account's only authority",
+      "area": "family",
+      "family": "xrpl.signerlist",
+      "status": "declared",
+      "summary": "Two transactions close the registry's bypass. The signers multi-sign a SetRegularKey that removes any regular key; then the master key holder signs an AccountSet that sets asfDisableMaster. The XRP Ledger accepts asfDisableMaster only when the master key itself signs it, so the list cannot take this step alone.",
+      "effect": {
+        "schema": "muster.effect.xrpl.signerlist.disable-master-key.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the multi-signed XRPL account (classic address); it pays the fee"
+          },
+          {
+            "name": "removeRegularKey",
+            "means": "a SetRegularKey with no RegularKey field: removes any regular key; multi-signed by the list"
+          },
+          {
+            "name": "regularKeySequence",
+            "means": "the Sequence (or 0 and a TicketSequence) of the SetRegularKey"
+          },
+          {
+            "name": "disableMaster",
+            "means": "an AccountSet with SetFlag asfDisableMaster (4): sets lsfDisableMaster; signed by the master key alone"
+          },
+          {
+            "name": "disableSequence",
+            "means": "the Sequence (or 0 and a TicketSequence) of the AccountSet, used after the SetRegularKey validates"
+          },
+          {
+            "name": "signerCount",
+            "means": "N, the number of signatures the fee is sized for; fixed before anyone signs"
+          },
+          {
+            "name": "fee",
+            "means": "the two Fees in drops: at least (N+1) x the base fee for the multi-signed SetRegularKey, one base fee for the single-signed AccountSet"
+          },
+          {
+            "name": "lastLedgerSequence",
+            "means": "optional expiry: the highest ledger index the transaction may be included in"
+          },
+          {
+            "name": "network",
+            "means": "the XRPL network the room binds this to (CAIP-2 xrpl:<network id>); for network ids <= 1024 no NetworkID is in the signed bytes"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "signer weights >= SignerQuorum for the SetRegularKey, then the master key alone for asfDisableMaster",
+        "finality": "external",
+        "domain": "xrpl.tx.multi-sign.smt.v1 + xrpl.tx.single-sign.stx.v1"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "xrpl:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "xrpl:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "xrpl-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "xrpl:*",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "xrpl-signer-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "xrpl-signerlist:<account>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "xrpl-multisig-account",
+          "party": "proposer",
+          "class": "address",
+          "target": "xrpl-account:<account>",
+          "field": "account"
+        },
+        {
+          "kind": "authority",
+          "name": "xrpl-master-key",
+          "party": "proposer",
+          "class": "authority",
+          "target": "xrpl-account:<account>",
+          "field": "disableMaster"
+        },
+        {
+          "kind": "asset",
+          "name": "xrp-fee",
+          "party": "proposer",
+          "class": "asset",
+          "target": "xrpl-account:<account>",
+          "field": "fee"
+        }
+      ],
+      "touches": [
+        {
+          "target": "xrpl:*",
+          "mode": "write"
+        },
+        {
+          "target": "xrpl-account:<account>",
+          "mode": "write"
+        },
+        {
+          "target": "xrpl-signerlist:<account>",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "effect",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "The master key holder proposes locking the account to its signer list. The instance reads the account (lsfDisableMaster, RegularKey, Sequence), its SignerList and the fee, and records each read. The chain only checks that a list or regular key exists before it disables the master key, not that the list's keys still work, so muster would require the list to prove itself first: the multi-signed SetRegularKey must validate before the master key step is offered.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "policy",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/AccountSet.cpp#L305-L329",
+            "https://xrpl.org/docs/concepts/accounts/multi-signing",
+            "https://xrpl.org/docs/concepts/accounts/cryptographic-keys#special-permissions"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Signers each re-derive and sign their own blob for the SetRegularKey that removes the regular key (invariant 1).",
+          "signs": "Per signer, a different blob: the 4 bytes 0x534D5400 (ASCII 'SMT' + a zero byte, HashPrefix::TxMultiSign) || the transaction's canonical binary serialization of its signing fields only (fields sorted by type code, then field code) — TransactionType SetRegularKey, Flags, Account, Fee, Sequence (or Sequence 0 and TicketSequence), optional LastLedgerSequence (RegularKey absent), and SigningPubKey present but empty; TxnSignature and the Signers array are non-signing fields and are left out || that signer's own 20-byte AccountID. A secp256k1 key signs SHA-512Half of those bytes with ECDSA (RFC 6979 nonce, DER); an Ed25519 key signs the raw bytes. Inside: the account, the Sequence or Ticket, the Fee (so the signature count it covers) and, if set, LastLedgerSequence. Not inside on network ids <= 1024 (mainnet, testnet, devnet): any network id.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/Sign.cpp#L100-L147",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/include/xrpl/protocol/Sign.h#L124-L131",
+            "https://xrpl.org/docs/references/protocol/transactions/types/setregularkey",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SetRegularKey.cpp#L53-L79"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "proposer",
+          "does": "The instance submits the multi-signed SetRegularKey. Once it validates, proving the list can reach its quorum, the master key holder signs the AccountSet and the instance submits it. A multi-signed or regular-key-signed asfDisableMaster would fail with tecNEED_MASTER_KEY and still burn its fee. The server sees each signed transaction first; validators see it before it is included.",
+          "signs": "One single signature by the master key, on the AccountSet only (the SetRegularKey submitted first carries the approve step's signatures and adds none): the 4 bytes 0x53545800 (ASCII 'STX' + a zero byte, HashPrefix::TxSign) || the transaction's canonical binary serialization of its signing fields — TransactionType AccountSet, Flags, Account, Fee, Sequence (or Sequence 0 and TicketSequence), optional LastLedgerSequence, SetFlag 4 (asfDisableMaster), and SigningPubKey = the signing key's public key; TxnSignature is left out and no AccountID is appended. A secp256k1 key signs SHA-512Half of those bytes with ECDSA (RFC 6979 nonce, DER); an Ed25519 key signs the raw bytes. No NetworkID on network ids <= 1024, so the bytes name no network.",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/AccountSet.cpp#L305-L329",
+            "https://xrpl.org/docs/references/protocol/transactions/types/accountset",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/STTx.cpp#L171-L224",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/include/xrpl/protocol/HashPrefix.h#L61-L69",
+            "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tec-codes"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "The instance reads the account back: lsfDisableMaster set and no RegularKey. From then on only the signer list can authorize the account. Keys are checked when a transaction applies, so anything the master or regular key signed earlier and did not submit now fails (tefMASTER_DISABLED / tefBAD_AUTH). The quorum can still re-enable the master key later, with a multi-signed AccountSet that clears asfDisableMaster.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L1018-L1048",
+            "https://xrpl.org/docs/references/protocol/transactions/types/accountset",
+            "https://xrpl.org/docs/concepts/accounts/cryptographic-keys#special-permissions"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "collecting multi-signatures on an AccountSet that sets asfDisableMaster",
+          "why": "the chain's rule: only the master key can set asfDisableMaster (tecNEED_MASTER_KEY); a multi-signed one would burn the fee and the Sequence",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/AccountSet.cpp#L305-L329",
+            "https://xrpl.org/docs/references/protocol/transactions/types/accountset",
+            "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tec-codes"
+          ]
+        },
+        {
+          "what": "offering the master key step before a multi-signed transaction from this list has validated",
+          "why": "the chain checks only that a list or regular key exists (tecNO_ALTERNATIVE_KEY otherwise), not that the list's signers can still reach the quorum; with no master key and no regular key, an unusable list leaves nothing that can authorize the account",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/AccountSet.cpp#L305-L329",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SetRegularKey.cpp#L53-L79",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L1050-L1206"
+          ]
+        },
+        {
+          "what": "a signature over any bytes other than the re-derived blob: each signer's own SetRegularKey blob, or the master key's AccountSet bytes",
+          "why": "invariant 1 / F-4",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/Sign.cpp#L100-L147",
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/STTx.cpp#L171-L224"
+          ]
+        },
+        {
+          "what": "submitting the AccountSet before the SetRegularKey validated, or either with a Sequence another transaction already used",
+          "why": "the chain's rule: the Sequence must be exactly the account's next (tefPAST_SEQ / terPRE_SEQ)",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L698-L761",
+            "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tef-codes"
+          ]
+        },
+        {
+          "what": "submitting to any network other than the one the room bound, or with a NetworkID on a network whose id is <= 1024 (or without one above 1024)",
+          "why": "invariant 2: on mainnet, testnet and devnet the chain's signed bytes carry no network id (binding: none), so muster's envelope is the only binding; the chain itself refuses telNETWORK_ID_MAKES_TX_NON_CANONICAL / telREQUIRES_NETWORK_ID / telWRONG_NETWORK",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L63-L97",
+            "https://xrpl.org/docs/references/protocol/transactions/common-fields#networkid-field",
+            "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tel-codes"
+          ]
+        },
+        {
+          "what": "signing when the account's flags, its regular key, its SignerList or a Sequence was read but not recorded",
+          "why": "invariant 10: each reached the signed bytes or the decision to offer the action",
+          "evidence": [
+            "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/AccountSet.cpp#L305-L329",
+            "https://xrpl.org/docs/concepts/accounts/multi-signing"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Once lsfDisableMaster is set and no regular key remains, the XRP Ledger accepts transactions from this account only with the signer list's quorum.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Only the master key holder can take the last step: the signers cannot disable the master key themselves, so the bypass closes only if that holder does it.",
+          "credibility": "motivational",
+          "party": "the holder of the account's master key"
+        },
+        {
+          "claim": "Keys are checked when a transaction applies, so anything the master or regular key signed earlier fails once the lock validates.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The quorum can re-enable the master key later (AccountSet ClearFlag asfDisableMaster, multi-signed); that takes the quorum, not one key.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The signed bytes name no network on mainnet, testnet or devnet (NetworkID must be omitted for ids <= 1024). Any XRPL network with id <= 1024 where the account exists at that Sequence would accept them. Muster binds the network in the room; the chain does not.",
+          "credibility": "exposed",
+          "party": "anyone holding the signed transaction (the RPC provider, a relaying node, any chain observer after settle) who submits it on another XRPL network with id <= 1024"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/AccountSet.cpp#L305-L329",
+          "what": "rippled: SetFlag asfDisableMaster requires a signature by the master key itself (tecNEED_MASTER_KEY) and a regular key or signer list to exist (tecNO_ALTERNATIVE_KEY); ClearFlag has no such check"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/types/accountset",
+          "what": "XRPL docs: asfDisableMaster can only be set with the master key (not a regular key or multi-signature) and only if another way to sign exists; a regular key or multi-signature can clear it"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/transactors/account/SetRegularKey.cpp#L53-L79",
+          "what": "rippled: SetRegularKey without RegularKey removes the regular key, refused (tecNO_ALTERNATIVE_KEY) only when the master key is disabled and no signer list exists"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/types/setregularkey",
+          "what": "XRPL docs: SetRegularKey with RegularKey omitted removes the existing regular key pair"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/concepts/accounts/cryptographic-keys#special-permissions",
+          "what": "XRPL docs: only the master key can send an account's first transaction or disable the master key; a regular key or multi-signature can do anything else, including re-enabling the master key"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L1018-L1048",
+          "what": "rippled: a single signature is accepted from the regular key, or the master key unless lsfDisableMaster is set (tefMASTER_DISABLED); any other key is tefBAD_AUTH — checked against ledger state when the transaction applies"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L1050-L1206",
+          "what": "rippled: checkMultiSign reads the account's current SignerList, matches each Signer to an entry (tefBAD_SIGNATURE otherwise), accepts a signer's master key (unless disabled) or regular key or an unfunded 'phantom' account's master key, and refuses weights below SignerQuorum (tefBAD_QUORUM)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/Sign.cpp#L100-L147",
+          "what": "rippled: buildMultiSigningData = startMultiSigningData (prefix + the signing fields) + finishMultiSigningData (the signer's AccountID); the comment explains why the AccountID is inside"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/include/xrpl/protocol/Sign.h#L124-L131",
+          "what": "rippled: finishMultiSigningData appends the signer's 20-byte AccountID to the shared signing data"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/protocol/STTx.cpp#L171-L224",
+          "what": "rippled: single-signing data is HashPrefix::TxSign + the transaction without its non-signing fields; no AccountID suffix"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/include/xrpl/protocol/HashPrefix.h#L61-L69",
+          "what": "rippled: HashPrefix::TxSign = 'STX'+0x00 (single-signing) and HashPrefix::TxMultiSign = 'SMT'+0x00 (multi-signing)"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/concepts/accounts/multi-signing",
+          "what": "XRPL docs: a signer list holds 1-32 addresses with weights and a quorum; multi-signing coexists with the master and regular keys; all fields are fixed before signatures are collected; Fee >= (N+1) x base; Signers sorted by address"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L698-L761",
+          "what": "rippled: a past Sequence is refused (tefPAST_SEQ), a future one retried (terPRE_SEQ); a used or never-created Ticket is refused (tefNO_TICKET)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/XRPLF/rippled/blob/d6df33ff03509312a64f8f14d1a68f8a68d1e368/src/libxrpl/tx/Transactor.cpp#L63-L97",
+          "what": "rippled: on a network whose id is <= 1024 a NetworkID field is refused (telNETWORK_ID_MAKES_TX_NON_CANONICAL); above 1024 it is required (telREQUIRES_NETWORK_ID) and must match (telWRONG_NETWORK)"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/common-fields#networkid-field",
+          "what": "XRPL docs: NetworkID must be omitted on networks with id <= 1024 (Mainnet 0, Testnet 1, Devnet 2: Disallowed) and required above; the conditions under which a transaction replays on another network"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tec-codes",
+          "what": "XRPL docs: a tec result destroys the fee and consumes the Sequence; tecNEED_MASTER_KEY, tecNO_ALTERNATIVE_KEY, tecINSUFFICIENT_RESERVE"
+        },
+        {
+          "kind": "source",
+          "url": "https://xrpl.org/docs/references/protocol/transactions/transaction-results/tef-codes",
+          "what": "XRPL docs: tefBAD_QUORUM, tefBAD_SIGNATURE, tefMASTER_DISABLED, tefMAX_LEDGER, tefNO_TICKET, tefNOT_MULTI_SIGNING, tefPAST_SEQ"
+        }
+      ],
+      "unverified": [
+        "Permission delegation (DelegateSet, amendment PermissionDelegationV1_1) would let the quorum grant another account's keys some transaction types for this account; its status on mainnet was not confirmed from a primary source (the known-amendments page loads status at runtime).",
+        "Objects the account created before the lock (payment channels, escrows, checks) may still move the funds they already set aside under their own rules; this was not researched per object type."
+      ]
+    }
+  ]
+}

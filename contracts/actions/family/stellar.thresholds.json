@@ -1,0 +1,2565 @@
+{
+  "actions": [
+    {
+      "id": "stellar.thresholds/register-signers",
+      "name": "Register signers and thresholds on a Stellar account",
+      "area": "family",
+      "family": "stellar.thresholds",
+      "status": "declared",
+      "summary": "The holder of an existing funded Stellar account makes it a weighted multisig: one transaction of SetOptions operations adds each member's ed25519 key with a weight and sets the master weight and the low, medium and high thresholds. The rule then lives in the account entry, and the protocol checks it on every later transaction.",
+      "effect": {
+        "schema": "muster.effect.stellar.thresholds.register-signers.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the existing, funded Stellar account (G… address) that becomes the multisig"
+          },
+          {
+            "name": "signers",
+            "means": "the signers to add: each a member-disclosed ed25519 public key with a weight from 1 to 255, one SetOptions operation per signer"
+          },
+          {
+            "name": "masterWeight",
+            "means": "the new weight of the account's own master key (0 turns it off)"
+          },
+          {
+            "name": "low",
+            "means": "the LOW threshold, 0-255 (BumpSequence, and the transaction itself)"
+          },
+          {
+            "name": "med",
+            "means": "the MEDIUM threshold, 0-255 (payments, contract calls, most operations)"
+          },
+          {
+            "name": "high",
+            "means": "the HIGH threshold, 0-255 (changing signers or thresholds, merging the account)"
+          },
+          {
+            "name": "fee",
+            "means": "the maximum total fee in stroops, paid by the account (at least 100 stroops per operation)"
+          },
+          {
+            "name": "seqNum",
+            "means": "the account's sequence number + 1, read from the chain"
+          },
+          {
+            "name": "maxTime",
+            "means": "the timeBounds upper limit in UNIX seconds; after it the transaction is invalid (0 = never)"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "signatures whose weights sum to at least the account's current HIGH threshold (a fresh account: its master key, weight 1, against threshold 0)",
+        "finality": "external",
+        "domain": "stellar.tx-signature-payload.envelope-type-tx"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "stellar:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "stellar:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "stellar-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "stellar:* (account reads, transaction submit)",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "stellar-signer-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "stellar-account:<G… multisig account> (ed25519 signer; weight toward HIGH)",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "signer-keys",
+          "party": "proposer",
+          "class": "address",
+          "target": "stellar-account:<G… multisig account> signers (ed25519, disclosed by each holder, weight 1-255, at most 20)",
+          "field": "signers"
+        },
+        {
+          "kind": "asset",
+          "name": "xlm-for-reserve",
+          "party": "proposer",
+          "class": "asset",
+          "target": "stellar-account:<G… multisig account> (0.5 XLM base reserve per added signer, plus the fee)",
+          "field": "signers"
+        }
+      ],
+      "touches": [
+        {
+          "target": "stellar:*",
+          "mode": "write"
+        },
+        {
+          "target": "stellar-account:<G… multisig account>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "effect",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Writes the effect: the keys and weights members disclosed, the master weight and the three thresholds. Muster would read the account's balance, sequence number and current signers from the RPC, record each read, build one SetOptions operation per signer, re-derive the transaction hash, and check the result: every threshold at most the total weight that remains.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "policy",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SetOptionsOpFrame.cpp#L32",
+            "https://developers.stellar.org/docs/learn/fundamentals/lumens",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Each current signer (for a fresh account, the master key alone) rebuilds the transaction, checks the hash, and signs. SetOptions that touches signers or thresholds is a HIGH-threshold operation, checked against the account as it was before any operation applies.",
+          "signs": "Ed25519, by each signer's key, over the 32-byte transaction hash SHA-256(XDR(TransactionSignaturePayload{networkId = SHA-256(network passphrase, e.g. \"Public Global Stellar Network ; September 2015\"), taggedTransaction = ENVELOPE_TYPE_TX (2) + Transaction{sourceAccount = the multisig account, fee = uint32 maximum total fee in stroops, seqNum = the account's sequence number + 1, cond = preconditions (timeBounds minTime/maxTime; muster would set maxTime to the room's expiry), memo, operations = [SetOptions{signer = {key: SIGNER_KEY_TYPE_ED25519, weight}} per signer; the first also sets masterWeight, lowThreshold, medThreshold, highThreshold], ext = 0}})). Inside: the network id, the account, the sequence number, the fee and the time bounds. Not inside: any other signature. Attached as a DecoratedSignature: a 4-byte hint (the last 4 bytes of the signer's public key) and the 64-byte signature.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L1012",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L133",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/main/ApplicationImpl.cpp#L142",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L33",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SetOptionsOpFrame.cpp#L32",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1546",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L201"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "One member attaches the collected signatures (at most 20) to the envelope and submits it through the RPC. The RPC provider sees the signed transaction first; validators see it before it is in a ledger. The account pays the fee.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L526",
+            "https://developers.stellar.org/docs/learn/fundamentals/fees-resource-limits-metering",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L33"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "The ledger closes. From here the account entry lists every signer key, its weight and the thresholds, readable by anyone. Muster would read the account back, record the read, and check it matches the effect.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-ledger-entries.x#L190",
+            "https://developers.stellar.org/docs/learn/fundamentals/lumens"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an approval over a transaction hash that differs from the one the room re-derived from the reviewed effect",
+          "why": "invariant 1 / F-4: effects are reviewed, the transaction hash is the materialization, and a mismatch refuses",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L133",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L1012"
+          ]
+        },
+        {
+          "what": "signing a payload whose networkId is not SHA-256 of the room's network passphrase, or whose source account or sequence number differs from the effect",
+          "why": "invariant 2: the payload must commit to environment, account and slot. Stellar binds explicitly: the network id is inside the signed hash, and a signature made for another network fails txBAD_AUTH",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/main/ApplicationImpl.cpp#L142",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L2026",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions"
+          ]
+        },
+        {
+          "what": "a resulting configuration in which any threshold exceeds the total weight of the signers that remain (including a master weight of 0 with too little weight left)",
+          "why": "the chain does not check it: SetOptions writes weights and thresholds as given, and a threshold above the total weight can never be met again, so the account is locked for that operation class",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SetOptionsOpFrame.cpp#L124",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig"
+          ]
+        },
+        {
+          "what": "more than 20 signers on the account, a weight or threshold above 255, or the account's own master key as an added signer",
+          "why": "the chain's rule: SET_OPTIONS_TOO_MANY_SIGNERS, SET_OPTIONS_THRESHOLD_OUT_OF_RANGE and SET_OPTIONS_BAD_SIGNER",
+          "evidence": [
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-ledger-entries.x#L135",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SetOptionsOpFrame.cpp#L231",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/list-of-operations"
+          ]
+        },
+        {
+          "what": "adding signers when the account's available balance cannot cover one more base reserve (0.5 XLM) per new signer plus the fee",
+          "why": "the chain's rule: each signer is a subentry that raises the minimum balance; otherwise SET_OPTIONS_LOW_RESERVE",
+          "evidence": [
+            "https://developers.stellar.org/docs/learn/fundamentals/lumens",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SetOptionsOpFrame.cpp#L45",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig"
+          ]
+        },
+        {
+          "what": "adding a signer that is not an ed25519 key held by a named member: a pre-authorized transaction hash, a hash(x), or an ed25519 signed-payload signer",
+          "why": "invariant 9: every driver is named. These signer types authorize without a keyholder's live approval: a pre-auth hash authorizes one exact transaction, anyone who learns x can use a hash(x) signer, and a signed-payload signature is checked against its fixed payload, not the transaction",
+          "evidence": [
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-types.x#L59",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L47",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureUtils.cpp#L84",
+            "https://github.com/stellar/stellar-protocol/blob/master/core/cap-0040.md"
+          ]
+        },
+        {
+          "what": "attaching a signature the protocol would not need: the collected weights must reach the HIGH threshold only with the last signature attached, in envelope order",
+          "why": "the chain's rule: the checker walks the signatures in order and stops once the weight meets the threshold; any signature it never used fails the whole transaction with txBAD_AUTH_EXTRA, so collection must stop at exactly enough",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L47",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L172",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1592",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig"
+          ]
+        },
+        {
+          "what": "collecting on, or submitting, a transaction whose seqNum is no longer the account's sequence number + 1 (another transaction from the account landed first)",
+          "why": "the chain's rule: the sequence number must be exactly one above the account's (txBAD_SEQ); muster would re-read the account before submit and mark the proposal stale",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1602",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions"
+          ]
+        },
+        {
+          "what": "collecting after the room's expiry, or submitting after the transaction's timeBounds.maxTime",
+          "why": "invariant 2 (expiry) and the chain's rule: after maxTime the transaction fails txTOO_LATE; with maxTime 0 a signed transaction never expires on its own",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1485",
+            "https://github.com/stellar/stellar-protocol/blob/master/core/cap-0021.md",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions"
+          ]
+        },
+        {
+          "what": "signing when a read that reached the signed bytes (the sequence number, balance, current signers and fee) is not recorded in the room log as an external read",
+          "why": "invariant 10: nothing is signed whose inputs cannot be accounted for; the sequence number and fee come from the chain, not the room",
+          "evidence": [
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions",
+            "https://developers.stellar.org/docs/learn/fundamentals/fees-resource-limits-metering"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The signed bytes name the network: networkId = SHA-256(passphrase) is inside every signature payload, so a signature is worthless on another Stellar network.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "After setup the protocol itself checks the signers' weights against the thresholds for every transaction from the account.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The policy is public from setup: every signer key, weight and threshold is in the account entry.",
+          "credibility": "exposed",
+          "party": "any chain observer"
+        },
+        {
+          "claim": "The chain accepts a threshold above the total signer weight, which locks the account; only a client-side check would stop it.",
+          "credibility": "exposed",
+          "party": "the signers who approve a setup outside muster"
+        },
+        {
+          "claim": "Pre-authorized transaction and hash(x) signers can be added to the account and then authorize without the keyholders; muster would not register them through this action.",
+          "credibility": "motivational",
+          "party": "whoever registered the pre-authorized transaction hash, or anyone who learns x (public once it is used)"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L1012",
+          "what": "TransactionSignaturePayload = {networkId, taggedTransaction = ENVELOPE_TYPE_TX + Transaction}: the bytes every signer's key signs (after SHA-256)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L939",
+          "what": "Transaction = {sourceAccount, fee, seqNum, cond (preconditions), memo, operations, ext (Soroban data)}: everything a signature commits to."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L33",
+          "what": "DecoratedSignature = {hint: last 4 bytes of the public key, signature}; TransactionV1Envelope carries signatures<20>."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L133",
+          "what": "stellar-core: the contents hash is sha256(xdr(networkID, ENVELOPE_TYPE_TX, tx)) and every signature is checked against it."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/main/ApplicationImpl.cpp#L142",
+          "what": "stellar-core: networkID = sha256(NETWORK_PASSPHRASE), so the network is inside every signed hash."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/js-stellar-base/blob/v15.0.0/src/network.js",
+          "what": "js-stellar-base: the network passphrases (public, testnet, futurenet, standalone) whose SHA-256 is the networkId."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L47",
+          "what": "stellar-core SignatureChecker: pre-auth-tx signers match the contents hash with no signature; hash(x) signers match sha256(signature); ed25519 signatures are walked in envelope order until the weight meets the needed threshold."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L172",
+          "what": "stellar-core: checkAllSignaturesUsed fails when any attached signature was never needed."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1592",
+          "what": "stellar-core: an unused signature fails the transaction with txBAD_AUTH_EXTRA."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L526",
+          "what": "stellar-core checkAllTransactionSignatures: the transaction's source account must meet its LOW threshold (and any extraSigners)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/OperationFrame.cpp#L217",
+          "what": "stellar-core OperationFrame::checkSignature: each operation's source account must meet that operation's threshold, else opBAD_AUTH."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1602",
+          "what": "stellar-core isBadSeq: without minSeqNum the tx seqNum must be exactly account seq + 1; with minSeqNum it is valid while minSeqNum <= account seq < tx seqNum."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L2022",
+          "what": "Result codes: txTOO_LATE (after maxTime), txBAD_SEQ, txBAD_AUTH (too few valid signatures / wrong network), txBAD_AUTH_EXTRA (unused signatures)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-ledger-entries.x#L190",
+          "what": "AccountEntry holds seqNum, thresholds [master weight | low | med | high] and signers<20>: the policy is ledger state anyone can read."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig",
+          "what": "Stellar docs: thresholds 0-255 per low/medium/high class, up to 20 signatures per transaction, leftover signatures fail with TX_BAD_AUTH_EXTRA, pre-authorized transaction and hash(x) signer types."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions",
+          "what": "Stellar docs: sequence number must be account seq + 1 unless preconditions relax it; preconditions (time bounds, ledger bounds, minSeqNum, minSeqAge, minSeqLedgerGap, extraSigners); the network passphrase is part of the signed hash."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0007.md",
+          "what": "SEP-7 web+stellar:tx URI: a TransactionEnvelope handed to a signer's wallet, with pubkey and callback for multisig coordination; the family's interop format."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar-expert/refractor",
+          "what": "Refractor: a hosted multisig aggregator and pending-transaction store for Stellar; the server the room replaces (invariant 8)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SetOptionsOpFrame.cpp#L32",
+          "what": "stellar-core SetOptionsOpFrame: any change to masterWeight, a threshold, or a signer is a HIGH-threshold operation; otherwise MEDIUM."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SetOptionsOpFrame.cpp#L124",
+          "what": "stellar-core SetOptions doApply: writes weights and thresholds as given, with no check that the thresholds stay reachable; weight 0 deletes a signer."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SetOptionsOpFrame.cpp#L231",
+          "what": "stellar-core SetOptions doCheckValid: weights and thresholds above 255 and the account's own key as signer are refused."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-ledger-entries.x#L135",
+          "what": "MAX_SIGNERS = 20."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/lumens",
+          "what": "Stellar docs: base reserve 0.5 XLM; minimum balance is 2 base reserves plus one per subentry, and signers are subentries."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/transactions/list-of-operations",
+          "what": "Stellar docs, list of operations: Set Options is HIGH when it changes signers or thresholds; SET_OPTIONS_TOO_MANY_SIGNERS, SET_OPTIONS_LOW_RESERVE, SET_OPTIONS_BAD_SIGNER."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1546",
+          "what": "stellar-core processSignatures: every operation's signatures are checked before any operation applies."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-protocol/blob/master/core/cap-0040.md",
+          "what": "CAP-40: the ed25519 signed-payload signer type, a signature over a fixed payload rather than the transaction."
+        }
+      ],
+      "unverified": [
+        "The Stellar docs warn only that a master weight of 0 can lock the account; the general lockout (any threshold above the total remaining weight) is derived from the authorization rule and SetOptions applying without a check, not stated in the docs."
+      ]
+    },
+    {
+      "id": "stellar.thresholds/payment",
+      "name": "Send XLM from a Stellar multisig account",
+      "area": "family",
+      "family": "stellar.thresholds",
+      "status": "declared",
+      "summary": "Members of a weighted multisig account send native XLM. Each signer signs the same transaction hash in the room until the weights reach the account's medium threshold; one member submits, and the account pays the fee. The protocol checks the rule.",
+      "effect": {
+        "schema": "muster.effect.stellar.thresholds.payment.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the multisig account paying (the transaction and operation source)"
+          },
+          {
+            "name": "to",
+            "means": "the payee's Stellar account (G… or muxed M… address); it must already exist"
+          },
+          {
+            "name": "amount",
+            "means": "the XLM amount in stroops (int64; 1 XLM = 10,000,000 stroops)"
+          },
+          {
+            "name": "memo",
+            "means": "the transaction memo, public on the ledger (none, text, id, hash or return)"
+          },
+          {
+            "name": "fee",
+            "means": "the maximum total fee in stroops, paid by the account (at least 100 stroops per operation)"
+          },
+          {
+            "name": "seqNum",
+            "means": "the account's sequence number + 1, read from the chain; it orders this payment after the account's earlier transactions"
+          },
+          {
+            "name": "maxTime",
+            "means": "the timeBounds upper limit in UNIX seconds; after it the transaction is invalid (0 = never)"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "signatures whose weights sum to at least the account's MEDIUM threshold (and its LOW threshold for the transaction itself); at most 20 signatures",
+        "finality": "external",
+        "domain": "stellar.tx-signature-payload.envelope-type-tx"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "stellar:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "stellar:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "stellar-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "stellar:* (account reads, transaction submit)",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "stellar-signer-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "stellar-account:<G… multisig account> (ed25519 signer; weight toward MEDIUM)",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "payee",
+          "party": "counterparty",
+          "class": "address",
+          "target": "stellar-account:<G… payee> (must already exist)",
+          "field": "to"
+        },
+        {
+          "kind": "asset",
+          "name": "xlm-available",
+          "party": "proposer",
+          "class": "asset",
+          "target": "stellar-account:<G… multisig account> (balance - minimum balance - selling liabilities >= amount + fee)",
+          "field": "amount"
+        }
+      ],
+      "touches": [
+        {
+          "target": "stellar:*",
+          "mode": "write"
+        },
+        {
+          "target": "stellar-account:<G… multisig account>",
+          "mode": "write"
+        },
+        {
+          "target": "stellar-account:<G… payee>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "payer",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "always"
+        },
+        {
+          "field": "amount",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "payee",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Writes the payee, the amount, a memo and an expiry. Muster would read the account's sequence number and balance and check that the payee exists, record each read, build the transaction and re-derive its hash. The proposal takes the next sequence number: it settles after the account's earlier transactions, and any other transaction from the account that lands first makes it stale.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "payer",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L939",
+            "https://developers.stellar.org/docs/learn/fundamentals/lumens",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/PaymentOpFrame.cpp#L105"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Each signer's client rebuilds the transaction from the effect, checks the hash, and signs. Payment is a MEDIUM-threshold operation. Muster would stop at exactly enough weight.",
+          "signs": "Ed25519, by each signer's key, over the 32-byte transaction hash SHA-256(XDR(TransactionSignaturePayload{networkId = SHA-256(network passphrase, e.g. \"Public Global Stellar Network ; September 2015\"), taggedTransaction = ENVELOPE_TYPE_TX (2) + Transaction{sourceAccount = the multisig account, fee = uint32 maximum total fee in stroops, seqNum = the account's sequence number + 1, cond = preconditions (timeBounds minTime/maxTime; muster would set maxTime to the room's expiry), memo, operations = [Payment{destination = to, asset = native, amount}], ext = 0}})). Inside: the network id, the account, the sequence number, the fee and the time bounds. Not inside: any other signature. Attached as a DecoratedSignature: a 4-byte hint (the last 4 bytes of the signer's public key) and the 64-byte signature.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L1012",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L133",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/main/ApplicationImpl.cpp#L142",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L33",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L84",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/OperationFrame.cpp#L205",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L47"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "One member attaches the signatures (at most 20) and submits through the RPC. The RPC provider sees the signed transaction first; validators see it before it is in a ledger. The protocol checks LOW weight for the transaction, MEDIUM for the payment, the sequence number and the time bounds. The account pays the fee, even if the transaction fails once applied. A fee-bump wrapper, signed separately by another account, would move the fee to that account.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payee",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L526",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/OperationFrame.cpp#L217",
+            "https://developers.stellar.org/docs/learn/fundamentals/fees-resource-limits-metering",
+            "https://github.com/stellar/stellar-protocol/blob/master/core/cap-0021.md"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "The ledger closes. The payer, payee, amount, memo and every signature's hint stay in the public ledger. Muster would read the result, record it, and fold it into the room's view.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L33",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an approval over a transaction hash that differs from the one the room re-derived from the reviewed effect",
+          "why": "invariant 1 / F-4: effects are reviewed, the transaction hash is the materialization, and a mismatch refuses",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L133",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L1012"
+          ]
+        },
+        {
+          "what": "signing a payload whose networkId is not SHA-256 of the room's network passphrase, or whose source account or sequence number differs from the effect",
+          "why": "invariant 2: the payload must commit to environment, account and slot. Stellar binds explicitly: the network id is inside the signed hash, and a signature made for another network fails txBAD_AUTH",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/main/ApplicationImpl.cpp#L142",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L2026",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions"
+          ]
+        },
+        {
+          "what": "attaching a signature the protocol would not need: the collected weights must reach the MEDIUM threshold only with the last signature attached, in envelope order",
+          "why": "the chain's rule: the checker walks the signatures in order and stops once the weight meets the threshold; any signature it never used fails the whole transaction with txBAD_AUTH_EXTRA, so collection must stop at exactly enough",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L47",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L172",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1592",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig"
+          ]
+        },
+        {
+          "what": "collecting on, or submitting, a transaction whose seqNum is no longer the account's sequence number + 1 (another transaction from the account landed first)",
+          "why": "the chain's rule: the sequence number must be exactly one above the account's (txBAD_SEQ); muster would re-read the account before submit and mark the proposal stale",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1602",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions"
+          ]
+        },
+        {
+          "what": "collecting after the room's expiry, or submitting after the transaction's timeBounds.maxTime",
+          "why": "invariant 2 (expiry) and the chain's rule: after maxTime the transaction fails txTOO_LATE; with maxTime 0 a signed transaction never expires on its own",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1485",
+            "https://github.com/stellar/stellar-protocol/blob/master/core/cap-0021.md",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions"
+          ]
+        },
+        {
+          "what": "a native payment to an account that does not exist",
+          "why": "the chain's rule: it fails PAYMENT_NO_DESTINATION and the account still pays the fee; creating an account is a different operation",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/PaymentOpFrame.cpp#L105",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/list-of-operations"
+          ]
+        },
+        {
+          "what": "signing when a read that reached the signed bytes (the sequence number, balance, payee existence and fee) is not recorded in the room log as an external read",
+          "why": "invariant 10: nothing is signed whose inputs cannot be accounted for; the sequence number and fee come from the chain, not the room",
+          "evidence": [
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions",
+            "https://developers.stellar.org/docs/learn/fundamentals/fees-resource-limits-metering"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The signed bytes name the network: networkId = SHA-256(passphrase) is inside every signature payload, so a signature is worthless on another Stellar network.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The protocol checks the signers' weights against the account's medium threshold; no server decides.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "One unneeded signature fails the whole transaction (txBAD_AUTH_EXTRA); muster would stop collecting at exactly enough weight.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Who signed is public at settle: each signature carries the last 4 bytes of its signer's key, and the account's signer list is public.",
+          "credibility": "exposed",
+          "party": "any chain observer"
+        },
+        {
+          "claim": "A pre-authorized transaction signer or a hash(x) signer on the account could authorize a payment without the keyholders.",
+          "credibility": "motivational",
+          "party": "whoever registered the pre-authorized transaction hash, or anyone who learns x (public once it is used)"
+        },
+        {
+          "claim": "The RPC provider sees the account reads and the signed transaction before the network does.",
+          "credibility": "exposed",
+          "party": "the configured RPC provider"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L1012",
+          "what": "TransactionSignaturePayload = {networkId, taggedTransaction = ENVELOPE_TYPE_TX + Transaction}: the bytes every signer's key signs (after SHA-256)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L939",
+          "what": "Transaction = {sourceAccount, fee, seqNum, cond (preconditions), memo, operations, ext (Soroban data)}: everything a signature commits to."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L33",
+          "what": "DecoratedSignature = {hint: last 4 bytes of the public key, signature}; TransactionV1Envelope carries signatures<20>."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L133",
+          "what": "stellar-core: the contents hash is sha256(xdr(networkID, ENVELOPE_TYPE_TX, tx)) and every signature is checked against it."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/main/ApplicationImpl.cpp#L142",
+          "what": "stellar-core: networkID = sha256(NETWORK_PASSPHRASE), so the network is inside every signed hash."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/js-stellar-base/blob/v15.0.0/src/network.js",
+          "what": "js-stellar-base: the network passphrases (public, testnet, futurenet, standalone) whose SHA-256 is the networkId."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L47",
+          "what": "stellar-core SignatureChecker: pre-auth-tx signers match the contents hash with no signature; hash(x) signers match sha256(signature); ed25519 signatures are walked in envelope order until the weight meets the needed threshold."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L172",
+          "what": "stellar-core: checkAllSignaturesUsed fails when any attached signature was never needed."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1592",
+          "what": "stellar-core: an unused signature fails the transaction with txBAD_AUTH_EXTRA."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L526",
+          "what": "stellar-core checkAllTransactionSignatures: the transaction's source account must meet its LOW threshold (and any extraSigners)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/OperationFrame.cpp#L217",
+          "what": "stellar-core OperationFrame::checkSignature: each operation's source account must meet that operation's threshold, else opBAD_AUTH."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1602",
+          "what": "stellar-core isBadSeq: without minSeqNum the tx seqNum must be exactly account seq + 1; with minSeqNum it is valid while minSeqNum <= account seq < tx seqNum."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L2022",
+          "what": "Result codes: txTOO_LATE (after maxTime), txBAD_SEQ, txBAD_AUTH (too few valid signatures / wrong network), txBAD_AUTH_EXTRA (unused signatures)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-ledger-entries.x#L190",
+          "what": "AccountEntry holds seqNum, thresholds [master weight | low | med | high] and signers<20>: the policy is ledger state anyone can read."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig",
+          "what": "Stellar docs: thresholds 0-255 per low/medium/high class, up to 20 signatures per transaction, leftover signatures fail with TX_BAD_AUTH_EXTRA, pre-authorized transaction and hash(x) signer types."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions",
+          "what": "Stellar docs: sequence number must be account seq + 1 unless preconditions relax it; preconditions (time bounds, ledger bounds, minSeqNum, minSeqAge, minSeqLedgerGap, extraSigners); the network passphrase is part of the signed hash."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0007.md",
+          "what": "SEP-7 web+stellar:tx URI: a TransactionEnvelope handed to a signer's wallet, with pubkey and callback for multisig coordination; the family's interop format."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar-expert/refractor",
+          "what": "Refractor: a hosted multisig aggregator and pending-transaction store for Stellar; the server the room replaces (invariant 8)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L84",
+          "what": "PaymentOp = {destination, asset, amount}; Threshold: med."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/OperationFrame.cpp#L205",
+          "what": "stellar-core OperationFrame: the default threshold level is MEDIUM (Payment does not override it)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/PaymentOpFrame.cpp#L105",
+          "what": "stellar-core PaymentOpFrame: result codes include PAYMENT_NO_DESTINATION and PAYMENT_UNDERFUNDED."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/fees-resource-limits-metering",
+          "what": "Stellar docs: fees are deducted from the source account unless a fee-bump transaction says otherwise; at least 100 stroops per operation."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/lumens",
+          "what": "Stellar docs: available balance = balance - minimum balance - selling liabilities."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-protocol/blob/master/core/cap-0021.md",
+          "what": "CAP-21 (preconditions, protocol 19): time bounds, ledger bounds, minSeqNum, minSeqAge, minSeqLedgerGap, extraSigners and their failure codes; a transaction that fails at apply still costs the fee."
+        }
+      ]
+    },
+    {
+      "id": "stellar.thresholds/contract-call",
+      "name": "Call a Soroban contract from a Stellar multisig account",
+      "area": "family",
+      "family": "stellar.thresholds",
+      "status": "declared",
+      "summary": "Members of a weighted multisig account invoke a Soroban contract. With the account as the transaction source, its authorization rides on the envelope signatures, which must reach the medium threshold. If someone else submits, the account authorizes through an address-credential entry: its signers sign a separate Soroban payload, and the host checks the same medium threshold.",
+      "effect": {
+        "schema": "muster.effect.stellar.thresholds.contract-call.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the multisig account authorizing the call (by default also the transaction source and fee payer)"
+          },
+          {
+            "name": "contract",
+            "means": "the Soroban contract address (C…) being invoked"
+          },
+          {
+            "name": "function",
+            "means": "the contract function name (SCSymbol)"
+          },
+          {
+            "name": "args",
+            "means": "the call's arguments (SCVal list)"
+          },
+          {
+            "name": "auth",
+            "means": "the SorobanAuthorizationEntry list: source-account credentials for this account when it is the transaction source; address credentials V2 otherwise"
+          },
+          {
+            "name": "sorobanData",
+            "means": "the footprint, resource limits and resourceFee returned by simulation (the transaction's ext)"
+          },
+          {
+            "name": "authNonce",
+            "means": "address credentials only: the int64 nonce the host consumes for this account"
+          },
+          {
+            "name": "signatureExpirationLedger",
+            "means": "address credentials only: the last ledger at which the auth signatures are valid"
+          },
+          {
+            "name": "fee",
+            "means": "the maximum total fee in stroops: the resource fee plus the inclusion fee, paid by the transaction source"
+          },
+          {
+            "name": "seqNum",
+            "means": "the transaction source's sequence number + 1, read from the chain"
+          },
+          {
+            "name": "maxTime",
+            "means": "the timeBounds upper limit in UNIX seconds (0 = never)"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "signatures whose weights sum to at least the account's MEDIUM threshold, both for the envelope and for an address-credential auth entry",
+        "finality": "external",
+        "domain": "stellar.tx-signature-payload.envelope-type-tx; stellar.hash-id-preimage.soroban-authorization-with-address"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "stellar:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "stellar:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "stellar-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "stellar:* (account reads, transaction submit)",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "stellar-rpc-simulate",
+          "party": "instance",
+          "class": "infra",
+          "target": "stellar:* simulateTransaction (footprint, resource fee, auth entries)",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "stellar-signer-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "stellar-account:<G… multisig account> (ed25519 signer; weight toward MEDIUM)",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "contract",
+          "party": "proposer",
+          "class": "address",
+          "target": "stellar-contract:<C… contract> (instance and code live on the ledger)",
+          "field": "contract"
+        },
+        {
+          "kind": "asset",
+          "name": "xlm-for-fee",
+          "party": "proposer",
+          "class": "asset",
+          "target": "stellar-account:<G… multisig account> (resource fee + inclusion fee, above the minimum balance)",
+          "field": "fee"
+        }
+      ],
+      "touches": [
+        {
+          "target": "stellar:*",
+          "mode": "write"
+        },
+        {
+          "target": "stellar-account:<G… multisig account>",
+          "mode": "write"
+        },
+        {
+          "target": "stellar-contract:<C… contract>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "args",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "always"
+        },
+        {
+          "field": "effect",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "args",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Writes the contract, function and arguments. Muster would send the unsigned transaction to the RPC's simulateTransaction, which returns the footprint, the resource fee and the auth entries; it would record that result as an external read, check that the auth entries name only this account and the reviewed invocation, and re-derive the transaction hash. Simulation shows the whole call to the RPC provider before anyone signs. In recording mode the host meters one signature for an address-credential account, so a multisig entry may need more budget than simulated.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "args",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "https://developers.stellar.org/docs/data/apis/rpc/api-reference/methods/simulateTransaction",
+            "https://developers.stellar.org/docs/learn/fundamentals/contract-development/authorization",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/list-of-operations",
+            "https://github.com/stellar/rs-soroban-env/blob/v28.0.2/soroban-env-host/src/auth.rs#L2431"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Each signer rebuilds the transaction and signs its hash. With the account as the transaction source, its auth entry uses source-account credentials: the host accepts the envelope's signatures as the account's authorization, and the protocol checks them against MEDIUM for the InvokeHostFunction operation. With address credentials, each signer also signs the Soroban payload, and the host checks that those keys' weights reach MEDIUM. The driver, not the core, reads the auth entries and the signature vector (invariant 6). Muster would stop at exactly enough weight on the envelope.",
+          "signs": "Ed25519, by each signer's key, over the 32-byte transaction hash SHA-256(XDR(TransactionSignaturePayload{networkId = SHA-256(network passphrase, e.g. \"Public Global Stellar Network ; September 2015\"), taggedTransaction = ENVELOPE_TYPE_TX (2) + Transaction{sourceAccount = the multisig account, fee = uint32 maximum total fee in stroops, seqNum = the account's sequence number + 1, cond = preconditions (timeBounds minTime/maxTime; muster would set maxTime to the room's expiry), memo, operations = [InvokeHostFunction{hostFunction = invokeContract{contract, function, args}, auth = [SorobanAuthorizationEntry{credentials = SOROBAN_CREDENTIALS_SOURCE_ACCOUNT, rootInvocation}]} (a Soroban transaction holds one operation)], ext = 1: SorobanTransactionData{resources = {footprint, instructions, diskReadBytes, writeBytes}, resourceFee}}})). Inside: the network id, the account, the sequence number, the fee and the time bounds. Not inside: any other signature. Attached as a DecoratedSignature: a 4-byte hint (the last 4 bytes of the signer's public key) and the 64-byte signature. With address credentials instead: each signer also signs, with Ed25519, SHA-256(XDR(HashIDPreimage ENVELOPE_TYPE_SOROBAN_AUTHORIZATION_WITH_ADDRESS{networkID, nonce, signatureExpirationLedger, address = the account, invocation})); the legacy ENVELOPE_TYPE_SOROBAN_AUTHORIZATION{networkID, nonce, signatureExpirationLedger, invocation} leaves the address out. Those signatures go into the entry as a vector of {public_key, signature}, strictly ascending by key, and the entry becomes part of the transaction the envelope signers then sign.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L1012",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L133",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/main/ApplicationImpl.cpp#L142",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L33",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L721",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L564",
+            "https://github.com/stellar/rs-soroban-env/blob/v28.0.2/soroban-env-host/src/auth.rs#L2631",
+            "https://github.com/stellar/rs-soroban-env/blob/v28.0.2/soroban-env-host/src/builtin_contracts/account_contract.rs#L175",
+            "https://github.com/stellar/rs-soroban-env/blob/v28.0.2/soroban-env-host/src/host/data_helper.rs#L513",
+            "https://github.com/stellar/stellar-protocol/blob/master/core/cap-0071-02.md"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "One member attaches the signatures and submits through the RPC. The RPC provider sees the signed transaction first; validators see the call, its arguments and its footprint before it is in a ledger. The host consumes an address-credential nonce and refuses an expired one. The transaction source pays the resource fee and the inclusion fee.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "args",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L526",
+            "https://github.com/stellar/rs-soroban-env/blob/v28.0.2/soroban-env-host/src/auth.rs#L2586",
+            "https://developers.stellar.org/docs/learn/fundamentals/fees-resource-limits-metering",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L880"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "The ledger closes. The call, its result, its events and the state it changed are public. Muster would read the result, record it, and fold it into the room's view.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://developers.stellar.org/docs/learn/fundamentals/fees-resource-limits-metering",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L623"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an approval over a transaction hash that differs from the one the room re-derived from the reviewed effect",
+          "why": "invariant 1 / F-4: effects are reviewed, the transaction hash is the materialization, and a mismatch refuses",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L133",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L1012"
+          ]
+        },
+        {
+          "what": "signing a payload whose networkId is not SHA-256 of the room's network passphrase, or whose source account or sequence number differs from the effect",
+          "why": "invariant 2: the payload must commit to environment, account and slot. Stellar binds explicitly: the network id is inside the signed hash, and a signature made for another network fails txBAD_AUTH",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/main/ApplicationImpl.cpp#L142",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L2026",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions"
+          ]
+        },
+        {
+          "what": "a legacy address-credential entry (SOROBAN_CREDENTIALS_ADDRESS, payload ENVELOPE_TYPE_SOROBAN_AUTHORIZATION) for this account",
+          "why": "invariant 2 (account): that payload does not name the account, so where signers share keys with another account and the invocation does not name it, a signature could be replayed there; SOROBAN_CREDENTIALS_ADDRESS_V2 adds the address",
+          "evidence": [
+            "https://github.com/stellar/stellar-protocol/blob/master/core/cap-0071-02.md",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L721",
+            "https://github.com/stellar/rs-soroban-env/blob/v28.0.2/soroban-env-host/src/auth.rs#L2631"
+          ]
+        },
+        {
+          "what": "simulated auth entries that name an address other than this account, or an invocation tree other than the reviewed one",
+          "why": "invariant 1 and invariant 10: the auth entries are an external read that reaches the signed bytes; they are checked against the effect and recorded, or signing refuses",
+          "evidence": [
+            "https://developers.stellar.org/docs/data/apis/rpc/api-reference/methods/simulateTransaction",
+            "https://github.com/stellar/rs-soroban-env/blob/v28.0.2/soroban-env-host/src/auth.rs#L2631"
+          ]
+        },
+        {
+          "what": "an address-credential signature from a key with no weight on the account, keys out of ascending order, or more than 20 signatures",
+          "why": "the host's rule: any of these fails the whole entry; only the account's ed25519 signers count toward MEDIUM for a classic account's auth entry",
+          "evidence": [
+            "https://github.com/stellar/rs-soroban-env/blob/v28.0.2/soroban-env-host/src/builtin_contracts/account_contract.rs#L175",
+            "https://github.com/stellar/rs-soroban-env/blob/v28.0.2/soroban-env-host/src/host/data_helper.rs#L513"
+          ]
+        },
+        {
+          "what": "collecting address-credential signatures after the entry's signatureExpirationLedger, or reusing a consumed nonce",
+          "why": "the host's rule: an expired signature or a reused nonce fails authorization",
+          "evidence": [
+            "https://github.com/stellar/rs-soroban-env/blob/v28.0.2/soroban-env-host/src/auth.rs#L2586",
+            "https://developers.stellar.org/docs/learn/fundamentals/contract-development/authorization"
+          ]
+        },
+        {
+          "what": "attaching a signature the protocol would not need: the collected weights must reach the MEDIUM threshold only with the last signature attached, in envelope order",
+          "why": "the chain's rule: the checker walks the signatures in order and stops once the weight meets the threshold; any signature it never used fails the whole transaction with txBAD_AUTH_EXTRA, so collection must stop at exactly enough",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L47",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L172",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1592",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig"
+          ]
+        },
+        {
+          "what": "collecting on, or submitting, a transaction whose seqNum is no longer the account's sequence number + 1 (another transaction from the account landed first)",
+          "why": "the chain's rule: the sequence number must be exactly one above the account's (txBAD_SEQ); muster would re-read the account before submit and mark the proposal stale",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1602",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions"
+          ]
+        },
+        {
+          "what": "collecting after the room's expiry, or submitting after the transaction's timeBounds.maxTime",
+          "why": "invariant 2 (expiry) and the chain's rule: after maxTime the transaction fails txTOO_LATE; with maxTime 0 a signed transaction never expires on its own",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1485",
+            "https://github.com/stellar/stellar-protocol/blob/master/core/cap-0021.md",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions"
+          ]
+        },
+        {
+          "what": "signing when a read that reached the signed bytes (the sequence number, the fee and the simulation's footprint, resource fee and auth entries) is not recorded in the room log as an external read",
+          "why": "invariant 10: nothing is signed whose inputs cannot be accounted for; the sequence number and fee come from the chain, not the room",
+          "evidence": [
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions",
+            "https://developers.stellar.org/docs/learn/fundamentals/fees-resource-limits-metering"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Both the transaction hash and the Soroban auth payload carry the network id, so neither signature is valid on another Stellar network.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The host checks a classic account's contract authorization against the account's medium threshold, counting only its ed25519 signers.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The legacy address-credential payload does not name the account; only the V2 payload binds a signature to it.",
+          "credibility": "exposed",
+          "party": "anyone holding a legacy auth signature from keys the account shares with another account"
+        },
+        {
+          "claim": "The RPC provider sees the full call at simulation, before anyone signs, and the signed transaction before the network.",
+          "credibility": "exposed",
+          "party": "the configured RPC provider"
+        },
+        {
+          "claim": "A pre-authorized transaction signer or a hash(x) signer on the account could authorize the envelope, and with it a source-account contract call, without the keyholders.",
+          "credibility": "motivational",
+          "party": "whoever registered the pre-authorized transaction hash, or anyone who learns x (public once it is used)"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L1012",
+          "what": "TransactionSignaturePayload = {networkId, taggedTransaction = ENVELOPE_TYPE_TX + Transaction}: the bytes every signer's key signs (after SHA-256)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L939",
+          "what": "Transaction = {sourceAccount, fee, seqNum, cond (preconditions), memo, operations, ext (Soroban data)}: everything a signature commits to."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L33",
+          "what": "DecoratedSignature = {hint: last 4 bytes of the public key, signature}; TransactionV1Envelope carries signatures<20>."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L133",
+          "what": "stellar-core: the contents hash is sha256(xdr(networkID, ENVELOPE_TYPE_TX, tx)) and every signature is checked against it."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/main/ApplicationImpl.cpp#L142",
+          "what": "stellar-core: networkID = sha256(NETWORK_PASSPHRASE), so the network is inside every signed hash."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/js-stellar-base/blob/v15.0.0/src/network.js",
+          "what": "js-stellar-base: the network passphrases (public, testnet, futurenet, standalone) whose SHA-256 is the networkId."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L47",
+          "what": "stellar-core SignatureChecker: pre-auth-tx signers match the contents hash with no signature; hash(x) signers match sha256(signature); ed25519 signatures are walked in envelope order until the weight meets the needed threshold."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L172",
+          "what": "stellar-core: checkAllSignaturesUsed fails when any attached signature was never needed."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1592",
+          "what": "stellar-core: an unused signature fails the transaction with txBAD_AUTH_EXTRA."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L526",
+          "what": "stellar-core checkAllTransactionSignatures: the transaction's source account must meet its LOW threshold (and any extraSigners)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/OperationFrame.cpp#L217",
+          "what": "stellar-core OperationFrame::checkSignature: each operation's source account must meet that operation's threshold, else opBAD_AUTH."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1602",
+          "what": "stellar-core isBadSeq: without minSeqNum the tx seqNum must be exactly account seq + 1; with minSeqNum it is valid while minSeqNum <= account seq < tx seqNum."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L2022",
+          "what": "Result codes: txTOO_LATE (after maxTime), txBAD_SEQ, txBAD_AUTH (too few valid signatures / wrong network), txBAD_AUTH_EXTRA (unused signatures)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-ledger-entries.x#L190",
+          "what": "AccountEntry holds seqNum, thresholds [master weight | low | med | high] and signers<20>: the policy is ledger state anyone can read."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig",
+          "what": "Stellar docs: thresholds 0-255 per low/medium/high class, up to 20 signatures per transaction, leftover signatures fail with TX_BAD_AUTH_EXTRA, pre-authorized transaction and hash(x) signer types."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions",
+          "what": "Stellar docs: sequence number must be account seq + 1 unless preconditions relax it; preconditions (time bounds, ledger bounds, minSeqNum, minSeqAge, minSeqLedgerGap, extraSigners); the network passphrase is part of the signed hash."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0007.md",
+          "what": "SEP-7 web+stellar:tx URI: a TransactionEnvelope handed to a signer's wallet, with pubkey and callback for multisig coordination; the family's interop format."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar-expert/refractor",
+          "what": "Refractor: a hosted multisig aggregator and pending-transaction store for Stellar; the server the room replaces (invariant 8)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L721",
+          "what": "HashIDPreimage: ENVELOPE_TYPE_SOROBAN_AUTHORIZATION{networkID, nonce, signatureExpirationLedger, invocation} and ..._WITH_ADDRESS{networkID, nonce, signatureExpirationLedger, address, invocation}."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L564",
+          "what": "SorobanAddressCredentials = {address, nonce, signatureExpirationLedger, signature}; credential types SOURCE_ACCOUNT, ADDRESS, ADDRESS_V2, ADDRESS_WITH_DELEGATES."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L623",
+          "what": "InvokeHostFunctionOp = {hostFunction, auth<>}; Threshold: med."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L880",
+          "what": "SorobanTransactionData = {resources (footprint, instructions, diskReadBytes, writeBytes), resourceFee}, carried in the signed transaction's ext."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/rs-soroban-env/blob/v28.0.2/soroban-env-host/src/auth.rs#L2631",
+          "what": "soroban-env-host: the auth signature payload is the hash of the HashIDPreimage above; V2 and delegate credentials use the address-bound preimage."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/rs-soroban-env/blob/v28.0.2/soroban-env-host/src/auth.rs#L2665",
+          "what": "soroban-env-host: source-account credentials skip the host's signature check (the envelope carries it); address credentials on a classic account go to check_account_authentication."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/rs-soroban-env/blob/v28.0.2/soroban-env-host/src/auth.rs#L2586",
+          "what": "soroban-env-host: an address-credential signature past its expiration ledger is refused and its nonce is consumed."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/rs-soroban-env/blob/v28.0.2/soroban-env-host/src/auth.rs#L2431",
+          "what": "soroban-env-host recording mode (simulation): the transaction source gets source-account credentials; any other address gets ADDRESS_V2 with a random nonce, and the signature expiration is left for the signer to set."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/rs-soroban-env/blob/v28.0.2/soroban-env-host/src/builtin_contracts/account_contract.rs#L175",
+          "what": "soroban-env-host check_account_authentication: 1-20 signatures, strictly ascending keys, each key must have weight > 0, total weight must reach the MEDIUM threshold."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/rs-soroban-env/blob/v28.0.2/soroban-env-host/src/host/data_helper.rs#L513",
+          "what": "soroban-env-host: signer weight comes from the master weight or an ed25519 signer entry only; other signer types do not count for auth entries."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-protocol/blob/master/core/cap-0071-02.md",
+          "what": "CAP-71-02 (Final, protocol 27): SOROBAN_CREDENTIALS_ADDRESS_V2 adds the address to the auth payload so a signature cannot be reused across accounts that share keys."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/contract-development/authorization",
+          "what": "Stellar docs, authorization: a Stellar account authorizes contract calls with its multisig at the medium threshold; the host verifies and consumes nonces."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/data/apis/rpc/api-reference/methods/simulateTransaction",
+          "what": "Stellar RPC simulateTransaction: returns transactionData, minResourceFee and the auth entries to use when submitting."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/fees-resource-limits-metering",
+          "what": "Stellar docs: a Soroban transaction's fee is its resource fee plus its inclusion fee."
+        }
+      ],
+      "unverified": [
+        "That protocol 27 (CAP-71-02, SOROBAN_CREDENTIALS_ADDRESS_V2) is active on Stellar mainnet today; the CAP is Final and the v28 host implements it, but the live network's protocol version was not checked.",
+        "That the RPC provider's simulateTransaction runs a host with the v28 recording behavior (source-account credentials for the transaction source, ADDRESS_V2 for anyone else); only the host source was read."
+      ]
+    },
+    {
+      "id": "stellar.thresholds/change-signers",
+      "name": "Change the signers or thresholds of a Stellar multisig account",
+      "area": "family",
+      "family": "stellar.thresholds",
+      "status": "declared",
+      "summary": "Members change who can sign, in place: SetOptions operations add, remove (weight 0) or re-weight signers and change the thresholds, and the account address stays. The signers before the change must reach the HIGH threshold; the new set governs from the next transaction.",
+      "effect": {
+        "schema": "muster.effect.stellar.thresholds.change-signers.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the multisig account whose signer set changes (its address stays)"
+          },
+          {
+            "name": "add",
+            "means": "signers to add: each a member-disclosed ed25519 key with a weight from 1 to 255"
+          },
+          {
+            "name": "remove",
+            "means": "signer keys to remove (SetOptions with weight 0)"
+          },
+          {
+            "name": "reweight",
+            "means": "existing signer keys with their new weight (1-255)"
+          },
+          {
+            "name": "masterWeight",
+            "means": "optional: the new master key weight (0 turns it off)"
+          },
+          {
+            "name": "low",
+            "means": "optional: the new LOW threshold, 0-255"
+          },
+          {
+            "name": "med",
+            "means": "optional: the new MEDIUM threshold, 0-255"
+          },
+          {
+            "name": "high",
+            "means": "optional: the new HIGH threshold, 0-255"
+          },
+          {
+            "name": "fee",
+            "means": "the maximum total fee in stroops, paid by the account"
+          },
+          {
+            "name": "seqNum",
+            "means": "the account's sequence number + 1, read from the chain"
+          },
+          {
+            "name": "maxTime",
+            "means": "the timeBounds upper limit in UNIX seconds (0 = never)"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "signatures from the signer set before the change whose weights sum to at least the account's HIGH threshold",
+        "finality": "external",
+        "domain": "stellar.tx-signature-payload.envelope-type-tx"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "stellar:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "stellar:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "stellar-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "stellar:* (account reads, transaction submit)",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "stellar-signer-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "stellar-account:<G… multisig account> (ed25519 signer; weight toward HIGH)",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "new-signer-keys",
+          "party": "proposer",
+          "class": "address",
+          "target": "stellar-account:<G… multisig account> signers (ed25519, disclosed by each holder, weight 1-255, at most 20)",
+          "field": "add"
+        },
+        {
+          "kind": "asset",
+          "name": "xlm-for-reserve",
+          "party": "proposer",
+          "class": "asset",
+          "target": "stellar-account:<G… multisig account> (0.5 XLM base reserve per added signer, plus the fee)",
+          "field": "add"
+        }
+      ],
+      "touches": [
+        {
+          "target": "stellar:*",
+          "mode": "write"
+        },
+        {
+          "target": "stellar-account:<G… multisig account>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "policy",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "always"
+        },
+        {
+          "field": "effect",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Writes the change. Muster would read the account's current signers, thresholds, balance and sequence number, record each read, compute the resulting configuration and re-derive the hash. It shows two sets apart: room members, who can read, and account signers, who can authorize. This action admits no one to the room, and a member admitted later reads only from their epoch on.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "policy",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SetOptionsOpFrame.cpp#L32",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-ledger-entries.x#L190"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Each current signer rebuilds the transaction, checks the hash, and signs. The protocol checks every operation's signatures against the account as it was before any operation applies, so the old set authorizes the change. Muster would stop at exactly enough weight.",
+          "signs": "Ed25519, by each signer's key, over the 32-byte transaction hash SHA-256(XDR(TransactionSignaturePayload{networkId = SHA-256(network passphrase, e.g. \"Public Global Stellar Network ; September 2015\"), taggedTransaction = ENVELOPE_TYPE_TX (2) + Transaction{sourceAccount = the multisig account, fee = uint32 maximum total fee in stroops, seqNum = the account's sequence number + 1, cond = preconditions (timeBounds minTime/maxTime; muster would set maxTime to the room's expiry), memo, operations = [SetOptions{signer = {key, weight}} per added or re-weighted signer, SetOptions{signer = {key, weight = 0}} per removed signer, and SetOptions{masterWeight, lowThreshold, medThreshold, highThreshold} for threshold changes], ext = 0}})). Inside: the network id, the account, the sequence number, the fee and the time bounds. Not inside: any other signature. Attached as a DecoratedSignature: a 4-byte hint (the last 4 bytes of the signer's public key) and the 64-byte signature.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L1012",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L133",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/main/ApplicationImpl.cpp#L142",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L33",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SetOptionsOpFrame.cpp#L32",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1546",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SetOptionsOpFrame.cpp#L124"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "One member attaches the signatures (at most 20) and submits through the RPC. The RPC provider sees the signed transaction first; validators see it before it is in a ledger. The account pays the fee.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L526",
+            "https://developers.stellar.org/docs/learn/fundamentals/fees-resource-limits-metering"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "The ledger closes. The new signer set and thresholds are public. Every other proposal collected on this account is now stale by sequence number, and a removed signer's signature no longer counts. Muster would re-read the account, record the read, and re-grade the room's pending proposals.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "policy",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-ledger-entries.x#L190",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1602"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an approval over a transaction hash that differs from the one the room re-derived from the reviewed effect",
+          "why": "invariant 1 / F-4: effects are reviewed, the transaction hash is the materialization, and a mismatch refuses",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L133",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L1012"
+          ]
+        },
+        {
+          "what": "signing a payload whose networkId is not SHA-256 of the room's network passphrase, or whose source account or sequence number differs from the effect",
+          "why": "invariant 2: the payload must commit to environment, account and slot. Stellar binds explicitly: the network id is inside the signed hash, and a signature made for another network fails txBAD_AUTH",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/main/ApplicationImpl.cpp#L142",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L2026",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions"
+          ]
+        },
+        {
+          "what": "a resulting configuration in which any threshold exceeds the total weight of the signers that remain (including a master weight of 0 with too little weight left)",
+          "why": "the chain does not check it: SetOptions writes weights and thresholds as given, and a threshold above the total weight can never be met again, so the account is locked for that operation class",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SetOptionsOpFrame.cpp#L124",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig"
+          ]
+        },
+        {
+          "what": "more than 20 signers on the account, a weight or threshold above 255, or the account's own master key as an added signer",
+          "why": "the chain's rule: SET_OPTIONS_TOO_MANY_SIGNERS, SET_OPTIONS_THRESHOLD_OUT_OF_RANGE and SET_OPTIONS_BAD_SIGNER",
+          "evidence": [
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-ledger-entries.x#L135",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SetOptionsOpFrame.cpp#L231",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/list-of-operations"
+          ]
+        },
+        {
+          "what": "adding signers when the account's available balance cannot cover one more base reserve (0.5 XLM) per new signer plus the fee",
+          "why": "the chain's rule: each signer is a subentry that raises the minimum balance; otherwise SET_OPTIONS_LOW_RESERVE",
+          "evidence": [
+            "https://developers.stellar.org/docs/learn/fundamentals/lumens",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SetOptionsOpFrame.cpp#L45",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig"
+          ]
+        },
+        {
+          "what": "adding a signer that is not an ed25519 key held by a named member: a pre-authorized transaction hash, a hash(x), or an ed25519 signed-payload signer",
+          "why": "invariant 9: every driver is named. These signer types authorize without a keyholder's live approval: a pre-auth hash authorizes one exact transaction, anyone who learns x can use a hash(x) signer, and a signed-payload signature is checked against its fixed payload, not the transaction",
+          "evidence": [
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-types.x#L59",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L47",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureUtils.cpp#L84",
+            "https://github.com/stellar/stellar-protocol/blob/master/core/cap-0040.md"
+          ]
+        },
+        {
+          "what": "attaching a signature the protocol would not need: the collected weights must reach the HIGH threshold only with the last signature attached, in envelope order",
+          "why": "the chain's rule: the checker walks the signatures in order and stops once the weight meets the threshold; any signature it never used fails the whole transaction with txBAD_AUTH_EXTRA, so collection must stop at exactly enough",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L47",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L172",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1592",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig"
+          ]
+        },
+        {
+          "what": "collecting on, or submitting, a transaction whose seqNum is no longer the account's sequence number + 1 (another transaction from the account landed first)",
+          "why": "the chain's rule: the sequence number must be exactly one above the account's (txBAD_SEQ); muster would re-read the account before submit and mark the proposal stale",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1602",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions"
+          ]
+        },
+        {
+          "what": "collecting after the room's expiry, or submitting after the transaction's timeBounds.maxTime",
+          "why": "invariant 2 (expiry) and the chain's rule: after maxTime the transaction fails txTOO_LATE; with maxTime 0 a signed transaction never expires on its own",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1485",
+            "https://github.com/stellar/stellar-protocol/blob/master/core/cap-0021.md",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions"
+          ]
+        },
+        {
+          "what": "signing when a read that reached the signed bytes (the sequence number, balance, current signers, thresholds and fee) is not recorded in the room log as an external read",
+          "why": "invariant 10: nothing is signed whose inputs cannot be accounted for; the sequence number and fee come from the chain, not the room",
+          "evidence": [
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions",
+            "https://developers.stellar.org/docs/learn/fundamentals/fees-resource-limits-metering"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Signer changes are in place: the address stays, and the protocol checks the old set against the HIGH threshold.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The signed bytes name the network: networkId = SHA-256(passphrase) is inside every signature payload, so a signature is worthless on another Stellar network.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The chain accepts a configuration that can never meet its own thresholds; only a client-side check would stop it.",
+          "credibility": "exposed",
+          "party": "the signers who approve a change outside muster"
+        },
+        {
+          "claim": "The new signer set is public from the ledger that applies it.",
+          "credibility": "exposed",
+          "party": "any chain observer"
+        },
+        {
+          "claim": "Room membership and signing power are separate sets: a signer added here reads the room only after a member admits them, and only from that epoch on.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A pre-authorized transaction signer or a hash(x) signer on the account could change the signers, if its weight reaches HIGH, without the keyholders.",
+          "credibility": "motivational",
+          "party": "whoever registered the pre-authorized transaction hash, or anyone who learns x (public once it is used)"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L1012",
+          "what": "TransactionSignaturePayload = {networkId, taggedTransaction = ENVELOPE_TYPE_TX + Transaction}: the bytes every signer's key signs (after SHA-256)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L939",
+          "what": "Transaction = {sourceAccount, fee, seqNum, cond (preconditions), memo, operations, ext (Soroban data)}: everything a signature commits to."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L33",
+          "what": "DecoratedSignature = {hint: last 4 bytes of the public key, signature}; TransactionV1Envelope carries signatures<20>."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L133",
+          "what": "stellar-core: the contents hash is sha256(xdr(networkID, ENVELOPE_TYPE_TX, tx)) and every signature is checked against it."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/main/ApplicationImpl.cpp#L142",
+          "what": "stellar-core: networkID = sha256(NETWORK_PASSPHRASE), so the network is inside every signed hash."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/js-stellar-base/blob/v15.0.0/src/network.js",
+          "what": "js-stellar-base: the network passphrases (public, testnet, futurenet, standalone) whose SHA-256 is the networkId."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L47",
+          "what": "stellar-core SignatureChecker: pre-auth-tx signers match the contents hash with no signature; hash(x) signers match sha256(signature); ed25519 signatures are walked in envelope order until the weight meets the needed threshold."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L172",
+          "what": "stellar-core: checkAllSignaturesUsed fails when any attached signature was never needed."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1592",
+          "what": "stellar-core: an unused signature fails the transaction with txBAD_AUTH_EXTRA."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L526",
+          "what": "stellar-core checkAllTransactionSignatures: the transaction's source account must meet its LOW threshold (and any extraSigners)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/OperationFrame.cpp#L217",
+          "what": "stellar-core OperationFrame::checkSignature: each operation's source account must meet that operation's threshold, else opBAD_AUTH."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1602",
+          "what": "stellar-core isBadSeq: without minSeqNum the tx seqNum must be exactly account seq + 1; with minSeqNum it is valid while minSeqNum <= account seq < tx seqNum."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L2022",
+          "what": "Result codes: txTOO_LATE (after maxTime), txBAD_SEQ, txBAD_AUTH (too few valid signatures / wrong network), txBAD_AUTH_EXTRA (unused signatures)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-ledger-entries.x#L190",
+          "what": "AccountEntry holds seqNum, thresholds [master weight | low | med | high] and signers<20>: the policy is ledger state anyone can read."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig",
+          "what": "Stellar docs: thresholds 0-255 per low/medium/high class, up to 20 signatures per transaction, leftover signatures fail with TX_BAD_AUTH_EXTRA, pre-authorized transaction and hash(x) signer types."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions",
+          "what": "Stellar docs: sequence number must be account seq + 1 unless preconditions relax it; preconditions (time bounds, ledger bounds, minSeqNum, minSeqAge, minSeqLedgerGap, extraSigners); the network passphrase is part of the signed hash."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0007.md",
+          "what": "SEP-7 web+stellar:tx URI: a TransactionEnvelope handed to a signer's wallet, with pubkey and callback for multisig coordination; the family's interop format."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar-expert/refractor",
+          "what": "Refractor: a hosted multisig aggregator and pending-transaction store for Stellar; the server the room replaces (invariant 8)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SetOptionsOpFrame.cpp#L32",
+          "what": "stellar-core SetOptionsOpFrame: a signer or threshold change is a HIGH-threshold operation."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SetOptionsOpFrame.cpp#L45",
+          "what": "stellar-core addOrChangeSigner: an existing key is re-weighted in place; a new one fails SET_OPTIONS_TOO_MANY_SIGNERS at 20 or SET_OPTIONS_LOW_RESERVE without the reserve."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SetOptionsOpFrame.cpp#L124",
+          "what": "stellar-core SetOptions doApply: weight 0 deletes a signer; thresholds are written with no reachability check."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1546",
+          "what": "stellar-core processSignatures: all operations' signatures are checked before any operation applies."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/lumens",
+          "what": "Stellar docs: each signer is a subentry costing one base reserve (0.5 XLM)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-protocol/blob/master/core/cap-0040.md",
+          "what": "CAP-40: the ed25519 signed-payload signer type."
+        }
+      ],
+      "unverified": [
+        "The Stellar docs warn only that a master weight of 0 can lock the account and to change weights in the correct order; the general lockout (any threshold above the remaining total weight) is derived from the authorization rule and SetOptions applying without a check."
+      ]
+    },
+    {
+      "id": "stellar.thresholds/cancel-by-bump-sequence",
+      "name": "Cancel collected transactions by bumping the sequence number",
+      "area": "family",
+      "family": "stellar.thresholds",
+      "status": "declared",
+      "summary": "Members void every collected but unsubmitted transaction from the account at once: a BumpSequence operation raises the account's sequence number to at least the highest pending one, so none of them can ever apply. It needs only the LOW threshold. The other route is expiry: a transaction past its timeBounds.maxTime is dead anyway.",
+      "effect": {
+        "schema": "muster.effect.stellar.thresholds.cancel-by-bump-sequence.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the multisig account whose pending transactions are voided"
+          },
+          {
+            "name": "bumpTo",
+            "means": "the new sequence number: at least the highest seqNum among the pending transactions, below INT64_MAX"
+          },
+          {
+            "name": "voids",
+            "means": "the room's pending proposals on this account, with their seqNums, that this voids"
+          },
+          {
+            "name": "fee",
+            "means": "the maximum total fee in stroops, paid by the account"
+          },
+          {
+            "name": "seqNum",
+            "means": "this transaction's own sequence number: the account's sequence number + 1, read from the chain"
+          },
+          {
+            "name": "maxTime",
+            "means": "the timeBounds upper limit in UNIX seconds (0 = never)"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "signatures whose weights sum to at least the account's LOW threshold",
+        "finality": "external",
+        "domain": "stellar.tx-signature-payload.envelope-type-tx"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "stellar:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "stellar:*",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "stellar-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "stellar:* (account reads, transaction submit)",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "stellar-signer-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "stellar-account:<G… multisig account> (ed25519 signer; weight toward LOW)",
+          "field": ""
+        },
+        {
+          "kind": "asset",
+          "name": "xlm-for-fee",
+          "party": "proposer",
+          "class": "asset",
+          "target": "stellar-account:<G… multisig account> (fee, above the minimum balance)",
+          "field": "fee"
+        }
+      ],
+      "touches": [
+        {
+          "target": "stellar:*",
+          "mode": "write"
+        },
+        {
+          "target": "stellar-account:<G… multisig account>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "payer",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "policy",
+          "observer": "chain-observer",
+          "when": "always"
+        },
+        {
+          "field": "effect",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "signers",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee-payer",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "Writes bumpTo at or above the highest seqNum among the account's pending proposals in the room, and lists them. Muster would read the account's sequence number, record the read, and re-derive the hash. This transaction takes the next sequence number itself, so it competes with the lowest pending one.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "payer",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/BumpSequenceOpFrame.cpp#L39",
+            "https://github.com/stellar/stellar-protocol/blob/master/core/cap-0021.md"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "Signers sign until the weights reach LOW. When LOW is below MEDIUM, fewer signers can cancel than can pay. Muster would stop at exactly enough weight.",
+          "signs": "Ed25519, by each signer's key, over the 32-byte transaction hash SHA-256(XDR(TransactionSignaturePayload{networkId = SHA-256(network passphrase, e.g. \"Public Global Stellar Network ; September 2015\"), taggedTransaction = ENVELOPE_TYPE_TX (2) + Transaction{sourceAccount = the multisig account, fee = uint32 maximum total fee in stroops, seqNum = the account's sequence number + 1, cond = preconditions (timeBounds minTime/maxTime; muster would set maxTime to the room's expiry), memo, operations = [BumpSequence{bumpTo}], ext = 0}})). Inside: the network id, the account, the sequence number, the fee and the time bounds. Not inside: any other signature. Attached as a DecoratedSignature: a 4-byte hint (the last 4 bytes of the signer's public key) and the 64-byte signature.",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L1012",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L133",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/main/ApplicationImpl.cpp#L142",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L33",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/BumpSequenceOpFrame.cpp#L25",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L319"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "One member submits through the RPC. The RPC provider sees the signed transaction first; validators see it before it is in a ledger. It races the pending transactions: a fully signed pending transaction that someone submits first still settles. The chain sees a sequence bump, not the transactions it voids.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "fee-payer",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L526",
+            "https://github.com/stellar/stellar-protocol/blob/master/core/cap-0021.md"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "The ledger closes and the account's sequence number is at least bumpTo. Each listed transaction now fails txBAD_SEQ, even one with a minSeqNum precondition, because its seqNum is no longer above the account's. Muster would read the account, record the read, and mark those proposals void in the room.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1602",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/BumpSequenceOpFrame.cpp#L39"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an approval over a transaction hash that differs from the one the room re-derived from the reviewed effect",
+          "why": "invariant 1 / F-4: effects are reviewed, the transaction hash is the materialization, and a mismatch refuses",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L133",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L1012"
+          ]
+        },
+        {
+          "what": "signing a payload whose networkId is not SHA-256 of the room's network passphrase, or whose source account or sequence number differs from the effect",
+          "why": "invariant 2: the payload must commit to environment, account and slot. Stellar binds explicitly: the network id is inside the signed hash, and a signature made for another network fails txBAD_AUTH",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/main/ApplicationImpl.cpp#L142",
+            "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L2026",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions"
+          ]
+        },
+        {
+          "what": "a bumpTo below the seqNum of a pending proposal it claims to void",
+          "why": "the chain's rule: a transaction with minSeqNum stays valid while minSeqNum <= account seq < its seqNum, so a lower bump would not void it",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1602",
+            "https://github.com/stellar/stellar-protocol/blob/master/core/cap-0021.md",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions"
+          ]
+        },
+        {
+          "what": "bumpTo = INT64_MAX",
+          "why": "the chain's rule: at INT64_MAX every later transaction fails the sequence check, so the account could never act again",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1602"
+          ]
+        },
+        {
+          "what": "a negative bumpTo",
+          "why": "the chain's rule: BUMP_SEQUENCE_BAD_SEQ",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/BumpSequenceOpFrame.cpp#L72",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/list-of-operations"
+          ]
+        },
+        {
+          "what": "attaching a signature the protocol would not need: the collected weights must reach the LOW threshold only with the last signature attached, in envelope order",
+          "why": "the chain's rule: the checker walks the signatures in order and stops once the weight meets the threshold; any signature it never used fails the whole transaction with txBAD_AUTH_EXTRA, so collection must stop at exactly enough",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L47",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L172",
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1592",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig"
+          ]
+        },
+        {
+          "what": "collecting on, or submitting, a transaction whose seqNum is no longer the account's sequence number + 1 (another transaction from the account landed first)",
+          "why": "the chain's rule: the sequence number must be exactly one above the account's (txBAD_SEQ); muster would re-read the account before submit and mark the proposal stale",
+          "evidence": [
+            "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1602",
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions"
+          ]
+        },
+        {
+          "what": "signing when a read that reached the signed bytes (the sequence number and fee) is not recorded in the room log as an external read",
+          "why": "invariant 10: nothing is signed whose inputs cannot be accounted for; the sequence number and fee come from the chain, not the room",
+          "evidence": [
+            "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions",
+            "https://developers.stellar.org/docs/learn/fundamentals/fees-resource-limits-metering"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The chain enforces the cancel: once the account's sequence number reaches a transaction's seqNum, that transaction can never apply.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Signatures without a maxTime never expire on their own; only moving the account's sequence number past them cancels them.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Cancelling is a race: a member holding a fully signed pending transaction can submit it first.",
+          "credibility": "motivational",
+          "party": "any member holding enough collected signatures"
+        },
+        {
+          "claim": "Signers whose weights reach only the LOW threshold can void proposals that need MEDIUM or HIGH.",
+          "credibility": "motivational",
+          "party": "signers whose combined weight reaches the LOW threshold"
+        },
+        {
+          "claim": "The signed bytes name the network: networkId = SHA-256(passphrase) is inside every signature payload, so a signature is worthless on another Stellar network.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A pre-authorized transaction signer or a hash(x) signer on the account could authorize a sequence bump without the keyholders.",
+          "credibility": "motivational",
+          "party": "whoever registered the pre-authorized transaction hash, or anyone who learns x (public once it is used)"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L1012",
+          "what": "TransactionSignaturePayload = {networkId, taggedTransaction = ENVELOPE_TYPE_TX + Transaction}: the bytes every signer's key signs (after SHA-256)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L939",
+          "what": "Transaction = {sourceAccount, fee, seqNum, cond (preconditions), memo, operations, ext (Soroban data)}: everything a signature commits to."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L33",
+          "what": "DecoratedSignature = {hint: last 4 bytes of the public key, signature}; TransactionV1Envelope carries signatures<20>."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L133",
+          "what": "stellar-core: the contents hash is sha256(xdr(networkID, ENVELOPE_TYPE_TX, tx)) and every signature is checked against it."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/main/ApplicationImpl.cpp#L142",
+          "what": "stellar-core: networkID = sha256(NETWORK_PASSPHRASE), so the network is inside every signed hash."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/js-stellar-base/blob/v15.0.0/src/network.js",
+          "what": "js-stellar-base: the network passphrases (public, testnet, futurenet, standalone) whose SHA-256 is the networkId."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L47",
+          "what": "stellar-core SignatureChecker: pre-auth-tx signers match the contents hash with no signature; hash(x) signers match sha256(signature); ed25519 signatures are walked in envelope order until the weight meets the needed threshold."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/SignatureChecker.cpp#L172",
+          "what": "stellar-core: checkAllSignaturesUsed fails when any attached signature was never needed."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1592",
+          "what": "stellar-core: an unused signature fails the transaction with txBAD_AUTH_EXTRA."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L526",
+          "what": "stellar-core checkAllTransactionSignatures: the transaction's source account must meet its LOW threshold (and any extraSigners)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/OperationFrame.cpp#L217",
+          "what": "stellar-core OperationFrame::checkSignature: each operation's source account must meet that operation's threshold, else opBAD_AUTH."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/TransactionFrame.cpp#L1602",
+          "what": "stellar-core isBadSeq: without minSeqNum the tx seqNum must be exactly account seq + 1; with minSeqNum it is valid while minSeqNum <= account seq < tx seqNum."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L2022",
+          "what": "Result codes: txTOO_LATE (after maxTime), txBAD_SEQ, txBAD_AUTH (too few valid signatures / wrong network), txBAD_AUTH_EXTRA (unused signatures)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-ledger-entries.x#L190",
+          "what": "AccountEntry holds seqNum, thresholds [master weight | low | med | high] and signers<20>: the policy is ledger state anyone can read."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/transactions/signatures-multisig",
+          "what": "Stellar docs: thresholds 0-255 per low/medium/high class, up to 20 signatures per transaction, leftover signatures fail with TX_BAD_AUTH_EXTRA, pre-authorized transaction and hash(x) signer types."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions",
+          "what": "Stellar docs: sequence number must be account seq + 1 unless preconditions relax it; preconditions (time bounds, ledger bounds, minSeqNum, minSeqAge, minSeqLedgerGap, extraSigners); the network passphrase is part of the signed hash."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0007.md",
+          "what": "SEP-7 web+stellar:tx URI: a TransactionEnvelope handed to a signer's wallet, with pubkey and callback for multisig coordination; the family's interop format."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar-expert/refractor",
+          "what": "Refractor: a hosted multisig aggregator and pending-transaction store for Stellar; the server the room replaces (invariant 8)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-xdr/blob/v28.0/Stellar-transaction.x#L311",
+          "what": "BumpSequenceOp = {bumpTo}; Threshold: low."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/BumpSequenceOpFrame.cpp#L25",
+          "what": "stellar-core BumpSequenceOpFrame: bumping the sequence is a LOW-threshold operation."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/BumpSequenceOpFrame.cpp#L39",
+          "what": "stellar-core BumpSequence doApply: raises the sequence to bumpTo when higher; a lower bumpTo succeeds and changes nothing."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-core/blob/v28.0.1/src/transactions/BumpSequenceOpFrame.cpp#L72",
+          "what": "stellar-core BumpSequence doCheckValid: a negative bumpTo fails BUMP_SEQUENCE_BAD_SEQ."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/stellar/stellar-protocol/blob/master/core/cap-0021.md",
+          "what": "CAP-21: a previously valid transaction can fail at apply if a BUMP_SEQUENCE made its sequence number invalid; minSeqNum relaxes the sequence check."
+        },
+        {
+          "kind": "source",
+          "url": "https://developers.stellar.org/docs/learn/fundamentals/transactions/list-of-operations",
+          "what": "Stellar docs, list of operations: Bump Sequence is LOW threshold; bumpTo must be between 0 and INT64_MAX."
+        }
+      ]
+    }
+  ]
+}

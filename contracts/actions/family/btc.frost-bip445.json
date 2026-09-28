@@ -1,0 +1,608 @@
+{
+  "actions": [
+    {
+      "id": "btc.frost-bip445/spend",
+      "name": "Spend from a Bitcoin FROST account (looks single-sig)",
+      "area": "family",
+      "family": "btc.frost-bip445",
+      "kind": "btc-frost",
+      "status": "built",
+      "summary": "t of the ceremony's n participants spend the account's coins in two rounds. The witness is ONE BIP-340 signature by the key-path output key: to the chain it is a single-sig taproot spend — no policy, no signers.",
+      "generated": "btc-frost/spend",
+      "effect": {
+        "schema": "muster.effect.btc-spend.v1",
+        "fields": [
+          {
+            "name": "inputs",
+            "means": "the coins spent, each with its prevout (value + scriptPubKey)"
+          },
+          {
+            "name": "outputs",
+            "means": "the payee first, then change back to the account unless dust"
+          },
+          {
+            "name": "locktime",
+            "means": "nLocktime"
+          },
+          {
+            "name": "fee",
+            "means": "declared, must equal inputs − outputs; sized for one 64-byte signature per input"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the proposer",
+          "does": "Chooses the account ('btc-frost@<CAIP-10>', coordinate_set_policy) and calls coordinate_propose_btc_spend(pay_to, amount_sat, fee_rate). The module needs Settings → btc-rpc (the user's own Bitcoin Core node): it reads the account's coins with scantxoutset, keeps only coins whose scriptPubKey is the account's, and builds the spend largest coin first until the payment and its fee are covered — payee first, change back to the account unless it would be dust (then it goes to the fee). The fee is fee_rate × an upper bound of the signed vsize and is declared as inputs − outputs. Every input carries its prevout (amount + scriptPubKey). The driver's gate runs before anything is published; then the policy, the effect, and the context are published (environment = the chain's CAIP-2 bip122:<genesis>, account = the account's address, slot = the intent id, expiry), and the coin read is recorded in the log as an external read (source 'bitcoind:scantxoutset'), so every signer can account for the inputs (invariant 10). The materialization every member re-derives: dCBOR ['bip341.keypath.frost-bip445.v1', <CAIP-2 chain>, [each input's BIP-341 key-path SigMsg]].",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect (inputs with prevouts, outputs, fee)",
+              "observer": "room-member"
+            },
+            {
+              "field": "the account's address (the scantxoutset query)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim",
+            "module/tests/btc_frost_driver_test.nim",
+            "module/tests/phase_d_exit_test.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "each member who is a participant — Approve once",
+          "does": "Round 1 (Approve): the keystore commits fresh nonces for this intent under the ceremony's label and the member publishes its public nonces, one per input, named by its host key, attested by the host key over P. The core advances to round 2 at t. Round 2 (automatic, on the room's tick): the signer SET is what the log fixes — the first t round-1 contributions the fold accepts, in canonical order — so honest members agree on it; each member in it has its keystore make a partial signature per input under that set's aggregate nonce and publishes {r: 2, signer, set, psigs}, attested. A member outside the set is told 'not-in-signing-set' and publishes nothing. A nonce is consumed before it is used; a keystore restarted between the rounds has lost it and refuses round 2 — the session aborts rather than reuse a nonce.",
+          "signs": "round 1: nothing (public nonces); round 2: a BIP-445 partial signature per input over its BIP-341 key-path SigMsg (hash_type 0x00, every input's amount and scriptPubKey, spend_type = key path), valid only under the carried signer set; each contribution attested by the member's host key over P",
+          "reveals": [
+            {
+              "field": "contributions (public nonces, then partial signatures)",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim",
+            "module/tests/btc_frost_driver_test.nim",
+            "module/tests/frost_keystore_test.nim",
+            "module/tests/phase_d_exit_test.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "any member, through their own Bitcoin node",
+          "does": "coordinate_submit: the settlement re-runs the driver's gate, finds a signer set with all t partials, aggregates them into one BIP-340 signature per input and verifies each under x(Q) before building anything. The witness of every input is that signature alone. Broadcast through the user's node.",
+          "signs": "nothing new — t partial signatures aggregate into one",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "inputs",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "outputs",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "module/tests/btc_frost_driver_test.nim",
+            "module/tests/frost_ceremony_room_test.nim",
+            "module/tests/phase_d_exit_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one — the node is read",
+          "does": "Final at the network's confirmation depth, read from the node. On chain the input's witness is one 64-byte signature, the shape Bitcoin Core's own single-sig taproot spend has.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/phase_d_exit_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a spend with an input that is not this account's coins, or a declared fee that is not inputs − outputs",
+          "why": "the same gate as the script multisigs, before anyone signs",
+          "evidence": [
+            "module/tests/btc_frost_driver_test.nim"
+          ]
+        },
+        {
+          "what": "a round-1 contribution from a non-participant, or a round-1 payload offered in round 2",
+          "why": "the driver checks the signer is a participant and the round tag",
+          "evidence": [
+            "module/tests/btc_frost_driver_test.nim"
+          ]
+        },
+        {
+          "what": "a round-2 partial that is tampered, from a signer outside its carried set, or under a set of the wrong size",
+          "why": "the partial verifies only against its set and the signer's public share",
+          "evidence": [
+            "module/tests/btc_frost_driver_test.nim"
+          ]
+        },
+        {
+          "what": "a round-2 contribution from a member outside the log's signer set",
+          "why": "'not-in-signing-set' — nothing published",
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim"
+          ]
+        },
+        {
+          "what": "signing round 2 after a restart between the rounds",
+          "why": "the nonce is gone and is never regenerated for the same session: 'refused … abort', nothing published",
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim",
+            "module/tests/frost_keystore_test.nim"
+          ]
+        },
+        {
+          "what": "signing twice with one nonce",
+          "why": "the keystore consumes a nonce before use and refuses a second use",
+          "evidence": [
+            "module/tests/frost_keystore_test.nim",
+            "module/tests/frost_signing_test.nim"
+          ]
+        },
+        {
+          "what": "settling below t",
+          "why": "no complete signer set: 'insufficient-signatures'; below t there is no spend",
+          "evidence": [
+            "module/tests/btc_frost_driver_test.nim"
+          ]
+        },
+        {
+          "what": "an aggregate that does not verify under the account key",
+          "why": "settlement verifies every aggregate before building a transaction",
+          "evidence": [
+            "module/tests/btc_frost_driver_test.nim",
+            "module/tests/frost_dkg_sign_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_set_policy",
+        "coordinate_propose_btc_spend",
+        "coordinate_readiness",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_decline",
+        "coordinate_submit"
+      ],
+      "ui": "Room → + → Payment → Settles via Bitcoin (FROST) → From <account> → payee + amount (sat) + fee (sat/vB) → Propose; card → Approve once (round 2 follows on the tick). The card also offers 'Sign outside muster (PSBT)', which answers no-outside-format for a FROST intent. Settle is headless (coordinate_submit).",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The chain sees one signature by one key: nothing on chain names the policy, the threshold, or who signed",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Shares and nonces live only in each member's keystore; a nonce is never reused, and a restart aborts the session",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Every signer inside the room is named by its host key; the room sees who took part",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The user's node learns the account's address when the proposer reads its coins, and sees the signed spend first",
+          "credibility": "exposed",
+          "party": "the configured Bitcoin node"
+        },
+        {
+          "claim": "BIP-445 and ChillDKG are drafts; this port is demo-grade and not constant time",
+          "credibility": "not-applicable"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/btc_frost_driver_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/frost_ceremony_room_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/phase_d_exit_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/frost_signing_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/frost_keystore_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/frost_dkg_sign_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/frost_group_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/profile_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/bitcoin/bips/pull/2070",
+          "what": "bitcoin/bips#2070: BIP-445 FROST signing draft"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/bitcoin/bips/master/bip-0341.mediawiki",
+          "what": "BIP-341: the key-path SigMsg"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/bitcoin/bips/master/bip-0340.mediawiki",
+          "what": "BIP-340: the one Schnorr signature the chain checks"
+        }
+      ],
+      "unverified": [
+        "The btc-frost driver is not run through checkConformance by any test (only its profile, in profile_test); CLAUDE.md's working agreement says conformance grades every driver.",
+        "The card body draws only to / value, so it shows no outputs for a btc-spend (Room.qml cardFor), and the ready box's 'Nothing settles on-chain' is wrong for this rail.",
+        "coordinate_submit polls the node for about four seconds; if the spend is not final by then it returns pending, and nothing later publishes the final event for a Bitcoin intent (only LEZ settles are re-watched by the pump). From reading nim-lib/muster_module.nim, not a test.",
+        "The room's fold counts one approval per contributor NAME in the event key, not per verifying key, so the room can show 'executable' early if one signature is published under two names (seen in a scratch run against the threshold driver, not a repo test). The settlement re-counts by the key that signed, so nothing wrong settles."
+      ]
+    },
+    {
+      "id": "btc.frost-bip445/key-ceremony",
+      "name": "Make a FROST key (ChillDKG ceremony in the room)",
+      "area": "family",
+      "family": "btc.frost-bip445",
+      "kind": "btc-frost",
+      "status": "built",
+      "setup": true,
+      "summary": "The setup for this family: t-of-n members run a ChillDKG key ceremony over the room's log. The room is the authenticated coordinator ChillDKG asks for, and every member computes the coordinator's steps from the log. The result is one threshold key; the taproot address it gives is disclosed into the room with the ceremony's public recovery data.",
+      "effect": {
+        "fields": [
+          {
+            "name": "ceremony_id",
+            "means": "a name for the key, without '/'"
+          },
+          {
+            "name": "network",
+            "means": "a Bitcoin network name — regtest (the default), signet, testnet or mainnet; the account is on that network"
+          },
+          {
+            "name": "t",
+            "means": "signers needed, 1 ≤ t ≤ n"
+          },
+          {
+            "name": "n",
+            "means": "participants, n ≥ 2 — the first n members to join, in the log's order"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 2,
+        "threshold": "all n participants: the ceremony completes only when every participant's step-1 and step-2 messages are in the log; a fault aborts it (ChillDKG is not robust)",
+        "finality": "immediate — in the room, when each participant finalizes and discloses",
+        "domain": "ChillDKG (bip-frost-dkg draft, bitcoin/bips#2227) over secp256k1",
+        "evidence": [
+          "module/tests/frost_ceremony_room_test.nim",
+          "module/tests/frost_chilldkg_test.nim"
+        ]
+      },
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "frost-host-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "frost/<ceremony_id>",
+          "field": "",
+          "evidence": [
+            "module/tests/frost_keystore_test.nim",
+            "module/tests/frost_ceremony_room_test.nim"
+          ]
+        }
+      ],
+      "touches": [],
+      "disclosure": [
+        {
+          "field": "open (network, t, n)",
+          "observer": "room-member",
+          "when": "act",
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim"
+          ]
+        },
+        {
+          "field": "host keys (joins)",
+          "observer": "room-member",
+          "when": "act",
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim",
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "field": "step messages (encrypted shares, VSS commitments, certifying signatures)",
+          "observer": "room-member",
+          "when": "act",
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim"
+          ]
+        },
+        {
+          "field": "account + recovery data (host keys, t, threshold key, public shares)",
+          "observer": "room-member",
+          "when": "final",
+          "evidence": [
+            "module/tests/btc_frost_driver_test.nim",
+            "module/tests/phase_d_exit_test.nim",
+            "module/tests/frost_ceremony_room_test.nim"
+          ]
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always",
+          "evidence": [
+            "module/tests/flow_test.nim"
+          ]
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always",
+          "evidence": [
+            "module/tests/flow_test.nim"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "step": "ceremony",
+          "who": "the opener (any member)",
+          "does": "frost_ceremony_open(ceremony_id, network, t, n): the module checks n ≥ 2, 1 ≤ t ≤ n and an id without '/', publishes frost/<id>/open {network, t, n}, and joins it.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "open (network, t, n)",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "each member who takes part",
+          "does": "frost_ceremony_join: the keystore derives a host key for label 'frost/<id>' from its own secret — never exported — and the member publishes frost/<id>/join/<member> {host}, author-signed. The first n joins in the log's canonical order are the participants.",
+          "signs": "an Ed25519 author signature (room identity) over the join event",
+          "reveals": [
+            {
+              "field": "host key",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/frost_keystore_test.nim",
+            "module/tests/frost_ceremony_room_test.nim",
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "each participant — automatically, on the room's tick",
+          "does": "Step 1: once n have joined, the keystore makes the participant's step-1 message — its secret shares for every participant, encrypted to their host keys, a VSS commitment and a proof of possession — published as frost/<id>/pmsg1/<host>. Step 2: once all n step-1 messages are in the log, each participant computes the coordinator's step 1 from the log itself (the room only relays) and its keystore makes the step-2 message: its certifying signature (CertEq) over the ceremony's transcript, published as frost/<id>/pmsg2/<host>.",
+          "signs": "step 2: the participant's certifying signature (CertEq) by its host key",
+          "reveals": [
+            {
+              "field": "step messages",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim",
+            "module/tests/frost_keystore_test.nim",
+            "module/tests/frost_chilldkg_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "each participant",
+          "does": "Once all n step-2 messages are in the log, each computes the coordinator's finalize from the log — the certificate and the recovery data — and its keystore checks the certificate. Then it discloses the account, author-signed, with config {ceremony, recovery}: the address is bech32m OP_1 x(Q) — ChillDKG's threshold key is already a taproot output key (it commits to an unspendable script path), so it is used as it stands. Any member re-derives the account from the recovery data, with no chain read; a member's share is recovered from the same public data by its keystore, never stored.",
+          "signs": "the disclosure event's author signature",
+          "reveals": [
+            {
+              "field": "account + recovery data",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/btc_frost_driver_test.nim",
+            "module/tests/phase_d_exit_test.nim",
+            "module/tests/frost_ceremony_room_test.nim",
+            "module/tests/frost_keystore_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a disclosure whose address does not derive from its recovery data",
+          "why": "the account is the ceremony, re-derived; a mismatch is refused, never trusted",
+          "evidence": [
+            "module/tests/btc_frost_driver_test.nim"
+          ]
+        },
+        {
+          "what": "a faulty ceremony message: a bad commitment, proof, share, or a coordinator's lie",
+          "why": "ChillDKG raises with the blamed participant; the ceremony does not complete",
+          "evidence": [
+            "module/tests/frost_chilldkg_test.nim"
+          ]
+        },
+        {
+          "what": "a join published in another member's name",
+          "why": "joins are author-signed; the room's read path drops a forged one",
+          "evidence": [
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "what": "a share or a nonce in the log",
+          "why": "none is ever published: the ceremony's entries are its open, joins and step messages",
+          "evidence": [
+            "module/tests/frost_ceremony_room_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "frost_ceremony_open",
+        "frost_ceremony_join",
+        "frost_ceremonies",
+        "coordinate_accounts"
+      ],
+      "ui": "Room → Accounts → 'FROST key ceremony (Bitcoin taproot)' → a name, t, n, network (regtest by default) → Open the ceremony and join it; other members → Join. It advances on the room's tick and the account appears under Accounts.",
+      "invariants": [
+        4,
+        8,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "No share and no nonce enters the log; a share is recovered from the public recovery data by the member's own keystore",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The room coordinates: every member computes the coordinator's steps from the log — there is no coordinator server",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "To anyone outside the room the account is one key: its address names no policy and no signers",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "ChillDKG aborts on a fault; a participant who stops answering stops the ceremony",
+          "credibility": "motivational",
+          "party": "every participant"
+        },
+        {
+          "claim": "The participants are the first n members to join, in the log's order — the opener does not choose them",
+          "credibility": "motivational",
+          "party": "the room's members"
+        },
+        {
+          "claim": "Demo-grade: this FROST code is not constant time and sits behind the production gate",
+          "credibility": "not-applicable"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/frost_ceremony_room_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/frost_chilldkg_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/frost_keystore_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/frost_dkg_sign_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/authorship_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/btc_frost_driver_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/phase_d_exit_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/BlockstreamResearch/bip-frost-dkg",
+          "what": "ChillDKG: the draft this ports"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/bitcoin/bips/pull/2227",
+          "what": "bitcoin/bips#2227: the ChillDKG BIP draft"
+        }
+      ],
+      "unverified": [
+        "The hosted checks on t, n and the id, and 'not-a-participant' for a member who joins after the first n, are from reading nim-lib/muster_module.nim and coordination/aggregate.nim; no test covers them."
+      ]
+    }
+  ]
+}

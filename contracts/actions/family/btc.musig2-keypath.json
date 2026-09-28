@@ -1,0 +1,423 @@
+{
+  "actions": [
+    {
+      "id": "btc.musig2-keypath/setup",
+      "name": "Set up a MuSig2 account (aggregate the keys)",
+      "area": "family",
+      "family": "btc.musig2-keypath",
+      "status": "declared",
+      "summary": "Each member brings one key. Muster sorts the keys, aggregates them into one BIP-327 key, and tweaks it into a taproot output with no usable script path. The address looks like any single-key taproot address. All n keys must sign every spend.",
+      "effect": {
+        "schema": "muster.effect.btc.musig2-keypath.setup.v0",
+        "fields": [
+          { "name": "network", "means": "the Bitcoin network (CAIP-2) the address is for" },
+          { "name": "keys", "means": "each member's 33-byte compressed secp256k1 public key, or an xpub when the aggregate is derived per BIP-328" },
+          { "name": "aggregate", "means": "KeySort, then KeyAgg: the aggregate key P (BIP-327)" },
+          { "name": "output-key", "means": "Q = P + hash_TapTweak(P)·G: a key path committing to an unspendable script path (BIP-341), as a bech32m address" },
+          { "name": "descriptor", "means": "tr(musig(K1,...,Kn)), or tr(musig(xpub1,...,xpubn)/<0;1>/*) with BIP-328 derivation (BIP-390, Draft)" }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "every member (n of n) confirms the aggregate key",
+        "finality": "immediate",
+        "domain": "bip327.keyagg.bip386.tr.v0"
+      },
+      "requirements": [
+        { "kind": "authority", "name": "musig2-key", "party": "contributor", "class": "authority", "target": "a secp256k1 key the member's keystore or signing device holds", "field": "" }
+      ],
+      "touches": [],
+      "disclosure": [
+        { "field": "effect", "observer": "room-member", "when": "propose" },
+        { "field": "pubkeys", "observer": "room-member", "when": "propose" },
+        { "field": "contributions", "observer": "room-member", "when": "approve" },
+        { "field": "address", "observer": "room-member", "when": "final" },
+        { "field": "timing", "observer": "store-node", "when": "always" },
+        { "field": "topic", "observer": "store-node", "when": "always" }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "takes each member's key from that member's own disclosure, sorts the keys (KeySort), aggregates them (KeyAgg) and applies the taproot tweak. Every member's client repeats the computation and refuses a different result.",
+          "signs": "",
+          "reveals": [
+            { "field": "effect", "observer": "room-member" },
+            { "field": "pubkeys", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki",
+            "https://github.com/bitcoin/bips/blob/master/bip-0390.mediawiki",
+            "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "each member checks that their own key is in the sorted list and that the address re-derives. A member who signs outside Muster registers the tr(musig(...)) policy on a device that supports it (BIP-388 policies include MuSig2).",
+          "signs": "a muster attestation over the aggregate key and descriptor; no chain signature exists at setup",
+          "reveals": [
+            { "field": "contributions", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0388.mediawiki"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "once all n members have confirmed, the account is disclosed into the room: family, network, the n keys, the descriptor and the address.",
+          "signs": "",
+          "reveals": [
+            { "field": "address", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bitcoin/blob/master/doc/descriptors.md"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an address that does not re-derive from the disclosed keys, or a key list that leaves out a member",
+          "why": "invariant 1: the account is re-derived by every member, never taken on trust",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki", "https://github.com/bitcoin/bips/blob/master/bip-0390.mediawiki" ]
+        },
+        {
+          "what": "an output key that commits to a script tree",
+          "why": "a script path is a different policy, and a leaf used on chain reveals it; this family is the key path alone",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki" ]
+        },
+        {
+          "what": "hardened derivation of the aggregate key",
+          "why": "there is no aggregate private key, so only unhardened derivation is possible (BIP-328, BIP-390)",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0328.mediawiki", "https://github.com/bitcoin/bips/blob/master/bip-0390.mediawiki" ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [ 1, 4, 5, 9 ],
+      "claims": [
+        { "claim": "the address commits to exactly these n keys, and every member re-derives it", "credibility": "imperative" },
+        { "claim": "the chain never learns the members, their number, or that the account is shared", "credibility": "imperative" },
+        { "claim": "keys cannot be added or removed on this address; a membership change is a new account and a sweep", "credibility": "imperative" }
+      ],
+      "evidence": [
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki", "what": "MuSig2 (Deployed): KeySort, KeyAgg, ApplyTweak; n-of-n only" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0328.mediawiki", "what": "derivation for MuSig2 aggregate keys: a synthetic xpub with a fixed chain code; unhardened only" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0390.mediawiki", "what": "musig() descriptor key expression (Draft): keys sorted with KeySort before aggregation; allowed inside tr() and rawtr()" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki", "what": "taproot: a key-only output should commit to an unspendable script path, Q = P + hash_TapTweak(P)·G" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0386.mediawiki", "what": "tr() descriptors: the output key from an internal key with no script tree" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bitcoin/blob/master/doc/descriptors.md", "what": "Bitcoin Core: tr(musig(xpub,xpub)/0/*) example; musig() only inside tr()" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0388.mediawiki", "what": "wallet policies, including MuSig2 examples, registered on a signing device" }
+      ],
+      "unverified": [
+        "which signing devices can register a tr(musig(...)) wallet policy"
+      ]
+    },
+    {
+      "id": "btc.musig2-keypath/spend",
+      "name": "Spend with all n keys (two rounds)",
+      "area": "family",
+      "family": "btc.musig2-keypath",
+      "status": "declared",
+      "summary": "All n members sign one key-path spend in two rounds: first a fresh public nonce per input, then a partial signature. The partials combine into one BIP-340 signature per input. On chain the spend looks like any single-key taproot spend.",
+      "effect": {
+        "schema": "muster.effect.btc.musig2-keypath.spend.v0",
+        "fields": [
+          { "name": "inputs", "means": "each coin: txid, vout, value, scriptPubKey and nSequence" },
+          { "name": "outputs", "means": "each payee's address and value, and any change to the account" },
+          { "name": "locktime", "means": "nLockTime" },
+          { "name": "fee", "means": "inputs minus outputs, declared and checked" }
+        ]
+      },
+      "agreement": {
+        "rounds": 2,
+        "threshold": "n of n: every member, in both rounds",
+        "finality": "external",
+        "domain": "bip341.keypath.musig2-bip327.v0"
+      },
+      "requirements": [
+        { "kind": "environment", "name": "bip122:*", "party": "instance", "class": "infra", "target": "the Bitcoin network the account is on", "field": "" },
+        { "kind": "infra", "name": "bitcoind-rpc", "party": "instance", "class": "infra", "target": "a UTXO source, fee estimation and broadcast the user configures", "field": "" },
+        { "kind": "authority", "name": "musig2-key", "party": "contributor", "class": "authority", "target": "one of the n aggregated keys", "field": "" },
+        { "kind": "address", "name": "payee", "party": "proposer", "class": "address", "target": "an address on the account's network", "field": "outputs" },
+        { "kind": "asset", "name": "BTC", "party": "proposer", "class": "asset", "target": "coins at the account's output key", "field": "inputs" }
+      ],
+      "touches": [
+        { "target": "bip122:*", "mode": "write" },
+        { "target": "utxo:<txid>:<vout>", "mode": "write" },
+        { "target": "bitcoind-rpc", "mode": "read" }
+      ],
+      "disclosure": [
+        { "field": "effect", "observer": "room-member", "when": "propose" },
+        { "field": "account-addresses", "observer": "rpc-provider", "when": "propose" },
+        { "field": "contributions", "observer": "room-member", "when": "approve" },
+        { "field": "signed-tx", "observer": "rpc-provider", "when": "settle" },
+        { "field": "inputs", "observer": "chain-observer", "when": "settle" },
+        { "field": "outputs", "observer": "chain-observer", "when": "settle" },
+        { "field": "fee", "observer": "chain-observer", "when": "settle" },
+        { "field": "timing", "observer": "store-node", "when": "always" },
+        { "field": "topic", "observer": "store-node", "when": "always" }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "reads the account's coins through the user's RPC (external reads, invariant 10) and writes the spend. Every member's client re-derives each input's BIP-341 key-path SigMsg from the effect.",
+          "signs": "",
+          "reveals": [
+            { "field": "effect", "observer": "room-member" },
+            { "field": "account-addresses", "observer": "rpc-provider" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "round 1: every member's keystore runs NonceGen once per input and keeps each secret nonce inside the keystore, bound to this proposal (seam S7). The member posts the 66-byte public nonces. BIP-327 allows this round before the message is final, but Muster binds each nonce to one proposal.",
+          "signs": "nothing yet: a public nonce is not a signature. The contribution carries the member's muster attestation over P.",
+          "reveals": [
+            { "field": "contributions", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki",
+            "https://github.com/bitcoin-core/secp256k1/blob/master/include/secp256k1_musig.h"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "round 2: once all n public nonces are in the log, every member's client computes the same aggregate nonce (NonceAgg). Each keystore runs Sign per input and erases the secret nonce before the partial signature leaves it.",
+          "signs": "each input's BIP-341 key-path SigMsg (every input's amount, scriptPubKey and nSequence, the outputs, nLockTime, SIGHASH_DEFAULT, no leaf), as a 32-byte BIP-327 partial signature under the session context: the aggregate nonce, the n sorted keys, the x-only taproot tweak, and that message. Plus the member's muster attestation over P.",
+          "reveals": [
+            { "field": "contributions", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki",
+            "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "checks each partial signature with PartialSigVerify (a bad one names its signer), combines them with PartialSigAgg into one 64-byte BIP-340 signature per input, verifies it under the output key Q, and broadcasts. The witness is that signature alone.",
+          "signs": "",
+          "reveals": [
+            { "field": "signed-tx", "observer": "rpc-provider" },
+            { "field": "inputs", "observer": "chain-observer" },
+            { "field": "outputs", "observer": "chain-observer" },
+            { "field": "fee", "observer": "chain-observer" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki",
+            "https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "watches for confirmations.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a partial signature over a message that is not the one re-derived from the effect",
+          "why": "invariant 1: refuse on mismatch",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki" ]
+        },
+        {
+          "what": "a second Sign with the same secret nonce, or a secret nonce copied, stored or restored after a restart",
+          "why": "signing twice with one secret nonce reveals the secret key (BIP-327); the keystore erases it on use, and a restart aborts the session",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki", "https://github.com/bitcoin-core/secp256k1/blob/master/include/secp256k1_musig.h" ]
+        },
+        {
+          "what": "a changed transaction (a fee bump, a replacement) signed under the old nonces",
+          "why": "any change is a new message; it needs a new session with fresh nonces from all n",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki" ]
+        },
+        {
+          "what": "round 2 before all n public nonces are in the log",
+          "why": "NonceAgg needs every signer's nonce; members who aggregate different sets make partials that cannot combine",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki" ]
+        },
+        {
+          "what": "a partial signature that fails PartialSigVerify",
+          "why": "the combined signature would be invalid; BIP-327 identifies the signer who sent it, and the spend cannot complete without a valid partial from every member",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki" ]
+        },
+        {
+          "what": "foreign coins, a declared fee that is not inputs minus outputs, or a dust output",
+          "why": "the same checks the built Bitcoin drivers apply",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki", "https://github.com/bitcoin/bitcoin/blob/master/src/policy/policy.cpp" ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [ 1, 2, 4, 5, 8, 9, 10 ],
+      "claims": [
+        { "claim": "every member signs only the message Muster re-derived from the effect", "credibility": "imperative" },
+        { "claim": "a secret nonce never enters the room log, and the keystore erases it before the partial signature leaves", "credibility": "imperative" },
+        { "claim": "the chain sees one signature: never the members, their number, or who signed", "credibility": "imperative" },
+        { "claim": "any one member can stop every spend by not signing", "credibility": "motivational", "party": "every member" },
+        { "claim": "the RPC provider learns the account's address from the coin reads and sees the signed transaction before it is mined", "credibility": "exposed", "party": "the user-configured RPC provider" }
+      ],
+      "evidence": [
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki", "what": "MuSig2: NonceGen, NonceAgg, Sign, PartialSigVerify, PartialSigAgg; 66-byte public nonces, 32-byte partials; never Sign twice with one secret nonce" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki", "what": "the key-path SigMsg and SIGHASH_DEFAULT" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki", "what": "the 64-byte Schnorr signature the partials combine into" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0373.mediawiki", "what": "PSBT MuSig2 fields: participant keys, public nonces and partial signatures, for signers outside Muster" },
+        { "kind": "source", "url": "https://github.com/bitcoin-core/secp256k1/blob/master/include/secp256k1_musig.h", "what": "libsecp256k1 MuSig2 module: Sign overwrites the secret nonce with zeros; copying it risks reuse" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bitcoin/pull/29675", "what": "Bitcoin Core: the wallet receives and spends inputs with MuSig2 aggregate keys (merged 2025-10-14)" }
+      ],
+      "unverified": [
+        "which Bitcoin Core release first ships MuSig2 signing (PR 29675 is merged; the 30.0 and 31.0 release notes do not name it)",
+        "which signing devices implement the BIP-373 PSBT fields"
+      ]
+    },
+    {
+      "id": "btc.musig2-keypath/rekey",
+      "name": "Change members: a new aggregate key and a sweep",
+      "area": "family",
+      "family": "btc.musig2-keypath",
+      "status": "declared",
+      "summary": "MuSig2 cannot change membership in place: the aggregate key is the set of keys. Adding or removing a member means a new account (its own setup) and a spend of every coin to it, signed by all n current members, including anyone who is leaving.",
+      "effect": {
+        "schema": "muster.effect.btc.musig2-keypath.rekey.v0",
+        "fields": [
+          { "name": "to-account", "means": "the new account, already set up and disclosed in this room" },
+          { "name": "inputs", "means": "every coin of the current account: txid, vout, value, scriptPubKey and nSequence" },
+          { "name": "outputs", "means": "the new account's address" },
+          { "name": "fee", "means": "inputs minus outputs, declared and checked" }
+        ]
+      },
+      "agreement": {
+        "rounds": 2,
+        "threshold": "n of n of the current members",
+        "finality": "external",
+        "domain": "bip341.keypath.musig2-bip327.v0"
+      },
+      "requirements": [
+        { "kind": "environment", "name": "bip122:*", "party": "instance", "class": "infra", "target": "the Bitcoin network the account is on", "field": "" },
+        { "kind": "infra", "name": "bitcoind-rpc", "party": "instance", "class": "infra", "target": "a UTXO source, fee estimation and broadcast the user configures", "field": "" },
+        { "kind": "authority", "name": "musig2-key", "party": "contributor", "class": "authority", "target": "one of the current account's n keys", "field": "" },
+        { "kind": "address", "name": "new-account-address", "party": "proposer", "class": "address", "target": "the address of an account disclosed in this room", "field": "outputs" },
+        { "kind": "asset", "name": "BTC", "party": "proposer", "class": "asset", "target": "every coin at the current account's output key", "field": "inputs" }
+      ],
+      "touches": [
+        { "target": "bip122:*", "mode": "write" },
+        { "target": "utxo:<txid>:<vout>", "mode": "write" },
+        { "target": "bitcoind-rpc", "mode": "read" }
+      ],
+      "disclosure": [
+        { "field": "effect", "observer": "room-member", "when": "propose" },
+        { "field": "account-addresses", "observer": "rpc-provider", "when": "propose" },
+        { "field": "contributions", "observer": "room-member", "when": "approve" },
+        { "field": "signed-tx", "observer": "rpc-provider", "when": "settle" },
+        { "field": "inputs", "observer": "chain-observer", "when": "settle" },
+        { "field": "outputs", "observer": "chain-observer", "when": "settle" },
+        { "field": "fee", "observer": "chain-observer", "when": "settle" },
+        { "field": "timing", "observer": "store-node", "when": "always" },
+        { "field": "topic", "observer": "store-node", "when": "always" }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "after the new member set's setup is final and its account is disclosed, writes a spend of every coin of the current account to the new address. Every member's client re-derives each input's key-path SigMsg.",
+          "signs": "",
+          "reveals": [
+            { "field": "effect", "observer": "room-member" },
+            { "field": "account-addresses", "observer": "rpc-provider" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "round 1: each current member posts fresh public nonces, one per input.",
+          "signs": "nothing yet. The contribution carries the member's muster attestation over P.",
+          "reveals": [
+            { "field": "contributions", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "round 2: each current member signs, as in a spend.",
+          "signs": "each input's BIP-341 key-path SigMsg as a BIP-327 partial signature under the current aggregate key's session context. Plus the member's muster attestation over P.",
+          "reveals": [
+            { "field": "contributions", "observer": "room-member" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki",
+            "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "combines the partials into one signature per input and broadcasts.",
+          "signs": "",
+          "reveals": [
+            { "field": "signed-tx", "observer": "rpc-provider" },
+            { "field": "inputs", "observer": "chain-observer" },
+            { "field": "outputs", "observer": "chain-observer" },
+            { "field": "fee", "observer": "chain-observer" }
+          ],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "once confirmed, the new account holds the coins and the old key controls nothing.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a sweep to an address that is not an account disclosed in this room",
+          "why": "a membership change moves coins to the new set's account; anything else is a payment and belongs on the spend card",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0390.mediawiki" ]
+        },
+        {
+          "what": "an approval over a message that is not the re-derived one, or reuse of a nonce",
+          "why": "invariant 1, and BIP-327's one-use nonce rule",
+          "evidence": [ "https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki" ]
+        },
+        {
+          "what": "foreign coins, a wrong fee, or a dust output",
+          "why": "the same checks as a spend",
+          "evidence": [ "https://github.com/bitcoin/bitcoin/blob/master/src/policy/policy.cpp" ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [ 1, 2, 4, 5, 9, 10 ],
+      "claims": [
+        { "claim": "a member who is leaving must still sign the sweep; without them the coins cannot move, because this family has no script-path fallback", "credibility": "motivational", "party": "every current member, including the one leaving" },
+        { "claim": "a removed member's key has no part in the new account's key", "credibility": "imperative" },
+        { "claim": "the sweep moves every coin to one new address in one public transaction, which links the two accounts", "credibility": "exposed", "party": "chain observer" }
+      ],
+      "evidence": [
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki", "what": "MuSig2 is n-of-n: the aggregate key depends on every key, and every key must sign" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki", "what": "a key-path-only output has no other way to spend" },
+        { "kind": "source", "url": "https://github.com/bitcoin/bips/blob/master/bip-0390.mediawiki", "what": "the account is a tr(musig(...)) descriptor of a fixed key set" }
+      ]
+    }
+  ]
+}

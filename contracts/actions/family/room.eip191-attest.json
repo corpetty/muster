@@ -1,0 +1,191 @@
+{
+  "actions": [
+    {
+      "id": "room.eip191-attest/statement",
+      "name": "Attest a statement with EIP-191 personal_sign",
+      "area": "family",
+      "family": "room.eip191-attest",
+      "kind": "eip191",
+      "status": "built",
+      "summary": "The signers of a Safe the room holds attest a sentence with EIP-191 personal_sign — the signature any EVM tool can check with ecrecover. The hosted module completes it at one recognized signer. Nothing settles.",
+      "generated": "eip191/statement",
+      "effect": {
+        "schema": "muster.effect.statement.v1",
+        "fields": [
+          {
+            "name": "text",
+            "means": "the sentence the signers attest"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the proposer",
+          "does": "Room → + → Statement → Endorse with Attest → From <account>. Attest is account-bound: its policy is 'eip191@<CAIP-10>' of an account a member disclosed (a Safe), and its signer set is that account's disclosed signers. The hosted module builds it with threshold 1: one recognized signer completes it. The proposal publishes its policy, the effect, and the signing context: environment 'room', account = the room's topic, slot = the intent id, expiry = now + MUSTER_INTENT_TTL_S (7 days by default). The intent id is content-addressed from the effect and the policy.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/accounts_test.nim",
+            "module/tests/eip191_room_test.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "a signer of the account",
+          "does": "Re-derives the digest from the logged effect and approves in-app with the secp256k1 authorization key (the composer says 'You attest with your secp256k1 authorization key'). The driver counts a signature only if it recovers to one of the account's signers; a duplicate folds once.",
+          "signs": "keccak256('\\x19Ethereum Signed Message:\\n' ‖ len(m) ‖ m), m = dCBOR ['eip191.personal_sign.v1', 'muster.effect.statement.v1', {text}], as a 65-byte recoverable secp256k1 signature; plus a muster attestation by the same key over P",
+          "reveals": [
+            {
+              "field": "contributions (the personal_sign signature and its attestation)",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/eip191_test.nim",
+            "module/tests/eip191_room_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one",
+          "does": "Executable is the end: the signatures sit in the room's log, verifiable by anyone the room gives them to. coordinate_submit on it answers 'not-onchain': a room family has no settlement, and the card reads '✓ Endorsed — a signed group decision. Nothing settles on-chain.'",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/eip191_room_test.nim",
+            "module/tests/settlement_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a signature that recovers to no signer of the account",
+          "why": "it never counts; the live path answers 'rejected'",
+          "evidence": [
+            "module/tests/eip191_test.nim",
+            "module/tests/eip191_room_test.nim"
+          ]
+        },
+        {
+          "what": "the same signer twice",
+          "why": "a duplicate attestation folds once",
+          "evidence": [
+            "module/tests/eip191_room_test.nim"
+          ]
+        },
+        {
+          "what": "a malformed 65-byte signature",
+          "why": "not valid, names no one, never fatal",
+          "evidence": [
+            "module/tests/malformed_sig_test.nim"
+          ]
+        },
+        {
+          "what": "a tampered effect",
+          "why": "invariant 1: the digest is re-derived; conformance refuses another effect's bytes",
+          "evidence": [
+            "module/tests/eip191_test.nim",
+            "module/tests/conformance_test.nim"
+          ]
+        },
+        {
+          "what": "an Attest policy that names no account the room holds",
+          "why": "Attest is an account-bound kind whose signers are the disclosed account's; the resolution rule (tested for 'safe') sends an account-bound policy without a disclosed account to an unsupported driver, never to a default",
+          "evidence": [
+            "module/tests/accounts_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_accounts",
+        "coordinate_set_policy",
+        "coordinate_propose",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_decline"
+      ],
+      "ui": "Room → + → Statement → Endorse with Attest → From <account> → text → Propose; card → Approve.",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Only a signature that recovers to one of the account's disclosed signers counts",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The personal_sign signature commits to the statement alone — no room, chain, account or expiry. Handed outside the room it verifies anywhere; only muster's attestation binds it to this room and intent",
+          "credibility": "exposed",
+          "party": "whoever the room gives the signatures to"
+        },
+        {
+          "claim": "The signer set is what members disclosed for the account; the room checks a Safe's disclosure against the chain through the user's RPC",
+          "credibility": "motivational",
+          "party": "the member who disclosed the account"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/eip191_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/eip191_room_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/accounts_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/conformance_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/malformed_sig_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/settlement_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-191",
+          "what": "EIP-191 signed data: version 0x45, '\\x19Ethereum Signed Message:\\n' ‖ len ‖ message"
+        }
+      ],
+      "unverified": [
+        "eip191_room_test folds a 2-of-2 signer set; the hosted module builds 1 of the account's signers (coordination/accounts.nim driverForPolicy). The test's comment still says the hosted arm is k = 2."
+      ]
+    }
+  ]
+}

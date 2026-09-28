@@ -1,0 +1,1004 @@
+{
+  "actions": [
+    {
+      "id": "lez.public-witness/derive",
+      "name": "Disclose a LEZ public account for multi-witness transactions",
+      "area": "family",
+      "family": "lez.public-witness",
+      "summary": "Each member derives a public account from their own key and discloses it into the room. Nothing is registered on chain; a transaction's witness set is simply the accounts it names. Signers cannot change: a rotated key is a new account, and funds move with a transfer.",
+      "effect": {
+        "schema": "muster.effect.lez.public-witness.derive.v0",
+        "fields": [
+          {
+            "name": "publicKey",
+            "means": "the member's x-only secp256k1 public key"
+          },
+          {
+            "name": "accountId",
+            "means": "SHA256(\"/LEE/v0.3/AccountId/Public/\" padded to 32 || publicKey)"
+          },
+          {
+            "name": "zone",
+            "means": "the LEZ network the member uses it on (room binding only; the chain's bytes carry none)"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "each member discloses their own account",
+        "finality": "immediate",
+        "domain": "a room disclosure entry; nothing is signed for the chain"
+      },
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "lez-public-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "lez:<account id>",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "lez:<account id>:nonce,balance",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "account id and public key",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "account nonce and balance reads",
+          "observer": "rpc-provider",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "contributor",
+          "does": "derives the account id from its key and discloses it (S1); readers check the account against the sequencer RPC and the room shows whether they agree",
+          "signs": "a room log entry under the member's authorization key; nothing on chain",
+          "reveals": [
+            {
+              "field": "account id and public key",
+              "observer": "room-member"
+            },
+            {
+              "field": "account nonce and balance reads (sequencer RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/signature/public_key.rs",
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/core/src/account.rs"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a disclosed account id that is not SHA256 of the prefix and the disclosed public key",
+          "why": "invariant 1: the room re-derives the account from the key before anyone relies on it",
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/signature/public_key.rs"
+          ]
+        },
+        {
+          "what": "a proposal to change an account's signer",
+          "why": "the account id is derived from one key; membership is fixed, so the room offers a transfer to a new account instead",
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/signature/public_key.rs"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        4,
+        8,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "The account id is derived from the key; nothing is registered on chain.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An account's signer can never change; rotating a key means a new account.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The account, its balance and its nonce are public on the zone once used.",
+          "credibility": "exposed",
+          "party": "chain observers"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/signature/public_key.rs",
+          "what": "AccountId = SHA256(\"/LEE/v0.3/AccountId/Public/\" padded to 32 || x-only public key)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/core/src/account.rs",
+          "what": "Nonce(u128) and ProgramShardSelector {account_id, program_account_id}"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/validated_state_diff/mod.rs",
+          "what": "a missing account's nonce reads as the default (0)"
+        }
+      ],
+      "unverified": [
+        "The registry's sources point at the repo's `main` branch (stale, 2026-08-07); the Message shape it records matches the default branch `dev` (commit f7fda38a, 2026-09-26), which these sources pin."
+      ],
+      "status": "declared",
+      "ui": "not built"
+    },
+    {
+      "id": "lez.public-witness/transfer",
+      "name": "Send native LEZ with a co-signing fee payer",
+      "area": "family",
+      "family": "lez.public-witness",
+      "summary": "A member sends the native token from their public account; when another member pays the fee, both sign the same message. Every listed witness must sign.",
+      "effect": {
+        "schema": "muster.effect.lez.public-witness.transfer.v0",
+        "fields": [
+          {
+            "name": "sender",
+            "means": "the paying account (a witness)"
+          },
+          {
+            "name": "recipient",
+            "means": "the receiving account; it does not sign"
+          },
+          {
+            "name": "amount",
+            "means": "native units moved (u128)"
+          },
+          {
+            "name": "feePayer",
+            "means": "the account debited for the fee (a witness; may be the sender)"
+          },
+          {
+            "name": "gasLimit",
+            "means": "the fee declaration's gas limit"
+          },
+          {
+            "name": "tip",
+            "means": "the fee declaration's tip"
+          },
+          {
+            "name": "maxFee",
+            "means": "the most the payer will pay"
+          },
+          {
+            "name": "nonces",
+            "means": "each witness's current nonce, read from the zone, in witness order"
+          },
+          {
+            "name": "program",
+            "means": "the native token program (account id all zeros); shard selectors pick each account's native-balance shard"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "all n listed witnesses (the sender, plus the fee payer when it is another account)",
+        "finality": "external",
+        "domain": "SHA256(\"/LEE/v0.3/Message/Public/\" padded to 32 || borsh(Message)); no zone id"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "lez:<zone>",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez:<zone>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "lez sequencer RPC",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez sequencer RPC",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "lez-public-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "lez:<sender>, lez:<fee payer>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "recipient",
+          "party": "counterparty",
+          "class": "address",
+          "target": "lez:<zone>",
+          "field": "recipient"
+        },
+        {
+          "kind": "asset",
+          "name": "amount",
+          "party": "proposer",
+          "class": "asset",
+          "target": "lez:<zone>",
+          "field": "amount"
+        },
+        {
+          "kind": "asset",
+          "name": "fee",
+          "party": "contributor",
+          "class": "asset",
+          "target": "lez:<fee payer>",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "lez:<sender>",
+          "mode": "write"
+        },
+        {
+          "target": "lez:<recipient>",
+          "mode": "write"
+        },
+        {
+          "target": "lez:<fee payer>",
+          "mode": "write"
+        },
+        {
+          "target": "lez:<witness>:nonce",
+          "mode": "read"
+        },
+        {
+          "target": "lez:<zone>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "witness account nonce and balance reads",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed transaction (sequencer RPC)",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "sender",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "recipient",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "amount",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee payer and fee",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "every witness's public key and signature (who signed)",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "composes the transfer and fee declaration; reads each witness's nonce through the sequencer RPC (external reads); the room builds the Message and re-derives its hash",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "witness account reads (sequencer RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/message.rs",
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/core/src/native_token.rs",
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lez/wallet/src/program_facades/native_token_transfer/public.rs"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "each witness (the sender; the fee payer if different) re-derives the message hash and signs it",
+          "signs": "BIP-340 Schnorr (secp256k1, prehashed, fresh aux randomness) over the 32-byte digest SHA256(PREFIX || borsh(Message)), PREFIX = \"/LEE/v0.3/Message/Public/\" padded with zero bytes to 32; borsh(Message) encodes, in order, program_account_id (32 bytes), shard_selectors (each an (account_id, program_account_id) pair), nonces (one u128 per witness, in witness order), instruction_data, and fee (none, or payer, gas_limit, tip, max_fee). No chain or zone id is in these bytes. One 64-byte signature and the signer's x-only public key per witness",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/message.rs",
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/witness_set.rs",
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/signature/mod.rs"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "one member submits the transaction to the sequencer RPC; the sequencer checks one nonce per witness, no duplicate signers, every signature valid over the message hash, each nonce equal to that account's current nonce, and the fee payer's signature; it then executes the program with the witnesses as the authorized accounts and advances every witness's nonce",
+          "signs": "nothing new; the member assembles PublicTransaction {message, witness_set: [(signature, public_key) …]} with the witnesses in the same order as the nonces and submits it to the sequencer",
+          "reveals": [
+            {
+              "field": "signed transaction (sequencer RPC)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "sender",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "recipient",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "every witness's public key and signature (who signed)",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "nonces",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/validated_state_diff/mod.rs",
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/state/mod.rs",
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/fees.rs"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "watches the transaction's inclusion and the zone's finality through the sequencer RPC",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "transaction hash being watched (sequencer RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/transaction.rs"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a witness signature over a digest other than the one the room re-derives from the effect",
+          "why": "invariant 1 (F-4): refuse on mismatch",
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/message.rs",
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/witness_set.rs"
+          ]
+        },
+        {
+          "what": "submitting to a sequencer whose zone differs from the disclosed account's environment",
+          "why": "invariant 2: the chain's bytes name no zone, so only muster's envelope binds the transaction to one network; the chain would not catch it",
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/message.rs"
+          ]
+        },
+        {
+          "what": "a stale nonce: any witness account's nonce moved since the proposal (re-read at review and at settle)",
+          "why": "invariant 10: each nonce is an external read in the signed bytes; the sequencer rejects \"Nonce mismatch\" and every collected witness is void",
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/validated_state_diff/mod.rs"
+          ]
+        },
+        {
+          "what": "the same account twice in the witness set, or nonces not in witness order",
+          "why": "the sequencer rejects duplicate signers and pairs nonces with witnesses by position; muster refuses before submitting",
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/validated_state_diff/mod.rs"
+          ]
+        },
+        {
+          "what": "settling before every listed witness has signed",
+          "why": "all of n: the sequencer rejects the whole transaction if any listed signature is missing or invalid; there is no threshold below n",
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/validated_state_diff/mod.rs",
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/witness_set.rs"
+          ]
+        },
+        {
+          "what": "a fee declaration whose payer has not signed",
+          "why": "the payer is authorized only by its own witness signature, never inferred from the witness set",
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/fees.rs"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Every listed witness must sign; there is no k-of-n.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Each witness's nonce is checked and advanced, so a signed transaction settles at most once per nonce.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The signed bytes name no zone or network: the same transaction is valid on any LEZ network where each witness's nonce matches.",
+          "credibility": "exposed",
+          "party": "whoever holds the signed transaction on another LEZ network (room members; the sequencer RPC)"
+        },
+        {
+          "claim": "Any other transaction from any witness account first makes every collected witness stale.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The sequencer RPC sees the whole signed transaction before inclusion.",
+          "credibility": "exposed",
+          "party": "the LEZ sequencer (RPC)"
+        },
+        {
+          "claim": "The sequencer can delay or drop the transaction.",
+          "credibility": "motivational",
+          "party": "the LEZ sequencer"
+        },
+        {
+          "claim": "Every witness's public key and signature is public once settled, so observers learn exactly who signed.",
+          "credibility": "exposed",
+          "party": "chain observers"
+        },
+        {
+          "claim": "Witness signatures never expire; to cancel, spend one witness's nonce on another transaction.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The recipient does not sign and cannot block the transfer; the native program needs only the sender's authorization.",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/message.rs",
+          "what": "LEZ public Message {program_account_id, shard_selectors, nonces, instruction_data, fee}; hash = SHA256(\"/LEE/v0.3/Message/Public/\" padded to 32 || borsh)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/witness_set.rs",
+          "what": "WitnessSet: (signature, public_key) pairs; is_valid_for requires every pair to verify over the message hash"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/validated_state_diff/mod.rs",
+          "what": "authenticate_public_transaction_signers: nonce count = witness count, no duplicate signers, all signatures valid, each nonce = current"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/state/mod.rs",
+          "what": "every witness account's nonce is incremented when the transaction applies"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/fees.rs",
+          "what": "FeeDeclaration {payer, gas_limit, tip, max_fee} is covered by the message hash; the payer must sign"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/signature/mod.rs",
+          "what": "Signature: k256 BIP-340 Schnorr, sign_prehash_with_aux_rand / verify_prehash"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/signature/public_key.rs",
+          "what": "AccountId = SHA256(\"/LEE/v0.3/AccountId/Public/\" padded to 32 || x-only public key)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki",
+          "what": "BIP-340: Schnorr signatures for secp256k1"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/core/src/native_token.rs",
+          "what": "native token program: Transfer {amount} over [sender, recipient]; only the sender must be authorized"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lez/wallet/src/program_facades/native_token_transfer/public.rs",
+          "what": "the LEZ wallet's public native transfer: shard selectors for sender and recipient under NATIVE_TOKEN_PROGRAM_ID"
+        }
+      ],
+      "unverified": [
+        "Whether the sequencer accepts a fee-exempt (fee: none) user transaction, or only system transactions.",
+        "The registry's sources point at the repo's `main` branch (stale, 2026-08-07); the Message shape it records matches the default branch `dev` (commit f7fda38a, 2026-09-26), which these sources pin."
+      ],
+      "status": "declared",
+      "ui": "not built"
+    },
+    {
+      "id": "lez.public-witness/program-call",
+      "name": "Call a LEZ program that needs several accounts to authorize",
+      "area": "family",
+      "family": "lez.public-witness",
+      "summary": "Several members sign one public transaction that calls a program over accounts each of them owns, such as an exchange between two members. The program sees every witness as authorized; every listed witness must sign.",
+      "effect": {
+        "schema": "muster.effect.lez.public-witness.program-call.v0",
+        "fields": [
+          {
+            "name": "program",
+            "means": "the program's account id"
+          },
+          {
+            "name": "accounts",
+            "means": "the shard selectors: each (account, owning program) pair the call reads or writes"
+          },
+          {
+            "name": "witnesses",
+            "means": "the accounts that sign; the program treats them as authorized"
+          },
+          {
+            "name": "instruction",
+            "means": "the instruction data, decoded by the program's driver; shown as undeclared when no decoder exists"
+          },
+          {
+            "name": "nonces",
+            "means": "each witness's current nonce, in witness order"
+          },
+          {
+            "name": "fee",
+            "means": "the fee declaration (payer, gas_limit, tip, max_fee), or none"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "all n listed witnesses",
+        "finality": "external",
+        "domain": "SHA256(\"/LEE/v0.3/Message/Public/\" padded to 32 || borsh(Message)); no zone id"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "lez:<zone>",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez:<zone>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "lez sequencer RPC",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez sequencer RPC",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "lez-public-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "lez:<each witness>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "program",
+          "party": "proposer",
+          "class": "address",
+          "target": "lez:<zone>",
+          "field": "program"
+        },
+        {
+          "kind": "asset",
+          "name": "fee",
+          "party": "contributor",
+          "class": "asset",
+          "target": "lez:<fee payer>",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "lez:<program>",
+          "mode": "read"
+        },
+        {
+          "target": "lez:<each listed account>",
+          "mode": "write"
+        },
+        {
+          "target": "lez:<witness>:nonce",
+          "mode": "read"
+        },
+        {
+          "target": "lez:<zone>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "witness account and program reads",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed transaction (sequencer RPC)",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "program",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "accounts (shard selectors)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "instruction data",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "fee payer and fee",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "every witness's public key and signature (who signed)",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "composes the call; reads that the program is deployed and each witness's nonce through the sequencer RPC; the room builds the Message and re-derives its hash",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "program and witness reads (sequencer RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/message.rs",
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/validated_state_diff/mod.rs",
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/validated_state_diff/public_backend.rs"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "each listed witness re-derives the message hash, reviews the decoded instruction, and signs",
+          "signs": "BIP-340 Schnorr (secp256k1, prehashed, fresh aux randomness) over the 32-byte digest SHA256(PREFIX || borsh(Message)), PREFIX = \"/LEE/v0.3/Message/Public/\" padded with zero bytes to 32; borsh(Message) encodes, in order, program_account_id (32 bytes), shard_selectors (each an (account_id, program_account_id) pair), nonces (one u128 per witness, in witness order), instruction_data, and fee (none, or payer, gas_limit, tip, max_fee). No chain or zone id is in these bytes. One 64-byte signature and the signer's x-only public key per witness",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/message.rs",
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/witness_set.rs",
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/signature/mod.rs"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "one member submits the transaction to the sequencer RPC; the sequencer checks one nonce per witness, no duplicate signers, every signature valid over the message hash, each nonce equal to that account's current nonce, and the fee payer's signature; it then executes the program with the witnesses as the authorized accounts and advances every witness's nonce",
+          "signs": "nothing new; the member assembles PublicTransaction {message, witness_set: [(signature, public_key) …]} with the witnesses in the same order as the nonces and submits it to the sequencer",
+          "reveals": [
+            {
+              "field": "signed transaction (sequencer RPC)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "program",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "instruction data",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "every witness's public key and signature (who signed)",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "nonces",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/validated_state_diff/mod.rs",
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/state/mod.rs",
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/fees.rs"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "watches the transaction's inclusion and the zone's finality through the sequencer RPC",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "transaction hash being watched (sequencer RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/transaction.rs"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a witness signature over a digest other than the one the room re-derives from the effect",
+          "why": "invariant 1 (F-4): refuse on mismatch",
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/message.rs",
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/witness_set.rs"
+          ]
+        },
+        {
+          "what": "submitting to a sequencer whose zone differs from the disclosed account's environment",
+          "why": "invariant 2: the chain's bytes name no zone, so only muster's envelope binds the transaction to one network; the chain would not catch it",
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/message.rs"
+          ]
+        },
+        {
+          "what": "a stale nonce: any witness account's nonce moved since the proposal (re-read at review and at settle)",
+          "why": "invariant 10: each nonce is an external read in the signed bytes; the sequencer rejects \"Nonce mismatch\" and every collected witness is void",
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/validated_state_diff/mod.rs"
+          ]
+        },
+        {
+          "what": "the same account twice in the witness set, or nonces not in witness order",
+          "why": "the sequencer rejects duplicate signers and pairs nonces with witnesses by position; muster refuses before submitting",
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/validated_state_diff/mod.rs"
+          ]
+        },
+        {
+          "what": "settling before every listed witness has signed",
+          "why": "all of n: the sequencer rejects the whole transaction if any listed signature is missing or invalid; there is no threshold below n",
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/validated_state_diff/mod.rs",
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/witness_set.rs"
+          ]
+        },
+        {
+          "what": "a fee declaration whose payer has not signed",
+          "why": "the payer is authorized only by its own witness signature, never inferred from the witness set",
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/fees.rs"
+          ]
+        },
+        {
+          "what": "a program that is not deployed on the zone",
+          "why": "the sequencer rejects an unknown program (UnknownProgram); the program's existence is an external read (invariant 10)",
+          "evidence": [
+            "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/validated_state_diff/public_backend.rs"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Every listed witness must sign; there is no k-of-n.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Each witness's nonce is checked and advanced, so a signed transaction settles at most once per nonce.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The signed bytes name no zone or network: the same transaction is valid on any LEZ network where each witness's nonce matches.",
+          "credibility": "exposed",
+          "party": "whoever holds the signed transaction on another LEZ network (room members; the sequencer RPC)"
+        },
+        {
+          "claim": "Any other transaction from any witness account first makes every collected witness stale.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The sequencer RPC sees the whole signed transaction before inclusion.",
+          "credibility": "exposed",
+          "party": "the LEZ sequencer (RPC)"
+        },
+        {
+          "claim": "The sequencer can delay or drop the transaction.",
+          "credibility": "motivational",
+          "party": "the LEZ sequencer"
+        },
+        {
+          "claim": "Every witness's public key and signature is public once settled, so observers learn exactly who signed.",
+          "credibility": "exposed",
+          "party": "chain observers"
+        },
+        {
+          "claim": "Witness signatures never expire; to cancel, spend one witness's nonce on another transaction.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The program decides what the witnesses authorize; muster shows the decoded instruction but cannot vouch for the program.",
+          "credibility": "motivational",
+          "party": "the program's author"
+        },
+        {
+          "claim": "A program may return a block or timestamp validity window, which the sequencer enforces; the witnesses themselves carry none.",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/message.rs",
+          "what": "LEZ public Message {program_account_id, shard_selectors, nonces, instruction_data, fee}; hash = SHA256(\"/LEE/v0.3/Message/Public/\" padded to 32 || borsh)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/public_transaction/witness_set.rs",
+          "what": "WitnessSet: (signature, public_key) pairs; is_valid_for requires every pair to verify over the message hash"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/validated_state_diff/mod.rs",
+          "what": "authenticate_public_transaction_signers: nonce count = witness count, no duplicate signers, all signatures valid, each nonce = current"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/state/mod.rs",
+          "what": "every witness account's nonce is incremented when the transaction applies"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/fees.rs",
+          "what": "FeeDeclaration {payer, gas_limit, tip, max_fee} is covered by the message hash; the payer must sign"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/signature/mod.rs",
+          "what": "Signature: k256 BIP-340 Schnorr, sign_prehash_with_aux_rand / verify_prehash"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/signature/public_key.rs",
+          "what": "AccountId = SHA256(\"/LEE/v0.3/AccountId/Public/\" padded to 32 || x-only public key)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki",
+          "what": "BIP-340: Schnorr signatures for secp256k1"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/f7fda38a4428b9989f1db1dbf5d2411484848fd4/lee/state_machine/src/validated_state_diff/public_backend.rs",
+          "what": "public execution: an unknown program is rejected; a program's block and timestamp validity windows are checked (OutOfValidityWindow)"
+        }
+      ],
+      "unverified": [
+        "Whether the sequencer accepts a fee-exempt (fee: none) user transaction, or only system transactions.",
+        "The registry's sources point at the repo's `main` branch (stale, 2026-08-07); the Message shape it records matches the default branch `dev` (commit f7fda38a, 2026-09-26), which these sources pin."
+      ],
+      "status": "declared",
+      "ui": "not built"
+    }
+  ]
+}

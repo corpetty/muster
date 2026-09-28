@@ -1,0 +1,2156 @@
+{
+  "about": {
+    "generatedBy": "module/tools/action_corpus.nim",
+    "edit": "never by hand — regenerate with: TEST_ARGS=--write module/tests/run-suite.sh action_corpus",
+    "checkedBy": "module/tests/action_corpus_test.nim",
+    "design": "docs/design/action-atlas.md §3a"
+  },
+  "entries": {
+    "btc-frost/spend": {
+      "kind": "btc-frost",
+      "variant": "spend",
+      "family": "btc.frost-bip445",
+      "effectExample": {
+        "schema": "muster.effect.btc-spend.v1",
+        "fields": {
+          "inputs": [
+            {
+              "txid": "1111111111111111111111111111111111111111111111111111111111111111",
+              "vout": 0,
+              "value": 60000,
+              "scriptPubKey": "51204db7a003c5f17752686630b0428401a68b461fe1fe3ba829fd44b2d580536795",
+              "sequence": 4294967293
+            },
+            {
+              "txid": "2222222222222222222222222222222222222222222222222222222222222222",
+              "vout": 1,
+              "value": 50000,
+              "scriptPubKey": "51204db7a003c5f17752686630b0428401a68b461fe1fe3ba829fd44b2d580536795",
+              "sequence": 4294967293
+            }
+          ],
+          "outputs": [
+            {
+              "value": 100000,
+              "address": "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+            },
+            {
+              "value": 9600,
+              "address": "bcrt1pfkm6qq7979m4y6rxxzcy9pqp5695v8lplca6s20agjedtqznv72sf2rtyh"
+            }
+          ],
+          "locktime": 0,
+          "fee": 400
+        }
+      },
+      "describe": {
+        "rounds": 2,
+        "threshold": 2,
+        "finality": "external",
+        "domain": "bip341.keypath.frost-bip445.v1"
+      },
+      "environment": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+      "profile": {
+        "declared": true,
+        "family": "btc.frost-bip445",
+        "settlement": "bitcoin",
+        "locus": "aggregate",
+        "scheme": "aggregate-threshold",
+        "commits": "content",
+        "binding": "implicit",
+        "ordering": "utxo",
+        "expiry": "none",
+        "setup": "dkg",
+        "membershipChange": "new-address",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "never",
+          "signers": "never",
+          "effect": "public"
+        },
+        "rounds": 2,
+        "secretState": true,
+        "maturity": "draft",
+        "chain": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+        "account": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328:bcrt1pfkm6qq7979m4y6rxxzcy9pqp5695v8lplca6s20agjedtqznv72sf2rtyh",
+        "k": 2,
+        "n": 3,
+        "bypassesKnown": true,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 2,
+          "threshold": 2,
+          "finality": "external",
+          "domain": "bip341.keypath.frost-bip445.v1"
+        },
+        "requirements": [
+          {
+            "kind": "environment",
+            "name": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+              "field": ""
+            }
+          },
+          {
+            "kind": "infra",
+            "name": "bitcoind-rpc",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "bitcoind-rpc",
+              "field": ""
+            }
+          },
+          {
+            "kind": "authority",
+            "name": "frost-share",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "frost-share",
+              "field": ""
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          },
+          {
+            "field": "outputs",
+            "to": "chain-observer"
+          },
+          {
+            "field": "inputs",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signed-tx",
+            "to": "rpc-provider"
+          }
+        ],
+        "touches": [
+          {
+            "target": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+            "mode": "write"
+          },
+          {
+            "target": "utxo:1111111111111111111111111111111111111111111111111111111111111111:0",
+            "mode": "write"
+          },
+          {
+            "target": "utxo:2222222222222222222222222222222222222222222222222222222222222222:1",
+            "mode": "write"
+          }
+        ]
+      },
+      "signRefusal": ""
+    },
+    "btc-p2wsh/spend": {
+      "kind": "btc-p2wsh",
+      "variant": "spend",
+      "family": "btc.p2wsh-sortedmulti",
+      "effectExample": {
+        "schema": "muster.effect.btc-spend.v1",
+        "fields": {
+          "inputs": [
+            {
+              "txid": "0202020202020202020202020202020202020202020202020202020202020202",
+              "vout": 2,
+              "value": 250000,
+              "scriptPubKey": "00200ce2fe674390ad87478c52efabe6d4d754321e0c195d6bb5a4d45e963cbad114",
+              "sequence": 4294967293
+            },
+            {
+              "txid": "0303030303030303030303030303030303030303030303030303030303030303",
+              "vout": 3,
+              "value": 120000,
+              "scriptPubKey": "00200ce2fe674390ad87478c52efabe6d4d754321e0c195d6bb5a4d45e963cbad114",
+              "sequence": 4294967293
+            }
+          ],
+          "outputs": [
+            {
+              "value": 300000,
+              "address": "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+            },
+            {
+              "value": 69115,
+              "address": "bcrt1qpn30ue6rjzkcw3uv2th6hek56a2ry8svr9wkhddy630fv0966y2qa8723c"
+            }
+          ],
+          "locktime": 0,
+          "fee": 885
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 2,
+        "finality": "external",
+        "domain": "bip143.p2wsh.sortedmulti.v1"
+      },
+      "environment": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+      "profile": {
+        "declared": true,
+        "family": "btc.p2wsh-sortedmulti",
+        "settlement": "bitcoin",
+        "locus": "native",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "implicit",
+        "ordering": "utxo",
+        "expiry": "none",
+        "setup": "derive",
+        "membershipChange": "new-address",
+        "approverCost": "per-signature",
+        "reveals": {
+          "policy": "at-settle",
+          "signers": "at-settle",
+          "effect": "public"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "production",
+        "chain": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+        "account": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328:bcrt1qpn30ue6rjzkcw3uv2th6hek56a2ry8svr9wkhddy630fv0966y2qa8723c",
+        "k": 2,
+        "n": 3,
+        "bypassesKnown": true,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 2,
+          "finality": "external",
+          "domain": "bip143.p2wsh.sortedmulti.v1"
+        },
+        "requirements": [
+          {
+            "kind": "environment",
+            "name": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+              "field": ""
+            }
+          },
+          {
+            "kind": "infra",
+            "name": "bitcoind-rpc",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "bitcoind-rpc",
+              "field": ""
+            }
+          },
+          {
+            "kind": "authority",
+            "name": "btc-multisig-key",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "btc-multisig-key",
+              "field": ""
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          },
+          {
+            "field": "outputs",
+            "to": "chain-observer"
+          },
+          {
+            "field": "inputs",
+            "to": "chain-observer"
+          },
+          {
+            "field": "policy",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signers",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signed-tx",
+            "to": "rpc-provider"
+          }
+        ],
+        "touches": [
+          {
+            "target": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+            "mode": "write"
+          },
+          {
+            "target": "utxo:0202020202020202020202020202020202020202020202020202020202020202:2",
+            "mode": "write"
+          },
+          {
+            "target": "utxo:0303030303030303030303030303030303030303030303030303030303030303:3",
+            "mode": "write"
+          }
+        ]
+      },
+      "signRefusal": ""
+    },
+    "btc-tapscript/spend": {
+      "kind": "btc-tapscript",
+      "variant": "spend",
+      "family": "btc.tapscript-multi-a",
+      "effectExample": {
+        "schema": "muster.effect.btc-spend.v1",
+        "fields": {
+          "inputs": [
+            {
+              "txid": "0202020202020202020202020202020202020202020202020202020202020202",
+              "vout": 2,
+              "value": 250000,
+              "scriptPubKey": "5120e9756bc0a275b3e8ef415dc94e3d4e29cc3bbe1091a70f63b965dba1872079f1",
+              "sequence": 4294967293
+            },
+            {
+              "txid": "0303030303030303030303030303030303030303030303030303030303030303",
+              "vout": 3,
+              "value": 120000,
+              "scriptPubKey": "5120e9756bc0a275b3e8ef415dc94e3d4e29cc3bbe1091a70f63b965dba1872079f1",
+              "sequence": 4294967293
+            }
+          ],
+          "outputs": [
+            {
+              "value": 300000,
+              "address": "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+            },
+            {
+              "value": 69094,
+              "address": "bcrt1pa96khs9zwke73m6pthy5u02w98xrh0ssjxns7caevhd6rpeq08cshce09u"
+            }
+          ],
+          "locktime": 0,
+          "fee": 906
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 2,
+        "finality": "external",
+        "domain": "bip341.tapscript.multi_a.v1"
+      },
+      "environment": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+      "profile": {
+        "declared": true,
+        "family": "btc.tapscript-multi-a",
+        "settlement": "bitcoin",
+        "locus": "native",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "implicit",
+        "ordering": "utxo",
+        "expiry": "none",
+        "setup": "derive",
+        "membershipChange": "new-address",
+        "approverCost": "per-signature",
+        "reveals": {
+          "policy": "at-settle",
+          "signers": "at-settle",
+          "effect": "public"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "production",
+        "chain": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+        "account": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328:bcrt1pa96khs9zwke73m6pthy5u02w98xrh0ssjxns7caevhd6rpeq08cshce09u",
+        "k": 2,
+        "n": 3,
+        "bypassesKnown": true,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 2,
+          "finality": "external",
+          "domain": "bip341.tapscript.multi_a.v1"
+        },
+        "requirements": [
+          {
+            "kind": "environment",
+            "name": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+              "field": ""
+            }
+          },
+          {
+            "kind": "infra",
+            "name": "bitcoind-rpc",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "bitcoind-rpc",
+              "field": ""
+            }
+          },
+          {
+            "kind": "authority",
+            "name": "btc-multisig-key",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "btc-multisig-key",
+              "field": ""
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          },
+          {
+            "field": "outputs",
+            "to": "chain-observer"
+          },
+          {
+            "field": "inputs",
+            "to": "chain-observer"
+          },
+          {
+            "field": "policy",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signers",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signed-tx",
+            "to": "rpc-provider"
+          }
+        ],
+        "touches": [
+          {
+            "target": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+            "mode": "write"
+          },
+          {
+            "target": "utxo:0202020202020202020202020202020202020202020202020202020202020202:2",
+            "mode": "write"
+          },
+          {
+            "target": "utxo:0303030303030303030303030303030303030303030303030303030303030303:3",
+            "mode": "write"
+          }
+        ]
+      },
+      "signRefusal": ""
+    },
+    "eip191/statement": {
+      "kind": "eip191",
+      "variant": "statement",
+      "family": "room.eip191-attest",
+      "effectExample": {
+        "schema": "muster.effect.statement.v1",
+        "fields": {
+          "text": "The room approves the Q4 budget."
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 1,
+        "finality": "immediate",
+        "domain": "eip191.personal_sign.v1"
+      },
+      "environment": "room",
+      "profile": {
+        "declared": true,
+        "family": "room.eip191-attest",
+        "settlement": "none",
+        "locus": "room",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "room",
+        "ordering": "none",
+        "expiry": "optional",
+        "setup": "none",
+        "membershipChange": "in-place",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "never",
+          "signers": "never",
+          "effect": "room-only"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "production",
+        "chain": "",
+        "account": "",
+        "k": 1,
+        "n": 3,
+        "bypassesKnown": true,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 1,
+          "finality": "immediate",
+          "domain": "eip191.personal_sign.v1"
+        },
+        "requirements": [
+          {
+            "kind": "authority",
+            "name": "signer",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "signer",
+              "field": ""
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          }
+        ],
+        "touches": []
+      },
+      "signRefusal": ""
+    },
+    "frost/statement": {
+      "kind": "frost",
+      "variant": "statement",
+      "family": "room.frost-scaffold",
+      "effectExample": {
+        "schema": "muster.effect.statement.v1",
+        "fields": {
+          "text": "The room approves the Q4 budget."
+        }
+      },
+      "describe": {
+        "rounds": 2,
+        "threshold": 2,
+        "finality": "immediate",
+        "domain": "muster.frost.v1"
+      },
+      "environment": "room",
+      "profile": {
+        "declared": true,
+        "family": "room.frost-scaffold",
+        "settlement": "none",
+        "locus": "room",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "room",
+        "ordering": "none",
+        "expiry": "optional",
+        "setup": "none",
+        "membershipChange": "in-place",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "never",
+          "signers": "never",
+          "effect": "room-only"
+        },
+        "rounds": 2,
+        "secretState": false,
+        "maturity": "demo",
+        "chain": "",
+        "account": "",
+        "k": 2,
+        "n": 3,
+        "bypassesKnown": true,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 2,
+          "threshold": 2,
+          "finality": "immediate",
+          "domain": "muster.frost.v1"
+        },
+        "requirements": [
+          {
+            "kind": "authority",
+            "name": "roster-member",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "roster-member",
+              "field": ""
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          }
+        ],
+        "touches": []
+      },
+      "signRefusal": ""
+    },
+    "invoke/lez-transfer": {
+      "kind": "invoke",
+      "variant": "lez-transfer",
+      "family": "room.invoke",
+      "effectExample": {
+        "schema": "muster.invoke.lez_core.transfer_private.v1",
+        "fields": {
+          "module": "lez_core",
+          "method": "transfer_private",
+          "args": "[\"0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e\",\"\",\"c8000000000000000000000000000000\"]",
+          "counterparty": "to",
+          "to": "",
+          "chain": "lez:testnet"
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 2,
+        "finality": "immediate",
+        "domain": "muster.invoke.v1"
+      },
+      "environment": "room",
+      "profile": {
+        "declared": true,
+        "family": "room.invoke",
+        "settlement": "none",
+        "locus": "room",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "room",
+        "ordering": "none",
+        "expiry": "optional",
+        "setup": "none",
+        "membershipChange": "in-place",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "never",
+          "signers": "never",
+          "effect": "target-module"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "production",
+        "chain": "",
+        "account": "",
+        "k": 2,
+        "n": 3,
+        "bypassesKnown": true,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 2,
+          "finality": "immediate",
+          "domain": "muster.invoke.v1"
+        },
+        "requirements": [
+          {
+            "kind": "authority",
+            "name": "roster-member",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "roster-member",
+              "field": ""
+            }
+          },
+          {
+            "kind": "module",
+            "name": "lez_core",
+            "party": "instance",
+            "needs": {
+              "class": "capability",
+              "target": "lez_core",
+              "field": ""
+            }
+          },
+          {
+            "kind": "address",
+            "name": "payee",
+            "party": "counterparty",
+            "needs": {
+              "class": "address",
+              "target": "lez:testnet",
+              "field": "to"
+            }
+          },
+          {
+            "kind": "infra",
+            "name": "lez-account",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "lez-account",
+              "field": ""
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          },
+          {
+            "field": "args",
+            "to": "target-module"
+          },
+          {
+            "field": "to",
+            "to": "target-module"
+          }
+        ],
+        "touches": [
+          {
+            "target": "module:lez_core.transfer_private",
+            "mode": "write"
+          }
+        ]
+      },
+      "signRefusal": ""
+    },
+    "invoke/module-call": {
+      "kind": "invoke",
+      "variant": "module-call",
+      "family": "room.invoke",
+      "effectExample": {
+        "schema": "muster.invoke.delivery_module.send.v1",
+        "fields": {
+          "module": "delivery_module",
+          "method": "send",
+          "args": "[\"/room\",\"hello\"]"
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 2,
+        "finality": "immediate",
+        "domain": "muster.invoke.v1"
+      },
+      "environment": "room",
+      "profile": {
+        "declared": true,
+        "family": "room.invoke",
+        "settlement": "none",
+        "locus": "room",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "room",
+        "ordering": "none",
+        "expiry": "optional",
+        "setup": "none",
+        "membershipChange": "in-place",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "never",
+          "signers": "never",
+          "effect": "target-module"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "production",
+        "chain": "",
+        "account": "",
+        "k": 2,
+        "n": 3,
+        "bypassesKnown": true,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 2,
+          "finality": "immediate",
+          "domain": "muster.invoke.v1"
+        },
+        "requirements": [
+          {
+            "kind": "authority",
+            "name": "roster-member",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "roster-member",
+              "field": ""
+            }
+          },
+          {
+            "kind": "module",
+            "name": "delivery_module",
+            "party": "instance",
+            "needs": {
+              "class": "capability",
+              "target": "delivery_module",
+              "field": ""
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          },
+          {
+            "field": "args",
+            "to": "target-module"
+          }
+        ],
+        "touches": [
+          {
+            "target": "module:delivery_module.send",
+            "mode": "write"
+          }
+        ]
+      },
+      "signRefusal": ""
+    },
+    "lez-frost/transfer": {
+      "kind": "lez-frost",
+      "variant": "transfer",
+      "family": "lez.frost-public-account",
+      "effectExample": {
+        "schema": "muster.effect.lez-call.v1",
+        "fields": {
+          "program": "ccc4713e2b5ecdff37b0c67c295369effc04b7e8994eb11c3f410bb226b82e9b",
+          "accounts": [
+            "551580c62764657708fd965bb42a5ff698ba7fc46c6a3a2fbf64ac2e7270282f",
+            "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c"
+          ],
+          "instruction": [
+            0,
+            200,
+            0,
+            0,
+            0
+          ],
+          "signers": [
+            "551580c62764657708fd965bb42a5ff698ba7fc46c6a3a2fbf64ac2e7270282f"
+          ],
+          "nonces": [
+            "0"
+          ]
+        }
+      },
+      "describe": {
+        "rounds": 2,
+        "threshold": 2,
+        "finality": "external",
+        "domain": "lee.public.frost-bip340.v1"
+      },
+      "environment": "lez:local",
+      "profile": {
+        "declared": true,
+        "family": "lez.frost-public-account",
+        "settlement": "lez",
+        "locus": "aggregate",
+        "scheme": "aggregate-threshold",
+        "commits": "content",
+        "binding": "none",
+        "ordering": "sequence",
+        "expiry": "none",
+        "setup": "dkg",
+        "membershipChange": "new-address",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "never",
+          "signers": "never",
+          "effect": "public"
+        },
+        "rounds": 2,
+        "secretState": true,
+        "maturity": "draft",
+        "chain": "lez:local",
+        "account": "lez:local:551580c62764657708fd965bb42a5ff698ba7fc46c6a3a2fbf64ac2e7270282f",
+        "k": 2,
+        "n": 3,
+        "bypassesKnown": true,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 2,
+          "threshold": 2,
+          "finality": "external",
+          "domain": "lee.public.frost-bip340.v1"
+        },
+        "requirements": [
+          {
+            "kind": "environment",
+            "name": "lez:local",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "lez:local",
+              "field": ""
+            }
+          },
+          {
+            "kind": "infra",
+            "name": "lez-account",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "lez-account",
+              "field": ""
+            }
+          },
+          {
+            "kind": "authority",
+            "name": "frost-share",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "frost-share",
+              "field": ""
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          },
+          {
+            "field": "call",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signed-tx",
+            "to": "rpc-provider"
+          }
+        ],
+        "touches": [
+          {
+            "target": "lez:local",
+            "mode": "write"
+          },
+          {
+            "target": "lez:551580c62764657708fd965bb42a5ff698ba7fc46c6a3a2fbf64ac2e7270282f",
+            "mode": "write"
+          },
+          {
+            "target": "lez:551580c62764657708fd965bb42a5ff698ba7fc46c6a3a2fbf64ac2e7270282f",
+            "mode": "write"
+          },
+          {
+            "target": "lez:0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+            "mode": "write"
+          }
+        ]
+      },
+      "signRefusal": ""
+    },
+    "lez-multisig/transfer": {
+      "kind": "lez-multisig",
+      "variant": "transfer",
+      "family": "lez.multisig-program",
+      "effectExample": {
+        "schema": "muster.effect.lez-multisig-proposal.v1",
+        "fields": {
+          "index": 1,
+          "target": "ccc4713e2b5ecdff37b0c67c295369effc04b7e8994eb11c3f410bb226b82e9b",
+          "instruction": [
+            0,
+            200,
+            0,
+            0,
+            0
+          ],
+          "accounts": [
+            "f97aa8602aec30ceb5a1e6ac8e9d6d8b9079255e49dbad002e3e25b03e02ff0c",
+            "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c"
+          ],
+          "pdaSeeds": [
+            "78a54573675c9ddaa7ed240f24dda6700713ba31f941cdf25bf3804c351bd52f"
+          ],
+          "authorized": [
+            0
+          ]
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 2,
+        "finality": "external",
+        "domain": "lez.multisig.pointer.v1"
+      },
+      "environment": "lez:local",
+      "profile": {
+        "declared": true,
+        "family": "lez.multisig-program",
+        "settlement": "lez",
+        "locus": "vote",
+        "scheme": "own-transaction",
+        "commits": "pointer",
+        "binding": "none",
+        "ordering": "index",
+        "expiry": "none",
+        "setup": "deploy",
+        "membershipChange": "in-place",
+        "approverCost": "per-vote",
+        "reveals": {
+          "policy": "at-creation",
+          "signers": "per-approval",
+          "effect": "public"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "demo",
+        "chain": "lez:local",
+        "account": "lez:local:8c0cee9ed5fe62b542417752483261b75c0315b859b7ef7ce58b550322544479",
+        "k": 2,
+        "n": 3,
+        "bypassesKnown": true,
+        "bypasses": [
+          "the executor chooses the target accounts at execute — a proposal records only how many (logos-co/lez-multisig#40)"
+        ]
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 2,
+          "finality": "external",
+          "domain": "lez.multisig.pointer.v1"
+        },
+        "requirements": [
+          {
+            "kind": "environment",
+            "name": "lez:local",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "lez:local",
+              "field": ""
+            }
+          },
+          {
+            "kind": "module",
+            "name": "lez_core",
+            "party": "instance",
+            "needs": {
+              "class": "capability",
+              "target": "lez_core",
+              "field": ""
+            }
+          },
+          {
+            "kind": "infra",
+            "name": "lez-account",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "lez-account",
+              "field": ""
+            }
+          },
+          {
+            "kind": "authority",
+            "name": "lez-multisig-member",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "lez-multisig-member",
+              "field": ""
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          },
+          {
+            "field": "approvals",
+            "to": "chain-observer"
+          },
+          {
+            "field": "effect",
+            "to": "chain-observer"
+          },
+          {
+            "field": "policy",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signed-tx",
+            "to": "rpc-provider"
+          }
+        ],
+        "touches": [
+          {
+            "target": "lez:local",
+            "mode": "write"
+          },
+          {
+            "target": "lez-proposal:9a0a419381d59c3ea67cf820e747f76e9fe6723206987eeeb2538444374be203",
+            "mode": "write"
+          }
+        ]
+      },
+      "signRefusal": ""
+    },
+    "lez-multisig/vault-init": {
+      "kind": "lez-multisig",
+      "variant": "vault-init",
+      "family": "lez.multisig-program",
+      "effectExample": {
+        "schema": "muster.effect.lez-multisig-proposal.v1",
+        "fields": {
+          "index": 1,
+          "target": "ccc4713e2b5ecdff37b0c67c295369effc04b7e8994eb11c3f410bb226b82e9b",
+          "instruction": [
+            3
+          ],
+          "accounts": [
+            "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d",
+            "f97aa8602aec30ceb5a1e6ac8e9d6d8b9079255e49dbad002e3e25b03e02ff0c"
+          ],
+          "pdaSeeds": [
+            "78a54573675c9ddaa7ed240f24dda6700713ba31f941cdf25bf3804c351bd52f"
+          ],
+          "authorized": [
+            1
+          ]
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 2,
+        "finality": "external",
+        "domain": "lez.multisig.pointer.v1"
+      },
+      "environment": "lez:local",
+      "profile": {
+        "declared": true,
+        "family": "lez.multisig-program",
+        "settlement": "lez",
+        "locus": "vote",
+        "scheme": "own-transaction",
+        "commits": "pointer",
+        "binding": "none",
+        "ordering": "index",
+        "expiry": "none",
+        "setup": "deploy",
+        "membershipChange": "in-place",
+        "approverCost": "per-vote",
+        "reveals": {
+          "policy": "at-creation",
+          "signers": "per-approval",
+          "effect": "public"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "demo",
+        "chain": "lez:local",
+        "account": "lez:local:8c0cee9ed5fe62b542417752483261b75c0315b859b7ef7ce58b550322544479",
+        "k": 2,
+        "n": 3,
+        "bypassesKnown": true,
+        "bypasses": [
+          "the executor chooses the target accounts at execute — a proposal records only how many (logos-co/lez-multisig#40)"
+        ]
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 2,
+          "finality": "external",
+          "domain": "lez.multisig.pointer.v1"
+        },
+        "requirements": [
+          {
+            "kind": "environment",
+            "name": "lez:local",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "lez:local",
+              "field": ""
+            }
+          },
+          {
+            "kind": "module",
+            "name": "lez_core",
+            "party": "instance",
+            "needs": {
+              "class": "capability",
+              "target": "lez_core",
+              "field": ""
+            }
+          },
+          {
+            "kind": "infra",
+            "name": "lez-account",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "lez-account",
+              "field": ""
+            }
+          },
+          {
+            "kind": "authority",
+            "name": "lez-multisig-member",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "lez-multisig-member",
+              "field": ""
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          },
+          {
+            "field": "approvals",
+            "to": "chain-observer"
+          },
+          {
+            "field": "effect",
+            "to": "chain-observer"
+          },
+          {
+            "field": "policy",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signed-tx",
+            "to": "rpc-provider"
+          }
+        ],
+        "touches": [
+          {
+            "target": "lez:local",
+            "mode": "write"
+          },
+          {
+            "target": "lez-proposal:9a0a419381d59c3ea67cf820e747f76e9fe6723206987eeeb2538444374be203",
+            "mode": "write"
+          }
+        ]
+      },
+      "signRefusal": ""
+    },
+    "safe/contract-call": {
+      "kind": "safe",
+      "variant": "contract-call",
+      "family": "evm.safe",
+      "effectExample": {
+        "schema": "muster.effect.safe-tx.v1",
+        "fields": {
+          "to": "0x2222222222222222222222222222222222222222",
+          "data": "0xa9059cbb0000000000000000000000001111111111111111111111111111111111111111000000000000000000000000000000000000000000000000000000000ee6b280",
+          "value": 0,
+          "nonce": 0,
+          "operation": 0
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 2,
+        "finality": "external",
+        "domain": "eip712.safe.v1.4.1"
+      },
+      "environment": "eip155:31337",
+      "profile": {
+        "declared": true,
+        "family": "evm.safe",
+        "settlement": "evm",
+        "locus": "contract",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "explicit",
+        "ordering": "sequence",
+        "expiry": "none",
+        "setup": "deploy",
+        "membershipChange": "in-place",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "at-creation",
+          "signers": "at-settle",
+          "effect": "public"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "production",
+        "chain": "eip155:31337",
+        "account": "eip155:31337:0x5fbdb2315678afecb367f032d93f642f64180aa3",
+        "k": 2,
+        "n": 3,
+        "bypassesKnown": false,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 2,
+          "finality": "external",
+          "domain": "eip712.safe.v1.4.1"
+        },
+        "requirements": [
+          {
+            "kind": "environment",
+            "name": "chain:31337",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "chain:31337",
+              "field": ""
+            }
+          },
+          {
+            "kind": "infra",
+            "name": "rpc",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "rpc",
+              "field": ""
+            }
+          },
+          {
+            "kind": "authority",
+            "name": "safe-owner",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "safe-owner",
+              "field": ""
+            }
+          },
+          {
+            "kind": "address",
+            "name": "payee",
+            "party": "counterparty",
+            "needs": {
+              "class": "address",
+              "target": "chain:31337",
+              "field": "to"
+            }
+          },
+          {
+            "kind": "asset",
+            "name": "amount",
+            "party": "proposer",
+            "needs": {
+              "class": "asset",
+              "target": "chain:31337",
+              "field": "value"
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          },
+          {
+            "field": "to",
+            "to": "chain-observer"
+          },
+          {
+            "field": "value",
+            "to": "chain-observer"
+          },
+          {
+            "field": "data",
+            "to": "chain-observer"
+          },
+          {
+            "field": "operation",
+            "to": "chain-observer"
+          },
+          {
+            "field": "payer",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signed-tx",
+            "to": "rpc-provider"
+          }
+        ],
+        "touches": [
+          {
+            "target": "safe:0x5fbdb2315678afecb367f032d93f642f64180aa3",
+            "mode": "write"
+          },
+          {
+            "target": "safe:0x5fbdb2315678afecb367f032d93f642f64180aa3:nonce",
+            "mode": "write"
+          },
+          {
+            "target": "chain:31337",
+            "mode": "write"
+          }
+        ]
+      },
+      "signRefusal": ""
+    },
+    "safe/delegatecall": {
+      "kind": "safe",
+      "variant": "delegatecall",
+      "family": "evm.safe",
+      "effectExample": {
+        "schema": "muster.effect.safe-tx.v1",
+        "fields": {
+          "to": "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D",
+          "data": "0x8d80ff0a0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000009900222222222222222222222222222222222222222200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000044a9059cbb0000000000000000000000001111111111111111111111111111111111111111000000000000000000000000000000000000000000000000000000000ee6b28000000000000000",
+          "value": 0,
+          "nonce": 0,
+          "operation": 1
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 2,
+        "finality": "external",
+        "domain": "eip712.safe.v1.4.1"
+      },
+      "environment": "eip155:31337",
+      "profile": {
+        "declared": true,
+        "family": "evm.safe",
+        "settlement": "evm",
+        "locus": "contract",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "explicit",
+        "ordering": "sequence",
+        "expiry": "none",
+        "setup": "deploy",
+        "membershipChange": "in-place",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "at-creation",
+          "signers": "at-settle",
+          "effect": "public"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "production",
+        "chain": "eip155:31337",
+        "account": "eip155:31337:0x5fbdb2315678afecb367f032d93f642f64180aa3",
+        "k": 2,
+        "n": 3,
+        "bypassesKnown": false,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 2,
+          "finality": "external",
+          "domain": "eip712.safe.v1.4.1"
+        },
+        "requirements": [
+          {
+            "kind": "environment",
+            "name": "chain:31337",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "chain:31337",
+              "field": ""
+            }
+          },
+          {
+            "kind": "infra",
+            "name": "rpc",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "rpc",
+              "field": ""
+            }
+          },
+          {
+            "kind": "authority",
+            "name": "safe-owner",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "safe-owner",
+              "field": ""
+            }
+          },
+          {
+            "kind": "address",
+            "name": "payee",
+            "party": "counterparty",
+            "needs": {
+              "class": "address",
+              "target": "chain:31337",
+              "field": "to"
+            }
+          },
+          {
+            "kind": "asset",
+            "name": "amount",
+            "party": "proposer",
+            "needs": {
+              "class": "asset",
+              "target": "chain:31337",
+              "field": "value"
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          },
+          {
+            "field": "to",
+            "to": "chain-observer"
+          },
+          {
+            "field": "value",
+            "to": "chain-observer"
+          },
+          {
+            "field": "data",
+            "to": "chain-observer"
+          },
+          {
+            "field": "operation",
+            "to": "chain-observer"
+          },
+          {
+            "field": "payer",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signed-tx",
+            "to": "rpc-provider"
+          }
+        ],
+        "touches": [
+          {
+            "target": "safe:0x5fbdb2315678afecb367f032d93f642f64180aa3",
+            "mode": "write"
+          },
+          {
+            "target": "safe:0x5fbdb2315678afecb367f032d93f642f64180aa3:nonce",
+            "mode": "write"
+          },
+          {
+            "target": "chain:31337",
+            "mode": "write"
+          },
+          {
+            "target": "safe:0x5fbdb2315678afecb367f032d93f642f64180aa3:storage",
+            "mode": "write"
+          }
+        ]
+      },
+      "signRefusal": "delegatecall to 0x40a2accbd92bca938b02010e17a5b8929b49130d runs its code as the Safe and can rewrite its owners; it is not on this client's delegatecall allowlist (MUSTER_SAFE_DELEGATECALL_ALLOW)"
+    },
+    "safe/transfer": {
+      "kind": "safe",
+      "variant": "transfer",
+      "family": "evm.safe",
+      "effectExample": {
+        "schema": "muster.effect.transfer.v1",
+        "fields": {
+          "to": "0x1111111111111111111111111111111111111111",
+          "value": 1000000000000000,
+          "nonce": 0
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 2,
+        "finality": "external",
+        "domain": "eip712.safe.v1.4.1"
+      },
+      "environment": "eip155:31337",
+      "profile": {
+        "declared": true,
+        "family": "evm.safe",
+        "settlement": "evm",
+        "locus": "contract",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "explicit",
+        "ordering": "sequence",
+        "expiry": "none",
+        "setup": "deploy",
+        "membershipChange": "in-place",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "at-creation",
+          "signers": "at-settle",
+          "effect": "public"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "production",
+        "chain": "eip155:31337",
+        "account": "eip155:31337:0x5fbdb2315678afecb367f032d93f642f64180aa3",
+        "k": 2,
+        "n": 3,
+        "bypassesKnown": false,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 2,
+          "finality": "external",
+          "domain": "eip712.safe.v1.4.1"
+        },
+        "requirements": [
+          {
+            "kind": "environment",
+            "name": "chain:31337",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "chain:31337",
+              "field": ""
+            }
+          },
+          {
+            "kind": "infra",
+            "name": "rpc",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "rpc",
+              "field": ""
+            }
+          },
+          {
+            "kind": "authority",
+            "name": "safe-owner",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "safe-owner",
+              "field": ""
+            }
+          },
+          {
+            "kind": "address",
+            "name": "payee",
+            "party": "counterparty",
+            "needs": {
+              "class": "address",
+              "target": "chain:31337",
+              "field": "to"
+            }
+          },
+          {
+            "kind": "asset",
+            "name": "amount",
+            "party": "proposer",
+            "needs": {
+              "class": "asset",
+              "target": "chain:31337",
+              "field": "value"
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          },
+          {
+            "field": "to",
+            "to": "chain-observer"
+          },
+          {
+            "field": "value",
+            "to": "chain-observer"
+          },
+          {
+            "field": "data",
+            "to": "chain-observer"
+          },
+          {
+            "field": "operation",
+            "to": "chain-observer"
+          },
+          {
+            "field": "payer",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signed-tx",
+            "to": "rpc-provider"
+          }
+        ],
+        "touches": [
+          {
+            "target": "safe:0x5fbdb2315678afecb367f032d93f642f64180aa3",
+            "mode": "write"
+          },
+          {
+            "target": "safe:0x5fbdb2315678afecb367f032d93f642f64180aa3:nonce",
+            "mode": "write"
+          },
+          {
+            "target": "chain:31337",
+            "mode": "write"
+          }
+        ]
+      },
+      "signRefusal": ""
+    },
+    "threshold/add-driver": {
+      "kind": "threshold",
+      "variant": "add-driver",
+      "family": "room.threshold",
+      "effectExample": {
+        "schema": "muster.effect.governance.add-driver.v1",
+        "fields": {
+          "kind": "unanimous"
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 2,
+        "finality": "immediate",
+        "domain": "muster.threshold.v1"
+      },
+      "environment": "room",
+      "profile": {
+        "declared": true,
+        "family": "room.threshold",
+        "settlement": "none",
+        "locus": "room",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "room",
+        "ordering": "none",
+        "expiry": "optional",
+        "setup": "none",
+        "membershipChange": "in-place",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "never",
+          "signers": "never",
+          "effect": "room-only"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "production",
+        "chain": "",
+        "account": "",
+        "k": 2,
+        "n": 3,
+        "bypassesKnown": true,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 2,
+          "finality": "immediate",
+          "domain": "muster.threshold.v1"
+        },
+        "requirements": [
+          {
+            "kind": "authority",
+            "name": "roster-member",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "roster-member",
+              "field": ""
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          }
+        ],
+        "touches": []
+      },
+      "signRefusal": ""
+    },
+    "threshold/statement": {
+      "kind": "threshold",
+      "variant": "statement",
+      "family": "room.threshold",
+      "effectExample": {
+        "schema": "muster.effect.statement.v1",
+        "fields": {
+          "text": "The room approves the Q4 budget."
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 2,
+        "finality": "immediate",
+        "domain": "muster.threshold.v1"
+      },
+      "environment": "room",
+      "profile": {
+        "declared": true,
+        "family": "room.threshold",
+        "settlement": "none",
+        "locus": "room",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "room",
+        "ordering": "none",
+        "expiry": "optional",
+        "setup": "none",
+        "membershipChange": "in-place",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "never",
+          "signers": "never",
+          "effect": "room-only"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "production",
+        "chain": "",
+        "account": "",
+        "k": 2,
+        "n": 3,
+        "bypassesKnown": true,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 2,
+          "finality": "immediate",
+          "domain": "muster.threshold.v1"
+        },
+        "requirements": [
+          {
+            "kind": "authority",
+            "name": "roster-member",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "roster-member",
+              "field": ""
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          }
+        ],
+        "touches": []
+      },
+      "signRefusal": ""
+    },
+    "unanimous/statement": {
+      "kind": "unanimous",
+      "variant": "statement",
+      "family": "room.threshold",
+      "effectExample": {
+        "schema": "muster.effect.statement.v1",
+        "fields": {
+          "text": "The room approves the Q4 budget."
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 3,
+        "finality": "immediate",
+        "domain": "muster.threshold.v1"
+      },
+      "environment": "room",
+      "profile": {
+        "declared": true,
+        "family": "room.threshold",
+        "settlement": "none",
+        "locus": "room",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "room",
+        "ordering": "none",
+        "expiry": "optional",
+        "setup": "none",
+        "membershipChange": "in-place",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "never",
+          "signers": "never",
+          "effect": "room-only"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "production",
+        "chain": "",
+        "account": "",
+        "k": 3,
+        "n": 3,
+        "bypassesKnown": true,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 3,
+          "finality": "immediate",
+          "domain": "muster.threshold.v1"
+        },
+        "requirements": [
+          {
+            "kind": "authority",
+            "name": "roster-member",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "roster-member",
+              "field": ""
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          }
+        ],
+        "touches": []
+      },
+      "signRefusal": ""
+    }
+  }
+}

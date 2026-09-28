@@ -1,0 +1,534 @@
+{
+  "actions": [
+    {
+      "id": "room.threshold/statement",
+      "name": "Endorse a statement (k of the room)",
+      "area": "family",
+      "family": "room.threshold",
+      "kind": "threshold",
+      "status": "built",
+      "summary": "The room ratifies a sentence: k of its members sign it with their room identities. Nothing goes to a chain; the signed decision lives in the room's log.",
+      "generated": "threshold/statement",
+      "effect": {
+        "schema": "muster.effect.statement.v1",
+        "fields": [
+          {
+            "name": "text",
+            "means": "the sentence the room ratifies, verbatim"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the proposer (any room member)",
+          "does": "Room → + → Statement → Endorse with Threshold, types the text and proposes. The hosted module builds the driver over the room's CURRENT members — their Ed25519 identities from the membership fold — with k = min(2, members). The proposal publishes its policy, the effect, and the signing context: environment 'room', account = the room's topic, slot = the intent id, expiry = now + MUSTER_INTENT_TTL_S (7 days by default). The intent id is content-addressed from the effect and the policy.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/threshold_fold_test.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "each member",
+          "does": "Re-derives the materialization from the logged effect — dCBOR ['muster.threshold.v1', 'muster.effect.statement.v1', {text}] — and approves in-app: the keystore signs it with the member's Ed25519 room identity and signs the attestation over P with the same key. The driver counts a signature only if it verifies under one of the roster's keys; the fold reaches executable at k. A member may Deny instead: named, informational, the threshold unchanged.",
+          "signs": "an Ed25519 signature by the member's room identity (their encryption identity's Ed25519 key, held in the keystore) over the materialization: the dCBOR array [serialization domain, schema id, {field: value…}] (CDE map order, shortest integers); plus a muster attestation by the same key over P = (context, the materialization, the provenance record)",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/in_app_signing_test.nim",
+            "module/tests/threshold_fold_test.nim",
+            "module/tests/probes/probe_live_attestation_binds.nim",
+            "module/tests/probes/probe_live_unattested_grade_stepper.nim",
+            "module/tests/decline_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one",
+          "does": "Executable is the end: agreement is final in the room. coordinate_submit on it answers 'not-onchain': a room family has no settlement, and the card reads '✓ Endorsed — a signed group decision. Nothing settles on-chain.'",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/settlement_test.nim",
+            "module/tests/activity_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an endorsement by a key that is not on the roster",
+          "why": "the driver identifies no roster member for it; it never counts, and the live path answers 'rejected'",
+          "evidence": [
+            "module/tests/threshold_fold_test.nim",
+            "module/tests/in_app_signing_test.nim"
+          ]
+        },
+        {
+          "what": "an endorsement over bytes other than the re-derived materialization (a changed text, another schema)",
+          "why": "invariant 1: the statement selects its own schema, so a transfer's bytes and a statement's never match; a tampered effect is refused by the driver's conformance check",
+          "evidence": [
+            "module/tests/threshold_fold_test.nim",
+            "module/tests/conformance_test.nim"
+          ]
+        },
+        {
+          "what": "an in-app approval after the intent's expiry",
+          "why": "invariant 2: 'expired', nothing published",
+          "evidence": [
+            "module/tests/probes/probe_live_context_stepper.nim"
+          ]
+        },
+        {
+          "what": "an in-app approval when an input has no source record",
+          "why": "invariant 10: 'unaccountable-input', nothing published",
+          "evidence": [
+            "module/tests/probes/probe_live_refusal_stepper.nim"
+          ]
+        },
+        {
+          "what": "an attestation that does not verify over the P every member re-derives",
+          "why": "graded rejected: the approval does not count",
+          "evidence": [
+            "module/tests/probes/probe_live_convergence.nim"
+          ]
+        },
+        {
+          "what": "settling it on a chain",
+          "why": "a room family has no settlement: 'not-onchain'",
+          "evidence": [
+            "module/tests/settlement_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_set_policy",
+        "coordinate_policy",
+        "coordinate_propose",
+        "coordinate_readiness",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_decline"
+      ],
+      "ui": "Room → + → Statement → Endorse with Threshold → text → Propose; card → Approve or Deny; the ready box reads '✓ Endorsed — a signed group decision. Nothing settles on-chain.'",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Only a valid Ed25519 signature by a room member over the re-derived bytes counts",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The decision never leaves the room: no chain, no RPC, no module",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The store node relaying the sealed room sees when events pass and on which topic, not what they say",
+          "credibility": "exposed",
+          "party": "the store node"
+        },
+        {
+          "claim": "k distinct members: the fold dedups by the name in the event key, so it relies on members publishing under their own names",
+          "credibility": "motivational",
+          "party": "every room member"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/threshold_fold_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/in_app_signing_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/conformance_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/activity_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/decline_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/settlement_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/flow_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/coordination_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_live_attestation_binds.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_live_context_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_live_refusal_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_live_convergence.nim"
+        }
+      ],
+      "unverified": [
+        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per verifying key: a valid signature by one member, published a second time under another name, counts twice and the intent reaches 'executable' with one signer (confirmed by a scratch run against the threshold driver while writing this corpus; no repo test covers it). A room family has no settlement to re-check the signers, so for it the room's count is the outcome. Honest clients publish under the recovered name (coordination/live.nim).",
+        "k = min(2, members) is how nim-lib/muster_module.nim (roomDriver) builds the hosted driver; the tests build their own rosters."
+      ]
+    },
+    {
+      "id": "room.threshold/unanimous-statement",
+      "name": "Endorse a statement (every member)",
+      "area": "family",
+      "family": "room.threshold",
+      "kind": "unanimous",
+      "status": "built",
+      "summary": "Every member of the room must sign. 'unanimous' is the k = n threshold; it is not a founding kind — a room admits it only by approving an add-driver proposal first.",
+      "generated": "unanimous/statement",
+      "effect": {
+        "schema": "muster.effect.statement.v1",
+        "fields": [
+          {
+            "name": "text",
+            "means": "the sentence the room ratifies, verbatim"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the proposer",
+          "does": "Selects Unanimous in the Statement picker — offered only once the room has admitted it; before that the button reads '＋ Propose unanimous' and proposes the add-driver instead. coordinate_set_policy refuses a kind the room has not admitted ('policy not admitted in this room'). The proposal publishes its policy, the effect, and the signing context: environment 'room', account = the room's topic, slot = the intent id, expiry = now + MUSTER_INTENT_TTL_S (7 days by default). The intent id is content-addressed from the effect and the policy.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/governance_test.nim",
+            "module/tests/kinds_test.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "every member",
+          "does": "As a threshold statement, with k = the roster size: every current member's Ed25519 endorsement is needed. The roster is the room's current membership, so a member admitted before the last approval raises n.",
+          "signs": "an Ed25519 signature by the member's room identity (their encryption identity's Ed25519 key, held in the keystore) over the materialization: the dCBOR array ['muster.threshold.v1', schema id, {field: value…}] (CDE map order, shortest integers); plus a muster attestation by the same key over P = (context, the materialization, the provenance record)",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/kinds_test.nim",
+            "module/tests/threshold_fold_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one",
+          "does": "Executable is the end. coordinate_submit on it answers 'not-onchain': a room family has no settlement, and the card reads '✓ Endorsed — a signed group decision. Nothing settles on-chain.'",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/settlement_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "using unanimous before the room admitted it",
+          "why": "it is not a founding kind and is not among the room's kinds until an add-driver for it is approved; coordinate_set_policy refuses a kind not among them, and the composer offers the add-driver instead",
+          "evidence": [
+            "module/tests/governance_test.nim",
+            "module/tests/kinds_test.nim"
+          ]
+        },
+        {
+          "what": "an endorsement by a key not on the roster",
+          "why": "never counts",
+          "evidence": [
+            "module/tests/threshold_fold_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_drivers",
+        "coordinate_set_policy",
+        "coordinate_propose",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_decline"
+      ],
+      "ui": "Room → + → Statement → Endorse with Unanimous (shown as '＋ Propose unanimous' until the room admits it) → text → Propose; card → Approve.",
+      "invariants": [
+        1,
+        4,
+        5,
+        6,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Unanimous is the threshold driver with k = n over the room's roster",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Admission gates what an honest client composes; the fold itself resolves 'unanimous' whether or not the room admitted it",
+          "credibility": "motivational",
+          "party": "each member's client"
+        },
+        {
+          "claim": "k distinct members: the fold dedups by the name in the event key",
+          "credibility": "motivational",
+          "party": "every room member"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/kinds_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/governance_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/threshold_fold_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/settlement_test.nim"
+        }
+      ],
+      "unverified": [
+        "governance_test proves roomDriverKinds admits 'unanimous' after an approved add-driver; that coordinate_set_policy refuses it before is from reading nim-lib/muster_module.nim (musterCoordinateSetPolicy).",
+        "That the fold does not check admission, and that n follows the current membership, are from reading nim-lib/muster_module.nim (roomDriver, driverForPolicy); no test covers either.",
+        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per verifying key: a valid signature by one member, published a second time under another name, counts twice and the intent reaches 'executable' with one signer (confirmed by a scratch run against the threshold driver while writing this corpus; no repo test covers it). A room family has no settlement to re-check the signers, so for it the room's count is the outcome. Honest clients publish under the recovered name (coordination/live.nim)."
+      ]
+    },
+    {
+      "id": "room.threshold/add-driver",
+      "name": "Admit a new policy into the room (driver-as-proposal)",
+      "area": "family",
+      "family": "room.threshold",
+      "kind": "threshold",
+      "status": "built",
+      "summary": "What a room can do grows by proposal, not a compile-time list (invariant 6): the room endorses an add-driver intent naming a kind, and once it is approved the kind is admitted — if this client has it.",
+      "generated": "threshold/add-driver",
+      "effect": {
+        "schema": "muster.effect.governance.add-driver.v1",
+        "fields": [
+          {
+            "name": "kind",
+            "means": "the driver kind to admit, from the one kind list (drivers/kinds.nim) — e.g. 'unanimous'"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the proposer",
+          "does": "Clicks '＋ Propose <kind>' in the Statement picker, which proposes {effect: 'add-driver', kind} under the compose policy in force. It is schema-bound governance: its bytes can never be read as a payment. The proposal publishes its policy, the effect, and the signing context: environment 'room', account = the room's topic, slot = the intent id, expiry = now + MUSTER_INTENT_TTL_S (7 days by default). The intent id is content-addressed from the effect and the policy.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/governance_test.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "k members",
+          "does": "Endorse it like a statement: dCBOR ['muster.threshold.v1', 'muster.effect.governance.add-driver.v1', {kind}] signed with Ed25519 room identities.",
+          "signs": "an Ed25519 signature by the member's room identity (their encryption identity's Ed25519 key, held in the keystore) over the materialization: the dCBOR array ['muster.threshold.v1', schema id, {field: value…}] (CDE map order, shortest integers); plus a muster attestation by the same key over P = (context, the materialization, the provenance record)",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/governance_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one",
+          "does": "Once the intent is executable, every member's fold of roomDriverKinds adds the kind — once, and only if it is on this client's one kind list. coordinate_drivers then marks it admitted and the composer offers it. coordinate_submit on it answers 'not-onchain': a room family has no settlement, and the card reads '✓ Endorsed — a signed group decision. Nothing settles on-chain.'",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/governance_test.nim",
+            "module/tests/kinds_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "admitting a kind while its add-driver is still collecting",
+          "why": "a collecting add-driver grants nothing; only an approved one (executable or beyond) admits",
+          "evidence": [
+            "module/tests/governance_test.nim"
+          ]
+        },
+        {
+          "what": "admitting a kind this client does not have",
+          "why": "roomDriverKinds adds only kinds on the one list — admitting one it lacks would be a guess",
+          "evidence": [
+            "module/tests/kinds_test.nim"
+          ]
+        },
+        {
+          "what": "a non-member pushing it to approved",
+          "why": "a non-roster endorsement never counts, so nothing is admitted",
+          "evidence": [
+            "module/tests/governance_test.nim"
+          ]
+        },
+        {
+          "what": "reading an add-driver signature as a transfer",
+          "why": "the governance schema separates the bytes (F-5)",
+          "evidence": [
+            "module/tests/governance_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_drivers",
+        "coordinate_propose",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_set_policy"
+      ],
+      "ui": "Room → + → Statement → '＋ Propose <kind>' (a kind the room has not admitted) → the add-driver card → Approve; the room's Endorse-with buttons then include the kind.",
+      "invariants": [
+        1,
+        4,
+        5,
+        6,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "A kind is admitted only by an add-driver intent that reached executable, and only if it is on this client's kind list; a non-member cannot grant it",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Which policy approves an add-driver is the proposer's choice: roomDriverKinds admits from ANY executable add-driver intent, whatever its policy — under an Attest policy, one of a Safe's signers is enough",
+          "credibility": "motivational",
+          "party": "the proposer and the members who endorse"
+        },
+        {
+          "claim": "Admission is decided in the room and nowhere else",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/governance_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/kinds_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/threshold_fold_test.nim"
+        }
+      ],
+      "unverified": [
+        "That roomDriverKinds ignores the add-driver's policy is from reading coordination/intents.nim; governance_test folds it under a threshold driver only.",
+        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per verifying key: a valid signature by one member, published a second time under another name, counts twice and the intent reaches 'executable' with one signer (confirmed by a scratch run against the threshold driver while writing this corpus; no repo test covers it). A room family has no settlement to re-check the signers, so for it the room's count is the outcome. Honest clients publish under the recovered name (coordination/live.nim)."
+      ]
+    }
+  ]
+}

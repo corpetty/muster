@@ -2,7 +2,7 @@
 
 ## Run them
 
-One command runs every test that needs no chain — 93 unit tests and the 55 invariant
+One command runs every test that needs no chain — 94 unit tests and the 55 invariant
 probes under `probes/`, in parallel:
 
 ```bash
@@ -60,6 +60,7 @@ wants (below), which the runner supplies.
 - `room_infra_test` (exo-428 — the room's infrastructure is dictated by its drivers; also needs `$SECP` for the real Safe driver)
 - `materialshare_test` (exo-45e K5)
 - `schema_unknown_test` (exo-1ec.3 — the schema-driven rendering gate)
+- `action_corpus_test` (exo-661 A2 — the action atlas's generated half: `contracts/actions/generated.json` must equal what `tools/action_corpus.nim` reads off the running drivers — describe / environment / profile / manifest / signRefusal for each fixed (kind, variant) — byte for byte; regenerate with `TEST_ARGS=--write tests/run-suite.sh action_corpus`; `$SECP` + `$STINT` + web3 + `$SODIUM`)
 
 **Phase A — Safe and the family profile.**
 

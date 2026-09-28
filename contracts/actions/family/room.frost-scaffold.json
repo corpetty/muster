@@ -1,0 +1,183 @@
+{
+  "actions": [
+    {
+      "id": "room.frost-scaffold/statement",
+      "name": "Endorse a statement in two rounds (FROST-shaped scaffold)",
+      "area": "family",
+      "family": "room.frost-scaffold",
+      "kind": "frost",
+      "status": "partial",
+      "partialBecause": "The registry: it exercises the multi-round seam; its own header says it is a coordination scaffold, not production FROST; superseded by btc.frost-bip445 and lez.frost-public-account.",
+      "summary": "A statement endorsed in two rounds, k of the room's members in each. It has FROST's shape — two rounds over a named roster — and none of its cryptography: no nonce commitments, no Schnorr aggregation, one Ed25519 signature per member per round.",
+      "generated": "frost/statement",
+      "effect": {
+        "schema": "muster.effect.statement.v1",
+        "fields": [
+          {
+            "name": "text",
+            "means": "the sentence the room ratifies"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the proposer",
+          "does": "Room → + → Statement → Endorse with FROST → text → Propose. The hosted driver is the room's current members with k = min(2, members) per round. The proposal publishes its policy, the effect, and the signing context: environment 'room', account = the room's topic, slot = the intent id, expiry = now + MUSTER_INTENT_TTL_S (7 days by default). The intent id is content-addressed from the effect and the policy.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/frost_room_test.nim",
+            "module/tests/frost_test.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "each member, round 1",
+          "does": "Signs the materialization dCBOR ['muster.frost.v1', 'muster.effect.statement.v1', {text}] with Ed25519. The live path tags the contribution with the round the intent is collecting (1); the fold keeps one contribution per (member, round) and folds every round-1 contribution before any round-2 one. At k the core advances to round 2 — from describe().rounds, never a constant. The card shows 'round 1 of 2'.",
+          "signs": "an Ed25519 signature by the member's room identity (their encryption identity's Ed25519 key, held in the keystore) over the materialization: the dCBOR array ['muster.frost.v1', schema id, {field: value…}] (CDE map order, shortest integers); plus a muster attestation by the same key over P = (context, the materialization, the provenance record)",
+          "reveals": [
+            {
+              "field": "contributions (round 1)",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/frost_room_test.nim",
+            "module/tests/frost_test.nim",
+            "module/tests/in_app_signing_test.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "each member, round 2",
+          "does": "The same act again, tagged round 2: the same Ed25519 signature over the same bytes — acceptance is round-agnostic by design (the scaffold's header). At k distinct members in round 2 the intent is executable.",
+          "signs": "the same Ed25519 signature over the same materialization as round 1",
+          "reveals": [
+            {
+              "field": "contributions (round 2)",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/frost_room_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one",
+          "does": "Executable is the end. coordinate_submit on it answers 'not-onchain': a room family has no settlement, and the card reads '✓ Endorsed — a signed group decision. Nothing settles on-chain.'",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/settlement_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a non-member's signature",
+          "why": "no roster key verifies it; it never counts",
+          "evidence": [
+            "module/tests/frost_test.nim",
+            "module/tests/frost_room_test.nim"
+          ]
+        },
+        {
+          "what": "completing it alone",
+          "why": "the fold keeps one contribution per (member, round): a single member can never complete a k ≥ 2 intent",
+          "evidence": [
+            "module/tests/frost_room_test.nim"
+          ]
+        },
+        {
+          "what": "a tampered effect",
+          "why": "invariant 1: the conformance check refuses a materialization of another effect",
+          "evidence": [
+            "module/tests/conformance_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_set_policy",
+        "coordinate_propose",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_decline"
+      ],
+      "ui": "Room → + → Statement → Endorse with FROST → text → Propose; the card shows 'round R of 2'; Approve once per round.",
+      "invariants": [
+        1,
+        4,
+        5,
+        6
+      ],
+      "claims": [
+        {
+          "claim": "Both rounds must reach k before the intent is executable; the round count comes from the driver's describe()",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "This is not FROST: no nonce commitments, no partial signatures, no aggregate — a round-1 signature is valid in round 2",
+          "credibility": "not-applicable"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/frost_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/frost_room_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/in_app_signing_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/conformance_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/settlement_test.nim"
+        }
+      ],
+      "unverified": [
+        "Ed25519 is deterministic and both rounds sign the same bytes, so a member's round-2 contribution equals their round-1 one; anyone in the room holding it could publish it tagged round 2 and it would count, graded unattested. From reading drivers/frost.nim and coordination/intents.nim; no test covers it.",
+        "frost is not one of the live probes' policies (probes/live_room.nim: safe, threshold), so its expiry and provenance refusals on the hosted path are not tested for this kind.",
+        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per verifying key: a valid signature by one member, published a second time under another name, counts twice and the intent reaches 'executable' with one signer (confirmed by a scratch run against the threshold driver while writing this corpus; no repo test covers it). A room family has no settlement to re-check the signers, so for it the room's count is the outcome. Honest clients publish under the recovered name (coordination/live.nim)."
+      ]
+    }
+  ]
+}

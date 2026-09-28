@@ -1,0 +1,2333 @@
+{
+  "actions": [
+    {
+      "id": "evm.safe-4337/deploy",
+      "name": "Create a Safe with the ERC-4337 module",
+      "area": "family",
+      "family": "evm.safe-4337",
+      "summary": "The room agrees an owner set and threshold, derives the Safe's counterfactual address, and deploys it with the first UserOperation's initCode, the 4337 module enabled and set as fallback handler. An existing Safe instead enables the module with an evm.safe proposal.",
+      "effect": {
+        "schema": "muster.effect.evm.safe-4337.deploy.v0",
+        "fields": [
+          {
+            "name": "owners",
+            "means": "the owner addresses, one shared by each future owner"
+          },
+          {
+            "name": "threshold",
+            "means": "k"
+          },
+          {
+            "name": "saltNonce",
+            "means": "the CREATE2 salt input; with the initializer it fixes the address"
+          },
+          {
+            "name": "singleton",
+            "means": "the Safe singleton (v1.4.1 or newer)"
+          },
+          {
+            "name": "proxyFactory",
+            "means": "the SafeProxyFactory named in initCode"
+          },
+          {
+            "name": "moduleSetup",
+            "means": "SafeModuleSetup, delegatecalled by setup() to enable the module"
+          },
+          {
+            "name": "module",
+            "means": "Safe4337Module (v0.3.0: 0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226), enabled and set as fallback handler"
+          },
+          {
+            "name": "initCode",
+            "means": "proxyFactory || createProxyWithNonce(singleton, initializer, saltNonce)"
+          },
+          {
+            "name": "nonce",
+            "means": "the EntryPoint nonce: a 192-bit key (the lane) and a 64-bit sequence; not the Safe's own nonce"
+          },
+          {
+            "name": "callGasLimit",
+            "means": "gas for the execution call"
+          },
+          {
+            "name": "verificationGasLimit",
+            "means": "gas for validateUserOp"
+          },
+          {
+            "name": "preVerificationGas",
+            "means": "gas the bundler charges for calldata and overhead"
+          },
+          {
+            "name": "maxFeePerGas",
+            "means": "EIP-1559 fee cap per gas"
+          },
+          {
+            "name": "maxPriorityFeePerGas",
+            "means": "EIP-1559 tip per gas"
+          },
+          {
+            "name": "validAfter",
+            "means": "48-bit timestamp; the UserOp is invalid before it"
+          },
+          {
+            "name": "validUntil",
+            "means": "48-bit timestamp; the UserOp is invalid after it (0 means no end)"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n of the new owners sign the first UserOp",
+        "finality": "external",
+        "domain": "EIP-712 SafeOp over the first UserOp, including keccak256(initCode)"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "eip155:<chainId>",
+          "party": "instance",
+          "class": "infra",
+          "target": "eip155:<chainId>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "rpc",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "bundler",
+          "party": "instance",
+          "class": "infra",
+          "target": "an ERC-7769 bundler supporting EntryPoint v0.7 0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "safe-owner",
+          "party": "contributor",
+          "class": "authority",
+          "target": "the new Safe's owner set",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "owner-address",
+          "party": "counterparty",
+          "class": "address",
+          "target": "eip155:<chainId>",
+          "field": "owners"
+        },
+        {
+          "kind": "asset",
+          "name": "gas-prefund",
+          "party": "instance",
+          "class": "asset",
+          "target": "the counterfactual Safe address, or a paymaster",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "safe:<counterfactual address>",
+          "mode": "write"
+        },
+        {
+          "target": "contract:<proxyFactory>",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:0x0000000071727De22E5E9d8BAf0edAc6f37da032:nonce(safe,key)",
+          "mode": "write"
+        },
+        {
+          "target": "eip155:<chainId>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "owner addresses shared by each member",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "unsigned first UserOp with initCode: owners, threshold (bundler, gas estimation)",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed first UserOp (bundler)",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "owners",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "threshold",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "enabled modules and fallback handler",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "owner signatures in the handleOps calldata (who signed)",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "each future owner shares a signing address; the proposer composes owners, threshold and salt; the room computes the counterfactual address from initCode and discloses the account (S1) as pending",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "owner addresses",
+              "observer": "room-member"
+            },
+            {
+              "field": "unsigned first UserOp (bundler)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/safe-global/safe-modules/blob/main/modules/4337/README.md",
+            "https://eips.ethereum.org/EIPS/eip-4337"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "k of the new owners re-derive the first UserOp's SafeOp digest, which commits to keccak256(initCode), and sign",
+          "signs": "the EIP-712 digest keccak256(0x19 || 0x01 || domainSeparator || structHash), where domainSeparator = keccak256(abi.encode(0x47e79534…9218 [EIP712Domain(uint256 chainId,address verifyingContract)], chainId, Safe4337Module)) and structHash = keccak256(abi.encode(SAFE_OP_TYPEHASH 0xc03dfc11…ea7f, safe, nonce, keccak256(initCode), keccak256(callData), verificationGasLimit, callGasLimit, preVerificationGas, maxPriorityFeePerGas, maxFeePerGas, keccak256(paymasterAndData), validAfter, validUntil, entryPoint)); one 65-byte secp256k1 ECDSA signature r || s || v per owner",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "a member sends the first UserOp to the bundler; the EntryPoint deploys the proxy through the factory, setup() enables the module via SafeModuleSetup and sets it as fallback handler, then validates the owner signatures against the new Safe",
+          "signs": "nothing new; the member packs signature = validAfter (6 bytes) || validUntil (6 bytes) || exactly threshold owner signatures in ascending owner order, and sends the UserOp with eth_sendUserOperation",
+          "reveals": [
+            {
+              "field": "signed first UserOp (bundler)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "owners",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "threshold",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://github.com/safe-global/safe-modules/blob/main/modules/4337/README.md",
+            "https://eips.ethereum.org/EIPS/eip-4337"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "reads the Safe's owners, threshold, modules and fallback handler back from the chain and marks the disclosure verified",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "Safe configuration reads (RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/safe-global/safe-modules/blob/main/modules/4337/README.md"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an initCode the room did not derive from the agreed owners, threshold, salt and addresses",
+          "why": "invariant 1: the SafeOp commits to keccak256(initCode); a swapped initCode would deploy a different Safe",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol"
+          ]
+        },
+        {
+          "what": "a module or EntryPoint address other than the deployment the module's CHANGELOG names for the chosen version",
+          "why": "invariant 2: the module is the signature domain's verifyingContract; the wrong one binds signatures elsewhere",
+          "evidence": [
+            "https://github.com/safe-global/safe-modules/blob/main/modules/4337/CHANGELOG.md"
+          ]
+        },
+        {
+          "what": "a threshold of 0 or above the owner count",
+          "why": "Safe setup reverts; muster refuses at propose",
+          "evidence": [
+            "https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/base/OwnerManager.sol"
+          ]
+        },
+        {
+          "what": "a Safe singleton older than v1.4.1",
+          "why": "the module README: it MUST only be used with Safe 1.4.1 or newer",
+          "evidence": [
+            "https://github.com/safe-global/safe-modules/blob/main/modules/4337/README.md"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The address is fixed by the owners, threshold, salt and deployment addresses before anything is on chain.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The owner set and threshold are public on chain from deployment.",
+          "credibility": "exposed",
+          "party": "chain observers"
+        },
+        {
+          "claim": "The bundler sees the future Safe's owners when it estimates the first UserOp.",
+          "credibility": "exposed",
+          "party": "the configured bundler"
+        },
+        {
+          "claim": "Enabling the module on an existing Safe also replaces its fallback handler (setFallbackHandler).",
+          "credibility": "not-applicable"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-modules/blob/main/modules/4337/README.md",
+          "what": "the setup flow: initCode = proxyFactory || createProxyWithNonce(singleton, setup(... SafeModuleSetup.enableModules([module]) ..., module as fallback handler), saltNonce)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-modules/blob/main/modules/4337/CHANGELOG.md",
+          "what": "v0.3.0 deployment addresses: SafeModuleSetup 0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47, Safe4337Module 0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+          "what": "Safe4337Module: the SafeOp commits keccak256(initCode) so a bundler cannot substitute a costlier deployment"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-4337",
+          "what": "ERC-4337: first-time account creation through initCode"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/base/OwnerManager.sol",
+          "what": "Safe v1.4.1 OwnerManager.setupOwners: threshold checks"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/base/FallbackManager.sol",
+          "what": "Safe v1.4.1 FallbackManager.setFallbackHandler: one handler per Safe"
+        }
+      ],
+      "status": "declared",
+      "ui": "not built"
+    },
+    {
+      "id": "evm.safe-4337/transfer",
+      "name": "Send ETH from a Safe through a bundler",
+      "area": "family",
+      "family": "evm.safe-4337",
+      "summary": "k of n Safe owners approve a UserOperation that sends ETH; one member hands it to a bundler, which puts it on chain through the EntryPoint. The Safe pays the gas.",
+      "effect": {
+        "schema": "muster.effect.evm.safe-4337.transfer.v0",
+        "fields": [
+          {
+            "name": "safe",
+            "means": "the Safe that sends (the UserOp sender)"
+          },
+          {
+            "name": "to",
+            "means": "the payee's address"
+          },
+          {
+            "name": "value",
+            "means": "the amount of ETH, in wei"
+          },
+          {
+            "name": "nonce",
+            "means": "the EntryPoint nonce: a 192-bit key (the lane) and a 64-bit sequence; not the Safe's own nonce"
+          },
+          {
+            "name": "callGasLimit",
+            "means": "gas for the execution call"
+          },
+          {
+            "name": "verificationGasLimit",
+            "means": "gas for validateUserOp"
+          },
+          {
+            "name": "preVerificationGas",
+            "means": "gas the bundler charges for calldata and overhead"
+          },
+          {
+            "name": "maxFeePerGas",
+            "means": "EIP-1559 fee cap per gas"
+          },
+          {
+            "name": "maxPriorityFeePerGas",
+            "means": "EIP-1559 tip per gas"
+          },
+          {
+            "name": "validAfter",
+            "means": "48-bit timestamp; the UserOp is invalid before it"
+          },
+          {
+            "name": "validUntil",
+            "means": "48-bit timestamp; the UserOp is invalid after it (0 means no end)"
+          },
+          {
+            "name": "entryPoint",
+            "means": "the EntryPoint the module accepts (v0.7: 0x0000000071727De22E5E9d8BAf0edAc6f37da032)"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n owners (the Safe's threshold, read from the chain)",
+        "finality": "external",
+        "domain": "EIP-712 SafeOp; domain {chainId, verifyingContract = Safe4337Module}"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "eip155:<chainId>",
+          "party": "instance",
+          "class": "infra",
+          "target": "eip155:<chainId>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "rpc",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "bundler",
+          "party": "instance",
+          "class": "infra",
+          "target": "an ERC-7769 bundler endpoint whose eth_supportedEntryPoints includes EntryPoint v0.7 0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "safe-owner",
+          "party": "contributor",
+          "class": "authority",
+          "target": "safe:<address>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "payee",
+          "party": "counterparty",
+          "class": "address",
+          "target": "eip155:<chainId>",
+          "field": "to"
+        },
+        {
+          "kind": "asset",
+          "name": "amount",
+          "party": "proposer",
+          "class": "asset",
+          "target": "eip155:<chainId>",
+          "field": "value"
+        },
+        {
+          "kind": "asset",
+          "name": "gas-prefund",
+          "party": "instance",
+          "class": "asset",
+          "target": "safe:<address>",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "safe:<address>",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:0x0000000071727De22E5E9d8BAf0edAc6f37da032:nonce(safe,key)",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:0x0000000071727De22E5E9d8BAf0edAc6f37da032:getNonce(safe,key)",
+          "mode": "read"
+        },
+        {
+          "target": "safe:<address>:owners,threshold,modules,fallbackHandler",
+          "mode": "read"
+        },
+        {
+          "target": "eip155:<chainId>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "Safe address, nonce key and balance reads",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "unsigned UserOp: sender, nonce, callData, gas fields (bundler, eth_estimateUserOperationGas)",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed UserOp with owner signatures (bundler, eth_sendUserOperation)",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "to",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "value",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "safe (sender)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "owner signatures in the handleOps calldata (who signed)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "the bundler's address and beneficiary; gas paid",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "composes the effect; callData = executeUserOp(to, value, \"\", 0); reads the EntryPoint nonce for the chosen key and the fee market through the RPC and asks the bundler to estimate gas; the room re-derives the SafeOp digest",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "Safe address and nonce key (RPC)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "unsigned UserOp (bundler, gas estimation)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://eips.ethereum.org/EIPS/eip-4337",
+            "https://eips.ethereum.org/EIPS/eip-7769",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "each owner re-derives the SafeOp digest from the effect and signs it; the room counts distinct owners up to the threshold",
+          "signs": "the EIP-712 digest keccak256(0x19 || 0x01 || domainSeparator || structHash), where domainSeparator = keccak256(abi.encode(0x47e79534…9218 [EIP712Domain(uint256 chainId,address verifyingContract)], chainId, Safe4337Module)) and structHash = keccak256(abi.encode(SAFE_OP_TYPEHASH 0xc03dfc11…ea7f, safe, nonce, keccak256(initCode), keccak256(callData), verificationGasLimit, callGasLimit, preVerificationGas, maxPriorityFeePerGas, maxFeePerGas, keccak256(paymasterAndData), validAfter, validUntil, entryPoint)); one 65-byte secp256k1 ECDSA signature r || s || v per owner",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://eips.ethereum.org/EIPS/eip-712"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "one member packs the signature, sends the UserOp to the bundler; the bundler simulates it (ERC-7562 rules) and calls EntryPoint.handleOps; the EntryPoint calls the Safe's validateUserOp, which the fallback handler forwards to the module; the module checks the owner signatures with Safe.checkSignatures, pays the prefund and then runs executeUserOp → execTransactionFromModule",
+          "signs": "nothing new; the member packs signature = validAfter (6 bytes) || validUntil (6 bytes) || exactly threshold owner signatures in ascending owner order, and sends the UserOp with eth_sendUserOperation",
+          "reveals": [
+            {
+              "field": "signed UserOp with owner signatures (bundler)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "safe (sender)",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "to",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "value",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "owner signatures (who signed)",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://github.com/safe-global/safe-modules/blob/main/modules/4337/README.md",
+            "https://eips.ethereum.org/EIPS/eip-7769",
+            "https://eips.ethereum.org/EIPS/eip-7562"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "reads eth_getUserOperationReceipt from the bundler, or the UserOperationEvent through the RPC; final when the chain is",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "the userOpHash being watched (bundler / RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7769"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an owner approval over a SafeOp digest that is not the one the room re-derives from the effect",
+          "why": "invariant 1 (F-4): effects are reviewed, materializations are signed, and a mismatch is refused",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol"
+          ]
+        },
+        {
+          "what": "a SafeOp whose domain chainId, verifyingContract (the module) or entryPoint field differs from the disclosed account's environment",
+          "why": "invariant 2 (F-5): the signature must be worthless on any other chain, module or EntryPoint",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://github.com/safe-global/safe-modules/blob/main/modules/4337/CHANGELOG.md"
+          ]
+        },
+        {
+          "what": "a stale EntryPoint nonce: the (key, sequence) pair was consumed on chain since the proposal, re-read at review and at settle",
+          "why": "invariant 10: the nonce is an external read that reached the signed bytes; the EntryPoint would reject it anyway",
+          "evidence": [
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol",
+            "https://eips.ethereum.org/EIPS/eip-4337"
+          ]
+        },
+        {
+          "what": "a validUntil later than the room envelope's expiry, or 0 (no end) when the envelope has one",
+          "why": "invariant 2: every signing payload commits to expiry; the chain-level window must not outlive the envelope",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://eips.ethereum.org/EIPS/eip-4337"
+          ]
+        },
+        {
+          "what": "callData whose selector is not executeUserOp or executeUserOpWithErrorString",
+          "why": "the module reverts UnsupportedExecutionFunction; the card could not say what executes",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol"
+          ]
+        },
+        {
+          "what": "a gas price, nonce or other input that reached the SafeOp without a recorded read",
+          "why": "invariant 10: nothing is signed whose inputs cannot be accounted for",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol"
+          ]
+        },
+        {
+          "what": "assembling more signatures than the threshold, or owners out of ascending order",
+          "why": "the module's _checkSignaturesLength rejects extra bytes and Safe.checkNSignatures requires ascending owners (GS026)",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/Safe.sol"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Owners sign every UserOp field except the signature, including gas limits, fees, initCode and paymasterAndData, so a bundler cannot change them.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A signature is valid only on one chain, for one Safe, through one module and one EntryPoint.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A signed SafeOp stops being valid after validUntil, when one is set; the EntryPoint enforces it.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Approving costs owners nothing; the Safe pays the EntryPoint prefund and the bundler is reimbursed from it.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The bundler can delay or refuse to include the UserOp.",
+          "credibility": "motivational",
+          "party": "the configured bundler"
+        },
+        {
+          "claim": "The bundler sees the signed UserOp, including which owners signed, before the chain does.",
+          "credibility": "exposed",
+          "party": "the configured bundler"
+        },
+        {
+          "claim": "The Safe's other modules, and k owners through execTransaction, can still act outside this path.",
+          "credibility": "motivational",
+          "party": "every other enabled Safe module; any k owners using execTransaction"
+        },
+        {
+          "claim": "The EntryPoint nonce is a second replay domain: a 4337 proposal and an execTransaction proposal do not conflict by nonce, only by state.",
+          "credibility": "not-applicable"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+          "what": "Safe4337Module: the SafeOp typehash, the domain {chainId, verifyingContract = module}, validateUserOp and executeUserOp"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-modules/blob/main/modules/4337/README.md",
+          "what": "the 4337 module's execution flow, setup flow and signature encoding validAfter || validUntil || signatures"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-modules/blob/main/modules/4337/CHANGELOG.md",
+          "what": "v0.3.0 supports EntryPoint v0.7.0 at 0x0000000071727De22E5E9d8BAf0edAc6f37da032"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-4337",
+          "what": "ERC-4337: UserOperation, the 2D nonce, validUntil/validAfter, paymasters, the bundler flow"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol",
+          "what": "EntryPoint v0.7.0: getUserOpHash = keccak256(abi.encode(userOp.hash(), entryPoint, chainid))"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol",
+          "what": "EntryPoint v0.7.0 NonceManager: key = nonce >> 64, sequence = uint64(nonce), sequence must match and increments"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7769",
+          "what": "ERC-7769: the bundler JSON-RPC API (eth_sendUserOperation, eth_estimateUserOperationGas, eth_getUserOperationReceipt)"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7562",
+          "what": "ERC-7562: the validation scope rules a bundler applies before accepting a UserOp"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/Safe.sol",
+          "what": "Safe v1.4.1: checkNSignatures requires ascending owners; module and owner management"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-712",
+          "what": "EIP-712: typed structured data hashing"
+        }
+      ],
+      "unverified": [
+        "Owners holding p256 passkeys (the registry lists p256-webauthn) sign through a Safe WebAuthn signer contract in this path; not checked against source here.",
+        "Whether a given bundler gossips UserOps on the ERC-4337 P2P mempool or keeps them private is bundler-specific."
+      ],
+      "status": "declared",
+      "ui": "not built"
+    },
+    {
+      "id": "evm.safe-4337/contract-call",
+      "name": "Call a contract from a Safe through a bundler",
+      "area": "family",
+      "family": "evm.safe-4337",
+      "summary": "k of n owners approve a UserOperation that makes the Safe CALL a contract with data (and optional ETH). A delegatecall is not this action.",
+      "effect": {
+        "schema": "muster.effect.evm.safe-4337.contract-call.v0",
+        "fields": [
+          {
+            "name": "safe",
+            "means": "the Safe that calls (the UserOp sender)"
+          },
+          {
+            "name": "to",
+            "means": "the contract called"
+          },
+          {
+            "name": "value",
+            "means": "ETH sent with the call, in wei"
+          },
+          {
+            "name": "data",
+            "means": "the calldata, decoded on the card when its ABI is known"
+          },
+          {
+            "name": "operation",
+            "means": "0 (CALL); 1 (DELEGATECALL) is refused here"
+          },
+          {
+            "name": "nonce",
+            "means": "the EntryPoint nonce: a 192-bit key (the lane) and a 64-bit sequence; not the Safe's own nonce"
+          },
+          {
+            "name": "callGasLimit",
+            "means": "gas for the execution call"
+          },
+          {
+            "name": "verificationGasLimit",
+            "means": "gas for validateUserOp"
+          },
+          {
+            "name": "preVerificationGas",
+            "means": "gas the bundler charges for calldata and overhead"
+          },
+          {
+            "name": "maxFeePerGas",
+            "means": "EIP-1559 fee cap per gas"
+          },
+          {
+            "name": "maxPriorityFeePerGas",
+            "means": "EIP-1559 tip per gas"
+          },
+          {
+            "name": "validAfter",
+            "means": "48-bit timestamp; the UserOp is invalid before it"
+          },
+          {
+            "name": "validUntil",
+            "means": "48-bit timestamp; the UserOp is invalid after it (0 means no end)"
+          },
+          {
+            "name": "entryPoint",
+            "means": "the EntryPoint the module accepts (v0.7: 0x0000000071727De22E5E9d8BAf0edAc6f37da032)"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n owners (the Safe's threshold, read from the chain)",
+        "finality": "external",
+        "domain": "EIP-712 SafeOp; domain {chainId, verifyingContract = Safe4337Module}"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "eip155:<chainId>",
+          "party": "instance",
+          "class": "infra",
+          "target": "eip155:<chainId>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "rpc",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "bundler",
+          "party": "instance",
+          "class": "infra",
+          "target": "an ERC-7769 bundler endpoint whose eth_supportedEntryPoints includes EntryPoint v0.7 0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "safe-owner",
+          "party": "contributor",
+          "class": "authority",
+          "target": "safe:<address>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "target-contract",
+          "party": "proposer",
+          "class": "address",
+          "target": "eip155:<chainId>",
+          "field": "to"
+        },
+        {
+          "kind": "asset",
+          "name": "gas-prefund",
+          "party": "instance",
+          "class": "asset",
+          "target": "safe:<address>",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "safe:<address>",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:0x0000000071727De22E5E9d8BAf0edAc6f37da032:nonce(safe,key)",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:0x0000000071727De22E5E9d8BAf0edAc6f37da032:getNonce(safe,key)",
+          "mode": "read"
+        },
+        {
+          "target": "safe:<address>:owners,threshold,modules,fallbackHandler",
+          "mode": "read"
+        },
+        {
+          "target": "eip155:<chainId>",
+          "mode": "write"
+        },
+        {
+          "target": "contract:<to>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "Safe address, nonce key and balance reads",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "unsigned UserOp: sender, nonce, callData, gas fields (bundler, eth_estimateUserOperationGas)",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed UserOp with owner signatures (bundler, eth_sendUserOperation)",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "to",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "value",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "data",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "safe (sender)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "owner signatures in the handleOps calldata (who signed)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "the bundler's address and beneficiary; gas paid",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "composes the effect; callData = executeUserOp(to, value, data, 0); reads the nonce and fees, and the target's code, through the RPC; the bundler estimates gas; the room re-derives the SafeOp digest",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "target contract and Safe reads (RPC)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "unsigned UserOp (bundler, gas estimation)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://eips.ethereum.org/EIPS/eip-7769"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "each owner re-derives the SafeOp digest, reviews the decoded call, and signs",
+          "signs": "the EIP-712 digest keccak256(0x19 || 0x01 || domainSeparator || structHash), where domainSeparator = keccak256(abi.encode(0x47e79534…9218 [EIP712Domain(uint256 chainId,address verifyingContract)], chainId, Safe4337Module)) and structHash = keccak256(abi.encode(SAFE_OP_TYPEHASH 0xc03dfc11…ea7f, safe, nonce, keccak256(initCode), keccak256(callData), verificationGasLimit, callGasLimit, preVerificationGas, maxPriorityFeePerGas, maxFeePerGas, keccak256(paymasterAndData), validAfter, validUntil, entryPoint)); one 65-byte secp256k1 ECDSA signature r || s || v per owner",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://eips.ethereum.org/EIPS/eip-712"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "one member packs the signature, sends the UserOp to the bundler; the bundler simulates it (ERC-7562 rules) and calls EntryPoint.handleOps; the EntryPoint calls the Safe's validateUserOp, which the fallback handler forwards to the module; the module checks the owner signatures with Safe.checkSignatures, pays the prefund and then runs executeUserOp → execTransactionFromModule",
+          "signs": "nothing new; the member packs signature = validAfter (6 bytes) || validUntil (6 bytes) || exactly threshold owner signatures in ascending owner order, and sends the UserOp with eth_sendUserOperation",
+          "reveals": [
+            {
+              "field": "signed UserOp with owner signatures (bundler)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "data",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "to",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "value",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "owner signatures (who signed)",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://github.com/safe-global/safe-modules/blob/main/modules/4337/README.md",
+            "https://eips.ethereum.org/EIPS/eip-7769",
+            "https://eips.ethereum.org/EIPS/eip-7562"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "reads eth_getUserOperationReceipt from the bundler, or the UserOperationEvent through the RPC; final when the chain is",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "the userOpHash being watched (bundler / RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7769"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an owner approval over a SafeOp digest that is not the one the room re-derives from the effect",
+          "why": "invariant 1 (F-4): effects are reviewed, materializations are signed, and a mismatch is refused",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol"
+          ]
+        },
+        {
+          "what": "a SafeOp whose domain chainId, verifyingContract (the module) or entryPoint field differs from the disclosed account's environment",
+          "why": "invariant 2 (F-5): the signature must be worthless on any other chain, module or EntryPoint",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://github.com/safe-global/safe-modules/blob/main/modules/4337/CHANGELOG.md"
+          ]
+        },
+        {
+          "what": "a stale EntryPoint nonce: the (key, sequence) pair was consumed on chain since the proposal, re-read at review and at settle",
+          "why": "invariant 10: the nonce is an external read that reached the signed bytes; the EntryPoint would reject it anyway",
+          "evidence": [
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol",
+            "https://eips.ethereum.org/EIPS/eip-4337"
+          ]
+        },
+        {
+          "what": "a validUntil later than the room envelope's expiry, or 0 (no end) when the envelope has one",
+          "why": "invariant 2: every signing payload commits to expiry; the chain-level window must not outlive the envelope",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://eips.ethereum.org/EIPS/eip-4337"
+          ]
+        },
+        {
+          "what": "callData whose selector is not executeUserOp or executeUserOpWithErrorString",
+          "why": "the module reverts UnsupportedExecutionFunction; the card could not say what executes",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol"
+          ]
+        },
+        {
+          "what": "a gas price, nonce or other input that reached the SafeOp without a recorded read",
+          "why": "invariant 10: nothing is signed whose inputs cannot be accounted for",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol"
+          ]
+        },
+        {
+          "what": "assembling more signatures than the threshold, or owners out of ascending order",
+          "why": "the module's _checkSignaturesLength rejects extra bytes and Safe.checkNSignatures requires ascending owners (GS026)",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/Safe.sol"
+          ]
+        },
+        {
+          "what": "operation = 1 (DELEGATECALL) in a contract-call proposal",
+          "why": "a delegatecall runs the target's code as the Safe and can rewrite its owners, threshold and modules; it is never offered as an ordinary call",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/base/ModuleManager.sol"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Owners sign every UserOp field except the signature, including gas limits, fees, initCode and paymasterAndData, so a bundler cannot change them.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A signature is valid only on one chain, for one Safe, through one module and one EntryPoint.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A signed SafeOp stops being valid after validUntil, when one is set; the EntryPoint enforces it.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Approving costs owners nothing; the Safe pays the EntryPoint prefund and the bundler is reimbursed from it.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The bundler can delay or refuse to include the UserOp.",
+          "credibility": "motivational",
+          "party": "the configured bundler"
+        },
+        {
+          "claim": "The bundler sees the signed UserOp, including which owners signed, before the chain does.",
+          "credibility": "exposed",
+          "party": "the configured bundler"
+        },
+        {
+          "claim": "The Safe's other modules, and k owners through execTransaction, can still act outside this path.",
+          "credibility": "motivational",
+          "party": "every other enabled Safe module; any k owners using execTransaction"
+        },
+        {
+          "claim": "The EntryPoint nonce is a second replay domain: a 4337 proposal and an execTransaction proposal do not conflict by nonce, only by state.",
+          "credibility": "not-applicable"
+        },
+        {
+          "claim": "The called contract's code runs with the Safe as msg.sender; muster shows the decoded call but cannot vouch for the contract.",
+          "credibility": "motivational",
+          "party": "the called contract's author"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+          "what": "Safe4337Module: the SafeOp typehash, the domain {chainId, verifyingContract = module}, validateUserOp and executeUserOp"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-modules/blob/main/modules/4337/README.md",
+          "what": "the 4337 module's execution flow, setup flow and signature encoding validAfter || validUntil || signatures"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-modules/blob/main/modules/4337/CHANGELOG.md",
+          "what": "v0.3.0 supports EntryPoint v0.7.0 at 0x0000000071727De22E5E9d8BAf0edAc6f37da032"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-4337",
+          "what": "ERC-4337: UserOperation, the 2D nonce, validUntil/validAfter, paymasters, the bundler flow"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol",
+          "what": "EntryPoint v0.7.0: getUserOpHash = keccak256(abi.encode(userOp.hash(), entryPoint, chainid))"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol",
+          "what": "EntryPoint v0.7.0 NonceManager: key = nonce >> 64, sequence = uint64(nonce), sequence must match and increments"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7769",
+          "what": "ERC-7769: the bundler JSON-RPC API (eth_sendUserOperation, eth_estimateUserOperationGas, eth_getUserOperationReceipt)"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7562",
+          "what": "ERC-7562: the validation scope rules a bundler applies before accepting a UserOp"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/Safe.sol",
+          "what": "Safe v1.4.1: checkNSignatures requires ascending owners; module and owner management"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-712",
+          "what": "EIP-712: typed structured data hashing"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/base/ModuleManager.sol",
+          "what": "Safe v1.4.1 ModuleManager: execTransactionFromModule runs CALL or DELEGATECALL for an enabled module"
+        }
+      ],
+      "status": "declared",
+      "ui": "not built"
+    },
+    {
+      "id": "evm.safe-4337/sponsored-transfer",
+      "name": "Send ETH from a Safe with gas paid by a paymaster",
+      "area": "family",
+      "family": "evm.safe-4337",
+      "summary": "As transfer, but a paymaster pays the gas. The paymaster service sees the unsigned UserOp before any owner approves, and its data is part of what the owners sign.",
+      "effect": {
+        "schema": "muster.effect.evm.safe-4337.sponsored-transfer.v0",
+        "fields": [
+          {
+            "name": "safe",
+            "means": "the Safe that sends (the UserOp sender)"
+          },
+          {
+            "name": "to",
+            "means": "the payee's address"
+          },
+          {
+            "name": "value",
+            "means": "the amount of ETH, in wei"
+          },
+          {
+            "name": "nonce",
+            "means": "the EntryPoint nonce: a 192-bit key (the lane) and a 64-bit sequence; not the Safe's own nonce"
+          },
+          {
+            "name": "callGasLimit",
+            "means": "gas for the execution call"
+          },
+          {
+            "name": "verificationGasLimit",
+            "means": "gas for validateUserOp"
+          },
+          {
+            "name": "preVerificationGas",
+            "means": "gas the bundler charges for calldata and overhead"
+          },
+          {
+            "name": "maxFeePerGas",
+            "means": "EIP-1559 fee cap per gas"
+          },
+          {
+            "name": "maxPriorityFeePerGas",
+            "means": "EIP-1559 tip per gas"
+          },
+          {
+            "name": "validAfter",
+            "means": "48-bit timestamp; the UserOp is invalid before it"
+          },
+          {
+            "name": "validUntil",
+            "means": "48-bit timestamp; the UserOp is invalid after it (0 means no end)"
+          },
+          {
+            "name": "entryPoint",
+            "means": "the EntryPoint the module accepts (v0.7: 0x0000000071727De22E5E9d8BAf0edAc6f37da032)"
+          },
+          {
+            "name": "paymaster",
+            "means": "the paymaster contract that pays the gas"
+          },
+          {
+            "name": "paymasterVerificationGasLimit",
+            "means": "gas for validatePaymasterUserOp"
+          },
+          {
+            "name": "paymasterPostOpGasLimit",
+            "means": "gas for postOp"
+          },
+          {
+            "name": "paymasterData",
+            "means": "the paymaster's own data, often its signature and validity window"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n owners (the Safe's threshold, read from the chain)",
+        "finality": "external",
+        "domain": "EIP-712 SafeOp; domain {chainId, verifyingContract = Safe4337Module}"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "eip155:<chainId>",
+          "party": "instance",
+          "class": "infra",
+          "target": "eip155:<chainId>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "rpc",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "bundler",
+          "party": "instance",
+          "class": "infra",
+          "target": "an ERC-7769 bundler endpoint whose eth_supportedEntryPoints includes EntryPoint v0.7 0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "safe-owner",
+          "party": "contributor",
+          "class": "authority",
+          "target": "safe:<address>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "paymaster",
+          "party": "instance",
+          "class": "infra",
+          "target": "an ERC-7677 paymaster service and its paymaster contract with an EntryPoint deposit",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "payee",
+          "party": "counterparty",
+          "class": "address",
+          "target": "eip155:<chainId>",
+          "field": "to"
+        },
+        {
+          "kind": "asset",
+          "name": "amount",
+          "party": "proposer",
+          "class": "asset",
+          "target": "eip155:<chainId>",
+          "field": "value"
+        }
+      ],
+      "touches": [
+        {
+          "target": "safe:<address>",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:0x0000000071727De22E5E9d8BAf0edAc6f37da032:nonce(safe,key)",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:0x0000000071727De22E5E9d8BAf0edAc6f37da032:getNonce(safe,key)",
+          "mode": "read"
+        },
+        {
+          "target": "safe:<address>:owners,threshold,modules,fallbackHandler",
+          "mode": "read"
+        },
+        {
+          "target": "eip155:<chainId>",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:0x0000000071727De22E5E9d8BAf0edAc6f37da032:deposit(paymaster)",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "Safe address, nonce key and balance reads",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "unsigned UserOp: sender, nonce, callData, gas fields (bundler, eth_estimateUserOperationGas)",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed UserOp with owner signatures (bundler, eth_sendUserOperation)",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "unsigned UserOp: sender, nonce, callData, gas fields (paymaster service, pm_getPaymasterStubData / pm_getPaymasterData)",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "to",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "value",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "safe (sender)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "paymaster address",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "owner signatures in the handleOps calldata (who signed)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "the bundler's address and beneficiary; gas paid",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "composes the effect; asks the paymaster service for stub data (pm_getPaymasterStubData), estimates gas with the bundler, then asks for the final paymasterAndData (pm_getPaymasterData); records that reply as an external read; the room re-derives the SafeOp digest over it",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "unsigned UserOp (paymaster service)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "unsigned UserOp (bundler, gas estimation)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7677",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/samples/VerifyingPaymaster.sol",
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "each owner re-derives the SafeOp digest, which includes keccak256(paymasterAndData), and signs; the paymaster's signature is already inside paymasterAndData, so it signed first (EntryPoint v0.7 has no separate paymaster signature field)",
+          "signs": "the EIP-712 digest keccak256(0x19 || 0x01 || domainSeparator || structHash), where domainSeparator = keccak256(abi.encode(0x47e79534…9218 [EIP712Domain(uint256 chainId,address verifyingContract)], chainId, Safe4337Module)) and structHash = keccak256(abi.encode(SAFE_OP_TYPEHASH 0xc03dfc11…ea7f, safe, nonce, keccak256(initCode), keccak256(callData), verificationGasLimit, callGasLimit, preVerificationGas, maxPriorityFeePerGas, maxFeePerGas, keccak256(paymasterAndData), validAfter, validUntil, entryPoint)); one 65-byte secp256k1 ECDSA signature r || s || v per owner",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/samples/VerifyingPaymaster.sol"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "one member packs the signature, sends the UserOp to the bundler; the bundler simulates it (ERC-7562 rules) and calls EntryPoint.handleOps; the EntryPoint calls the Safe's validateUserOp, which the fallback handler forwards to the module; the module checks the owner signatures with Safe.checkSignatures, pays the prefund and then runs executeUserOp → execTransactionFromModule",
+          "signs": "nothing new; the member packs signature = validAfter (6 bytes) || validUntil (6 bytes) || exactly threshold owner signatures in ascending owner order, and sends the UserOp with eth_sendUserOperation",
+          "reveals": [
+            {
+              "field": "signed UserOp with owner signatures (bundler)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "paymaster address",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "to",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "value",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "owner signatures (who signed)",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://github.com/safe-global/safe-modules/blob/main/modules/4337/README.md",
+            "https://eips.ethereum.org/EIPS/eip-7769",
+            "https://eips.ethereum.org/EIPS/eip-7562"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "reads eth_getUserOperationReceipt from the bundler, or the UserOperationEvent through the RPC; final when the chain is",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "the userOpHash being watched (bundler / RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7769"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an owner approval over a SafeOp digest that is not the one the room re-derives from the effect",
+          "why": "invariant 1 (F-4): effects are reviewed, materializations are signed, and a mismatch is refused",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol"
+          ]
+        },
+        {
+          "what": "a SafeOp whose domain chainId, verifyingContract (the module) or entryPoint field differs from the disclosed account's environment",
+          "why": "invariant 2 (F-5): the signature must be worthless on any other chain, module or EntryPoint",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://github.com/safe-global/safe-modules/blob/main/modules/4337/CHANGELOG.md"
+          ]
+        },
+        {
+          "what": "a stale EntryPoint nonce: the (key, sequence) pair was consumed on chain since the proposal, re-read at review and at settle",
+          "why": "invariant 10: the nonce is an external read that reached the signed bytes; the EntryPoint would reject it anyway",
+          "evidence": [
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol",
+            "https://eips.ethereum.org/EIPS/eip-4337"
+          ]
+        },
+        {
+          "what": "a validUntil later than the room envelope's expiry, or 0 (no end) when the envelope has one",
+          "why": "invariant 2: every signing payload commits to expiry; the chain-level window must not outlive the envelope",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://eips.ethereum.org/EIPS/eip-4337"
+          ]
+        },
+        {
+          "what": "callData whose selector is not executeUserOp or executeUserOpWithErrorString",
+          "why": "the module reverts UnsupportedExecutionFunction; the card could not say what executes",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol"
+          ]
+        },
+        {
+          "what": "a gas price, nonce or other input that reached the SafeOp without a recorded read",
+          "why": "invariant 10: nothing is signed whose inputs cannot be accounted for",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol"
+          ]
+        },
+        {
+          "what": "assembling more signatures than the threshold, or owners out of ascending order",
+          "why": "the module's _checkSignaturesLength rejects extra bytes and Safe.checkNSignatures requires ascending owners (GS026)",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/Safe.sol"
+          ]
+        },
+        {
+          "what": "an approval after paymasterAndData changed (a new sponsorship reply)",
+          "why": "invariant 1: the SafeOp digest commits to keccak256(paymasterAndData), so earlier approvals no longer match and are not counted",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol"
+          ]
+        },
+        {
+          "what": "paymasterAndData that reached the signed bytes without a recorded read naming the paymaster service",
+          "why": "invariant 10: the paymaster's reply is an external read",
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7677"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Owners sign every UserOp field except the signature, including gas limits, fees, initCode and paymasterAndData, so a bundler cannot change them.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A signature is valid only on one chain, for one Safe, through one module and one EntryPoint.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A signed SafeOp stops being valid after validUntil, when one is set; the EntryPoint enforces it.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Approving costs owners nothing; the Safe pays the EntryPoint prefund and the bundler is reimbursed from it.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The bundler can delay or refuse to include the UserOp.",
+          "credibility": "motivational",
+          "party": "the configured bundler"
+        },
+        {
+          "claim": "The bundler sees the signed UserOp, including which owners signed, before the chain does.",
+          "credibility": "exposed",
+          "party": "the configured bundler"
+        },
+        {
+          "claim": "The Safe's other modules, and k owners through execTransaction, can still act outside this path.",
+          "credibility": "motivational",
+          "party": "every other enabled Safe module; any k owners using execTransaction"
+        },
+        {
+          "claim": "The EntryPoint nonce is a second replay domain: a 4337 proposal and an execTransaction proposal do not conflict by nonce, only by state.",
+          "credibility": "not-applicable"
+        },
+        {
+          "claim": "The paymaster service sees every UserOp it sponsors (sender, callData, gas) before the owners approve.",
+          "credibility": "exposed",
+          "party": "the paymaster service"
+        },
+        {
+          "claim": "The paymaster can refuse to sponsor, and its own validity window can end the sponsorship before collection finishes.",
+          "credibility": "motivational",
+          "party": "the paymaster service"
+        },
+        {
+          "claim": "Approving and settling cost the Safe no gas; the paymaster's EntryPoint deposit pays.",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+          "what": "Safe4337Module: the SafeOp typehash, the domain {chainId, verifyingContract = module}, validateUserOp and executeUserOp"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-modules/blob/main/modules/4337/README.md",
+          "what": "the 4337 module's execution flow, setup flow and signature encoding validAfter || validUntil || signatures"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-modules/blob/main/modules/4337/CHANGELOG.md",
+          "what": "v0.3.0 supports EntryPoint v0.7.0 at 0x0000000071727De22E5E9d8BAf0edAc6f37da032"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-4337",
+          "what": "ERC-4337: UserOperation, the 2D nonce, validUntil/validAfter, paymasters, the bundler flow"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol",
+          "what": "EntryPoint v0.7.0: getUserOpHash = keccak256(abi.encode(userOp.hash(), entryPoint, chainid))"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol",
+          "what": "EntryPoint v0.7.0 NonceManager: key = nonce >> 64, sequence = uint64(nonce), sequence must match and increments"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7769",
+          "what": "ERC-7769: the bundler JSON-RPC API (eth_sendUserOperation, eth_estimateUserOperationGas, eth_getUserOperationReceipt)"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7562",
+          "what": "ERC-7562: the validation scope rules a bundler applies before accepting a UserOp"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/Safe.sol",
+          "what": "Safe v1.4.1: checkNSignatures requires ascending owners; module and owner management"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-712",
+          "what": "EIP-712: typed structured data hashing"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7677",
+          "what": "ERC-7677: pm_getPaymasterStubData and pm_getPaymasterData take the unsigned UserOp, entryPoint and chainId"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/samples/VerifyingPaymaster.sol",
+          "what": "EntryPoint v0.7.0 VerifyingPaymaster: the paymaster signer hashes sender, nonce, initCode, callData, gas fields, chainid, paymaster, validUntil, validAfter"
+        }
+      ],
+      "unverified": [
+        "Which paymaster services require an API key or account, and what they log, is service-specific."
+      ],
+      "status": "declared",
+      "ui": "not built"
+    },
+    {
+      "id": "evm.safe-4337/change-signers",
+      "name": "Change a Safe's owners or threshold through a bundler",
+      "area": "family",
+      "family": "evm.safe-4337",
+      "summary": "k of n owners approve a UserOperation in which the Safe calls itself to add, remove or swap an owner, or change the threshold. The address stays.",
+      "effect": {
+        "schema": "muster.effect.evm.safe-4337.change-signers.v0",
+        "fields": [
+          {
+            "name": "safe",
+            "means": "the Safe whose owners change"
+          },
+          {
+            "name": "change",
+            "means": "addOwnerWithThreshold | removeOwner | swapOwner | changeThreshold"
+          },
+          {
+            "name": "owner",
+            "means": "the owner added, removed or swapped in"
+          },
+          {
+            "name": "prevOwner",
+            "means": "the previous entry in the Safe's owner list, read from the chain"
+          },
+          {
+            "name": "threshold",
+            "means": "the new threshold"
+          },
+          {
+            "name": "nonce",
+            "means": "the EntryPoint nonce: a 192-bit key (the lane) and a 64-bit sequence; not the Safe's own nonce"
+          },
+          {
+            "name": "callGasLimit",
+            "means": "gas for the execution call"
+          },
+          {
+            "name": "verificationGasLimit",
+            "means": "gas for validateUserOp"
+          },
+          {
+            "name": "preVerificationGas",
+            "means": "gas the bundler charges for calldata and overhead"
+          },
+          {
+            "name": "maxFeePerGas",
+            "means": "EIP-1559 fee cap per gas"
+          },
+          {
+            "name": "maxPriorityFeePerGas",
+            "means": "EIP-1559 tip per gas"
+          },
+          {
+            "name": "validAfter",
+            "means": "48-bit timestamp; the UserOp is invalid before it"
+          },
+          {
+            "name": "validUntil",
+            "means": "48-bit timestamp; the UserOp is invalid after it (0 means no end)"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n owners (the Safe's threshold, read from the chain)",
+        "finality": "external",
+        "domain": "EIP-712 SafeOp; domain {chainId, verifyingContract = Safe4337Module}"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "eip155:<chainId>",
+          "party": "instance",
+          "class": "infra",
+          "target": "eip155:<chainId>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "rpc",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "bundler",
+          "party": "instance",
+          "class": "infra",
+          "target": "an ERC-7769 bundler endpoint whose eth_supportedEntryPoints includes EntryPoint v0.7 0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "safe-owner",
+          "party": "contributor",
+          "class": "authority",
+          "target": "safe:<address>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "new-owner",
+          "party": "counterparty",
+          "class": "address",
+          "target": "eip155:<chainId>",
+          "field": "owner"
+        },
+        {
+          "kind": "asset",
+          "name": "gas-prefund",
+          "party": "instance",
+          "class": "asset",
+          "target": "safe:<address>",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "safe:<address>",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:0x0000000071727De22E5E9d8BAf0edAc6f37da032:nonce(safe,key)",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:0x0000000071727De22E5E9d8BAf0edAc6f37da032:getNonce(safe,key)",
+          "mode": "read"
+        },
+        {
+          "target": "safe:<address>:owners,threshold,modules,fallbackHandler",
+          "mode": "read"
+        },
+        {
+          "target": "eip155:<chainId>",
+          "mode": "write"
+        },
+        {
+          "target": "safe:<address>:storage(owners,threshold)",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "Safe address, nonce key and balance reads",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "unsigned UserOp: sender, nonce, callData, gas fields (bundler, eth_estimateUserOperationGas)",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed UserOp with owner signatures (bundler, eth_sendUserOperation)",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "owner (added, removed or swapped)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "threshold",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "safe (sender)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "owner signatures in the handleOps calldata (who signed)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "the bundler's address and beneficiary; gas paid",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "composes the change; callData = executeUserOp(safe, 0, <OwnerManager call>, 0); reads the owner list (for prevOwner) and threshold through the RPC; the room re-derives the SafeOp digest",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "Safe owner list read (RPC)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "unsigned UserOp (bundler, gas estimation)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/base/OwnerManager.sol"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "each owner re-derives the SafeOp digest and signs",
+          "signs": "the EIP-712 digest keccak256(0x19 || 0x01 || domainSeparator || structHash), where domainSeparator = keccak256(abi.encode(0x47e79534…9218 [EIP712Domain(uint256 chainId,address verifyingContract)], chainId, Safe4337Module)) and structHash = keccak256(abi.encode(SAFE_OP_TYPEHASH 0xc03dfc11…ea7f, safe, nonce, keccak256(initCode), keccak256(callData), verificationGasLimit, callGasLimit, preVerificationGas, maxPriorityFeePerGas, maxFeePerGas, keccak256(paymasterAndData), validAfter, validUntil, entryPoint)); one 65-byte secp256k1 ECDSA signature r || s || v per owner",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "one member packs the signature, sends the UserOp to the bundler; the bundler simulates it (ERC-7562 rules) and calls EntryPoint.handleOps; the EntryPoint calls the Safe's validateUserOp, which the fallback handler forwards to the module; the module checks the owner signatures with Safe.checkSignatures, pays the prefund and then runs executeUserOp → execTransactionFromModule",
+          "signs": "nothing new; the member packs signature = validAfter (6 bytes) || validUntil (6 bytes) || exactly threshold owner signatures in ascending owner order, and sends the UserOp with eth_sendUserOperation",
+          "reveals": [
+            {
+              "field": "signed UserOp with owner signatures (bundler)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "owner (added, removed or swapped)",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "threshold",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "to",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "value",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "owner signatures (who signed)",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://github.com/safe-global/safe-modules/blob/main/modules/4337/README.md",
+            "https://eips.ethereum.org/EIPS/eip-7769",
+            "https://eips.ethereum.org/EIPS/eip-7562"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "reads eth_getUserOperationReceipt from the bundler, or the UserOperationEvent through the RPC; final when the chain is",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "the userOpHash being watched (bundler / RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7769"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an owner approval over a SafeOp digest that is not the one the room re-derives from the effect",
+          "why": "invariant 1 (F-4): effects are reviewed, materializations are signed, and a mismatch is refused",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol"
+          ]
+        },
+        {
+          "what": "a SafeOp whose domain chainId, verifyingContract (the module) or entryPoint field differs from the disclosed account's environment",
+          "why": "invariant 2 (F-5): the signature must be worthless on any other chain, module or EntryPoint",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://github.com/safe-global/safe-modules/blob/main/modules/4337/CHANGELOG.md"
+          ]
+        },
+        {
+          "what": "a stale EntryPoint nonce: the (key, sequence) pair was consumed on chain since the proposal, re-read at review and at settle",
+          "why": "invariant 10: the nonce is an external read that reached the signed bytes; the EntryPoint would reject it anyway",
+          "evidence": [
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol",
+            "https://eips.ethereum.org/EIPS/eip-4337"
+          ]
+        },
+        {
+          "what": "a validUntil later than the room envelope's expiry, or 0 (no end) when the envelope has one",
+          "why": "invariant 2: every signing payload commits to expiry; the chain-level window must not outlive the envelope",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://eips.ethereum.org/EIPS/eip-4337"
+          ]
+        },
+        {
+          "what": "callData whose selector is not executeUserOp or executeUserOpWithErrorString",
+          "why": "the module reverts UnsupportedExecutionFunction; the card could not say what executes",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol"
+          ]
+        },
+        {
+          "what": "a gas price, nonce or other input that reached the SafeOp without a recorded read",
+          "why": "invariant 10: nothing is signed whose inputs cannot be accounted for",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol"
+          ]
+        },
+        {
+          "what": "assembling more signatures than the threshold, or owners out of ascending order",
+          "why": "the module's _checkSignaturesLength rejects extra bytes and Safe.checkNSignatures requires ascending owners (GS026)",
+          "evidence": [
+            "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+            "https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/Safe.sol"
+          ]
+        },
+        {
+          "what": "a change that leaves the threshold above the owner count, or a prevOwner that is not the owner's predecessor",
+          "why": "OwnerManager reverts; the owner list is an external read re-read at settle (invariant 10)",
+          "evidence": [
+            "https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/base/OwnerManager.sol"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Owners sign every UserOp field except the signature, including gas limits, fees, initCode and paymasterAndData, so a bundler cannot change them.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A signature is valid only on one chain, for one Safe, through one module and one EntryPoint.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A signed SafeOp stops being valid after validUntil, when one is set; the EntryPoint enforces it.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Approving costs owners nothing; the Safe pays the EntryPoint prefund and the bundler is reimbursed from it.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The bundler can delay or refuse to include the UserOp.",
+          "credibility": "motivational",
+          "party": "the configured bundler"
+        },
+        {
+          "claim": "The bundler sees the signed UserOp, including which owners signed, before the chain does.",
+          "credibility": "exposed",
+          "party": "the configured bundler"
+        },
+        {
+          "claim": "The Safe's other modules, and k owners through execTransaction, can still act outside this path.",
+          "credibility": "motivational",
+          "party": "every other enabled Safe module; any k owners using execTransaction"
+        },
+        {
+          "claim": "The EntryPoint nonce is a second replay domain: a 4337 proposal and an execTransaction proposal do not conflict by nonce, only by state.",
+          "credibility": "not-applicable"
+        },
+        {
+          "claim": "The Safe's address stays the same; the change is one proposal.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Signatures for other pending UserOps are checked against the owners at execution time, so a removed owner's signature stops counting.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The new owner set is public on chain once settled.",
+          "credibility": "exposed",
+          "party": "chain observers"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/safe-global/safe-modules/main/modules/4337/contracts/Safe4337Module.sol",
+          "what": "Safe4337Module: the SafeOp typehash, the domain {chainId, verifyingContract = module}, validateUserOp and executeUserOp"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-modules/blob/main/modules/4337/README.md",
+          "what": "the 4337 module's execution flow, setup flow and signature encoding validAfter || validUntil || signatures"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-modules/blob/main/modules/4337/CHANGELOG.md",
+          "what": "v0.3.0 supports EntryPoint v0.7.0 at 0x0000000071727De22E5E9d8BAf0edAc6f37da032"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-4337",
+          "what": "ERC-4337: UserOperation, the 2D nonce, validUntil/validAfter, paymasters, the bundler flow"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol",
+          "what": "EntryPoint v0.7.0: getUserOpHash = keccak256(abi.encode(userOp.hash(), entryPoint, chainid))"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol",
+          "what": "EntryPoint v0.7.0 NonceManager: key = nonce >> 64, sequence = uint64(nonce), sequence must match and increments"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7769",
+          "what": "ERC-7769: the bundler JSON-RPC API (eth_sendUserOperation, eth_estimateUserOperationGas, eth_getUserOperationReceipt)"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7562",
+          "what": "ERC-7562: the validation scope rules a bundler applies before accepting a UserOp"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/Safe.sol",
+          "what": "Safe v1.4.1: checkNSignatures requires ascending owners; module and owner management"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-712",
+          "what": "EIP-712: typed structured data hashing"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/safe-global/safe-smart-account/blob/v1.4.1/contracts/base/OwnerManager.sol",
+          "what": "Safe v1.4.1 OwnerManager: addOwnerWithThreshold, removeOwner, swapOwner, changeThreshold (authorized = the Safe itself)"
+        }
+      ],
+      "status": "declared",
+      "ui": "not built"
+    }
+  ]
+}

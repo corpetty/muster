@@ -1,0 +1,380 @@
+{
+  "actions": [
+    {
+      "id": "btc.p2wsh-sortedmulti/spend",
+      "name": "Spend from a Bitcoin P2WSH multisig",
+      "area": "family",
+      "family": "btc.p2wsh-sortedmulti",
+      "kind": "btc-p2wsh",
+      "status": "built",
+      "summary": "k of an account's n keys spend its coins. The address commits to the keys and k, so a member's disclosure is checked by re-deriving it, with no chain read. Members sign in-app through the keystore, or a signer outside muster signs an exported PSBT; any member settles through their own Bitcoin node.",
+      "generated": "btc-p2wsh/spend",
+      "effect": {
+        "schema": "muster.effect.btc-spend.v1",
+        "fields": [
+          {
+            "name": "inputs",
+            "means": "the coins spent: txid, vout, value (sat), scriptPubKey, sequence — every prevout carried so every signer can re-derive the hashes and the fee"
+          },
+          {
+            "name": "outputs",
+            "means": "the payee first, then change back to the account (unless dust): value + address or scriptPubKey"
+          },
+          {
+            "name": "locktime",
+            "means": "nLocktime (0 from the composer)"
+          },
+          {
+            "name": "fee",
+            "means": "the declared fee in sat; must equal inputs − outputs"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the proposer (a member; any member may propose)",
+          "does": "Chooses the account ('btc-p2wsh@<CAIP-10>', coordinate_set_policy) and calls coordinate_propose_btc_spend(pay_to, amount_sat, fee_rate). The module needs Settings → btc-rpc (the user's own Bitcoin Core node): it reads the account's coins with scantxoutset, keeps only coins whose scriptPubKey is the account's, and builds the spend largest coin first until the payment and its fee are covered — payee first, change back to the account unless it would be dust (then it goes to the fee). The fee is fee_rate × an upper bound of the signed vsize and is declared as inputs − outputs. Every input carries its prevout (amount + scriptPubKey). The driver's gate runs before anything is published; then the policy, the effect, and the context are published (environment = the chain's CAIP-2 bip122:<genesis>, account = the account's address, slot = the intent id, expiry), and the coin read is recorded in the log as an external read (source 'bitcoind:scantxoutset'), so every signer can account for the inputs (invariant 10). The materialization every member re-derives: dCBOR ['bip143.p2wsh.sortedmulti.v1', <CAIP-2 chain>, [each input's BIP-143 sighash]].",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect (inputs with prevouts, outputs, fee)",
+              "observer": "room-member"
+            },
+            {
+              "field": "the account's address (the scantxoutset query)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/btc_settlement_test.nim",
+            "module/tests/btc_driver_test.nim",
+            "module/tests/btc_regtest_e2e.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "each member whose key is one of the account's (in muster)",
+          "does": "coordinate_readiness first: the Bitcoin RPC is infrastructure this proposal introduces (missing until configured); the chain is graded by asking THAT node which chain it serves; the authority is whether MY key is one of the account's — never who else holds one. Approve signs in-app: the driver's hook has the keystore sign every input with the member's secp256k1 key and attest over P with the same key, so the approval is 'committed'. A key that is not the account's makes a contribution the driver rejects: nothing published.",
+          "signs": "per input, the BIP-143 sighash: nVersion, hashPrevouts, hashSequence, this input's outpoint, scriptCode = the witnessScript (OP_k <the n keys, sorted> OP_n OP_CHECKMULTISIG), THIS input's amount, nSequence, hashOutputs, nLocktime, SIGHASH_ALL — signed ECDSA, DER, low-S (RFC 6979) by the member's keystore key. The contribution is dCBOR {signer: the 33-byte key, sigs: [one DER signature per input]}; the attestation is a recoverable secp256k1 signature by the same key over P",
+          "reveals": [
+            {
+              "field": "contributions (signatures per input + attestation)",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/btc_inapp_test.nim",
+            "module/tests/btc_driver_test.nim",
+            "module/tests/btc_outside_signer_test.nim",
+            "module/tests/btc_regtest_e2e.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "a signer outside muster (seam S8) — a hardware signer, Sparrow, Bitcoin Core",
+          "does": "Any member clicks 'Sign outside muster (PSBT)': coordinate_export_outside gives the proposal's spend as a base64 PSBT — each input's witness UTXO and witnessScript; the signer's partial signatures (SIGHASH_ALL) come back. Nothing is signed or published by the export. The outside signer signs and hands the PSBT back; Import (coordinate_import_outside) has the DRIVER read it: every account key that signed EVERY input becomes a contribution, verified like a native one, and is published as a pasted approval. It counts toward k and every member sees it graded 'unattested' (signed outside muster), never 'committed'.",
+          "signs": "the outside signer signs the same per-input hashes in its own device; muster signs nothing here",
+          "reveals": [
+            {
+              "field": "the PSBT (the unsigned spend + prevouts + scripts)",
+              "observer": "room-member"
+            },
+            {
+              "field": "contributions (graded unattested)",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/btc_outside_signer_test.nim",
+            "module/tests/btc_regtest_e2e.nim",
+            "module/tests/btc_driver_test.nim",
+            "module/tests/psbt_test.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "any member, through their own Bitcoin node",
+          "does": "coordinate_submit once the fold says executable (Settings → btc-rpc required: 'no-bitcoin-node' otherwise). The Bitcoin settlement re-runs the driver's gate, re-derives every input's sighash, admits only contributions the driver names a key for — one per key — refuses below k, and finalizes the witness per input: an empty CHECKMULTISIG dummy, exactly k signatures (+ the SIGHASH_ALL byte) in the witnessScript's sorted-key order, then the witnessScript. The broadcast transaction's non-witness bytes ARE the reviewed spend and its txid is the one the payload names; the node relays it (sendrawtransaction). The settlement holds no key; no one signs anything new.",
+          "signs": "nothing new — the collected signatures become the witnesses",
+          "reveals": [
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "inputs",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "outputs",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "policy (the witnessScript / executed leaf: k and all n keys)",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signers (which k keys signed)",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "module/tests/btc_settlement_test.nim",
+            "module/tests/btc_regtest_e2e.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one — the node is read",
+          "does": "Finality is read from the node (getrawtransaction): final at 1 confirmation on regtest, 6 elsewhere — observed, never asserted. On a final read the room publishes a final event.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/btc_regtest_e2e.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a spend with an input that is not this account's coins",
+          "why": "signRefusal: 'input <i> spends coins that are not this account's' — before anyone is asked to sign",
+          "evidence": [
+            "module/tests/btc_driver_test.nim"
+          ]
+        },
+        {
+          "what": "a declared fee that is not exactly inputs − outputs",
+          "why": "BIP-143 signs only each input's own amount, so a wrong prevout would silently change the fee; the declared fee must equal inputs − outputs, and every signer re-derives it from the carried prevouts",
+          "evidence": [
+            "module/tests/btc_driver_test.nim"
+          ]
+        },
+        {
+          "what": "an output below the dust limit (546 sat)",
+          "why": "signRefusal refuses a dust output before anyone signs; the builder never makes dust change — it goes to the fee",
+          "evidence": [
+            "module/tests/btc_driver_test.nim",
+            "module/tests/btc_settlement_test.nim"
+          ]
+        },
+        {
+          "what": "a spend the account's coins cannot pay",
+          "why": "the builder raises ('not enough in the account') — never a spend that could not be broadcast",
+          "evidence": [
+            "module/tests/btc_settlement_test.nim"
+          ]
+        },
+        {
+          "what": "a signature by a key that is not one of the account's",
+          "why": "the driver verifies each input's signature for an account key only; the live path answers 'rejected' and publishes nothing",
+          "evidence": [
+            "module/tests/btc_driver_test.nim",
+            "module/tests/btc_inapp_test.nim"
+          ]
+        },
+        {
+          "what": "a signature over another spend's hashes",
+          "why": "invariant 1: every member re-derives each input's sighash from the logged effect; a signature over any other bytes does not verify, and settlement drops it",
+          "evidence": [
+            "module/tests/btc_driver_test.nim",
+            "module/tests/btc_settlement_test.nim"
+          ]
+        },
+        {
+          "what": "a key_ref other than the key the Bitcoin hook signs with",
+          "why": "'unknown-key'",
+          "evidence": [
+            "module/tests/btc_inapp_test.nim"
+          ]
+        },
+        {
+          "what": "importing an outside signer's PSBT of a different spend",
+          "why": "'not-this-spend': the PSBT's canonical form (unsigned tx + each input's prevout + spending script) must equal the proposal's; nothing is published",
+          "evidence": [
+            "module/tests/btc_outside_signer_test.nim",
+            "module/tests/psbt_test.nim"
+          ]
+        },
+        {
+          "what": "a PSBT that carries no account signature, or is not a PSBT",
+          "why": "'no-signatures' / 'not-readable'; nothing imported",
+          "evidence": [
+            "module/tests/btc_outside_signer_test.nim"
+          ]
+        },
+        {
+          "what": "the same PSBT imported twice",
+          "why": "it counts once",
+          "evidence": [
+            "module/tests/btc_outside_signer_test.nim"
+          ]
+        },
+        {
+          "what": "settling below k",
+          "why": "'insufficient-signatures', naming have and need; a stranger's, another spend's, or a repeated signature never counts",
+          "evidence": [
+            "module/tests/btc_settlement_test.nim"
+          ]
+        },
+        {
+          "what": "a disclosure whose address does not commit to its keys and k",
+          "why": "the address is re-derived from the disclosed keys and k; a mismatch is refused, never trusted",
+          "evidence": [
+            "module/tests/btc_driver_test.nim"
+          ]
+        },
+        {
+          "what": "taking part without a Bitcoin node configured",
+          "why": "readiness grades the node as missing (with a remedy) and the chain as unknown, never met; the hosted propose and submit answer 'no-bitcoin-node' — a spend is read and settled only through the user's own node",
+          "evidence": [
+            "module/tests/btc_outside_signer_test.nim"
+          ]
+        },
+        {
+          "what": "an in-app approval when the recorded coin read is missing from the log",
+          "why": "invariant 10: the spend declares its inputs as an external read; the generic 'unaccountable-input' refusal is proven on the live path for the safe and threshold policies",
+          "evidence": [
+            "module/tests/btc_settlement_test.nim",
+            "module/tests/probes/probe_live_refusal_stepper.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_disclose_account",
+        "coordinate_accounts",
+        "coordinate_set_policy",
+        "coordinate_propose_btc_spend",
+        "coordinate_readiness",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_export_outside",
+        "coordinate_import_outside",
+        "coordinate_decline",
+        "coordinate_submit"
+      ],
+      "ui": "Room → + → Payment → Settles via Bitcoin (P2WSH) → From <account> → payee + amount (sat) + fee (sat/vB) → Propose; card → Approve, or 'Sign outside muster (PSBT)' → Copy PSBT / Import. Settle is headless (coordinate_submit): the ready box offers Settle on-chain only for a Safe.",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The chain itself checks k of n: nothing — no module, no guard, no admin — gets around the script",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A signature spends only these exact coins: it is bound through the outpoints, not a chain id",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The fee is implicit in what each signer signs (BIP-143 commits to its own input's amount); muster makes it explicit — every prevout is carried and the declared fee must equal inputs − outputs before anyone signs",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Muster signs only what it re-derived; an outside signer's signature counts only if the driver verifies it, and it is always shown as signed outside muster",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "At spend the chain learns the policy (k and all n keys) and which k signed — P2WSH and a single-leaf tapscript reveal the same",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        },
+        {
+          "claim": "The user's node learns the account's address when the proposer reads its coins, and sees the signed spend before the network",
+          "credibility": "exposed",
+          "party": "the configured Bitcoin node"
+        },
+        {
+          "claim": "A collected signature never expires; revoking means double-spending an input",
+          "credibility": "motivational",
+          "party": "every signer"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/btc_driver_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/btc_inapp_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/btc_outside_signer_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/btc_settlement_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/btc_regtest_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/psbt_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/bitcoin_primitives_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/profile_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/bitcoin/bips/master/bip-0143.mediawiki",
+          "what": "BIP-143: the segwit v0 sighash — commits to this input's amount only"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/bitcoin/bips/master/bip-0383.mediawiki",
+          "what": "BIP-383: sortedmulti() descriptors"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/bitcoin/bips/master/bip-0174.mediawiki",
+          "what": "PSBT v0 (BIP-174)"
+        }
+      ],
+      "unverified": [
+        "The card body draws only a to / value pair, which a btc-spend effect does not have, so a Bitcoin card shows no outputs; the fixed rows and the re-derived hash still render (Room.qml cardFor). The ready box shows no Settle button for a non-Safe rail and reads 'Nothing settles on-chain', which is wrong for this family: settling is headless (coordinate_submit).",
+        "coordinate_submit polls the node for about four seconds; if the spend is not final by then it returns pending, and nothing later publishes the final event for a Bitcoin intent (only LEZ settles are re-watched by the pump). From reading nim-lib/muster_module.nim, not a test.",
+        "The room's fold counts one approval per contributor NAME in the event key, not per verifying key, so the room can show 'executable' early if one signature is published under two names (seen in a scratch run against the threshold driver, not a repo test). The settlement re-counts by the key that signed, so nothing wrong settles."
+      ]
+    }
+  ]
+}

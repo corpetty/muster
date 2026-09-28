@@ -1,0 +1,1063 @@
+{
+  "actions": [
+    {
+      "id": "lez.multisig-program/transfer",
+      "name": "Send a token from a LEZ multisig's vault",
+      "area": "family",
+      "family": "lez.multisig-program",
+      "kind": "lez-multisig",
+      "status": "built",
+      "summary": "Members of a k-of-n LEZ multisig move a token out of its vault. Nobody signs shared bytes: the proposer and each approver send their own on-chain transaction, and the program counts them and executes at k.",
+      "generated": "lez-multisig/transfer",
+      "effect": {
+        "schema": "muster.effect.lez-multisig-proposal.v1",
+        "fields": [
+          {
+            "name": "index",
+            "means": "the on-chain proposal number #i the room's intent points at"
+          },
+          {
+            "name": "target",
+            "means": "the program the multisig will call — the chain's token program"
+          },
+          {
+            "name": "instruction",
+            "means": "[0, amount low 32 bits, amount high 32 bits, 0, 0] — token Transfer (variant 0), the amount a u128 as four words"
+          },
+          {
+            "name": "accounts",
+            "means": "[the vault PDA, the recipient's token holding]"
+          },
+          {
+            "name": "pdaSeeds",
+            "means": "the vault's seed, so the program can prove the vault PDA"
+          },
+          {
+            "name": "authorized",
+            "means": "which of the accounts the multisig authorizes (the vault)"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the proposer (a member of the multisig)",
+          "does": "Chooses the multisig ('lez-multisig@<CAIP-10>') and calls coordinate_propose_lez_transfer(recipient, amount): the recipient is a token holding (hex or base58); the target is the token program's id, read from the user's sequencer (getProgramIds). The vault must already hold the token (see vault-init). The proposer's OWN Propose transaction puts the call on chain as the multisig's next proposal #i and auto-approves it — it is their first vote. Refused with 'not-a-member' when none of this instance's member accounts is in the multisig. The call returns at once ('pending'); the chain is never awaited inside a hosted call. A later coordinate_intents tick completes the step when the chain includes it; a step not included within 10 minutes is dropped as 'timed out' (lez_pending). Once the chain holds #i, the room intent is published: the pointer (#i) plus the content the room reviews there, under the account; the materialization is dCBOR ['lez.multisig.pointer.v1', chain, PDA scheme, program, create key, #i, target, instruction, accounts, PDA seeds, authorized]. The proposer's vote is reported into the room as a receipt attested by their room key.",
+          "signs": "the member's own LEZ v0.2.4 public transaction: message = borsh(the program id as 8 LE u32 words · the account ids [the state PDA, the member's account, the proposal PDA] · [the member account's u128 nonce] · the Propose instruction as the program's risc0-serde u32 words); hash = SHA-256('/LEE/v0.3/Message/Public/' padded to 32 ‖ borsh); a BIP-340 signature (zero aux) by the member key the keystore derives for this membership — no zone or chain id in it",
+          "reveals": [
+            {
+              "field": "effect (the pointer + its content)",
+              "observer": "room-member"
+            },
+            {
+              "field": "signed-tx (the Propose)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect (the proposal's content)",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "approvals (the proposer's own vote)",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_vote_test.nim",
+            "module/tests/phase_c_exit_test.nim",
+            "module/tests/lez_multisig_live_e2e.nim"
+          ]
+        },
+        {
+          "step": "vote",
+          "who": "each other member",
+          "does": "Approve on the card routes to coordinate_vote. S5 first: the member's client re-reads proposal #i from the chain and refuses on ANY difference from what the room reviewed — index, create key, a config change, target program, instruction, how many target accounts, which accounts (account-ids layout), PDA seeds, authorized — or a proposal no longer active. Then the member's own Approve transaction is signed with their member key and sent. The call returns at once ('pending'); the chain is never awaited inside a hosted call. A later coordinate_intents tick completes the step when the chain includes it; a step not included within 10 minutes is dropped as 'timed out' (lez_pending). When the chain shows the vote, the S5 read is recorded in the log and the receipt published: dCBOR {domain 'lez.multisig.vote.v1', for: SHA-256(materialization), index, tx, vote: 'approve', voter}, attested by the member's room key (Ed25519 over P). The receipt counts only for a member and only for this pointer.",
+          "signs": "the member's own LEZ v0.2.4 public transaction: message = borsh(the program id as 8 LE u32 words · the account ids [the state PDA, the member's account, the proposal PDA] · [the member account's u128 nonce] · the Approve instruction as the program's risc0-serde u32 words); hash = SHA-256('/LEE/v0.3/Message/Public/' padded to 32 ‖ borsh); a BIP-340 signature (zero aux) by the member key the keystore derives for this membership — no zone or chain id in it",
+          "reveals": [
+            {
+              "field": "signed-tx (the vote)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "approvals (who voted, on which proposal, when)",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "contributions (the receipt + attestation)",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_vote_test.nim",
+            "module/tests/lez_multisig_driver_test.nim",
+            "module/tests/phase_c_exit_test.nim",
+            "module/tests/lez_multisig_live_e2e.nim",
+            "module/tests/lez_tx_test.nim",
+            "module/tests/lez_member_keys_test.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "a member (Execute is a member's own transaction)",
+          "does": "coordinate_submit — refused with 'not-a-lez-member' on an instance holding no member account. The settlement re-reads the proposal (S5 again) and counts the approvals the CHAIN holds against the threshold the chain holds — the room's receipts are not the tally — and at k prepares Execute with the effect's target accounts, sent from the member's account.",
+          "signs": "the member's own LEZ v0.2.4 public transaction: message = borsh(the program id as 8 LE u32 words · the account ids [the state PDA, the member's account, the proposal PDA, the target accounts…] · [the member account's u128 nonce] · the Execute instruction as the program's risc0-serde u32 words); hash = SHA-256('/LEE/v0.3/Message/Public/' padded to 32 ‖ borsh); a BIP-340 signature (zero aux) by the member key the keystore derives for this membership — no zone or chain id in it",
+          "reveals": [
+            {
+              "field": "signed-tx (the Execute)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect (the executed call)",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_settlement_test.nim",
+            "module/tests/phase_c_exit_test.nim",
+            "module/tests/lez_multisig_live_e2e.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one — the chain is read",
+          "does": "Final only when the Execute landed AND the chain shows the proposal Executed; the pump publishes the final event then. An Execute included but not Executed stays pending, never final.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/lez_settlement_test.nim",
+            "module/tests/lez_multisig_live_e2e.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "voting for on-chain content that differs from what the room reviewed, or for a proposal that is missing or no longer active",
+          "why": "S5: the pointer is re-read and re-derived before anything is cast — nothing cast, nothing published, nothing paid",
+          "evidence": [
+            "module/tests/lez_vote_test.nim",
+            "module/tests/lez_multisig_driver_test.nim",
+            "module/tests/phase_c_exit_test.nim",
+            "module/tests/lez_multisig_rebuilt_test.nim"
+          ]
+        },
+        {
+          "what": "a vote the chain refuses (not a member, already voted)",
+          "why": "'refused: the chain refused the vote' — no receipt is published",
+          "evidence": [
+            "module/tests/lez_vote_test.nim"
+          ]
+        },
+        {
+          "what": "voting after the intent's expiry, or approving an intent that is not a vote-locus one",
+          "why": "'expired' / 'not-a-vote-locus' — nothing cast",
+          "evidence": [
+            "module/tests/lez_vote_test.nim"
+          ]
+        },
+        {
+          "what": "a receipt for a non-member, or for another pointer",
+          "why": "the driver names no voter for it; it never counts",
+          "evidence": [
+            "module/tests/lez_vote_test.nim",
+            "module/tests/lez_multisig_driver_test.nim"
+          ]
+        },
+        {
+          "what": "a receipt whose attestation does not verify over P",
+          "why": "graded rejected, never committed",
+          "evidence": [
+            "module/tests/lez_vote_test.nim"
+          ]
+        },
+        {
+          "what": "settling on the room's receipts when the chain holds fewer approvals",
+          "why": "'insufficient-approvals', have / need read from the chain",
+          "evidence": [
+            "module/tests/lez_settlement_test.nim",
+            "module/tests/phase_c_exit_test.nim"
+          ]
+        },
+        {
+          "what": "settling content the room did not review",
+          "why": "S5 again at settle: not settled",
+          "evidence": [
+            "module/tests/lez_settlement_test.nim"
+          ]
+        },
+        {
+          "what": "an Execute that substitutes a target account (a different recipient)",
+          "why": "under the account-ids layout the program refuses it on chain and nothing moves; under the published count-only layout it goes through (lez-multisig#40), and the card names that way around the rule",
+          "evidence": [
+            "module/tests/lez_multisig_live_e2e.nim",
+            "module/tests/lez_multisig_rebuilt_test.nim",
+            "module/tests/lez_multisig_driver_test.nim"
+          ]
+        },
+        {
+          "what": "a relayer the program refuses",
+          "why": "it raises — never a false 'landed'",
+          "evidence": [
+            "module/tests/lez_settlement_test.nim"
+          ]
+        },
+        {
+          "what": "a disclosure whose address is not the state PDA its config derives",
+          "why": "refused, never trusted",
+          "evidence": [
+            "module/tests/lez_multisig_driver_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_set_policy",
+        "coordinate_propose_lez_transfer",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_vote",
+        "coordinate_readiness",
+        "coordinate_submit",
+        "lez_pending"
+      ],
+      "ui": "Room → + → Payment → Settles via LEZ multisig → From <account> → recipient token holding + amount (token units) → Propose ('proposal #i is on its way to the chain'); card 'On-chain proposal #i: transfer N from the vault to …' → Approve ('⏳ Your vote is on its way to the chain'). Settle is headless (coordinate_submit).",
+      "invariants": [
+        1,
+        2,
+        4,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The program counts the votes and executes; muster settles only on the chain's count",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Every approval is the member's own public transaction: who voted, on which proposal, when",
+          "credibility": "exposed",
+          "party": "anyone reading the zone"
+        },
+        {
+          "claim": "An approval points at proposal #i; each member's client re-reads its content before voting and before settling",
+          "credibility": "motivational",
+          "party": "each member's client and the sequencer it reads"
+        },
+        {
+          "claim": "A vote transaction commits to no zone or chain id — only the member account's nonce and the program bind it; muster binds the environment in the room, the chain does not",
+          "credibility": "exposed",
+          "party": "anyone who can submit to another zone running the same program"
+        },
+        {
+          "claim": "Under the account-ids layout (the program muster creates) the executor cannot change the target accounts",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Under the published count-only program the executor chooses the target accounts at execute (lez-multisig#40)",
+          "credibility": "motivational",
+          "party": "whoever executes"
+        },
+        {
+          "claim": "The room's count is receipts, which are not signed by the voter's LEZ key; settlement re-counts on chain, so an overstated room count cannot settle",
+          "credibility": "motivational",
+          "party": "every room member"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/lez_multisig_driver_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_vote_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_settlement_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/phase_c_exit_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_multisig_live_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_multisig_rebuilt_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_multisig_chain_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_multisig_model_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_tx_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_member_keys_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/lez-multisig",
+          "what": "the LEZ multisig program (Squads-v4-style: Propose / Approve / Reject / Execute, members' own transactions)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/lez-multisig/issues/40",
+          "what": "lez-multisig#40: a proposal records only how many target accounts, so the executor chooses them"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/lez-multisig/pull/41",
+          "what": "lez-multisig#41: proposals commit their target account ids and execute binds them"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/lez-multisig/pull/45",
+          "what": "lez-multisig#45: the SPEL v0.7.0 / LEZ v0.2.4 rebuild deployed on the public testnet"
+        }
+      ],
+      "unverified": [
+        "Registry approverCost is per-vote; on the live LEZ v0.2.4 chain a vote is still the member's own transaction, but LEZ v0.2.4 charges no fees (wallet/lez_multisig_live.nim: 'payer is unused'). The fee path exists only in the in-process model (lez_multisig_chain_test step 5).",
+        "The driver's manifest requires the lez_core module, but the live path signs with the keystore and talks to Settings → lez-rpc over JSON-RPC, not through lez_core (wallet/lez_multisig_live.nim explains why). Readiness can therefore report lez_core missing where the action would work.",
+        "The token program id is read from the user's sequencer (getProgramIds) at compose and is not recorded as an external read; the card's summary is inferred from the instruction's shape, not from checking the target is the token program. From reading nim-lib/muster_module.nim and ui/src/qml/Room.qml.",
+        "The ready box shows no Settle button for this rail and reads 'Nothing settles on-chain'; settling is headless (coordinate_submit).",
+        "Header comments in drivers/lez_multisig.nim, lez_vote_test and phase_c_exit_test say the member's LEZ wallet signs, 'never muster'; the live path signs with a member key the muster keystore derives (lez_member_keys_test, lez_multisig_live_e2e). The registry says the latter."
+      ]
+    },
+    {
+      "id": "lez.multisig-program/vault-init",
+      "name": "Set up a LEZ multisig's vault to hold a token",
+      "area": "family",
+      "family": "lez.multisig-program",
+      "kind": "lez-multisig",
+      "status": "built",
+      "summary": "Before a vault can hold or send a token it must be initialized as a holding of that token. The members approve InitializeAccount on the token program with the vault as the authorized PDA; once executed the vault belongs to the token program.",
+      "generated": "lez-multisig/vault-init",
+      "effect": {
+        "schema": "muster.effect.lez-multisig-proposal.v1",
+        "fields": [
+          {
+            "name": "index",
+            "means": "the on-chain proposal number #i the room's intent points at"
+          },
+          {
+            "name": "target",
+            "means": "the program the multisig will call — the chain's token program"
+          },
+          {
+            "name": "instruction",
+            "means": "[3] — token InitializeAccount (variant 3)"
+          },
+          {
+            "name": "accounts",
+            "means": "[the token's definition account, the vault PDA]"
+          },
+          {
+            "name": "pdaSeeds",
+            "means": "the vault's seed, so the program can prove the vault PDA"
+          },
+          {
+            "name": "authorized",
+            "means": "which of the accounts the multisig authorizes (the vault)"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the proposer (a member of the multisig)",
+          "does": "Chooses the multisig and calls coordinate_propose_lez_vault_init(definition): the token's definition account (hex or base58). The proposer's OWN Propose transaction puts the call on chain as the multisig's next proposal #i and auto-approves it — it is their first vote. Refused with 'not-a-member' when none of this instance's member accounts is in the multisig. The call returns at once ('pending'); the chain is never awaited inside a hosted call. A later coordinate_intents tick completes the step when the chain includes it; a step not included within 10 minutes is dropped as 'timed out' (lez_pending). Once the chain holds #i, the room intent is published: the pointer (#i) plus the content the room reviews there, under the account; the materialization is dCBOR ['lez.multisig.pointer.v1', chain, PDA scheme, program, create key, #i, target, instruction, accounts, PDA seeds, authorized]. The proposer's vote is reported into the room as a receipt attested by their room key.",
+          "signs": "the member's own LEZ v0.2.4 public transaction: message = borsh(the program id as 8 LE u32 words · the account ids [the state PDA, the member's account, the proposal PDA] · [the member account's u128 nonce] · the Propose instruction as the program's risc0-serde u32 words); hash = SHA-256('/LEE/v0.3/Message/Public/' padded to 32 ‖ borsh); a BIP-340 signature (zero aux) by the member key the keystore derives for this membership — no zone or chain id in it",
+          "reveals": [
+            {
+              "field": "effect (the pointer + its content)",
+              "observer": "room-member"
+            },
+            {
+              "field": "signed-tx (the Propose)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect (the proposal's content)",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "approvals (the proposer's own vote)",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_vote_test.nim",
+            "module/tests/phase_c_exit_test.nim",
+            "module/tests/lez_multisig_live_e2e.nim"
+          ]
+        },
+        {
+          "step": "vote",
+          "who": "each other member",
+          "does": "Approve on the card routes to coordinate_vote. S5 first: the member's client re-reads proposal #i from the chain and refuses on ANY difference from what the room reviewed — index, create key, a config change, target program, instruction, how many target accounts, which accounts (account-ids layout), PDA seeds, authorized — or a proposal no longer active. Then the member's own Approve transaction is signed with their member key and sent. The call returns at once ('pending'); the chain is never awaited inside a hosted call. A later coordinate_intents tick completes the step when the chain includes it; a step not included within 10 minutes is dropped as 'timed out' (lez_pending). When the chain shows the vote, the S5 read is recorded in the log and the receipt published: dCBOR {domain 'lez.multisig.vote.v1', for: SHA-256(materialization), index, tx, vote: 'approve', voter}, attested by the member's room key (Ed25519 over P). The receipt counts only for a member and only for this pointer.",
+          "signs": "the member's own LEZ v0.2.4 public transaction: message = borsh(the program id as 8 LE u32 words · the account ids [the state PDA, the member's account, the proposal PDA] · [the member account's u128 nonce] · the Approve instruction as the program's risc0-serde u32 words); hash = SHA-256('/LEE/v0.3/Message/Public/' padded to 32 ‖ borsh); a BIP-340 signature (zero aux) by the member key the keystore derives for this membership — no zone or chain id in it",
+          "reveals": [
+            {
+              "field": "signed-tx (the vote)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "approvals (who voted, on which proposal, when)",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "contributions (the receipt + attestation)",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_vote_test.nim",
+            "module/tests/lez_multisig_driver_test.nim",
+            "module/tests/phase_c_exit_test.nim",
+            "module/tests/lez_multisig_live_e2e.nim",
+            "module/tests/lez_tx_test.nim",
+            "module/tests/lez_member_keys_test.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "a member (Execute is a member's own transaction)",
+          "does": "coordinate_submit — refused with 'not-a-lez-member' on an instance holding no member account. The settlement re-reads the proposal (S5 again) and counts the approvals the CHAIN holds against the threshold the chain holds — the room's receipts are not the tally — and at k prepares Execute with the effect's target accounts, sent from the member's account.",
+          "signs": "the member's own LEZ v0.2.4 public transaction: message = borsh(the program id as 8 LE u32 words · the account ids [the state PDA, the member's account, the proposal PDA, the target accounts…] · [the member account's u128 nonce] · the Execute instruction as the program's risc0-serde u32 words); hash = SHA-256('/LEE/v0.3/Message/Public/' padded to 32 ‖ borsh); a BIP-340 signature (zero aux) by the member key the keystore derives for this membership — no zone or chain id in it",
+          "reveals": [
+            {
+              "field": "signed-tx (the Execute)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "effect (the executed call)",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_settlement_test.nim",
+            "module/tests/phase_c_exit_test.nim",
+            "module/tests/lez_multisig_live_e2e.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one — the chain is read",
+          "does": "Final only when the Execute landed AND the chain shows the proposal Executed; the pump publishes the final event then. An Execute included but not Executed stays pending, never final.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/lez_settlement_test.nim",
+            "module/tests/lez_multisig_live_e2e.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "voting for on-chain content that differs from what the room reviewed, or for a proposal that is missing or no longer active",
+          "why": "S5: the pointer is re-read and re-derived before anything is cast — nothing cast, nothing published, nothing paid",
+          "evidence": [
+            "module/tests/lez_vote_test.nim",
+            "module/tests/lez_multisig_driver_test.nim",
+            "module/tests/phase_c_exit_test.nim",
+            "module/tests/lez_multisig_rebuilt_test.nim"
+          ]
+        },
+        {
+          "what": "a vote the chain refuses (not a member, already voted)",
+          "why": "'refused: the chain refused the vote' — no receipt is published",
+          "evidence": [
+            "module/tests/lez_vote_test.nim"
+          ]
+        },
+        {
+          "what": "voting after the intent's expiry, or approving an intent that is not a vote-locus one",
+          "why": "'expired' / 'not-a-vote-locus' — nothing cast",
+          "evidence": [
+            "module/tests/lez_vote_test.nim"
+          ]
+        },
+        {
+          "what": "a receipt for a non-member, or for another pointer",
+          "why": "the driver names no voter for it; it never counts",
+          "evidence": [
+            "module/tests/lez_vote_test.nim",
+            "module/tests/lez_multisig_driver_test.nim"
+          ]
+        },
+        {
+          "what": "a receipt whose attestation does not verify over P",
+          "why": "graded rejected, never committed",
+          "evidence": [
+            "module/tests/lez_vote_test.nim"
+          ]
+        },
+        {
+          "what": "settling on the room's receipts when the chain holds fewer approvals",
+          "why": "'insufficient-approvals', have / need read from the chain",
+          "evidence": [
+            "module/tests/lez_settlement_test.nim",
+            "module/tests/phase_c_exit_test.nim"
+          ]
+        },
+        {
+          "what": "settling content the room did not review",
+          "why": "S5 again at settle: not settled",
+          "evidence": [
+            "module/tests/lez_settlement_test.nim"
+          ]
+        },
+        {
+          "what": "an Execute that substitutes a target account (a different recipient)",
+          "why": "under the account-ids layout the program refuses it on chain and nothing moves; under the published count-only layout it goes through (lez-multisig#40), and the card names that way around the rule",
+          "evidence": [
+            "module/tests/lez_multisig_live_e2e.nim",
+            "module/tests/lez_multisig_rebuilt_test.nim",
+            "module/tests/lez_multisig_driver_test.nim"
+          ]
+        },
+        {
+          "what": "a relayer the program refuses",
+          "why": "it raises — never a false 'landed'",
+          "evidence": [
+            "module/tests/lez_settlement_test.nim"
+          ]
+        },
+        {
+          "what": "a disclosure whose address is not the state PDA its config derives",
+          "why": "refused, never trusted",
+          "evidence": [
+            "module/tests/lez_multisig_driver_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_set_policy",
+        "coordinate_propose_lez_vault_init",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_vote",
+        "coordinate_readiness",
+        "coordinate_submit",
+        "lez_pending"
+      ],
+      "ui": "Room → + (with a LEZ multisig policy) → 'token definition account' → Propose vault setup; card 'On-chain proposal #i: set up the vault to hold token …' → Approve. Settle is headless (coordinate_submit).",
+      "invariants": [
+        1,
+        2,
+        4,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The program counts the votes and executes; muster settles only on the chain's count",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Every approval is the member's own public transaction: who voted, on which proposal, when",
+          "credibility": "exposed",
+          "party": "anyone reading the zone"
+        },
+        {
+          "claim": "An approval points at proposal #i; each member's client re-reads its content before voting and before settling",
+          "credibility": "motivational",
+          "party": "each member's client and the sequencer it reads"
+        },
+        {
+          "claim": "A vote transaction commits to no zone or chain id — only the member account's nonce and the program bind it; muster binds the environment in the room, the chain does not",
+          "credibility": "exposed",
+          "party": "anyone who can submit to another zone running the same program"
+        },
+        {
+          "claim": "Under the account-ids layout (the program muster creates) the executor cannot change the target accounts",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Under the published count-only program the executor chooses the target accounts at execute (lez-multisig#40)",
+          "credibility": "motivational",
+          "party": "whoever executes"
+        },
+        {
+          "claim": "The room's count is receipts, which are not signed by the voter's LEZ key; settlement re-counts on chain, so an overstated room count cannot settle",
+          "credibility": "motivational",
+          "party": "every room member"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/lez_multisig_driver_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_vote_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_settlement_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/phase_c_exit_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_multisig_live_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_multisig_rebuilt_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_multisig_chain_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_multisig_model_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_tx_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_member_keys_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/lez-multisig",
+          "what": "the LEZ multisig program (Squads-v4-style: Propose / Approve / Reject / Execute, members' own transactions)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/lez-multisig/issues/40",
+          "what": "lez-multisig#40: a proposal records only how many target accounts, so the executor chooses them"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/lez-multisig/pull/41",
+          "what": "lez-multisig#41: proposals commit their target account ids and execute binds them"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/lez-multisig/pull/45",
+          "what": "lez-multisig#45: the SPEL v0.7.0 / LEZ v0.2.4 rebuild deployed on the public testnet"
+        }
+      ],
+      "unverified": [
+        "Registry approverCost is per-vote; on the live LEZ v0.2.4 chain a vote is still the member's own transaction, but LEZ v0.2.4 charges no fees (wallet/lez_multisig_live.nim: 'payer is unused'). The fee path exists only in the in-process model (lez_multisig_chain_test step 5).",
+        "The driver's manifest requires the lez_core module, but the live path signs with the keystore and talks to Settings → lez-rpc over JSON-RPC, not through lez_core (wallet/lez_multisig_live.nim explains why). Readiness can therefore report lez_core missing where the action would work.",
+        "The token program id is read from the user's sequencer (getProgramIds) at compose and is not recorded as an external read; the card's summary is inferred from the instruction's shape, not from checking the target is the token program. From reading nim-lib/muster_module.nim and ui/src/qml/Room.qml.",
+        "The ready box shows no Settle button for this rail and reads 'Nothing settles on-chain'; settling is headless (coordinate_submit).",
+        "Header comments in drivers/lez_multisig.nim, lez_vote_test and phase_c_exit_test say the member's LEZ wallet signs, 'never muster'; the live path signs with a member key the muster keystore derives (lez_member_keys_test, lez_multisig_live_e2e). The registry says the latter."
+      ]
+    },
+    {
+      "id": "lez.multisig-program/create",
+      "name": "Create a LEZ multisig on chain",
+      "area": "family",
+      "family": "lez.multisig-program",
+      "kind": "lez-multisig",
+      "status": "built",
+      "setup": true,
+      "summary": "The setup for this family: one person puts a k-of-n multisig on the LEZ, over fresh member accounts each member derived in their own keystore. The create transaction is unsigned. Once the chain holds the state, it is disclosed into the room with its config.",
+      "effect": {
+        "fields": [
+          {
+            "name": "threshold",
+            "means": "k, 1 ≤ k ≤ n"
+          },
+          {
+            "name": "members",
+            "means": "the n member account ids (hex or base58), each fresh — at most 10 (the program's limit)"
+          },
+          {
+            "name": "create_key",
+            "means": "32 random bytes; the state PDA derives from the program and this key"
+          },
+          {
+            "name": "program",
+            "means": "Settings → lez-multisig-program; by default the build deployed on the LEZ testnet (lez-multisig#45)"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "one person — the create transaction carries no signature",
+        "finality": "external — included in a LEZ block; muster sends without waiting and discloses on inclusion",
+        "domain": "a LEZ v0.2.4 public transaction to the lez-multisig program (Create), with no signer",
+        "evidence": [
+          "module/tests/lez_tx_test.nim",
+          "module/tests/lez_multisig_live_e2e.nim"
+        ]
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "lez:<zone>",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez:<zone>",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_multisig_live_e2e.nim"
+          ]
+        },
+        {
+          "kind": "infra",
+          "name": "lez-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez-rpc",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_multisig_live_e2e.nim"
+          ]
+        },
+        {
+          "kind": "infra",
+          "name": "lez-multisig-program",
+          "party": "instance",
+          "class": "infra",
+          "target": "the program's image id on the zone",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_multisig_rebuilt_test.nim",
+            "module/tests/lez_multisig_live_e2e.nim"
+          ]
+        },
+        {
+          "kind": "address",
+          "name": "fresh-member-account",
+          "party": "contributor",
+          "class": "address",
+          "target": "lez:<zone>",
+          "field": "members",
+          "evidence": [
+            "module/tests/lez_member_keys_test.nim",
+            "module/tests/lez_multisig_chain_test.nim"
+          ]
+        }
+      ],
+      "touches": [
+        {
+          "target": "lez:<zone>",
+          "mode": "write",
+          "evidence": [
+            "module/tests/lez_multisig_live_e2e.nim"
+          ]
+        },
+        {
+          "target": "lez:<state PDA>",
+          "mode": "write",
+          "evidence": [
+            "module/tests/lez_multisig_live_e2e.nim"
+          ]
+        },
+        {
+          "target": "lez:<each member account> (fresh check)",
+          "mode": "read",
+          "evidence": [
+            "module/tests/lez_multisig_live_e2e.nim"
+          ]
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "member accounts (lez_member_account's freshness read)",
+          "observer": "rpc-provider",
+          "when": "act",
+          "evidence": [
+            "module/tests/lez_multisig_live_e2e.nim"
+          ]
+        },
+        {
+          "field": "signed-tx (the create)",
+          "observer": "rpc-provider",
+          "when": "act",
+          "evidence": [
+            "module/tests/lez_multisig_live_e2e.nim"
+          ]
+        },
+        {
+          "field": "members",
+          "observer": "chain-observer",
+          "when": "act",
+          "evidence": [
+            "module/tests/lez_multisig_live_e2e.nim"
+          ]
+        },
+        {
+          "field": "threshold",
+          "observer": "chain-observer",
+          "when": "act",
+          "evidence": [
+            "module/tests/lez_multisig_live_e2e.nim"
+          ]
+        },
+        {
+          "field": "create key",
+          "observer": "chain-observer",
+          "when": "act",
+          "evidence": [
+            "module/tests/lez_multisig_model_test.nim"
+          ]
+        },
+        {
+          "field": "account (state PDA + config + members + threshold)",
+          "observer": "room-member",
+          "when": "final",
+          "evidence": [
+            "module/tests/phase_c_exit_test.nim",
+            "module/tests/lez_multisig_driver_test.nim"
+          ]
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "final",
+          "evidence": [
+            "module/tests/flow_test.nim"
+          ]
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "final",
+          "evidence": [
+            "module/tests/flow_test.nim"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "each member",
+          "does": "lez_member_account: the keystore derives a member key for label 'lez-member/<index>' (HMAC-SHA256 of its own secret — never exported) and returns the first account the sequencer still shows fresh (no owner, no data, nonce 0), in hex and base58. The member hands that id to whoever creates the multisig.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "member accounts",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_member_keys_test.nim",
+            "module/tests/lez_multisig_live_e2e.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "the creator (any one person)",
+          "does": "lez_multisig_create(threshold, members): refuses a malformed member ('bad-member') or k outside 1..n ('bad-threshold'), draws a random 32-byte create key, and sends Create to the configured program with the account-ids layout — the lez-multisig#41 fix, so a proposal commits its target accounts. The transaction is unsigned: anyone may create. It is sent to the user's sequencer without waiting.",
+          "signs": "nothing — the Create message names the state PDA and the members and carries no signer and no witness",
+          "reveals": [
+            {
+              "field": "signed-tx (the create)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "members",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "threshold",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "create key",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_tx_test.nim",
+            "module/tests/lez_multisig_live_e2e.nim",
+            "module/tests/lez_multisig_chain_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one — the chain is read",
+          "does": "Once the chain holds the state at the PDA (a coordinate_intents tick), the module discloses the multisig into the joined room, author-signed, with config {program, createKey, pda 'lee-v0.2', layout 'account-ids'}. Every member re-derives the state PDA from the config and reads the state from the chain: verified, disagrees (naming what), or unknown.",
+          "signs": "the disclosure event's author signature",
+          "reveals": [
+            {
+              "field": "account (state PDA + config + members + threshold)",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/phase_c_exit_test.nim",
+            "module/tests/lez_multisig_driver_test.nim",
+            "module/tests/authorship_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a member account that is not fresh, an empty member list, k of 0 or above n, or more than 10 members",
+          "why": "the program's own reasons, reproduced by the model; the hosted call refuses k outside 1..n first",
+          "evidence": [
+            "module/tests/lez_multisig_chain_test.nim"
+          ]
+        },
+        {
+          "what": "a disclosure whose address is not the state PDA its config derives, or that carries no config",
+          "why": "refused, never trusted",
+          "evidence": [
+            "module/tests/lez_multisig_driver_test.nim"
+          ]
+        },
+        {
+          "what": "a disclosure naming another threshold than the chain holds",
+          "why": "the room's check reads 'disagrees'",
+          "evidence": [
+            "module/tests/phase_c_exit_test.nim",
+            "module/tests/lez_multisig_driver_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "lez_member_account",
+        "lez_multisig_create",
+        "lez_pending",
+        "coordinate_accounts",
+        "coordinate_disclose_account"
+      ],
+      "ui": "Room → Accounts → LEZ multisig → 'My LEZ member account' (each member); the creator enters k and the members' accounts → 'Create this LEZ multisig on chain'; it appears under Accounts once included. An existing multisig → its config → Disclose.",
+      "invariants": [
+        4,
+        8,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "From creation the chain shows the members and the threshold",
+          "credibility": "exposed",
+          "party": "anyone reading the zone"
+        },
+        {
+          "claim": "A room member's disclosure is checked: its address must be the state PDA its config derives, and the chain's state must agree",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Member keys never leave the keystore; the membership label is what the room can record",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Anyone may create a multisig naming your fresh account as a member",
+          "credibility": "motivational",
+          "party": "whoever creates it"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/lez_member_keys_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_multisig_live_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_tx_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_multisig_chain_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/phase_c_exit_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_multisig_driver_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_multisig_rebuilt_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/lez-multisig",
+          "what": "the LEZ multisig program (Squads-v4-style: Propose / Approve / Reject / Execute, members' own transactions)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/lez-multisig/issues/40",
+          "what": "lez-multisig#40: a proposal records only how many target accounts, so the executor chooses them"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/lez-multisig/pull/41",
+          "what": "lez-multisig#41: proposals commit their target account ids and execute binds them"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/lez-multisig/pull/45",
+          "what": "lez-multisig#45: the SPEL v0.7.0 / LEZ v0.2.4 rebuild deployed on the public testnet"
+        }
+      ],
+      "unverified": [
+        "The hosted lez_multisig_create proc and its automatic disclosure on inclusion (the LEZ pump) are not driven by a test; lez_multisig_live_e2e sends the same Create through the same chain seam and discloses by hand.",
+        "The registry notes say members are fresh accounts 'the program claims'. That is the published c45100b program (modelled in lez_multisig_chain_test); the rebuilt program muster creates against leaves them unowned (lez_multisig_live_e2e step 2)."
+      ]
+    }
+  ]
+}

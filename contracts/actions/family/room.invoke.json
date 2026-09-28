@@ -1,0 +1,455 @@
+{
+  "actions": [
+    {
+      "id": "room.invoke/module-call",
+      "name": "Call a Logos module method the room agreed on",
+      "area": "family",
+      "family": "room.invoke",
+      "kind": "invoke",
+      "status": "built",
+      "summary": "k of the room's members agree to call one method of a Logos module with given arguments; then a member's instance calls it — if that instance allowlists the module.method and the module's capability policy lets it.",
+      "generated": "invoke/module-call",
+      "effect": {
+        "schema": "muster.invoke.<module>.<method>.v1 (e.g. muster.invoke.delivery_module.send.v1)",
+        "fields": [
+          {
+            "name": "module",
+            "means": "the Logos module to call"
+          },
+          {
+            "name": "method",
+            "means": "the method to call on it"
+          },
+          {
+            "name": "args",
+            "means": "the positional arguments, as their verbatim JSON text — exactly what the method will receive"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the proposer",
+          "does": "Room → + → Action: the menu is coordinate_available_actions — the methods of the modules on the allowlist or named in MUSTER_INVOKE_MODULES, reads pruned, allowlisted ones marked — never a blind scan of every loaded module. Picks one, types the args as a JSON array, proposes; the composer sets the invoke policy for this proposal. The schema id is per (module, method), so two methods never share signable bytes. The proposal publishes its policy, the effect, and the signing context: environment 'room', account = the room's topic, slot = the intent id, expiry = now + MUSTER_INTENT_TTL_S (7 days by default). The intent id is content-addressed from the effect and the policy.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/coordination_invoke_test.nim",
+            "module/tests/conformance_test.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "k members",
+          "does": "Endorse the call like a statement: an Ed25519 signature by the member's room identity over dCBOR ['muster.invoke.v1', 'muster.invoke.<module>.<method>.v1', {module, method, args}]. The hosted driver is the current members, k = min(2, members). coordinate_readiness asks the host whether the named module is loaded here.",
+          "signs": "an Ed25519 signature by the member's room identity (their encryption identity's Ed25519 key, held in the keystore) over the materialization: the dCBOR array ['muster.invoke.v1', schema id, {field: value…}] (CDE map order, shortest integers); plus a muster attestation by the same key over P = (context, the materialization, the provenance record)",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/coordination_invoke_test.nim",
+            "module/tests/invoke_execute_test.nim",
+            "module/tests/readiness_test.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "a member who clicks Run the action",
+          "does": "coordinate_execute, once the fold says executable: the core — never the driver — reads module / method / args from the logged effect and checks two gates before calling. (1) THIS instance's allowlist, MUSTER_INVOKE_ALLOWLIST: a JSON array of {module, method, finalityEvent}, empty by default, so nothing runs until an operator opts an action in. (2) The target module's own capability policy, enforced by the lp_* layer: a denied call is a refusal, never a false success. Then it invokes module.method(args) over lp_*, publishes a submit event and — when the allowlist names no finality event — a final one, so every member converges.",
+          "signs": "nothing — the call is made by the module, not signed by a member",
+          "reveals": [
+            {
+              "field": "args",
+              "observer": "target-module"
+            },
+            {
+              "field": "module.method",
+              "observer": "target-module"
+            }
+          ],
+          "evidence": [
+            "module/tests/invoke_execute_test.nim",
+            "module/tests/coordination_invoke_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one",
+          "does": "With no finality event named, the room folds straight to final and the card reads '✓ Ran — the action executed.' What the called module does next — publish, send, write to a chain — is that module's own disclosure.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/coordination_invoke_test.nim",
+            "module/tests/invoke_execute_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "running a module.method that is not on this instance's allowlist",
+          "why": "'not-allowlisted'; the target is never invoked",
+          "evidence": [
+            "module/tests/invoke_execute_test.nim"
+          ]
+        },
+        {
+          "what": "a call the target module's capability policy denies",
+          "why": "a refusal naming the capability, never a false success",
+          "evidence": [
+            "module/tests/invoke_execute_test.nim"
+          ]
+        },
+        {
+          "what": "reading an endorsement of one method as an endorsement of another",
+          "why": "invariant 5: the schema id is per (module, method), so the same args under another method are other bytes",
+          "evidence": [
+            "module/tests/conformance_test.nim",
+            "module/tests/coordination_invoke_test.nim"
+          ]
+        },
+        {
+          "what": "a tampered effect",
+          "why": "invariant 1: conformance refuses a materialization of another effect",
+          "evidence": [
+            "module/tests/conformance_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_available_actions",
+        "coordinate_set_policy",
+        "coordinate_propose",
+        "coordinate_readiness",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_decline",
+        "coordinate_execute"
+      ],
+      "ui": "Room → + → Action → pick from the menu → args (a JSON array) → Propose; card → Approve; ready box → Run the action.",
+      "invariants": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The driver never calls anything; the core calls the module only for an executable intent on this instance's allowlist, and the target's capability policy can still refuse",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The allowlist is per instance: the member who runs the action decides with their own allowlist",
+          "credibility": "motivational",
+          "party": "the executing member's operator"
+        },
+        {
+          "claim": "The target module sees the args; whatever it then puts on a public record is its own disclosure, not declared here",
+          "credibility": "exposed",
+          "party": "the target module"
+        },
+        {
+          "claim": "coordinate_execute trusts the room's fold for 'executable'",
+          "credibility": "motivational",
+          "party": "every room member"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/coordination_invoke_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/invoke_execute_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/conformance_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/readiness_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/schema_unknown_test.nim"
+        }
+      ],
+      "unverified": [
+        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per verifying key: a valid signature by one member, published a second time under another name, counts twice and the intent reaches 'executable' with one signer (confirmed by a scratch run against the threshold driver while writing this corpus; no repo test covers it). A room family has no settlement to re-check the signers, so for it the room's count is the outcome. Honest clients publish under the recovered name (coordination/live.nim). coordinate_execute runs on the fold's 'executable', so the same applies to running an allowlisted module action."
+      ]
+    },
+    {
+      "id": "room.invoke/lez-transfer",
+      "name": "Coordinate a LEZ private transfer (Mode B)",
+      "area": "family",
+      "family": "room.invoke",
+      "kind": "invoke",
+      "status": "built",
+      "summary": "The room agrees to call lez_core.transfer_private, with the recipient left for the recipient to fill: the effect names which field holds the recipient, so the manifest asks that person for a LEZ address and their own holdings offer one.",
+      "generated": "invoke/lez-transfer",
+      "effect": {
+        "schema": "muster.invoke.lez_core.transfer_private.v1",
+        "fields": [
+          {
+            "name": "module",
+            "means": "lez_core"
+          },
+          {
+            "name": "method",
+            "means": "transfer_private"
+          },
+          {
+            "name": "args",
+            "means": "the positional arguments for lez_core.transfer_private, as JSON text (the generated example: [from, '', amount as 16-byte little-endian hex])"
+          },
+          {
+            "name": "counterparty",
+            "means": "the NAME of the effect field that holds the recipient ('to')"
+          },
+          {
+            "name": "to",
+            "means": "the recipient's LEZ address as the proposal carries it — empty when the proposer does not know it yet; it is part of the signed bytes"
+          },
+          {
+            "name": "chain",
+            "means": "the zone, e.g. lez:testnet; a lez:* chain adds the proposer's funded-LEZ-account requirement"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the proposer",
+          "does": "Room → + → Action → lez_core.transfer_private → args → 'Make it a coordinated transfer (ask the recipient)' → recipient field 'to', chain 'lez:testnet' → Propose. The invoke manifest then declares a counterparty payee slot bound to 'to', the lez_core module, the proposer's lez-account infra requirement, and target-module rows for the args and the recipient.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_modeb_test.nim"
+          ]
+        },
+        {
+          "step": "propose",
+          "who": "the recipient",
+          "does": "coordinate_offers grades the slot against the recipient's OWN holdings only: a shielded LEZ key node fills it (the private rail). They share only its public face with coordinate_share_material — bound to the intent and the field 'to', never a handle, author-signed, folded once per (slot, sharer).",
+          "signs": "an Ed25519 author signature over the share event (room identity)",
+          "reveals": [
+            {
+              "field": "payee (the shared public face)",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_modeb_test.nim",
+            "module/tests/materialshare_test.nim",
+            "module/tests/offers_test.nim",
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "k members",
+          "does": "Endorse the call as any invoke intent: Ed25519 over dCBOR ['muster.invoke.v1', 'muster.invoke.lez_core.transfer_private.v1', {module, method, args, counterparty, to, chain}]. The recipient the room endorses is the one the proposal carries: a later share does not rewrite an intent already in the log.",
+          "signs": "an Ed25519 signature by the member's room identity (their encryption identity's Ed25519 key, held in the keystore) over the materialization: the dCBOR array ['muster.invoke.v1', schema id, {field: value…}] (CDE map order, shortest integers); plus a muster attestation by the same key over P = (context, the materialization, the provenance record)",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/coordination_invoke_test.nim",
+            "module/tests/lez_modeb_test.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "a member who clicks Run the action",
+          "does": "coordinate_execute, once the fold says executable: the core — never the driver — reads module / method / args from the logged effect and checks two gates before calling. (1) THIS instance's allowlist, MUSTER_INVOKE_ALLOWLIST: a JSON array of {module, method, finalityEvent}, empty by default, so nothing runs until an operator opts an action in. (2) The target module's own capability policy, enforced by the lp_* layer: a denied call is a refusal, never a false success. Then it invokes module.method(args) over lp_*, publishes a submit event and — when the allowlist names no finality event — a final one, so every member converges.",
+          "signs": "nothing in muster; lez_core proves and signs the private transfer with its own wallet",
+          "reveals": [
+            {
+              "field": "args",
+              "observer": "target-module"
+            },
+            {
+              "field": "to",
+              "observer": "target-module"
+            }
+          ],
+          "evidence": [
+            "module/tests/invoke_execute_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one",
+          "does": "Final as any invoke intent. What reaches the zone is lez_core's own disclosure: on the private rail the amount, payer and payee stay shielded.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/invoke_execute_test.nim",
+            "module/tests/wallet_lez_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "running lez_core.transfer_private when this instance has not allowlisted it",
+          "why": "'not-allowlisted'; nothing is invoked",
+          "evidence": [
+            "module/tests/invoke_execute_test.nim"
+          ]
+        },
+        {
+          "what": "a counterparty slot on an effect that names no counterparty field",
+          "why": "the slot is opt-in per effect; a plain invoke asks no one for an address",
+          "evidence": [
+            "module/tests/lez_modeb_test.nim"
+          ]
+        },
+        {
+          "what": "a share or an offer that carries a handle, or another member's holdings",
+          "why": "a share carries only a public face and class; offers are computed about you only, and their payload has no handle and no score",
+          "evidence": [
+            "module/tests/materialshare_test.nim",
+            "module/tests/offers_test.nim"
+          ]
+        },
+        {
+          "what": "a share published in another member's name",
+          "why": "shares are author-signed; the room's read path drops a forged one",
+          "evidence": [
+            "module/tests/authorship_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_available_actions",
+        "coordinate_propose",
+        "coordinate_offers",
+        "coordinate_share_material",
+        "coordinate_readiness",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_execute"
+      ],
+      "ui": "Room → + → Action → lez_core.transfer_private → 'Make it a coordinated transfer (ask the recipient)' → Propose; the recipient's card → 'From you:' → Share; card → Approve; ready box → Run the action.",
+      "invariants": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The recipient the room endorses is committed in the signed bytes; no one substitutes it afterwards",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The recipient decides what they reveal by which address form they share; the offer machinery reads only their own holdings",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "What lez_core puts on the zone is lez_core's disclosure; muster's manifest names only what reaches the module",
+          "credibility": "exposed",
+          "party": "the lez_core module"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/lez_modeb_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/materialshare_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/offers_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/invoke_execute_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/coordination_invoke_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/authorship_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/wallet_lez_test.nim"
+        }
+      ],
+      "unverified": [
+        "No test runs a Mode B intent through coordinate_execute into lez_core.transfer_private; the execute path is proven with a stand-in invoker (invoke_execute_test, coordination_invoke_test). CLAUDE.md lists a room-coordinated LEZ transfer (Mode B) as not yet done, and docs/design/lez-adapter.md §6 lists the live shielded settle as remaining.",
+        "A share lands in the log bound to the field; turning it into a complete effect is a new proposal (the existing intent's bytes and id are fixed). No test drives that re-proposal.",
+        "The generated example's args are the generator's fixture; the exact argument list lez_core.transfer_private takes is not checked against lez_core here.",
+        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per verifying key: a valid signature by one member, published a second time under another name, counts twice and the intent reaches 'executable' with one signer (confirmed by a scratch run against the threshold driver while writing this corpus; no repo test covers it). A room family has no settlement to re-check the signers, so for it the room's count is the outcome. Honest clients publish under the recovered name (coordination/live.nim)."
+      ]
+    }
+  ]
+}

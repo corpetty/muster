@@ -1,0 +1,2255 @@
+{
+  "actions": [
+    {
+      "id": "evm.erc7579-ownable/deploy",
+      "name": "Create a modular account with OwnableValidator",
+      "area": "family",
+      "family": "evm.erc7579-ownable",
+      "summary": "The room agrees owners and a threshold; a factory deploys an ERC-7579 account with OwnableValidator installed, through the first UserOperation's initCode. The account implementation (Safe7579, Nexus, Kernel …) is the member's choice.",
+      "effect": {
+        "schema": "muster.effect.evm.erc7579-ownable.deploy.v0",
+        "fields": [
+          {
+            "name": "factory",
+            "means": "the account factory named in initCode"
+          },
+          {
+            "name": "factoryData",
+            "means": "the factory call, including the account implementation and its modules"
+          },
+          {
+            "name": "owners",
+            "means": "the owner addresses, sorted ascending and unique, at most 32"
+          },
+          {
+            "name": "threshold",
+            "means": "k, between 1 and the owner count"
+          },
+          {
+            "name": "initData",
+            "means": "abi.encode(threshold, owners), passed to OwnableValidator.onInstall"
+          },
+          {
+            "name": "nonce",
+            "means": "the EntryPoint nonce: a 192-bit key and a 64-bit sequence; many accounts put the validator's address in the key (Safe7579: the top 20 bytes)"
+          },
+          {
+            "name": "callGasLimit",
+            "means": "gas for the execution call"
+          },
+          {
+            "name": "verificationGasLimit",
+            "means": "gas for validation"
+          },
+          {
+            "name": "preVerificationGas",
+            "means": "gas the bundler charges for calldata and overhead"
+          },
+          {
+            "name": "maxFeePerGas",
+            "means": "EIP-1559 fee cap per gas"
+          },
+          {
+            "name": "maxPriorityFeePerGas",
+            "means": "EIP-1559 tip per gas"
+          },
+          {
+            "name": "paymasterAndData",
+            "means": "empty unless a paymaster pays; hashed into userOpHash either way"
+          },
+          {
+            "name": "entryPoint",
+            "means": "the EntryPoint the account accepts; hashed into userOpHash"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n of the new owners sign the first UserOp",
+        "finality": "external",
+        "domain": "EIP-191 personal_sign of the first UserOp's userOpHash (commits to keccak256(initCode))"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "eip155:<chainId>",
+          "party": "instance",
+          "class": "infra",
+          "target": "eip155:<chainId>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "rpc",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "bundler",
+          "party": "instance",
+          "class": "infra",
+          "target": "an ERC-7769 bundler endpoint for the account's EntryPoint",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "ownable-validator-owner",
+          "party": "contributor",
+          "class": "authority",
+          "target": "the new account's owner set",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "owner-address",
+          "party": "counterparty",
+          "class": "address",
+          "target": "eip155:<chainId>",
+          "field": "owners"
+        },
+        {
+          "kind": "asset",
+          "name": "gas-prefund",
+          "party": "instance",
+          "class": "asset",
+          "target": "the counterfactual account address, or a paymaster",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "erc7579:<counterfactual address>",
+          "mode": "write"
+        },
+        {
+          "target": "contract:<factory>",
+          "mode": "write"
+        },
+        {
+          "target": "ownable-validator:<counterfactual address>:storage",
+          "mode": "write"
+        },
+        {
+          "target": "eip155:<chainId>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "owner addresses shared by each member",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "unsigned first UserOp with initCode: owners, threshold (bundler, gas estimation)",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed first UserOp (bundler)",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "owners",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "threshold",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "installed modules",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "owner signatures in the handleOps calldata (who signed)",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "each future owner shares a signing address; the proposer composes owners (sorted, unique), threshold and the factory call; the room computes the counterfactual address and discloses the account (S1) as pending",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "owner addresses",
+              "observer": "room-member"
+            },
+            {
+              "field": "unsigned first UserOp (bundler)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+            "https://eips.ethereum.org/EIPS/eip-4337"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "k of the new owners re-derive the first UserOp's userOpHash, which commits to keccak256(initCode), and sign",
+          "signs": "EIP-191 personal_sign of the 32-byte userOpHash: ECDSA(secp256k1) over keccak256(\"\\x19Ethereum Signed Message:\\n32\" || userOpHash). On EntryPoint v0.7, userOpHash = keccak256(abi.encode(keccak256(abi.encode(sender, nonce, keccak256(initCode), keccak256(callData), accountGasLimits, preVerificationGas, gasFees, keccak256(paymasterAndData))), entryPoint, chainId)); on v0.8+ it is the EIP-712 hash with domain {name \"ERC4337\", version \"1\", chainId, verifyingContract = entryPoint}. One 65-byte r || s || v (v = 27/28) per owner",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "a member sends the first UserOp; the EntryPoint runs initCode through the factory, the account installs OwnableValidator (onInstall stores owners and threshold keyed by the account), then validates the owner signatures",
+          "signs": "nothing new; the member concatenates at least threshold owner signatures into userOp.signature (order does not matter: the validator sorts and de-duplicates signers) and sends the UserOp with eth_sendUserOperation",
+          "reveals": [
+            {
+              "field": "signed first UserOp (bundler)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "owners",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "threshold",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7579",
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+            "https://eips.ethereum.org/EIPS/eip-4337"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "reads getOwners, threshold and the installed modules back from the chain and marks the disclosure verified",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "account configuration reads (RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an initCode the room did not derive from the agreed owners, threshold and factory call",
+          "why": "invariant 1: userOpHash commits to keccak256(initCode); another initCode deploys another account",
+          "evidence": [
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/UserOperationLib.sol"
+          ]
+        },
+        {
+          "what": "owners not sorted and unique, a threshold of 0 or above the owner count, or more than 32 owners",
+          "why": "OwnableValidator.onInstall reverts NotSortedAndUnique / ThresholdNotSet / InvalidThreshold / MaxOwnersReached; muster refuses at propose",
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol"
+          ]
+        },
+        {
+          "what": "a factory that installs other validators or executors the card does not show",
+          "why": "they are ways around the owners' threshold; an unread module list is an unaccounted input (invariant 10)",
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7579"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The address is fixed by the factory call before anything is on chain.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The owners and threshold are public on chain from deployment (OwnerAdded, ModuleInitialized events).",
+          "credibility": "exposed",
+          "party": "chain observers"
+        },
+        {
+          "claim": "The bundler sees the future account's owners when it estimates the first UserOp.",
+          "credibility": "exposed",
+          "party": "the configured bundler"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+          "what": "OwnableValidator.onInstall: abi.decode(data, (uint256 threshold, address[] owners)); sorted and unique; at most 32; threshold ≤ owners"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7579",
+          "what": "ERC-7579: installModule MUST call onInstall with initData and emit ModuleInstalled"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-4337",
+          "what": "ERC-4337: first-time account creation through initCode (factory || factoryData)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/UserOperationLib.sol",
+          "what": "EntryPoint v0.7.0 UserOperationLib.encode hashes keccak256(initCode) into userOp.hash()"
+        }
+      ],
+      "unverified": [
+        "Which EntryPoint version (v0.7 or v0.8+) a given ERC-7579 account implementation targets; the signed hash differs between them.",
+        "Validator selection is account-specific (ERC-7579 does not dictate it); only Safe7579's nonce-key encoding was checked here, not Nexus or Kernel.",
+        "Production maturity and audit scope of OwnableValidator (carried from the registry)."
+      ],
+      "status": "declared",
+      "ui": "not built"
+    },
+    {
+      "id": "evm.erc7579-ownable/transfer",
+      "name": "Send ETH from a modular account",
+      "area": "family",
+      "family": "evm.erc7579-ownable",
+      "summary": "k of n OwnableValidator owners approve a UserOperation whose callData is execute(single call, to, value); one member hands it to a bundler.",
+      "effect": {
+        "schema": "muster.effect.evm.erc7579-ownable.transfer.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the ERC-7579 account that acts (the UserOp sender)"
+          },
+          {
+            "name": "to",
+            "means": "the payee's address"
+          },
+          {
+            "name": "value",
+            "means": "the amount of ETH, in wei"
+          },
+          {
+            "name": "mode",
+            "means": "ERC-7579 execution mode: callType 0x00 (single call), execType 0x00 (revert on failure)"
+          },
+          {
+            "name": "nonce",
+            "means": "the EntryPoint nonce: a 192-bit key and a 64-bit sequence; many accounts put the validator's address in the key (Safe7579: the top 20 bytes)"
+          },
+          {
+            "name": "callGasLimit",
+            "means": "gas for the execution call"
+          },
+          {
+            "name": "verificationGasLimit",
+            "means": "gas for validation"
+          },
+          {
+            "name": "preVerificationGas",
+            "means": "gas the bundler charges for calldata and overhead"
+          },
+          {
+            "name": "maxFeePerGas",
+            "means": "EIP-1559 fee cap per gas"
+          },
+          {
+            "name": "maxPriorityFeePerGas",
+            "means": "EIP-1559 tip per gas"
+          },
+          {
+            "name": "paymasterAndData",
+            "means": "empty unless a paymaster pays; hashed into userOpHash either way"
+          },
+          {
+            "name": "entryPoint",
+            "means": "the EntryPoint the account accepts; hashed into userOpHash"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n owners (the validator's threshold, read from the chain)",
+        "finality": "external",
+        "domain": "EIP-191 personal_sign of the ERC-4337 userOpHash (commits to entryPoint and chainId)"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "eip155:<chainId>",
+          "party": "instance",
+          "class": "infra",
+          "target": "eip155:<chainId>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "rpc",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "bundler",
+          "party": "instance",
+          "class": "infra",
+          "target": "an ERC-7769 bundler endpoint for the account's EntryPoint",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "ownable-validator-owner",
+          "party": "contributor",
+          "class": "authority",
+          "target": "ownable-validator:<account>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "payee",
+          "party": "counterparty",
+          "class": "address",
+          "target": "eip155:<chainId>",
+          "field": "to"
+        },
+        {
+          "kind": "asset",
+          "name": "amount",
+          "party": "proposer",
+          "class": "asset",
+          "target": "eip155:<chainId>",
+          "field": "value"
+        },
+        {
+          "kind": "asset",
+          "name": "gas-prefund",
+          "party": "instance",
+          "class": "asset",
+          "target": "erc7579:<account>",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "erc7579:<account>",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:<address>:nonce(account,key)",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:<address>:getNonce(account,key)",
+          "mode": "read"
+        },
+        {
+          "target": "ownable-validator:<account>:owners,threshold",
+          "mode": "read"
+        },
+        {
+          "target": "erc7579:<account>:installed modules",
+          "mode": "read"
+        },
+        {
+          "target": "eip155:<chainId>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "account address, nonce key and balance reads",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "unsigned UserOp: sender, nonce, callData, gas fields (bundler, eth_estimateUserOperationGas)",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed UserOp with owner signatures (bundler, eth_sendUserOperation)",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "to",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "value",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "account (sender)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "owner signatures in the handleOps calldata (who signed)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "the bundler's address and beneficiary; gas paid",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "composes the effect; callData = execute(mode, abi.encodePacked(to, value, \"\")); reads the nonce for the validator's key and fees through the RPC; the bundler estimates gas; the room re-derives userOpHash",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "account and nonce-key reads (RPC)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "unsigned UserOp (bundler, gas estimation)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7579",
+            "https://eips.ethereum.org/EIPS/eip-4337",
+            "https://eips.ethereum.org/EIPS/eip-7769",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "each owner re-derives userOpHash from the effect and signs it; a hardware wallet shows only the 32-byte hash, so the room's re-derived view is the only readable one",
+          "signs": "EIP-191 personal_sign of the 32-byte userOpHash: ECDSA(secp256k1) over keccak256(\"\\x19Ethereum Signed Message:\\n32\" || userOpHash). On EntryPoint v0.7, userOpHash = keccak256(abi.encode(keccak256(abi.encode(sender, nonce, keccak256(initCode), keccak256(callData), accountGasLimits, preVerificationGas, gasFees, keccak256(paymasterAndData))), entryPoint, chainId)); on v0.8+ it is the EIP-712 hash with domain {name \"ERC4337\", version \"1\", chainId, verifyingContract = entryPoint}. One 65-byte r || s || v (v = 27/28) per owner",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.8.0/contracts/core/EntryPoint.sol",
+            "https://eips.ethereum.org/EIPS/eip-191"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "one member sends the UserOp to the bundler; the bundler simulates it (ERC-7562) and calls EntryPoint.handleOps; the account selects the validator (account-specific; Safe7579 reads it from the nonce key) and calls OwnableValidator.validateUserOp, which recovers threshold signers over toEthSignedMessageHash(userOpHash), counts distinct owners, and returns success or failure; the account then runs the callData",
+          "signs": "nothing new; the member concatenates at least threshold owner signatures into userOp.signature (order does not matter: the validator sorts and de-duplicates signers) and sends the UserOp with eth_sendUserOperation",
+          "reveals": [
+            {
+              "field": "signed UserOp with owner signatures (bundler)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "to",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "value",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "owner signatures (who signed)",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+            "https://github.com/rhinestonewtf/checknsignatures/blob/main/src/CheckNSignatures.sol",
+            "https://github.com/rhinestonewtf/safe7579/blob/main/src/Safe7579.sol",
+            "https://eips.ethereum.org/EIPS/eip-7769",
+            "https://eips.ethereum.org/EIPS/eip-7562"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "reads eth_getUserOperationReceipt from the bundler, or the UserOperationEvent through the RPC; final when the chain is",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "the userOpHash being watched (bundler / RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7769"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an owner signature over a userOpHash that is not the one the room re-derives from the effect",
+          "why": "invariant 1 (F-4): refuse on mismatch; the owner's device shows only the hash, so this check is the review",
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol"
+          ]
+        },
+        {
+          "what": "a userOpHash computed for a different chainId or EntryPoint than the disclosed account's",
+          "why": "invariant 2 (F-5): userOpHash commits to entryPoint and chainId; a mismatch binds the signature elsewhere",
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-4337",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol"
+          ]
+        },
+        {
+          "what": "a nonce whose key names a validator other than the OwnableValidator the account disclosed, on accounts that select the validator from the nonce",
+          "why": "invariant 2: the nonce key is the slot; on Safe7579 a key naming no installed validator falls back to the Safe's own owners",
+          "evidence": [
+            "https://github.com/rhinestonewtf/safe7579/blob/main/src/Safe7579.sol"
+          ]
+        },
+        {
+          "what": "a stale nonce: the (key, sequence) pair was consumed since the proposal, re-read at review and at settle",
+          "why": "invariant 10: the nonce is an external read that reached the signed bytes",
+          "evidence": [
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol"
+          ]
+        },
+        {
+          "what": "any gas, fee or paymaster input that reached the UserOp without a recorded read",
+          "why": "invariant 10: nothing is signed whose inputs cannot be accounted for",
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-4337"
+          ]
+        },
+        {
+          "what": "counting two signatures from the same owner, or a signer the validator does not list",
+          "why": "invariant 9 and the validator itself: signers are sorted, de-duplicated and checked against the owner list",
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Owners sign userOpHash, which covers every UserOp field except the signature, the EntryPoint and the chain id.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An owner signing on a hardware wallet sees only an opaque 32-byte hash; what they approve is what their muster client shows them.",
+          "credibility": "motivational",
+          "party": "the signer's own muster client"
+        },
+        {
+          "claim": "Other installed validators and executors can act on the account without these owners' threshold.",
+          "credibility": "motivational",
+          "party": "every other installed validator or executor module (on Safe7579, also the Safe's own owners)"
+        },
+        {
+          "claim": "The bundler can delay or refuse to include the UserOp.",
+          "credibility": "motivational",
+          "party": "the configured bundler"
+        },
+        {
+          "claim": "The bundler sees the signed UserOp, including which owners signed, before the chain does.",
+          "credibility": "exposed",
+          "party": "the configured bundler"
+        },
+        {
+          "claim": "OwnableValidator puts no validity window on owner signatures: collected signatures stay valid until the nonce is used.",
+          "credibility": "motivational",
+          "party": "anyone holding the assembled UserOp (room members; the bundler once sent)"
+        },
+        {
+          "claim": "Approving costs owners nothing; the account prefunds gas to the EntryPoint.",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7579",
+          "what": "ERC-7579 (Draft): execute / installModule / uninstallModule, module types 1–4, execution mode encoding; validator selection left to the account"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+          "what": "OwnableValidator: onInstall(abi.encode(threshold, owners)), MAX_OWNERS = 32, validateUserOp over ECDSA.toEthSignedMessageHash(userOpHash)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/rhinestonewtf/checknsignatures/blob/main/src/CheckNSignatures.sol",
+          "what": "CheckNSignatures.recoverNSignatures: threshold 65-byte r||s||v signatures; v = 0 contract signature, v > 30 eth_sign"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/rhinestonewtf/modulekit/blob/main/src/module-bases/ERC7579ValidatorBase.sol",
+          "what": "modulekit ERC7579ValidatorBase: VALIDATION_SUCCESS = 0, VALIDATION_FAILED = 1 (no validity window)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/rhinestonewtf/safe7579/blob/main/src/Safe7579.sol",
+          "what": "Safe7579 adapter: validator := shr(96, nonce); an uninstalled validator falls back to Safe.checkSignatures"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-4337",
+          "what": "ERC-4337: UserOperation, userOpHash commits to chainid and EntryPoint, the 2D nonce, bundlers"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol",
+          "what": "EntryPoint v0.7.0: getUserOpHash = keccak256(abi.encode(userOp.hash(), address(this), block.chainid))"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/UserOperationLib.sol",
+          "what": "EntryPoint v0.7.0 UserOperationLib.encode: the fields hashed into userOp.hash()"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.8.0/contracts/core/EntryPoint.sol",
+          "what": "EntryPoint v0.8.0: userOpHash is EIP-712 with domain name \"ERC4337\", version \"1\""
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7769",
+          "what": "ERC-7769: the bundler JSON-RPC API"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-191",
+          "what": "EIP-191: signed data standard (personal_sign prefix)"
+        }
+      ],
+      "unverified": [
+        "Registry lists expiry as optional (ERC-4337 validationData can carry validUntil/validAfter), but OwnableValidator.validateUserOp returns VALIDATION_SUCCESS (0) or VALIDATION_FAILED (1) with no window; only a paymaster or a pre-validation hook could bound the owners' signatures.",
+        "Which EntryPoint version (v0.7 or v0.8+) a given ERC-7579 account implementation targets; the signed hash differs between them.",
+        "Validator selection is account-specific (ERC-7579 does not dictate it); only Safe7579's nonce-key encoding was checked here, not Nexus or Kernel.",
+        "Production maturity and audit scope of OwnableValidator (carried from the registry)."
+      ],
+      "status": "declared",
+      "ui": "not built"
+    },
+    {
+      "id": "evm.erc7579-ownable/contract-call",
+      "name": "Call a contract from a modular account",
+      "area": "family",
+      "family": "evm.erc7579-ownable",
+      "summary": "k of n owners approve a UserOperation whose callData is execute(single or batch call) to one or more contracts. Delegatecall mode is not this action.",
+      "effect": {
+        "schema": "muster.effect.evm.erc7579-ownable.contract-call.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the ERC-7579 account that acts (the UserOp sender)"
+          },
+          {
+            "name": "calls",
+            "means": "one or more (target, value, callData) executions, decoded on the card when the ABI is known"
+          },
+          {
+            "name": "mode",
+            "means": "callType 0x00 (single) or 0x01 (batch); 0xff (delegatecall) is refused here"
+          },
+          {
+            "name": "nonce",
+            "means": "the EntryPoint nonce: a 192-bit key and a 64-bit sequence; many accounts put the validator's address in the key (Safe7579: the top 20 bytes)"
+          },
+          {
+            "name": "callGasLimit",
+            "means": "gas for the execution call"
+          },
+          {
+            "name": "verificationGasLimit",
+            "means": "gas for validation"
+          },
+          {
+            "name": "preVerificationGas",
+            "means": "gas the bundler charges for calldata and overhead"
+          },
+          {
+            "name": "maxFeePerGas",
+            "means": "EIP-1559 fee cap per gas"
+          },
+          {
+            "name": "maxPriorityFeePerGas",
+            "means": "EIP-1559 tip per gas"
+          },
+          {
+            "name": "paymasterAndData",
+            "means": "empty unless a paymaster pays; hashed into userOpHash either way"
+          },
+          {
+            "name": "entryPoint",
+            "means": "the EntryPoint the account accepts; hashed into userOpHash"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n owners (the validator's threshold, read from the chain)",
+        "finality": "external",
+        "domain": "EIP-191 personal_sign of the ERC-4337 userOpHash (commits to entryPoint and chainId)"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "eip155:<chainId>",
+          "party": "instance",
+          "class": "infra",
+          "target": "eip155:<chainId>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "rpc",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "bundler",
+          "party": "instance",
+          "class": "infra",
+          "target": "an ERC-7769 bundler endpoint for the account's EntryPoint",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "ownable-validator-owner",
+          "party": "contributor",
+          "class": "authority",
+          "target": "ownable-validator:<account>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "target-contract",
+          "party": "proposer",
+          "class": "address",
+          "target": "eip155:<chainId>",
+          "field": "calls"
+        },
+        {
+          "kind": "asset",
+          "name": "gas-prefund",
+          "party": "instance",
+          "class": "asset",
+          "target": "erc7579:<account>",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "erc7579:<account>",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:<address>:nonce(account,key)",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:<address>:getNonce(account,key)",
+          "mode": "read"
+        },
+        {
+          "target": "ownable-validator:<account>:owners,threshold",
+          "mode": "read"
+        },
+        {
+          "target": "erc7579:<account>:installed modules",
+          "mode": "read"
+        },
+        {
+          "target": "eip155:<chainId>",
+          "mode": "write"
+        },
+        {
+          "target": "contract:<target>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "account address, nonce key and balance reads",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "unsigned UserOp: sender, nonce, callData, gas fields (bundler, eth_estimateUserOperationGas)",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed UserOp with owner signatures (bundler, eth_sendUserOperation)",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "calls (targets, values, calldata)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "account (sender)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "owner signatures in the handleOps calldata (who signed)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "the bundler's address and beneficiary; gas paid",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "composes the calls; single: execute(mode, abi.encodePacked(target, value, callData)); batch: execute(mode, abi.encode(Execution[])); reads the nonce, fees and each target's code through the RPC; the room re-derives userOpHash",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "account and nonce-key reads (RPC)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "unsigned UserOp (bundler, gas estimation)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "target contract reads (RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7579",
+            "https://eips.ethereum.org/EIPS/eip-4337",
+            "https://eips.ethereum.org/EIPS/eip-7769",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "each owner re-derives userOpHash from the effect and signs it; a hardware wallet shows only the 32-byte hash, so the room's re-derived view is the only readable one",
+          "signs": "EIP-191 personal_sign of the 32-byte userOpHash: ECDSA(secp256k1) over keccak256(\"\\x19Ethereum Signed Message:\\n32\" || userOpHash). On EntryPoint v0.7, userOpHash = keccak256(abi.encode(keccak256(abi.encode(sender, nonce, keccak256(initCode), keccak256(callData), accountGasLimits, preVerificationGas, gasFees, keccak256(paymasterAndData))), entryPoint, chainId)); on v0.8+ it is the EIP-712 hash with domain {name \"ERC4337\", version \"1\", chainId, verifyingContract = entryPoint}. One 65-byte r || s || v (v = 27/28) per owner",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.8.0/contracts/core/EntryPoint.sol",
+            "https://eips.ethereum.org/EIPS/eip-191"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "one member sends the UserOp to the bundler; the bundler simulates it (ERC-7562) and calls EntryPoint.handleOps; the account selects the validator (account-specific; Safe7579 reads it from the nonce key) and calls OwnableValidator.validateUserOp, which recovers threshold signers over toEthSignedMessageHash(userOpHash), counts distinct owners, and returns success or failure; the account then runs the callData",
+          "signs": "nothing new; the member concatenates at least threshold owner signatures into userOp.signature (order does not matter: the validator sorts and de-duplicates signers) and sends the UserOp with eth_sendUserOperation",
+          "reveals": [
+            {
+              "field": "signed UserOp with owner signatures (bundler)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "calls (targets, values, calldata)",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "owner signatures (who signed)",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+            "https://github.com/rhinestonewtf/checknsignatures/blob/main/src/CheckNSignatures.sol",
+            "https://github.com/rhinestonewtf/safe7579/blob/main/src/Safe7579.sol",
+            "https://eips.ethereum.org/EIPS/eip-7769",
+            "https://eips.ethereum.org/EIPS/eip-7562"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "reads eth_getUserOperationReceipt from the bundler, or the UserOperationEvent through the RPC; final when the chain is",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "the userOpHash being watched (bundler / RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7769"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an owner signature over a userOpHash that is not the one the room re-derives from the effect",
+          "why": "invariant 1 (F-4): refuse on mismatch; the owner's device shows only the hash, so this check is the review",
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol"
+          ]
+        },
+        {
+          "what": "a userOpHash computed for a different chainId or EntryPoint than the disclosed account's",
+          "why": "invariant 2 (F-5): userOpHash commits to entryPoint and chainId; a mismatch binds the signature elsewhere",
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-4337",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol"
+          ]
+        },
+        {
+          "what": "a nonce whose key names a validator other than the OwnableValidator the account disclosed, on accounts that select the validator from the nonce",
+          "why": "invariant 2: the nonce key is the slot; on Safe7579 a key naming no installed validator falls back to the Safe's own owners",
+          "evidence": [
+            "https://github.com/rhinestonewtf/safe7579/blob/main/src/Safe7579.sol"
+          ]
+        },
+        {
+          "what": "a stale nonce: the (key, sequence) pair was consumed since the proposal, re-read at review and at settle",
+          "why": "invariant 10: the nonce is an external read that reached the signed bytes",
+          "evidence": [
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol"
+          ]
+        },
+        {
+          "what": "any gas, fee or paymaster input that reached the UserOp without a recorded read",
+          "why": "invariant 10: nothing is signed whose inputs cannot be accounted for",
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-4337"
+          ]
+        },
+        {
+          "what": "counting two signatures from the same owner, or a signer the validator does not list",
+          "why": "invariant 9 and the validator itself: signers are sorted, de-duplicated and checked against the owner list",
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol"
+          ]
+        },
+        {
+          "what": "callType 0xff (delegatecall) in a contract-call proposal",
+          "why": "a delegatecall runs foreign code as the account and can rewrite its modules; ERC-7579 warns that delegatecall targets must be trusted",
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7579"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Owners sign userOpHash, which covers every UserOp field except the signature, the EntryPoint and the chain id.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An owner signing on a hardware wallet sees only an opaque 32-byte hash; what they approve is what their muster client shows them.",
+          "credibility": "motivational",
+          "party": "the signer's own muster client"
+        },
+        {
+          "claim": "Other installed validators and executors can act on the account without these owners' threshold.",
+          "credibility": "motivational",
+          "party": "every other installed validator or executor module (on Safe7579, also the Safe's own owners)"
+        },
+        {
+          "claim": "The bundler can delay or refuse to include the UserOp.",
+          "credibility": "motivational",
+          "party": "the configured bundler"
+        },
+        {
+          "claim": "The bundler sees the signed UserOp, including which owners signed, before the chain does.",
+          "credibility": "exposed",
+          "party": "the configured bundler"
+        },
+        {
+          "claim": "OwnableValidator puts no validity window on owner signatures: collected signatures stay valid until the nonce is used.",
+          "credibility": "motivational",
+          "party": "anyone holding the assembled UserOp (room members; the bundler once sent)"
+        },
+        {
+          "claim": "Approving costs owners nothing; the account prefunds gas to the EntryPoint.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Each called contract runs with the account as msg.sender; muster shows the decoded call but cannot vouch for the contract.",
+          "credibility": "motivational",
+          "party": "each called contract's author"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7579",
+          "what": "ERC-7579 (Draft): execute / installModule / uninstallModule, module types 1–4, execution mode encoding; validator selection left to the account"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+          "what": "OwnableValidator: onInstall(abi.encode(threshold, owners)), MAX_OWNERS = 32, validateUserOp over ECDSA.toEthSignedMessageHash(userOpHash)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/rhinestonewtf/checknsignatures/blob/main/src/CheckNSignatures.sol",
+          "what": "CheckNSignatures.recoverNSignatures: threshold 65-byte r||s||v signatures; v = 0 contract signature, v > 30 eth_sign"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/rhinestonewtf/modulekit/blob/main/src/module-bases/ERC7579ValidatorBase.sol",
+          "what": "modulekit ERC7579ValidatorBase: VALIDATION_SUCCESS = 0, VALIDATION_FAILED = 1 (no validity window)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/rhinestonewtf/safe7579/blob/main/src/Safe7579.sol",
+          "what": "Safe7579 adapter: validator := shr(96, nonce); an uninstalled validator falls back to Safe.checkSignatures"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-4337",
+          "what": "ERC-4337: UserOperation, userOpHash commits to chainid and EntryPoint, the 2D nonce, bundlers"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol",
+          "what": "EntryPoint v0.7.0: getUserOpHash = keccak256(abi.encode(userOp.hash(), address(this), block.chainid))"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/UserOperationLib.sol",
+          "what": "EntryPoint v0.7.0 UserOperationLib.encode: the fields hashed into userOp.hash()"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.8.0/contracts/core/EntryPoint.sol",
+          "what": "EntryPoint v0.8.0: userOpHash is EIP-712 with domain name \"ERC4337\", version \"1\""
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7769",
+          "what": "ERC-7769: the bundler JSON-RPC API"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-191",
+          "what": "EIP-191: signed data standard (personal_sign prefix)"
+        }
+      ],
+      "unverified": [
+        "Registry lists expiry as optional (ERC-4337 validationData can carry validUntil/validAfter), but OwnableValidator.validateUserOp returns VALIDATION_SUCCESS (0) or VALIDATION_FAILED (1) with no window; only a paymaster or a pre-validation hook could bound the owners' signatures.",
+        "Which EntryPoint version (v0.7 or v0.8+) a given ERC-7579 account implementation targets; the signed hash differs between them.",
+        "Validator selection is account-specific (ERC-7579 does not dictate it); only Safe7579's nonce-key encoding was checked here, not Nexus or Kernel.",
+        "Production maturity and audit scope of OwnableValidator (carried from the registry)."
+      ],
+      "status": "declared",
+      "ui": "not built"
+    },
+    {
+      "id": "evm.erc7579-ownable/change-signers",
+      "name": "Change the owners or threshold of a modular account",
+      "area": "family",
+      "family": "evm.erc7579-ownable",
+      "summary": "k of n owners approve a UserOperation in which the account calls OwnableValidator.addOwner, removeOwner or setThreshold. The address stays.",
+      "effect": {
+        "schema": "muster.effect.evm.erc7579-ownable.change-signers.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the ERC-7579 account that acts (the UserOp sender)"
+          },
+          {
+            "name": "change",
+            "means": "addOwner | removeOwner | setThreshold"
+          },
+          {
+            "name": "owner",
+            "means": "the owner added or removed"
+          },
+          {
+            "name": "prevOwner",
+            "means": "for removeOwner, the owner's predecessor in the validator's list, read from the chain"
+          },
+          {
+            "name": "threshold",
+            "means": "for setThreshold, the new threshold"
+          },
+          {
+            "name": "nonce",
+            "means": "the EntryPoint nonce: a 192-bit key and a 64-bit sequence; many accounts put the validator's address in the key (Safe7579: the top 20 bytes)"
+          },
+          {
+            "name": "callGasLimit",
+            "means": "gas for the execution call"
+          },
+          {
+            "name": "verificationGasLimit",
+            "means": "gas for validation"
+          },
+          {
+            "name": "preVerificationGas",
+            "means": "gas the bundler charges for calldata and overhead"
+          },
+          {
+            "name": "maxFeePerGas",
+            "means": "EIP-1559 fee cap per gas"
+          },
+          {
+            "name": "maxPriorityFeePerGas",
+            "means": "EIP-1559 tip per gas"
+          },
+          {
+            "name": "paymasterAndData",
+            "means": "empty unless a paymaster pays; hashed into userOpHash either way"
+          },
+          {
+            "name": "entryPoint",
+            "means": "the EntryPoint the account accepts; hashed into userOpHash"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n owners (the validator's threshold, read from the chain)",
+        "finality": "external",
+        "domain": "EIP-191 personal_sign of the ERC-4337 userOpHash (commits to entryPoint and chainId)"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "eip155:<chainId>",
+          "party": "instance",
+          "class": "infra",
+          "target": "eip155:<chainId>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "rpc",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "bundler",
+          "party": "instance",
+          "class": "infra",
+          "target": "an ERC-7769 bundler endpoint for the account's EntryPoint",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "ownable-validator-owner",
+          "party": "contributor",
+          "class": "authority",
+          "target": "ownable-validator:<account>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "new-owner",
+          "party": "counterparty",
+          "class": "address",
+          "target": "eip155:<chainId>",
+          "field": "owner"
+        },
+        {
+          "kind": "asset",
+          "name": "gas-prefund",
+          "party": "instance",
+          "class": "asset",
+          "target": "erc7579:<account>",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "erc7579:<account>",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:<address>:nonce(account,key)",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:<address>:getNonce(account,key)",
+          "mode": "read"
+        },
+        {
+          "target": "ownable-validator:<account>:owners,threshold",
+          "mode": "read"
+        },
+        {
+          "target": "erc7579:<account>:installed modules",
+          "mode": "read"
+        },
+        {
+          "target": "eip155:<chainId>",
+          "mode": "write"
+        },
+        {
+          "target": "ownable-validator:<account>:storage(owners,threshold,ownerCount)",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "account address, nonce key and balance reads",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "unsigned UserOp: sender, nonce, callData, gas fields (bundler, eth_estimateUserOperationGas)",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed UserOp with owner signatures (bundler, eth_sendUserOperation)",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "owner (added or removed)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "threshold",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "account (sender)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "owner signatures in the handleOps calldata (who signed)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "the bundler's address and beneficiary; gas paid",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "composes the change; callData = execute(single, abi.encodePacked(OwnableValidator, 0, <addOwner | removeOwner | setThreshold call>)) so msg.sender at the validator is the account; reads getOwners, threshold and ownerCount through the RPC; the room re-derives userOpHash",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "account and nonce-key reads (RPC)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "unsigned UserOp (bundler, gas estimation)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "validator owner list read (RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7579",
+            "https://eips.ethereum.org/EIPS/eip-4337",
+            "https://eips.ethereum.org/EIPS/eip-7769",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "each owner re-derives userOpHash from the effect and signs it; a hardware wallet shows only the 32-byte hash, so the room's re-derived view is the only readable one",
+          "signs": "EIP-191 personal_sign of the 32-byte userOpHash: ECDSA(secp256k1) over keccak256(\"\\x19Ethereum Signed Message:\\n32\" || userOpHash). On EntryPoint v0.7, userOpHash = keccak256(abi.encode(keccak256(abi.encode(sender, nonce, keccak256(initCode), keccak256(callData), accountGasLimits, preVerificationGas, gasFees, keccak256(paymasterAndData))), entryPoint, chainId)); on v0.8+ it is the EIP-712 hash with domain {name \"ERC4337\", version \"1\", chainId, verifyingContract = entryPoint}. One 65-byte r || s || v (v = 27/28) per owner",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.8.0/contracts/core/EntryPoint.sol",
+            "https://eips.ethereum.org/EIPS/eip-191"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "one member sends the UserOp to the bundler; the bundler simulates it (ERC-7562) and calls EntryPoint.handleOps; the account selects the validator (account-specific; Safe7579 reads it from the nonce key) and calls OwnableValidator.validateUserOp, which recovers threshold signers over toEthSignedMessageHash(userOpHash), counts distinct owners, and returns success or failure; the account then runs the callData",
+          "signs": "nothing new; the member concatenates at least threshold owner signatures into userOp.signature (order does not matter: the validator sorts and de-duplicates signers) and sends the UserOp with eth_sendUserOperation",
+          "reveals": [
+            {
+              "field": "signed UserOp with owner signatures (bundler)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "owner (added or removed)",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "threshold",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "owner signatures (who signed)",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+            "https://github.com/rhinestonewtf/checknsignatures/blob/main/src/CheckNSignatures.sol",
+            "https://github.com/rhinestonewtf/safe7579/blob/main/src/Safe7579.sol",
+            "https://eips.ethereum.org/EIPS/eip-7769",
+            "https://eips.ethereum.org/EIPS/eip-7562"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "reads eth_getUserOperationReceipt from the bundler, or the UserOperationEvent through the RPC; final when the chain is",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "the userOpHash being watched (bundler / RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7769"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an owner signature over a userOpHash that is not the one the room re-derives from the effect",
+          "why": "invariant 1 (F-4): refuse on mismatch; the owner's device shows only the hash, so this check is the review",
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol"
+          ]
+        },
+        {
+          "what": "a userOpHash computed for a different chainId or EntryPoint than the disclosed account's",
+          "why": "invariant 2 (F-5): userOpHash commits to entryPoint and chainId; a mismatch binds the signature elsewhere",
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-4337",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol"
+          ]
+        },
+        {
+          "what": "a nonce whose key names a validator other than the OwnableValidator the account disclosed, on accounts that select the validator from the nonce",
+          "why": "invariant 2: the nonce key is the slot; on Safe7579 a key naming no installed validator falls back to the Safe's own owners",
+          "evidence": [
+            "https://github.com/rhinestonewtf/safe7579/blob/main/src/Safe7579.sol"
+          ]
+        },
+        {
+          "what": "a stale nonce: the (key, sequence) pair was consumed since the proposal, re-read at review and at settle",
+          "why": "invariant 10: the nonce is an external read that reached the signed bytes",
+          "evidence": [
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol"
+          ]
+        },
+        {
+          "what": "any gas, fee or paymaster input that reached the UserOp without a recorded read",
+          "why": "invariant 10: nothing is signed whose inputs cannot be accounted for",
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-4337"
+          ]
+        },
+        {
+          "what": "counting two signatures from the same owner, or a signer the validator does not list",
+          "why": "invariant 9 and the validator itself: signers are sorted, de-duplicated and checked against the owner list",
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol"
+          ]
+        },
+        {
+          "what": "removeOwner while ownerCount equals the threshold, addOwner past 32 owners, or setThreshold above ownerCount",
+          "why": "OwnableValidator reverts CannotRemoveOwner / MaxOwnersReached / InvalidThreshold; the counts are external reads re-read at settle",
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Owners sign userOpHash, which covers every UserOp field except the signature, the EntryPoint and the chain id.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An owner signing on a hardware wallet sees only an opaque 32-byte hash; what they approve is what their muster client shows them.",
+          "credibility": "motivational",
+          "party": "the signer's own muster client"
+        },
+        {
+          "claim": "Other installed validators and executors can act on the account without these owners' threshold.",
+          "credibility": "motivational",
+          "party": "every other installed validator or executor module (on Safe7579, also the Safe's own owners)"
+        },
+        {
+          "claim": "The bundler can delay or refuse to include the UserOp.",
+          "credibility": "motivational",
+          "party": "the configured bundler"
+        },
+        {
+          "claim": "The bundler sees the signed UserOp, including which owners signed, before the chain does.",
+          "credibility": "exposed",
+          "party": "the configured bundler"
+        },
+        {
+          "claim": "OwnableValidator puts no validity window on owner signatures: collected signatures stay valid until the nonce is used.",
+          "credibility": "motivational",
+          "party": "anyone holding the assembled UserOp (room members; the bundler once sent)"
+        },
+        {
+          "claim": "Approving costs owners nothing; the account prefunds gas to the EntryPoint.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The account's address stays the same; the change is one proposal.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Pending UserOps are checked against the owner list at execution time, so a removed owner's signature stops counting.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "The new owner and threshold are public on chain (OwnerAdded / OwnerRemoved / ThresholdSet events).",
+          "credibility": "exposed",
+          "party": "chain observers"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7579",
+          "what": "ERC-7579 (Draft): execute / installModule / uninstallModule, module types 1–4, execution mode encoding; validator selection left to the account"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+          "what": "OwnableValidator: onInstall(abi.encode(threshold, owners)), MAX_OWNERS = 32, validateUserOp over ECDSA.toEthSignedMessageHash(userOpHash)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/rhinestonewtf/checknsignatures/blob/main/src/CheckNSignatures.sol",
+          "what": "CheckNSignatures.recoverNSignatures: threshold 65-byte r||s||v signatures; v = 0 contract signature, v > 30 eth_sign"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/rhinestonewtf/modulekit/blob/main/src/module-bases/ERC7579ValidatorBase.sol",
+          "what": "modulekit ERC7579ValidatorBase: VALIDATION_SUCCESS = 0, VALIDATION_FAILED = 1 (no validity window)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/rhinestonewtf/safe7579/blob/main/src/Safe7579.sol",
+          "what": "Safe7579 adapter: validator := shr(96, nonce); an uninstalled validator falls back to Safe.checkSignatures"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-4337",
+          "what": "ERC-4337: UserOperation, userOpHash commits to chainid and EntryPoint, the 2D nonce, bundlers"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol",
+          "what": "EntryPoint v0.7.0: getUserOpHash = keccak256(abi.encode(userOp.hash(), address(this), block.chainid))"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/UserOperationLib.sol",
+          "what": "EntryPoint v0.7.0 UserOperationLib.encode: the fields hashed into userOp.hash()"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.8.0/contracts/core/EntryPoint.sol",
+          "what": "EntryPoint v0.8.0: userOpHash is EIP-712 with domain name \"ERC4337\", version \"1\""
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7769",
+          "what": "ERC-7769: the bundler JSON-RPC API"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-191",
+          "what": "EIP-191: signed data standard (personal_sign prefix)"
+        }
+      ],
+      "unverified": [
+        "Registry lists expiry as optional (ERC-4337 validationData can carry validUntil/validAfter), but OwnableValidator.validateUserOp returns VALIDATION_SUCCESS (0) or VALIDATION_FAILED (1) with no window; only a paymaster or a pre-validation hook could bound the owners' signatures.",
+        "Which EntryPoint version (v0.7 or v0.8+) a given ERC-7579 account implementation targets; the signed hash differs between them.",
+        "Validator selection is account-specific (ERC-7579 does not dictate it); only Safe7579's nonce-key encoding was checked here, not Nexus or Kernel.",
+        "Production maturity and audit scope of OwnableValidator (carried from the registry)."
+      ],
+      "status": "declared",
+      "ui": "not built"
+    },
+    {
+      "id": "evm.erc7579-ownable/install-module",
+      "name": "Install or uninstall a module on a modular account",
+      "area": "family",
+      "family": "evm.erc7579-ownable",
+      "summary": "k of n owners approve a UserOperation that calls installModule or uninstallModule. A new validator, executor, fallback or hook changes who can act on the account, so the card treats it as governance.",
+      "effect": {
+        "schema": "muster.effect.evm.erc7579-ownable.install-module.v0",
+        "fields": [
+          {
+            "name": "account",
+            "means": "the ERC-7579 account that acts (the UserOp sender)"
+          },
+          {
+            "name": "op",
+            "means": "installModule | uninstallModule"
+          },
+          {
+            "name": "moduleTypeId",
+            "means": "1 validator, 2 executor, 3 fallback handler, 4 hook"
+          },
+          {
+            "name": "module",
+            "means": "the module's address"
+          },
+          {
+            "name": "initData",
+            "means": "passed to onInstall / onUninstall; decoded on the card when the module is known"
+          },
+          {
+            "name": "nonce",
+            "means": "the EntryPoint nonce: a 192-bit key and a 64-bit sequence; many accounts put the validator's address in the key (Safe7579: the top 20 bytes)"
+          },
+          {
+            "name": "callGasLimit",
+            "means": "gas for the execution call"
+          },
+          {
+            "name": "verificationGasLimit",
+            "means": "gas for validation"
+          },
+          {
+            "name": "preVerificationGas",
+            "means": "gas the bundler charges for calldata and overhead"
+          },
+          {
+            "name": "maxFeePerGas",
+            "means": "EIP-1559 fee cap per gas"
+          },
+          {
+            "name": "maxPriorityFeePerGas",
+            "means": "EIP-1559 tip per gas"
+          },
+          {
+            "name": "paymasterAndData",
+            "means": "empty unless a paymaster pays; hashed into userOpHash either way"
+          },
+          {
+            "name": "entryPoint",
+            "means": "the EntryPoint the account accepts; hashed into userOpHash"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "k of n owners (the validator's threshold, read from the chain)",
+        "finality": "external",
+        "domain": "EIP-191 personal_sign of the ERC-4337 userOpHash (commits to entryPoint and chainId)"
+      },
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "eip155:<chainId>",
+          "party": "instance",
+          "class": "infra",
+          "target": "eip155:<chainId>",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "rpc",
+          "field": ""
+        },
+        {
+          "kind": "infra",
+          "name": "bundler",
+          "party": "instance",
+          "class": "infra",
+          "target": "an ERC-7769 bundler endpoint for the account's EntryPoint",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "ownable-validator-owner",
+          "party": "contributor",
+          "class": "authority",
+          "target": "ownable-validator:<account>",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "module",
+          "party": "proposer",
+          "class": "address",
+          "target": "eip155:<chainId>",
+          "field": "module"
+        },
+        {
+          "kind": "asset",
+          "name": "gas-prefund",
+          "party": "instance",
+          "class": "asset",
+          "target": "erc7579:<account>",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "erc7579:<account>",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:<address>:nonce(account,key)",
+          "mode": "write"
+        },
+        {
+          "target": "entrypoint:<address>:getNonce(account,key)",
+          "mode": "read"
+        },
+        {
+          "target": "ownable-validator:<account>:owners,threshold",
+          "mode": "read"
+        },
+        {
+          "target": "erc7579:<account>:installed modules",
+          "mode": "read"
+        },
+        {
+          "target": "eip155:<chainId>",
+          "mode": "write"
+        },
+        {
+          "target": "erc7579:<account>:module config",
+          "mode": "write"
+        },
+        {
+          "target": "module:<address>",
+          "mode": "write"
+        },
+        {
+          "target": "module:<address>:isModuleType, code",
+          "mode": "read"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "account address, nonce key and balance reads",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "unsigned UserOp: sender, nonce, callData, gas fields (bundler, eth_estimateUserOperationGas)",
+          "observer": "rpc-provider",
+          "when": "propose"
+        },
+        {
+          "field": "signed UserOp with owner signatures (bundler, eth_sendUserOperation)",
+          "observer": "rpc-provider",
+          "when": "settle"
+        },
+        {
+          "field": "module",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "moduleTypeId",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "initData",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "account (sender)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "owner signatures in the handleOps calldata (who signed)",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "the bundler's address and beneficiary; gas paid",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "composes the change; callData = installModule(moduleTypeId, module, initData) or uninstallModule(...), which ERC-7579 requires the account to authorize (onlyEntryPointOrSelf); reads the module's code and isModuleType(moduleTypeId) through the RPC; the room re-derives userOpHash",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "account and nonce-key reads (RPC)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "unsigned UserOp (bundler, gas estimation)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "module code and type reads (RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7579",
+            "https://eips.ethereum.org/EIPS/eip-4337",
+            "https://eips.ethereum.org/EIPS/eip-7769",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "each owner re-derives userOpHash from the effect and signs it; a hardware wallet shows only the 32-byte hash, so the room's re-derived view is the only readable one",
+          "signs": "EIP-191 personal_sign of the 32-byte userOpHash: ECDSA(secp256k1) over keccak256(\"\\x19Ethereum Signed Message:\\n32\" || userOpHash). On EntryPoint v0.7, userOpHash = keccak256(abi.encode(keccak256(abi.encode(sender, nonce, keccak256(initCode), keccak256(callData), accountGasLimits, preVerificationGas, gasFees, keccak256(paymasterAndData))), entryPoint, chainId)); on v0.8+ it is the EIP-712 hash with domain {name \"ERC4337\", version \"1\", chainId, verifyingContract = entryPoint}. One 65-byte r || s || v (v = 27/28) per owner",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.8.0/contracts/core/EntryPoint.sol",
+            "https://eips.ethereum.org/EIPS/eip-191"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "instance",
+          "does": "one member sends the UserOp to the bundler; the bundler simulates it (ERC-7562) and calls EntryPoint.handleOps; the account selects the validator (account-specific; Safe7579 reads it from the nonce key) and calls OwnableValidator.validateUserOp, which recovers threshold signers over toEthSignedMessageHash(userOpHash), counts distinct owners, and returns success or failure; the account then runs the callData",
+          "signs": "nothing new; the member concatenates at least threshold owner signatures into userOp.signature (order does not matter: the validator sorts and de-duplicates signers) and sends the UserOp with eth_sendUserOperation",
+          "reveals": [
+            {
+              "field": "signed UserOp with owner signatures (bundler)",
+              "observer": "rpc-provider"
+            },
+            {
+              "field": "module",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "moduleTypeId",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "owner signatures (who signed)",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+            "https://github.com/rhinestonewtf/checknsignatures/blob/main/src/CheckNSignatures.sol",
+            "https://github.com/rhinestonewtf/safe7579/blob/main/src/Safe7579.sol",
+            "https://eips.ethereum.org/EIPS/eip-7769",
+            "https://eips.ethereum.org/EIPS/eip-7562"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "instance",
+          "does": "reads eth_getUserOperationReceipt from the bundler, or the UserOperationEvent through the RPC; final when the chain is",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "the userOpHash being watched (bundler / RPC)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7769"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "an owner signature over a userOpHash that is not the one the room re-derives from the effect",
+          "why": "invariant 1 (F-4): refuse on mismatch; the owner's device shows only the hash, so this check is the review",
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol"
+          ]
+        },
+        {
+          "what": "a userOpHash computed for a different chainId or EntryPoint than the disclosed account's",
+          "why": "invariant 2 (F-5): userOpHash commits to entryPoint and chainId; a mismatch binds the signature elsewhere",
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-4337",
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol"
+          ]
+        },
+        {
+          "what": "a nonce whose key names a validator other than the OwnableValidator the account disclosed, on accounts that select the validator from the nonce",
+          "why": "invariant 2: the nonce key is the slot; on Safe7579 a key naming no installed validator falls back to the Safe's own owners",
+          "evidence": [
+            "https://github.com/rhinestonewtf/safe7579/blob/main/src/Safe7579.sol"
+          ]
+        },
+        {
+          "what": "a stale nonce: the (key, sequence) pair was consumed since the proposal, re-read at review and at settle",
+          "why": "invariant 10: the nonce is an external read that reached the signed bytes",
+          "evidence": [
+            "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol"
+          ]
+        },
+        {
+          "what": "any gas, fee or paymaster input that reached the UserOp without a recorded read",
+          "why": "invariant 10: nothing is signed whose inputs cannot be accounted for",
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-4337"
+          ]
+        },
+        {
+          "what": "counting two signatures from the same owner, or a signer the validator does not list",
+          "why": "invariant 9 and the validator itself: signers are sorted, de-duplicated and checked against the owner list",
+          "evidence": [
+            "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol"
+          ]
+        },
+        {
+          "what": "a module whose isModuleType(moduleTypeId) is false, or whose code was not read",
+          "why": "invariant 10: the meaning of the proposal depends on an external read; ERC-7579 requires accounts to keep module types apart",
+          "evidence": [
+            "https://eips.ethereum.org/EIPS/eip-7579"
+          ]
+        }
+      ],
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Owners sign userOpHash, which covers every UserOp field except the signature, the EntryPoint and the chain id.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An owner signing on a hardware wallet sees only an opaque 32-byte hash; what they approve is what their muster client shows them.",
+          "credibility": "motivational",
+          "party": "the signer's own muster client"
+        },
+        {
+          "claim": "Other installed validators and executors can act on the account without these owners' threshold.",
+          "credibility": "motivational",
+          "party": "every other installed validator or executor module (on Safe7579, also the Safe's own owners)"
+        },
+        {
+          "claim": "The bundler can delay or refuse to include the UserOp.",
+          "credibility": "motivational",
+          "party": "the configured bundler"
+        },
+        {
+          "claim": "The bundler sees the signed UserOp, including which owners signed, before the chain does.",
+          "credibility": "exposed",
+          "party": "the configured bundler"
+        },
+        {
+          "claim": "OwnableValidator puts no validity window on owner signatures: collected signatures stay valid until the nonce is used.",
+          "credibility": "motivational",
+          "party": "anyone holding the assembled UserOp (room members; the bundler once sent)"
+        },
+        {
+          "claim": "Approving costs owners nothing; the account prefunds gas to the EntryPoint.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An installed executor can call executeFromExecutor and act without the owners' threshold.",
+          "credibility": "motivational",
+          "party": "whoever controls the installed executor"
+        },
+        {
+          "claim": "An installed hook can revert every execution and lock the account.",
+          "credibility": "motivational",
+          "party": "whoever controls the installed hook"
+        },
+        {
+          "claim": "Uninstalling OwnableValidator clears its owners and threshold for this account (onUninstall).",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7579",
+          "what": "ERC-7579 (Draft): execute / installModule / uninstallModule, module types 1–4, execution mode encoding; validator selection left to the account"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/rhinestonewtf/core-modules/main/src/OwnableValidator/OwnableValidator.sol",
+          "what": "OwnableValidator: onInstall(abi.encode(threshold, owners)), MAX_OWNERS = 32, validateUserOp over ECDSA.toEthSignedMessageHash(userOpHash)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/rhinestonewtf/checknsignatures/blob/main/src/CheckNSignatures.sol",
+          "what": "CheckNSignatures.recoverNSignatures: threshold 65-byte r||s||v signatures; v = 0 contract signature, v > 30 eth_sign"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/rhinestonewtf/modulekit/blob/main/src/module-bases/ERC7579ValidatorBase.sol",
+          "what": "modulekit ERC7579ValidatorBase: VALIDATION_SUCCESS = 0, VALIDATION_FAILED = 1 (no validity window)"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/rhinestonewtf/safe7579/blob/main/src/Safe7579.sol",
+          "what": "Safe7579 adapter: validator := shr(96, nonce); an uninstalled validator falls back to Safe.checkSignatures"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-4337",
+          "what": "ERC-4337: UserOperation, userOpHash commits to chainid and EntryPoint, the 2D nonce, bundlers"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/EntryPoint.sol",
+          "what": "EntryPoint v0.7.0: getUserOpHash = keccak256(abi.encode(userOp.hash(), address(this), block.chainid))"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/UserOperationLib.sol",
+          "what": "EntryPoint v0.7.0 UserOperationLib.encode: the fields hashed into userOp.hash()"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/eth-infinitism/account-abstraction/blob/v0.8.0/contracts/core/EntryPoint.sol",
+          "what": "EntryPoint v0.8.0: userOpHash is EIP-712 with domain name \"ERC4337\", version \"1\""
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-7769",
+          "what": "ERC-7769: the bundler JSON-RPC API"
+        },
+        {
+          "kind": "source",
+          "url": "https://eips.ethereum.org/EIPS/eip-191",
+          "what": "EIP-191: signed data standard (personal_sign prefix)"
+        }
+      ],
+      "unverified": [
+        "Registry lists expiry as optional (ERC-4337 validationData can carry validUntil/validAfter), but OwnableValidator.validateUserOp returns VALIDATION_SUCCESS (0) or VALIDATION_FAILED (1) with no window; only a paymaster or a pre-validation hook could bound the owners' signatures.",
+        "Which EntryPoint version (v0.7 or v0.8+) a given ERC-7579 account implementation targets; the signed hash differs between them.",
+        "Validator selection is account-specific (ERC-7579 does not dictate it); only Safe7579's nonce-key encoding was checked here, not Nexus or Kernel.",
+        "Production maturity and audit scope of OwnableValidator (carried from the registry)."
+      ],
+      "status": "declared",
+      "ui": "not built"
+    }
+  ]
+}
