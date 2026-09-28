@@ -774,6 +774,9 @@ proc musterCoordinateInvites(): string =
   items.reverse()                        # newest first
   var arr = newJArray()
   for n in items: arr.add n
+  if gLpDebug:
+    stderr.writeLine("MUSTER-LP invites=" & $arr.len & " frames=" & $gInbox.receivedInvites().len &
+                     " topics=" & $(arr.getElems().mapIt(it{"topic"}.getStr())))
   $arr
 
 proc musterCoordinateDismissInvite(roomTopic: string): string =
