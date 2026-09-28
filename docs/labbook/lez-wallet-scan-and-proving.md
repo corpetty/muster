@@ -37,8 +37,10 @@ behind a proof times out).
 
 | proof | from → landed | duration |
 |---|---|---|
-| shield (public → own key node), 150 units | ~15:43 → 15:49:14 | ~6 min |
-| private transfer, 50 units | 15:56:00 → 16:03:55 | ~8 min |
+| run 1 · shield (public → own key node), 150 units | ~15:43 → 15:49:14 | ~6 min |
+| run 1 · private transfer, 50 units | 15:56:00 → 16:03:55 | ~8 min |
+| run 2 · shield, 150 units | 16:13:23 → ~16:20:39 | ~7 min |
+| run 3 · private transfer, 50 units | 17:01:13 → 17:08:29 | ~7¼ min |
 
 While proving, the `lez_core` host process held **~10 cores and ~9 GB RSS**. Anything
 else on the machine slows it: do not rebuild the runner or run the suite in parallel.
@@ -82,6 +84,10 @@ source (`src/lez_core_module.cpp`), because the LIDL says only `-> tstr` / `-> i
 So a label counts only once it resolves back to the account (`LpLezCore.labelAccount`,
 exo-884).
 
+Verified on the real core by run 3, a relaunch over run 2's wallets: both wallets held
+5 accounts before and after, their labels were unchanged, and the creditor's payTo key
+node was byte-for-byte run 2's.
+
 ## 6. The faucet
 
 The pinata lives at hex `cafecafe…cafe` (base58 `EfQhKQAkX2FJiwNii2WFQsGndjvF1Mzd7RuVe7QdPLw7`),
@@ -97,3 +103,29 @@ claim still goes through, so treat an empty answer as "in flight", not "retry".
 The UI backend's `qInfo` lines do not reach the runner's log; the module's `MUSTER-LP` /
 `MUSTER-LEZ` lines (stderr, under `MUSTER_LP_DEBUG`) do, and so do `lez_core`'s own.
 An offscreen self-test must read what it asserts from the module's lines.
+
+## 8. A fleet outage looks like a muster fault from inside the run
+
+The first attempt at run 3 (16:29–16:59) sat at `members=1` on both instances for 30
+minutes: nothing was proposed and nothing was paid. The logs held no error from muster,
+only this, about 2,200 times per instance, against all six `logos.test` store nodes:
+
+```
+Store query failed for peer: /dns4/node-01.do-ams3.logos.test.status.im/…
+  reason: … storeQuery failed: PEER_DIAL_FAILURE
+```
+
+There were also ~8,800 `connection_change` events flapping between connected and
+disconnected. Cross-host receive rides store catch-up
+(`two-instance-live-wire-blockers.md`), so a store outage silences the room. Run 2 had
+seen its first such failure at 16:25:20. By 17:00 plain TCP to the nodes' `:30303` was
+open again, and a retry formed the room within seconds. **Before debugging a stuck
+membership, count `Store query failed` in the log**: zero on a healthy run, thousands
+during an outage.
+
+## 9. Do not edit a script while it runs
+
+Run 2 died because `split-lez-testnet.sh` was edited while it ran. Bash reads a script as
+it executes, so the running copy met a syntax error at the edited line. Its `EXIT` trap
+then killed both runners eight minutes into a payment proof. The script's body is now
+one `{ … }` compound command, which bash reads whole before running any of it.
