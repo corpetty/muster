@@ -288,7 +288,7 @@
       ],
       "unverified": [
         "The btc-frost driver is not run through checkConformance by any test (only its profile, in profile_test); CLAUDE.md's working agreement says conformance grades every driver.",
-        "The card body draws only to / value, so it shows no outputs for a btc-spend (Room.qml cardFor).",
+        "The card's amount → payee line for a Bitcoin spend comes from the module's effect summary (the payment outputs, change excluded; card_words_test); it has not been seen on screen.",
         "coordinate_submit polls the node for about four seconds; if the spend is not final by then it returns pending, and nothing later publishes the final event for a Bitcoin intent (only LEZ settles are re-watched by the pump). From reading nim-lib/muster_module.nim, not a test.",
         "The ready box's Settle on-chain for this family is wired from the profile's settlement, but has not been clicked through on screen."
       ]

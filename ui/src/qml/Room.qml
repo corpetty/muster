@@ -29,6 +29,9 @@ Item {
     property var backend
 
     readonly property string topic: backend ? backend.roomTopic : ""
+    // What this instance knows the room as (Main's session-only title), shown instead of
+    // the topic, which names nothing (exo-661.7 / exo-59c). Empty → the topic.
+    property string roomTitle: ""
     readonly property bool joined: room.topic.length > 0
 
     // Whether the proposal composer is open (the "+" in the message row), and which
@@ -309,6 +312,16 @@ Item {
         return qsTr("On-chain proposal #%1: call %2 with %3 words on %4 accounts")
                .arg(idx).arg(abbrev(eff.target)).arg(ins.length).arg(acc.length);
     }
+    function headingFor(kind) {
+        return kind === "btc-spend" ? qsTr("Proposed a Bitcoin payment")
+             : kind === "lez-transfer" ? qsTr("Proposed a LEZ transfer")
+             : kind === "lez-call" ? qsTr("Proposed a LEZ call")
+             : kind === "lez-proposal" ? qsTr("Proposed an on-chain LEZ multisig proposal")
+             : kind === "policy" ? qsTr("Proposed a new policy for the room")
+             : kind === "contract-call" ? qsTr("Proposed a contract call")
+             : kind === "delegatecall" ? qsTr("Proposed a DELEGATECALL")
+             : "";
+    }
     function isBtcIntent(it) { return String((it && it.policy) || "").indexOf("btc-") === 0; }
     // Refresh the action menu when the action composer opens — the module queries each
     // candidate module's methods (never a blind scan), so not on the message tick.
@@ -383,9 +396,10 @@ Item {
 
     // Project one folded intent view onto the card vocabulary. The module's
     // lifecycle names (draft/proposed/collecting/executable/submitted/final) map to
-    // the card's shorter rail (proposed/collecting/ready/paid). Nothing here is
-    // per-viewer — the fold is the room's shared truth — so no proposedByMe /
-    // approvedByMe is claimed; the card draws the count, not a personal stake.
+    // the card's shorter rail (proposed/collecting/ready/paid). The one per-viewer claim,
+    // approvedByMe, is what the module proves from the log + this member's keys (or an
+    // approval this instance made) — never assumed (exo-59c). What the effect moves comes
+    // from the module's summary, the same reading the room history uses.
     function intentToCard(it) {
         var st = String((it && it.state) || "proposed");
         var cardState = (st === "executable" || st === "submitted") ? "ready"
@@ -419,9 +433,17 @@ Item {
                      : isStatement ? String(eff.text || "") : "",
             // a LEZ step the chain has not included yet: "vote" | "settle" (exo-3c9)
             chainPending: (it && it.chainPending) ? String(it.chainPending) : "",
-            amount: (!isStatement && eff.value !== undefined) ? String(eff.value) : "",
-            denom: "",
-            to: (!isStatement && eff.to !== undefined) ? String(eff.to) : "",
+            amount: (!isStatement && eff.value !== undefined) ? String(eff.value)
+                  : (it && it.summary && it.summary.amount) ? String(it.summary.amount) : "",
+            denom: (it && it.summary && it.summary.unit) ? String(it.summary.unit) : "",
+            to: (!isStatement && eff.to !== undefined) ? String(eff.to)
+              : (it && it.summary && it.summary.to && !isInvoke && !isLez) ? String(it.summary.to) : "",
+            // the heading, in the family's words (a Bitcoin payment, a LEZ transfer, a new policy…)
+            heading: room.headingFor(it && it.summary ? String(it.summary.kind || "") : ""),
+            // who approved, named (or "you"), and whether I did (exo-59c)
+            approvers: (it && Array.isArray(it.approvers)) ? it.approvers : [],
+            approvedByMe: !!(it && it.approvedByMe),
+            declinerNames: (it && Array.isArray(it.declinerNames)) ? it.declinerNames : [],
             // a full Safe transaction's own fields (exo-a50.1.4): what it calls and HOW —
             // a DELEGATECALL runs the target's code as the Safe, so the card must say so
             safeData: (!isStatement && eff.data !== undefined) ? String(eff.data) : "",
@@ -643,7 +665,8 @@ Item {
 
             LogosText {
                 Layout.fillWidth: true
-                text: room.joined ? qsTr("Room · %1").arg(room.topic) : qsTr("Join a room")
+                text: room.joined ? qsTr("Room · %1").arg(room.roomTitle.length > 0 ? room.roomTitle : room.topic)
+                                  : qsTr("Join a room")
                 color: Theme.palette.text
                 font.family: Theme.typography.publicSans
                 font.pixelSize: Theme.typography.primaryText
@@ -1163,6 +1186,8 @@ Item {
                                                    .arg(String(o.module || "")).arg(String(o.method || ""));
                                         return qsTr("⚠ ") + err + (o.detail ? " — " + String(o.detail) : "");
                                     }
+                                    if (o.executed === false)
+                                        return qsTr("⚠ The action did not run%1").arg(o.detail ? " — " + String(o.detail) : "");
                                     return o.executed
                                          ? qsTr("✓ Action ran%1").arg(o.detail ? "  ·  " + String(o.detail) : "")
                                          : qsTr("Running…");
@@ -1715,7 +1740,8 @@ Item {
                         objectName: "roomProposeTo"
                         Layout.fillWidth: true
                         placeholderText: room.isLezPolicy ? qsTr("recipient token holding (base58 or hex)")
-                                                          : qsTr("recipient (0x…)")
+                                       : room.isBtcPolicy ? qsTr("recipient Bitcoin address (bc1… / tb1… / bcrt1…)")
+                                       : qsTr("recipient (0x…)")
                         font.family: Theme.typography.mono
                     }
 
@@ -1949,6 +1975,10 @@ Item {
                         return qsTr("⚠ Not in a room — join one first.");
                     if (reason === "unknown-intent")
                         return qsTr("⚠ That proposal isn't in the room's log yet — give it a moment.");
+                    if (reason === "attestation-mismatch")
+                        return qsTr("⚠ Your approval wasn't published — the attestation your key made "
+                                  + "doesn't verify as the signer the driver recovered, so every member "
+                                  + "would reject it. Nothing was sent.");
                     return qsTr("⚠ Approval didn't count — %1").arg(reason);
                 }
                 color: Theme.palette.warning
@@ -2076,6 +2106,7 @@ Item {
                 members: room.members
                 pending: room.pending
                 topic: room.topic
+                joinStatus: room.backend ? String(room.backend.joinStatus || "") : ""
                 securityLevels: room.securityLevels
                 onRequestJoin: if (room.backend) room.backend.requestJoin()
                 onAdmit: function(identityHex) {
@@ -2111,6 +2142,16 @@ Item {
             room.backend.loadMessages();
             room.backend.loadIntents();
         }
+    }
+
+    // Accounts other members (or the LEZ create / FROST ceremony pumps) disclose, on a slow
+    // tick: listing them re-checks each EVM account against the chain, so not every second
+    // (exo-59c: they used to appear only after re-entering the room).
+    Timer {
+        interval: 10000
+        running: room.joined
+        repeat: true
+        onTriggered: if (room.backend) room.backend.loadAccounts()
     }
 
     // Connectivity on a slower cadence than the message tick: once a Safe proposal has

@@ -34,7 +34,7 @@ OUT=out-safe
 # Bind address for anvil's RPC. Default 127.0.0.1 (local-only, the safe default).
 # For a TWO-MACHINE demo where a second peer must reach this Safe chain over the LAN,
 # start with ANVIL_HOST=0.0.0.0 — anvil then listens on all interfaces and the second
-# peer points its RPC (Settings, or MUSTER_RPC) at http://<this-machine-LAN-IP>:8545.
+# peer points its RPC (Settings → RPC endpoint) at http://<this-machine-LAN-IP>:8545.
 # All local calls below (deploy/fund) still use 127.0.0.1.
 ANVIL_HOST=${ANVIL_HOST:-127.0.0.1}
 
@@ -86,5 +86,5 @@ echo "SINGLETON=$SINGLETON FACTORY=$FACTORY FALLBACK=$FALLBACK"
 echo "RPC=$RPC"
 if [ "$ANVIL_HOST" = "0.0.0.0" ]; then
   LANIP=$(ip route get 1.1.1.1 2>/dev/null | grep -oE 'src [0-9.]+' | awk '{print $2}' | head -1)
-  [ -n "$LANIP" ] && echo "LAN_RPC=http://$LANIP:8545   # point the second peer's RPC here (Settings or MUSTER_RPC)"
+  [ -n "$LANIP" ] && echo "LAN_RPC=http://$LANIP:8545   # point the second peer's RPC here (Settings → RPC endpoint)"
 fi

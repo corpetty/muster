@@ -246,6 +246,10 @@ proc entry(kind, variant: string): JsonNode =
      "manifest": d.manifest(e).toJson(),
      "signRefusal": d.signRefusal(e)}
 
+proc fixtureDriver*(kind: string): Driver =
+  ## The driver the corpus is generated from, for a kind — tests read the same fixtures.
+  newDriver(kind, configOf(kind))
+
 proc proposedEffectJson*(key: string): string =
   ## The effect JSON a room carries for the generated `<kind>/<variant>` — exactly what the
   ## hosted composer would propose, so a test can hold the card's rendering gate

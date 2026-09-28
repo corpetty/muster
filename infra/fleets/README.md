@@ -34,9 +34,10 @@ muster_module.coordinate_join("/muster/<room>")
 ```
 
 The config is `{"mode":"Core","preset":"logos.test","entryNodes":[<6 fleet multiaddrs>]}`.
-A host/runner should set this at startup, the way the demo UI defaults to
-`kDefaultDeliveryPreset = "logos.test"` — muster itself stays infra-agnostic and defaults to
-an isolated node.
+The module now defaults to this very config: an embedded logos.test preset with its entry
+nodes (`module/nim-lib/muster_module.nim`), so a room connects with no setup. A host or runner
+can still set another at startup (`MUSTER_DELIVERY_CONFIG`, as `make run-fleet` does for
+`FLEET=logos.dev`), and a delivery config saved in Settings always wins.
 
 ## Verified
 

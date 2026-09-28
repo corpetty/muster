@@ -356,7 +356,7 @@
         }
       ],
       "unverified": [
-        "coordinate_submit polls the receipt for about four seconds. If the chain has not mined it by then, it returns pending, and nothing later publishes the final event for a Safe intent (a LEZ settle is re-watched by the pump; a Safe one is not). From reading nim-lib/muster_module.nim, not a test."
+        "A settle still pending after coordinate_submit's ~4 s poll is re-watched by the module's pump (every tick, at most every 2 s, for up to 10 minutes) and final is published when the receipt lands; no test drives that path — from reading nim-lib/muster_module.nim."
       ]
     },
     {
@@ -729,7 +729,7 @@
       ],
       "unverified": [
         "No muster test proposes an owner or threshold change; that it is a CALL to the Safe is the Safe's own rule (OwnerManager functions are `authorized`). The data-carrying CALL path itself is proven on the real Safe (safe_real_anvil_e2e step 3).",
-        "coordinate_submit polls the receipt for about four seconds. If the chain has not mined it by then, it returns pending, and nothing later publishes the final event for a Safe intent (a LEZ settle is re-watched by the pump; a Safe one is not). From reading nim-lib/muster_module.nim, not a test."
+        "A settle still pending after coordinate_submit's ~4 s poll is re-watched by the module's pump (every tick, at most every 2 s, for up to 10 minutes) and final is published when the receipt lands; no test drives that path — from reading nim-lib/muster_module.nim."
       ]
     },
     {

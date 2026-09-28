@@ -24,12 +24,14 @@ import ../intents/materialization
 import ../intents/signing_payload
 import ../intents/provenance     # InputClass — the spec's accountability vocabulary (inv 10)
 import ../drivers/driver
+import ../drivers/profile   # a family's settlement names how it leaves the room (exo-59c)
 import ../drivers/kinds     # the one list of driver kinds (exo-a50.1.2)
 export lifecycle.Intent, lifecycle.LifecycleState
 export provenance.InputClass    # so consumers can name a lineage entry's class
 
 import ./intent_events
 export intent_events
+import ./effect_summary           # one reading of an effect for the card and the history (exo-59c)
 import ./attest                   # live attestations: the fold's gate + every surface's grade (exo-ef1)
 export attest
 
@@ -296,24 +298,33 @@ proc shortId(s: string): string =
   if s.len > 12: s[0 ..< 6] & "…" & s[^4 .. ^1] else: s
 
 proc activityEffectLabel(events: seq[Event], id: string): string =
-  ## A short summary of an intent's effect for the activity feed — honest about the
-  ## three effect shapes (payment / statement / add-driver), never fabricated.
-  let ej = effectJsonOf(events, id)
-  if ej.len == 0: return "a proposal"
-  try:
-    let j = parseJson(ej)
-    let kind = if j.hasKey("effect"): j["effect"].getStr() else: ""
-    if kind == "statement":
-      let t = if j.hasKey("text"): j["text"].getStr() else: ""
-      return "a statement: “" & t & "”"
-    if kind == "add-driver":
-      let k = if j.hasKey("kind"): j["kind"].getStr() else: "?"
-      return "a new policy: " & k
-    let val = if j.hasKey("value"): $j["value"] else: "0"
-    let to = if j.hasKey("to"): j["to"].getStr() else: ""
-    return "a payment: " & val & " → " & shortId(to)
-  except CatchableError:
-    return "a proposal"
+  ## A short summary of an intent's effect for the activity feed — the same reading the
+  ## card uses (effect_summary.nim, exo-59c), so the two never tell different stories.
+  effectSummary(effectJsonOf(events, id)).text
+
+proc settleWords(events: seq[Event], driverFor: DriverFor, id: string):
+    tuple[submit, submitDetail, final, finalDetail: string] =
+  ## How THIS intent's family leaves the room and lands (exo-59c): its settlement,
+  ## from the driver's profile — a Bitcoin broadcast is not a Safe execTransaction, and a
+  ## module call is not a payment.
+  let pol = intentPolicyOf(events, id)
+  if pol.split('@')[0] == "invoke":
+    let call = effectSummary(effectJsonOf(events, id)).to
+    return ("Running the action", (if call.len > 0: call & " was called" else: "the module call was made"),
+            "The action ran", "final — the module call returned")
+  let isPayment = effectSummary(effectJsonOf(events, id)).kind == "payment"
+  case driverFor(pol).profile().settlement
+  of "evm":
+    ("Submitted on-chain", "the Safe execTransaction was sent through your RPC",
+     "Settled on-chain", (if isPayment: "final — the payment landed" else: "final — the transaction landed"))
+  of "bitcoin":
+    ("Broadcast to Bitcoin", "the signed transaction went out through your Bitcoin node",
+     "Confirmed on Bitcoin", "final — the spend is in a block")
+  of "lez":
+    ("Sent to the LEZ", "the transaction went out through your LEZ sequencer",
+     "Executed on the LEZ", "final — a block included it")
+  else:
+    ("Submitted", "sent outside the room", "Final", "")
 
 proc gradeLookup(events: seq[Event], driverFor: DriverFor): proc (id, who, round: string): string =
   ## Memoized per-intent approval grades, keyed "<who>/<round>" (exo-ef1).
@@ -377,12 +388,13 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
         title: "Declined by " & shortId(p[3]),
         detail: "chose not to take part — the threshold is unchanged")
     of "submit":
+      let w = settleWords(events, driverFor, id)
       result.add ActivityEntry(seq: i, order: 0, kind: "submit", intentId: id,
-        account: "", title: "Submitted on-chain",
-        detail: "the Safe execTransaction was sent through the RPC")
+        account: "", title: w.submit, detail: w.submitDetail)
     of "final":
+      let w = settleWords(events, driverFor, id)
       result.add ActivityEntry(seq: i, order: 0, kind: "settled", intentId: id,
-        account: "", title: "Settled on-chain", detail: "final — the payment landed")
+        account: "", title: w.final, detail: w.finalDetail)
     else: discard
   # Derived "ready" line: narrate the threshold being met, positioned right after the
   # intent's last approval. Authoritative from the fold's own state — never a

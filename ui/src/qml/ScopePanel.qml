@@ -36,6 +36,11 @@ Item {
     // 64-byte hex. A parse failure upstream yields [] (absent), never fiction.
     property var pending: []
 
+    // The last ask's outcome (coordinate_request_join): "ok" | "waiting-for-room-key" | ""
+    // (exo-59c). A request is sealed to a join key a member announces (exo-661.7); until
+    // one arrives the ask can't be sent, and the panel says so instead of going quiet.
+    property string joinStatus: ""
+
     // Asks the host to grow the room; the host collects the new member's key.
     signal addMember()
 
@@ -279,6 +284,22 @@ Item {
                          + "they'll see your request and can let you in — you don't need to "
                          + "do anything else. (Asking again above re-sends the request.)")
                 color: Theme.palette.textTertiary
+                font.pixelSize: Theme.typography.badgeText
+            }
+
+            // Where the ask stands — sealed and sent, or still waiting for the room's key.
+            LogosText {
+                objectName: "joinStatusLabel"
+                visible: scope.roster.length <= 1 && scope.joinStatus.length > 0
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: scope.joinStatus === "waiting-for-room-key"
+                      ? qsTr("Waiting for someone in the room to announce its join key — your ask is "
+                           + "sealed to it, so only members can read who is asking. Asking again in a moment.")
+                      : scope.joinStatus === "ok"
+                        ? qsTr("Your ask is sealed and sent — a member here can admit you.")
+                        : qsTr("Ask: %1").arg(scope.joinStatus)
+                color: Theme.palette.textSecondary
                 font.pixelSize: Theme.typography.badgeText
             }
 

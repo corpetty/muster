@@ -66,6 +66,7 @@ import ../src/intents/authorization    # muster-issued authorizations for the ho
 import ../src/coordination/lp_invoker  # LpInvoker — call the target module over lp_*
 import ../src/coordination/discovery   # discover coordinatable module actions (P-D3)
 import ../src/coordination/contacts    # the address book (aliases for member ids)
+import ../src/coordination/effect_summary  # what an effect moves, in its family's words (exo-59c)
 import ../src/wallet/types             # chain-agnostic wallet types
 import ../src/wallet/adapter           # ChainAdapter seam + Wallet aggregate
 import ../src/wallet/evm_adapter       # the EVM/Safe chain
@@ -406,7 +407,9 @@ proc musterIdentity(): string =
   $(%*{
     "address": toHex(ks.address()),
     "ed25519": toHex(enc.ed),
-    "x25519": toHex(enc.x)
+    "x25519": toHex(enc.x),
+    # the key a Bitcoin multisig names you by — what you give whoever sets one up (exo-59c)
+    "btcPubKey": toHex(ks.btcPubKey())
   })
 
 proc safeProtocolVersion(): string =
@@ -1207,6 +1210,31 @@ proc musterCoordinateVote(intentId: string): string =
   except CatchableError as e:
     "refused: the LEZ sequencer: " & e.msg
 
+var gApprovedHere = initHashSet[string]()   ## intents THIS instance approved in-app this session (exo-59c)
+
+proc initialsOf(name: string): string =
+  ## One or two letters for an approval slot: a contact's initials, "Y" for you, or the
+  ## first two hex digits of an unnamed key.
+  var n = name.strip()
+  if n == "you": return "Y"
+  for p in ["0x", "ed:", "frost:"]:
+    if n.startsWith(p): n = n[p.len .. ^1]
+  if n.len == 0: return ""
+  let words = n.splitWhitespace()
+  if words.len >= 2: return ($words[0][0] & $words[1][0]).toUpperAscii()
+  n[0 ..< min(2, n.len)].toUpperAscii()
+
+proc noteApproved(intentId, r: string): string =
+  ## Remember an in-app approval that went through, for "approved by me" when the log
+  ## alone cannot say (a FROST-group or LEZ-vote approval is named by a per-ceremony or
+  ## per-membership key). A refusal is not an approval.
+  const failures = ["not-joined", "unknown-intent", "unsupported-driver", "rejected", "expired",
+                    "no-context", "unaccountable-input", "unknown-key", "attestation-mismatch"]
+  if r notin failures and not r.startsWith("refused") and not r.startsWith("not-") and
+     "\"error\"" notin r:
+    gApprovedHere.incl intentId
+  r
+
 proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: string): string =
   ## Add a contribution (in-app signed when `signatureHex` is empty, else pasted). The
   ## live contribute path lives in coordination/live.nim (exo-ef1) so it can be driven
@@ -1215,16 +1243,17 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
   if gSession == nil: return "not-joined"
   if signatureHex.len == 0:
     let drv = driverFor(intentPolicyOf(gSession.roomEvents(), intentId))
-    if drv of LezMultisigDriver: return musterCoordinateVote(intentId)
+    if drv of LezMultisigDriver: return noteApproved(intentId, musterCoordinateVote(intentId))
     if drv.frostGroupOf().ok:
       # a FROST approval (Bitcoin or LEZ) is two rounds: this member's nonces now, its partial signature
       # under the log's signer set once round 1 closes (frostPump) — one approval, two halves
       let r = liveFrostContribute(gSession, moduleKeystore(), driverFor, intentId, uint64(epochTime()))
       if r in ["collecting", "executable"] or r.startsWith("waiting") or r == "already-contributed":
         if intentId notin gFrostAuto: gFrostAuto.add intentId
-      return r
-  liveContribute(gSession, moduleKeystore(), driverFor, intentId, signatureHex, keyRef,
-                 intentLinkContext(intentId), uint64(epochTime()))
+      return noteApproved(intentId, r)
+  let r = liveContribute(gSession, moduleKeystore(), driverFor, intentId, signatureHex, keyRef,
+                         intentLinkContext(intentId), uint64(epochTime()))
+  if signatureHex.len == 0: noteApproved(intentId, r) else: r
 
 proc musterCoordinateIntents(): string =
   ## The room's proposals, folded from the shared log and projected to what a card
@@ -1237,6 +1266,9 @@ proc musterCoordinateIntents(): string =
   lezPump()                            # complete any LEZ step the chain has since included
   frostPump()                          # advance joined FROST ceremonies and round 2
   let events = gSession.roomEvents()
+  let myEnc = moduleKeystore().encIdentity()
+  let myEncHex = toHex(myEnc.toBytes()).toLowerAscii()
+  let myNames = myContributorNames(moduleKeystore())
   var arr = newJArray()
   for v in reduceIntentViews(events, driverFor):
     # Each intent renders under ITS OWN driver — the policy it was proposed with
@@ -1287,7 +1319,7 @@ proc musterCoordinateIntents(): string =
       # Resolve the contributing account to an address-book name, so the lineage reads
       # "Alice", not raw hex, when known — the alias is investigative, the raw account
       # stays for verification.
-      let alias = (if item.account.len > 0: contactBook().aliasOf(item.account) else: "")
+      let alias = (if item.account.len > 0: contactBook().nameFor(item.account) else: "")
       prov.add %*{"class": $item.cls, "logPos": item.logPos,
                   "account": item.account, "alias": alias,
                   "accountable": item.accountable, "what": item.what,
@@ -1297,6 +1329,27 @@ proc musterCoordinateIntents(): string =
     o["provenance"] = prov
     let chainPending = lezPendingFor(v.id)   # "vote" | "settle" while the chain has not included it
     if chainPending.len > 0: o["chainPending"] = %chainPending
+    # What it moves, in the family's own words and unit — the same reading the history
+    # uses (effect_summary.nim), so a Bitcoin spend or a LEZ call shows its amount (exo-59c).
+    let sm = effectSummary(v.effectJson)
+    o["summary"] = %*{"kind": sm.kind, "amount": sm.amount, "unit": sm.unit, "to": sm.to, "text": sm.text}
+    # Who approved, named from the address book (or "you"), and whether I did — read
+    # from the log + my keys (attest.approvedByMe), or an in-app approval made here.
+    var whos: seq[string]
+    for g in approvalGrades(events, driverFor, v.id):
+      if g.grade != agRejected and g.who notin whos: whos.add g.who
+    var approvers = newJArray()
+    for w in whos:
+      let me = approvedByMe(events, v.id, @[w], myEnc, myNames)
+      let name = (if me: "you" else: contactBook().nameFor(w))
+      approvers.add %*{"who": w, "name": name, "mine": me,
+                       "initials": initialsOf(if name.len > 0: name else: w)}
+    o["approvers"] = approvers
+    o["approvedByMe"] = %(approvedByMe(events, v.id, whos, myEnc, myNames) or v.id in gApprovedHere)
+    var decl = newJArray()
+    for d in v.decliners:
+      decl.add %*{"who": d, "name": (if normId(d) == myEncHex: "you" else: contactBook().nameFor(d))}
+    o["declinerNames"] = decl
     arr.add o
   $arr
 
@@ -1404,7 +1457,7 @@ proc musterCoordinateProvenance(): string =
   gSession.poll()
   var arr = newJArray()
   for it in logProvenance(gSession.roomEvents(), driverFor):
-    let alias = (if it.account.len > 0: contactBook().aliasOf(it.account) else: "")
+    let alias = (if it.account.len > 0: contactBook().nameFor(it.account) else: "")
     arr.add %*{"seq": it.seq, "class": $it.cls, "kind": it.kind, "intentId": it.intentId,
                "account": it.account, "alias": alias, "accountable": it.accountable,
                "what": it.what, "detail": it.detail, "guarantee": it.guarantee, "epoch": it.epoch}
@@ -1613,9 +1666,19 @@ proc musterCoordinateActivity(): string =
   if gSession == nil: return "[]"
   gSession.poll()
   var arr = newJArray()
-  for a in reduceActivity(gSession.roomEvents(), driverFor):
+  let events = gSession.roomEvents()
+  let myEnc = moduleKeystore().encIdentity()
+  let myNames = myContributorNames(moduleKeystore())
+  for a in reduceActivity(events, driverFor):
+    var title = a.title
+    # "Approved by 0x1234…abcd" → "Approved by Bob" / "Approved by you" when known (exo-59c)
+    if a.kind in ["approve", "decline"] and a.account.len > 0:
+      let mine = (if a.kind == "approve": approvedByMe(events, a.intentId, @[a.account], myEnc, myNames)
+                  else: normId(a.account) == toHex(myEnc.toBytes()).toLowerAscii())
+      let name = (if mine: "you" else: contactBook().nameFor(a.account))
+      if name.len > 0: title = (if a.kind == "approve": "Approved by " else: "Declined by ") & name
     arr.add %*{"seq": a.seq, "kind": a.kind, "intentId": a.intentId,
-               "account": a.account, "title": a.title, "detail": a.detail}
+               "account": a.account, "title": title, "detail": a.detail}
   $arr
 
 proc introducersJson(who: seq[Introducer]): JsonNode =
@@ -1885,8 +1948,10 @@ proc musterCoordinateSubmit(intentId: string): string =
     if fin.status != fsPending: break
     sleep(200)
   if fin.status == fsFinal: gSession.publish(finalEvent(intentId, chainRef = txRef.id))
-  elif fin.status == fsPending and (drv of LezMultisigDriver or drv of LezFrostDriver):
-    # a LEZ Execute lands a block later: the pump publishes final when the chain says Executed
+  elif fin.status == fsPending:
+    # Not final within ~4s (a block to come: a LEZ Execute, a Bitcoin confirmation, a slow
+    # EVM node): the pump keeps watching and publishes final when the chain says so (exo-59c;
+    # it used to watch only the LEZ, so a Safe or Bitcoin settle sat at "submitted").
     gLezPending.add LezPending(kind: lpSettle, session: gSession, settle: st, txRef: txRef, intentId: intentId,
                                started: epochTime())
   let onchain = (case fin.status
@@ -2258,7 +2323,11 @@ proc musterCoordinateExecute(intentId: string): string =
   if gInvoker == nil: gInvoker = newLpInvoker("muster_module")
   let ex = executeInvoke(gInvoker, invokeAllowlist(), module, meth, argsJson)
   if not ex.executed:
-    return $(%*{"id": intentId, "executed": false, "state": "refused", "detail": ex.reason})
+    # a refusal is an error the card names (exo-59c): it used to come back without one,
+    # so the ready box read "Running…" for a call that never ran
+    let err = (if ex.reason.startsWith("not-allowlisted"): "not-allowed" else: "invoke-rejected")
+    return $(%*{"id": intentId, "executed": false, "state": "refused", "error": err,
+                "module": module, "method": meth, "detail": ex.reason})
   # Fold forward: submit → (immediate finality) final. Event/receipt finality is a
   # later refinement — an immediate action folds straight to final here.
   gSession.publish(submitEvent(intentId))
@@ -2647,7 +2716,9 @@ proc musterSettings(): string =
     "delivery": gDeliveryConfig,
     "environment": "eip155:" & $gDevSafe.chainId.int,   # the wallet's dev chain (CAIP-2)
     "identity": {"address": toHex(ks.address()),
-                 "ed25519": toHex(enc.ed), "x25519": toHex(enc.x)}
+                 "ed25519": toHex(enc.ed), "x25519": toHex(enc.x),
+                 # the compressed key a Bitcoin multisig names you by (exo-59c)
+                 "btcPubKey": toHex(ks.btcPubKey())}
   })
 
 proc musterSetSetting(key, value: string): string =

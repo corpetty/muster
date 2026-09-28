@@ -83,3 +83,21 @@ proc asJson*(b: ContactBook): JsonNode =
   result = newJArray()
   for id, c in b.byId:
     result.add %*{"identity": c.identity, "alias": c.alias, "address": c.address}
+
+proc nameFor*(b: ContactBook, who: string): string =
+  ## A contributor's alias, however its driver names it (exo-59c): the 64-byte identity,
+  ## "ed:" / "frost:" + an Ed25519 key (the identity's first half), or a secp address
+  ## (matched against each contact's address). "" when no contact matches.
+  var w = who.strip()
+  for p in ["ed:", "frost:"]:
+    if w.startsWith(p): w = w[p.len .. ^1]
+  let id = normId(w)
+  if id.len == 0: return ""
+  if id in b.byId: return b.byId[id].alias
+  if id.len == 64:
+    for k, c in b.byId:
+      if k.len == 128 and k[0 ..< 64] == id: return c.alias
+  if id.len == 40:
+    for _, c in b.byId:
+      if c.address.len > 0 and normId(c.address) == id: return c.alias
+  ""

@@ -159,6 +159,48 @@ Item {
                         }
                     }
 
+                    // ── your Bitcoin key (exo-59c) ─────────────────────────────
+                    LogosText {
+                        Layout.topMargin: Theme.spacing.small
+                        text: qsTr("YOUR BITCOIN KEY")
+                        color: Theme.palette.textTertiary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                        font.weight: Theme.typography.weightMedium
+                    }
+                    LogosText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: qsTr("Share this with whoever sets up a Bitcoin multisig with you (Accounts → "
+                                 + "Bitcoin multisig). It's the public half of your authorization key, "
+                                 + "compressed — the key your in-app approvals sign with.")
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        TextEdit {
+                            id: btcKeyField
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignVCenter
+                            readOnly: true
+                            selectByMouse: true
+                            wrapMode: TextEdit.WrapAnywhere
+                            text: String((settings.identity && settings.identity.btcPubKey) || "").replace(/^0x/i, "")
+                            color: Theme.palette.textSecondary
+                            selectionColor: Theme.palette.primary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        LogosButton {
+                            objectName: "copyBtcKey"
+                            text: qsTr("Copy")
+                            enabled: btcKeyField.text.length > 0
+                            onClicked: { btcKeyField.selectAll(); btcKeyField.copy(); btcKeyField.deselect(); }
+                        }
+                    }
+
                     LogosText {
                         Layout.fillWidth: true
                         Layout.topMargin: 2
