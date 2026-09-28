@@ -312,6 +312,7 @@ void MusterUiBackend::requestJoin()
     // the first half of merging them into one readable room.
     const QString r = modules().muster_module.coordinate_request_join();
     qInfo() << "[muster_ui] coordinate_request_join ->" << r;
+    setJoinStatus(r);
     loadPending();
     // Keep re-announcing until admitted. Delivery over the fleet is best-effort and
     // muster's shard can be sparse (no mesh peer at the instant of a one-shot send),
@@ -346,7 +347,7 @@ void MusterUiBackend::scheduleJoinRetry()
             m_joinRetrying = false;
             return;
         }
-        modules().muster_module.coordinate_request_join();
+        setJoinStatus(modules().muster_module.coordinate_request_join());
         loadPending();
         scheduleJoinRetry();
     });
@@ -400,7 +401,7 @@ void MusterUiBackend::contributeInRoom(const QString &intentId, const QString &s
     const bool ok = (st != "rejected" && st != "not-joined" && st != "unknown-intent" && st != "unknown-key"
                      && !st.startsWith("refused") && st != "not-a-vote-locus" && st != "expired"
                      && st != "unsupported-driver" && st != "no-context" && st != "unaccountable-input"
-                     && !st.startsWith("unconfirmed"));
+                     && st != "attestation-mismatch" && !st.startsWith("unconfirmed"));
     QJsonObject r;
     r.insert("intentId", intentId);
     r.insert("state", st);

@@ -284,7 +284,7 @@
         "coordinate_decline",
         "coordinate_submit"
       ],
-      "ui": "Room → + → Payment → Settles via Bitcoin (P2WSH) → From <account> → payee + amount (sat) + fee (sat/vB) → Propose; card → Approve, or 'Sign outside muster (PSBT)' → Copy PSBT / Import. Settle on-chain in the ready box (coordinate_submit) — shown because the family's profile settles on a chain.",
+      "ui": "The account first: Room → Accounts → Bitcoin multisig (P2WSH or Taproot, k, network, each member's key from Settings → YOUR BITCOIN KEY) → Disclose. Then Room → + → Payment → Settles via Bitcoin (P2WSH) → From <account> → payee + amount (sat) + fee (sat/vB) → Propose; card → Approve, or 'Sign outside muster (PSBT)' → Copy PSBT / Import. Settle on-chain in the ready box (coordinate_submit) — shown because the family's profile settles on a chain.",
       "invariants": [
         1,
         2,
@@ -382,7 +382,7 @@
         }
       ],
       "unverified": [
-        "The card body draws only a to / value pair, which a btc-spend effect does not have, so a Bitcoin card shows no outputs; the fixed rows and the re-derived hash still render (Room.qml cardFor).",
+        "The card's amount → payee line for a Bitcoin spend comes from the module's effect summary (the payment outputs, change excluded; card_words_test); it has not been seen on screen.",
         "coordinate_submit polls the node for about four seconds; if the spend is not final by then it returns pending, and nothing later publishes the final event for a Bitcoin intent (only LEZ settles are re-watched by the pump). From reading nim-lib/muster_module.nim, not a test.",
         "The ready box's Settle on-chain for this family is wired from the profile's settlement, but has not been clicked through on screen."
       ]

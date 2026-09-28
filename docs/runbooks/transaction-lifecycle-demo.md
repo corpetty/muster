@@ -47,7 +47,7 @@ Two tracks, same coordination, different disclosure — **that contrast is the d
 cd infra/anvil && ./devnet.sh            # anvil + the real Safe v1.4.1 (2-of-3), prints SAFE_ADDR + RPC
 ```
 
-Point the app's RPC at `http://127.0.0.1:8545` (Settings, or `MUSTER_RPC`) and seed each
+The app's RPC defaults to `http://127.0.0.1:8545` (change it in Settings → RPC endpoint); seed each
 peer with a real owner key (`scripts/demo-peer.sh`, or `MUSTER_DEV_SECP_KEY`) so their
 in-app signature recovers to a configured owner. The headless proof that the on-chain leg
 works, if you want it on a slide:

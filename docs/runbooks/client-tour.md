@@ -131,12 +131,15 @@ What happens underneath:
    **Admit**.
 5. If Bob's ask ever stalls, **Ask to join this room** (Bob's scope panel) re-sends it.
 
+While Bob's ask waits for the room's join key, his scope panel says so: *Waiting for
+someone in the room to announce its join key…*. Once it's sealed and sent, the panel reads
+*Your ask is sealed and sent*. The room header shows the room's title
+(`Room · talk · with …`), not its topic.
+
 **Known rough edges**
-- The room header shows the raw topic, not the Home title.
-- Titles vanish on restart; Home then shows the topic.
+- Titles are session-only; after a restart, Home and the header show the topic.
 - Auto-admit works only while Alice stays in the room she just composed. After she
   re-opens it from Home, admit by hand.
-- Nothing on screen says "waiting for the room's key" while the first ask waits.
 
 ---
 
@@ -168,19 +171,21 @@ dropped forgery leaves no trace. The screen shows only correct names. The proof 
    - **✓ you have everything this needs**, from one need: **authority: roster-member**.
    - *Who will see what*: the store node sees only **timing, topic**.
    - The agreement line ends with **final in the room**.
-3. **Alice: Approve.** The slots show **1 of 2**.
-4. **Alice: Approve again.** (Known rough edge: the button stays visible after you
-   approve.)
-   ✓ Expect: still **1 of 2**. One member is one approval, however many times they sign
-   (exo-a5a). Before, one signature published under two names counted twice.
-5. **Bob: Approve.** ✓ Expect **2 of 2**, then the ready box: **✓ Endorsed — a signed
-   group decision. Nothing settles on-chain.**
-6. **Room history** (right column) reads *Approved by …* with each name. Open **Who can
+3. **Alice: Approve.** ✓ Expect: the slots show **1 of 2**, the first slot carries **Y**,
+   and a line under them reads **by you**. **Approve** is gone from Alice's card: the
+   module proves from the log and her keys that she approved (exo-59c). On Bob's side the
+   same line reads **by Alice**.
+4. **Bob: Approve.** ✓ Expect **2 of 2**, **by Alice, you** on Bob's side, then the ready
+   box: **✓ Endorsed — a signed group decision. Nothing settles on-chain.** A member
+   counts once however many times they sign (exo-a5a): one signature published under two
+   names used to count twice. That can't be done from the UI; `distinct_signer_test`
+   proves it.
+5. **Room history** (right column) reads *Approved by Alice*, *Approved by you*. Open **Who can
    see what** and try **Show per-action rows**.
-7. Propose a second statement. **Bob: Deny.**
-   ✓ Expect the card to show **… declined**. The history line reads *chose not to take
-   part — the threshold is unchanged*.
-8. **Governance.** In *Endorse with*, click **＋ Propose unanimous** and approve it on both
+6. Propose a second statement. **Bob: Deny.**
+   ✓ Expect the card to show **1 declined: Bob** (on Bob's side, **you**). The history line
+   reads *Declined by Bob — chose not to take part — the threshold is unchanged*.
+7. **Governance.** In *Endorse with*, click **＋ Propose unanimous** and approve it on both
    sides. ✓ Expect a **Unanimous** button to appear. The room admitted a new policy by
    vote.
 
@@ -216,8 +221,8 @@ running after the script exits; stop it later with `pkill anvil`.
 1. **Alice:** in **Accounts** (right column), click **Disclose the local test Safe**.
    ✓ Expect the row **Local test Safe (anvil) · 2 of 3**, then `evm.safe · eip155:31337 · …`,
    **the chain agrees**, and (new) the whole address with **Copy address**.
-2. **Bob:** accounts disclosed by someone else don't refresh on their own (known rough
-   edge). Go **Home** and click the room's row; the Safe then appears.
+2. **Bob:** within 10 s the Safe appears under Accounts too. Other members' accounts
+   refresh on a 10-second tick.
 3. **Alice:** **+** → **Payment** → *Settles via* **Safe** → pick the account under
    *From*.
    ✓ Expect the context box: *you act as … ✓ a Safe owner — your approval counts*.
@@ -258,17 +263,19 @@ running after the script exits; stop it later with `pkill anvil`.
 **Optional:** *Endorse with* **Attest** (EIP-191) acts from the same Safe.
 ✓ Expect *✓ a recognized attester (a Safe owner)*.
 
-**Known rough edge:** a settle still pending after about 4 s is never re-checked, so it
-can sit at *Submitted — awaiting finality* on a slow chain.
+The history reads *Submitted on-chain — the Safe execTransaction was sent through your
+RPC*, then *Settled on-chain — final — the payment landed*. A settle still pending after
+the first ~4 s keeps being watched, and turns final when the receipt lands.
 
 ---
 
-## 5. Bitcoin through a FROST key (regtest) 🆕 first on screen
+## 5. Bitcoin on regtest 🆕 first on screen
 
-The two Bitcoin multisig families (P2WSH, taproot `multi_a`) **cannot be disclosed from
-the UI yet**: there is no form, and no screen shows a member's compressed key. So the
-Bitcoin path you can drive by hand is FROST. A key ceremony makes one group key, and a
-spend settles as a single 64-byte signature.
+Two ways to hold Bitcoin together:
+- **5a**, a classic multisig (P2WSH `sortedmulti` or taproot `multi_a`) built from each
+  member's key;
+- **5b**, a FROST key made by a ceremony, whose spend settles as a single 64-byte
+  signature.
 
 **Setup.** In a terminal:
 
@@ -282,6 +289,53 @@ chain; `infra/bitcoind/regtest.sh stop` stops it.
 **Both peers:** **Settings → Bitcoin node** → `http://muster:muster@127.0.0.1:18443` →
 **Save**.
 
+Keep a bash shell open for the node:
+
+```bash
+nix shell nixpkgs#bitcoind -c bash
+```
+
+```bash
+bcli() { bitcoin-cli -regtest -rpcuser=muster -rpcpassword=muster -rpcport=18443 "$@"; }
+bcli createwallet miner
+M=$(bcli getnewaddress); bcli generatetoaddress 101 "$M" >/dev/null
+R=$(bcli getnewaddress); echo "$R"
+```
+
+### 5a. A Bitcoin multisig
+
+1. **Both:** **Settings → YOUR BITCOIN KEY** → **Copy**. Paste Bob's key into the chat for
+   Alice.
+2. **Alice:** **Accounts → Bitcoin multisig**.
+   - Pick **P2WSH** (or **Taproot**).
+   - Set **k** `2`, network `regtest`.
+   - Paste both keys, comma-separated, then **Disclose this Bitcoin multisig**.
+   - ✓ Expect a `btc.p2wsh-sortedmulti · bip122:0f9188f1… · bcrt1q…` account, **2 of 2**.
+     Its address is derived from the keys.
+3. **Fund it:** **Copy address**, then:
+
+   ```bash
+   bcli sendtoaddress <paste> 1.0 && bcli generatetoaddress 1 "$M" >/dev/null
+   ```
+
+4. **Alice:** **+** → **Payment** → *Settles via* **Bitcoin (P2WSH)** → pick the account.
+   - Recipient: `$R`. The placeholder now asks for a Bitcoin address.
+   - **amount (sat)** `40000000`, **fee** `2`, then **Propose**.
+   - ✓ Expect the card: **Proposed a Bitcoin payment**, `40000000 sat → bcrt1q…`. Change
+     back to the account is not counted as a payment.
+5. **Both: Approve** (in-app DER signatures), or try **Sign outside muster (PSBT)** on one
+   side: copy the PSBT, sign it in Core, and **Import** it.
+6. **Settle on-chain**, then mine a block:
+
+   ```bash
+   bcli generatetoaddress 1 "$M" >/dev/null
+   ```
+
+   ✓ Expect *Broadcast to Bitcoin*, then *Confirmed on Bitcoin* in the history, and the
+   ready box turns final.
+
+### 5b. A FROST key
+
 **The ceremony**
 1. **Alice:** in **Accounts → FROST key ceremony (Bitcoin taproot)**, fill in:
    - name `vault`
@@ -294,25 +348,16 @@ chain; `infra/bitcoind/regtest.sh stop` stops it.
    ✓ Expect a **FROST 2 of 2** account (`btc.frost-bip445 · bip122:0f9188f1… · bcrt1p…`).
    If it doesn't show, go Home and click the room row.
 
-**Fund it.** Click **Copy address** (new in this PR) on the FROST account. Then:
+**Fund it.** Click **Copy address** on the FROST account. Then:
 
 ```bash
-nix shell nixpkgs#bitcoind -c bash
-```
-
-```bash
-bcli() { bitcoin-cli -regtest -rpcuser=muster -rpcpassword=muster -rpcport=18443 "$@"; }
-bcli createwallet miner
-M=$(bcli getnewaddress); bcli generatetoaddress 101 "$M" >/dev/null
-bcli sendtoaddress <paste the FROST address> 1.0
-bcli generatetoaddress 1 "$M" >/dev/null
-R=$(bcli getnewaddress); echo "$R"
+bcli sendtoaddress <paste the FROST address> 1.0 && bcli generatetoaddress 1 "$M" >/dev/null
 ```
 
 **Spend it**
 1. **Alice:** **+** → **Payment** → *Settles via* **Bitcoin (FROST)** → pick the FROST
    account under *From*.
-2. Recipient: the `$R` address. The placeholder still says `0x…` (known rough edge).
+2. Recipient: the `$R` address.
 3. **amount (sat)** `40000000`, **fee (sat/vB)** `2`, then **Propose**.
 4. On the card, ✓ expect **round 1 of 2**.
    - **Open "What this needs"**: expect `environment: bip122:0f9188f13cb7b2c71f2a335e3a4fc328`,
@@ -336,11 +381,8 @@ R=$(bcli getnewaddress); echo "$R"
    <txid> 1`). Its witness should be **one 64-byte signature**, the same as a
    single-signer taproot spend.
 
-**Known rough edges**
-- The card shows no amount or outputs for a Bitcoin spend.
-- Room history calls it *a payment: 0 →* and *the Safe execTransaction*.
-- **Sign outside muster (PSBT)** appears, but a FROST key has no outside format.
-- The ready box may stay at *Submitted* after you mine (see Part 4).
+**Known rough edge:** **Sign outside muster (PSBT)** appears on a FROST card, but a FROST
+key has no outside format.
 
 ---
 
@@ -371,7 +413,7 @@ https://testnet.lez.logos.co (lez:testnet)**. Blocks take about 40 s, so expect 
    ✓ Expect *⏳ Your vote is on its way to the chain — it counts once a block includes it.*
 6. **Settle on-chain** 🆕. ✓ Expect *⏳ Executing on chain*. **The execution is expected
    to be rejected** unless the vault holds that token. Nothing in the app mints a token or
-   funds the vault yet. What you're judging here is the propose-and-vote experience.
+   funds the vault yet (`exo-2752`). What you're judging here is the propose-and-vote experience.
 
 ---
 
@@ -427,17 +469,14 @@ For each part: ✓, or what you saw instead. For 🆕 steps, what you saw even i
 right. Beyond that, what felt wrong, slow or confusing. Timings help most for the
 handshake (Part 1) and the chain waits (Parts 4–7).
 
-**Known rough edges** (tracked in `exo-59c`, so you can skip reporting these):
-- Approve stays visible after you approve.
-- Accounts don't refresh until you re-enter the room.
-- Bitcoin and LEZ cards show no amount.
-- Room history says "Safe execTransaction" for every family.
-- A settle is re-checked for only about 4 s.
-- A refused **Run the action** shows *Running…*.
-- Nothing shows "waiting for the room's key".
-- The room header shows the raw topic.
-- The Bitcoin multisig families can't be disclosed in the UI.
-- Nothing mints or funds LEZ tokens.
+**Known rough edges** (so you can skip reporting these):
+- Nothing mints a LEZ token or funds a vault or group account (`exo-2752`), so the LEZ
+  settles in Parts 6–7 are expected to be rejected.
+- Room titles last only for the session.
+- A FROST card offers **Sign outside muster (PSBT)** with nothing to export.
+
+The fourteen rough edges the first version of this runbook listed are fixed (`exo-59c`),
+except the LEZ funding, which is now its own feature (`exo-2752`).
 
 **Reset**
 

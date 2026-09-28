@@ -30,6 +30,15 @@ Item {
     property var frostCeremony: ({})      // the last open/join result ({ceremony, host} or {error})
     signal frostOpenRequested(string ceremonyId, string network, string t, string n)
     signal frostJoinRequested(string ceremonyId)
+    // the Bitcoin multisig form: which family, and each network's CAIP-2 chain id
+    // (module/src/bitcoin/network.nim)
+    property string btcFamily: "btc.p2wsh-sortedmulti"
+    readonly property var btcChains: ({
+        mainnet: "bip122:000000000019d6689c085ae165831e93",
+        testnet: "bip122:000000000933ea01ad0ee984209779ba",
+        testnet4: "bip122:00000000da84f2bafbbc53dee25a72ae",
+        signet: "bip122:00000008819873e925422c1ff0f99f7c",
+        regtest: "bip122:0f9188f13cb7b2c71f2a335e3a4fc328" })
 
     implicitHeight: col.implicitHeight
 
@@ -198,6 +207,66 @@ Item {
             onClicked: acc.discloseRequested(JSON.stringify({
                 family: "evm.safe", chain: "eip155:" + chainField.text.trim(),
                 address: addrField.text.trim(), label: "" }))
+        }
+        // ── a Bitcoin multisig (exo-a50.2 families; this form, exo-59c) ──
+        // k of n members' compressed keys (each finds theirs in Settings → YOUR BITCOIN KEY).
+        // The address is derived from the keys, so nothing here is taken on trust: every
+        // member re-derives it, and the module refuses a key list that doesn't parse.
+        LogosText {
+            Layout.fillWidth: true
+            Layout.topMargin: Theme.spacing.small
+            text: qsTr("Bitcoin multisig")
+            color: Theme.palette.textSecondary
+            font.pixelSize: Theme.typography.badgeText
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Theme.spacing.small
+            LogosButton {
+                objectName: "btcFamilyP2wsh"
+                text: qsTr("P2WSH")
+                variant: acc.btcFamily === "btc.p2wsh-sortedmulti" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                onClicked: acc.btcFamily = "btc.p2wsh-sortedmulti"
+            }
+            LogosButton {
+                objectName: "btcFamilyTaproot"
+                text: qsTr("Taproot")
+                variant: acc.btcFamily === "btc.tapscript-multi-a" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                onClicked: acc.btcFamily = "btc.tapscript-multi-a"
+            }
+            LogosTextField {
+                id: btcK
+                objectName: "btcThreshold"
+                Layout.preferredWidth: 44
+                placeholderText: qsTr("k")
+                text: "2"
+            }
+            LogosTextField {
+                id: btcNet
+                objectName: "btcNetwork"
+                Layout.fillWidth: true
+                placeholderText: qsTr("network")
+                text: "regtest"
+            }
+        }
+        LogosTextField {
+            id: btcKeys
+            objectName: "btcKeys"
+            Layout.fillWidth: true
+            placeholderText: qsTr("members' Bitcoin keys (66 hex each), comma-separated")
+        }
+        LogosButton {
+            objectName: "discloseBtc"
+            Layout.fillWidth: true
+            readonly property var keys: btcKeys.text.split(",").map(function (k) { return k.trim().replace(/^0x/i, ""); })
+                                                    .filter(function (k) { return k.length > 0; })
+            enabled: keys.length >= 1 && Number(btcK.text) >= 1 && Number(btcK.text) <= keys.length
+                     && acc.btcChains[btcNet.text.trim()] !== undefined
+            text: qsTr("Disclose this Bitcoin multisig")
+            variant: LogosButton.Variant.Secondary
+            onClicked: acc.discloseRequested(JSON.stringify({
+                family: acc.btcFamily, chain: acc.btcChains[btcNet.text.trim()],
+                signers: keys, threshold: Number(btcK.text), label: "" }))
         }
         // ── a FROST key ceremony (Phase D) ──
         // The room is the ceremony's coordinator. Each participant's part runs on the room's

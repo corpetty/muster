@@ -2,7 +2,7 @@
 
 ## Run them
 
-One command runs every test that needs no chain — 98 unit tests and the 55 invariant
+One command runs every test that needs no chain — 99 unit tests and the 55 invariant
 probes under `probes/`, in parallel:
 
 ```bash
@@ -54,6 +54,7 @@ wants (below), which the runner supplies.
 - `schema_coverage_test` (the card recognizes every effect a built driver canonicalizes, under the schema id the driver signs over — so no built family's card is schema-unknown with its Approve hidden; found: LEZ-FROST's lez-call)
 - `manifest_precision_test` (exo-ec8 — every generated manifest says exactly what its action needs, touches and discloses: unique touches, chains in CAIP-2 and accounts in CAIP-10, the environment requirement named as environment(); a Safe payee only on a transfer, an amount on a transfer (even a template), on a call only when ETH moves, never on a delegatecall; a Safe's signers, policy, nonce and gas public; a LEZ action naming every account it passes and the program it calls; `lez-rpc`, not `lez_core`, on the live LEZ paths)
 - `distinct_signer_test` (exo-a5a — a k-of-n decision needs k distinct signers: a contribution counts only under the name of the signer the driver identifies, checked before dedup; one signature under two names is one approval, a forgery never takes a member's slot, governance cannot be completed alone; threshold and Safe; `$SECP` + `$SODIUM`)
+- `card_words_test` (exo-59c — the card and the room history say what each family's intent does, over every generated (kind, variant): no proposal reads as "a payment: 0 →"; a Bitcoin spend names its payment output (change excluded) in sat, a LEZ transfer its amount in token units, a module action its call; submit/final lines follow the family's settlement; contributors are named from the address book by identity, Ed25519 key or secp address; "approved by me" is read from the log + this member's keys, and a key binding counts only when its own signer is that approver)
 - `store_node_view_test` (exo-661.7 — what a store node reads off a room's topic: over the app's join-by-name flow (two founders, one admits the other, a non-founding member admits a third), no member's Ed25519 key, X25519 key, secp256k1 address or binding signature appears in any retained frame, no data or grant frame carries an epoch tag at either end, and each asker still reads from its own epoch on, F-16)
 - `authorship_test` (exo-f76 — an author-bearing event counts only when its author signed it: forged, wrong-key, cross-room, tampered and malformed author events are dropped, genuine ones count, over the wire included; `$SECP` + `$STINT` + `$SODIUM`)
 - `log_proof_test`

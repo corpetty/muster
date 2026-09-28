@@ -15,7 +15,7 @@ in `../contracts/specs/derived-exo-*.spec.json`; each names probes under
 
 **P0–P4 landed; P3 built — two instances converge over the live Logos fleet;
 the multisig families (Phases A–D) landed 2026-09-24/25.** The signing-path core,
-the intent lifecycle and driver interface, all ten invariants (98 unit tests and
+the intent lifecycle and driver interface, all ten invariants (99 unit tests and
 55 invariant probes, green via `tests/run-suite.sh`), and the LIDL codegen that
 generates the surface from the contract are all in. P4 put the whole lifecycle
 through the real UI (ADR-013). P3 — transport, encryption, and multi-party
@@ -124,4 +124,4 @@ tests/          unit tests · run-suite.sh (all of them, one command) · vectors
 - Invariant tests are append-only. Extend, don't weaken.
 - The module imports nothing from `../ui/`; it reaches other modules only through logos-core.
 
-<!-- rot-check: current-phase=CLAUDE.md sha256=41c005b2b4e4831235f87bef0feb5565fd6f3b4c59857b0156fe8238617352cb -->
+<!-- rot-check: current-phase=CLAUDE.md sha256=cf661ef44ae35e13b44b0de64417744fb618150b1854a95098d2362cfc4d8e16 -->

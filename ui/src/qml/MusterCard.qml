@@ -309,7 +309,8 @@ Rectangle {
             text: cardRoot.kind === "address-request" ? qsTr("Asked for an address")
                 : cardRoot.kind === "address-share" ? qsTr("Shared an address")
                 : cardRoot.kind === "intent-propose"
-                  ? (String((cardRoot.card && cardRoot.card.statement) || "").length > 0 ? qsTr("Proposed a statement")
+                  ? (String((cardRoot.card && cardRoot.card.heading) || "").length > 0 ? String(cardRoot.card.heading)
+                     : String((cardRoot.card && cardRoot.card.statement) || "").length > 0 ? qsTr("Proposed a statement")
                      : String((cardRoot.card && cardRoot.card.action) || "").length > 0 ? qsTr("Proposed an action")
                      : qsTr("Proposed a payment"))
                 : cardRoot.kind === "intent-approve" ? qsTr("Approved")
@@ -714,6 +715,23 @@ Rectangle {
                     font.pixelSize: Theme.typography.badgeText
                     font.weight: Theme.typography.weightMedium
                 }
+            }
+
+            // Who approved, by name ("you" for this member) — the slots' initials, spelled out.
+            LogosText {
+                objectName: "cardApproverNames"
+                readonly property var named: (cardRoot.card && Array.isArray(cardRoot.card.approvers))
+                                             ? cardRoot.card.approvers : []
+                visible: named.length > 0
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("by %1").arg(named.map(function (a) {
+                          var n = String(a.name || "");
+                          if (n.length > 0) return n;
+                          var w = String(a.who || "");
+                          return w.length > 12 ? w.slice(0, 6) + "…" + w.slice(-4) : w; }).join(", "))
+                color: Theme.palette.textSecondary
+                font.pixelSize: Theme.typography.badgeText
             }
 
             // Committed vs unattested, in words — only when something was pasted in, so a
@@ -1164,8 +1182,13 @@ Rectangle {
             visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown && cardRoot.declines > 0
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: qsTr("%1 declined: %2").arg(cardRoot.declines).arg(cardRoot.decliners.map(function (d) {
-                      var x = String(d); return x.length > 12 ? x.slice(0, 6) + "…" + x.slice(-4) : x; }).join(", "))
+            text: qsTr("%1 declined: %2").arg(cardRoot.declines).arg(
+                      ((cardRoot.card && Array.isArray(cardRoot.card.declinerNames) && cardRoot.card.declinerNames.length > 0)
+                         ? cardRoot.card.declinerNames : cardRoot.decliners.map(function (d) { return { who: d, name: "" }; }))
+                      .map(function (d) {
+                          var n = String(d.name || "");
+                          if (n.length > 0) return n;
+                          var x = String(d.who || ""); return x.length > 12 ? x.slice(0, 6) + "…" + x.slice(-4) : x; }).join(", "))
             color: Theme.palette.warning
             font.pixelSize: Theme.typography.badgeText
         }

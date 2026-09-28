@@ -48,7 +48,8 @@ block:
     let t = proposeTitle(kind, variant)
     doAssert t.len > 0, kind & "/" & variant & ": no proposal line"
     doAssert "a payment: 0 → " notin t, kind & "/" & variant & " reads as a zero payment: " & t
-  doAssert "a payment: 1 wei → 0x" in proposeTitle("safe", "transfer"), proposeTitle("safe", "transfer")
+  let v = $parseJson(eff("safe/transfer"))["value"].getBiggestInt()
+  doAssert ("a payment: " & v & " wei → 0x") in proposeTitle("safe", "transfer"), proposeTitle("safe", "transfer")
   doAssert "contract call" in proposeTitle("safe", "contract-call"), proposeTitle("safe", "contract-call")
   doAssert "DELEGATECALL" in proposeTitle("safe", "delegatecall"), proposeTitle("safe", "delegatecall")
   doAssert "an action: delivery_module.send" in proposeTitle("invoke", "module-call"), proposeTitle("invoke", "module-call")
@@ -133,11 +134,22 @@ block:
   doAssert approvedByMe(@[], id, @[mineWho], me, names)
   # someone else's is not
   doAssert not approvedByMe(@[], id, @[theirsWho], me, names)
-  # a name that is none of mine counts as mine only when the log binds it to my identity
-  let bound = keyBindingEvent(id, "someKeyName", "0x" & hx(encodeLink(mine.bindingFor(ctx))))
-  doAssert approvedByMe(@[bound], id, @["someKeyName"], me, names)
-  let boundToOther = keyBindingEvent(id, "someKeyName", "0x" & hx(encodeLink(other.bindingFor(ctx))))
-  doAssert not approvedByMe(@[boundToOther], id, @["someKeyName"], me, names)
+  # A key that is none of my names counts as mine only when the log carries a binding
+  # that key itself signed, naming MY identity (an in-app approval with another held key).
+  let spare = newInMemoryKeystore(seed(0x33), seed(0x41))      # another secp key, MY encryption seed
+  doAssert spare.encIdentity() == me
+  let spareWho = "0x" & hx(spare.address())
+  doAssert spareWho notin names
+  let bound = keyBindingEvent(id, spareWho, "0x" & hx(encodeLink(spare.bindingFor(ctx))))
+  doAssert approvedByMe(@[bound], id, @[spareWho], me, names), "a key the log binds to me"
+  # someone else binding their own key to someone else's identity: not mine
+  let boundToOther = keyBindingEvent(id, theirsWho, "0x" & hx(encodeLink(other.bindingFor(ctx))))
+  doAssert not approvedByMe(@[boundToOther], id, @[theirsWho], me, names)
+  # a binding naming me but filed under a different approver's name: the signer is not
+  # that approver, so it proves nothing about theirs
+  let misfiled = keyBindingEvent(id, theirsWho, "0x" & hx(encodeLink(spare.bindingFor(ctx))))
+  doAssert not approvedByMe(@[misfiled], id, @[theirsWho], me, names),
+    "a binding counts only when its own signer is the approver it is filed under"
   echo "5. approved-by-me: my own names, or a binding to my identity in the log OK"
 
 echo "card_words_test: all OK"

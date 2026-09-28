@@ -36,6 +36,7 @@ import ../intents/signing_payload
 import ../intents/provenance
 import ./intent_events
 import ../crypto/keystore
+import ../crypto/binding
 export provenance.SignedInput, signing_payload.SigningContext
 
 type
@@ -303,7 +304,54 @@ proc expired*(ctx: SigningContext, nowSec: uint64): bool =
   ## pure function of the log (invariant 4).
   nowSec > ctx.expiry
 
-# exo-59c stubs — see the green commit
-proc myContributorNames*(ks: Keystore): seq[string] = @[]
+# ── "did I approve this?" — read from the log and my keys (exo-59c) ──────────────
+# The card used to claim nothing per-viewer, so Approve stayed after you used it. What is
+# claimed now is only what the log and this member's keys prove: an approval named by one
+# of MY names, or one whose key the log binds to my encryption identity with a statement
+# that key itself signed. A FROST-group or LEZ-vote approval is named by a key neither
+# rule reaches; the host remembers those it made itself.
+
+proc lowHex(b: openArray[byte]): string =
+  const d = "0123456789abcdef"
+  for x in b: (result.add d[int(x shr 4)]; result.add d[int(x and 0x0F)])
+
+proc myContributorNames*(ks: Keystore): seq[string] =
+  ## The names the drivers give THIS member's approvals, derived from its keys: a Safe /
+  ## EIP-191 approval is named by a secp address (every key the keystore holds), a
+  ## Bitcoin multisig approval by the primary key's compressed public key, a threshold /
+  ## invoke / room-FROST approval by the Ed25519 key.
+  let e = ks.encIdentity()
+  for r in ks.keyRefs(): result.add r.toLowerAscii()
+  let a = "0x" & lowHex(ks.address())
+  if a notin result: result.add a
+  try: result.add lowHex(ks.btcPubKey())
+  except CatchableError: discard
+  result.add "ed:" & lowHex(e.ed)
+  result.add "frost:" & lowHex(e.ed)
+
 proc approvedByMe*(events: seq[Event], intentId: string, approvers: seq[string],
-                   me: EncIdentity, myNames: seq[string]): bool = false
+                   me: EncIdentity, myNames: seq[string]): bool =
+  ## Whether THIS member is among an intent's approvers. `approvers` are the names the
+  ## fold counted (non-rejected grades). A binding (intent/<id>/binding/<who>) counts
+  ## only when its statement names my identity AND its signer is that approver — so no
+  ## one can make my card claim an approval by binding their own key to me.
+  var mine: seq[string]
+  for n in myNames: mine.add n.toLowerAscii()
+  var named: seq[string]
+  for w in approvers:
+    let lw = w.toLowerAscii()
+    if lw in mine: return true
+    named.add lw
+  for e in events:
+    let p = e.key.split('/')
+    if p.len != 4 or p[0] != "intent" or p[1] != intentId or p[2] != "binding": continue
+    let who = p[3].toLowerAscii()
+    if who notin named: continue
+    try:
+      let st = decodeLink(hexToBytes(e.value))
+      if st.enc != me: continue
+      let signer = bindingSigner(st, 0)          # the key that vouched; expiry is not the question here
+      if who == "0x" & lowHex(signer): return true
+      if who.len == 66 and addressOfCompressed(hexToBytes(who)) == signer: return true
+    except CatchableError: discard
+  false

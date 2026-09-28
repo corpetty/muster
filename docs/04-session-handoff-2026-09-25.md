@@ -93,7 +93,8 @@ verified at handoff from a fresh GitHub clone; see §5.
      reasons are in `docs/labbook/lez-multisig-versions.md`.
      - Build the multisig guest with `make build` in a `logos-co/lez-multisig` checkout
        (PR #45 or later). It reproduces the testnet ImageID.
-   - **Bitcoin regtest:** `nix shell nixpkgs#bitcoind -c bash infra/bitcoind/regtest.sh start`.
+   - **Bitcoin regtest:** `nix shell nixpkgs#bitcoind -c bash infra/bitcoind/regtest.sh` (it takes no `start`: any
+     argument but `stop` starts a fresh chain).
      `phase_d_exit_test` needs a **fresh** regtest; stop any other worktree's instance first.
    - **Anvil and the real Safe v1.4.1:** `infra/anvil/devnet.sh`.
 

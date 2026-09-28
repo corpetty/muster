@@ -403,4 +403,8 @@ class MusterUi
     // binding recovers to a Safe owner (F-9). The scope panel lists these with an
     // Admit action; admitting re-keys the room forward (F-16).
     PROP(QString pendingJson="[]" READONLY)
+    // The last join ask's outcome (coordinate_request_join): "ok" (sent, sealed to the
+    // room's join key), "waiting-for-room-key" (no member has announced one yet — the
+    // ask was re-requested), or "" before any ask. The scope panel says which (exo-59c).
+    PROP(QString joinStatus="" READONLY)
 }

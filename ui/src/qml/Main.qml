@@ -409,6 +409,8 @@ Item {
     // The conversation surface. Reads its state from the module through the backend.
     Room {
         id: roomSurface
+        // the session title for this room (never its topic, which names nothing)
+        roomTitle: root.roomLabels[roomSurface.topic] || ""
         // A card remedy that lives in Settings (repoint the RPC): hop to the view.
         onSettingsRequested: {
             root.view = "settings";
