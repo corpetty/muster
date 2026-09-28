@@ -1985,6 +1985,10 @@ proc musterCoordinateActivity(): string =
     let title =
       if a.kind == "approve" and a.account.len > 0 and
          approvedByMe(events, a.intentId, @[a.account], myEnc, myNames): "Approved by you"
+      elif a.kind == "propose":
+        # "Proposed a split — …: 0.6 ETH, 1 person owes you": the effect's own people, named
+        "Proposed " & effectSummary(effectJsonOf(events, a.intentId),
+                                    proc(who: string): string = memberName(who, mine)).text
       else: activityTitle(a, proc(who: string): string = memberName(who, mine))
     arr.add %*{"seq": a.seq, "kind": a.kind, "intentId": a.intentId,
                "account": a.account, "title": title, "detail": a.detail}

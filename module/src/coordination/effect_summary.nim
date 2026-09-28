@@ -24,6 +24,18 @@ type
 proc short(s: string): string =
   if s.len > 12: s[0 ..< 6] & "…" & s[^4 .. ^1] else: s
 
+proc inDecimals(raw: string, decimals: int): string =
+  ## Base units as a decimal in the asset's own decimals, by string (never a float):
+  ## "600000000000000000", 18 -> "0.6"; "100", 9 -> "0.0000001".
+  var r = raw.strip()
+  if r.len == 0 or not r.allCharsInSet({'0' .. '9'}): return raw
+  while r.len <= decimals: r = "0" & r
+  var whole = r[0 ..< r.len - decimals]
+  var frac = r[r.len - decimals .. ^1]
+  while frac.len > 0 and frac[^1] == '0': frac.setLen(frac.len - 1)
+  while whole.len > 1 and whole[0] == '0': whole = whole[1 .. ^1]
+  if frac.len > 0: whole & "." & frac else: whole
+
 proc numText(n: JsonNode): string =
   ## A JSON number or numeric string, as decimal text.
   if n.isNil: return "0"
@@ -79,7 +91,9 @@ proc btcSummary(j: JsonNode): EffectSummary =
   result.text = "a Bitcoin payment: " & $total & " sat → " & short(payees[0]) &
                 (if payees.len > 1: " and " & $(payees.len - 1) & " more" else: "") & fee
 
-proc effectSummary*(effectJson: string): EffectSummary =
+proc effectSummary*(effectJson: string, label: proc (who: string): string = nil): EffectSummary =
+  ## `label` names a person the effect carries (a split's creditor) the way the card
+  ## does — "you", an alias (exo-221); without one, a short id.
   if effectJson.len == 0: return EffectSummary(kind: "unknown", text: "a proposal")
   var j: JsonNode
   try: j = parseJson(effectJson)
@@ -105,9 +119,13 @@ proc effectSummary*(effectJson: string): EffectSummary =
     let unit = (if asset == "ETH": "wei" else: asset)
     let total = numText(j{"total"})
     let memo = j{"memo"}.getStr()
+    # the words read in the asset's own decimals (ETH 18, LEZ 9); .amount/.unit stay raw
+    let shown = inDecimals(total, (if asset == "LEZ": 9 else: 18)) & " " & asset
+    let creditor = j{"creditor"}.getStr()
     return EffectSummary(kind: "split", amount: total, unit: unit, to: j{"payTo"}.getStr(),
-      text: "a split" & (if memo.len > 0: " — " & memo else: "") & ": " & total & " " & unit & ", " &
-            $n & (if n == 1: " person owes " else: " people owe ") & short(j{"creditor"}.getStr()))
+      text: "a split" & (if memo.len > 0: " — " & memo else: "") & ": " & shown & ", " &
+            $n & (if n == 1: " person owes " else: " people owe ") &
+            (if label != nil: label(creditor) else: short(creditor)))
   else: discard
   if j.hasKey("program") and j.hasKey("instruction"):         # a LEZ call
     if isTokenTransfer(j["instruction"], j{"accounts"}):
