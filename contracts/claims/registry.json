@@ -242,6 +242,32 @@
       "party": "anyone reading the chain — the settled transaction names the signers"
     },
     {
+      "step": "submit",
+      "kind": "protects",
+      "title": "In a split, you pay exactly the share you agreed",
+      "body": "The payment your wallet signs is derived from the split everyone agreed to: your share, to the address in it, in its asset, on its chain. There is no amount or address to type. Nothing is sent before everyone named has agreed, twice, for someone else's share, or after the agreement expired.",
+      "requirement": "F-4",
+      "test": "module/tests/probes/probe_split_payment_derived_stepper.nim",
+      "credibility": "imperative"
+    },
+    {
+      "step": "submit",
+      "kind": "protects",
+      "title": "A private split tells the chain only that private transfers happened",
+      "body": "On the LEZ's private rail each person pays shielded to shielded, so the chain sees no payer, no payee and no amount. A payment from a public account, which would name them, is refused rather than quietly allowed. The creditor finds each payment by scanning her own wallet for a note of exactly that share; every share is a different amount, a few base units apart, so no two can be confused.",
+      "requirement": "FS-9",
+      "test": "module/tests/split_lez_test.nim",
+      "credibility": "imperative"
+    },
+    {
+      "step": "submit",
+      "kind": "others-leak",
+      "title": "Settling a split with public transfers links the whole group",
+      "body": "When each friend pays their share with an ordinary transfer, every payment puts payer, payee and amount on the chain. Several payments of similar amounts to one address, close together, tie the group to each other and to the bill, permanently.",
+      "system": "a bill split settled with public on-chain transfers (each friend sending their share to whoever paid)",
+      "observer": "anyone reading the chain"
+    },
+    {
       "step": "settle",
       "kind": "protects",
       "title": "A fact about the world carries how it was checked",
@@ -267,6 +293,25 @@
       "status": "partial",
       "credibility": "motivational",
       "party": "the supplier of the state root — until the beacon light-client sidecar, the root the proof is checked against is attested, not derived"
+    },
+    {
+      "step": "settle",
+      "kind": "protects",
+      "title": "A share counts as paid only when the person owed says so",
+      "body": "Only the person who owes a share can report it paid, and only the person owed can confirm it, from their own read of the chain or their own scan. A report signed by anyone else never moves the split. A split is final when every share is confirmed, not when someone announces it.",
+      "requirement": "FS-7",
+      "test": "module/tests/probes/probe_split_authorship_stepper.nim",
+      "credibility": "imperative"
+    },
+    {
+      "step": "settle",
+      "kind": "gap",
+      "title": "Nothing makes anyone pay their share",
+      "body": "The room records who agreed and who has paid, truthfully and only as each person disclosed it, but no contract holds the money. A split is a promise the group can see, not one the chain enforces.",
+      "fix": "a split with deposits: each person locks their share in an on-chain escrow when they agree, released to whoever paid the bill once the split settles",
+      "status": "none",
+      "credibility": "motivational",
+      "party": "each person who owes a share (whether they pay is up to them)"
     }
   ]
 }
