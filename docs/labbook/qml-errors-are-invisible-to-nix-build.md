@@ -72,9 +72,40 @@ Four plausible ways to confirm a view rendered without a human looking at it. Al
 - **A `console.info` probe in `ChatView.qml`'s `Component.onCompleted`** — does not reach the run's `chat_ui` log, though `ProcessLog` handles `QtInfoMsg`. Do not build a check on it.
 - **"No QML errors in the log"** — the trap this document is about, and every configuration above produces exactly that.
 
-**So: ask the operator for a screenshot.** Twice on 2026-08-12 that was the only real evidence — first that the *baseline* rendered at all, which is what proved the log-based checks worthless rather than the change under test; then that the multi-asset wallet card rendered correctly. A screenshot also catches what no automated check would: the second one showed the per-holding blocker note landing on the right row, and prompted noticing that `Fund` could still shield into an unregistered private account.
+**Update 2026-09-28 — a virtual X display does work** (see "Looking without a screen" below). The four paths above still fail as described; none of them was Xvfb.
+
+**So: ask the operator for a screenshot**, or use Xvfb. Twice on 2026-08-12 that was the only real evidence — first that the *baseline* rendered at all, which is what proved the log-based checks worthless rather than the change under test; then that the multi-asset wallet card rendered correctly. A screenshot also catches what no automated check would: the second one showed the per-holding blocker note landing on the right row, and prompted noticing that `Fund` could still shield into an unregistered private account.
 
 State plainly which paths remain unverified rather than letting a green build imply they were covered.
+
+## Looking without a screen: Xvfb (2026-09-28)
+
+What the four paths above miss: an X server whose framebuffer lives in memory. Run the
+real runner against it on the `xcb` platform with Qt Quick's software renderer. The QML
+view is instantiated and drawn, and ImageMagick reads the pixels back. That is how the
+split's composer and card were first seen (exo-9a4):
+
+```bash
+XV=$(ls -d /nix/store/*-xvfb-21*/bin | head -1)/Xvfb          # or: nix build nixpkgs#xvfb-run
+$XV :99 -screen 0 1400x900x24 -nolisten tcp &
+env -u WAYLAND_DISPLAY DISPLAY=:99 QT_QPA_PLATFORM=xcb QT_QUICK_BACKEND=software \
+    .run/runner/bin/muster-ui --user-dir "$(mktemp -d)" &
+import -display :99 -window root shot.png                     # /usr/bin/import
+XDO=$(nix build nixpkgs#xdotool --no-link --print-out-paths)/bin/xdotool
+DISPLAY=:99 $XDO mousemove 320 33 click 1                      # e.g. the Room tab
+DISPLAY=:99 $XDO search --onlyvisible --name . windowsize %@ 1400 2200   # resize
+```
+
+- **One display per peer.** Give each its own Xvfb (`:99`, `:100`), so screenshots and
+  clicks never cross.
+- **Take coordinates from a screenshot, then click.** Take a new screenshot after
+  anything that moves the layout. Switching a composer rail moved every field 14 px, and
+  a memo typed there landed in the total.
+- **Mind the window size.** The window opens at 1024×768. Check a layout there too: a
+  room that only works at 2,200 px tall is a bug the big screenshot hides (the message
+  row sat off-screen at 900 px).
+- **Kill by pid or session, never `pkill -f Xvfb …`.** The pattern matches the shell
+  running it.
 
 ## Prevention
 

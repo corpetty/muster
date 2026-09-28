@@ -6,8 +6,7 @@
       "area": "family",
       "family": "evm.split",
       "kind": "evm-split",
-      "status": "partial",
-      "partialBecause": "everything is built and the backend round trip runs end to end through the real runner (scripts/split-self-test.sh, live fleet + anvil); the rendered card has not yet been looked at on a display (offscreen never instantiates the QML view)",
+      "status": "built",
       "summary": "One member fronted a bill; the split names every debtor, their share and the address to pay. Each debtor agrees to their own share with their room key; once everyone named has agreed, each pays their share from their own wallet, the creditor confirms each payment, and the split is final when every share is confirmed. No shared account: nothing on the chain counts or enforces the agreement.",
       "generated": "evm-split/split",
       "effect": {

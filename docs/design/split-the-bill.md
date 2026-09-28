@@ -1,6 +1,6 @@
 # Split the bill: the room agrees who owes what, and each person pays their own share
 
-**Status:** design, 2026-09-28. Epic `exo-a90` (pebbles; `pb dep tree exo-a90` for live status; slices `exo-a90.1`–`.11`). **S0–S5 landed** (2026-09-28): the core seams, the `evm.split` driver, paying and confirming (end to end on anvil, `split_anvil_e2e`), the hosted methods, and the UI (§7), driven end to end through the real runner by `scripts/split-self-test.sh`. The rendered card awaits an on-display check. `lez.split` — the private split, §4.7 — is built, hosted and in the UI, and **ran end to end on the LEZ testnet** (2026-09-28). **S9**: the typed spec `contracts/specs/derived-exo-a90.spec.json` (six oracles, graded 6/6).
+**Status:** design, 2026-09-28. Epic `exo-a90` (pebbles; `pb dep tree exo-a90` for live status; slices `exo-a90.1`–`.11`). **S0–S5 landed** (2026-09-28): the core seams, the `evm.split` driver, paying and confirming (end to end on anvil, `split_anvil_e2e`), the hosted methods, and the UI (§7), driven end to end through the real runner by `scripts/split-self-test.sh`. The composer and card were looked at on a display (Xvfb) and fixed, exo-9a4. `lez.split` — the private split, §4.7 — is built, hosted and in the UI, and **ran end to end on the LEZ testnet** (2026-09-28). **S9**: the typed spec `contracts/specs/derived-exo-a90.spec.json` (six oracles, graded 6/6).
 **Reads with:** `multisig-landscape.md` (families, profiles, the card's fixed rows; this adds one locus to its vocabulary), `action-manifest.md` (the manifest and the credibility axis), `material-and-disclosure.md` (who supplies what; request-first), `lez-adapter.md` (the four LEZ rails and what each discloses), `docs/00-vision.md` (the education mission), FURPS F-3 / F-4 / F-5 / F-10 / F-16 / F-20 / FS-7 / FS-9.
 **Prototype:** `ui/prototype/coordination-prototype-v2.html`, the "Split the Lisbon offsite costs" room ("four wallets, no shared account — the room is the only thing holding this together") and the `split` plugin ("even shares, settles to personal wallets").
 
@@ -233,7 +233,7 @@ The **split body** (S5) shows one row per person: name, amount, and state (*owes
 | `drivers/profile.nim`, `card_rows.nim`, `kinds.nim`, `registry.nim`, `coordination/accounts.nim` | the `each` locus + rules; its rows; `evm-split` / `lez-split` with `settlesOn`; chain-qualified resolution |
 | `coordination/parts.nim`, `parts_evm.nim` (new) | `PartSeam` (+ a fake ledger, + the EVM seam), `liveSettlePart` (send / complete), `liveConfirmParts`, `liveConfirmPart` — generic over any parts family |
 | `wallet/evm_rpc.nim` | `rpcTransferOf(hash)`: from, to, value, status (nim-web3's `eth_getTransactionByHash` + receipt) |
-| `contracts/families/registry.json`, `scripts/check-family-registry.py` | the `each` vocabulary + rules; `evm.split` (partial → built at S4/S5), `lez.split` (next) |
+| `contracts/families/registry.json`, `scripts/check-family-registry.py` | the `each` vocabulary + rules; `evm.split` and `lez.split`, both built (exo-9a4) |
 | `api/muster.lidl`, `nim-lib/muster_module.nim` | S4: `coordinate_propose_split`, `coordinate_settle_part`, `coordinate_confirm_part`, the confirm pump, parts in `coordinate_intents` |
 | `ui/src/qml/*` | S5 |
 | `contracts/actions/family/evm.split.json`, `contracts/claims/registry.json` | S6 |

@@ -6,8 +6,7 @@
       "area": "family",
       "family": "lez.split",
       "kind": "lez-split",
-      "status": "partial",
-      "partialBecause": "everything is built, hosted and in the UI, and it ran end to end on the LEZ testnet across two instances (scripts/split-lez-testnet.sh, 2026-09-28: final on both, the creditor's scan confirming a note of exactly the share); the rendered card has not yet been looked at on a display (offscreen never instantiates the QML view)",
+      "status": "built",
       "summary": "The same agreement as evm.split — each debtor signs their own share with their room key — settled so the chain names no payer, no payee and no amount: the creditor shares a shielded key node, each debtor pays shielded → shielded from their own LEZ wallet, and the creditor's own scan confirms each share when a note of exactly that amount arrives. Every share is a different amount, a few base units apart, so a note can be attributed to its share without the chain naming anyone.",
       "generated": "lez-split/split",
       "effect": {
