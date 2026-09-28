@@ -265,23 +265,34 @@ proc verifyAttestation*(who: string, p: seq[byte], sigHex: string): bool =
 proc approvalGrades*(events: seq[Event], driverFor: DriverFor,
                      intentId: string): seq[ApprovalGrade] =
   ## One grade per (contributor, round) approval on this intent, in canonical order.
+  ## Only a contribution the fold would count gets one: every surface (the card, the
+  ## activity feed, both provenance views, the audit file) reads these grades, so a
+  ## contribution with no grade is on none of them.
   let p0 = attestationPayload(events, driverFor, intentId)
-  # exo-a5a: the same attribution rule the fold applies — a contribution under a name that
-  # is not its signer's is no one's approval, so it gets no grade and no slot.
   let ej = effectJsonOf(events, intentId)
+  if ej.len == 0: return                  # not proposed here: the fold has no intent to count toward
   let drv = driverFor(intentPolicyOf(events, intentId))
   var m: Materialization
-  var haveM = false
-  if ej.len > 0:
-    try: (m = canonicalize(drv, effectFromJson(ej)); haveM = true)
-    except CatchableError: discard
+  try: m = canonicalize(drv, effectFromJson(ej))
+  except CatchableError: return           # nothing to verify against, so nothing verifies
+  drv.expectMaterialization(m)
   var seen = initHashSet[string]()
   let ordered = canonicalOrder(events)
   for e in ordered:
     let p = e.key.split('/')
     if p.len < 4 or p[0] != "intent" or p[1] != intentId or p[2] != "sig": continue
-    if haveM and not signedByNamed(drv, m, p[3], e.value): continue
+    # exo-a5a: the same attribution rule the fold applies — a contribution under a name that
+    # is not its signer's is no one's approval, so it gets no grade and no slot.
+    if not signedByNamed(drv, m, p[3], e.value): continue
     let round = (if p.len >= 5: (try: parseInt(p[4]) except CatchableError: 1) else: 1)
+    # exo-b96: and the fold's verify rule. signedByNamed passes whenever the driver cannot
+    # name a signer, which is also what it says of a contribution that is not valid at all
+    # (a non-member's signature, a malformed one, a vote for another pointer); the fold
+    # never counts those, so neither may any view. Verified at the key's round, since a
+    # multi-round driver's contribution carries its own (a FROST round-1 payload is not a
+    # round-2 partial). Before dedup, like attribution: an invalid contribution that arrives
+    # first must not take the named member's slot.
+    if not drv.verifyContribution(Contribution(bytes: hexToBytes(e.value)), round): continue
     let k = p[3] & "/" & $round
     if k in seen: continue
     seen.incl k

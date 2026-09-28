@@ -327,14 +327,17 @@ proc settleWords(events: seq[Event], driverFor: DriverFor, id: string):
     ("Submitted", "sent outside the room", "Final", "")
 
 proc gradeLookup(events: seq[Event], driverFor: DriverFor): proc (id, who, round: string): string =
-  ## Memoized per-intent approval grades, keyed "<who>/<round>" (exo-ef1).
+  ## Memoized per-intent approval grades, keyed "<who>/<round>" (exo-ef1). "" when the
+  ## contribution has no grade — the fold never counted it (misattributed, or its driver
+  ## refused it, exo-b96) — so a surface shows it no more than a rejected one.
   var cache = initTable[string, Table[string, string]]()
   result = proc (id, who, round: string): string =
     if id notin cache:
       var t = initTable[string, string]()
       for g in approvalGrades(events, driverFor, id): t[g.who & "/" & $g.round] = $g.grade
       cache[id] = t
-    cache[id].getOrDefault(who & "/" & round, "")
+    let r = (try: parseInt(round) except CatchableError: 1)   # the key's round, read as the fold reads it
+    cache[id].getOrDefault(who & "/" & $r, "")
 
 proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntry] =
   ## The room's coordination history as reduce(log). See the section note above.
@@ -371,7 +374,7 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
       let dkey = who & "/" & rnd
       if dkey in approvers[id]: continue     # one contribution per (contributor, round)
       let grade = gradeOf(id, who, rnd)
-      if grade == $agRejected: continue      # the fold didn't count it; neither does the story
+      if grade.len == 0 or grade == $agRejected: continue   # the fold didn't count it; neither does the story
       approvers[id].incl dkey
       lastSig[id] = i
       var distinctWho = initHashSet[string]()
@@ -488,7 +491,7 @@ proc intentProvenance*(events: seq[Event], driverFor: DriverFor, intentId: strin
       if p[3] in seenSig: continue
       let round = (if p.len >= 5: p[4] else: "1")
       let grade = gradeOf(intentId, p[3], round)
-      if grade == $agRejected: continue      # attested, but not over P: it never reached the decision
+      if grade.len == 0 or grade == $agRejected: continue   # uncounted, or attested but not over P: it never reached the decision
       seenSig.incl p[3]
       result.add ProvItem(cls: icContribution, logPos: i,
                           account: p[3], attestation: grade,
@@ -569,10 +572,14 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
         epoch: epoch)
     of "sig":
       if p.len < 4 or (id & "/" & p[3]) in seenSig: continue
+      let grade = gradeOf(id, p[3], (if p.len >= 5: p[4] else: "1"))
+      # no grade: the fold never counted it, so it is no one's approval — and the name on
+      # its key is whatever its publisher wrote (exo-b96)
+      if grade.len == 0: continue
       seenSig.incl(id & "/" & p[3])
       result.add LogProvItem(seq: i, cls: icContribution, kind: "sig", intentId: id,
         account: p[3], accountable: true, what: "an approval",
-        attestation: gradeOf(id, p[3], (if p.len >= 5: p[4] else: "1")),
+        attestation: grade,
         detail: (if p.len >= 5 and p[4] != "1": "round " & p[4] else: ""),
         guarantee: "the driver verified this recovers to a configured member — a non-member never reaches the fold",
         epoch: epoch)
