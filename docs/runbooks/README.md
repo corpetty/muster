@@ -3,6 +3,11 @@
 Repeatable scripts for demos and posts. Not specs — the specs are `docs/01-furps.md` and
 `contracts/specs/`; these are how to *show* what the specs guarantee.
 
+- [`client-tour.md`](client-tour.md) — a hands-on tour of everything the client gained
+  recently, two instances on one machine: rooms that name nobody, chat authorship, a
+  signed decision, a Safe settled on anvil, Bitcoin through a FROST key on regtest, the
+  LEZ multisig and LEZ FROST on the testnet, the wallet, and the walkthrough. Marks the
+  steps no one has yet done on screen, and the known rough edges (exo-59c).
 - [`transaction-lifecycle-demo.md`](transaction-lifecycle-demo.md) — a live, step-by-step
   demo of the whole transaction lifecycle (compose → propose → review → contribute →
   submit → final), with the provenance / proof / flow dive-ins and a claim→surface

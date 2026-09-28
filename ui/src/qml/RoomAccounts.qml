@@ -113,6 +113,31 @@ Item {
                     font.pixelSize: Theme.typography.badgeText
                     wrapMode: Text.WrapAnywhere
                 }
+                // The whole address, selectable and copyable — funding an account (a Bitcoin
+                // FROST key on regtest, a LEZ vault) needs it in full, not shortened.
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+                    visible: String(modelData.address || "").length > 0
+                    TextEdit {
+                        id: fullAddr
+                        Layout.fillWidth: true
+                        readOnly: true
+                        selectByMouse: true
+                        wrapMode: TextEdit.WrapAnywhere
+                        text: String(modelData.address || "")
+                        color: Theme.palette.textSecondary
+                        selectionColor: Theme.palette.primary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                    LogosButton {
+                        objectName: "copyAccountAddress"
+                        text: qsTr("Copy address")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: { fullAddr.selectAll(); fullAddr.copy(); fullAddr.deselect(); }
+                    }
+                }
                 LogosText {
                     Layout.fillWidth: true
                     text: qsTr("disclosed by %1").arg(acc.discloserNames(modelData))
