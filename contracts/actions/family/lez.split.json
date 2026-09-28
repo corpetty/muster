@@ -7,7 +7,7 @@
       "family": "lez.split",
       "kind": "lez-split",
       "status": "partial",
-      "partialBecause": "built and tested on a shared fake LEZ chain (split_lez_test); not yet run on the LEZ testnet (a private transfer proves for minutes and needs a funded shielded account), and the hosted methods and UI speak only evm.split so far",
+      "partialBecause": "everything is built, hosted and in the UI, and it ran end to end on the LEZ testnet across two instances (scripts/split-lez-testnet.sh, 2026-09-28: final on both, the creditor's scan confirming a note of exactly the share); the rendered card has not yet been looked at on a display (offscreen never instantiates the QML view)",
       "summary": "The same agreement as evm.split — each debtor signs their own share with their room key — settled so the chain names no payer, no payee and no amount: the creditor shares a shielded key node, each debtor pays shielded → shielded from their own LEZ wallet, and the creditor's own scan confirms each share when a note of exactly that amount arrives. Every share is a different amount, a few base units apart, so a note can be attributed to its share without the chain naming anyone.",
       "generated": "lez-split/split",
       "effect": {
@@ -85,7 +85,7 @@
         {
           "step": "settle",
           "who": "each debtor, then the creditor",
-          "does": "Each debtor pays their derived share from their OWN shielded LEZ account to payTo on the private rail — a public source is refused, since the shield rail would name the payer and the amount — and reports it once the transfer settles. The creditor's own wallet scans: a note that arrived at payTo, of exactly one share's amount, not already claimed, confirms that share; the room records a hash of the note's id. A report without a note never confirms.",
+          "does": "Each debtor pays their derived share on the private rail from their OWN LEZ wallet — from the one shielded note that covers it (money received privately, a shield to yourself included, lands at an account the scan discovers; a transfer draws on one note) — and reports it, with the zone's transaction, once the proof lands (minutes). A public source is refused: the shield rail would name the payer and the amount. The creditor's own wallet scans: a note that arrived at payTo, of exactly one share's amount, not already claimed, confirms that share; the room records a hash of the note's id. A report without a note never confirms. Neither side acts on a scan still behind the chain tip; each member's scan keeps moving while a split waits on them.",
           "signs": "each debtor's own private LEZ transfer (their wallet proves and signs it); each report is signed by its author's room key",
           "reveals": [
             {
@@ -98,7 +98,9 @@
             }
           ],
           "evidence": [
-            "module/tests/split_lez_test.nim"
+            "module/tests/split_lez_test.nim",
+            "module/tests/split_lez_zone_test.nim",
+            "scripts/split-lez-testnet.sh"
           ]
         },
         {
@@ -140,15 +142,32 @@
           "evidence": [
             "module/tests/split_lez_test.nim"
           ]
+        },
+        {
+          "what": "paying a share no single shielded note of the debtor's covers",
+          "why": "a private transfer draws on one note; the debtor is told so, and nothing moves",
+          "evidence": [
+            "module/tests/split_lez_zone_test.nim"
+          ]
+        },
+        {
+          "what": "paying, or matching a note, on a wallet whose scan has not reached the chain tip",
+          "why": "a note may sit in a block not yet read: behind is reported as 'still scanning', never as 'nothing arrived'",
+          "evidence": [
+            "module/tests/split_lez_zone_test.nim"
+          ]
         }
       ],
       "hosted": [
+        "coordinate_propose_split",
         "coordinate_intents",
         "coordinate_contribute",
         "coordinate_decline",
-        "coordinate_readiness"
+        "coordinate_readiness",
+        "coordinate_settle_part",
+        "coordinate_confirm_part"
       ],
-      "ui": "not yet: the Split composer and card speak evm.split; the private rail is the next hosted / UI step",
+      "ui": "Room → + → Split with \"Settles on\" the private split: the total in LEZ (9 decimals), who's in, a preview of each share (a few base units apart, so the creditor's scan can tell whose payment arrived) → Propose; the split card → Agree to my share → Pay my share (once everyone agreed; paid privately from your own LEZ wallet) → the creditor's card confirms each share when their scan finds its note (\"received — a private note of exactly this share\"), or Mark received",
       "invariants": [
         1,
         2,
@@ -170,6 +189,10 @@
         },
         {
           "claim": "A share is confirmed only by the creditor's own scan finding a note of exactly that amount — never by the payer's word",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "No payment is sent and no note matched on a wallet whose scan is behind the chain tip",
           "credibility": "imperative"
         },
         {
@@ -195,11 +218,18 @@
         {
           "kind": "test",
           "path": "module/tests/profile_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/split_lez_zone_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "scripts/split-lez-testnet.sh"
         }
       ],
       "unverified": [
-        "whether a LEZ privacy-preserving transaction commits to a zone/chain id",
-        "the real lez_core's scan exposes a received note's key node and amount the way the fake does"
+        "whether a LEZ privacy-preserving transaction commits to a zone/chain id"
       ]
     }
   ]
