@@ -1243,3 +1243,5 @@
 {"type":"close","timestamp":"2026-09-28T13:00:44.711940947Z","issue_id":"exo-661.6","payload":{}}
 {"type":"close","timestamp":"2026-09-28T13:00:44.711940947Z","issue_id":"exo-661.8","payload":{}}
 {"type":"close","timestamp":"2026-09-28T13:00:44.756901038Z","issue_id":"exo-661","payload":{}}
+{"type":"status_update","timestamp":"2026-09-28T13:25:48.529644897Z","issue_id":"exo-661.7","payload":{"status":"in_progress"}}
+{"type":"comment","timestamp":"2026-09-28T13:42:16.956323033Z","issue_id":"exo-661.7","payload":{"body":"Fixed on fix/exo-661.7-store-node-view: red f43f843 (store_node_view_test), green next commit — join requests sealed to an announced room join key (derived from the epoch key), grants sealed whole per member, no epoch header, composer topics random. Remaining visible to the store node: topic, timing, frame size and kind (someone asked to join; admit grant count = room size). Residual: an active party who announces a false join key learns who asks by name."}}

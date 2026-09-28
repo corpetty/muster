@@ -94,3 +94,28 @@ method ingestControl*(cc: ConversationCrypto, frame: seq[byte]): bool {.base.} =
   ## true if it advanced our membership (we now hold a key we did not before),
   ## false if it was not for us or we could not open it.
   raise newException(CatchableError, "ConversationCrypto.ingestControl is abstract")
+
+# ── join requests that name no one on the topic (exo-661.7) ───────────────────
+# Everything on a content topic is readable by the store node and any subscriber, so
+# a join request cannot carry the joiner's identity in the clear (FS-7). The room
+# announces a join key that names no member (a beacon); a would-be joiner seals its
+# request to it, and only someone who already holds the room's key can open it.
+
+method joinBeacon*(cc: ConversationCrypto): seq[byte] {.base.} =
+  ## The room's current join key to announce on the topic, or @[] when we hold no
+  ## current key (a joiner not yet admitted announces nothing).
+  raise newException(CatchableError, "ConversationCrypto.joinBeacon is abstract")
+
+method ownsBeacon*(cc: ConversationCrypto, beacon: seq[byte]): bool {.base.} =
+  ## Whether an announced join key is one of our own rooms' — so we never ask ourselves.
+  raise newException(CatchableError, "ConversationCrypto.ownsBeacon is abstract")
+
+method sealJoinRequest*(cc: ConversationCrypto, beacon, request: seq[byte]): seq[byte] {.base.} =
+  ## Seal a join request to an announced join key: only holders of that room's key
+  ## can open it. The result names no one.
+  raise newException(CatchableError, "ConversationCrypto.sealJoinRequest is abstract")
+
+method openJoinRequest*(cc: ConversationCrypto, frame: seq[byte]): seq[byte] {.base.} =
+  ## Open a sealed join request with any join key we hold; raises when none opens it
+  ## (the caller treats a raise as "not for this room").
+  raise newException(CatchableError, "ConversationCrypto.openJoinRequest is abstract")

@@ -117,18 +117,18 @@ Item {
     readonly property bool hasPeer: composer.peer.length > 0
     readonly property int scopeCount: 1 + (composer.hasPeer ? 1 : 0)
 
-    // "muster." + verb + "." + a short suffix off the peer, or just the verb solo.
+    // A room's topic is public: every store node and subscriber reads it (FS-9). So it
+    // names nothing (exo-661.7) — not the activity, not who it is with (it used to carry
+    // the last six hex digits of the peer's chat id), not when it was made. Just random
+    // bits, enough that two rooms never collide. The verb and the peer travel to the
+    // room's members inside the sealed invite and the room itself, never in the name.
     function derivedTopic() {
         if (!composer.hasVerb)
             return "";
-        if (composer.hasPeer) {
-            var bare = composer.peer.replace(/^0x/i, "");
-            var suffix = bare.substring(Math.max(0, bare.length - 6)).toLowerCase();
-            if (suffix.length === 0)
-                suffix = "room";
-            return "muster." + composer.pickedVerb + "." + suffix;
-        }
-        return "muster." + composer.pickedVerb;
+        var tail = "";
+        for (var i = 0; i < 4; ++i)
+            tail += ("000" + Math.floor(Math.random() * 0x10000).toString(16)).slice(-4);
+        return "muster.room." + tail;
     }
 
     // The button names the next missing choice rather than going flat and silent.
@@ -143,14 +143,12 @@ Item {
     function confirm() {
         if (!composer.hasVerb)
             return;
-        // Every "Start something" opens a NEW conversation, so give the topic a unique
-        // tail. Without it, two rooms of the same shape — e.g. two solo "pay" rooms —
-        // derive the identical topic, and coordinate_join re-activates the first
-        // instead of creating a second. Re-opening an existing room goes through Home
-        // (which passes its stored topic), never here, so this only affects creation.
-        var uniq = Date.now().toString(36) + Math.floor(Math.random() * 46656).toString(36);
+        // Every "Start something" opens a NEW conversation: derivedTopic's random tail
+        // keeps two rooms of the same shape from deriving one topic (coordinate_join
+        // would re-activate the first instead of creating a second). Re-opening an
+        // existing room goes through Home (which passes its stored topic), never here.
         composer.createRoom(composer.pickedVerb, composer.peer,
-                            composer.derivedTopic() + "." + uniq, composer.pickedPolicy,
+                            composer.derivedTopic(), composer.pickedPolicy,
                             composer.draftJson());
     }
 

@@ -89,11 +89,11 @@ module muster_module {
 
   method coordinate_policy() -> tstr description "The joined room's current coordination policy as {policy, threshold, domain}, described by its driver."
 
-  method coordinate_request_join() -> tstr description "Ask to be admitted to the joined conversation: announce our member key on the topic. This carries no authority — an existing member still has to admit us; it is discovery, not entry. Returns \"ok\"."
+  method coordinate_request_join() -> tstr description "Ask to be admitted to the joined conversation: send our binding (encryption identity, signed by our secp key) sealed to each join key the room has announced on the topic, so only its members can read who is asking; a store node sees that someone asked, not who (FS-7, exo-661.7). This carries no authority — an existing member still has to admit us; it is discovery, not entry. Returns \"ok\" when the request was sent, or \"waiting-for-room-key\" when no member has announced a join key yet — the call asked them to, so call again shortly (the UI re-asks every few seconds)."
 
   method coordinate_pending() -> tstr description "List the encryption identities that have requested to join the conversation but have not been admitted, as a JSON array of 64-byte hex identities (ed25519 ++ x25519). A join-request confers nothing; a member reviews these and decides whom to admit."
 
-  method coordinate_admit(identity_hex: tstr) -> tstr description "Admit a member (a 64-byte encryption identity hex: ed25519 ++ x25519) to the joined conversation: re-key the room forward and publish the grants so the joiner receives the new epoch key. The joiner gets only the new epoch, never earlier ones (F-16, membership epochs). Returns \"ok\", or \"not-joined\"/\"bad-key\"."
+  method coordinate_admit(identity_hex: tstr) -> tstr description "Admit a member (a 64-byte encryption identity hex: ed25519 ++ x25519) to the joined conversation: re-key the room forward and publish the grants so the joiner receives the new epoch key. Each grant is sealed whole to one member, so the topic carries one anonymous box per member of the new epoch and no roster (exo-661.7). The joiner gets only the new epoch, never earlier ones (F-16, membership epochs). Returns \"ok\", or \"not-joined\"/\"bad-key\"."
 
   method coordinate_post_message(body: tstr) -> tstr description "Post an authored event to the joined conversation over encrypted transport. `body` is either a plain chat message or a typed card as JSON {kind, ...} (address-share, receipt, fact); everything the room says rides one channel and the UI folds cards out of it (cards are data). Returns the event id. Adds a message event to the shared, sealed log (state = reduce(log), F-1/F-2)."
 

@@ -53,6 +53,15 @@
     },
     {
       "step": "open-room",
+      "kind": "protects",
+      "title": "Nothing on the room's topic says who is in it",
+      "body": "Everything published on a room's content topic is readable by the store node and any subscriber, so none of it names a member. A join request is sealed to a join key the room announces, so only members read who is asking; each key grant is sealed whole to one member, so no roster travels; and no envelope carries its epoch number. The store node still sees that someone asked to join, and how many members an admit re-keyed.",
+      "requirement": "FS-7",
+      "test": "module/tests/store_node_view_test.nim",
+      "credibility": "imperative"
+    },
+    {
+      "step": "open-room",
       "kind": "others-leak",
       "title": "A hosted chat backend sees the whole room",
       "body": "In a conventional hosted group chat, the server holds the membership roster and sees message timing directly — the room's shape is the operator's data.",
@@ -63,12 +72,12 @@
       "step": "open-room",
       "kind": "gap",
       "title": "The store node still sees the conversation graph",
-      "body": "Content is encrypted, but a store node still sees the room's content topic and the timing of publishes and fetches — the conversation graph, pseudonymously. This surface names that limit rather than claiming to hide it (FS-9).",
+      "body": "Content is encrypted, but a store node still sees the room's content topic, the timing and size of publishes and fetches, and each frame's kind — so that someone asked to join, and how many members an admit re-keyed — the conversation graph, pseudonymously. It never sees who is in the room (FS-7). This surface names that limit rather than claiming to hide it (FS-9).",
       "fix": "route through the Logos transport-layer mixnet, which unlinks the subscription set and timing from the reader",
       "status": "specified",
       "spec_stage": "raw (LOGOS-MIXNET, send-only proof-of-concept)",
       "credibility": "exposed",
-      "party": "the store node operator (sees which topics a client subscribes to, and when it publishes and fetches)"
+      "party": "the store node operator (sees which topics a client subscribes to, and when it publishes and fetches, each frame's size and kind)"
     },
     {
       "step": "propose",

@@ -12,10 +12,11 @@
 ## This is the join point: swap LocalTransport→delivery for a real network, or
 ## EpochCrypto→native chat, and this layer is unchanged (both are interfaces).
 
-import std/[json, sequtils, tables]
+import std/[json, sequtils, sets, tables, times]
 import ../transport/transport
 import ../crypto/conversation
 import ../crypto/binding
+import ../crypto/sodium   # randomBytes: a beacon request's nonce
 import ../log/log
 import ./intents   # membershipEvent (the admit as a log entry)
 export log, binding
@@ -28,15 +29,29 @@ type
     log*: Log
     pending: seq[LinkStatement]  ## join-requests seen but not yet admitted (each carries a binding; no authority)
     invites: seq[seq[byte]]      ## invite frames seen on this (inbox) topic — opaque, sealed to the owner; the module opens them
+    beacons: seq[seq[byte]]      ## join keys other rooms on this topic announced, most recent last (at most MaxBeacons)
+    lastBeacon: seq[byte]        ## the join key we last announced
+    lastBeaconAt: float          ## when (epoch seconds) — answers to beacon requests are rate-limited
+    answered: HashSet[string]    ## beacon-request nonces already answered (a store catchup window re-delivers them)
     authorChecked*: Table[string, bool]  ## exo-f76: event id → its author signature verifies (authorship.nim). A pure function of (topic, event), so safe to cache
 
 # Every frame on the topic carries a 1-byte kind, so the membership handshake
 # shares the topic with data without either misreading the other.
+#
+# What a store node — or anyone subscribed to the topic — reads (exo-661.7, FS-7/FS-9):
+# the topic, when each frame was published, its size, and this kind byte. So it learns
+# THAT someone asked to join, that an admit happened and how many members received the
+# new key (one grant each), and when the room's join key changed. It never learns WHO:
+# no frame carries a member identity, address, binding or epoch number in the clear.
 const
-  FrameData = 0x00'u8          ## body = epoch-sealed event envelope
-  FrameJoinRequest = 0x01'u8   ## body = the requester's 33-byte member key (no authority)
-  FrameControl = 0x02'u8       ## body = an opaque membership control frame (a grant)
+  FrameData = 0x00'u8          ## body = epoch-sealed event envelope (no epoch number in the clear)
+  FrameJoinRequest = 0x01'u8   ## body = the requester's binding, sealed to a room's join key (a beacon) — no authority
+  FrameControl = 0x02'u8       ## body = an opaque membership control frame (a grant, sealed whole to one member)
   FrameInvite = 0x03'u8        ## body = a sealed-box invite to THIS topic's owner (an inbox drop). Not epoch-sealed, so it needs no shared membership — anyone may drop, only the owner opens (sealed to their X25519).
+  FrameBeacon = 0x04'u8        ## body = a room's current join key (32 bytes, derived from its epoch key; names no member)
+  FrameBeaconRequest = 0x05'u8 ## body = a random 16-byte nonce: a would-be joiner has no join key to seal its request to yet
+  MaxBeacons = 8               ## join keys a would-be joiner keeps (and seals each request to)
+  BeaconMinInterval = 2.0      ## seconds between answers to beacon requests, per session, for an unchanged key
 
 proc toBytes(s: string): seq[byte] = (for c in s: result.add byte(c))
 proc toStr(b: openArray[byte]): string = (for x in b: result.add char(x))
@@ -59,6 +74,19 @@ proc decodeEvent(b: seq[byte]): Event =
   if j.hasKey("parents") and j["parents"].kind == JArray:
     for p in j["parents"]: result.parents.add p.getStr()
 
+proc announceBeacon*(s: CoordinationSession) =
+  ## Announce the room's current join key, so someone who knows only the topic can ask
+  ## to join without saying who they are in the clear. A changed key is announced at
+  ## once; the same key at most every BeaconMinInterval (it answers beacon requests,
+  ## and a request flood must not become a reply flood). Nothing when we hold no key.
+  let b = s.crypto.joinBeacon()
+  if b.len == 0: return
+  let now = epochTime()
+  if b == s.lastBeacon and now - s.lastBeaconAt < BeaconMinInterval: return
+  s.lastBeacon = b
+  s.lastBeaconAt = now
+  discard s.transport.publish(s.topic, @[FrameBeacon] & b)
+
 proc ingestEnvelope(s: CoordinationSession, env: IncomingMessage) =
   ## Route a frame by its kind byte. A raise — we can't decrypt (not a member, or a
   ## later-epoch envelope we hold no key for, F-16), a control frame not addressed
@@ -71,7 +99,7 @@ proc ingestEnvelope(s: CoordinationSession, env: IncomingMessage) =
     of FrameData:
       s.log.ingest(decodeEvent(s.crypto.open(body)))
     of FrameJoinRequest:
-      let st = decodeLink(body)                # a binding requesting admission
+      let st = decodeLink(s.crypto.openJoinRequest(body))   # sealed to a join key; only a member opens it
       let m = st.enc
       if m notin s.crypto.members() and not s.pending.anyIt(it.enc == m):
         s.pending.add st
@@ -79,6 +107,15 @@ proc ingestEnvelope(s: CoordinationSession, env: IncomingMessage) =
       discard s.crypto.ingestControl(body)     # a grant; ours to open or not
     of FrameInvite:
       s.invites.add body                       # opaque here; the module sealOpens it with its keystore
+    of FrameBeacon:
+      if body.len == 32 and not s.crypto.ownsBeacon(body):
+        s.beacons = s.beacons.filterIt(it != body) & @[body]
+        if s.beacons.len > MaxBeacons: s.beacons = s.beacons[^MaxBeacons .. ^1]
+    of FrameBeaconRequest:
+      let nonce = toStr(body)
+      if nonce notin s.answered:
+        s.answered.incl nonce
+        s.announceBeacon()
     else: discard
   except CatchableError:
     discard
@@ -111,12 +148,27 @@ proc receivedInvites*(s: CoordinationSession): seq[seq[byte]] = s.invites
   ## The raw sealed invite frames seen on this topic — the module opens them with its
   ## keystore (only the owner can); malformed / not-for-us ones simply won't open.
 
-proc requestJoin*(s: CoordinationSession, binding: LinkStatement) =
-  ## Announce our binding on the topic, asking to be admitted. The binding lets a
-  ## member VERIFY we are who we claim (our encryption identity is signed by our
-  ## secp key) before admitting — but it carries no authority on its own: a member
-  ## still has to decide. Discovery, not entry.
-  discard s.transport.publish(s.topic, @[FrameJoinRequest] & encodeLink(binding))
+proc catchUp*(s: CoordinationSession)
+
+proc requestJoin*(s: CoordinationSession, binding: LinkStatement): bool {.discardable.} =
+  ## Ask to be admitted: send our binding, sealed to each join key the room has
+  ## announced, so only its members can read who is asking (FS-7) — the store node sees
+  ## that someone asked, not who. The binding lets a member VERIFY we are who we claim
+  ## (our encryption identity is signed by our secp key) before admitting, but carries
+  ## no authority on its own: a member still has to decide. Discovery, not entry.
+  ##
+  ## With no join key seen yet we pull the store's retained frames, and if there is
+  ## still none, ask the room to announce one; a synchronous transport answers inside
+  ## that publish, an asynchronous one by the next retry. False: nothing was sent yet.
+  if s.beacons.len == 0:
+    s.catchUp()
+  if s.beacons.len == 0:
+    discard s.transport.publish(s.topic, @[FrameBeaconRequest] & randomBytes(16))
+  if s.beacons.len == 0: return false
+  let request = encodeLink(binding)
+  for b in s.beacons:
+    discard s.transport.publish(s.topic, @[FrameJoinRequest] & s.crypto.sealJoinRequest(b, request))
+  true
 
 proc members*(s: CoordinationSession): seq[Member] = s.crypto.members()
 proc epoch*(s: CoordinationSession): int = s.crypto.epoch()
@@ -152,6 +204,9 @@ proc admit*(s: CoordinationSession, joiner: Member) =
   # the joiner reads its own admission and nothing before it (F-16), and every
   # member's history + provenance fold shows the re-key from the same log.
   s.publish(membershipEvent(s.crypto.epoch(), hexOf(toBytes(joiner))))
+  # The new epoch has a new join key; announce it so the next asker seals to a key
+  # every current member (the new one included) can open.
+  s.announceBeacon()
 
 proc catchUp*(s: CoordinationSession) =
   ## Offline catchup (F-15): pull the store's retained envelopes for the topic and

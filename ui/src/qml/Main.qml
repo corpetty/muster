@@ -157,6 +157,32 @@ Item {
     readonly property string roomTopic: backend ? backend.roomTopic : ""
     readonly property string intentsJson: backend ? backend.intentsJson : "[]"
 
+    // A room's topic is public, so it names nothing (exo-661.7; Composer.derivedTopic).
+    // What this instance knows about a room it opened or was invited to — the activity,
+    // who it is with — is kept here for Home's titles instead: this session only, keyed
+    // by the room's content topic. A room without a label shows its topic.
+    property var roomLabels: ({})
+    function contentTopicOf(t) {
+        // The module's toContentTopic, so a raw name keys the same room it joins.
+        t = String(t || "");
+        var parts = t.split("/");
+        if (t.charAt(0) === "/" && parts.length === 5 && parts[1] && parts[2] && parts[3] && parts[4])
+            return t;
+        var name = t.replace(/^\/+|\/+$/g, "").replace(/\//g, ".");
+        return "/muster/1/" + (name.length ? name : "room") + "/proto";
+    }
+    function labelRoom(topic, label) {
+        if (!topic || !label)
+            return;
+        var m = Object.assign({}, root.roomLabels);   // reassign so bindings re-evaluate
+        m[root.contentTopicOf(topic)] = label;
+        root.roomLabels = m;
+    }
+    function shortId(s) {
+        s = String(s || "").replace(/^0x/i, "");
+        return s.length > 12 ? s.slice(0, 8) + "…" : s;
+    }
+
     // Every joined conversation (multi-room), from coordinate_conversations.
     readonly property var conversations: {
         try { return JSON.parse(backend ? backend.conversationsJson : "[]"); }
@@ -185,10 +211,11 @@ Item {
         for (var i = 0; i < convs.length; ++i) {
             var c = convs[i];
             var topic = String(c.topic || "");
+            var title = root.roomLabels[topic] || topic;
             if (c.active)
-                rows.push({ topic: topic, title: topic, action: hl, state: st, detail: detail });
+                rows.push({ topic: topic, title: title, action: hl, state: st, detail: detail });
             else
-                rows.push({ topic: topic, title: topic, action: "Open", state: "idle",
+                rows.push({ topic: topic, title: title, action: "Open", state: "idle",
                             detail: c.lastTs ? ("last active · " + c.lastTs) : "no messages yet" });
         }
         return rows;
@@ -319,7 +346,18 @@ Item {
             catch (e) { return []; }
         }
         onActivated: root.enterRoom(topic)
-        onJoinInvite: function(topic) { root.enterRoom(topic); }   // joiner path → auto-asks to join
+        onJoinInvite: function(topic) {   // joiner path → auto-asks to join
+            // Title the room from the sealed invite (its note and sender), never its topic.
+            for (var i = 0; i < invites.length; ++i) {
+                var inv = invites[i];
+                if (String(inv.topic || "") === topic) {
+                    root.labelRoom(topic, String(inv.note || "room") + " · from " +
+                                   (inv.fromAlias ? String(inv.fromAlias) : root.shortId(inv.from)));
+                    break;
+                }
+            }
+            root.enterRoom(topic);
+        }
         onDismissInvite: function(topic) { if (root.backend) root.backend.dismissInvite(topic); }
         onNewActivity: {
             root.view = "compose";
@@ -350,6 +388,7 @@ Item {
         }
         backend: root.backend
         onCreateRoom: {
+            root.labelRoom(topic, String(verb || "room") + (peer ? " · with " + root.shortId(peer) : ""));
             root.enterRoom(topic, verb, policy, draftJson);
             // If a specific person was chosen (their 64-byte chat id, 128 hex chars), invite
             // them: seal this room's topic to their inbox so it appears on their instance —
