@@ -70,6 +70,7 @@ import ../src/coordination/effect_summary  # what an effect moves, in its family
 import ../src/wallet/types             # chain-agnostic wallet types
 import ../src/wallet/adapter           # ChainAdapter seam + Wallet aggregate
 import ../src/wallet/evm_adapter       # the EVM/Safe chain
+import ../src/wallet/evm_rpc           # rpcChainId: the chain the configured RPC serves (a split's)
 import ../src/wallet/mock_chain        # a second, non-EVM chain (proves agnosticism)
 import ../src/wallet/lez_core          # the LEZ wallet seam + FakeLezCore (P-L3 swaps in real)
 import ../src/wallet/lez_adapter       # the Logos Execution Zone chain (send assets via Logos)
@@ -192,7 +193,7 @@ var gNow: uint64 = 0
 # User-settable now (invariant 8: untrusted, user-configurable infrastructure — and
 # that is empty if the user can't configure it). Defaults to the anvil fixture; a
 # settings surface (settings / set_setting) points it at the user's own node/nodes.
-var gRpcUrl = "http://127.0.0.1:8545"
+var gRpcUrl = getEnv("MUSTER_RPC", "http://127.0.0.1:8545")   ## a saved setting wins (settings.json)
 var gRelayer = "self"
 var gBtcRpc = getEnv("MUSTER_BTC_RPC", "")   ## the user's Bitcoin node, "http://user:pass@host:port"; "" = none (exo-a50.2.6)
 # The LEZ multisig, live (exo-3c9): the user's sequencer (untrusted, invariant 8), the zone
@@ -971,6 +972,13 @@ proc frostPump() =
       if id in folded and not folded[id].collection.complete: auto.add id
   gFrostAuto = auto
 
+proc rpcChainCaip2(): tuple[ok: bool, chain, detail: string] =
+  ## The CAIP-2 chain THIS member's configured EVM RPC actually serves — what a split
+  ## settles on when the composer names none (exo-a90.6). Read, never assumed: an RPC that
+  ## does not answer is an error, not a default chain.
+  try: (true, "eip155:" & rpcChainId(gRpcUrl), "")
+  except CatchableError as e: (false, "", "your RPC (" & gRpcUrl & ") did not answer: " & e.msg)
+
 # ── a split: each pays their own share (exo-a90; docs/design/split-the-bill.md) ─────
 # Paying SENDS and returns; the settled report follows on the intents tick once the
 # payment lands (a hosted call never waits on a block, exo-3c9). On the same tick, this
@@ -987,6 +995,7 @@ const SplitPendingDeadlineS = 600.0
 var gSplitPending: seq[SplitPending]
 var gSplitRecent: seq[JsonNode]  ## the last outcomes, newest last
 var gSplitPumpAt = 0.0
+var gSplitLogged = initTable[string, string]()   ## intent id → the last state line logged (debug)
 
 proc splitSeam(chain: string): EvmPartSeam =
   ## THIS member's own wallet on `chain`: their key signs (client-side EIP-155, through the
@@ -1021,6 +1030,7 @@ proc splitPump() =
       outcome = "timed out: the payment never landed"
     if outcome.len == 0: keep.add p
     else:
+      if gLpDebug: stderr.writeLine("MUSTER-LP split reported " & p.pp.intentId & " " & outcome)
       gSplitRecent.add %*{"intentId": p.pp.intentId, "part": p.pp.part, "tx": p.pp.tx,
                           "outcome": outcome, "at": int64(epochTime())}
       if gSplitRecent.len > 20: gSplitRecent.delete(0)
@@ -1032,14 +1042,35 @@ proc splitPump() =
     let (k, c) = splitPolicy(v.policy)
     if k == "evm-split" and c notin chains: chains.add c
   for c in chains:
-    try: discard liveConfirmParts(gSession, ks, driverFor, splitSeam(c))
+    try:
+      let confirmed = liveConfirmParts(gSession, ks, driverFor, splitSeam(c))
+      if gLpDebug and confirmed.len > 0: stderr.writeLine("MUSTER-LP split confirmed " & $(%confirmed))
     except CatchableError: discard
+  if gLpDebug:
+    # each split's state, once per change — what an offscreen self-test watches
+    for v in reduceIntentViews(gSession.roomEvents(), driverFor):
+      if v.parts.len == 0: continue
+      var done = 0
+      for pv in v.parts:
+        if pv.confirmed: inc done
+      let line = v.id & " state=" & v.state & " agreed=" & $v.approvals & "/" & $v.threshold &
+                 " confirmed=" & $done & "/" & $v.parts.len
+      if gSplitLogged.getOrDefault(v.id, "") != line:
+        gSplitLogged[v.id] = line
+        stderr.writeLine("MUSTER-LP split " & line)
 
 proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): string =
   ## Propose splitting a bill THIS member fronted: they are the creditor, paid at their own
   ## address on `chain` (proposer material, written into the effect so it is reviewed and
   ## signed). Returns the intent id, or {error}.
   if gSession == nil: return $(%*{"error": "not-joined"})
+  var chain = chain
+  if chain.len == 0:
+    # none named: the chain this member's RPC serves — written into the effect, so every
+    # member reviews it before agreeing
+    let (ok, c, detail) = rpcChainCaip2()
+    if not ok: return $(%*{"error": "no-rpc", "detail": detail})
+    chain = c
   let (isEvm, _) = evmChainId(chain)
   if not isCaip2(chain) or not isEvm: return $(%*{"error": "not-an-evm-chain", "chain": chain})
   if "evm-split" notin roomKinds(): return $(%*{"error": "not-admitted", "kind": "evm-split"})
@@ -1093,16 +1124,19 @@ proc musterCoordinateConfirmPartImpl(intentId, part, tx: string): string =
 # The dispatch at the C ABI has no try/except at the pinned SDK rev (muster_gen.nim), so a
 # raise inside a handler would cross it: each split handler answers {error} instead.
 proc musterCoordinateProposeSplit(chain, total, sharesJson, memo: string): string =
-  try: musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo)
-  except CatchableError as e: $(%*{"error": "failed", "detail": e.msg})
+  try: result = musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo)
+  except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
+  if gLpDebug: stderr.writeLine("MUSTER-LP split propose " & result)
 
 proc musterCoordinateSettlePart(intentId: string): string =
-  try: musterCoordinateSettlePartImpl(intentId)
-  except CatchableError as e: $(%*{"error": "failed", "detail": e.msg})
+  try: result = musterCoordinateSettlePartImpl(intentId)
+  except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
+  if gLpDebug: stderr.writeLine("MUSTER-LP split pay " & intentId & " " & result)
 
 proc musterCoordinateConfirmPart(intentId, part, tx: string): string =
-  try: musterCoordinateConfirmPartImpl(intentId, part, tx)
-  except CatchableError as e: $(%*{"error": "failed", "detail": e.msg})
+  try: result = musterCoordinateConfirmPartImpl(intentId, part, tx)
+  except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
+  if gLpDebug: stderr.writeLine("MUSTER-LP split confirm " & intentId & " " & result)
 
 proc lezChainViewOf(a: RoomAccount): ChainView =
   if a.chain != gLezChain:
@@ -1287,6 +1321,19 @@ proc musterCoordinateSetPolicy(kind: string): string =
   if k notin roomKinds():
     return $(%*{"error": "policy not admitted in this room: " & k,
                 "admitted": roomKinds()})
+  if kindSettlesOnChain(k):
+    # a chain-qualified kind (a split, exo-a90): its qualifier is the CAIP-2 chain the
+    # parties pay on — the one named, or the one this member's RPC serves
+    var chain = acct
+    if chain.len == 0:
+      let (ok, c, detail) = rpcChainCaip2()
+      if not ok: return $(%*{"error": "no-rpc", "kind": k, "detail": detail})
+      chain = c
+    if not isCaip2(chain) or chain.split(':')[0] notin kindInfo(k).settlesOn:
+      return $(%*{"error": "a " & k & " policy settles on " & kindInfo(k).settlesOn.join("/") &
+                           " chains, not " & chain, "kind": k})
+    gCoordKind = qualify(k, chain)
+    return $policyJson()
   if not kindNeedsAccount(k):
     if acct.len > 0:
       return $(%*{"error": "a " & k & " policy acts from no account", "kind": k})
