@@ -85,6 +85,13 @@ proc newLpLezCore*(instancePath: string, origin = "muster_module"): LpLezCore =
   if not openOk:
     discard result.rawCall("create_new", args(%cfg, %sto, %sta, %""), kReadMs)
 
+proc save(c: LpLezCore) =
+  ## Persist the wallet (its keys, accounts and scan position) — lez_core holds them in
+  ## memory until told to. Without this a new account, funded or not, dies with the
+  ## process: its keys were never written (found on the testnet run, exo-14d; the demo
+  ## saved after every change). Best effort: a failed save is logged by rawCall.
+  discard c.rawCall("save", "[]", kReadMs)
+
 # ── the seam ───────────────────────────────────────────────────────────────────
 
 method createAccount*(c: LpLezCore, kind: LezAccountKind): LezAccount =
@@ -94,6 +101,7 @@ method createAccount*(c: LpLezCore, kind: LezAccountKind): LezAccount =
     # ACTIVATE a fresh public account on-chain, or the sequencer silently drops txns
     # to it (labbook §9 / the atomic-swap POC). Registering is safe for public accounts.
     discard c.rawCall("register_public_account", args(%id), kReadMs)
+    c.save()
     LezAccount(id: id, kind: lakPublic)
   else:
     let id = c.rawCall("create_account_private", "[]", kReadMs)
@@ -101,6 +109,7 @@ method createAccount*(c: LpLezCore, kind: LezAccountKind): LezAccount =
     # Read the key node to publish (npk/vpk). Do NOT register a private RECEIVE
     # account — initializing it makes it permanently uncreditable by foreign senders.
     let kn = parseKeyNode(c.rawCall("get_private_account_keys", args(%id), kReadMs))
+    c.save()
     LezAccount(id: id, kind: lakPrivate, npk: kn.npk, vpk: kn.vpk)
 
 method listAccounts*(c: LpLezCore): seq[LezAccount] =
@@ -181,6 +190,7 @@ method pollTransfer*(c: LpLezCore): tuple[done: bool, result: LezResult] =
       if j.kind == JString: s = j.getStr()
     except CatchableError: discard
     c.lastResult = parseEnvelope(s)
+  c.save()                                            # the spent note, the change, the nonce
   (true, c.lastResult)
 
 method sync*(c: LpLezCore): int =
@@ -204,7 +214,7 @@ method sync*(c: LpLezCore): int =
   {.cast(gcsafe).}:                 # the step closure touches only this core, on the module thread
     (code, reached) = walkSync(last, tip, kSyncChunk, kSyncBudgetS, step, proc(): float = epochTime())
   (c.synced, c.tip) = (reached, tip)
-  if code == LezSyncOk and reached > last: discard c.rawCall("save", "[]", kReadMs)
+  if code == LezSyncOk and reached > last: c.save()
   code
 
 method claimPinata*(c: LpLezCore, pinataId, account: string): LezResult =
@@ -213,8 +223,14 @@ method claimPinata*(c: LpLezCore, pinataId, account: string): LezResult =
   ## claim is accepted on send; the credit lands only when a block commits (minutes).
   let acct = c.rawCall("get_account_public", args(%pinataId), kReadMs)
   if acct.len == 0: return LezResult(success: false, error: "pinata account unreadable")
+  # `data` as hex text, or — the sequencer's own shape, which the demo read — an array of
+  # byte values; either way 33 bytes
   var dataHex = ""
-  try: dataHex = parseJson(acct){"data"}.getStr("")
+  try:
+    let d = parseJson(acct){"data"}
+    if d != nil and d.kind == JString: dataHex = d.getStr()
+    elif d != nil and d.kind == JArray:
+      for b in d: dataHex.add toHex(b.getInt(), 2).toLowerAscii()
   except CatchableError: discard
   if dataHex.len < 2: return LezResult(success: false, error: "pinata challenge missing")
   let difficulty = parseHexInt(dataHex[0 .. 1])          # first byte = difficulty
@@ -222,4 +238,5 @@ method claimPinata*(c: LpLezCore, pinataId, account: string): LezResult =
   var solution = ""
   try: solution = pinataSolve(seedHex, difficulty)
   except CatchableError as e: return LezResult(success: false, error: "PoW: " & e.msg)
-  parseEnvelope(c.rawCall("claim_pinata", args(%pinataId, %account, %solution), kReadMs))
+  result = parseEnvelope(c.rawCall("claim_pinata", args(%pinataId, %account, %solution), kReadMs))
+  if result.success: c.save()
