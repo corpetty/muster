@@ -1371,3 +1371,4 @@
 {"type":"close","timestamp":"2026-09-28T21:40:00.712616626Z","issue_id":"exo-a90.13","payload":{}}
 {"type":"comment","timestamp":"2026-09-28T21:40:00.763637897Z","issue_id":"exo-a90.6","payload":{"body":"Closed with exo-9a4: the composer and card seen on a display end to end on both rails and fixed."}}
 {"type":"close","timestamp":"2026-09-28T21:40:00.813970475Z","issue_id":"exo-a90.6","payload":{}}
+{"type":"status_update","timestamp":"2026-09-28T21:41:50.784747594Z","issue_id":"exo-a90.14","payload":{"status":"in_progress"}}

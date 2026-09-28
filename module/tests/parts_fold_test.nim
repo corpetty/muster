@@ -159,6 +159,34 @@ block:
            kinds == @["part-confirmed/" & $icExternalRead, "part-settled/" & $icPeerMessage], $kinds
   echo "6. view + activity + provenance name each part's state OK"
 
+# ── 6b. every activity line with people in it names them as data (exo-221) ───────
+# The fold keeps who acted (account) and whose part it was (subject), so the hosted layer
+# can say "you" / "Bob" there exactly as the card does; activityTitle re-renders a line
+# with names, and never leaves a raw id when a name is known.
+block:
+  let evs = agreed & @[partEvent(id, "alice", "settled", "alice", "0xaa"),
+                       partEvent(id, "alice", "confirmed", "carol", "0xaa")]
+  let label = proc(who: string): string =
+    (if who == "alice": "you" elif who == "carol": "Carol" elif who == "bob": "Bob" else: who)
+  var titles: seq[string]
+  for a in reduceActivity(evs, dfor):
+    if a.intentId != id: continue
+    case a.kind
+    of "part-settled": doAssert a.account == "alice" and a.subject == "alice", $a
+    of "part-confirmed": doAssert a.account == "carol" and a.subject == "alice", $a
+    else: discard
+    titles.add activityTitle(a, label)
+  doAssert "Approved by you" in titles and "Approved by Bob" in titles, $titles
+  doAssert "You settled your part" in titles, $titles
+  doAssert "Carol confirmed your part" in titles, $titles
+  let other = agreed & @[partEvent(id, "bob", "settled", "bob", "0xbb"),
+                         partEvent(id, "bob", "confirmed", "carol", "0xbb")]
+  var t2: seq[string]
+  for a in reduceActivity(other, dfor):
+    if a.intentId == id and a.kind.startsWith("part-"): t2.add activityTitle(a, label)
+  doAssert t2 == @["Bob settled their part", "Carol confirmed Bob's part"], $t2
+  echo "6b. activity lines carry who acted and whose part; titled with the card's names OK"
+
 # ── 7. reduce(log): reorder + duplication → identical state and view (inv 4) ──────
 block:
   let full = agreed & @[partEvent(id, "alice", "settled", "alice", "0xaa"),
