@@ -245,6 +245,21 @@ proc contributorOf*(driver: Driver, effectJson, signatureHex: string): string =
   let m = canonicalize(driver, effectFromJson(effectJson))
   identifyContributor(driver, m, Contribution(bytes: hexToBytes(signatureHex)))
 
+proc normId(s: string): string =
+  result = s.toLowerAscii()
+  if result.startsWith("0x"): result = result[2 .. ^1]
+
+proc signedByNamed*(driver: Driver, m: Materialization, who, signatureHex: string): bool =
+  ## Whether a contribution published under <who> is that contributor's (exo-a5a). The key
+  ## is whatever its publisher wrote — any member holding the epoch key can publish raw
+  ## events — so where the driver can say who signed (identifyContributor ≠ ""), the
+  ## contribution belongs to THAT signer, and under any other name it is nobody's
+  ## approval. Checked before dedup: a forgery that arrives first must not claim the
+  ## named member's slot. A driver that cannot identify a signer (the base, the stub)
+  ## returns "" and is taken at the key's name; its own verifyContribution decides.
+  let signer = identifyContributor(driver, m, Contribution(bytes: hexToBytes(signatureHex)))
+  signer.len == 0 or normId(signer) == normId(who)
+
 # ── event constructors (what a participant publishes) ─────────────────────────
 
 proc proposeEvent*(intentId, effectJson: string): Event =

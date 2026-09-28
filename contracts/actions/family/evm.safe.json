@@ -221,6 +221,13 @@
             "module/tests/safe_test.nim",
             "module/tests/coordinate_submit_anvil.nim"
           ]
+        },
+        {
+          "what": "a contribution published under a name that is not its signer's",
+          "why": "it is nobody's approval: the fold and every view drop it before dedup, so one signer never counts twice and a forgery never takes a member's slot (exo-a5a)",
+          "evidence": [
+            "module/tests/distinct_signer_test.nim"
+          ]
         }
       ],
       "hosted": [
@@ -342,10 +349,13 @@
           "kind": "source",
           "url": "https://eips.ethereum.org/EIPS/eip-712",
           "what": "EIP-712 typed structured data hashing: 0x19 0x01 ‖ domainSeparator ‖ hashStruct"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/distinct_signer_test.nim"
         }
       ],
       "unverified": [
-        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per recovered owner: one owner's signature published under two names reaches 'executable' in the room. Seen by a scratch run against the threshold driver while writing this corpus; no repo test covers it. For a Safe the settlement re-dedups by the recovered owner (settlement_test) and the Safe checks on chain, so nothing wrong settles — but the card can show 'ready' early.",
         "coordinate_submit polls the receipt for about four seconds. If the chain has not mined it by then, it returns pending, and nothing later publishes the final event for a Safe intent (a LEZ settle is re-watched by the pump; a Safe one is not). From reading nim-lib/muster_module.nim, not a test."
       ]
     },
@@ -596,6 +606,13 @@
             "module/tests/safe_test.nim",
             "module/tests/coordinate_submit_anvil.nim"
           ]
+        },
+        {
+          "what": "a contribution published under a name that is not its signer's",
+          "why": "it is nobody's approval: the fold and every view drop it before dedup, so one signer never counts twice and a forgery never takes a member's slot (exo-a5a)",
+          "evidence": [
+            "module/tests/distinct_signer_test.nim"
+          ]
         }
       ],
       "hosted": [
@@ -704,11 +721,14 @@
           "kind": "source",
           "url": "https://eips.ethereum.org/EIPS/eip-712",
           "what": "EIP-712 typed structured data hashing: 0x19 0x01 ‖ domainSeparator ‖ hashStruct"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/distinct_signer_test.nim"
         }
       ],
       "unverified": [
         "No muster test proposes an owner or threshold change; that it is a CALL to the Safe is the Safe's own rule (OwnerManager functions are `authorized`). The data-carrying CALL path itself is proven on the real Safe (safe_real_anvil_e2e step 3).",
-        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per recovered owner: one owner's signature published under two names reaches 'executable' in the room. Seen by a scratch run against the threshold driver while writing this corpus; no repo test covers it. For a Safe the settlement re-dedups by the recovered owner (settlement_test) and the Safe checks on chain, so nothing wrong settles — but the card can show 'ready' early.",
         "coordinate_submit polls the receipt for about four seconds. If the chain has not mined it by then, it returns pending, and nothing later publishes the final event for a Safe intent (a LEZ settle is re-watched by the pump; a Safe one is not). From reading nim-lib/muster_module.nim, not a test."
       ]
     },
@@ -922,6 +942,13 @@
           "evidence": [
             "module/tests/settlement_test.nim"
           ]
+        },
+        {
+          "what": "a contribution published under a name that is not its signer's",
+          "why": "it is nobody's approval: the fold and every view drop it before dedup, so one signer never counts twice and a forgery never takes a member's slot (exo-a5a)",
+          "evidence": [
+            "module/tests/distinct_signer_test.nim"
+          ]
         }
       ],
       "hosted": [
@@ -1021,14 +1048,17 @@
           "kind": "source",
           "url": "https://eips.ethereum.org/EIPS/eip-712",
           "what": "EIP-712 typed structured data hashing: 0x19 0x01 ‖ domainSeparator ‖ hashStruct"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/distinct_signer_test.nim"
         }
       ],
       "unverified": [
         "That settlement does not re-check the delegatecall allowlist is from reading settlement/settlement.nim (SafeSettlement.assemble calls no signRefusal); no test settles an allowlisted delegatecall on chain — the real-Safe run checks only its hash (safe_real_anvil_e2e step 1).",
         "The gate itself (signRefusal) is what the tests call; that the live propose and in-app contribute paths call it before publishing is from reading coordination/live.nim.",
         "An operation above 1 is refused by signRefusal ('unknown Safe operation <n>'); no test covers it.",
-        "The Bybit attribution is the driver's and the test's own wording (safe.nim, safe_fidelity_test.nim); no primary source for the incident is cited here.",
-        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per recovered owner: one owner's signature published under two names reaches 'executable' in the room. Seen by a scratch run against the threshold driver while writing this corpus; no repo test covers it. For a Safe the settlement re-dedups by the recovered owner (settlement_test) and the Safe checks on chain, so nothing wrong settles — but the card can show 'ready' early."
+        "The Bybit attribution is the driver's and the test's own wording (safe.nim, safe_fidelity_test.nim); no primary source for the incident is cited here."
       ]
     }
   ]

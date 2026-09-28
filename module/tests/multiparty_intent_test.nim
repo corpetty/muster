@@ -64,13 +64,13 @@ doAssert intentState(bob.log.allEvents(), foldDrv, "1") == "proposed",
 echo "1. propose propagates OK"
 
 # Alice contributes her owner signature — collecting (1 of 2).
-alice.publish(contributeEvent("1", "owner0", sig0))
+alice.publish(contributeEvent("1", contributorOf(driver, effectJson, sig0), sig0))   # under its signer (exo-a5a)
 doAssert intentState(alice.log.allEvents(), foldDrv, "1") == "collecting",
          "one valid owner signature -> collecting"
 echo "2. first signature -> collecting OK"
 
 # Bob contributes his — threshold met, both fold to executable and converge.
-bob.publish(contributeEvent("1", "owner1", sig1))
+bob.publish(contributeEvent("1", contributorOf(driver, effectJson, sig1), sig1))
 let aState = intentState(alice.log.allEvents(), foldDrv, "1")
 let bState = intentState(bob.log.allEvents(), foldDrv, "1")
 doAssert aState == "executable", "two owner signatures -> executable (Alice): " & aState

@@ -2,7 +2,7 @@
 
 ## Run them
 
-One command runs every test that needs no chain — 94 unit tests and the 55 invariant
+One command runs every test that needs no chain — 95 unit tests and the 55 invariant
 probes under `probes/`, in parallel:
 
 ```bash
@@ -51,6 +51,7 @@ wants (below), which the runner supplies.
 
 - `dcbor_golden_test` (known-answer bytes for invariant 5, hand-computed from RFC 8949: width boundaries, the CDE-vs-length-first ordering discriminator, hash-input framing; it catches a byte-order flip the property probes pass)
 - `manifest_test`
+- `distinct_signer_test` (exo-a5a — a k-of-n decision needs k distinct signers: a contribution counts only under the name of the signer the driver identifies, checked before dedup; one signature under two names is one approval, a forgery never takes a member's slot, governance cannot be completed alone; threshold and Safe; `$SECP` + `$SODIUM`)
 - `authorship_test` (exo-f76 — an author-bearing event counts only when its author signed it: forged, wrong-key, cross-room, tampered and malformed author events are dropped, genuine ones count, over the wire included; `$SECP` + `$STINT` + `$SODIUM`)
 - `log_proof_test`
 - `malformed_sig_test` (exo-cf7 — a malformed signature is never fatal: the verifiers, both owner-signature drivers, the fold with a hostile approval in the log, join-request bindings, authorizations; needs `$SECP` + `$SODIUM`)

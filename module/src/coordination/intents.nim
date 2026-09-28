@@ -112,6 +112,9 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
     if p.len >= 5 and p[0] == "intent" and p[2] == "attest":
       attests.mgetOrPut(p[1] & "/" & p[3] & "/" & p[4], @[]).add e.value
   for s in sigs:
+    # A contribution under a name that is not its signer's is nobody's approval — dropped
+    # BEFORE dedup, so it can neither count twice nor take the named member's slot (exo-a5a).
+    if not signedByNamed(driverOf(s.id), result[s.id].materialization, s.who, s.value): continue
     let dedup = s.id & "/" & $s.round & "/" & s.who      # one contribution per (contributor, round)
     if dedup in seenSig: continue
     seenSig.incl dedup

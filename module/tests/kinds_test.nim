@@ -98,8 +98,9 @@ block:
   for (kind, admitted) in [("unanimous", true), ("btc.psbt-from-the-future", false)]:
     let eff = """{"effect":"add-driver","kind":"""" & kind & """"}"""
     let id = intentIdFor(eff, "threshold")
-    let ev = @[proposeEvent(id, eff), contributeEvent(id, "A", sign(1, id, eff)),
-               contributeEvent(id, "B", sign(2, id, eff))]
+    let (s1, s2) = (sign(1, id, eff), sign(2, id, eff))   # each under its signer's name (exo-a5a)
+    let ev = @[proposeEvent(id, eff), contributeEvent(id, contributorOf(thr, eff, s1), s1),
+               contributeEvent(id, contributorOf(thr, eff, s2), s2)]
     doAssert intentState(ev, foldDrv, id) == "executable"
     doAssert (kind in roomDriverKinds(ev, foldDrv)) == admitted,
       kind & (if admitted: " must be admitted" else: " is not a kind this client has — admitting it is a guess")

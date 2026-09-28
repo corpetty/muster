@@ -125,6 +125,13 @@
           "evidence": [
             "module/tests/settlement_test.nim"
           ]
+        },
+        {
+          "what": "a contribution published under a name that is not its signer's",
+          "why": "it is nobody's approval: the fold and every view drop it before dedup, so one signer never counts twice and a forgery never takes a member's slot (exo-a5a)",
+          "evidence": [
+            "module/tests/distinct_signer_test.nim"
+          ]
         }
       ],
       "hosted": [
@@ -161,9 +168,8 @@
           "party": "the store node"
         },
         {
-          "claim": "k distinct members: the fold dedups by the name in the event key, so it relies on members publishing under their own names",
-          "credibility": "motivational",
-          "party": "every room member"
+          "claim": "k distinct signers: a contribution counts only under the name of the signer the driver identifies, checked before dedup (exo-a5a)",
+          "credibility": "imperative"
         }
       ],
       "evidence": [
@@ -214,10 +220,13 @@
         {
           "kind": "test",
           "path": "module/tests/probes/probe_live_convergence.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/distinct_signer_test.nim"
         }
       ],
       "unverified": [
-        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per verifying key: a valid signature by one member, published a second time under another name, counts twice and the intent reaches 'executable' with one signer (confirmed by a scratch run against the threshold driver while writing this corpus; no repo test covers it). A room family has no settlement to re-check the signers, so for it the room's count is the outcome. Honest clients publish under the recovered name (coordination/live.nim).",
         "k = min(2, members) is how nim-lib/muster_module.nim (roomDriver) builds the hosted driver; the tests build their own rosters."
       ]
     },
@@ -314,6 +323,13 @@
           "evidence": [
             "module/tests/threshold_fold_test.nim"
           ]
+        },
+        {
+          "what": "a contribution published under a name that is not its signer's",
+          "why": "it is nobody's approval: the fold and every view drop it before dedup, so one signer never counts twice and a forgery never takes a member's slot (exo-a5a)",
+          "evidence": [
+            "module/tests/distinct_signer_test.nim"
+          ]
         }
       ],
       "hosted": [
@@ -344,9 +360,8 @@
           "party": "each member's client"
         },
         {
-          "claim": "k distinct members: the fold dedups by the name in the event key",
-          "credibility": "motivational",
-          "party": "every room member"
+          "claim": "k distinct signers: a contribution counts only under the name of the signer the driver identifies, checked before dedup (exo-a5a)",
+          "credibility": "imperative"
         }
       ],
       "evidence": [
@@ -365,12 +380,15 @@
         {
           "kind": "test",
           "path": "module/tests/settlement_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/distinct_signer_test.nim"
         }
       ],
       "unverified": [
         "governance_test proves roomDriverKinds admits 'unanimous' after an approved add-driver; that coordinate_set_policy refuses it before is from reading nim-lib/muster_module.nim (musterCoordinateSetPolicy).",
-        "That the fold does not check admission, and that n follows the current membership, are from reading nim-lib/muster_module.nim (roomDriver, driverForPolicy); no test covers either.",
-        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per verifying key: a valid signature by one member, published a second time under another name, counts twice and the intent reaches 'executable' with one signer (confirmed by a scratch run against the threshold driver while writing this corpus; no repo test covers it). A room family has no settlement to re-check the signers, so for it the room's count is the outcome. Honest clients publish under the recovered name (coordination/live.nim)."
+        "That the fold does not check admission, and that n follows the current membership, are from reading nim-lib/muster_module.nim (roomDriver, driverForPolicy); no test covers either."
       ]
     },
     {
@@ -478,6 +496,13 @@
           "evidence": [
             "module/tests/governance_test.nim"
           ]
+        },
+        {
+          "what": "a contribution published under a name that is not its signer's",
+          "why": "it is nobody's approval: the fold and every view drop it before dedup, so one signer never counts twice and a forgery never takes a member's slot (exo-a5a)",
+          "evidence": [
+            "module/tests/distinct_signer_test.nim"
+          ]
         }
       ],
       "hosted": [
@@ -523,11 +548,14 @@
         {
           "kind": "test",
           "path": "module/tests/threshold_fold_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/distinct_signer_test.nim"
         }
       ],
       "unverified": [
-        "That roomDriverKinds ignores the add-driver's policy is from reading coordination/intents.nim; governance_test folds it under a threshold driver only.",
-        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per verifying key: a valid signature by one member, published a second time under another name, counts twice and the intent reaches 'executable' with one signer (confirmed by a scratch run against the threshold driver while writing this corpus; no repo test covers it). A room family has no settlement to re-check the signers, so for it the room's count is the outcome. Honest clients publish under the recovered name (coordination/live.nim)."
+        "That roomDriverKinds ignores the add-driver's policy is from reading coordination/intents.nim; governance_test folds it under a threshold driver only."
       ]
     }
   ]

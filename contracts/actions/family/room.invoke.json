@@ -137,6 +137,13 @@
           "evidence": [
             "module/tests/conformance_test.nim"
           ]
+        },
+        {
+          "what": "a contribution published under a name that is not its signer's",
+          "why": "it is nobody's approval: the fold and every view drop it before dedup, so one signer never counts twice and a forgery never takes a member's slot (exo-a5a)",
+          "evidence": [
+            "module/tests/distinct_signer_test.nim"
+          ]
         }
       ],
       "hosted": [
@@ -199,10 +206,11 @@
         {
           "kind": "test",
           "path": "module/tests/schema_unknown_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/distinct_signer_test.nim"
         }
-      ],
-      "unverified": [
-        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per verifying key: a valid signature by one member, published a second time under another name, counts twice and the intent reaches 'executable' with one signer (confirmed by a scratch run against the threshold driver while writing this corpus; no repo test covers it). A room family has no settlement to re-check the signers, so for it the room's count is the outcome. Honest clients publish under the recovered name (coordination/live.nim). coordinate_execute runs on the fold's 'executable', so the same applies to running an allowlisted module action."
       ]
     },
     {
@@ -377,6 +385,13 @@
           "evidence": [
             "module/tests/authorship_test.nim"
           ]
+        },
+        {
+          "what": "a contribution published under a name that is not its signer's",
+          "why": "it is nobody's approval: the fold and every view drop it before dedup, so one signer never counts twice and a forgery never takes a member's slot (exo-a5a)",
+          "evidence": [
+            "module/tests/distinct_signer_test.nim"
+          ]
         }
       ],
       "hosted": [
@@ -442,13 +457,16 @@
         {
           "kind": "test",
           "path": "module/tests/wallet_lez_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/distinct_signer_test.nim"
         }
       ],
       "unverified": [
         "No test runs a Mode B intent through coordinate_execute into lez_core.transfer_private; the execute path is proven with a stand-in invoker (invoke_execute_test, coordination_invoke_test). CLAUDE.md lists a room-coordinated LEZ transfer (Mode B) as not yet done, and docs/design/lez-adapter.md §6 lists the live shielded settle as remaining.",
         "A share lands in the log bound to the field; turning it into a complete effect is a new proposal (the existing intent's bytes and id are fixed). No test drives that re-proposal.",
-        "The generated example's args are the generator's fixture; the exact argument list lez_core.transfer_private takes is not checked against lez_core here.",
-        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per verifying key: a valid signature by one member, published a second time under another name, counts twice and the intent reaches 'executable' with one signer (confirmed by a scratch run against the threshold driver while writing this corpus; no repo test covers it). A room family has no settlement to re-check the signers, so for it the room's count is the outcome. Honest clients publish under the recovered name (coordination/live.nim)."
+        "The generated example's args are the generator's fixture; the exact argument list lez_core.transfer_private takes is not checked against lez_core here."
       ]
     }
   ]

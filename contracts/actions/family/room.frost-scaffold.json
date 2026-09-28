@@ -125,6 +125,13 @@
           "evidence": [
             "module/tests/conformance_test.nim"
           ]
+        },
+        {
+          "what": "a contribution published under a name that is not its signer's",
+          "why": "it is nobody's approval: the fold and every view drop it before dedup, so one signer never counts twice and a forgery never takes a member's slot (exo-a5a)",
+          "evidence": [
+            "module/tests/distinct_signer_test.nim"
+          ]
         }
       ],
       "hosted": [
@@ -171,12 +178,15 @@
         {
           "kind": "test",
           "path": "module/tests/settlement_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/distinct_signer_test.nim"
         }
       ],
       "unverified": [
         "Ed25519 is deterministic and both rounds sign the same bytes, so a member's round-2 contribution equals their round-1 one; anyone in the room holding it could publish it tagged round 2 and it would count, graded unattested. From reading drivers/frost.nim and coordination/intents.nim; no test covers it.",
-        "frost is not one of the live probes' policies (probes/live_room.nim: safe, threshold), so its expiry and provenance refusals on the hosted path are not tested for this kind.",
-        "The room's fold counts one approval per contributor NAME in the event key (intent/<id>/sig/<who>/<round>), not per verifying key: a valid signature by one member, published a second time under another name, counts twice and the intent reaches 'executable' with one signer (confirmed by a scratch run against the threshold driver while writing this corpus; no repo test covers it). A room family has no settlement to re-check the signers, so for it the room's count is the outcome. Honest clients publish under the recovered name (coordination/live.nim)."
+        "frost is not one of the live probes' policies (probes/live_room.nim: safe, threshold), so its expiry and provenance refusals on the hosted path are not tested for this kind."
       ]
     }
   ]
