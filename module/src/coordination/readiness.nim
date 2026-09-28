@@ -58,10 +58,12 @@ proc remedyFor*(r: Requirement): string =
   of rqModule:      "install the " & r.name & " module (host install path)"
   of rqEnvironment:
     if r.name.startsWith("bip122:"): "point Settings → Bitcoin node at a node on " & r.name & " (set_setting btc-rpc)"
-    else: "point the RPC setting at " & r.name & " (set_setting rpc)"
+    elif r.name.startsWith("lez:"): "point Settings → LEZ sequencer at a node serving " & r.name & " (set_setting lez-rpc, lez-chain)"
+    else: "point the RPC setting at a node on " & r.name & " (set_setting rpc)"
   of rqAuthority:   "use a key that is a recognized " & r.name & " — or take part without signing"
   of rqInfra:
     if r.name == "lez-account": "set up a funded LEZ account in the LEZ Wallet App"
+    elif r.name == "lez-rpc": "point Settings → LEZ sequencer at your own (set_setting lez-rpc)"
     elif r.name == "bitcoind-rpc": "point Settings → Bitcoin node at your own node (set_setting btc-rpc)"
     else: "configure " & r.name & " (set_setting " & r.name & ")"
   of rqCapability:  "grant the " & r.name & " capability in the host"
@@ -112,7 +114,7 @@ proc assessReadiness*(m: ActionManifest, p: ReadinessProbe): Readiness =
 type
   HostFacts* = object
     rpcUrl*: string                ## "" = no RPC configured
-    expectedChainId*: int          ## what the environment requirement "chain:<id>" must match
+    expectedChainId*: int          ## what an EVM environment requirement "eip155:<id>" must match
     myAddress*: Address            ## this instance's secp authorization identity
     myEd*: Ed25519Pub              ## this instance's Ed25519 encryption identity
     signers*: seq[Address]         ## the eip191 signer set ("signer")
@@ -151,6 +153,11 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
       # a Bitcoin proposal INTRODUCES its node (exo-a50.2.6): read UTXOs, broadcast
       if facts.btcRpcUrl.len > 0: (rdMet, "bitcoind = " & redactUserinfo(facts.btcRpcUrl))
       else: (rdMissing, "no Bitcoin node configured")
+    elif name == "lez-rpc":
+      # the user's LEZ sequencer, which the live LEZ multisig and LEZ-FROST paths submit
+      # through (JSON-RPC). Configured is what this grades; reachability is the zone's.
+      if facts.lezRpcUrl.len > 0: (rdMet, "lez-rpc = " & facts.lezRpcUrl)
+      else: (rdMissing, "no LEZ sequencer configured")
     elif name == "lez-account":
       # A set-up, funded LEZ account. DETECTED here (via the host's lezReady closure over
       # lez_core); PROVISIONED in the LEZ Wallet App (exo-44b) — the remedy names it.
@@ -168,15 +175,15 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
       if not ok: return (rdMissing, "Bitcoin node unreachable: " & detail)
       if chain == name: return (rdMet, detail)
       return (rdMissing, "the Bitcoin node serves " & chain & ", the action needs " & name)
-    if not name.startsWith("chain:"):
-      # a non-EVM chain with no probe on this host
+    if not name.startsWith("eip155:"):
+      # a chain (CAIP-2) this host has no probe for
       return (rdUnknown, "this host has no probe for " & name & " yet")
     if facts.rpcUrl.len == 0:
       return (rdUnknown, "no RPC configured to probe " & name & " through")
     let probe = if facts.rpcProbe != nil: facts.rpcProbe else: probeRpc
     let (ok, chain, detail) = probe(facts.rpcUrl)
     if not ok: (rdMissing, "RPC unreachable: " & detail)
-    elif name == "chain:" & $chain: (rdMet, detail)
+    elif name == "eip155:" & $chain: (rdMet, detail)
     else: (rdMissing, "RPC serves chain " & $chain & ", the action needs " & name)
   result.authorityHeld = proc(name: string): Grade =
     case name

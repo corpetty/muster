@@ -150,7 +150,7 @@
       "requirements": [
         {
           "kind": "environment",
-          "name": "chain:31337",
+          "name": "eip155:31337",
           "party": "instance",
           "class": "infra",
           "target": "evm:31337 (fixed in the hosted wallet)",
@@ -394,7 +394,7 @@
       "requirements": [
         {
           "kind": "environment",
-          "name": "chain:31337",
+          "name": "eip155:31337",
           "party": "instance",
           "class": "infra",
           "target": "evm:31337 (fixed in the hosted wallet)",

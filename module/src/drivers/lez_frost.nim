@@ -162,15 +162,23 @@ method profile*(d: LezFrostDriver): FamilyProfile =
     n: d.account.group.params.hostpubkeys.len, bypassesKnown: true)
 
 method manifest*(d: LezFrostDriver, effect: Effect): ActionManifest =
-  ## Needs the zone reachable and a share of the ceremony; touches the account (its nonce)
-  ## and every account the call names. At settle the zone sees one signature by the
-  ## account: the call, never the policy or who signed.
-  var touches = @[touch(d.account.chain, tmWrite), touch("lez:" & d.account.address, tmWrite)]
+  ## Needs the user's LEZ sequencer (JSON-RPC, the `lez-rpc` setting: settlement sends the
+  ## aggregate through it) and a share of the ceremony. LEZ v0.2.4 charges no fee, so no
+  ## funded account is needed. Touches the group's account (its nonce), the program the
+  ## call runs (read) and every account the call passes (each may be written) — each once,
+  ## a chain in CAIP-2 and an account in CAIP-10 (exo-ec8). At settle the zone sees one
+  ## signature by the account: the call, never the policy or who signed.
+  let chain = d.account.chain
+  var touches = @[touch(chain, tmWrite), touch(chain & ":" & d.account.address, tmWrite)]
+  proc add(t: Touch) =
+    if not touches.anyIt(it.target == t.target): touches.add t
   try:
-    for a in callOf(effect).accounts: touches.add touch("lez:" & toHex(a), tmWrite)
+    let c = callOf(effect)
+    add touch(chain & ":" & toHex(c.program), tmRead)       # the program it calls
+    for a in c.accounts: add touch(chain & ":" & toHex(a), tmWrite)
   except CatchableError: discard
   ActionManifest(declared: true, agreement: d.describe(),
-    requirements: @[req(rqEnvironment, d.account.chain), req(rqInfra, "lez-account"),
+    requirements: @[req(rqEnvironment, chain), req(rqInfra, "lez-rpc"),
                     req(rqAuthority, "frost-share", rpContributor)],
     discloses: @[row("call", obChainObserver), row("signed-tx", obRpcProvider)],
     touches: touches)

@@ -16,7 +16,7 @@ For an intent the room has folded to **executable**, and only then, `coordinate_
   "intentId": "0x1f23…",
   "capability": "lez_core.transfer_private",
   "materializationRoot": "0x…",          // the exact bytes the room agreed on (F-4)
-  "environment": "chain:31337",          // replay binding, invariant 2
+  "environment": "eip155:31337",          // replay binding, invariant 2
   "account": "safe:0x5fbd…",
   "slot": "0x1f23…",                     // = intentId
   "expiry": 1789544400,

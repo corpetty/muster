@@ -23,7 +23,7 @@ import ../src/crypto/curve25519
 type RpcStub = ref object of StubDriver
 method manifest(d: RpcStub, effect: Effect): ActionManifest =
   result = ActionManifest(declared: true, agreement: d.descriptor)
-  result.requirements.add req(rqEnvironment, "chain:31337")
+  result.requirements.add req(rqEnvironment, "eip155:31337")
   result.requirements.add req(rqInfra, "rpc")
   result.requirements.add req(rqAuthority, "safe-owner", rpContributor)
   result.discloses.add row("signed-tx", obRpcProvider)
@@ -66,7 +66,7 @@ block:
 block:
   let ev = @[msg] & decide & pay1
   let ns = roomInfraNeeds(ev, drivers)
-  doAssert ns.keys == @["environment:chain:31337", "infra:rpc"], $ns.keys
+  doAssert ns.keys == @["environment:eip155:31337", "infra:rpc"], $ns.keys
   for n in ns:
     doAssert n.introducedBy == @[(intentIdFor("""{"to":"0xabc","value":5}""", "safe"), "safe")]
   doAssert "authority:safe-owner" notin ns.keys, "a contributor's key is not infrastructure"
@@ -113,7 +113,7 @@ block:
   doAssert roomInfraNeeds(@[msg] & decide, real).len == 0
   doAssert obRpcProvider notin introducedObservers(@[msg] & decide, real)
   let ks = roomInfraNeeds(@[msg] & decide & pay1, real).keys
-  doAssert "infra:rpc" in ks and "environment:chain:31337" in ks, $ks
+  doAssert "infra:rpc" in ks and "environment:eip155:31337" in ks, $ks
   doAssert obRpcProvider in introducedObservers(@[msg] & decide & pay1, real)
   echo "6. the real Safe driver introduces the RPC; the real threshold driver nothing OK"
 

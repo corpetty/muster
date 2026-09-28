@@ -84,7 +84,7 @@ block:
   f.ownersProbe = ownersOnChain(owners)
   let r = assessReadiness(m, probeFromFacts(f))
   doAssert not r.ready
-  doAssert r.item(rqEnvironment).status == rdMissing and "chain:31337" in r.item(rqEnvironment).detail
+  doAssert r.item(rqEnvironment).status == rdMissing and "eip155:31337" in r.item(rqEnvironment).detail
   echo "3. wrong chain: environment missing, the expected chain named OK"
 
 # ── 4. authority is about YOU only; a roster driver grades the Ed25519 identity ────

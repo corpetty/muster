@@ -343,7 +343,6 @@
       ],
       "unverified": [
         "Registry approverCost is per-vote; on the live LEZ v0.2.4 chain a vote is still the member's own transaction, but LEZ v0.2.4 charges no fees (wallet/lez_multisig_live.nim: 'payer is unused'). The fee path exists only in the in-process model (lez_multisig_chain_test step 5).",
-        "The driver's manifest requires the lez_core module, but the live path signs with the keystore and talks to Settings → lez-rpc over JSON-RPC, not through lez_core (wallet/lez_multisig_live.nim explains why). Readiness can therefore report lez_core missing where the action would work.",
         "The token program id is read from the user's sequencer (getProgramIds) at compose and is not recorded as an external read; the card's summary is inferred from the instruction's shape, not from checking the target is the token program. From reading nim-lib/muster_module.nim and ui/src/qml/Room.qml.",
         "The ready box shows no Settle button for this rail and reads 'Nothing settles on-chain'; settling is headless (coordinate_submit).",
         "Header comments in drivers/lez_multisig.nim, lez_vote_test and phase_c_exit_test say the member's LEZ wallet signs, 'never muster'; the live path signs with a member key the muster keystore derives (lez_member_keys_test, lez_multisig_live_e2e). The registry says the latter."
@@ -692,7 +691,6 @@
       ],
       "unverified": [
         "Registry approverCost is per-vote; on the live LEZ v0.2.4 chain a vote is still the member's own transaction, but LEZ v0.2.4 charges no fees (wallet/lez_multisig_live.nim: 'payer is unused'). The fee path exists only in the in-process model (lez_multisig_chain_test step 5).",
-        "The driver's manifest requires the lez_core module, but the live path signs with the keystore and talks to Settings → lez-rpc over JSON-RPC, not through lez_core (wallet/lez_multisig_live.nim explains why). Readiness can therefore report lez_core missing where the action would work.",
         "The token program id is read from the user's sequencer (getProgramIds) at compose and is not recorded as an external read; the card's summary is inferred from the instruction's shape, not from checking the target is the token program. From reading nim-lib/muster_module.nim and ui/src/qml/Room.qml.",
         "The ready box shows no Settle button for this rail and reads 'Nothing settles on-chain'; settling is headless (coordinate_submit).",
         "Header comments in drivers/lez_multisig.nim, lez_vote_test and phase_c_exit_test say the member's LEZ wallet signs, 'never muster'; the live path signs with a member key the muster keystore derives (lez_member_keys_test, lez_multisig_live_e2e). The registry says the latter."

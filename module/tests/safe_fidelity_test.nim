@@ -93,9 +93,9 @@ block:
                                   "data": "0xa9059cbb", "operation": 0}))
   let m = drv.manifest(dc)
   doAssert m.discloses.anyIt(it.field == "operation"), "the chain sees the operation"
-  doAssert m.touches.anyIt(it.target.endsWith(":storage") and it.mode == tmWrite),
+  doAssert m.touches.anyIt(it.target.endsWith("/storage") and it.mode == tmWrite),
     "a delegatecall runs code AS the Safe: it can write the Safe's own storage (owners, modules)"
-  doAssert not drv.manifest(call).touches.anyIt(it.target.endsWith(":storage")),
+  doAssert not drv.manifest(call).touches.anyIt(it.target.endsWith("/storage")),
     "a plain call does not touch the Safe's own storage"
   doAssert consistencyFailures(m, dc).len == 0
   let refusal = drv.signRefusal(dc)

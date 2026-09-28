@@ -40,7 +40,7 @@ type
     status*: OfferStatus
 
 proc trailing(s: string): string =
-  ## The segment after the last ':' — so "chain:31337" and "evm:31337" both yield "31337".
+  ## The segment after the last ':' — so "eip155:31337" (CAIP-2) and "evm:31337" (the wallet's chain key) both yield "31337".
   let i = s.rfind(':')
   if i < 0: s else: s[i+1 .. ^1]
 
@@ -50,7 +50,7 @@ proc targetMatches(r: Requirement, m: Material): bool =
   ## material's public face — any authority key is a candidate, and whether it is
   ## RECOGNIZED is graded by readiness / the chain (K3), never by the offer. For an
   ## address/asset the target names the chain (trailing id, format-insensitive across
-  ## "chain:N" vs "evm:N") or the public face directly. Empty target = any.
+  ## "eip155:N" vs "evm:N") or the public face directly. Empty target = any.
   if r.needs.class == mcAuthority: return true
   let target = r.needs.target
   if target.len == 0: return true

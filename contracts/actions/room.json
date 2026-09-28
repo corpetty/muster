@@ -2077,7 +2077,7 @@
         {
           "step": "act",
           "who": "a member (the issuer)",
-          "does": "coordinate_authorization(intentId) issues a grant only if the intent is executable in this member's fold. The grant names the capability (invoke → <module>.<method>; safe → safe.execute; eip191 → eip191.attest; threshold, unanimous, frost → room.attest; otherwise room.<policy>), the materialization root the room agreed on, and a context: environment (chain:<id> for an account on an EVM chain, else room), account (safe:<address> for a Safe, else room), slot = the intent id, expiry = now + 600 s.",
+          "does": "coordinate_authorization(intentId) issues a grant only if the intent is executable in this member's fold. The grant names the capability (invoke → <module>.<method>; safe → safe.execute; eip191 → eip191.attest; threshold, unanimous, frost → room.attest; otherwise room.<policy>), the materialization root the room agreed on, and a context: the intent's declared context — the same environment (the driver's CAIP-2 environment(), e.g. eip155:31337) and account its approvals were attested under, or room / room for a legacy proposal that declared none — slot = the intent id, expiry = now + 600 s.",
           "signs": "secp256k1 recoverable signature by this instance's authorization key over digest(hash-input \"muster.authorization.v1\" {intentId, capability, materialization, environment, account, slot, expiry})",
           "reveals": [],
           "evidence": [

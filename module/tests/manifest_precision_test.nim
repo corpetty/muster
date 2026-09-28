@@ -16,13 +16,19 @@
 ##   - a touch names a chain in CAIP-2 and an account in CAIP-10, and none repeats;
 ##   - an environment requirement is named exactly as the driver's environment();
 ##   - a Safe transfer's payee is counterparty material; a call's target is not anyone's;
-##   - an amount is asked for only when value actually moves;
+##   - a transfer always asks for an amount (it moves value by definition — the composer
+##     reads the slot off a template whose value is not chosen yet); a call only when it
+##     sends ETH; a delegatecall never;
 ##   - a LEZ action names every account it passes and the program it calls;
 ##   - the live LEZ paths need `lez-rpc`, which readiness can grade.
 ## Needs the full closure (run-suite.sh supplies it).
 
 import std/[json, sets, strutils, sequtils]
 import ../tools/action_corpus
+import ../src/dcbor/dcbor
+import ../src/intents/materialization
+import ../src/drivers/driver
+import ../src/drivers/registry
 import ../src/drivers/manifest
 import ../src/coordination/readiness
 
@@ -53,7 +59,7 @@ block:
         key & ": an account is named in CAIP-10 (" & t & ")"
   echo "1. every manifest: unique touches, CAIP-2 chains / CAIP-10 accounts, environment named as environment() OK"
 
-# ── 2. the Safe: a transfer asks for a payee; a call or delegatecall never does ─────────
+# ── 2. the Safe: a transfer asks for a payee and an amount; a call or delegatecall no payee ──
 block:
   let env = e("safe/transfer")["environment"].getStr()
   doAssert env == "eip155:31337"
@@ -68,6 +74,13 @@ block:
   doAssert hasReq("safe/contract-call", "asset", "amount") == (callValue > 0),
     "a call asks for an amount only when it sends ETH"
   doAssert not hasReq("safe/delegatecall", "asset", "amount"), "a delegatecall moves no value (Safe's executor passes none)"
+  # the composer reads the slots off a TEMPLATE transfer, before an amount is chosen
+  let safe = newDriver("safe", %*{"chainId": 31337, "safe": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+                                  "owners": ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"], "threshold": 1})
+  let tmpl = Effect(schemaId: "muster.effect.transfer.v1",
+                    fields: @[("to", cbText("")), ("value", cbUint(0'u64)), ("nonce", cbUint(0'u64))])
+  doAssert safe.manifest(tmpl).requirements.anyIt(it.kind == rqAsset and it.name == "amount" and it.party == rpProposer),
+    "a template transfer (value not chosen yet) still offers the amount slot"
   for key in ["safe/transfer", "safe/contract-call", "safe/delegatecall"]:
     let chain = discloses(key, "chain-observer")
     for f in ["to", "value", "data", "operation", "nonce", "signers", "policy"]:
@@ -76,7 +89,7 @@ block:
   let safeAcct = "eip155:31337:" & e("safe/transfer")["profile"]["account"].getStr().split(':')[^1]
   doAssert safeAcct in touches("safe/transfer") and (safeAcct & "/nonce") in touches("safe/transfer")
   doAssert (safeAcct & "/storage") in touches("safe/delegatecall") and (safeAcct & "/storage") notin touches("safe/transfer")
-  echo "2. Safe: payee only on a transfer, amount only when value moves, signers + policy + nonce public OK"
+  echo "2. Safe: payee only on a transfer; amount on a transfer, on a call only when ETH moves, never on a delegatecall; signers + policy + nonce public OK"
 
 # ── 3. LEZ: every passed account and the program, CAIP-10, no repeats; lez-rpc not lez_core ──
 block:

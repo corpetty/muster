@@ -65,7 +65,7 @@ Requirement
   kind      module | environment | authority | infra | capability | address | asset
             (address + asset added in K1 so participant-supplied material is first-class;
              the closed vocabulary grows by slice, never ad hoc)
-  name      "safe-owner" | "chain:31337" | "rpc" | …               (as today)
+  name      "safe-owner" | "eip155:31337" | "rpc" | …               (as today)
   party     instance | proposer | contributor | counterparty         (was scope: instance | contributor)
   needs     MaterialClass + constraint  e.g. authority on safe:0x…, address on lez:* any form, asset ETH ≥ effect.value
 ```
