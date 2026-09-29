@@ -132,10 +132,13 @@ block:
   doAssert creditorAgreeRefusal(effectFromJson(wrong), bob, @[]) == "", "a debtor's agreement is not this check"
   doAssert creditorAgreeRefusal(effectFromJson(e), alice, @["0xF39FD6E51AAD88F6F4CE6AB8827279CFFFB92266"]) == "",
            "an address is compared case-blind"
-  # a later share replaces the earlier one
-  r.alice.publishAuthored(aliceKs, share(alice, "0x70997970c51812dc3a010c7d01b50e0d17dc79c8", 4))
+  # a later share replaces the earlier one — authored as the hosted module writes an author,
+  # "0x" + hex, while a room identity is bare hex: the same member either way
+  r.alice.publishAuthored(aliceKs, share("0x" & alice, "0x70997970c51812dc3a010c7d01b50e0d17dc79c8", 4))
   r.carol.poll()
-  doAssert sharedAddressOf(r.carol.roomEvents(), alice) == "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
+  doAssert sharedAddressOf(r.carol.roomEvents(), alice) == "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+           "a 0x-prefixed author is the same member"
+  doAssert sharedAddressOf(r.carol.roomEvents(), "0x" & alice) == "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
   echo "5. on Alice's behalf, payTo is Alice's own shared address; her client refuses a payTo it does not hold OK"
 
 echo "split_creditor_test: all OK"
