@@ -9,6 +9,7 @@
 ## copy) and refuses on any mismatch. This check is unconditional: no flag,
 ## plugin, or preference can turn it off (FS-6).
 
+import std/strutils
 import ../dcbor/dcbor
 import ../drivers/driver
 
@@ -95,6 +96,28 @@ method agreesByProposing*(d: Driver, e: Effect, proposer: string): bool {.base, 
   ## agreement is (exo-770). Default false: a Safe owner who proposes still signs like the
   ## rest. A split's creditor proposing their own split agrees to it, payTo included.
   false
+
+type Eligibility* = enum
+  ## Whether a member's contribution to an intent would count, as its driver says from its
+  ## own signer set (exo-ed5). `elUnknown` is never read as yes.
+  elUnknown = "unknown", elYes = "yes", elNo = "no"
+
+proc bareNames*(names: openArray[string]): seq[string] =
+  ## A member's contributor names (attest.myContributorNames: "0x"-addresses, "ed:" and
+  ## "frost:" keys, a bare Bitcoin key) as lowercase bare hex, for a driver to look up in
+  ## its signer set whatever spelling it names contributors by.
+  for n in names:
+    var h = n.toLowerAscii()
+    for p in ["0x", "ed:", "frost:"]:
+      if h.startsWith(p): h = h[p.len .. ^1]
+    if h notin result: result.add h
+
+method mayContribute*(d: Driver, e: Effect, names: seq[string]): Eligibility {.base, gcsafe.} =
+  ## Whether a member known by `names` (their contributor names) is among those whose
+  ## contribution to `e` would count — from the driver's own signer set, never a chain read
+  ## (the home surface asks this for every intent on every tick, F-18). Default unknown:
+  ## a driver that does not say is never taken to mean "you".
+  elUnknown
 
 method settlementParts*(d: Driver, e: Effect): seq[string] {.base, gcsafe.} =
   ## The parties who each settle their OWN part of `e`, named as the driver names a

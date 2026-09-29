@@ -82,6 +82,16 @@ method expectMaterialization*(d: PersonalSignDriver, m: Materialization) =
   ## The fold's per-intent hook: contributions now verify against this digest.
   d.pendingDigest = mBytes32(m)
 
+method mayContribute*(d: PersonalSignDriver, e: Effect, names: seq[string]): Eligibility =
+  ## One of the account's signers.
+  const hexd = "0123456789abcdef"
+  let mine = bareNames(names)
+  for s in d.signers:
+    var h = ""
+    for b in s: (h.add hexd[int(b shr 4)]; h.add hexd[int(b and 0x0F)])
+    if h in mine: return elYes
+  elNo
+
 method identifyContributor*(d: PersonalSignDriver, m: Materialization, c: Contribution): string =
   ## Recover the signer address that produced this signature, as hex — or "" if it
   ## does not recover to a configured signer. How the fold keys a contribution and

@@ -158,7 +158,6 @@ Item {
 
     // Room state, aliased for the home fold.
     readonly property string roomTopic: backend ? backend.roomTopic : ""
-    readonly property string intentsJson: backend ? backend.intentsJson : "[]"
 
     // A room's topic is public, so it names nothing (exo-661.7; Composer.derivedTopic).
     // What this instance knows about a room it opened or was invited to — the activity,
@@ -192,36 +191,51 @@ Item {
         catch (e) { return []; }
     }
 
-    // The home surface lists every joined room. The ACTIVE room also folds its
-    // latest intent into a headline; the rest show when they were last active.
-    // Opening a row re-joins (re-activates) that room. Empty until a room exists.
+    // The home surface is a query over intents (F-18, exo-ed5): the module classes every
+    // intent in every joined room for THIS member — needs-you, waiting-on-others,
+    // settled — from the room's log and this member's own keys. One row per intent that
+    // waits on you, then one per room for the rest; needs-you first, then in flight,
+    // then settled, then the quiet rooms. Opening a row re-joins (re-activates) that room.
+    function needsHeadline(what) {
+        return what === "agree" ? qsTr("Needs your agreement")
+             : what === "pay" ? qsTr("Pay your share")
+             : what === "approve" ? qsTr("Needs your approval")
+             : what === "submit" ? qsTr("Agreed — ready to settle")
+             : qsTr("Waiting on you");
+    }
     readonly property var homeActions: {
-        var rows = [];
+        var needs = [], waiting = [], settled = [], idle = [];
         var convs = root.conversations;
-        var hl = "Talking", st = "waiting", detail = "in the room";
-        try {
-            var ints = JSON.parse(root.intentsJson);
-            if (ints.length) {
-                var last = ints[ints.length - 1];
-                hl = last.state === "executable" ? "Ready to submit"
-                   : last.state === "collecting" ? "Collecting approvals"
-                   : last.state === "final" ? "Done" : "Proposed";
-                st = last.state === "executable" ? "needs"
-                   : last.state === "final" ? "settled" : "waiting";
-                detail = "intent " + String(last.id || "").substring(0, 8) + " · " + last.state;
-            }
-        } catch (e) {}
         for (var i = 0; i < convs.length; ++i) {
             var c = convs[i];
             var topic = String(c.topic || "");
             var title = root.roomLabels[topic] || topic;
-            if (c.active)
-                rows.push({ topic: topic, title: title, action: hl, state: st, detail: detail });
+            var ns = Array.isArray(c.needs) ? c.needs : [];
+            for (var j = 0; j < ns.length; ++j)
+                needs.push({ topic: topic, title: title, action: root.needsHeadline(String(ns[j].what || "")),
+                             state: "needs", detail: String(ns[j].text || "") });
+            var w = Number(c.waiting || 0), d = Number(c.settled || 0);
+            if (ns.length > 0) continue;       // the room is already on the list, by what waits on you
+            if (w > 0)
+                waiting.push({ topic: topic, title: title, action: qsTr("Waiting on others"), state: "waiting",
+                               detail: w === 1 ? qsTr("1 in progress") : qsTr("%1 in progress").arg(w) });
+            else if (d > 0)
+                settled.push({ topic: topic, title: title, action: qsTr("Done"), state: "settled",
+                               detail: d === 1 ? qsTr("1 settled") : qsTr("%1 settled").arg(d) });
             else
-                rows.push({ topic: topic, title: title, action: "Open", state: "idle",
-                            detail: c.lastTs ? ("last active · " + c.lastTs) : "no messages yet" });
+                idle.push({ topic: topic, title: title, action: c.active ? qsTr("Talking") : qsTr("Open"),
+                            state: "idle",
+                            detail: c.lastTs ? qsTr("last active · %1").arg(c.lastTs) : qsTr("no proposals yet") });
         }
-        return rows;
+        return needs.concat(waiting, settled, idle);
+    }
+    // Keep the list current while it is on screen — what waits on you changes when
+    // someone else agrees, pays or proposes, in any room.
+    Timer {
+        interval: 2000
+        repeat: true
+        running: root.view === "home" && root.backend !== null
+        onTriggered: root.backend.loadConversations()
     }
 
     Connections {

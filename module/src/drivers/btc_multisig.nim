@@ -177,6 +177,13 @@ proc verifyAgainst(d: BtcMultisigDriver, hashes: seq[seq[byte]], c: Contribution
 method verifyContribution*(d: BtcMultisigDriver, c: Contribution, round: int): bool =
   d.verifyAgainst(d.pending, c).len > 0
 
+method mayContribute*(d: BtcMultisigDriver, e: Effect, names: seq[string]): Eligibility =
+  ## One of the account's k-of-n keys (compressed, as the keystore names its own).
+  let mine = bareNames(names)
+  for k in d.account.keys:
+    if k.toHex().toLowerAscii() in mine: return elYes
+  elNo
+
 method identifyContributor*(d: BtcMultisigDriver, m: Materialization, c: Contribution): string =
   d.verifyAgainst(sighashesIn(m), c)
 

@@ -86,6 +86,16 @@ method verifyContribution*(d: FrostDriver, c: Contribution, round: int): bool =
 method expectMaterialization*(d: FrostDriver, m: Materialization) =
   d.pending = m
 
+method mayContribute*(d: FrostDriver, e: Effect, names: seq[string]): Eligibility =
+  ## One of the n signers on the roster.
+  const hexd = "0123456789abcdef"
+  let mine = bareNames(names)
+  for pk in d.roster:
+    var h = ""
+    for b in pk: (h.add hexd[int(b shr 4)]; h.add hexd[int(b and 0x0F)])
+    if h in mine: return elYes
+  elNo
+
 method identifyContributor*(d: FrostDriver, m: Materialization, c: Contribution): string =
   ## The roster member (their Ed25519 key, hex) whose signature this is, or "" if no
   ## roster key verifies it — so the fold keys/dedups by signer and rejects non-members.
