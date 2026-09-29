@@ -24,6 +24,8 @@
 ## Build: see probes/live_room.nim (the secp closure + stint + libsodium).
 
 import std/[strutils, sequtils, sets]
+import ../src/drivers/threshold
+import ../src/coordination/flow
 import ./probes/audit_room
 
 proc proposeIdsOf(evs: seq[Event], id: string): seq[EventId] =
@@ -110,5 +112,95 @@ for policy in ["threshold", "safe"]:
       doAssert eventId(g.sig) != eventId(copy), policy & ": the copy outside the record stands for Alice's approval"
     verifies(policy & ": a copy parented on a room message", r, id, 2)
     echo "4. ", policy, ": a copy of a signature parented outside the intent stands for nothing; the audit verifies OK"
+
+# ── exo-dc6: the two ways left after exo-093 ─────────────────────────────────────────
+# 5. Multi-round: a copy may link only copies of its own round or earlier ones; honest ones
+#    do, since a member contributes to the round being collected and links the approvals
+#    graded so far. So the record of rounds up to r never depends on a later round, and
+#    everything it holds for a reached round the file can carry. An attacker's copy of
+#    Alice's round-1 approval parented on a copy under round 2 (not yet reached), and a
+#    forged attestation parented on it, is no part of the record.
+# 6. A settlement entry belongs to the record only if its parents lie in the intent's
+#    lineage (an honest one has none). A fake submit parented on a room message is not the
+#    intent's settlement: no reader counts it: not the fold, the activity feed, the
+#    provenance or the flow view. The file then never needs to carry it.
+# 7. The same for a fake final after an honest submit.
+type TwoRoundThreshold = ref object of ThresholdDriver
+method describe(d: TwoRoundThreshold): DriverDescriptor =
+  result = procCall describe(ThresholdDriver(d))
+  result.rounds = 2
+
+proc verifiesWith(label: string, r: Room, dFor: DriverFor, id: string, approvals: int, stage: string) =
+  let file = exportAudit(r.alice.log.allEvents(), dFor, id, aliceKs)
+  doAssert file.ok, label & ": export refused: " & file.reason
+  let v = verifyAudit(file.bytes)
+  doAssert v.ok, label & ": the audit file does not verify: " & v.reason
+  doAssert v.approvals.len == approvals and v.stage == stage,
+    label & ": " & $v.approvals.len & " approvals, stage " & v.stage
+
+block:
+  let two = TwoRoundThreshold(roster: @[aliceKs.encIdentity().ed, bobKs.encIdentity().ed], k: 2)
+  let dFor: DriverFor = proc(kind: string): Driver = (if kind == "threshold": Driver(two) else: liveDriverFor(kind))
+  var r = newRoom("/muster/1/dc6-rounds/proto")
+  let id = liveProposeIntent(r.alice, aliceKs, dFor, "threshold", effectFor("threshold", 990), int64(Now), 1,
+                             account = r.topic, ttlSec = Ttl)
+  doAssert liveContribute(r.alice, aliceKs, dFor, id, "", "", bindCtx(), Now) == "collecting"
+  r.bob.poll()
+  let orig = sigEventsFor(r.events(), id)[0]
+  let nameA = orig.key.split('/')[3]
+  let x = contributeEvent(id, nameA, orig.value, round = 2, parents = proposeIdsOf(r.events(), id))
+  let c = contributeEvent(id, nameA, orig.value, round = 1, parents = @[eventId(x)])
+  let forged = attestEvent(id, nameA, 1, "0x" & "cd".repeat(64), parents = @[eventId(c)])
+  r.bob.publish(x); r.bob.publish(c); r.bob.publish(forged)
+  let evs = r.events()
+  let it = reduceIntents(evs, dFor)[id]
+  doAssert $it.state == "collecting" and it.collection.round == 1, "two rounds: round 1 is still open"
+  doAssert gradeOf(approvalGrades(evs, dFor, id), nameA, 1) == agCommitted
+  for g in approvalGrades(evs, dFor, id):
+    doAssert eventId(forged) notin g.attests.mapIt(eventId(it)),
+      "the forged attestation, parented through a later round, is carried as the intent's"
+  verifiesWith("a chain through a round not yet reached", r, dFor, id, 1, "collecting")
+  echo "5. multi-round: a copy parented on a later round's copy, and an attestation on it, are no part of the record; the audit verifies OK"
+
+for policy in LivePolicies:
+  # ── 6. a fake submit parented on a room message ─────────────────────────────────
+  block:
+    var r = newRoom("/muster/1/dc6-submit-" & policy & "/proto")
+    let id = r.propose(policy, effectFor(policy, 991))
+    doAssert r.approveAs("alice", id) == "collecting"
+    doAssert r.approveAs("bob", id) == "executable"
+    let fake = submitEvent(id, parents = @[r.messageIds(1)[0]], chainRef = "0x" & "fa".repeat(32))
+    r.bob.publish(fake)
+    let evs = r.events()
+    doAssert intentState(evs, liveDriverFor, id) == "executable",
+      policy & ": a submit parented outside the intent moved it to " & intentState(evs, liveDriverFor, id)
+    doAssert not reduceActivity(evs, liveDriverFor).anyIt(it.intentId == id and it.kind == "submit"),
+      policy & ": the activity feed narrates the fake submit"
+    doAssert not logProvenance(evs, liveDriverFor).anyIt(it.intentId == id and it.kind == "submit"),
+      policy & ": the provenance lists the fake submit"
+    doAssert not reduceFlow(evs, liveDriverFor, @[]).anyIt(it.intentId == id and it.kind == "submit"),
+      policy & ": the flow view has information leave at the fake submit"
+    verifiesWith(policy & ": a fake submit", r, liveDriverFor, id, 2, "executable")
+    echo "6. ", policy, ": a submit parented on a room message is not the intent's settlement on any surface; the audit verifies OK"
+
+  # ── 7. an honest submit, then a fake final parented on a room message ───────────
+  block:
+    var r = newRoom("/muster/1/dc6-final-" & policy & "/proto")
+    let id = r.propose(policy, effectFor(policy, 992))
+    doAssert r.approveAs("alice", id) == "collecting"
+    doAssert r.approveAs("bob", id) == "executable"
+    r.settle(id, final = false)
+    r.bob.publish(finalEvent(id, parents = @[r.messageIds(1)[0]], chainRef = ChainRef))
+    let evs = r.events()
+    doAssert intentState(evs, liveDriverFor, id) == "submitted",
+      policy & ": a final parented outside the intent moved it to " & intentState(evs, liveDriverFor, id)
+    doAssert not reduceActivity(evs, liveDriverFor).anyIt(it.intentId == id and it.kind == "settled"),
+      policy & ": the activity feed narrates the fake final"
+    doAssert not logProvenance(evs, liveDriverFor).anyIt(it.intentId == id and it.kind == "final"),
+      policy & ": the provenance lists the fake final"
+    doAssert not reduceFlow(evs, liveDriverFor, @[]).anyIt(it.intentId == id and it.kind == "final"),
+      policy & ": the flow view has information leave at the fake final"
+    verifiesWith(policy & ": a fake final", r, liveDriverFor, id, 2, "submitted")
+    echo "7. ", policy, ": a final parented on a room message is not the intent's settlement; the audit verifies OK"
 
 echo "audit_record_closed_test: all OK"
