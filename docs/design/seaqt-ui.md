@@ -1,6 +1,6 @@
 # Muster's UI on nim-seaqt: no C++ in the repo
 
-**Status:** T0–T3 and T4a landed 2026-09-29; T4b in progress (§9). The hosting gate awaits Jacek (§8). Code: branch `feat/seaqt-ui`, [corpetty/muster#181](https://github.com/corpetty/muster/pull/181). Epic `exo-607` (pebbles; `pb dep tree exo-607` for live status).
+**Status:** T0–T4 landed 2026-09-29 (§9). Both hosting probes have answered, and the gate awaits Jacek (§8). The hosting gate awaits Jacek (§8). Code: branch `feat/seaqt-ui`, [corpetty/muster#181](https://github.com/corpetty/muster/pull/181). Epic `exo-607` (pebbles; `pb dep tree exo-607` for live status).
 **Reads with:** `docs/02-implementation-plan.md` (ADR-008 builder, ADR-013 the coherent UI builder, ADR-014 Nimbus/Status Nim reuse), `CLAUDE.md` working agreements (the UI reaches the module only through the logos API), `ui/tests/README.md`.
 **Reference projects:** [`seaqt/nim-seaqt`](https://github.com/seaqt/nim-seaqt) (Qt bindings), `seaqt/nimside` (the `qobject:` DSL and plugin macros), [`arnetheduck/nora-poc`](https://github.com/arnetheduck/nora-poc) (the pilot where nimside's DSL was designed), `status-im/status-desktop` (the production consumer).
 
@@ -18,13 +18,15 @@ Muster's UI backend is 1,140 lines of C++ in a Qt plugin. It is a thin pass-thro
 | T2: the contract in the DSL | done | `repContract` generates a nimside `qobject:` from the `.rep` repc reads. QtRO's view of it matches repc's, index for index: 50 properties, 50 signals, 66 slots. |
 | T3: seaqt RemoteObjects | done | QtRemoteObjects bindings, generated at build time by the pinned seaqt-gen plus four patches, so no C++ is committed. A nimside source is remoted and driven through a dynamic replica both ways. |
 | T4a: probe B, a standalone seaqt app | done | The real `Main.qml` runs in a Nim host, which starts logos-core itself and calls `muster_module` over `lp_*`. `health()` reaches the view as `ok`. No C++ of ours, no chronos worker. |
-| T4b: probe A, a Nim plugin in Basecamp | in progress | A Nim `.so` loaded by `ui-host`, remoted by its dynamic fallback to the builder's typed replica. |
-| Gate | needs Jacek | The five questions in §8. |
+| T4b: probe A, a Nim plugin in Basecamp | done | A Nim `.so` works in the real `ui-host`, both ways through the builder's typed replica. That only happens once the object is registered under the replica's name, which today takes an ABI hack. It cannot reach the capability token without the C++ SDK. Two small `ui-host` changes would make A clean. |
+| Gate | ready, needs Jacek | Both probes have answered. The five questions in §8. |
 
 **For Jacek:**
 
 - **The questions that decide the hosting path** are in [§8](#8-open-questions-for-jacek-and-the-operator).
 - **What muster asked of nimside that it could not say directly** is the gap list at the end of [§9, T2](#t2-the-view-contract-in-the-dsl-exo-6073-2026-09-29).
+  T3 and T4b add to that list.
+- **What would make the Basecamp path (A) clean** is two small `ui-host` changes, in [§9, T4b](#t4b-probe-a-a-nim-plugin-inside-basecamps-host-exo-6076-2026-09-29).
 
 ## 1. What was asked
 
@@ -98,11 +100,25 @@ We write only the backend class and the `.rep`. The builder generates everything
 | Risk | High | Medium | Low |
 | Size | L | M | M |
 
+**Update (T4b, 2026-09-29):** option A works, but not cleanly. A Nim plugin can replace the C++ one inside `ui-host`, with two catches:
+
+- **The replica's name.** `ui-host`'s dynamic fallback registers the object under the module's name, while the typed replica asks for the `.rep` class name. So the plugin has to impersonate the C++ `LogosViewPlugin` interface to be registered correctly.
+- **The token.** The capability token reaches a plugin only as a C++ `LogosAPI*`.
+
+Two small `ui-host` changes would remove both (§9, T4b).
+
 **Update (T4a, 2026-09-29):** option B's hardest part is resolved. A Nim host calls hosted modules over the `lp_*` ABI the modules embed, and a result arrives on the Qt main thread, where the client lives. So the UI stays responsive without a worker thread (§9, T4a).
 
 **Code sharing**, Jacek's second point, comes the same way in A and B. The UI's `muster_module` client becomes the **logos-nim-sdk consumer client generated from `muster.lidl`**, the same generator and contract the module is built from. Its typed Nim calls replace the C++ `LogosModules` client and the stringly-typed glue, and the UI can decode results into the module's own record types. Linking the Nim core into the UI process would **not** be code sharing. It would break the working agreement that the UI reaches the module only through the logos API, and the plan does not do it.
 
-**Recommendation:** start with the slices both A and B need (T1–T3 below). They are cheap, and they give Jacek the DSL exercise within days. Take the hosting question (Q2) to Jacek with this evidence. Lean **B** if Basecamp hosting can wait: it is the shape his tools (nimside, nora-poc) and Status already use, and it needs nothing from the Logos builder or Basecamp's C++ plugin ABI, which may itself change if Logos moves to seaqt. Choose **A** if Basecamp hosting is non-negotiable, and spike it before committing. C meets "no C++" most cheaply, but it produces no playground, so it is the fallback, not the goal.
+**Recommendation, after the probes (2026-09-29):**
+
+- **Choose B** unless Basecamp hosting is required now. It works end to end with no hacks: the real QML, logos-core, and `lp_*` calls on the GUI thread.
+- **Choose A** once `ui-host` gains the two changes in §9, T4b: a C-ABI token handoff, and a plugin naming its remote object. Before that, A needs either a C++ shim generated at build time or an ABI-level impersonation.
+
+The original recommendation follows.
+
+**Recommendation (at scoping):** start with the slices both A and B need (T1–T3 below). They are cheap, and they give Jacek the DSL exercise within days. Take the hosting question (Q2) to Jacek with this evidence. Lean **B** if Basecamp hosting can wait: it is the shape his tools (nimside, nora-poc) and Status already use, and it needs nothing from the Logos builder or Basecamp's C++ plugin ABI, which may itself change if Logos moves to seaqt. Choose **A** if Basecamp hosting is non-negotiable, and spike it before committing. C meets "no C++" most cheaply, but it produces no playground, so it is the fallback, not the goal.
 
 ## 7. The plan
 
@@ -115,8 +131,8 @@ The slices are tracked under epic `exo-607`. T1–T3 are needed whatever the hos
 | **T2** (exo-607.3) | **The contract in the DSL.** Declare the view contract (50 properties, 66 slots) as a nimside `qobject:`, with one source of truth: the Nim declaration generates the `.rep`, or the reverse. Check the metaobject order against repc's. Output: the first list of nimside gaps. | S–M | T1 | done |
 | **T3** (exo-607.4) | **seaqt RemoteObjects.** Add `RemoteObjects` to a seaqt-gen fork and generate the bindings (`QRemoteObjectNode`, `acquireDynamic`, `enableRemoting(QObject*)`). Needed by A, by B's likely module-call path, and by the headless-host port. Offer it upstream. | M | T1 | done |
 | **T4a** (exo-607.5) | **Probe B.** `muster-app` loads `Main.qml` with a Nim `logos` shim (`module()`, `isViewModuleReady()`), stands up logos-core, and makes an **async** `muster_module` call from Nim. It follows nora-poc's chronos worker + ThreadChannel pattern for results. | M | T2, T3 | done |
-| **T4b** (exo-607.6) | **Probe A.** `ui-host` loads a Nim `.so`. nimside `plugingen` is extended to emit the `PluginInterface` / `LogosViewPlugin` shim, the T2 object is remoted, and the builder's typed replica reads a property and invokes a slot correctly. The capability token is forwarded from `initLogos` to `lp_*`. | L | T2, T3 | in progress |
-| **Gate** (exo-607.7) | Choose A or B with Jacek (Q1–Q5). Record it as an ADR in `02-implementation-plan.md`. Skip whichever probe the answer makes moot. | — | T4a or T4b | needs Jacek |
+| **T4b** (exo-607.6) | **Probe A.** `ui-host` loads a Nim `.so`. nimside `plugingen` is extended to emit the `PluginInterface` / `LogosViewPlugin` shim, the T2 object is remoted, and the builder's typed replica reads a property and invokes a slot correctly. The capability token is forwarded from `initLogos` to `lp_*`. | L | T2, T3 | done |
+| **Gate** (exo-607.7) | Choose A or B with Jacek (Q1–Q5). Record it as an ADR in `02-implementation-plan.md`. Skip whichever probe the answer makes moot. | — | T4a or T4b | ready: needs Jacek |
 | **T5** (exo-607.8) | **Port the backend logic.** All 66 slots, the autopilot, the retry timers and the audit download, calling `muster_module` through the logos-nim-sdk consumer client generated from `muster.lidl`. | M | Gate, T0 | — |
 | **T6** (exo-607.9) | **Hosting integration.** For A: a Nim `ui_qml` path in logos-module-builder (an upstream PR, like #202/#226) and the `ui/` flake. For B: a `muster-app` flake app, with `make run` / `run-fleet` and the AppImage switched over. T0 goes green on the Nim build. | M (B) / L (A) | T5 | — |
 | **T7** (exo-607.10) | **Delete the C++.** Remove `ui/src/*.{cpp,h}` (and the `.rep` + CMakeLists under B), port the headless host and the probe harness to Nim, act on the `demo/muster-ui` decision, and add a `scripts/check-no-cpp.py` gate so C++ cannot come back unnoticed. | S–M | T6 | — |
@@ -125,7 +141,7 @@ The slices are tracked under epic `exo-607`. T1–T3 are needed whatever the hos
 ## 8. Open questions (for Jacek and the operator)
 
 1. **Qt 6.11 or Qt 6.9.2?** Logos runs 6.9.2, so only `qt-6.8` loads in its processes, and Status's own master vendors the `qt-6.8` head. Is `qt-6.11` a hard ask, or "whatever Status uses"? It only becomes possible when Logos moves, or under option B if the app process loads no Logos Qt libraries.
-2. **Inside Basecamp, or a standalone app?** Does "it works" require the UI to stay a Basecamp `ui_qml` module (A), or is a standalone seaqt app acceptable (B)? If B, and "no C++" holds, the Basecamp-hosted UI goes away until a Nim `ui_qml` path exists.
+2. **Inside Basecamp, or a standalone app?** The probes now inform this question. B works as-is. A needs either two small `ui-host` changes upstream, or build-time C++ glue (§9, T4b). Would Logos take those `ui-host` changes? Does "it works" require the UI to stay a Basecamp `ui_qml` module (A), or is a standalone seaqt app acceptable (B)? If B, and "no C++" holds, the Basecamp-hosted UI goes away until a Nim `ui_qml` path exists.
 3. **Is C++ generated at build time acceptable?** seaqt's own wrappers are exactly that, so presumably yes. The plugin shim in A depends on it.
 4. **`demo/muster-ui` (~5,500 lines of C++):** delete, move to its own repo, or exempt as "not the client"?
 5. **What is the DSL:** nimside's `qobject:` layer (as in nora-poc), or something higher, such as declaring views as well? Should muster's contract move from JSON strings to typed models, to make the playground "sufficiently complex" (T8)?
@@ -210,48 +226,6 @@ So the two backends cannot drift during the port, and the order QtRO binds by is
 
 Also found: 7 contract entries are never named as `backend.<x>` in the QML: `checkHealth`, `declineJson`, `loadActivity`, `loadDrivers`, `loadFrostCeremonies`, `loadPolicy`, `startInbox`. The C++ backend or its autopilot calls some of them itself. The rest are candidates for removal from the contract.
 
-### T4a: probe B, a standalone seaqt app (exo-607.5, 2026-09-29)
-
-**It works.** `ui-nim#muster-app` runs the real `ui/src/qml/Main.qml`, all fifteen files with `Logos.Theme` and `Logos.Controls`, in a Nim host. It uses no Basecamp, no `ui-host` and no QtRO.
-
-- **The backend** is the T2 contract object.
-- **The `logos` bridge** is a small nimside `qobject:`. Its `module("muster_ui")` returns the backend. It also has `isViewModuleReady` and the `viewModuleReadyChanged` signal. That is all muster's QML uses of the Logos bridge.
-
-![muster's real QML in the Nim host, drawn on Xvfb with logos-core behind it](img/seaqt-ui-t4a-nim-host.png)
-
-**The core half.** The host starts logos-core in its own process through liblogos's C API, the same five calls `logos-standalone-app` makes: add the modules dir, set the persistence path, start, and load `capability_module` and then `muster_module` with its dependencies. Each module runs in a `logos_host`. The host then does what the Logos host does for a view module:
-
-1. It takes the core's `capability_module` token.
-2. It registers a fresh view token with `capability_module` (`lp_inform_module_token`).
-3. It calls `muster_module` as `muster_ui` over `lp_*`, the consumer ABI the modules embed and logos-nim-sdk binds.
-
-`checkHealth` is implemented for real: `lp_invoke_async("health")` returns `ok` into the `health` property.
-
-**The checks:**
-
-- `checks.muster-app-view` runs in the nix sandbox. The view loads with no QML errors, `logos.module` returns the backend, and QML makes its load-time calls to it.
-- `scripts/nim-app-core-probe.sh` runs against the modules `make build` produced (5 PASS). The core starts, the token handshake succeeds, and `muster_module.health()` sets the property to `ok`. `logos_core_cleanup` leaves no process behind.
-- The screenshot above is the host on Xvfb, with the core running.
-
-**Pinned so it cannot drift.** Every Logos piece comes through the same `logos-module-builder` rev as `ui/flake.nix`:
-
-- `inputs.logos-standalone-app` supplies `liblogos_core`, `logos_host` and the bundled design system, the runner's own `44f5zpbl…` build.
-- `inputs.logos-protocol`'s `logos-protocol-lib` 0.2.0 supplies the same 21 `lp_*` symbols `muster_module` embeds.
-- The binary links one Qt, `dkfr32yi…-qtbase-6.9.2`.
-
-**What it settled:**
-
-- **No chronos worker or ThreadChannel.** The plan assumed nora-poc's pattern was needed to bring results back to the GUI thread. On the QtRO transport an `lp_*` client is owned by the Qt main thread, and `lp_invoke_async`'s callback fires there. The callback sets the property directly, and the UI never blocks on a module call.
-- **The newer liblogos cannot call a module.** It exports no call method: `logos_core_call_plugin_method_async` in the older `logos_core.h` is gone. Module calls go through `lp_*` from logos-protocol, and liblogos only starts the core, loads modules and hands out tokens.
-- **The host plays two roles, in one token store.** It saves the core's capability token to register the view, then saves the view token under `core` and `capability_module` for its own calls. `ui-host` does the same split across two processes.
-
-**Gaps found, for logos-nim-sdk** (corpetty/logos-nim-sdk):
-
-1. `ffi.nim` binds no consumer-side token calls, `lp_inform_module_token` and `lp_token_get`. Its users so far are modules, which receive a token, whereas a host registers one. The probe declares them locally (`ui-nim/app/logos_core.nim`).
-2. `ffi.nim`'s opaque handles are `importc: "struct LpClient"` with no file-scope declaration. Under gcc 14, each prototype then declares its own `struct LpClient`, and passing one handle to another prototype is a hard error. The probe emits `struct LpClient; struct LpSubscription;` in each module that names them. The SDK should emit it once.
-
-**Not yet:** the view has only `checkHealth` implemented, and the other 65 slots are T5. The host does not yet take `--user-dir` or run the `MUSTER_AUTO*` autopilot, which is T0's contract for a Nim build (T6).
-
 ### T3: seaqt RemoteObjects (exo-607.4, 2026-09-29)
 
 **Generated at build time, so no C++ is committed.** `ui-nim/nix/seaqt-ro.nix` runs seaqt-gen in the nix sandbox and adds its RemoteObjects output to nim-seaqt `qt-6.8`. The generated wrappers are C++ (`gen_*.cpp/.h`), so they exist only in the build. The repo carries the four generator patches in `ui-nim/nix/seaqt-gen-patches/`, which are Go diffs.
@@ -294,3 +268,116 @@ It links the runner's `qtbase` and `qtremoteobjects` 6.9.2 exactly.
 - **The accessor-slot finding from T2, seen from the replica side.** nimside's getters and setters arrive on a dynamic replica as remote methods, and a non-void one returns a pending call.
 
 **Not covered:** cross-process use, a typed (repc) replica against a Nim source (T4b's question), model replicas, the registry, and aarch64.
+
+### T4a: probe B, a standalone seaqt app (exo-607.5, 2026-09-29)
+
+**It works.** `ui-nim#muster-app` runs the real `ui/src/qml/Main.qml`, all fifteen files with `Logos.Theme` and `Logos.Controls`, in a Nim host. It uses no Basecamp, no `ui-host` and no QtRO.
+
+- **The backend** is the T2 contract object.
+- **The `logos` bridge** is a small nimside `qobject:`. Its `module("muster_ui")` returns the backend. It also has `isViewModuleReady` and the `viewModuleReadyChanged` signal. That is all muster's QML uses of the Logos bridge.
+
+![muster's real QML in the Nim host, drawn on Xvfb with logos-core behind it](img/seaqt-ui-t4a-nim-host.png)
+
+**The core half.** The host starts logos-core in its own process through liblogos's C API, the same five calls `logos-standalone-app` makes: add the modules dir, set the persistence path, start, and load `capability_module` and then `muster_module` with its dependencies. Each module runs in a `logos_host`. The host then does what the Logos host does for a view module:
+
+1. It takes the core's `capability_module` token.
+2. It registers a fresh view token with `capability_module` (`lp_inform_module_token`).
+3. It calls `muster_module` as `muster_ui` over `lp_*`, the consumer ABI the modules embed and logos-nim-sdk binds.
+
+`checkHealth` is implemented for real: `lp_invoke_async("health")` returns `ok` into the `health` property.
+
+**The checks:**
+
+- `checks.muster-app-view` runs in the nix sandbox. The view loads with no QML errors, `logos.module` returns the backend, and QML makes its load-time calls to it.
+- `scripts/nim-app-core-probe.sh` runs against the modules `make build` produced (5 PASS). The core starts, the token handshake succeeds, and `muster_module.health()` sets the property to `ok`. `logos_core_cleanup` leaves no process behind.
+- The screenshot above is the host on Xvfb, with the core running.
+
+**Pinned so it cannot drift.** Every Logos piece comes through the same `logos-module-builder` rev as `ui/flake.nix`:
+
+- `inputs.logos-standalone-app` supplies `liblogos_core`, `logos_host` and the bundled design system, the runner's own `44f5zpbl…` build.
+- `inputs.logos-protocol`'s `logos-protocol-lib` 0.2.0 supplies the same 21 `lp_*` symbols `muster_module` embeds.
+- The binary links one Qt, `dkfr32yi…-qtbase-6.9.2`.
+
+**What it settled:**
+
+- **No chronos worker or ThreadChannel.** The plan assumed nora-poc's pattern was needed to bring results back to the GUI thread. On the QtRO transport an `lp_*` client is owned by the Qt main thread, and `lp_invoke_async`'s callback fires there. The callback sets the property directly, and the UI never blocks on a module call.
+- **The newer liblogos cannot call a module.** It exports no call method: `logos_core_call_plugin_method_async` in the older `logos_core.h` is gone. Module calls go through `lp_*` from logos-protocol, and liblogos only starts the core, loads modules and hands out tokens.
+- **The host plays two roles, in one token store.** It saves the core's capability token to register the view, then saves the view token under `core` and `capability_module` for its own calls. `ui-host` does the same split across two processes.
+
+**Gaps found, for logos-nim-sdk** (corpetty/logos-nim-sdk):
+
+1. `ffi.nim` binds no consumer-side token calls, `lp_inform_module_token` and `lp_token_get`. Its users so far are modules, which receive a token, whereas a host registers one. The probe declares them locally (`ui-nim/app/logos_core.nim`).
+2. `ffi.nim`'s opaque handles are `importc: "struct LpClient"` with no file-scope declaration. Under gcc 14, each prototype then declares its own `struct LpClient`, and passing one handle to another prototype is a hard error. The probe emits `struct LpClient; struct LpSubscription;` in each module that names them. The SDK should emit it once.
+
+A fix for both is drafted and verified: the probe builds and passes against a patched `ffi.nim` with both local workarounds removed. It goes to logos-nim-sdk as its own change.
+
+**Not yet:** the view has only `checkHealth` implemented, and the other 65 slots are T5. The host does not yet take `--user-dir` or run the `MUSTER_AUTO*` autopilot, which is T0's contract for a Nim build (T6).
+
+### T4b: probe A, a Nim plugin inside Basecamp's host (exo-607.6, 2026-09-29)
+
+**It loads, and it works both ways once named correctly.** A Nim `--app:lib` library, whose Qt plugin instance *is* the T2 contract object, replaced `muster_ui_plugin.so` in a copy of the runner's plugin directory. The builder-generated replica factory was left unchanged.
+
+- **Loading.** The real `ui-host` loads it and prints READY. `NimMain` runs at `dlopen`. The library links one Qt.
+- **Plain dynamic fallback: the typed replica stalls.** This is ui-host's path when a plugin is not a `LogosViewPlugin`.
+  - The cause is the name. The builder's replica factory acquires the `.rep` class name, `MusterUi`, but the fallback registers the object under the module name, `muster_ui`. They never meet.
+  - The signature is not the problem. A nimside source's signature is empty, and QtRO's check passes whenever one side is empty.
+  - QML calls on a replica that never initialized are dropped silently.
+- **Registered as `MusterUi`: Valid.**
+  - The typed replica initializes against the Nim dynamic source and binds all 50 properties. This confirms T2's index agreement in the real host.
+  - QML → Nim: slot calls arrive with their arguments, including `propose({…})`, `setSetting(rpc, …)` and the 2-second `loadInvites()` timer.
+  - Nim → QML: properties set from Nim at plugin load show on screen.
+  - **How the name was fixed:** the Nim object answered `qt_metacast("logos.view.plugin/1.0")` with a Nim struct laid out like the C++ `LogosViewPlugin`, an Itanium vtable. So `ui-host` called the Nim `enableRemoting`, which registers the object as `MusterUi`. That is an ABI impersonation: fine for a probe, never for the product.
+
+![muster's QML in the Logos standalone host, backed by a Nim plugin in ui-host: health and the error banner are set from Nim](img/seaqt-ui-t4b-nim-plugin.png)
+
+**The token is the real blocker.** `ui-host` gives a plugin its capability token only through `initLogos(LogosAPI*)`, a C++ object.
+
+- **Receiving the pointer works, with a patch.** A six-line nimside patch lets a slot parameter name its own Qt type:
+
+  ```nim
+  ParamDef(name: `name`, metaType:
+    when compiles(qtTypeName(`typ`)): qtTypeName(`typ`)   # e.g. "LogosAPI*"
+    else: $QBuiltinMetaType.resolve(`typ`))
+  ```
+
+  With it, a Nim `initLogos(LogosAPI*)` is invoked, and Nim receives the object: `className=LogosAPI`, parented to the application.
+- **Reading the token from it does not.**
+  - `getTokenManager()` and `getToken()` are non-virtual C++.
+  - `LogosAPI` has no invokable methods and no properties.
+  - `ui-host` links the SDK statically, so `dlsym` finds none of its symbols.
+  - liblogos is not loaded in `ui-host` at all.
+
+  Reaching the token takes the C++ SDK: either mangled calls into its archive or a generated accessor.
+
+**What would make option A clean.** Two small upstream asks for `ui-host` (logos-view-module-runtime):
+
+1. **A language-neutral token handoff for view plugins.** For example, `dlsym(plugin, "logos_view_accept_token")`, mirroring the `logos_module_accept_token` C-ABI handshake core modules already use. muster's Nim core module has used that handshake since the live-wire work.
+2. **Let a plugin name its remote object.** A C export, or a "RemoteObject Type" classinfo, so the dynamic fallback registers it under the name the typed replica acquires. No interface impersonation would then be needed.
+
+With both, a Nim UI plugin would call `muster_module` exactly as the T4a host does: through `lp_*`, linking logos-protocol the way `muster_module` does. The interim path for A is the nimside patch plus a generated accessor, which is C++ at build time.
+
+**The plugin metadata.**
+
+- **What `ui-host` needs:** a valid Qt plugin (metadata v2) and `qt_plugin_instance`. It does not check the IID.
+- **What the standalone app needs:** it reads the directory's `metadata.json` and takes the first `*.so` by name.
+- **Basecamp** uses the manifest's `main` and was not tested.
+- **The C++ plugin's metadata** also embeds `metadata.json` and `logos_protocol_version` under `MetaData`. nimside's `Q_PLUGIN_METADATA` cannot emit that key.
+
+**For the gap list (nimside):**
+
+- `Q_PLUGIN_METADATA` builds its instance as a hidden `T()`. The plugin cannot construct it itself, so `create()` and the `.rep` defaults never run, and Nim cannot reach the instance to set a property. It also cannot emit `MetaData`, and its strings are capped at 255 bytes, while `metadata.json` is about 1.2 KB.
+- Slot parameter types are a closed list, so an opaque pointer is rejected. The patch above opens it.
+- No classinfo, and no `Q_INTERFACES`. A `metacast` override works as a stopgap.
+
+**Also found:**
+
+- **Offscreen instantiates the runner's QML.** An offscreen run of the runner received the QML timer's `loadInvites()`, which contradicts the labbook's note that offscreen never instantiates the view.
+- **Warnings predate this work.** The QML warnings seen in these runs (Walkthrough.qml and others) appear in the C++ control too.
+- **Debug logging exposes tokens.** `qt.remoteobjects.debug` logs capability tokens in clear. Leave it off outside a probe.
+
+**Not verified:**
+
+- Basecamp's own `ui-host` build.
+- Reading the token in Nim.
+- Whether an `lp_*` client inside `ui-host` could obtain a `muster_module` token.
+- Shutdown with the impersonated interface: `ui-host` deletes the plugin object while Nim holds a ref.
