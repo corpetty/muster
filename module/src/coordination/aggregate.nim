@@ -136,9 +136,12 @@ proc frostCeremonyStep*(s: CoordinationSession, ks: Keystore, cid: string): stri
     "refused: " & e.msg
 
 # ── the two signing rounds ────────────────────────────────────────────────────
-proc contributed(events: seq[Event], intentId, who: string, round: int): bool =
+proc contributed(events: seq[Event], fd: Driver, m: Materialization, intentId, who: string,
+                 round: int): bool =
+  ## Whether <who> already has a contribution to this round the fold can count. Junk someone
+  ## else published under their name is not theirs, and must not stop them (exo-c00).
   let k = "intent/" & intentId & "/sig/" & who & "/" & $round
-  events.anyIt(it.key == k)
+  events.anyIt(it.key == k and countable(fd, m, who, round, it.value))
 
 proc signingSet*(events: seq[Event], driverFor: DriverFor, intentId: string,
                  fd: Driver): seq[(seq[byte], seq[seq[byte]])] =
@@ -159,10 +162,13 @@ proc signingSet*(events: seq[Event], driverFor: DriverFor, intentId: string,
     if q.len < 5 or q[0] != "intent" or q[1] != intentId or q[2] != "sig" or q[4] != "1": continue
     let who = q[3]
     if who in seen: continue
+    let c = Contribution(bytes: hexToBytes(e.value))
+    # as the fold fills a slot: only with a contribution it can count, so junk published
+    # under a member's name cannot take their place in the set (exo-c00)
+    if not countable(fd, m, who, 1, e.value) or contributionRound(c) != 1 or
+       identifyContributor(fd, m, c) != who: continue
     seen.add who
     if who in attests and not attests[who].anyIt(verifyAttestation(who, p, it)): continue
-    let c = Contribution(bytes: hexToBytes(e.value))
-    if contributionRound(c) != 1 or identifyContributor(fd, m, c) != who: continue
     var nonces: seq[seq[byte]]
     try:
       let v = decodeRound1Nonces(c)
@@ -210,7 +216,7 @@ proc liveFrostContribute*(s: CoordinationSession, ks: Keystore, driverFor: Drive
   let host = ks.frostHostPubkey(lab)
   let hh = toHex(host)
   if host notin g.params.hostpubkeys: return "not-a-participant"
-  if contributed(events, intentId, hh, round): return "already-contributed"
+  if contributed(events, fd, folded[intentId].materialization, intentId, hh, round): return "already-contributed"
   let hashes = fd.frostMessages(effect)
   if hashes.len == 0: return "refused: nothing to sign"
   let rec = g.recoveryData

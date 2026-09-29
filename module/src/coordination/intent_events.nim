@@ -277,6 +277,17 @@ proc signedByNamed*(driver: Driver, m: Materialization, who, signatureHex: strin
   let signer = identifyContributor(driver, m, Contribution(bytes: hexToBytes(signatureHex)))
   signer.len == 0 or normId(signer) == normId(who)
 
+proc countable*(driver: Driver, m: Materialization, who: string, round: int,
+                signatureHex: string): bool =
+  ## Whether a contribution published as <who>'s for <round> is one the fold can count:
+  ## its signer's (signedByNamed, exo-a5a) and one the driver verifies at that round
+  ## (exo-b96). Whatever fills a (who, round) slot checks this FIRST (exo-c00): the key
+  ## is whatever its publisher wrote, so junk under a member's name must not take their
+  ## slot, whether in the fold, the grades, a FROST signer set, or "have I contributed?".
+  if not signedByNamed(driver, m, who, signatureHex): return false
+  driver.expectMaterialization(m)
+  driver.verifyContribution(Contribution(bytes: hexToBytes(signatureHex)), round)
+
 # ── event constructors (what a participant publishes) ─────────────────────────
 
 proc proposeEvent*(intentId, effectJson: string): Event =

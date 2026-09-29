@@ -49,6 +49,8 @@ type
     who*: string
     round*: int
     grade*: AttestGrade
+    sig*: Event           ## the contribution the fold counts for (who, round) — the first
+                          ## countable one, never merely the first under the key (exo-c00)
 
 const PlaceholderContext* = SigningContext(environment: "", account: "coordinated",
                                            slot: "0", expiry: high(uint64))
@@ -281,18 +283,16 @@ proc approvalGrades*(events: seq[Event], driverFor: DriverFor,
   for e in ordered:
     let p = e.key.split('/')
     if p.len < 4 or p[0] != "intent" or p[1] != intentId or p[2] != "sig": continue
-    # exo-a5a: the same attribution rule the fold applies — a contribution under a name that
-    # is not its signer's is no one's approval, so it gets no grade and no slot.
-    if not signedByNamed(drv, m, p[3], e.value): continue
     let round = (if p.len >= 5: (try: parseInt(p[4]) except CatchableError: 1) else: 1)
-    # exo-b96: and the fold's verify rule. signedByNamed passes whenever the driver cannot
-    # name a signer, which is also what it says of a contribution that is not valid at all
-    # (a non-member's signature, a malformed one, a vote for another pointer); the fold
-    # never counts those, so neither may any view. Verified at the key's round, since a
-    # multi-round driver's contribution carries its own (a FROST round-1 payload is not a
-    # round-2 partial). Before dedup, like attribution: an invalid contribution that arrives
-    # first must not take the named member's slot.
-    if not drv.verifyContribution(Contribution(bytes: hexToBytes(e.value)), round): continue
+    # The fold's rule for filling a slot (countable): attribution (exo-a5a) and the driver's
+    # verify (exo-b96). signedByNamed passes whenever the driver cannot name a signer, which
+    # is also what it says of a contribution that is not valid at all (a non-member's
+    # signature, a malformed one, a vote for another pointer); the fold never counts those,
+    # so neither may any view. Verified at the key's round, since a multi-round driver's
+    # contribution carries its own (a FROST round-1 payload is not a round-2 partial).
+    # Before dedup, as in the fold: junk that arrives first must not take the named
+    # member's slot (exo-c00).
+    if not countable(drv, m, p[3], round, e.value): continue
     let k = p[3] & "/" & $round
     if k in seen: continue
     seen.incl k
@@ -302,7 +302,7 @@ proc approvalGrades*(events: seq[Event], driverFor: DriverFor,
       if a.key != "intent/" & intentId & "/attest/" & p[3] & "/" & $round: continue
       present = true
       if verifyAttestation(p[3], p0, a.value): ok = true
-    result.add ApprovalGrade(who: p[3], round: round,
+    result.add ApprovalGrade(who: p[3], round: round, sig: e,
       grade: (if ok: agCommitted elif present: agRejected else: agUnattested))
   # exo-e42: and the fold's round rule. The fold counts a contribution only toward its own
   # round, which it reaches once every earlier round has `threshold` approvals (a rejected

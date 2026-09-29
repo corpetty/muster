@@ -197,10 +197,11 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
     if p.len >= 5 and p[0] == "intent" and p[2] == "attest":
       attests.mgetOrPut(p[1] & "/" & p[3] & "/" & p[4], @[]).add e.value
   for s in sigs:
-    # A contribution under a name that is not its signer's is nobody's approval — dropped
-    # BEFORE dedup, so it can neither count twice nor take the named member's slot (exo-a5a).
-    if not signedByNamed(driverOf(s.id), result[s.id].materialization, s.who, s.value): continue
     if s.round != result[s.id].collection.round: continue   # not its round: counts toward no other (exo-e42)
+    # A contribution under a name that is not its signer's (exo-a5a), or one its driver does
+    # not verify (exo-c00), is nobody's approval: dropped BEFORE dedup, so it can neither
+    # count twice nor take the named member's slot and leave their real one uncounted.
+    if not countable(driverOf(s.id), result[s.id].materialization, s.who, s.round, s.value): continue
     let dedup = s.id & "/" & $s.round & "/" & s.who      # one contribution per (contributor, round)
     if dedup in seenSig: continue
     seenSig.incl dedup
@@ -491,18 +492,21 @@ proc settleWords(events: seq[Event], driverFor: DriverFor, id: string):
   else:
     ("Submitted", "sent outside the room", "Final", "")
 
-proc gradeLookup(events: seq[Event], driverFor: DriverFor): proc (id, who, round: string): string =
-  ## Memoized per-intent approval grades, keyed "<who>/<round>" (exo-ef1). "" when the
-  ## contribution has no grade — the fold never counted it (misattributed, or its driver
-  ## refused it, exo-b96) — so a surface shows it no more than a rejected one.
-  var cache = initTable[string, Table[string, string]]()
-  result = proc (id, who, round: string): string =
+proc gradeLookup(events: seq[Event], driverFor: DriverFor):
+    proc (id, who, round: string): tuple[grade: string, sig: EventId] =
+  ## Memoized per-intent approval grades, keyed "<who>/<round>" (exo-ef1), each with the
+  ## contribution it grades. grade "" when there is none — the fold never counted one
+  ## (misattributed, or its driver refused it, exo-b96) — so a surface shows it no more than
+  ## a rejected one. A surface cites only `sig`: any other event under the same key is not
+  ## the one the fold counted, however early it sorts (exo-c00).
+  var cache = initTable[string, Table[string, tuple[grade: string, sig: EventId]]]()
+  result = proc (id, who, round: string): tuple[grade: string, sig: EventId] =
     if id notin cache:
-      var t = initTable[string, string]()
-      for g in approvalGrades(events, driverFor, id): t[g.who & "/" & $g.round] = $g.grade
+      var t = initTable[string, tuple[grade: string, sig: EventId]]()
+      for g in approvalGrades(events, driverFor, id): t[g.who & "/" & $g.round] = ($g.grade, eventId(g.sig))
       cache[id] = t
     let r = (try: parseInt(round) except CatchableError: 1)   # the key's round, read as the fold reads it
-    cache[id].getOrDefault(who & "/" & $r, "")
+    cache[id].getOrDefault(who & "/" & $r, ("", ""))
 
 proc countedPartsAt(ordered: seq[Event], folded: Table[string, Intent],
                     driverFor: DriverFor, events: seq[Event]): Table[string, Table[string, int]] =
@@ -550,8 +554,9 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
       if id notin approvers: approvers[id] = initHashSet[string]()
       let dkey = who & "/" & rnd
       if dkey in approvers[id]: continue     # one contribution per (contributor, round)
-      let grade = gradeOf(id, who, rnd)
-      if grade.len == 0 or grade == $agRejected: continue   # the fold didn't count it; neither does the story
+      let (grade, counted) = gradeOf(id, who, rnd)
+      # the fold didn't count it (or counted another event under this key); neither does the story
+      if grade.len == 0 or grade == $agRejected or eventId(ordered[i]) != counted: continue
       approvers[id].incl dkey
       lastSig[id] = i
       var distinctWho = initHashSet[string]()
@@ -692,8 +697,10 @@ proc intentProvenance*(events: seq[Event], driverFor: DriverFor, intentId: strin
     elif p[2] == "sig" and p.len >= 4:
       if p[3] in seenSig: continue
       let round = (if p.len >= 5: p[4] else: "1")
-      let grade = gradeOf(intentId, p[3], round)
-      if grade.len == 0 or grade == $agRejected: continue   # uncounted, or attested but not over P: it never reached the decision
+      let (grade, counted) = gradeOf(intentId, p[3], round)
+      # uncounted, attested but not over P, or not the event under this key the fold counted:
+      # it never reached the decision
+      if grade.len == 0 or grade == $agRejected or eventId(ordered[i]) != counted: continue
       seenSig.incl p[3]
       result.add ProvItem(cls: icContribution, logPos: i,
                           account: p[3], attestation: grade,
@@ -775,10 +782,11 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
         epoch: epoch)
     of "sig":
       if p.len < 4 or (id & "/" & p[3]) in seenSig: continue
-      let grade = gradeOf(id, p[3], (if p.len >= 5: p[4] else: "1"))
+      let (grade, counted) = gradeOf(id, p[3], (if p.len >= 5: p[4] else: "1"))
       # no grade: the fold never counted it, so it is no one's approval — and the name on
-      # its key is whatever its publisher wrote (exo-b96)
-      if grade.len == 0: continue
+      # its key is whatever its publisher wrote (exo-b96). Another event under the same key
+      # is not the one the fold counted (exo-c00).
+      if grade.len == 0 or eventId(e) != counted: continue
       seenSig.incl(id & "/" & p[3])
       result.add LogProvItem(seq: i, cls: icContribution, kind: "sig", intentId: id,
         account: p[3], accountable: true, what: "an approval",
@@ -827,7 +835,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
       if p.len < 5: continue
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "attest", intentId: id,
         account: p[3], accountable: true, what: "a member's commitment to an approval's inputs",
-        attestation: gradeOf(id, p[3], p[4]),
+        attestation: gradeOf(id, p[3], p[4]).grade,
         detail: "", guarantee: "signed by the approving key over the context, the materialization, and the provenance of every input (invariants 2 and 10); every member re-derives what it must cover",
         epoch: epoch)
     of "submit":

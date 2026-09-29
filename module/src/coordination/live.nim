@@ -231,10 +231,18 @@ proc liveImportOutside*(s: CoordinationSession, ks: Keystore, driverFor: DriverF
   if got.len == 0:
     return OutsideImport(error: "no-signatures",
                          detail: "it carries no signature by one of the account's keys over the whole proposal")
+  let m = canonicalize(drv, effectFromJson(effectJson))
   for (signer, c) in got:
+    # Already in the room only if the room holds one of the signer's the fold can count:
+    # junk someone published under their name is not theirs, and must not keep their real
+    # signature out (exo-c00).
     var seen = false
     for e in events:
-      if e.key.startsWith("intent/" & intentId & "/sig/" & signer): seen = true
+      let p = e.key.split('/')
+      if p.len >= 4 and p[0] == "intent" and p[1] == intentId and p[2] == "sig" and
+         p[3].toLowerAscii == signer.toLowerAscii and
+         countable(drv, m, p[3], (if p.len >= 5: (try: parseInt(p[4]) except ValueError: 1) else: 1), e.value):
+        seen = true
     if seen:
       result.already.add signer
       continue

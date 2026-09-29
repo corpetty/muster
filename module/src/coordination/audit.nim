@@ -237,12 +237,9 @@ proc exportAudit*(events: seq[Event], driverFor: DriverFor, intentId: string,
     let grades = approvalGrades(ordered, driverFor, intentId)
     var approvals: seq[CborValue]
     for g in grades:
-      var sigEv: Event
-      var found = false
-      for e in ordered:
-        if e.key == "intent/" & intentId & "/sig/" & g.who & "/" & $g.round:
-          sigEv = e; found = true; break
-      if not found: continue
+      # the contribution the fold counted — never merely the first event under its key,
+      # which anyone holding the epoch key could have published as junk (exo-c00)
+      let sigEv = g.sig
       for par in sigEv.parents: needReadable(par)
       var atts: seq[Event]
       for e in ordered:
