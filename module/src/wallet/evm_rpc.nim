@@ -15,6 +15,7 @@ import json_rpc/clients/httpclient
 import web3/[eth_api, eth_api_types]
 import eth/common/[addresses, hashes]
 import ./types
+import ./erc20_logs
 
 proc q(x: Quantity): uint64 = uint64(distinctBase(x))
 
@@ -102,6 +103,26 @@ proc rpcTransferOf*(url, txHashHex: string):
   let status = rpcReceiptStatus(url, txHashHex)
   (true, tx.`from`.to0xHex, (if tx.to.isSome: tx.to.get.to0xHex else: ""), $tx.value, status,
    (if tx.blockNumber.isSome: q(tx.blockNumber.get) else: 0'u64))
+
+proc hexOf(b: openArray[byte]): string =
+  const d = "0123456789abcdef"
+  result = "0x"
+  for x in b: (result.add d[int(x shr 4)]; result.add d[int(x and 0x0F)])
+
+proc rpcReceiptLogs*(url, txHashHex: string): tuple[found: bool, status: int, logs: seq[RawLog]] =
+  ## A transaction's receipt as THIS endpoint reports it: its status (1 success, 0 failed)
+  ## and its logs as hex (exo-5ab: a token payment is read from its Transfer log). found =
+  ## false while there is no receipt; a transport error raises — never "no logs".
+  let r = rpcTry(url, "eth_getTransactionReceipt"):
+    waitFor c.eth_getTransactionReceipt(Hash32.fromHex(txHashHex))
+  if r.isNil: return (false, -1, @[])
+  let status = (if r.status.isSome: (if q(r.status.get) == 1: 1 else: 0) else: -1)
+  var logs: seq[RawLog]
+  for l in r.logs:
+    var topics: seq[string]
+    for t in l.topics: topics.add hexOf(distinctBase(t))
+    logs.add RawLog(address: l.address.to0xHex, topics: topics, data: hexOf(l.data))
+  (true, status, logs)
 
 proc rpcSendTransaction*(url, fromHex, toHex: string, value: UInt256,
                          data: seq[byte], gas: uint64): string =
