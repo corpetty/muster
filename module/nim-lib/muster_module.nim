@@ -1195,13 +1195,35 @@ proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): s
      (not lez and not btc and not isEvm):
     return $(%*{"error": "not-a-" & (if lez: "lez" elif btc: "bitcoin" else: "evm") & "-chain", "chain": chain})
   if kind notin roomKinds(): return $(%*{"error": "not-admitted", "kind": kind})
-  if not isCanonDec(total) or total == "0": return $(%*{"error": "bad-total", "total": total})
   let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
   var creditor = me
   var shares: seq[SplitShare]
   var asset = (if lez: "LEZ" elif btc: "BTC" else: "ETH")
+  var total = total
+  var quote: SplitQuote
   try:
     let j = parseJson(sharesJson)
+    # an Ethereum split in a token (exo-5ab): {…, "asset": "0x<token>" | "erc20:0x<token>"}
+    if j.kind == JObject and j.hasKey("asset"):
+      let a = j["asset"].getStr().strip().toLowerAscii()
+      if a.len > 0 and a != "eth":
+        if lez: return $(%*{"error": "bad-asset", "detail": "a private split is paid in LEZ"})
+        if btc: return $(%*{"error": "bad-asset", "detail": "a Bitcoin split is paid in BTC"})
+        asset = (if a.startsWith("erc20:"): a else: "erc20:" & a)
+        if not isErc20Asset(asset): return $(%*{"error": "bad-asset", "detail": asset})
+    # a bill in fiat (exo-3a4): {…, "fiat": {currency, amount, rate, source}} — the rate is
+    # this member's quote (an external read, recorded with the proposal, invariant 10) and
+    # the total is its exact conversion into the asset, never typed
+    if j.kind == JObject and j{"fiat"} != nil and j["fiat"].kind == JObject:
+      let f = j["fiat"]
+      let dec = (if lez: 9 elif btc: 8 elif isErc20Asset(asset): tokenInfo(chain, asset[6 .. ^1])[1] else: 18)
+      if dec < 0: return $(%*{"error": "bad-asset", "detail": "the token's decimals could not be read for the conversion"})
+      let q = fiatQuote(f{"currency"}.getStr().strip().toUpperAscii(), f{"amount"}.getStr(), f{"rate"}.getStr(),
+                        dec, f{"source"}.getStr(), int64(epochTime()))
+      if not q.ok: return $(%*{"error": "bad-quote", "detail": q.why})
+      total = q.total
+      quote = q.quote
+    if not isCanonDec(total) or total == "0": return $(%*{"error": "bad-total", "total": total})
     if j.kind == JObject and j{"creditor"}.getStr().len > 0:
       creditor = j["creditor"].getStr().toLowerAscii().replace("0x", "")
     if j.kind == JArray:
@@ -1213,14 +1235,6 @@ proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): s
       shares = evenShares(total, creditor, j["parties"].getElems().mapIt(it.getStr().toLowerAscii()),
                           creditorShares = j{"creditorShares"}.getBool(true), distinctAmounts = lez)
     else: return $(%*{"error": "bad-shares", "detail": "an array of room identities, {parties}, or {shares}"})
-    # an Ethereum split in a token (exo-5ab): {…, "asset": "0x<token>" | "erc20:0x<token>"}
-    if j.kind == JObject and j.hasKey("asset"):
-      let a = j["asset"].getStr().strip().toLowerAscii()
-      if a.len > 0 and a != "eth":
-        if lez: return $(%*{"error": "bad-asset", "detail": "a private split is paid in LEZ"})
-        if btc: return $(%*{"error": "bad-asset", "detail": "a Bitcoin split is paid in BTC"})
-        asset = (if a.startsWith("erc20:"): a else: "erc20:" & a)
-        if not isErc20Asset(asset): return $(%*{"error": "bad-asset", "detail": asset})
   except CatchableError as e:
     return $(%*{"error": "bad-shares", "detail": e.msg})
   # payTo: my own address on the rail — the private split's is my shielded key node. On
@@ -1245,13 +1259,15 @@ proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): s
         if r.form == "shielded": payTo = r.address
     except CatchableError as e: return $(%*{"error": "no-lez-wallet", "detail": e.msg})
     if payTo.len == 0: return $(%*{"error": "no-lez-wallet", "detail": "no shielded account to be paid at"})
-  let effect = splitEffectJson(chain, asset, total, creditor, payTo, shares, memo)
+  let effect = splitEffectJson(chain, asset, total, creditor, payTo, shares, memo, quote)
   var ttl = DefaultIntentTtl
   try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
   except ValueError: discard
   inc gMsgSeq
+  # a fiat quote is this member's read: recorded before their own agreement (invariant 10)
   let id = liveProposeIntent(gSession, moduleKeystore(), driverFor, kind & "@" & chain, effect,
-                             int64(epochTime()), gMsgSeq, account = chain & ":" & payTo, ttlSec = ttl)
+                             int64(epochTime()), gMsgSeq, account = chain & ":" & payTo, ttlSec = ttl,
+                             reads = (if quote.quoted: @[(field: "quote", source: "quote:proposer")] else: @[]))
   if id.startsWith("0x"): id else: $(%*{"error": id})
 
 proc musterCoordinateSettlePartImpl(intentId: string): string =
@@ -1785,6 +1801,12 @@ proc musterCoordinateIntents(): string =
                                      creditorAgreeRefusal(effectFromJson(v.effectJson), myEncHex,
                                                           myPayTos(prof.family)).len == 0,
                         "creditorShare": subDec(sp.total, sum)}
+        # a bill in fiat (exo-3a4): the quote the room is trusting — its currency, amount,
+        # rate, source and time — for the card to name before anyone agrees
+        if sp.quote.quoted:
+          o["split"]["quote"] = %*{"currency": sp.quote.currency, "fiatTotal": sp.quote.fiatTotal,
+                                   "fiatDecimals": sp.quote.fiatDecimals, "rateAsset": sp.quote.rateAsset,
+                                   "rateFiat": sp.quote.rateFiat, "source": sp.quote.source, "at": sp.quote.at}
       except CatchableError: discard
     arr.add o
   $arr
