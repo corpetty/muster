@@ -499,4 +499,28 @@ block:
   check("room FROST: junk under a's round-1 name, sorted first", ev, frFor, id, wantApprovals = 2, wantRound = 2)
   echo "8c. room FROST: junk under a member's round-1 name sorted first takes nothing from them OK"
 
+# ── 9. the grades read the proposal's own policy, as the fold does (exo-18d) ────────
+# A family can declare its policy per proposal (describeFor, exo-a90.2), and the fold's
+# collection runs on that one. Which rounds the collection has reached depends on its
+# round count and threshold, so the grades must read the same policy: here the family's
+# describe() says one round and the proposal's says two.
+type PerProposalRounds = ref object of StubDriver
+method describeFor(d: PerProposalRounds, e: Effect): DriverDescriptor =
+  result = d.describe()
+  result.rounds = 2
+
+block:
+  let drv = PerProposalRounds(verifyResult: true,
+    descriptor: DriverDescriptor(rounds: 1, serializationDomain: "muster.stub.v1", finality: finImmediate, threshold: 2))
+  let dFor: DriverFor = proc(kind: string): Driver = drv
+  const stmtJson = """{"effect":"statement","text":"two rounds, this time"}"""
+  let id = intentIdFor(stmtJson, "stub")
+  let ev = @[policyDeclEvent(id, "stub"), proposeEvent(id, stmtJson),
+             contributeEvent(id, "ed:aa", "0x01", round = 1), contributeEvent(id, "ed:bb", "0x02", round = 1),
+             contributeEvent(id, "ed:aa", "0x01", round = 2)]
+  doAssert foldState(ev, dFor, id) == ("collecting", 2, 1),
+    "the fold runs the proposal's two rounds: " & $foldState(ev, dFor, id)
+  check("a proposal whose own policy has two rounds", ev, dFor, id, wantApprovals = 2, wantRound = 1)
+  echo "9. a per-proposal policy: the grades reach the rounds the fold's collection runs OK"
+
 echo "view_counts_fold_test: all OK"
