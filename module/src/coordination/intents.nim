@@ -191,10 +191,16 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
   proc payloadOf(id: string): seq[byte] =
     if id notin payloads: payloads[id] = attestationPayload(events, driverFor, id)
     payloads[id]
+  # Only the attestations that belong to the intent's record (exo-093): one parented on a
+  # room message or on junk is no attestation of this intent, so it rejects nothing.
   var attests = initTable[string, seq[string]]()        # "<id>/<who>/<round>" -> attestation hex
+  var attested = initHashSet[string]()
   for e in ordered:
     let p = e.key.split('/')
-    if p.len >= 5 and p[0] == "intent" and p[2] == "attest":
+    if p.len >= 5 and p[0] == "intent" and p[2] == "attest" and p[1] in result: attested.incl p[1]
+  for id in attested:
+    for e in admittedAttestations(events, driverFor, id):
+      let p = e.key.split('/')
       attests.mgetOrPut(p[1] & "/" & p[3] & "/" & p[4], @[]).add e.value
   for s in sigs:
     if s.round != result[s.id].collection.round: continue   # not its round: counts toward no other (exo-e42)
@@ -492,21 +498,26 @@ proc settleWords(events: seq[Event], driverFor: DriverFor, id: string):
   else:
     ("Submitted", "sent outside the room", "Final", "")
 
+type GradeEntry = tuple[grade: string, sig: EventId, attests: seq[EventId]]
+
 proc gradeLookup(events: seq[Event], driverFor: DriverFor):
-    proc (id, who, round: string): tuple[grade: string, sig: EventId] =
+    proc (id, who, round: string): GradeEntry =
   ## Memoized per-intent approval grades, keyed "<who>/<round>" (exo-ef1), each with the
-  ## contribution it grades. grade "" when there is none — the fold never counted one
-  ## (misattributed, or its driver refused it, exo-b96) — so a surface shows it no more than
-  ## a rejected one. A surface cites only `sig`: any other event under the same key is not
-  ## the one the fold counted, however early it sorts (exo-c00).
-  var cache = initTable[string, Table[string, tuple[grade: string, sig: EventId]]]()
-  result = proc (id, who, round: string): tuple[grade: string, sig: EventId] =
+  ## contribution it grades and the attestations that belong to it. grade "" when there is
+  ## none — the fold never counted one (misattributed, or its driver refused it, exo-b96) —
+  ## so a surface shows it no more than a rejected one. A surface cites only `sig`: any
+  ## other event under the same key is not the one the fold counted, however early it sorts
+  ## (exo-c00); and only `attests`: an attestation parented outside the intent's record is
+  ## no attestation of it (exo-093).
+  var cache = initTable[string, Table[string, GradeEntry]]()
+  result = proc (id, who, round: string): GradeEntry =
     if id notin cache:
-      var t = initTable[string, tuple[grade: string, sig: EventId]]()
-      for g in approvalGrades(events, driverFor, id): t[g.who & "/" & $g.round] = ($g.grade, eventId(g.sig))
+      var t = initTable[string, GradeEntry]()
+      for g in approvalGrades(events, driverFor, id):
+        t[g.who & "/" & $g.round] = ($g.grade, eventId(g.sig), g.attests.mapIt(eventId(it)))
       cache[id] = t
     let r = (try: parseInt(round) except CatchableError: 1)   # the key's round, read as the fold reads it
-    cache[id].getOrDefault(who & "/" & $r, ("", ""))
+    cache[id].getOrDefault(who & "/" & $r, ("", "", newSeq[EventId]()))
 
 proc countedPartsAt(ordered: seq[Event], folded: Table[string, Intent],
                     driverFor: DriverFor, events: seq[Event]): Table[string, Table[string, int]] =
@@ -554,7 +565,7 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
       if id notin approvers: approvers[id] = initHashSet[string]()
       let dkey = who & "/" & rnd
       if dkey in approvers[id]: continue     # one contribution per (contributor, round)
-      let (grade, counted) = gradeOf(id, who, rnd)
+      let (grade, counted, _) = gradeOf(id, who, rnd)
       # the fold didn't count it (or counted another event under this key); neither does the story
       if grade.len == 0 or grade == $agRejected or eventId(ordered[i]) != counted: continue
       approvers[id].incl dkey
@@ -697,7 +708,7 @@ proc intentProvenance*(events: seq[Event], driverFor: DriverFor, intentId: strin
     elif p[2] == "sig" and p.len >= 4:
       if p[3] in seenSig: continue
       let round = (if p.len >= 5: p[4] else: "1")
-      let (grade, counted) = gradeOf(intentId, p[3], round)
+      let (grade, counted, _) = gradeOf(intentId, p[3], round)
       # uncounted, attested but not over P, or not the event under this key the fold counted:
       # it never reached the decision
       if grade.len == 0 or grade == $agRejected or eventId(ordered[i]) != counted: continue
@@ -782,7 +793,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
         epoch: epoch)
     of "sig":
       if p.len < 4 or (id & "/" & p[3]) in seenSig: continue
-      let (grade, counted) = gradeOf(id, p[3], (if p.len >= 5: p[4] else: "1"))
+      let (grade, counted, _) = gradeOf(id, p[3], (if p.len >= 5: p[4] else: "1"))
       # no grade: the fold never counted it, so it is no one's approval — and the name on
       # its key is whatever its publisher wrote (exo-b96). Another event under the same key
       # is not the one the fold counted (exo-c00).
@@ -833,9 +844,11 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
         epoch: epoch)
     of "attest":
       if p.len < 5: continue
+      let att = gradeOf(id, p[3], p[4])
+      if eventId(e) notin att.attests: continue   # not an attestation of this intent's record (exo-093)
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "attest", intentId: id,
         account: p[3], accountable: true, what: "a member's commitment to an approval's inputs",
-        attestation: gradeOf(id, p[3], p[4]).grade,
+        attestation: att.grade,
         detail: "", guarantee: "signed by the approving key over the context, the materialization, and the provenance of every input (invariants 2 and 10); every member re-derives what it must cover",
         epoch: epoch)
     of "submit":

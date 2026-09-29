@@ -22,9 +22,11 @@
 ## this code re-derives; UNATTESTED when it was pasted (no attestation at all — the
 ## signer acted outside muster, so nothing muster can show was committed); and
 ## REJECTED when attestations exist but none verifies (forged, mismatched, from another
-## intent or room) — a rejected approval does not count.
+## intent or room) — a rejected approval does not count. Only attestations that belong to
+## the intent's record count here (exo-093): one that links anything but copies of its own
+## approval inside the record is no attestation of this intent.
 
-import std/[json, strutils, sets, algorithm]
+import std/[json, strutils, sets, algorithm, sequtils, tables]
 import ../log/log
 import ../dcbor/dcbor
 import ../hashing/keccak256
@@ -49,8 +51,11 @@ type
     who*: string
     round*: int
     grade*: AttestGrade
-    sig*: Event           ## the contribution the fold counts for (who, round) — the first
-                          ## countable one, never merely the first under the key (exo-c00)
+    sig*: Event           ## the contribution that stands for (who, round): the first countable
+                          ## one (never merely the first under the key, exo-c00) whose history
+                          ## stays inside the intent's record (exo-093)
+    copies*: seq[Event]   ## every countable copy under (who, round) inside the record, `sig` first
+    attests*: seq[Event]  ## the attestations under (who, round) that belong to the intent (exo-093)
 
 const PlaceholderContext* = SigningContext(environment: "", account: "coordinated",
                                            slot: "0", expiry: high(uint64))
@@ -264,26 +269,60 @@ proc verifyAttestation*(who: string, p: seq[byte], sigHex: string): bool =
 
 # ── grading every approval ────────────────────────────────────────────────────
 
-proc approvalGrades*(events: seq[Event], driverFor: DriverFor,
-                     intentId: string): seq[ApprovalGrade] =
-  ## One grade per (contributor, round) approval on this intent, in canonical order.
-  ## Only a contribution the fold would count gets one: every surface (the card, the
-  ## activity feed, both provenance views, the audit file) reads these grades, so a
-  ## contribution with no grade is on none of them.
-  let p0 = attestationPayload(events, driverFor, intentId)
+# ── the intent's record (exo-093) ─────────────────────────────────────────────
+# Any epoch-key holder chooses an event's parents, so an event parented outside the intent
+# (on a room message, on junk) is not part of what the intent's members did. The record is
+# closed: the intent's lineage, and the copies of its approvals whose parents all lie in the
+# record. The audit file, which must be parent-closed, can carry all of it; nothing outside it
+# decides anything.
+
+type
+  Copy = tuple[e: Event, id: EventId, who: string, round: int]
+  IntentRecord = object
+    ok: bool
+    drv: Driver
+    m: Materialization
+    desc: DriverDescriptor
+    lineage: HashSet[EventId]
+    copies: seq[Copy]                ## every countable contribution, in canonical order
+    admitted: seq[Event]             ## the attestations that belong to the intent
+
+proc lineageIds*(events: seq[Event], driverFor: DriverFor, intentId: string): HashSet[EventId] =
+  ## Every input the intent's provenance names, and their ancestors.
+  var byId = initTable[EventId, Event]()
+  for e in events: byId[eventId(e)] = e
+  var queue: seq[EventId]
+  for i in intentInputs(events, driverFor, intentId): queue.add i.logRef
+  while queue.len > 0:
+    let id = queue.pop()
+    if id in result or id notin byId: continue
+    result.incl id
+    for p in byId[id].parents: queue.add p
+
+proc closedWithin(cands: seq[Copy], lineage: HashSet[EventId]): HashSet[EventId] =
+  ## The candidates whose every parent is in the lineage or is another such candidate.
+  var grew = true
+  while grew:
+    grew = false
+    for c in cands:
+      if c.id in result: continue
+      var inside = true
+      for p in c.e.parents:
+        if p notin lineage and p notin result: (inside = false; break)
+      if inside: (result.incl c.id; grew = true)
+
+proc intentRecord(events: seq[Event], driverFor: DriverFor, intentId: string): IntentRecord =
   let ej = effectJsonOf(events, intentId)
   if ej.len == 0: return                  # not proposed here: the fold has no intent to count toward
-  let drv = driverFor(intentPolicyOf(events, intentId))
-  var m: Materialization
-  var desc: DriverDescriptor
+  result.drv = driverFor(intentPolicyOf(events, intentId))
   try:
     let effect = effectFromJson(ej)
-    m = canonicalize(drv, effect)
-    desc = describeFor(drv, effect)       # this proposal's policy, the one the fold's collection runs (exo-18d)
+    result.m = canonicalize(result.drv, effect)
+    result.desc = describeFor(result.drv, effect)   # this proposal's policy, the one the fold's collection runs (exo-18d)
   except CatchableError: return           # nothing to verify against, so nothing verifies
-  drv.expectMaterialization(m)
-  var seen = initHashSet[string]()
+  result.ok = true
   let ordered = canonicalOrder(events)
+  result.lineage = lineageIds(ordered, driverFor, intentId)
   for e in ordered:
     let p = e.key.split('/')
     if p.len < 4 or p[0] != "intent" or p[1] != intentId or p[2] != "sig": continue
@@ -296,18 +335,52 @@ proc approvalGrades*(events: seq[Event], driverFor: DriverFor,
     # contribution carries its own (a FROST round-1 payload is not a round-2 partial).
     # Before dedup, as in the fold: junk that arrives first must not take the named
     # member's slot (exo-c00).
-    if not countable(drv, m, p[3], round, e.value): continue
-    let k = p[3] & "/" & $round
+    if countable(result.drv, result.m, p[3], round, e.value):
+      result.copies.add (e: e, id: eventId(e), who: p[3], round: round)
+  # An attestation belongs to the intent only if it links nothing but copies of its own
+  # approval inside the record (an honest one links exactly its own signature; one with no
+  # parents links nothing). A forged one parented on a room message or on junk is no
+  # attestation of this intent: it neither rejects the approval nor rides in its audit.
+  var inRecord = initTable[EventId, string]()
+  let closed = closedWithin(result.copies.filterIt(it.round in 1 .. result.desc.rounds), result.lineage)
+  for c in result.copies:
+    if c.id in closed: inRecord[c.id] = c.e.key
+  for e in ordered:
+    let p = e.key.split('/')
+    if p.len < 5 or p[0] != "intent" or p[1] != intentId or p[2] != "attest": continue
+    let own = "intent/" & intentId & "/sig/" & p[3] & "/" & p[4]
+    if e.parents.allIt(inRecord.getOrDefault(it, "") == own): result.admitted.add e
+
+proc admittedAttestations*(events: seq[Event], driverFor: DriverFor, intentId: string): seq[Event] =
+  ## The attestations that belong to the intent, in canonical order (see intentRecord): what
+  ## the fold's attestation gate, the FROST signer set and every grade read.
+  intentRecord(events, driverFor, intentId).admitted
+
+# ── grading every approval ────────────────────────────────────────────────────
+
+proc approvalGrades*(events: seq[Event], driverFor: DriverFor,
+                     intentId: string): seq[ApprovalGrade] =
+  ## One grade per (contributor, round) approval on this intent, in canonical order.
+  ## Only a contribution the fold would count gets one: every surface (the card, the
+  ## activity feed, both provenance views, the audit file) reads these grades, so a
+  ## contribution with no grade is on none of them.
+  let rec = intentRecord(events, driverFor, intentId)
+  if not rec.ok: return
+  let p0 = attestationPayload(events, driverFor, intentId)
+  let desc = rec.desc
+  var seen = initHashSet[string]()
+  for c in rec.copies:
+    let k = c.who & "/" & $c.round
     if k in seen: continue
     seen.incl k
-    var present = false
+    var atts: seq[Event]
     var ok = false
-    for a in ordered:
-      if a.key != "intent/" & intentId & "/attest/" & p[3] & "/" & $round: continue
-      present = true
-      if verifyAttestation(p[3], p0, a.value): ok = true
-    result.add ApprovalGrade(who: p[3], round: round, sig: e,
-      grade: (if ok: agCommitted elif present: agRejected else: agUnattested))
+    for a in rec.admitted:
+      if a.key != "intent/" & intentId & "/attest/" & k: continue
+      atts.add a
+      if verifyAttestation(c.who, p0, a.value): ok = true
+    result.add ApprovalGrade(who: c.who, round: c.round, sig: c.e, attests: atts,
+      grade: (if ok: agCommitted elif atts.len > 0: agRejected else: agUnattested))
   # exo-e42: and the fold's round rule. The fold counts a contribution only toward its own
   # round, which it reaches once every earlier round has `threshold` approvals (a rejected
   # one closes nothing there either). So a key under a round the collection has not
@@ -325,6 +398,20 @@ proc approvalGrades*(events: seq[Event], driverFor: DriverFor,
   for g in result:
     if g.round in 1 .. reached: inReach.add g
   result = inReach
+  # exo-093: the copy that stands for each approval is the first whose history stays inside
+  # the record: its parents are the lineage, or copies of the approvals graded here (a
+  # fixpoint). So a copy parented outside the intent stands for nothing, however early it
+  # sorts, and approvals made after it do not link it. With no such copy (an approval from
+  # before exo-96d that linked junk), the first valid one, which the export then refuses.
+  var graded = initHashSet[string]()
+  for g in result: graded.incl g.who & "/" & $g.round
+  let standing = closedWithin(rec.copies.filterIt((it.who & "/" & $it.round) in graded), rec.lineage)
+  for g in result.mitems:
+    var first = true
+    for c in rec.copies:
+      if c.who != g.who or c.round != g.round or c.id notin standing: continue
+      if first: (g.sig = c.e; first = false)
+      g.copies.add c.e
 
 proc approvalParents*(events: seq[Event], driverFor: DriverFor, intentId: string): seq[EventId] =
   ## What a new approval links (exo-403): the proposal and every approval on the intent,

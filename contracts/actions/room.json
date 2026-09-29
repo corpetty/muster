@@ -1825,7 +1825,7 @@
         {
           "step": "act",
           "who": "any member",
-          "does": "coordinate_audit(intentId) reduces this member's log to one canonical-CBOR file: the effect and its re-derived materialization; the signing context; the provenance record and the parent-closed lineage it names; every approval with its grade (committed, unattested or rejected), its signature and attestation events, and any other copy of that signature the record links (exo-96d); settlement entries as external reads with the tx hash; and the claims the log alone cannot prove (threshold, stage, disclosure, first epoch). Returns the file as hex, a readable report rendered from it, and its digest.",
+          "does": "coordinate_audit(intentId) reduces this member's log to one canonical-CBOR file: the effect and its re-derived materialization; the signing context; the provenance record and the parent-closed lineage it names; every approval with its grade (committed, unattested or rejected), its signature and the attestation events that belong to the intent's record, and any other copy of that signature the record links (exo-96d, exo-093); settlement entries as external reads with the tx hash; and the claims the log alone cannot prove (threshold, stage, disclosure, first epoch). Returns the file as hex, a readable report rendered from it, and its digest.",
           "signs": "The exporter's secp256k1 key signs digest(hash-input \"muster.signature-audit.v1\" {body: the file body as canonical CBOR}).",
           "reveals": [],
           "evidence": [

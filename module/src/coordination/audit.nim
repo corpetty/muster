@@ -20,7 +20,7 @@
 ## `renderAuditReport` is a pure rendering of the file for people. It carries the
 ## file's digest and is never authoritative: the file is what verifies.
 
-import std/[json, strutils, sets, tables, algorithm]
+import std/[json, strutils, sets, tables, algorithm, sequtils]
 import ../log/log
 import ../dcbor/dcbor
 import ../hashing/hash_input
@@ -238,18 +238,29 @@ proc exportAudit*(events: seq[Event], driverFor: DriverFor, intentId: string,
     var atts = newSeq[seq[Event]](grades.len)
     for i, g in grades:
       # g.sig: the contribution the fold counted — never merely the first event under its
-      # key, which anyone holding the epoch key could have published as junk (exo-c00)
-      for e in ordered:
-        if e.key == "intent/" & intentId & "/attest/" & g.who & "/" & $g.round: atts[i].add e
+      # key, which anyone holding the epoch key could have published as junk (exo-c00) —
+      # and one whose history stays inside the intent's record; g.attests: the attestations
+      # that belong to the record. One parented outside it is no attestation of this intent,
+      # so it neither changes the grade nor rides in the file (exo-093).
+      atts[i] = g.attests
       atts[i].sort(proc (a, b: Event): int = cmp(eventId(a), eventId(b)))
 
-    # settlement: the chain's answer as the room observed it — external reads
+    # settlement: the chain's answer as the room observed it — external reads. Of several,
+    # one whose parents the record holds (an honest one has none), so one parented outside
+    # the intent cannot stand in for it (exo-093).
+    var inRecord = lineage
+    for g in grades:
+      for e in g.copies & g.attests: inRecord.incl eventId(e)
     var settle: seq[Event]
     for kind in ["submit", "final"]:
+      var pick, first: Event
+      var found, closed = false
       for e in ordered:
-        if e.key == "intent/" & intentId & "/" & kind:
-          settle.add e
-          break
+        if e.key != "intent/" & intentId & "/" & kind: continue
+        if not found: (first = e; found = true)
+        if e.parents.allIt(it in inRecord): (pick = e; closed = true; break)
+      if closed: settle.add pick
+      elif found: settle.add first      # parented outside the record: the export refuses it below, naming it
 
     # alternates (exo-96d): the counted event under a key can change — a valid copy of a
     # member's signature that sorts ahead of the original becomes the one carried — so the
@@ -272,10 +283,9 @@ proc exportAudit*(events: seq[Event], driverFor: DriverFor, intentId: string,
       for e in settle:
         for par in e.parents: linked.incl par
       for i, g in grades:
-        for e in ordered:
+        for e in g.copies:            # countable, and inside the intent's record (exo-093)
           let id = eventId(e)
-          if e.key == g.sig.key and id notin carried and id in linked and
-             countable(drv, mat, g.who, g.round, e.value):
+          if id notin carried and id in linked:
             alts[i].add e
             carried.incl id
             grew = true

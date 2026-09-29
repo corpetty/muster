@@ -152,10 +152,9 @@ proc signingSet*(events: seq[Event], driverFor: DriverFor, intentId: string,
   let m = canonicalize(fd, effectFromJson(effectJson))
   let p = attestationPayload(events, driverFor, intentId)
   var attests = initTable[string, seq[string]]()
-  for e in canonicalOrder(events):
+  for e in admittedAttestations(events, driverFor, intentId):   # the fold's gate reads only these (exo-093)
     let q = e.key.split('/')
-    if q.len >= 5 and q[0] == "intent" and q[1] == intentId and q[2] == "attest" and q[4] == "1":
-      attests.mgetOrPut(q[3], @[]).add e.value
+    if q[4] == "1": attests.mgetOrPut(q[3], @[]).add e.value
   var seen: seq[string]
   for e in canonicalOrder(events):
     let q = e.key.split('/')
