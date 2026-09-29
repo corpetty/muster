@@ -703,10 +703,12 @@ Rectangle {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     visible: cardRoot.onBehalfBy.length > 0
-                    text: cardRoot.creditorAgreed
-                          ? qsTr("Proposed by %1 on %2's behalf. ✓ %3 agreed: the address is theirs.")
+                    text: cardRoot.creditorAgreed && cardRoot.iAmCreditor
+                          ? qsTr("Proposed by %1 on your behalf. ✓ You agreed that %2 is yours.")
+                                .arg(cardRoot.onBehalfBy).arg(cardRoot.shortPayTo(String(cardRoot.split.payTo || "")))
+                          : cardRoot.creditorAgreed
+                          ? qsTr("Proposed by %1 on %2's behalf. ✓ %2 agreed the address is theirs.")
                                 .arg(cardRoot.onBehalfBy).arg(cardRoot.creditorName)
-                                .arg(cardRoot.iAmCreditor ? qsTr("You") : cardRoot.creditorName)
                           : cardRoot.iAmCreditor
                           ? qsTr("Proposed by %1 on your behalf. Nobody pays until you agree that %2 is yours.")
                                 .arg(cardRoot.onBehalfBy).arg(cardRoot.shortPayTo(String(cardRoot.split.payTo || "")))
