@@ -167,6 +167,16 @@ method expectMaterialization*(d: SafeDriver, m: Materialization) =
   ## Replaces the fold reaching into d.pendingHash directly.
   d.pendingHash = mBytes32(m)
 
+method mayContribute*(d: SafeDriver, e: Effect, names: seq[string]): Eligibility =
+  ## An owner of the Safe this driver was built from (the disclosed account's owner set).
+  const hexd = "0123456789abcdef"
+  let mine = bareNames(names)
+  for o in d.owners:
+    var h = ""
+    for b in o: (h.add hexd[int(b shr 4)]; h.add hexd[int(b and 0x0F)])
+    if h in mine: return elYes
+  elNo
+
 method identifyContributor*(d: SafeDriver, m: Materialization, c: Contribution): string =
   ## Recover the owner address that signed this safeTxHash, as hex — or "" if the
   ## 65-byte signature does not recover to a configured owner. This is how the fold

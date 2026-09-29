@@ -66,6 +66,7 @@ import ../src/intents/authorization    # muster-issued authorizations for the ho
 import ../src/coordination/lp_invoker  # LpInvoker — call the target module over lp_*
 import ../src/coordination/discovery   # discover coordinatable module actions (P-D3)
 import ../src/coordination/contacts    # the address book (aliases for member ids)
+import ../src/coordination/home        # the home surface: what waits on THIS member (F-18, exo-ed5)
 import ../src/coordination/effect_summary  # what an effect moves, in its family's words (exo-59c)
 import ../src/wallet/types             # chain-agnostic wallet types
 import ../src/wallet/adapter           # ChainAdapter seam + Wallet aggregate
@@ -2857,18 +2858,46 @@ proc musterCoordinateMembers(): string =
   $arr
 
 proc musterCoordinateConversations(): string =
-  ## Every joined room, as {topic, address, lastTs, active} — the home surface's
-  ## room list. The active room is flagged; lastTs is each room's latest message ts
-  ## (0 if none yet), so home can order by recency. Multi-room: one entry per session.
+  ## Every joined room, as {topic, address, lastTs, active, needs, waiting, settled} —
+  ## the home surface's room list. The active room is flagged; lastTs is each room's
+  ## latest message ts (0 if none yet), so home can order by recency. Multi-room: one
+  ## entry per session. The home surface is a query over intents (F-18, exo-ed5): `needs`
+  ## lists what waits on THIS member in that room ({id, what, text}), and `waiting` /
+  ## `settled` count the rest, each classed from the room's log and this member's keys.
   var arr = newJArray()
-  let myAddr = toHex(moduleKeystore().address())
+  let ks = moduleKeystore()
+  let myAddr = toHex(ks.address())
+  let myEnc = ks.encIdentity()
+  let myNames = myContributorNames(ks)
+  let myPart = partName(toHex(myEnc.toBytes()).toLowerAscii().replace("0x", ""))
   for topic, s in gSessions:
     if topic in gInboxTopics: continue      # an inbox is a drop-box, not a room to list
     s.poll()
-    let msgs = reduceMessages(s.roomEvents())
+    let events = s.roomEvents()
+    let msgs = reduceMessages(events)
     let lastTs = if msgs.len > 0: msgs[^1].ts else: 0'i64
+    # each room's intents resolve under THAT room's roster and disclosed accounts, which
+    # the resolver reads from the active session: swap it in for the fold
+    var items: seq[HomeItem]
+    let saved = gSession
+    gSession = s
+    try: items = homeItems(events, driverFor, myEnc, myNames)
+    except CatchableError as e:
+      if gLpDebug: stderr.writeLine("MUSTER-LP home " & topic & " " & e.msg)
+    finally: gSession = saved
+    var needs = newJArray()
+    var waiting, settled = 0
+    for it in items:
+      # a payment already on its way from this client waits on the chain, not on you
+      let cls = (if it.what == "pay" and splitPayingFor(it.id, myPart): hcWaiting else: it.cls)
+      case cls
+      of hcNeedsYou:
+        needs.add %*{"id": it.id, "what": it.what, "state": it.state,
+                     "text": effectSummary(it.effectJson).text}
+      of hcWaiting: inc waiting
+      of hcSettled: inc settled
     arr.add %*{"topic": topic, "address": myAddr, "lastTs": lastTs,
-               "active": (topic == gTopic)}
+               "active": (topic == gTopic), "needs": needs, "waiting": waiting, "settled": settled}
   $arr
 
 proc musterSecurityLevels(): string =

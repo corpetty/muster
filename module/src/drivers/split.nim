@@ -210,6 +210,16 @@ method agreesByProposing*(d: SplitDriver, e: Effect, proposer: string): bool =
 
 method environment*(d: SplitDriver): string = d.chain
 
+method mayContribute*(d: SplitDriver, e: Effect, names: seq[string]): Eligibility =
+  ## A party the split names: a debtor, or the creditor (exo-770). A malformed split names
+  ## no one, so nobody's agreement could count.
+  let (ok, sp, _) = d.validSplit(e)
+  if not ok: return elNo
+  let mine = bareNames(names)
+  for who in sp.shares.mapIt(it.who) & @[sp.creditor]:
+    if partName(who)[3 .. ^1] in mine: return elYes
+  elNo
+
 proc creditorAgreeRefusal*(e: Effect, me: string, held: seq[string]): string =
   ## Before THIS member agrees to a split: "" unless they are its creditor and payTo is not an
   ## address their client holds (`held`, compared case-blind) — then "payto-not-mine". The
