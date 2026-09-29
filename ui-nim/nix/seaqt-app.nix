@@ -11,13 +11,15 @@
 , qml ? [ ]           # QML files installed to $out/share/<pname>/
 , nimFlags ? [ ]
 , extraAttrs ? { }    # passed through to mkDerivation, e.g. qtWrapperArgs
+, seaqt ? nim-seaqt   # the seaqt source tree, e.g. nix/seaqt-ro.nix's (with QtRemoteObjects)
+, extraBuildInputs ? [ ]
 }:
 
 stdenv.mkDerivation ({
   inherit pname version src;
 
   nativeBuildInputs = [ nim pkg-config qt6.wrapQtAppsHook ];
-  buildInputs = [ qt6.qtbase qt6.qtdeclarative ];
+  buildInputs = [ qt6.qtbase qt6.qtdeclarative ] ++ extraBuildInputs;
   dontConfigure = true;
 
   buildPhase = ''
@@ -26,7 +28,7 @@ stdenv.mkDerivation ({
     # seaqt's wrappers are C++ but nim links with the C driver, so libstdc++ is named.
     nim c -d:release --mm:orc --threads:on --hints:off \
       --nimcache:$TMPDIR/nimcache --passL:-lstdc++ \
-      --path:${nim-seaqt} --path:${nimside}/src \
+      --path:${seaqt} --path:${nimside}/src \
       ${lib.escapeShellArgs nimFlags} \
       -o:${pname} ${main}
     runHook postBuild

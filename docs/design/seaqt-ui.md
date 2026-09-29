@@ -1,6 +1,6 @@
 # Muster's UI on nim-seaqt: no C++ in the repo
 
-**Status:** T0–T2 and T4a landed 2026-09-29; T3 and T4b in progress (§9). The hosting gate awaits Jacek (§8). Code: branch `feat/seaqt-ui`, [corpetty/muster#181](https://github.com/corpetty/muster/pull/181). Epic `exo-607` (pebbles; `pb dep tree exo-607` for live status).
+**Status:** T0–T3 and T4a landed 2026-09-29; T4b in progress (§9). The hosting gate awaits Jacek (§8). Code: branch `feat/seaqt-ui`, [corpetty/muster#181](https://github.com/corpetty/muster/pull/181). Epic `exo-607` (pebbles; `pb dep tree exo-607` for live status).
 **Reads with:** `docs/02-implementation-plan.md` (ADR-008 builder, ADR-013 the coherent UI builder, ADR-014 Nimbus/Status Nim reuse), `CLAUDE.md` working agreements (the UI reaches the module only through the logos API), `ui/tests/README.md`.
 **Reference projects:** [`seaqt/nim-seaqt`](https://github.com/seaqt/nim-seaqt) (Qt bindings), `seaqt/nimside` (the `qobject:` DSL and plugin macros), [`arnetheduck/nora-poc`](https://github.com/arnetheduck/nora-poc) (the pilot where nimside's DSL was designed), `status-im/status-desktop` (the production consumer).
 
@@ -16,7 +16,7 @@ Muster's UI backend is 1,140 lines of C++ in a Qt plugin. It is a thin pass-thro
 | T0: parity harness | done | Every offscreen self-test takes `MUSTER_UI=cpp\|nim`. C++ 7/7 green; Nim 7/7 red until T6. |
 | T1: toolchain | done | seaqt `qt-6.8` + nimside, built by nix against the runner's own Qt 6.9.2 (same store paths). A nimside object binds to QML both ways. |
 | T2: the contract in the DSL | done | `repContract` generates a nimside `qobject:` from the `.rep` repc reads. QtRO's view of it matches repc's, index for index: 50 properties, 50 signals, 66 slots. |
-| T3: seaqt RemoteObjects | in progress | Bindings generated with seaqt-gen, without Docker. |
+| T3: seaqt RemoteObjects | done | QtRemoteObjects bindings, generated at build time by the pinned seaqt-gen plus four patches, so no C++ is committed. A nimside source is remoted and driven through a dynamic replica both ways. |
 | T4a: probe B, a standalone seaqt app | done | The real `Main.qml` runs in a Nim host, which starts logos-core itself and calls `muster_module` over `lp_*`. `health()` reaches the view as `ok`. No C++ of ours, no chronos worker. |
 | T4b: probe A, a Nim plugin in Basecamp | in progress | A Nim `.so` loaded by `ui-host`, remoted by its dynamic fallback to the builder's typed replica. |
 | Gate | needs Jacek | The five questions in §8. |
@@ -113,7 +113,7 @@ The slices are tracked under epic `exo-607`. T1–T3 are needed whatever the hos
 | **T0** (exo-607.1) | **Parity harness first.** The offscreen self-tests (`card-`, `audit-download-`, `invite-`, `split-self-test.sh`, `two-instance-proof.sh`) and `ui/tests/muster-ui-test.mjs` gain a switch that selects the UI build. Recorded green on C++ and red on Nim. That is the acceptance oracle for every later slice, and the `MUSTER_AUTO*` autopilot is part of the contract. | S | — | done |
 | **T1** (exo-607.2) | **Toolchain.** A nix derivation in the repo flake builds seaqt (`qt-6.8`, pinned by commit) and nimside against **the same Qt 6.9.2 store path the runner uses** (pkg-config + private headers). A hello window loads one QML file and binds one nimside `qobject:` property. | S | — | done |
 | **T2** (exo-607.3) | **The contract in the DSL.** Declare the view contract (50 properties, 66 slots) as a nimside `qobject:`, with one source of truth: the Nim declaration generates the `.rep`, or the reverse. Check the metaobject order against repc's. Output: the first list of nimside gaps. | S–M | T1 | done |
-| **T3** (exo-607.4) | **seaqt RemoteObjects.** Add `RemoteObjects` to a seaqt-gen fork and generate the bindings (`QRemoteObjectNode`, `acquireDynamic`, `enableRemoting(QObject*)`). Needed by A, by B's likely module-call path, and by the headless-host port. Offer it upstream. | M | T1 | in progress |
+| **T3** (exo-607.4) | **seaqt RemoteObjects.** Add `RemoteObjects` to a seaqt-gen fork and generate the bindings (`QRemoteObjectNode`, `acquireDynamic`, `enableRemoting(QObject*)`). Needed by A, by B's likely module-call path, and by the headless-host port. Offer it upstream. | M | T1 | done |
 | **T4a** (exo-607.5) | **Probe B.** `muster-app` loads `Main.qml` with a Nim `logos` shim (`module()`, `isViewModuleReady()`), stands up logos-core, and makes an **async** `muster_module` call from Nim. It follows nora-poc's chronos worker + ThreadChannel pattern for results. | M | T2, T3 | done |
 | **T4b** (exo-607.6) | **Probe A.** `ui-host` loads a Nim `.so`. nimside `plugingen` is extended to emit the `PluginInterface` / `LogosViewPlugin` shim, the T2 object is remoted, and the builder's typed replica reads a property and invokes a slot correctly. The capability token is forwarded from `initLogos` to `lp_*`. | L | T2, T3 | in progress |
 | **Gate** (exo-607.7) | Choose A or B with Jacek (Q1–Q5). Record it as an ADR in `02-implementation-plan.md`. Skip whichever probe the answer makes moot. | — | T4a or T4b | needs Jacek |
@@ -251,3 +251,46 @@ Also found: 7 contract entries are never named as `backend.<x>` in the QML: `che
 2. `ffi.nim`'s opaque handles are `importc: "struct LpClient"` with no file-scope declaration. Under gcc 14, each prototype then declares its own `struct LpClient`, and passing one handle to another prototype is a hard error. The probe emits `struct LpClient; struct LpSubscription;` in each module that names them. The SDK should emit it once.
 
 **Not yet:** the view has only `checkHealth` implemented, and the other 65 slots are T5. The host does not yet take `--user-dir` or run the `MUSTER_AUTO*` autopilot, which is T0's contract for a Nim build (T6).
+
+### T3: seaqt RemoteObjects (exo-607.4, 2026-09-29)
+
+**Generated at build time, so no C++ is committed.** `ui-nim/nix/seaqt-ro.nix` runs seaqt-gen in the nix sandbox and adds its RemoteObjects output to nim-seaqt `qt-6.8`. The generated wrappers are C++ (`gen_*.cpp/.h`), so they exist only in the build. The repo carries the four generator patches in `ui-nim/nix/seaqt-gen-patches/`, which are Go diffs.
+
+- **The generator is seaqt-gen `56485e6`,** the revision that produced nim-seaqt `qt-6.8@7d40abd7`. A QtCore regenerated with it is structurally identical: its only diffs are 6.8.3 → 6.9.2 API changes.
+- **Clang must be 14.0.6,** the version in the generator's Docker image. clang 16 and later print nested types unqualified, and the generator panics. The runner's nixpkgs no longer has clang 14, so it comes from a pinned nixos-24.05, as a build tool only.
+- **Only Core, Network and RemoteObjects are parsed,** which is RemoteObjects' whole pkg-config closure.
+- **The build is reproducible.** The sandbox build's output is byte-identical to the one the spike produced by hand.
+
+**The patches:**
+
+| Patch | What it does | Upstream? |
+|---|---|---|
+| 0001 | Adds `RemoteObjects` to the Qt 6 module list, plus `qtremoteobjects` in the Docker images. | yes |
+| 0002 | `SEAQT_GEN_MODULES`, to parse only the closure. | local only |
+| 0003 | A parameter named `self` (`QRemoteObjectPendingCallWatcher::finished`) collided in both the C ABI and the Nim output. | yes, required |
+| 0004 | `QSet<T>` return values emitted invalid Nim (`QtROIoDeviceBase::remoteObjects()`). The same bug already ships unexercised in nim-seaqt's QtStateMachine and QtDesigner bindings. | yes, required |
+
+**What is bound:** QRemoteObjectNode, Host, HostBase and RegistryHost; the Replica, DynamicReplica and Registry; QAbstractItemModelReplica; pending calls and their watcher; the persisted stores; and the transport and factory classes.
+
+**What is not bound:**
+
+- **Templates:** `acquire<T>`, `enableRemoting<Api>`, `QRemoteObjectPendingReply<T>`, `registerType<T>`.
+- **Five blocked methods**, listed in the derivation's `ro-blocked.txt`.
+
+**The proof** is `checks.ro`, 9 PASS. In one process, a nimside source is remoted over `local:`, acquired as a dynamic replica, and driven both ways:
+
+- the initial value reaches the replica;
+- a slot call on the replica reaches the Nim slot;
+- a source change reaches the replica;
+- a property write on the replica reaches the source.
+
+It links the runner's `qtbase` and `qtremoteobjects` 6.9.2 exactly.
+
+**For the gap list:**
+
+- **Ownership.** `acquireDynamic` hands back its replica with `owned: false`, so Nim never deletes it. Parent it or delete it by hand.
+- **No QString type.** seaqt has none, so a string argument to `invokeMethod` goes in as `QGenericArgument.create("QString", QVariant.constData())`.
+- **A version split.** These bindings say GenVersion 6.9.2 while the rest of nim-seaqt says 6.8.3. That is harmless on Logos's Qt, and it goes away once seaqt regenerates with 0001.
+- **The accessor-slot finding from T2, seen from the replica side.** nimside's getters and setters arrive on a dynamic replica as remote methods, and a non-void one returns a pending call.
+
+**Not covered:** cross-process use, a typed (repc) replica against a Nim source (T4b's question), model replicas, the registry, and aarch64.

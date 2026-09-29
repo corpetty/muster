@@ -13,6 +13,11 @@ This is the port of the UI backend from C++ (`ui/src/muster_ui_backend.cpp`) to 
   - **What each PROP becomes:** a READONLY property with a Nim `setX`.
   - **The check** (`contract_test.nim`, `checks.contract`): compares QtRO's view of that object with repc's typed-source API, index by index; drives all 66 slots and 50 properties through QML; and resolves every `backend.<name>` in `ui/src/qml`.
   - **`--dump`** prints the generated declaration.
+- **`nix/seaqt-ro.nix`, `nix/seaqt-gen-patches/` and `ro/`**: T3.
+  - **What it is:** nim-seaqt plus QtRemoteObjects, **generated at build time** by the pinned seaqt-gen with four patches, and clang 14 from a pinned nixos-24.05.
+  - **Why build time:** the generated wrappers are C++, so they are never committed. Only the patches are.
+  - **The proof:** `ro/ro_test.nim` (`checks.ro`) remotes a nimside source and drives a dynamic replica both ways.
+  - **To use it:** an app passes `seaqt = seaqtRO pkgs` to `seaqtApp`.
 - **`app/`**: T4a, probe B, a standalone seaqt app.
   - **`muster_app.nim`** runs the real `ui/src/qml/Main.qml` in a Nim host. The backend is the T2 contract object, and a Nim `logos` shim provides `module()`, `isViewModuleReady()` and `viewModuleReadyChanged`.
   - **With `--modules <dir> --user-dir <dir>`** the host starts logos-core itself (`logos_core.nim`, liblogos's C API). It registers the view's token with `capability_module` and calls `muster_module` over `lp_*` (logos-nim-sdk's `ffi`). An `lp_invoke_async` result lands on the Qt main thread, so it sets a property directly.
@@ -24,6 +29,7 @@ cd ui-nim && nix build .#checks.x86_64-linux.hello     # the same test, in the s
 cd ui-nim && nix run .#hello                           # a real window, on a display
 cd ui-nim && nix build .#checks.x86_64-linux.contract  # T2: the contract, index for index with repc
 cd ui-nim && nix run .#contract-test -- --dump         # the nimside declaration repContract generates
+cd ui-nim && nix build .#checks.x86_64-linux.ro             # T3: QtRemoteObjects from Nim (bindings generated in the build)
 cd ui-nim && nix build .#checks.x86_64-linux.muster-app-view   # T4a: the real Main.qml in the Nim host (sandbox)
 scripts/nim-app-core-probe.sh                          # T4a: + logos-core and muster_module.health() over lp_* (needs make build)
 ```

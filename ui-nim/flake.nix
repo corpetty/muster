@@ -28,14 +28,29 @@
       url = "github:corpetty/logos-nim-sdk/9aa82f3ddca199c4ec2c56a03ba0b60b36338ea1";
       flake = false;
     };
+    # T3: seaqt-gen, the generator that produced nim-seaqt qt-6.8@7d40abd7. nix/seaqt-ro.nix
+    # runs it at build time (with nix/seaqt-gen-patches) to add QtRemoteObjects.
+    seaqt-gen = {
+      url = "github:seaqt/seaqt-gen/56485e6d0c3243f9511b34d65c215afead60865f";
+      flake = false;
+    };
+    # clang 14.0.6 for the generator only (its Docker image's version; clang >= 16 prints
+    # nested types unqualified and it panics). The runner's nixpkgs dropped llvmPackages_14.
+    # Build-time tooling: nothing from this nixpkgs reaches a binary.
+    nixpkgs-clang14.url = "github:NixOS/nixpkgs/b134951a4c9f3c995fd7be05f3243f8ecd65d798";
   };
 
-  outputs = { self, logos-module-builder, nim-seaqt, nimside, logos-nim-sdk }:
+  outputs = { self, logos-module-builder, nim-seaqt, nimside, logos-nim-sdk, seaqt-gen, nixpkgs-clang14 }:
     let
       nixpkgs = logos-module-builder.inputs.nixpkgs;
       systems = [ "x86_64-linux" "aarch64-linux" ];
       forAll = f: nixpkgs.lib.genAttrs systems (system: f (import nixpkgs { inherit system; }));
       seaqtApp = pkgs: pkgs.callPackage ./nix/seaqt-app.nix { inherit nim-seaqt nimside; };
+      # nim-seaqt + QtRemoteObjects, generated at build time (T3).
+      seaqtRO = pkgs: import ./nix/seaqt-ro.nix {
+        inherit pkgs nim-seaqt seaqt-gen;
+        clang14 = nixpkgs-clang14.legacyPackages.${pkgs.system}.llvmPackages_14.clang;
+      };
       # The view contract and the QML that uses it, shared with the C++ build (ui/).
       viewContract = ../ui/src/muster_ui.rep;
       viewQml = ../ui/src/qml;
@@ -76,6 +91,16 @@
           ];
           extraAttrs.qtWrapperArgs = [ "--set-default" "LOGOS_HOST_PATH" "${app}/bin/logos_host" ];
         };
+        # T3: nim-seaqt with QtRemoteObjects, and its proof (checks.ro): a nimside source
+        # remoted over local:, acquired as a dynamic replica, driven both ways.
+        seaqt-ro = seaqtRO pkgs;
+        ro-test = seaqtApp pkgs {
+          pname = "seaqt-ro-test";
+          src = ./ro;
+          main = "ro_test.nim";
+          seaqt = seaqtRO pkgs;
+          extraBuildInputs = [ pkgs.qt6.qtremoteobjects ];
+        };
         default = hello;
       });
 
@@ -95,6 +120,10 @@
         # The T2 gate: repc (the pinned qtremoteobjects) generates the typed source from the
         # view contract; the nimside declaration must present QtRO the same API, index for
         # index, and every backend.<name> in the real QML must be in it.
+        ro = pkgs.runCommand "seaqt-ro-check" { } ''
+          export HOME=$TMPDIR QT_QPA_PLATFORM=offscreen XDG_RUNTIME_DIR=$TMPDIR
+          ${self.packages.${pkgs.system}.ro-test}/bin/seaqt-ro-test | tee $out
+        '';
         contract = pkgs.runCommand "muster-contract-check" { } ''
           export HOME=$TMPDIR QT_QPA_PLATFORM=offscreen
           ${pkgs.qt6.qtremoteobjects}/libexec/repc -o source ${viewContract} $TMPDIR/rep_source.h

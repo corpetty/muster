@@ -109,7 +109,10 @@ repos:
   - id: trailing-whitespace
     args:
     - --markdown-linebreak-ext=md
+    # A patch's blank context line IS a single space: stripping it corrupts the patch.
+    exclude: \.patch$
   - id: end-of-file-fixer
+    exclude: \.patch$
   - id: check-yaml
     args:
     - --unsafe

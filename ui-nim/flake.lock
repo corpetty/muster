@@ -15768,6 +15768,22 @@
         "type": "github"
       }
     },
+    "nixpkgs-clang14": {
+      "locked": {
+        "lastModified": 1735563628,
+        "narHash": "sha256-OnSAY7XDSx7CtDoqNh8jwVwh4xNL/2HaJxGjryLWzX8=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "b134951a4c9f3c995fd7be05f3243f8ecd65d798",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "b134951a4c9f3c995fd7be05f3243f8ecd65d798",
+        "type": "github"
+      }
+    },
     "nixpkgs_10": {
       "locked": {
         "lastModified": 1759036355,
@@ -20694,7 +20710,9 @@
         "logos-module-builder": "logos-module-builder",
         "logos-nim-sdk": "logos-nim-sdk",
         "nim-seaqt": "nim-seaqt",
-        "nimside": "nimside"
+        "nimside": "nimside",
+        "nixpkgs-clang14": "nixpkgs-clang14",
+        "seaqt-gen": "seaqt-gen"
       }
     },
     "rust-overlay": {
@@ -20739,6 +20757,23 @@
       "original": {
         "owner": "oxalica",
         "repo": "rust-overlay",
+        "type": "github"
+      }
+    },
+    "seaqt-gen": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1783336558,
+        "narHash": "sha256-Kh7RDqX9PbbY8gHEgAz+aE3DE1urGbQeLphwKueOAS4=",
+        "owner": "seaqt",
+        "repo": "seaqt-gen",
+        "rev": "56485e6d0c3243f9511b34d65c215afead60865f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "seaqt",
+        "repo": "seaqt-gen",
+        "rev": "56485e6d0c3243f9511b34d65c215afead60865f",
         "type": "github"
       }
     }

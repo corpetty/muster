@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: t3 <t3@local>
+Date: Tue, 29 Sep 2026 12:43:33 -0400
+Subject: [PATCH 2/3] genbindings: SEAQT_GEN_MODULES filter (local)
+
+---
+ cmd/genbindings/config-libraries.go | 30 ++++++++++++++++++++++++++++-
+ 1 file changed, 29 insertions(+), 1 deletion(-)
+
+diff --git a/cmd/genbindings/config-libraries.go b/cmd/genbindings/config-libraries.go
+index 3e6e116c6e17..8ec991dd2486 100644
+--- a/cmd/genbindings/config-libraries.go
++++ b/cmd/genbindings/config-libraries.go
+@@ -1,11 +1,39 @@
+ package main
+ 
+ import (
++	"log"
+ 	"os"
+ 	"path/filepath"
+ 	"strings"
+ )
+ 
++// selectModules narrows the module list to $SEAQT_GEN_MODULES (comma-separated, e.g.
++// "Core,Network,RemoteObjects"), keeping the list's order. A module's dependencies must be
++// named too: types are only known once their module has been parsed, and a method using an
++// unknown type is dropped silently. Unset = every module.
++func selectModules(modules []string) []string {
++	want := os.Getenv("SEAQT_GEN_MODULES")
++	if want == "" {
++		return modules
++	}
++	keep := map[string]bool{}
++	for _, m := range strings.Split(want, ",") {
++		keep[strings.TrimSpace(m)] = true
++	}
++	var ret []string
++	for _, m := range modules {
++		if keep[m] {
++			ret = append(ret, m)
++			delete(keep, m)
++		}
++	}
++	for m := range keep {
++		log.Panicf("SEAQT_GEN_MODULES names %q, which is not in the module list", m)
++	}
++	log.Printf("SEAQT_GEN_MODULES: generating %v", ret)
++	return ret
++}
++
+ func toMajor(qtVersion string) string {
+ 	parts := strings.SplitN(qtVersion, ".", 2)
+ 	return parts[0]
+@@ -111,7 +139,7 @@ func buildQt6(clangBin, outDir, extraLibsDir, qtVersion string) {
+ 		"Quick", "WebEngineQuick",
+ 	}
+ 
+-	for _, lib := range modules {
++	for _, lib := range selectModules(modules) {
+ 		generate(
+ 			"Qt"+lib, "Qt6"+lib, qtHeaders, qtVersion,
+ 			[]string{filepath.Join(qtHeaders, "Qt"+lib)},
