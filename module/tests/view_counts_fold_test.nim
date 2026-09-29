@@ -293,4 +293,234 @@ block:
         prop & @[agree(ana), agree(jb), agree(outsider), agree(you), agree(devon)], dFor, id, 4, 4)
   echo "6. split: a non-party's agreement is on no surface; the creditor's is on every one OK"
 
+# ── 7. one member, under several round keys (exo-e42) ──────────────────────────────
+# A contribution's round is part of its key, so a member can publish ONE valid signature
+# under round 1, 2, 3, … The fold dedups by (who, round), but it verified each copy at the
+# round the collection was in, not the key's. For a driver whose verify ignores the round
+# (the room FROST scaffold, and every single-round driver) each copy then counted as
+# another member: A/1 + A/2 closed a 2-of-3 round, A/3 + A/4 the next. A contribution
+# counts only toward its own round, and every surface agrees.
+proc foldState(events: seq[Event], dfor: DriverFor, id: string): (string, int, int) =
+  let it = reduceIntents(events, dfor)[id]
+  ($it.state, it.collection.round, it.collection.acceptedThisRound)
+
+proc viewOf(events: seq[Event], dfor: DriverFor, id: string): IntentView =
+  for v in reduceIntentViews(events, dfor):
+    if v.id == id: return v
+
+block:
+  let fr = newFrostDriver(@[a.identity().ed, b.identity().ed, c.identity().ed], k = 2)
+  let frFor: DriverFor = proc(kind: string): Driver = fr
+  const stmtJson = """{"effect":"statement","text":"frost, alone"}"""
+  let id = intentIdFor(stmtJson, "frost")
+  let m = canonicalize(fr, effectFromJson(stmtJson))
+  proc contrib(k: EncKeys, round: int): Event =
+    let s = hx(edSign(k, m.bytes))
+    contributeEvent(id, contributorOf(fr, stmtJson, s), s, round = round)
+  let prop = @[policyDeclEvent(id, "frost"), proposeEvent(id, stmtJson)]
+  var alone = prop
+  for r in 1 .. 4: alone.add contrib(a, r)
+
+  let (st, rnd, acc) = foldState(alone, frFor, id)
+  doAssert st != "executable",
+    "room FROST: one member completed a 2-of-3 alone by publishing under round keys 1..4"
+  doAssert st == "collecting" and rnd == 1 and acc == 1,
+    "room FROST: one member alone is 1 of 2 in round 1, not " & st & " round " & $rnd & " (" & $acc & ")"
+  let v = viewOf(alone, frFor, id)
+  doAssert v.state == "collecting" and v.approvals == 1 and v.round == 1 and v.roundApprovals == 1,
+    "room FROST alone: the card says " & $v.approvals & " approved, round " & $v.round &
+    " (" & $v.roundApprovals & " this round)"
+  check("room FROST: one member under round keys 1..4", alone, frFor, id, wantApprovals = 1, wantRound = 1)
+  echo "7a. room FROST: one member under four round keys is one approval in round 1 OK"
+
+  # A round-2 contribution published early counts once round 1 closes — the keys under
+  # rounds the driver does not run never do, and no surface shows them.
+  let withB = alone & @[contrib(b, 1), contrib(b, 2)]
+  doAssert foldState(withB, frFor, id) == ("executable", 2, 2),
+    "room FROST: a and b in both rounds is executable, got " & $foldState(withB, frFor, id)
+  check("room FROST: a early in round 2, and under rounds 3 and 4", withB, frFor, id,
+        wantApprovals = 2, wantRound = 2)
+  for g in approvalGrades(withB, frFor, id):
+    doAssert g.round in 1 .. 2, "room FROST: a grade for round " & $g.round & " of a 2-round driver"
+  for e in reduceActivity(withB, frFor):
+    doAssert "round 3" notin e.detail and "round 4" notin e.detail,
+      "room FROST: the activity feed narrates a round the driver does not run: " & e.detail
+  echo "7b. room FROST: an early round-2 key counts once round 1 closes; rounds 3 and 4 never do OK"
+
+  # A third member's round-1 contribution, after round 1 closed, is not a round-2 one.
+  let surplus = prop & @[contrib(a, 1), contrib(b, 1), contrib(c, 1), contrib(a, 2)]
+  doAssert foldState(surplus, frFor, id) == ("collecting", 2, 1),
+    "room FROST: a surplus round-1 contribution spilled into round 2: " & $foldState(surplus, frFor, id)
+  let vs = viewOf(surplus, frFor, id)
+  doAssert vs.state == "collecting" and vs.round == 2 and vs.roundApprovals == 1,
+    "room FROST surplus: the card says round " & $vs.round & " with " & $vs.roundApprovals & " this round"
+  echo "7c. room FROST: a surplus round-1 contribution does not count toward round 2 OK"
+
+block:
+  # A single-round driver: the same signature under round keys 1 and 2 is still one member.
+  let thr = newThresholdDriver(@[a.identity().ed, b.identity().ed], k = 2)
+  let thrFor: DriverFor = proc(kind: string): Driver = thr
+  const stmtJson = """{"effect":"statement","text":"we agree, alone"}"""
+  let id = intentIdFor(stmtJson, "threshold")
+  let sigA = hx(edSign(a, canonicalize(thr, effectFromJson(stmtJson)).bytes))
+  let nameA = contributorOf(thr, stmtJson, sigA)
+  let alone = @[policyDeclEvent(id, "threshold"), proposeEvent(id, stmtJson),
+                contributeEvent(id, nameA, sigA, round = 1), contributeEvent(id, nameA, sigA, round = 2)]
+  doAssert foldState(alone, thrFor, id) == ("collecting", 1, 1),
+    "threshold: one member completed a 2-of-2 alone under round keys 1 and 2: " & $foldState(alone, thrFor, id)
+  doAssert viewOf(alone, thrFor, id).approvals == 1, "threshold alone: the card's approvals"
+  check("threshold: one member under round keys 1 and 2", alone, thrFor, id, wantApprovals = 1, wantRound = 1)
+  echo "7d. threshold: one member under two round keys is one approval OK"
+
+block:
+  var keys: seq[array[32, byte]]
+  var owners: seq[Address]
+  for k in 1 .. 3:
+    var sk: array[32, byte]; sk[31] = byte(k)
+    keys.add sk; owners.add addressOf(sk)
+  var safeAddr: Address
+  for i in 0 ..< 20: safeAddr[i] = byte(0x10 + i)
+  let sd = newSafeDriver(chainId = 31337, safe = safeAddr, owners = owners, threshold = 2)
+  let safeFor: DriverFor = proc(kind: string): Driver = sd
+  const payJson = """{"to":"0x00112233445566778899aabbccddeeff00112233","value":2000,"nonce":0}"""
+  let id = intentIdFor(payJson)
+  let pm = canonicalize(sd, effectFromJson(payJson))
+  var h: array[32, byte]
+  for i in 0 ..< 32: h[i] = pm.bytes[i]
+  let s0 = hx(signRecoverable(h, keys[0]))
+  let n0 = contributorOf(sd, payJson, s0)
+  let alone = @[proposeEvent(id, payJson), contributeEvent(id, n0, s0, round = 1),
+                contributeEvent(id, n0, s0, round = 2)]
+  doAssert foldState(alone, safeFor, id) == ("collecting", 1, 1),
+    "Safe: one owner completed a 2-of-3 alone under round keys 1 and 2: " & $foldState(alone, safeFor, id)
+  doAssert viewOf(alone, safeFor, id).approvals == 1, "Safe alone: the card's approvals"
+  check("Safe: one owner under round keys 1 and 2", alone, safeFor, id, wantApprovals = 1, wantRound = 1)
+  echo "7e. Safe: one owner under two round keys is one approval OK"
+
+# ── 8. junk under a member's name takes nothing from them (exo-c00) ─────────────────
+# Any epoch-key holder can publish an invalid contribution under a member's name, and grind
+# its bytes until canonical order puts it ahead of the member's real one. The fold dedups
+# by (who, round) and only then verified, so the junk took the member's slot and their real
+# approval was dropped as a duplicate, while the grades (which verify first) still counted
+# it. A contribution fills a (who, round) slot only if the driver verifies it, and every
+# surface cites the event the fold counted.
+proc junkFirst(id, who: string, real: Event, round = 1): Event =
+  ## An invalid contribution under <who>'s name that sorts ahead of <who>'s real one: the
+  ## same parents, its bytes ground until its id is the smaller.
+  for i in 0 .. 255:
+    result = contributeEvent(id, who, toHex(i, 2).toLowerAscii.repeat(65), round = round, parents = real.parents)
+    if eventId(result) < eventId(real): return
+  doAssert false, "no junk sorts first"
+
+proc citesReal(label: string, events: seq[Event], dfor: DriverFor, id, who: string, real, junk: Event) =
+  ## Every surface that names <who>'s approval cites the event the fold counted.
+  var realPos, junkPos = -1
+  for i, e in canonicalOrder(events):
+    if eventId(e) == eventId(real): realPos = i
+    if eventId(e) == eventId(junk): junkPos = i
+  doAssert junkPos >= 0 and junkPos < realPos, label & ": the junk does not sort first"
+  var n = 0
+  for p in intentProvenance(events, dfor, id):
+    if p.cls == icContribution and p.account == who:
+      doAssert p.logPos == realPos, label & ": intentProvenance cites log position " & $p.logPos &
+        ", the counted signature is at " & $realPos
+      inc n
+  for p in logProvenance(events, dfor):
+    if p.kind == "sig" and p.intentId == id and p.account == who:
+      doAssert p.seq == realPos, label & ": logProvenance cites " & $p.seq & ", not " & $realPos
+      inc n
+  for a in reduceActivity(events, dfor):
+    if a.kind == "approve" and a.intentId == id and a.account == who:
+      doAssert a.seq == realPos, label & ": the activity feed cites " & $a.seq & ", not " & $realPos
+      inc n
+  doAssert n == 3, label & ": a surface does not name the approval"
+
+block:
+  let thr = newThresholdDriver(@[a.identity().ed, b.identity().ed], k = 2)
+  let thrFor: DriverFor = proc(kind: string): Driver = thr
+  const stmtJson = """{"effect":"statement","text":"junk first"}"""
+  let id = intentIdFor(stmtJson, "threshold")
+  let m = canonicalize(thr, effectFromJson(stmtJson))
+  let sigA = hx(edSign(a, m.bytes))
+  let sigB = hx(edSign(b, m.bytes))
+  let nameA = contributorOf(thr, stmtJson, sigA)
+  let realA = contributeEvent(id, nameA, sigA)
+  let junk = junkFirst(id, nameA, realA)
+  let ev = @[policyDeclEvent(id, "threshold"), proposeEvent(id, stmtJson), realA, junk,
+             contributeEvent(id, contributorOf(thr, stmtJson, sigB), sigB)]
+  doAssert foldState(ev, thrFor, id) == ("executable", 1, 2),
+    "threshold: junk under a's name took a's slot: " & $foldState(ev, thrFor, id)
+  check("threshold: junk under a's name, sorted first", ev, thrFor, id, wantApprovals = 2, wantRound = 2)
+  citesReal("threshold", ev, thrFor, id, nameA, realA, junk)
+  echo "8a. threshold: junk under a member's name sorted first takes nothing from them OK"
+
+block:
+  var keys: seq[array[32, byte]]
+  var owners: seq[Address]
+  for k in 1 .. 3:
+    var sk: array[32, byte]; sk[31] = byte(k)
+    keys.add sk; owners.add addressOf(sk)
+  var safeAddr: Address
+  for i in 0 ..< 20: safeAddr[i] = byte(0x10 + i)
+  let sd = newSafeDriver(chainId = 31337, safe = safeAddr, owners = owners, threshold = 2)
+  let safeFor: DriverFor = proc(kind: string): Driver = sd
+  const payJson = """{"to":"0x00112233445566778899aabbccddeeff00112233","value":3000,"nonce":0}"""
+  let id = intentIdFor(payJson)
+  let pm = canonicalize(sd, effectFromJson(payJson))
+  var h: array[32, byte]
+  for i in 0 ..< 32: h[i] = pm.bytes[i]
+  let s0 = hx(signRecoverable(h, keys[0]))
+  let s1 = hx(signRecoverable(h, keys[1]))
+  let n0 = contributorOf(sd, payJson, s0)
+  let real0 = contributeEvent(id, n0, s0)
+  let junk = junkFirst(id, n0, real0)
+  let ev = @[proposeEvent(id, payJson), real0, junk, contributeEvent(id, contributorOf(sd, payJson, s1), s1)]
+  doAssert foldState(ev, safeFor, id) == ("executable", 1, 2),
+    "Safe: junk under an owner's name took their slot: " & $foldState(ev, safeFor, id)
+  check("Safe: junk under an owner's name, sorted first", ev, safeFor, id, wantApprovals = 2, wantRound = 2)
+  citesReal("Safe", ev, safeFor, id, n0, real0, junk)
+  echo "8b. Safe: junk under an owner's name sorted first takes nothing from them OK"
+
+block:
+  let fr = newFrostDriver(@[a.identity().ed, b.identity().ed, c.identity().ed], k = 2)
+  let frFor: DriverFor = proc(kind: string): Driver = fr
+  const stmtJson = """{"effect":"statement","text":"frost, junk first"}"""
+  let id = intentIdFor(stmtJson, "frost")
+  let m = canonicalize(fr, effectFromJson(stmtJson))
+  proc contrib(k: EncKeys, round: int): Event =
+    let s = hx(edSign(k, m.bytes))
+    contributeEvent(id, contributorOf(fr, stmtJson, s), s, round = round)
+  let realA1 = contrib(a, 1)
+  let junk = junkFirst(id, realA1.key.split('/')[3], realA1)
+  let ev = @[policyDeclEvent(id, "frost"), proposeEvent(id, stmtJson), realA1, junk, contrib(b, 1),
+             contrib(a, 2), contrib(b, 2)]
+  doAssert foldState(ev, frFor, id) == ("executable", 2, 2),
+    "room FROST: junk under a's round-1 name took a's slot: " & $foldState(ev, frFor, id)
+  check("room FROST: junk under a's round-1 name, sorted first", ev, frFor, id, wantApprovals = 2, wantRound = 2)
+  echo "8c. room FROST: junk under a member's round-1 name sorted first takes nothing from them OK"
+
+# ── 9. the grades read the proposal's own policy, as the fold does (exo-18d) ────────
+# A family can declare its policy per proposal (describeFor, exo-a90.2), and the fold's
+# collection runs on that one. Which rounds the collection has reached depends on its
+# round count and threshold, so the grades must read the same policy: here the family's
+# describe() says one round and the proposal's says two.
+type PerProposalRounds = ref object of StubDriver
+method describeFor(d: PerProposalRounds, e: Effect): DriverDescriptor =
+  result = d.describe()
+  result.rounds = 2
+
+block:
+  let drv = PerProposalRounds(verifyResult: true,
+    descriptor: DriverDescriptor(rounds: 1, serializationDomain: "muster.stub.v1", finality: finImmediate, threshold: 2))
+  let dFor: DriverFor = proc(kind: string): Driver = drv
+  const stmtJson = """{"effect":"statement","text":"two rounds, this time"}"""
+  let id = intentIdFor(stmtJson, "stub")
+  let ev = @[policyDeclEvent(id, "stub"), proposeEvent(id, stmtJson),
+             contributeEvent(id, "ed:aa", "0x01", round = 1), contributeEvent(id, "ed:bb", "0x02", round = 1),
+             contributeEvent(id, "ed:aa", "0x01", round = 2)]
+  doAssert foldState(ev, dFor, id) == ("collecting", 2, 1),
+    "the fold runs the proposal's two rounds: " & $foldState(ev, dFor, id)
+  check("a proposal whose own policy has two rounds", ev, dFor, id, wantApprovals = 2, wantRound = 1)
+  echo "9. a per-proposal policy: the grades reach the rounds the fold's collection runs OK"
+
 echo "view_counts_fold_test: all OK"

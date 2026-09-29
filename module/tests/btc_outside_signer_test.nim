@@ -140,4 +140,24 @@ for (family, kind) in [(P2wshFamily, "btc-p2wsh"), (TapscriptFamily, "btc-tapscr
   doAssert assessReadiness(m, probeFromFacts(facts)).statusOf("btc-multisig-key") == rdMissing
   echo "4. ", family, ": readiness — the node is introduced by the proposal, asked for its chain; my key graded OK"
 
+  # ── 5. junk under a signer's name takes nothing from them (exo-c00) ───────────────
+  # Anyone holding the epoch key can publish an event under any name. Bob publishes junk as
+  # Carol's approval before her PSBT comes back: the room has no approval of hers, so the
+  # import must still publish hers, and the fold must count it.
+  inc seqNo
+  let e5 = effectFromJson(spendJson(acct, 120_000))
+  let id5 = liveProposeIntent(r.alice, aliceKs, resolver, qualify(kind, acct.accountId), spendJson(acct, 120_000),
+                              int64(Now), seqNo, account = acct.address, ttlSec = Ttl)
+  doAssert id5.len > 0 and not id5.startsWith("refused"), id5
+  r.alice.poll(); r.bob.poll()
+  r.bob.publish(contributeEvent(id5, toHex(C), "00".repeat(72)))
+  r.alice.poll()
+  doAssert liveContribute(r.alice, aliceKs, resolver, id5, "", "", bindCtx(), Now) == "collecting"
+  var p5 = drv.exportPsbt(e5)
+  carolSigns(drv, e5, p5)
+  let im5 = liveImportOutside(r.alice, aliceKs, resolver, id5, p5.toBase64(), bindCtx(), Now)
+  doAssert im5.ok and im5.imported == @[toHex(C)] and im5.state == "executable",
+    "junk under Carol's name kept her signature out: " & $im5
+  echo "5. ", family, ": junk under a signer's name does not stop their PSBT from importing and counting OK"
+
 echo "btc_outside_signer_test: PSBT out, PSBT in — outside signatures count and are always surfaced; readiness asks the node — all OK"

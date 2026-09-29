@@ -146,4 +146,59 @@ doAssert entryKinds["open"] == 1 and entryKinds["join"] == 3 and entryKinds["pms
 doAssert toSeq(entryKinds.keys).allIt(it in ["open", "join", "pmsg1", "pmsg2"]), $entryKinds
 echo "7. the ceremony's log: one open, three joins, three step-1 and three step-2 messages — no shares, no nonces OK"
 
+# ── 8. junk under a member's name takes nothing from them (exo-c00) ──────────────
+# Anyone holding the epoch key can publish an event under any name. Bob publishes junk as
+# Alice's round-1 contribution before she makes hers: her pump must still contribute (it
+# is not hers), the fold must count her real nonces even behind junk that sorts first, and
+# the signer set round 2 signs under must include her. (Her approval links approvals only,
+# exo-96d, so a second junk, published after it and ground to sort first, is what puts
+# junk ahead of her real nonces.)
+let effectJson3 = buildFrostSpend(acct, utxos, "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080", 30_000, feeRate = 2)
+let id3 = liveProposeIntent(r.alice, aliceKs, res(r.alice), policy, effectJson3,
+                            int64(Now), 3, account = a.address, ttlSec = Ttl)
+doAssert id3.startsWith("0x"), id3
+r.alice.publish(readEvent(id3, "inputs", "bitcoind:scantxoutset", $parseJson(effectJson3)["inputs"]))
+pollAll()
+let aliceHost = toHex(aliceKs.frostHostPubkey(ceremonyLabel(Cid)))
+var proposeIds: seq[EventId]
+for e in r.bob.log.allEvents():
+  if e.key == "intent/" & id3 & "/propose": proposeIds.add eventId(e)
+r.bob.publish(contributeEvent(id3, aliceHost, "00".repeat(64), round = 1, parents = proposeIds))
+pollAll()
+block:
+  let got = liveFrostContribute(r.alice, aliceKs, res(r.alice), id3, Now)
+  doAssert got == "collecting", "junk under Alice's name blocked her round 1: " & got
+pollAll()
+block:
+  var realA: Event
+  for e in r.bob.log.allEvents():
+    if e.key == "intent/" & id3 & "/sig/" & aliceHost & "/1" and e.value != "00".repeat(64): realA = e
+  doAssert realA.key.len > 0, "Alice's real round-1 contribution"
+  var junk2: Event
+  for i in 1 .. 255:
+    junk2 = contributeEvent(id3, aliceHost, toHex(i, 2).toLowerAscii.repeat(64), round = 1, parents = realA.parents)
+    if eventId(junk2) < eventId(realA): break
+  doAssert eventId(junk2) < eventId(realA), "no junk sorts first"
+  r.bob.publish(junk2)
+  pollAll()
+  let order = canonicalOrder(r.bob.log.allEvents()).mapIt(eventId(it))
+  doAssert order.find(eventId(junk2)) < order.find(eventId(realA)), "the junk sorts ahead of Alice's nonces"
+block:
+  let got = liveFrostContribute(r.carol, room3CarolKs, res(r.carol), id3, Now)
+  doAssert got == "collecting", got
+pollAll()
+doAssert reduceIntents(r.bob.log.allEvents(), res(r.bob))[id3].collection.round == 2,
+  "round 1 closed with Alice's real nonces and Carol's"
+let set3 = signingSet(r.bob.log.allEvents(), res(r.bob), id3, res(r.bob)(policy))
+doAssert set3.len == 2 and set3.anyIt(toHex(it[0]) == aliceHost),
+  "the signer set leaves Alice out: " & $set3.mapIt(toHex(it[0]))
+block:
+  let got = liveFrostContribute(r.alice, aliceKs, res(r.alice), id3, Now)
+  doAssert got == "collecting", got
+pollAll()
+block:
+  let got = liveFrostContribute(r.carol, room3CarolKs, res(r.carol), id3, Now)
+  doAssert got == "executable", got
+echo "8. junk under Alice's round-1 name: her pump contributes, the fold counts her, round 2 signs with her OK"
+
 echo "frost_ceremony_room_test: the room runs the ceremony and both rounds; the chain would see one signature — all OK"

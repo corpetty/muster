@@ -74,10 +74,7 @@ proc publishVote(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, int
   let events = s.roomEvents()
   let folded = reduceIntents(events, driverFor)
   let round = (if intentId in folded: folded[intentId].collection.round else: 1)
-  var parents: seq[EventId]
-  for e in events:
-    if e.key == "intent/" & intentId & "/propose" or e.key.startsWith("intent/" & intentId & "/sig/"):
-      parents.add eventId(e)
+  let parents = approvalParents(events, driverFor, intentId)   # approvals only (exo-403, exo-96d)
   let sigEv = contributeEvent(intentId, who, hx(receipt.bytes), round = round, parents = parents)
   s.publish(sigEv)
   s.publish(attestEvent(intentId, who, round, attest, parents = @[eventId(sigEv)]))
