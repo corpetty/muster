@@ -741,8 +741,46 @@ Item {
     }
     // What each debtor owes and what stays yours, rounded down the way the module
     // rounds (evenShares): {each, mine} in wei, or null when there is nothing to split.
+    // A bill in another currency (exo-3a4): the total typed in that currency, the rate
+    // this member quotes (the asset per ONE unit of it) and where the rate came from. The
+    // module converts exactly and records the quote with the proposal (invariant 10); the
+    // preview converts the same way, by string arithmetic — never a float.
+    property bool splitFiat: false
+    property string splitFiatCurrency: "EUR"
+    property string splitFiatRate: ""
+    property string splitFiatSource: ""
+    function fiatDecimals(cur) {
+        if (["JPY", "KRW", "VND", "CLP", "ISK", "UGX", "PYG", "RWF", "XAF", "XOF", "KMF", "GNF", "VUV", "XPF", "DJF"].indexOf(cur) >= 0) return 0;
+        if (["BHD", "KWD", "OMR", "JOD", "TND", "LYD", "IQD"].indexOf(cur) >= 0) return 3;
+        return 2;
+    }
+    // two canonical decimal strings multiplied (schoolbook, exact)
+    function mulDec(a, b) {
+        a = String(a); b = String(b);
+        var res = [];
+        for (var k = 0; k < a.length + b.length; ++k) res.push(0);
+        for (var i = a.length - 1; i >= 0; --i)
+            for (var j = b.length - 1; j >= 0; --j) {
+                var p = Number(a.charAt(i)) * Number(b.charAt(j)) + res[i + j + 1];
+                res[i + j + 1] = p % 10;
+                res[i + j] += Math.floor(p / 10);
+            }
+        return res.join("").replace(/^0+/, "") || "0";
+    }
+    // the bill converted into the asset's base units at the typed rate ("" = not yet valid)
+    function fiatTotal(amount) {
+        var cur = String(room.splitFiatCurrency || "").trim().toUpperCase();
+        if (!/^[A-Z]{3}$/.test(cur)) return "";
+        var fd = room.fiatDecimals(cur);
+        var f = room.ethToWei(amount, fd), r = room.ethToWei(room.splitFiatRate, room.splitDecimals);
+        if (f.length === 0 || r.length === 0 || f === "0" || r === "0") return "";
+        var p = room.mulDec(f, r);
+        var t = fd > 0 ? p.slice(0, Math.max(0, p.length - fd)) : p;
+        return t.replace(/^0+/, "") || "0";
+    }
+    function splitTotalOf(totalText) { return room.splitFiat ? room.fiatTotal(totalText) : room.ethToWei(totalText); }
     function splitPreview(totalEth) {
-        var total = room.ethToWei(totalEth);
+        var total = room.splitTotalOf(totalEth);
         var n = room.splitDebtors().length;
         if (total.length === 0 || total === "0" || n === 0) return null;
         var parts = n + (room.splitCreditorShares ? 1 : 0);
@@ -751,7 +789,7 @@ Item {
     }
     function proposeSplit(totalEth, memo) {
         if (!room.backend) return;
-        var total = room.ethToWei(totalEth);
+        var total = room.splitTotalOf(totalEth);
         var who = room.splitDebtors();
         if (total.length === 0 || who.length === 0) return;
         if (room.splitTokenPending) return;
@@ -759,6 +797,11 @@ Item {
         var spec = { parties: who, creditorShares: room.splitCreditorShares };
         if (room.splitFor.length > 0) spec.creditor = room.splitFor;   // on their behalf (exo-770)
         if (room.splitTokenInfo) spec.asset = String(room.splitTokenInfo.asset);   // exo-5ab
+        if (room.splitFiat) {
+            if (String(room.splitFiatSource).trim().length === 0) return;   // a quote names its source
+            spec.fiat = { currency: String(room.splitFiatCurrency).trim().toUpperCase(), amount: String(totalEth).trim(),
+                          rate: String(room.splitFiatRate).trim(), source: String(room.splitFiatSource).trim() };
+        }
         // chain "" = the chain your configured RPC serves; it is written into the split,
         // so everyone reviews it before agreeing.
         room.backend.proposeSplit("", total, JSON.stringify(spec), String(memo || ""));
@@ -1986,7 +2029,8 @@ Item {
                             id: splitTotal
                             objectName: "roomSplitTotal"
                             Layout.preferredWidth: 160
-                            placeholderText: qsTr("total (%1)").arg(room.splitUnit)
+                            placeholderText: qsTr("total (%1)").arg(room.splitFiat ? String(room.splitFiatCurrency).toUpperCase()
+                                                                                     : room.splitUnit)
                             font.family: Theme.typography.mono
                         }
                         LogosTextField {
@@ -1999,6 +2043,58 @@ Item {
 
                     // pay in a token instead of ETH (exo-5ab): the token's own answer — its
                     // symbol and decimals — shown beside its address, because a token names itself
+                    // a bill in another currency (exo-3a4): the total above is then in that
+                    // currency, and the rate is YOUR quote — recorded with the proposal
+                    LogosButton {
+                        objectName: "roomSplitFiat"
+                        text: room.splitFiat ? qsTr("✓ The bill is in another currency") : qsTr("The bill is in another currency")
+                        variant: room.splitFiat ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                        onClicked: room.splitFiat = !room.splitFiat
+                    }
+                    RowLayout {
+                        visible: room.splitFiat
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        LogosTextField {
+                            objectName: "roomSplitFiatCurrency"
+                            Layout.preferredWidth: 70
+                            text: room.splitFiatCurrency
+                            placeholderText: qsTr("EUR")
+                            onTextChanged: room.splitFiatCurrency = String(text).trim().toUpperCase()
+                        }
+                        LogosTextField {
+                            objectName: "roomSplitFiatRate"
+                            Layout.preferredWidth: 200
+                            placeholderText: qsTr("1 %1 = ? %2").arg(room.splitFiatCurrency || "EUR").arg(room.splitUnit)
+                            font.family: Theme.typography.mono
+                            onTextChanged: room.splitFiatRate = String(text).trim()
+                        }
+                        LogosTextField {
+                            objectName: "roomSplitFiatSource"
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("where the rate is from (everyone will see it)")
+                            onTextChanged: room.splitFiatSource = String(text)
+                        }
+                    }
+                    LogosText {
+                        objectName: "roomSplitFiatNote"
+                        visible: room.splitFiat
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 0
+                        wrapMode: Text.WordWrap
+                        readonly property string conv: room.fiatTotal(splitTotal.text)
+                        text: conv.length > 0
+                              ? qsTr("%1 %2 at 1 %2 = %3 %4 comes to %5 %4. The rate is your quote: it is recorded with the proposal, and everyone agreeing trusts it.")
+                                    .arg(splitTotal.text).arg(room.splitFiatCurrency).arg(room.splitFiatRate)
+                                    .arg(room.splitUnit).arg(room.weiToEth(conv))
+                              : qsTr("⚠ Type the bill in %1 (at most %2 decimals), and the rate as %3 per 1 %1.")
+                                    .arg(room.splitFiatCurrency || "EUR").arg(room.fiatDecimals(room.splitFiatCurrency))
+                                    .arg(room.splitUnit)
+                        color: conv.length > 0 && String(room.splitFiatSource).trim().length > 0
+                               ? Theme.palette.textSecondary : Theme.palette.warning
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+
                     LogosTextField {
                         objectName: "roomSplitToken"
                         visible: !room.splitPrivate && !room.splitBitcoin
@@ -2120,8 +2216,9 @@ Item {
                         Layout.fillWidth: true
                         Layout.preferredWidth: 0   // wrap within the column; never widen it
                         wrapMode: Text.WordWrap
-                        text: room.ethToWei(splitTotal.text).length === 0
-                              ? qsTr("⚠ Type the total in %1, e.g. 1.2 (at most %2 decimals).").arg(room.splitUnit).arg(room.splitDecimals)
+                        text: room.splitTotalOf(splitTotal.text).length === 0
+                              ? (room.splitFiat ? qsTr("⚠ The bill and the rate are needed to work out each share (see above).")
+                                 : qsTr("⚠ Type the total in %1, e.g. 1.2 (at most %2 decimals).").arg(room.splitUnit).arg(room.splitDecimals))
                               : pv === null ? qsTr("Leave at least one person in.")
                               : room.splitBitcoin && pv.each.length < 4 && Number(pv.each) < 546
                               ? qsTr("⚠ Each share would be %1 sat — below Bitcoin's 546-sat dust limit, so it could never be paid.").arg(pv.each)
@@ -2262,6 +2359,7 @@ Item {
                         // AND the room must have enough people to act on it (see the hint):
                         // don't submit a proposal into a room that can't yet agree to it.
                         enabled: room.composeType === "split" ? room.splitPreview(splitTotal.text) !== null && !room.splitTokenPending
+                                                                && (!room.splitFiat || String(room.splitFiatSource).trim().length > 0)
                                                                 && (room.splitFor.length === 0 || room.sharedAddressOf(room.splitFor).length > 0)
                                : room.enoughToPropose && (
                                  room.composeType === "statement" ? proposeText.text.length > 0

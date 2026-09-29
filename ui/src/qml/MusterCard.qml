@@ -684,6 +684,31 @@ Rectangle {
                     font.pixelSize: Theme.typography.badgeText
                 }
 
+                // a bill in fiat (exo-3a4): the quote everyone agreeing is trusting — named, sourced,
+                // timed — so it is checked before anyone agrees, not after
+                LogosText {
+                    objectName: "cardSplitQuote"
+                    readonly property var q: (cardRoot.split && cardRoot.split.quote) ? cardRoot.split.quote : null
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    visible: q !== null
+                    text: {
+                        if (!q) return "";
+                        var fd = Number(q.fiatDecimals || 2), r = String(q.fiatTotal || "0");
+                        while (r.length <= fd) r = "0" + r;
+                        var fiat = fd === 0 ? r : r.slice(0, r.length - fd) + "." + r.slice(r.length - fd);
+                        var who = (cardRoot.card && Array.isArray(cardRoot.card.proposedBy) && cardRoot.card.proposedBy.length > 0)
+                                  ? String(cardRoot.card.proposedBy[0].name || "") : "";
+                        var when = new Date(Number(q.at || 0) * 1000).toLocaleString();
+                        return qsTr("A bill of %1 %2, converted at 1 %2 = %3 %4 — %5 quote, from “%6”, %7. Agreeing means trusting this rate: check it first.")
+                               .arg(fiat).arg(String(q.currency)).arg(cardRoot.eth(String(q.rateAsset))).arg(cardRoot.unit)
+                               .arg(who === "you" ? qsTr("your") : who.length > 0 ? who + qsTr("'s") : qsTr("the proposer's"))
+                               .arg(String(q.source)).arg(when);
+                    }
+                    color: Theme.palette.warning
+                    font.pixelSize: Theme.typography.badgeText
+                }
+
                 // a split paid in a token: which token, by address — its symbol is its own claim
                 LogosText {
                     objectName: "cardSplitToken"
