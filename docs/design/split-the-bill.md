@@ -173,6 +173,16 @@ This is proven in-process on a shared fake chain, where each member's wallet dis
 
 **It ran on the LEZ testnet on 2026-09-28** (`scripts/split-lez-testnet.sh`, exo-14d): two instances on the live Logos fleet, each with its own real `lez_core` wallet. B claimed the faucet, shielded it to its own key node (a proof of ~6 minutes), paid its 50-unit share on the private rail (~8 minutes), and A's own scan found a note of exactly 50 at its key node and confirmed it. The split was final on both after 25 minutes; the scans took ~2 minutes of work each from block 0. A re-run over the same wallets, relaunched, one proof, went final in under 8 minutes: the creditor's background scan was already at the tip, so it confirmed 2 seconds after the payer's report. So **the real scan does expose a received note's key node and amount**. The run also found six places where the fake had been kinder than the zone; each is fixed, and `docs/labbook/lez-wallet-scan-and-proving.md` records them. One thing stays unverified: whether a privacy-preserving transaction commits to a zone id.
 
+### 4.8 Paying in a token (ERC-20)
+
+An Ethereum split may be paid in a token as well as ETH (exo-5ab). The effect names the token by its address, `erc20:0x…`, lowercase, in one spelling; a symbol such as "USDC" is never a name, because a token names itself. The amounts stay base units, so nothing the room signs depends on what the token says about itself.
+
+- **Paying** is a `transfer(payTo, share)` call on the token, from the debtor's own key.
+- **Confirming** reads the receipt's `Transfer` log from the creditor's own RPC. It must be that token, exactly the share, to `payTo`, in a successful transaction; the right token paid elsewhere, or another token paid to `payTo`, is refused by name.
+- **Display.** The token's `symbol()` and `decimals()` are read through the member's own RPC and never signed. The card shows "0.3 MTD" and names the token's address beside it; the composer's "pay in a token" field looks the token up before the total is typed.
+
+`split_erc20_anvil_e2e` holds it on anvil against a test token (`tests/fixtures/MusterTestToken.sol`).
+
 ## 5. The invariants, one by one
 
 | # | How the split keeps it |
