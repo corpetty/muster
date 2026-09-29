@@ -17,7 +17,8 @@
 ## must name exactly that set, for every driver family with its own verify rule — a room
 ## threshold, a Safe, the room FROST scaffold, a real two-round FROST (btc.frost-bip445,
 ## whose contributions carry their round), the vote-locus LEZ receipt, and the split (whose
-## threshold is the debtors its effect names, and only a debtor's room key agrees).
+## threshold is the parties its effect names — each debtor and, since exo-770, the creditor —
+## and only a named party's room key agrees).
 ##
 ## Needs the secp closure + stint + libsodium (tests/README.md; run-suite.sh supplies them).
 
@@ -260,9 +261,11 @@ block:
   check("LEZ vote receipts: a non-member, a vote for another pointer", ev, dFor, id, 1, 1)
   echo "5. LEZ: a non-member's receipt and a receipt for another pointer are on no surface OK"
 
-# ── 6. the split (evm.split): every debtor it names must agree, and only a debtor can ──
-# On ef16319 (#171 merged, #172 not yet) the card counted the creditor's agreement and a
-# room member's who is not a debtor; split_driver_test checks only the fold's state.
+# ── 6. the split (evm.split): every party it names must agree, and only a party can ──
+# On ef16319 (#171 merged, #172 not yet) the card counted the creditor's agreement — then no
+# party — and a room member's who is not a debtor; split_driver_test checks only the fold's
+# state. Since exo-770 the creditor IS a party (their agreement is their word that payTo is
+# theirs): the fold counts it, so every surface must; the outsider still counts nowhere.
 block:
   proc idOf(k: EncKeys): string = hx(k.identity().toBytes())   # the room identity a split names
   proc edName(k: EncKeys): string = "ed:" & hx(k.identity().ed)
@@ -282,10 +285,12 @@ block:
   let m = canonicalize(drv, effectFromJson(ej))
   proc agree(k: EncKeys): Event = contributeEvent(id, edName(k), hx(edSign(k, m.bytes)))
   let prop = @[policyDeclEvent(id, policy), proposeEvent(id, ej)]
-  check("split: a debtor, the creditor, a member who is not a debtor",
-        prop & @[agree(ana), agree(devon), agree(outsider)], dFor, id, wantApprovals = 1, wantRound = 1)
-  check("split: every debtor agrees; the outsider still isn't counted",
+  check("split: a debtor, the creditor, a member who is not a party",
+        prop & @[agree(ana), agree(devon), agree(outsider)], dFor, id, wantApprovals = 2, wantRound = 2)
+  check("split: every debtor agrees, not the creditor; the outsider still isn't counted",
         prop & @[agree(ana), agree(jb), agree(outsider), agree(you)], dFor, id, 3, 3)
-  echo "6. split: the creditor's and a non-debtor's agreement are on no surface OK"
+  check("split: every debtor and the creditor; the outsider still isn't counted",
+        prop & @[agree(ana), agree(jb), agree(outsider), agree(you), agree(devon)], dFor, id, 4, 4)
+  echo "6. split: a non-party's agreement is on no surface; the creditor's is on every one OK"
 
 echo "view_counts_fold_test: all OK"
