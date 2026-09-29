@@ -94,6 +94,11 @@ proc newDriver*(kind: string, config: JsonNode): Driver =
     var members: seq[string]
     for m in config{"members"}.getElems(): members.add m.getStr()
     newSplitDriver(LezSplitFamily, config{"chain"}.getStr("lez:testnet"), members)
+  of "btc-split":
+    # A split paid in BTC (exo-d17): {chain: CAIP-2 bip122:…, members: [room identity hex]}.
+    var members: seq[string]
+    for m in config{"members"}.getElems(): members.add m.getStr()
+    newSplitDriver(BtcSplitFamily, config{"chain"}.getStr("bip122:0f9188f13cb7b2c71f2a335e3a4fc328"), members)
   of "stub":
     newStubDriver(rounds = config{"rounds"}.getInt(1),
                   threshold = config{"threshold"}.getInt(2),

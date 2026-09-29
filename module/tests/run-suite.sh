@@ -31,7 +31,7 @@ OUT="${OUT:-$(mktemp -d -t muster-suite.XXXXXX)}"
 mkdir -p "$OUT"
 
 # Tests that need a live chain (see tests/README.md): never in the default run.
-E2E=(safe_anvil_e2e safe_real_anvil_e2e coordinate_submit_anvil btc_regtest_e2e
+E2E=(safe_anvil_e2e safe_real_anvil_e2e coordinate_submit_anvil btc_regtest_e2e split_btc_regtest_e2e
      phase_d_exit_test lez_multisig_live_e2e lez_frost_account_e2e lez_frost_room_e2e
      split_anvil_e2e split_erc20_anvil_e2e)
 

@@ -19,9 +19,11 @@
 ##   * each debtor is a PART (§4.3): settled by that debtor, confirmed by the creditor, and
 ##     the transfer that settles it is derived here from the reviewed effect (invariant 1);
 ##   * the PROFILE is the each locus; the manifest says what each rail discloses (§6).
-## One driver, two families, as btc_multisig.nim: evm.split and lez.split — the private
+## One driver, three families, as btc_multisig.nim: evm.split; lez.split — the private
 ## split (exo-a90.9): a shielded payTo, the private rail, and every share a distinct amount
-## so the creditor's scan can attribute each note without the chain naming its payer.
+## so the creditor's scan can attribute each note without the chain naming its payer; and
+## btc.split (exo-d17): BTC in satoshis, each share its payer's own single-key spend to a
+## payTo of the chain's network, confirmed on the creditor's own node, no share below dust.
 
 import std/[json, strutils, sequtils, algorithm]
 import stint
@@ -31,10 +33,13 @@ import ../intents/materialization
 import ./driver
 import ./manifest
 import ./profile
+import ../bitcoin/[network, bech32]
 
 const
   EvmSplitFamily* = "evm.split"
   LezSplitFamily* = "lez.split"
+  BtcSplitFamily* = "btc.split"   ## paid in BTC on a Bitcoin chain, each share its payer's own spend (exo-d17)
+  BtcDust* = 546'u64              ## a Bitcoin output below this is non-standard: no share may be smaller
   SplitDomain* = "muster.split.v1"
   SplitSchema* = "muster.effect.split.v1"
   MaxMemo* = 280            ## bytes of room-only text
@@ -49,7 +54,7 @@ type
     shares*: seq[SplitShare]
 
   SplitDriver* = ref object of Driver
-    family*: string         ## evm.split | lez.split
+    family*: string         ## evm.split | lez.split | btc.split
     chain*: string          ## the CAIP-2 chain this instance settles on (the policy's qualifier)
     roster*: seq[string]    ## the room's members (room identities) — the propose/sign gate only, never the fold
     pending: seq[byte]      ## the materialization contributions currently verify against
@@ -93,9 +98,15 @@ proc isErc20Asset*(a: string): bool =
   let h = a[8 .. ^1]
   h.allCharsInSet({'0' .. '9', 'a' .. 'f'}) and h != repeat('0', 40)
 
-proc payToOk(family, payTo: string): bool =
+proc payToOk(family, chain, payTo: string): bool =
   case family
   of EvmSplitFamily: payTo.len == 42 and payTo.startsWith("0x") and isLowerHex(payTo[2 .. ^1])
+  of BtcSplitFamily:
+    # a segwit address of THIS chain's network, in its one (lowercase) spelling
+    try:
+      let net = networkByCaip2(chain)
+      payTo == payTo.toLowerAscii() and decodeSegwitAddress(net.hrp, payTo).program.len > 0
+    except CatchableError: false
   of LezSplitFamily:
     # a shielded key node: the private split pays only a shielded address (§4.6)
     let p = payTo.split(':')
@@ -134,10 +145,12 @@ proc refusal(d: SplitDriver, sp: Split): string =
            sp.asset & ")"
   if d.family == LezSplitFamily and sp.asset != "LEZ":
     return "only LEZ is split privately on " & d.chain & " so far (asked: " & sp.asset & ")"
+  if d.family == BtcSplitFamily and sp.asset != "BTC":
+    return "a Bitcoin split is paid in BTC, in satoshis (asked: " & sp.asset & ")"
   if not isCanonDec(sp.total): return "the total is not a canonical decimal: " & sp.total
   if sp.total == "0": return "the total must be more than zero"
   if not isRoomIdentity(sp.creditor): return "the creditor is not a room identity (64 bytes, lowercase hex)"
-  if not payToOk(d.family, sp.payTo): return "payTo is not a " & d.family & " address in its one spelling: " & sp.payTo
+  if not payToOk(d.family, d.chain, sp.payTo): return "payTo is not a " & d.family & " address in its one spelling: " & sp.payTo
   if sp.memo.len > MaxMemo: return "the memo is longer than " & $MaxMemo & " bytes"
   if sp.shares.len == 0: return "no one owes anything"
   var sum = 0.u256
@@ -147,6 +160,9 @@ proc refusal(d: SplitDriver, sp: Split): string =
     if i > 0 and s.who <= sp.shares[i-1].who: return "shares must be sorted by who, each debtor once"
     if not isCanonDec(s.amount): return "a share is not a canonical decimal: " & s.amount
     if s.amount == "0": return "every share must be more than zero"
+    if d.family == BtcSplitFamily and u256(s.amount) < u256(BtcDust):
+      return "a share of " & s.amount & " sat is below Bitcoin's dust limit (" & $BtcDust &
+             " sat): it could never be paid"
     let before = sum
     sum = sum + u256(s.amount)
     if sum < before: return "the shares overflow"
@@ -313,10 +329,15 @@ method profile*(d: SplitDriver): FamilyProfile =
   ## the agreement, each debtor's payment is their own transaction on the policy's chain.
   ## evm.split: every payment is an EIP-155 transfer — payer, payee and amount public at
   ## settle. lez.split: the private rail — nothing names a payer, payee or amount.
+  ## btc.split: every payment is the payer's own Bitcoin spend — its inputs name the payer,
+  ## and payee and amount are public once broadcast; the coins bind it to one chain.
   let lez = d.family == LezSplitFamily
-  FamilyProfile(declared: true, family: d.family, settlement: (if lez: "lez" else: "evm"),
+  let btc = d.family == BtcSplitFamily
+  FamilyProfile(declared: true, family: d.family,
+    settlement: (if lez: "lez" elif btc: "bitcoin" else: "evm"),
     locus: loEach, scheme: scSharedBytes, commits: cmContent,
-    binding: (if lez: bdNone else: bdExplicit),
+    # a Bitcoin payment spends coins that exist on one chain only: bound implicitly
+    binding: (if lez: bdNone elif btc: bdImplicit else: bdExplicit),
     ordering: orNone, expiry: exOptional, setup: suNone, signerChange: chFixed,
     revealsPolicy: rvNever, revealsSigners: (if lez: rvNever else: rvAtSettle),
     revealsEffect: (if lez: evShielded else: evPublic),
@@ -335,11 +356,13 @@ method manifest*(d: SplitDriver, effect: Effect): ActionManifest =
   if ok: touches.add touch(d.chain & ":" & sp.payTo, tmWrite)
   # a token share is a call on the token contract: its balances are what move
   if ok and isErc20Asset(sp.asset): touches.add touch(d.chain & ":" & sp.asset[6 .. ^1], tmWrite)
-  let asset = (if ok: sp.asset elif lez: "LEZ" else: "ETH")
+  let btc = d.family == BtcSplitFamily
+  let asset = (if ok: sp.asset elif lez: "LEZ" elif btc: "BTC" else: "ETH")
   ActionManifest(declared: true, agreement: d.describeFor(effect),
     requirements: @[
       req(rqEnvironment, d.chain),
-      (if lez: req(rqModule, "lez_core") else: req(rqInfra, "rpc")),
+      # the payer's and the creditor's own node / RPC (invariant 8)
+      (if lez: req(rqModule, "lez_core") elif btc: req(rqInfra, "bitcoind-rpc") else: req(rqInfra, "rpc")),
       req(rqAuthority, "split-party", rpContributor),
       req(rqAsset, "share", rpPayer, need(mcAsset, d.chain & "/" & asset)),   # a debtor's; the creditor pays nothing
       req(rqAddress, "pay-to", rpProposer, need(mcAddress, d.chain, "payTo"))],
