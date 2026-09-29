@@ -18,8 +18,8 @@
 # only this script's own processes (each runner's session), never another muster you run.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-RUNNER=".run/runner/bin/muster-ui"
-[ -x "$RUNNER" ] || { echo "build the runner first: make build"; exit 1; }
+. scripts/lib/ui-build.sh
+ui_require_runner
 command -v bitcoind >/dev/null && command -v bitcoin-cli >/dev/null ||
   { echo "needs bitcoind + bitcoin-cli: nix shell nixpkgs#bitcoind -c $0"; exit 1; }
 

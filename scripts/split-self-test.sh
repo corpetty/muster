@@ -27,8 +27,8 @@
 # muster you may have running.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-RUNNER=".run/runner/bin/muster-ui"
-[ -x "$RUNNER" ] || { echo "build the runner first: make build"; exit 1; }
+. scripts/lib/ui-build.sh
+ui_require_runner
 command -v anvil >/dev/null && command -v cast >/dev/null || { echo "needs foundry (anvil, cast)"; exit 1; }
 
 PORT="${SPLIT_ANVIL_PORT:-8551}"

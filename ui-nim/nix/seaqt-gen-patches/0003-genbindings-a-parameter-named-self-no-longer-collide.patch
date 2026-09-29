@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: t3 <t3@local>
+Date: Tue, 29 Sep 2026 12:58:24 -0400
+Subject: [PATCH 3/3] genbindings: a parameter named self no longer collides
+ with the receiver
+
+---
+ cmd/genbindings/emitcabi.go | 3 ++-
+ cmd/genbindings/emitnim.go  | 3 ++-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/cmd/genbindings/emitcabi.go b/cmd/genbindings/emitcabi.go
+index 07348d69dbee..64a4cb3c754a 100644
+--- a/cmd/genbindings/emitcabi.go
++++ b/cmd/genbindings/emitcabi.go
+@@ -17,7 +17,8 @@ func cppComment(s string) string {
+ func cReservedWord(s string) bool {
+ 	// parameter names that appear as properties in Qt, for example
+ 	switch s {
+-	case "default", "vtbl", "vdata": // not language-reserved words, but a binding-reserved words
++	case "default", "vtbl", "vdata", // not language-reserved words, but a binding-reserved words
++		"self": // the receiver's name in every generated function (QRemoteObjectPendingCallWatcher::finished(self))
+ 		return true
+ 	default:
+ 		return false
+diff --git a/cmd/genbindings/emitnim.go b/cmd/genbindings/emitnim.go
+index aa48a544f385..64b90a30a40d 100644
+--- a/cmd/genbindings/emitnim.go
++++ b/cmd/genbindings/emitnim.go
+@@ -51,7 +51,8 @@ func nimReservedWord(s string) bool {
+ 		"shl", "shr", "static", "template", "try", "tuple", "type", "using", "var",
+ 		"when", "while", "xor", "yield",
+ 		"Exception",
+-		"super", "ret", "result", "create", "string", "seq": // not language-reserved words, but a binding-reserved words
++		"super", "ret", "result", "create", "string", "seq", // not language-reserved words, but a binding-reserved words
++		"self": // the receiver's name in every generated proc (QRemoteObjectPendingCallWatcher::finished(self))
+ 		return true
+ 	default:
+ 		return false

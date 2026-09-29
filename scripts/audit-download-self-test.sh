@@ -24,8 +24,10 @@ emit() {
   echo "{\"traces\": [[${out}]]}"
 }
 
-RUNNER=".run/runner/bin/muster-ui"
-[ -x "$RUNNER" ] || { say "build the runner first: make build"; obs+=(0); emit; exit 1; }
+. scripts/lib/ui-build.sh
+[ -x "$RUNNER" ] || { say "$(ui_require_runner 2>&1)"; obs+=(0); emit; exit 1; }
+say "UI build: $MUSTER_UI ($RUNNER)"
+trap ui_cleanup EXIT
 D=$(mktemp -d)
 
 # ── the standalone verifier (reads only the file) ─────────────────────────────
@@ -51,16 +53,16 @@ TOPIC="/muster/1/audittest-$(date +%s)/proto"
 EFFECT='{"effect":"statement","text":"audit self-test"}'
 OUT="$D/out"
 say "topic: $TOPIC"
-MUSTER_AUTOADMIT=1 MUSTER_LP_DEBUG=1 MUSTER_DELIVERY_CONFIG="$CFG" MUSTER_AUTOJOIN_TOPIC="$TOPIC" \
-MUSTER_AUTOPOLICY=threshold MUSTER_AUTOPROPOSE="$EFFECT" MUSTER_AUTOAPPROVE=1 MUSTER_AUTOAUDIT=1 \
-MUSTER_AUDIT_DIR="$OUT" LOGOS_INSTANCE_ID=audittest QT_QPA_PLATFORM=offscreen \
-  setsid "$RUNNER" --user-dir "$D/A" >"$D/A.log" 2>&1 &
+ui_launch "$D/A" "$D/A.log" \
+  MUSTER_AUTOADMIT=1 MUSTER_LP_DEBUG=1 MUSTER_DELIVERY_CONFIG="$CFG" MUSTER_AUTOJOIN_TOPIC="$TOPIC" \
+  MUSTER_AUTOPOLICY=threshold MUSTER_AUTOPROPOSE="$EFFECT" MUSTER_AUTOAPPROVE=1 MUSTER_AUTOAUDIT=1 \
+  MUSTER_AUDIT_DIR="$OUT" LOGOS_INSTANCE_ID=audittest
 say "runner launched offscreen; waiting for the audit download (up to 60s)..."
 for _ in $(seq 1 12); do
   sleep 5
   ls "$OUT"/muster-audit-*.cbor >/dev/null 2>&1 && ls "$OUT"/muster-audit-*.md >/dev/null 2>&1 && break
 done
-pkill -9 -f "user-dir $D" 2>/dev/null; pkill -9 -f logos_host_qt 2>/dev/null
+ui_cleanup
 
 CBOR=$(ls "$OUT"/muster-audit-*.cbor 2>/dev/null | head -1)
 MD=$(ls "$OUT"/muster-audit-*.md 2>/dev/null | head -1)
