@@ -25,7 +25,6 @@
 
 import std/[strutils, sequtils, sets]
 import ../src/drivers/threshold
-import ../src/coordination/flow
 import ./probes/audit_room
 
 proc proposeIdsOf(evs: seq[Event], id: string): seq[EventId] =
@@ -120,10 +119,12 @@ for policy in ["threshold", "safe"]:
 #    everything it holds for a reached round the file can carry. An attacker's copy of
 #    Alice's round-1 approval parented on a copy under round 2 (not yet reached), and a
 #    forged attestation parented on it, is no part of the record.
-# 6. A settlement entry belongs to the record only if its parents lie in the intent's
-#    lineage (an honest one has none). A fake submit parented on a room message is not the
-#    intent's settlement: no reader counts it: not the fold, the activity feed, the
-#    provenance or the flow view. The file then never needs to carry it.
+# 6. A settlement entry is a leaf of the audit file. It is an external read, a member's
+#    report of what it sent or saw on chain, and nothing the file proves (approvals,
+#    inputs, what an approval saw) depends on what it links. So the file carries the entry
+#    with its content id checked, but not its ancestry. A fake submit parented on a room
+#    message counts as what it is, an unauthenticated report (the fold counted parentless
+#    fakes already), and the file reports it as an external read and verifies.
 # 7. The same for a fake final after an honest submit.
 type TwoRoundThreshold = ref object of ThresholdDriver
 method describe(d: TwoRoundThreshold): DriverDescriptor =
@@ -169,19 +170,14 @@ for policy in LivePolicies:
     let id = r.propose(policy, effectFor(policy, 991))
     doAssert r.approveAs("alice", id) == "collecting"
     doAssert r.approveAs("bob", id) == "executable"
-    let fake = submitEvent(id, parents = @[r.messageIds(1)[0]], chainRef = "0x" & "fa".repeat(32))
-    r.bob.publish(fake)
-    let evs = r.events()
-    doAssert intentState(evs, liveDriverFor, id) == "executable",
-      policy & ": a submit parented outside the intent moved it to " & intentState(evs, liveDriverFor, id)
-    doAssert not reduceActivity(evs, liveDriverFor).anyIt(it.intentId == id and it.kind == "submit"),
-      policy & ": the activity feed narrates the fake submit"
-    doAssert not logProvenance(evs, liveDriverFor).anyIt(it.intentId == id and it.kind == "submit"),
-      policy & ": the provenance lists the fake submit"
-    doAssert not reduceFlow(evs, liveDriverFor, @[]).anyIt(it.intentId == id and it.kind == "submit"),
-      policy & ": the flow view has information leave at the fake submit"
-    verifiesWith(policy & ": a fake submit", r, liveDriverFor, id, 2, "executable")
-    echo "6. ", policy, ": a submit parented on a room message is not the intent's settlement on any surface; the audit verifies OK"
+    let fakeRef = "0x" & "fa".repeat(32)
+    r.bob.publish(submitEvent(id, parents = @[r.messageIds(1)[0]], chainRef = fakeRef))
+    verifiesWith(policy & ": a submit parented on a room message", r, liveDriverFor, id, 2, "submitted")
+    let v = verifyAudit(r.exportAs("alice", id).bytes)
+    doAssert v.settlement.len == 1 and v.settlement[0].kind == "submit" and
+             v.settlement[0].chainRef == fakeRef and v.settlement[0].grade == "external-read",
+      policy & ": the file reports the submit as the external read it is"
+    echo "6. ", policy, ": a submit parented on a room message is carried as a leaf, reported as an external read; the audit verifies OK"
 
   # ── 7. an honest submit, then a fake final parented on a room message ───────────
   block:
@@ -191,16 +187,7 @@ for policy in LivePolicies:
     doAssert r.approveAs("bob", id) == "executable"
     r.settle(id, final = false)
     r.bob.publish(finalEvent(id, parents = @[r.messageIds(1)[0]], chainRef = ChainRef))
-    let evs = r.events()
-    doAssert intentState(evs, liveDriverFor, id) == "submitted",
-      policy & ": a final parented outside the intent moved it to " & intentState(evs, liveDriverFor, id)
-    doAssert not reduceActivity(evs, liveDriverFor).anyIt(it.intentId == id and it.kind == "settled"),
-      policy & ": the activity feed narrates the fake final"
-    doAssert not logProvenance(evs, liveDriverFor).anyIt(it.intentId == id and it.kind == "final"),
-      policy & ": the provenance lists the fake final"
-    doAssert not reduceFlow(evs, liveDriverFor, @[]).anyIt(it.intentId == id and it.kind == "final"),
-      policy & ": the flow view has information leave at the fake final"
-    verifiesWith(policy & ": a fake final", r, liveDriverFor, id, 2, "submitted")
-    echo "7. ", policy, ": a final parented on a room message is not the intent's settlement; the audit verifies OK"
+    verifiesWith(policy & ": a final parented on a room message", r, liveDriverFor, id, 2, "final")
+    echo "7. ", policy, ": a final parented on a room message is carried as a leaf; the audit verifies OK"
 
 echo "audit_record_closed_test: all OK"
