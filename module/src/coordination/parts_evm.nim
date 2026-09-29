@@ -2,12 +2,15 @@
 ## the PartSeam a split's evm.split family settles through. The payer's own wallet (the EVM
 ## adapter, their key through the keystore, their RPC) sends; the creditor reads a reported
 ## transaction from THEIR OWN RPC — never a service's (invariant 8) — and it is graded for what
-## it is: what that endpoint reported (F-10, attested). Native ETH only (evm.split v1).
+## it is: what that endpoint reported (F-10, attested). ETH, or an ERC-20 token named in the
+## split (exo-5ab): a token share is a transfer() call on the token, read back from its
+## Transfer log.
 
 import std/strutils
 import ../crypto/keystore
 import ../intents/materialization   # PartTransfer
-import ../wallet/[types, adapter, evm_adapter, evm_rpc]
+import ../wallet/[types, adapter, evm_adapter, evm_rpc, erc20_logs]
+import ../drivers/split   # isErc20Asset
 import ./parts
 
 type EvmPartSeam* = ref object of PartSeam
@@ -22,7 +25,8 @@ proc newEvmPartSeam*(chain, url: string, adapter: EvmAdapter, ks: Keystore, frm:
 
 proc refuse(s: EvmPartSeam, t: PartTransfer): string =
   if t.chain != s.chain: return "this wallet pays on " & s.chain & ", the part settles on " & t.chain
-  if t.asset != "ETH": return "only native ETH is paid on " & s.chain & " so far (asked: " & t.asset & ")"
+  if t.asset != "ETH" and not isErc20Asset(t.asset):
+    return "an Ethereum share is paid in ETH or an erc20:<token> (asked: " & t.asset & ")"
   # the endpoint must serve the chain agreed: never pay, nor confirm, through another one
   try:
     let served = "eip155:" & rpcChainId(s.url)
@@ -35,7 +39,12 @@ method sendPart*(s: EvmPartSeam, t: PartTransfer): tuple[ok: bool, tx, detail: s
   let why = s.refuse(t)
   if why.len > 0: return (false, "", why)
   try:
-    let amt = Amount(asset: s.adapter.describe().nativeAsset, raw: t.amount)
+    # ETH, or the split's token: the adapter's ERC-20 path builds transfer(payTo, share) on it
+    let amt =
+      if isErc20Asset(t.asset):
+        Amount(asset: AssetId(chain: s.adapter.describe().chain, symbol: t.asset, kind: akToken,
+                              reference: t.asset[6 .. ^1]), raw: t.amount)
+      else: Amount(asset: s.adapter.describe().nativeAsset, raw: t.amount)
     let r = s.adapter.submit(s.adapter.prepareTransfer(s.frm, t.to, amt), s.ks)
     (true, r.id, "")
   except CatchableError as e:
@@ -53,6 +62,14 @@ method checkReceived*(s: EvmPartSeam, t: PartTransfer, tx: string): tuple[ok: bo
   let why = s.refuse(t)
   if why.len > 0: return (false, why)
   try:
+    if isErc20Asset(t.asset):
+      # a token share: the receipt's Transfer log from THAT token, exactly the share, to payTo
+      let r = rpcReceiptLogs(s.url, tx)
+      if not r.found: return (false, "your RPC has no receipt for " & tx & " on " & s.chain & " yet")
+      if r.status != 1: return (false, tx & " failed on " & s.chain)
+      let why = matchTokenPayment(tokenTransfers(r.logs), t.asset[6 .. ^1], t.to, t.amount)
+      if why.len > 0: return (false, tx & ": " & why)
+      return (true, "")
     let r = rpcTransferOf(s.url, tx)
     if not r.found: return (false, "your RPC knows no transaction " & tx & " on " & s.chain)
     if r.status == -1: return (false, tx & " is not in a block yet")

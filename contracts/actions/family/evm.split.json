@@ -18,7 +18,7 @@
           },
           {
             "name": "asset",
-            "means": "what is paid: ETH (native) in v1"
+            "means": "what is paid: ETH (native), or an ERC-20 token named erc20:<0x address>, lowercase — the token's own symbol and decimals are display-only reads, never signed"
           },
           {
             "name": "total",
@@ -95,7 +95,7 @@
         {
           "step": "settle",
           "who": "each debtor, then the creditor",
-          "does": "Each debtor pays their own share from their own wallet: the transfer (share, payTo, asset, chain) is derived by the driver from the agreed effect, never typed, and sent through the debtor's own key and RPC; once it has landed, the debtor's author-signed 'settled' report carries its reference. The creditor's client reads each reported transaction from the creditor's own RPC and confirms it only if it succeeded, pays payTo and moves exactly the share; it never confirms a reference it already confirmed for another share. The creditor can also mark a share received outside muster. A report by anyone else, or before everyone agreed, never counts; paying against an expired agreement is refused.",
+          "does": "Each debtor pays their own share from their own wallet: the transfer (share, payTo, asset, chain) is derived by the driver from the agreed effect, never typed, and sent through the debtor's own key and RPC; once it has landed, the debtor's author-signed 'settled' report carries its reference. The creditor's client reads each reported transaction from the creditor's own RPC and confirms it only if it succeeded, pays payTo and moves exactly the share; it never confirms a reference it already confirmed for another share. The creditor can also mark a share received outside muster. A report by anyone else, or before everyone agreed, never counts; paying against an expired agreement is refused. A token share is a transfer(payTo, share) call on the split's token, and the creditor confirms it from the receipt's Transfer log: that token, exactly the share, to payTo.",
           "signs": "each debtor's own EIP-155 transfer (their wallet); each report is signed by its author's room key, bound to the room (authorship)",
           "reveals": [
             {
@@ -123,7 +123,9 @@
             "module/tests/split_live_test.nim",
             "module/tests/split_anvil_e2e.nim",
             "module/tests/parts_fold_test.nim",
-            "scripts/split-self-test.sh"
+            "scripts/split-self-test.sh",
+            "module/tests/split_erc20_anvil_e2e.nim",
+            "module/tests/erc20_logs_test.nim"
           ]
         },
         {
@@ -205,6 +207,21 @@
           "evidence": [
             "module/tests/split_live_test.nim"
           ]
+        },
+        {
+          "what": "a token share confirmed from anything but the split's token paying exactly the share to payTo (the right token paid elsewhere, another token paid to payTo)",
+          "why": "a token payment is read from its Transfer log, and only that token's log for that share counts",
+          "evidence": [
+            "module/tests/split_erc20_anvil_e2e.nim",
+            "module/tests/erc20_logs_test.nim"
+          ]
+        },
+        {
+          "what": "an asset other than ETH or erc20:<0x token> in its one spelling (a symbol like USDC, mixed case, a short or unprefixed address, the zero address)",
+          "why": "a token is named by its address — its symbol is its own claim",
+          "evidence": [
+            "module/tests/split_driver_test.nim"
+          ]
         }
       ],
       "hosted": [
@@ -214,9 +231,10 @@
         "coordinate_decline",
         "coordinate_readiness",
         "coordinate_settle_part",
-        "coordinate_confirm_part"
+        "coordinate_confirm_part",
+        "coordinate_token_info"
       ],
-      "ui": "Home → Split a bill (or Room → + → Split) → total in ETH, who's in, \"I'm in it too\" → Propose; the split card: each person's share and where it stands → Agree to my share → Pay my share (once everyone agreed; no amount or address to type); the creditor's card confirms payments from their own RPC read, or Mark received",
+      "ui": "Home → Split a bill (or Room → + → Split) → total in ETH (or in a token: its address, looked up for its symbol and decimals), who's in, \"I'm in it too\" → Propose; the split card: each person's share and where it stands → Agree to my share → Pay my share (once everyone agreed; no amount or address to type); the creditor's card confirms payments from their own RPC read, or Mark received",
       "invariants": [
         1,
         2,
@@ -276,6 +294,14 @@
         {
           "kind": "test",
           "path": "scripts/split-self-test.sh"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/split_erc20_anvil_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/erc20_logs_test.nim"
         }
       ],
       "unverified": []

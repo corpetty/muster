@@ -247,4 +247,37 @@ block:
   doAssert "0.0000001 LEZ" in effectSummary(lez).text, effectSummary(lez).text
   echo "9. a split's summary: its own decimals, the creditor by name OK"
 
+# ── 10. an ERC-20 split: its token named once, in one spelling (exo-5ab) ─────────
+block:
+  const Tok = "erc20:0x5fbdb2315678afecb367f032d93f642f64180aa3"
+  let es = evenShares("900000", idOf(devon), @[idOf(ana), idOf(jb)])
+  let e = splitEffectJson(Chain, Tok, "900000", idOf(devon), PayTo, es, "a token bill")
+  doAssert drv.signRefusal(effectFromJson(e)) == "", drv.signRefusal(effectFromJson(e))
+  for bad in ["USDC", "erc20:0x5FbDB2315678afecb367f032d93F642f64180aa3", "erc20:0x5fbdb2315678",
+              "erc20:5fbdb2315678afecb367f032d93f642f64180aa3", "erc20:0x0000000000000000000000000000000000000000"]:
+    let why = drv.signRefusal(effectFromJson(splitEffectJson(Chain, bad, "900000", idOf(devon), PayTo, es, "x")))
+    doAssert "token" in why or "ETH" in why, bad & ": " & why
+  let t = drv.partTransfer(effectFromJson(e), partName(idOf(ana)))
+  doAssert t.ok and t.asset == Tok and t.to == PayTo and t.amount == "300000", $t
+  var named = false
+  for r in drv.manifest(effectFromJson(e)).requirements:
+    if r.kind == rqAsset and Tok in $r: named = true
+  doAssert named, "the manifest names the token a share is paid in"
+  echo "10. an ERC-20 split: erc20:<token> in its one spelling; the share is paid in it OK"
+
+# ── 11. the history's words for a token split: the token's own decimals and symbol ──
+block:
+  const Tok = "erc20:0x5fbdb2315678afecb367f032d93f642f64180aa3"
+  let e = splitEffectJson(Chain, Tok, "900000", idOf(devon), PayTo,
+                          evenShares("900000", idOf(devon), @[idOf(ana)]), "Team lunch")
+  # told by the host what the token says about itself (display only): 0.9 MTD
+  let told = effectSummary(e, nil, proc(asset: string): tuple[symbol: string, decimals: int] =
+    (if asset == Tok: ("MTD", 6) else: ("", -1)))
+  doAssert "0.9 MTD" in told.text and "erc20:" notin told.text, told.text
+  # not told: base units, and the token named by a short address — never 18 decimals
+  let blind = effectSummary(e)
+  doAssert "900000 base units of token 0x5fbd" in blind.text and "0.0000" notin blind.text, blind.text
+  doAssert told.amount == "900000", "the raw amount stays"
+  echo "11. a token split's summary reads in the token's own decimals, or in base units OK"
+
 echo "split_driver_test: all OK"

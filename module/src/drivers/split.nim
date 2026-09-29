@@ -84,6 +84,13 @@ proc partName*(identity: string): string =
   ## layer already use).
   "ed:" & hx(edOf(identity))
 
+proc isErc20Asset*(a: string): bool =
+  ## A token an Ethereum split may be paid in, in its one spelling: "erc20:" + a lowercase
+  ## 0x address, never the zero address (exo-5ab).
+  if not a.startsWith("erc20:0x") or a.len != 48: return false
+  let h = a[8 .. ^1]
+  h.allCharsInSet({'0' .. '9', 'a' .. 'f'}) and h != repeat('0', 40)
+
 proc payToOk(family, payTo: string): bool =
   case family
   of EvmSplitFamily: payTo.len == 42 and payTo.startsWith("0x") and isLowerHex(payTo[2 .. ^1])
@@ -120,8 +127,9 @@ proc refusal(d: SplitDriver, sp: Split): string =
   if sp.chain != d.chain:
     return "this split settles on " & (if sp.chain.len > 0: sp.chain else: "no chain") &
            "; its policy settles on " & d.chain
-  if d.family == EvmSplitFamily and sp.asset != "ETH":
-    return "only ETH is split on " & d.chain & " so far (asked: " & sp.asset & ")"
+  if d.family == EvmSplitFamily and sp.asset != "ETH" and not isErc20Asset(sp.asset):
+    return "an Ethereum split is paid in ETH or in a token named erc20:<0x address, lowercase> (asked: " &
+           sp.asset & ")"
   if d.family == LezSplitFamily and sp.asset != "LEZ":
     return "only LEZ is split privately on " & d.chain & " so far (asked: " & sp.asset & ")"
   if not isCanonDec(sp.total): return "the total is not a canonical decimal: " & sp.total
@@ -282,6 +290,8 @@ method manifest*(d: SplitDriver, effect: Effect): ActionManifest =
   let lez = d.family == LezSplitFamily
   var touches = @[touch(d.chain, tmWrite)]
   if ok: touches.add touch(d.chain & ":" & sp.payTo, tmWrite)
+  # a token share is a call on the token contract: its balances are what move
+  if ok and isErc20Asset(sp.asset): touches.add touch(d.chain & ":" & sp.asset[6 .. ^1], tmWrite)
   let asset = (if ok: sp.asset elif lez: "LEZ" else: "ETH")
   ActionManifest(declared: true, agreement: d.describeFor(effect),
     requirements: @[

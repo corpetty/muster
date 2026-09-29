@@ -662,6 +662,15 @@ void MusterUiBackend::settlePart(const QString &intentId)
     loadIntents();
 }
 
+void MusterUiBackend::lookupToken(const QString &chain, const QString &token)
+{
+    // coordinate_token_info: what the token says about itself, through your own RPC —
+    // display only (the split's amounts are base units; nothing here is signed).
+    const QString r = modules().muster_module.coordinate_token_info(chain.trimmed(), token.trimmed());
+    qInfo() << "[muster_ui] coordinate_token_info" << token << "->" << r;
+    setTokenInfoJson(r);
+}
+
 void MusterUiBackend::confirmPart(const QString &intentId, const QString &part, const QString &tx)
 {
     // coordinate_confirm_part: the creditor confirms a share — from her own read of tx,
