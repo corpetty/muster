@@ -1581,3 +1581,4 @@
 {"type":"close","timestamp":"2026-09-29T16:08:26.196917964Z","issue_id":"exo-fcb","payload":{}}
 {"type":"close","timestamp":"2026-09-29T16:08:26.196917964Z","issue_id":"exo-fff","payload":{}}
 {"type":"close","timestamp":"2026-09-29T16:21:07.691892893Z","issue_id":"exo-ed5","payload":{}}
+{"type":"status_update","timestamp":"2026-09-29T16:35:02.684782432Z","issue_id":"exo-272","payload":{"status":"in_progress"}}

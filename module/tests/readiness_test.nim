@@ -10,6 +10,8 @@ import ../src/intents/materialization
 import ../src/drivers/driver
 import ../src/drivers/safe
 import ../src/drivers/threshold
+import ../src/drivers/split
+import ../src/coordination/intent_events   # effectFromJson
 import ../src/drivers/manifest
 import ../src/coordination/readiness
 import ../src/coordination/invoker
@@ -133,5 +135,37 @@ block:
   for d in mj["discloses"]: (if d["to"].getStr() == "store-node": sawStore = true)
   doAssert sawStore and mj["agreement"]["threshold"].getInt() == 2
   echo "6. undeclared → not ready; manifest JSON carries the baseline store-node rows OK"
+
+# ── 7. a split's authority (split-party): graded from the split itself, about YOU (exo-272) ──
+# The parties are named in the effect — each debtor and the creditor (exo-770) — so the
+# driver's own answer (mayContribute) grades it; nothing names anyone else (invariant 9).
+block:
+  proc hexOf(b: openArray[byte]): string =
+    const d = "0123456789abcdef"
+    for x in b: (result.add d[int(x shr 4)]; result.add d[int(x and 0x0F)])
+  proc seed(n: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = n)
+  let creditor = encFromSeed(seed(41))
+  let debtor = encFromSeed(seed(42))
+  let outsider = encFromSeed(seed(43))
+  proc id(k: EncKeys): string = hexOf(k.identity().toBytes())
+  proc names(k: EncKeys): seq[string] = @["ed:" & hexOf(k.identity().ed)]
+  let sd = newSplitDriver(EvmSplitFamily, "eip155:31337", @[id(creditor), id(debtor), id(outsider)])
+  let se = effectFromJson(splitEffectJson("eip155:31337", "ETH", "600", id(creditor),
+    "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", evenShares("600", id(creditor), @[id(debtor)]), "lunch"))
+  let sm = sd.manifest(se)
+  proc authority(k: EncKeys): ReadinessItem =
+    let r = assessReadiness(sm, probeFromFacts(HostFacts(contributes: sd.mayContribute(se, names(k)))))
+    r.item(rqAuthority)
+  doAssert authority(debtor).status == rdMet, authority(debtor).detail
+  doAssert authority(creditor).status == rdMet, "the creditor is a party too: " & authority(creditor).detail
+  let other = authority(outsider)
+  doAssert other.status == rdMissing and "does not name you" in other.detail, other.detail
+  doAssert other.remedy.len > 0
+  doAssert id(debtor)[0 ..< 12] notin other.detail and id(creditor)[0 ..< 12] notin other.detail,
+           "the grade names no one else (inv 9): " & other.detail
+  # not asked (no intent to grade against): unknown, never a silent met
+  let blank = assessReadiness(sm, probeFromFacts(HostFacts()))
+  doAssert blank.item(rqAuthority).status == rdUnknown, blank.item(rqAuthority).detail
+  echo "7. split-party graded from the split: debtor and creditor met, anyone else missing, unasked unknown OK"
 
 echo "readiness_test: all OK"
