@@ -1591,3 +1591,4 @@
 {"type":"status_update","timestamp":"2026-09-29T17:45:48.685208148Z","issue_id":"exo-a90.11.4","payload":{"status":"in_progress"}}
 {"type":"close","timestamp":"2026-09-29T18:06:21.735060334Z","issue_id":"exo-a90.11.4","payload":{}}
 {"type":"close","timestamp":"2026-09-29T18:06:21.735060334Z","issue_id":"exo-a90.11","payload":{}}
+{"type":"comment","timestamp":"2026-09-29T18:11:50.40439532Z","issue_id":"exo-d38","payload":{"body":"Merged since, and also to reap (local + origin), all confirmed merged into origin/main:\n- feat/split-backlog (#176)\n- feat/split-proposer (#177)\n- feat/home-needs-you (#180)\n- fix/readiness-split-party (#182)\nThe stacked PRs #183 (feat/btc-split), #184 (feat/fiat-bills) and #185 (feat/settle-up) are still open; reap them after they merge. The hook still reserves branch deletion for the integrator."}}
