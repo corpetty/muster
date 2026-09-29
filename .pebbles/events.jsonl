@@ -1644,3 +1644,5 @@
 {"type":"dep_add","timestamp":"2026-09-29T23:30:53.455843721Z","issue_id":"exo-a90.22","payload":{"dep_type":"parent-child","depends_on":"exo-a90"}}
 {"type":"rename","timestamp":"2026-09-29T23:30:53.455843721Z","issue_id":"exo-d0fe","payload":{"new_id":"exo-a90.22"}}
 {"type":"status_update","timestamp":"2026-09-29T23:38:14.455285975Z","issue_id":"exo-a90.16","payload":{"status":"in_progress"}}
+{"type":"close","timestamp":"2026-09-29T23:50:30.271296556Z","issue_id":"exo-a90.16","payload":{}}
+{"type":"comment","timestamp":"2026-09-29T23:50:30.326966472Z","issue_id":"exo-a90.16","payload":{"body":"Fixed in PR #188 (fix/expired-settle-up): an unpaid settle-up lapses a day past its expiry (CoverReleaseGraceS) and releases its covers; one that began paying finishes past its expiry and keeps covering; nothing-to-pay never lapses; plain splits unchanged (spec s1). settle_up_expiry_test; suite 178/178."}}
