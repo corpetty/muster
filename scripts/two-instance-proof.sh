@@ -7,17 +7,18 @@
 # admit — so it is reported, not asserted.)
 set -uo pipefail
 cd "$(dirname "$0")/.."
-RUNNER=".run/runner/bin/muster-ui"
-[ -x "$RUNNER" ] || { echo "build the runner first: make build"; exit 1; }
+. scripts/lib/ui-build.sh
+ui_require_runner
+trap ui_cleanup EXIT
 CFG=$(python3 -c 'import json;print(json.dumps(json.load(open("infra/fleets/logos.test.json"))["delivery_createNode_config"]))')
 TOPIC="/muster/1/proof-$(date +%s)/proto"
 D=$(mktemp -d)
 echo "topic: $TOPIC"
-MUSTER_AUTOADMIT=1 MUSTER_LP_DEBUG=1 MUSTER_DELIVERY_CONFIG="$CFG" MUSTER_AUTOJOIN_TOPIC="$TOPIC" LOGOS_INSTANCE_ID=proofA QT_QPA_PLATFORM=offscreen \
-  setsid "$RUNNER" --user-dir "$D/A" >"$D/A.log" 2>&1 &
+ui_launch "$D/A" "$D/A.log" \
+  MUSTER_AUTOADMIT=1 MUSTER_LP_DEBUG=1 MUSTER_DELIVERY_CONFIG="$CFG" MUSTER_AUTOJOIN_TOPIC="$TOPIC" LOGOS_INSTANCE_ID=proofA
 sleep 3
-MUSTER_LP_DEBUG=1 MUSTER_DELIVERY_CONFIG="$CFG" MUSTER_AUTOJOIN_TOPIC="$TOPIC" LOGOS_INSTANCE_ID=proofB QT_QPA_PLATFORM=offscreen \
-  setsid "$RUNNER" --user-dir "$D/B" >"$D/B.log" 2>&1 &
+ui_launch "$D/B" "$D/B.log" \
+  MUSTER_LP_DEBUG=1 MUSTER_DELIVERY_CONFIG="$CFG" MUSTER_AUTOJOIN_TOPIC="$TOPIC" LOGOS_INSTANCE_ID=proofB
 echo "two instances launched; watching for both to reach members=2 (up to 60s)..."
 both() { grep -aqE 'members=2' "$D/A.log" 2>/dev/null && grep -aqE 'members=2' "$D/B.log" 2>/dev/null; }
 ok=0
@@ -25,7 +26,7 @@ for i in $(seq 1 60); do
   sleep 1
   both && { ok=1; break; }
 done
-pkill -9 -f "user-dir $D" 2>/dev/null; pkill -9 -f logos_host_qt 2>/dev/null
+ui_cleanup
 saw() { grep -aqE "$1" "$2" 2>/dev/null && echo yes || echo no; }
 echo "A saw the join request (pending=1): $(saw 'pending=1' "$D/A.log") · A members=2: $(saw 'members=2' "$D/A.log") · B members=2: $(saw 'members=2' "$D/B.log")"
 if [ "$ok" = 1 ]; then

@@ -8,17 +8,17 @@
 #   POLICY=threshold scripts/infra-self-test.sh   # threshold: RPC never appears
 set -uo pipefail
 cd "$(dirname "$0")/.."
-RUNNER=".run/runner/bin/muster-ui"
-[ -x "$RUNNER" ] || { echo "build the runner first: make build"; exit 1; }
+. scripts/lib/ui-build.sh
+ui_require_runner
+trap ui_cleanup EXIT
 POLICY="${POLICY:-safe}"
 CFG=$(python3 -c 'import json;print(json.dumps(json.load(open("infra/fleets/logos.test.json"))["delivery_createNode_config"]))')
 TOPIC="/muster/1/infratest-$(date +%s)/proto"
 D=$(mktemp -d)
 EFFECT='{"to":"0x70997970C51812dc3A010C7d01b50e0d17dc79C8","value":1,"nonce":0}'
 echo "topic: $TOPIC  policy: $POLICY"
-MUSTER_LP_DEBUG=1 MUSTER_DELIVERY_CONFIG="$CFG" MUSTER_AUTOJOIN_TOPIC="$TOPIC" \
-MUSTER_AUTOPROPOSE="$EFFECT" MUSTER_AUTOPOLICY="$POLICY" MUSTER_AUTODISCLOSE=1 LOGOS_INSTANCE_ID=infratest QT_QPA_PLATFORM=offscreen \
-  setsid "$RUNNER" --user-dir "$D/A" >"$D/A.log" 2>&1 &
+ui_launch "$D/A" "$D/A.log" \
+  MUSTER_LP_DEBUG=1 MUSTER_DELIVERY_CONFIG="$CFG" MUSTER_AUTOJOIN_TOPIC="$TOPIC" MUSTER_AUTOPROPOSE="$EFFECT" MUSTER_AUTOPOLICY="$POLICY" MUSTER_AUTODISCLOSE=1 LOGOS_INSTANCE_ID=infratest
 echo "runner launched offscreen; waiting for join → propose (up to 40s)..."
 # The proposal logs its readiness; wait for a connectivity line AFTER it (the join's
 # own connectivity lines come first, and more than one may land before the proposal).
@@ -50,6 +50,6 @@ fi
 echo "── QML load ──"
 if grep -aiE 'qrc:/.*(error|TypeError|ReferenceError)|QQmlApplicationEngine failed|is not a type' "$D/A.log"; then echo "QML ERRORS ABOVE"; ok=0; else echo "no QML errors"; fi
 [ "$ok" = 1 ] && echo "SUCCESS: infrastructure follows the drivers ($POLICY)." || echo "FAILED — see $D/A.log"
-pkill -9 -f "user-dir $D" 2>/dev/null; pkill -9 -f logos_host_qt 2>/dev/null
+ui_cleanup
 [ "$ok" = 1 ] && rm -rf "$D"
 exit $((1-ok))

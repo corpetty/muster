@@ -165,6 +165,15 @@ Expected: `3 passed, 0 failed`, and `muster-ui.png` showing the Muster view — 
 Safe account from `describe()`, the proposed intent, the green re-materialization
 strip with the re-derived `safeTxHash`, and `module.health() → ok`.
 
+### Which UI build it tests (exo-607)
+
+The harness drives whatever app binary you pass it, so the build is chosen at bake time: step 1 bakes in either `muster_ui`'s C++ backend or, once it exists, the Nim (seaqt) one. How the Nim build reaches this harness depends on exo-607's hosting decision (`docs/design/seaqt-ui.md` §6):
+
+- **Option A, a Nim plugin inside Basecamp:** bake it the same way and pass the same binary. The harness is unchanged.
+- **Option B, a standalone seaqt app:** there is no Basecamp sidebar to click, so `openMuster` would need a standalone path.
+
+The offscreen self-tests select their build with `MUSTER_UI=cpp|nim` instead (`scripts/lib/ui-build.sh`, `scripts/ui-parity.sh`).
+
 ## Extending
 
 Add a `test("muster_ui: …", async (app) => { … })` block. Useful primitives on

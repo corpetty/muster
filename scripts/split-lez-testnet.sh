@@ -33,8 +33,8 @@ set -uo pipefail
 # while a run is under way cannot change the running copy (a run died that way, 2026-09-28).
 {
 cd "$(dirname "$0")/.."
-RUNNER=".run/runner/bin/muster-ui"
-[ -x "$RUNNER" ] || { echo "build the runner first: make build"; exit 1; }
+. scripts/lib/ui-build.sh
+ui_require_runner
 curl -s -m 10 -X POST -H 'content-type: application/json' \
   --data '{"jsonrpc":"2.0","id":1,"method":"getLastBlockId","params":[]}' https://testnet.lez.logos.co \
   | grep -q '"result"' || { echo "testnet.lez.logos.co does not answer"; exit 1; }

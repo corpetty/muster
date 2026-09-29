@@ -1,6 +1,6 @@
 # Muster's UI on nim-seaqt: no C++ in the repo
 
-**Status:** scoping, 2026-09-28. Not started. Epic `exo-607` (pebbles; `pb dep tree exo-607` for live status).
+**Status:** T0 and T1 landed 2026-09-29 (§9); the hosting gate awaits Jacek (§8). Epic `exo-607` (pebbles; `pb dep tree exo-607` for live status).
 **Reads with:** `docs/02-implementation-plan.md` (ADR-008 builder, ADR-013 the coherent UI builder, ADR-014 Nimbus/Status Nim reuse), `CLAUDE.md` working agreements (the UI reaches the module only through the logos API), `ui/tests/README.md`.
 **Reference projects:** [`seaqt/nim-seaqt`](https://github.com/seaqt/nim-seaqt) (Qt bindings), `seaqt/nimside` (the `qobject:` DSL and plugin macros), [`arnetheduck/nora-poc`](https://github.com/arnetheduck/nora-poc) (the pilot where nimside's DSL was designed), `status-im/status-desktop` (the production consumer).
 
@@ -105,3 +105,48 @@ The slices are tracked under epic `exo-607`. T1–T3 are needed whatever the hos
 3. **Is C++ generated at build time acceptable?** seaqt's own wrappers are exactly that, so presumably yes. The plugin shim in A depends on it.
 4. **`demo/muster-ui` (~5,500 lines of C++):** delete, move to its own repo, or exempt as "not the client"?
 5. **What is the DSL:** nimside's `qobject:` layer (as in nora-poc), or something higher, such as declaring views as well? Should muster's contract move from JSON strings to typed models, to make the playground "sufficiently complex" (T8)?
+
+## 9. Progress
+
+### T0: the parity harness (exo-607.1, 2026-09-29)
+
+- **`scripts/lib/ui-build.sh`** is sourced by every offscreen self-test. `MUSTER_UI=cpp` (the default) drives `.run/runner`. `MUSTER_UI=nim` drives `.run/runner-nim`, which nothing builds until T6, so every test is red on it with the reason stated.
+- **The header of `ui-build.sh` is the contract** a UI build must meet:
+  - an executable that takes `--user-dir`;
+  - it hosts `muster_module`, whose `MUSTER-LP` lines reach its log;
+  - it runs the `MUSTER_AUTO*` autopilot;
+  - QML errors reach the same log.
+
+  The Nim build inherits this contract unchanged, which is what makes the self-tests its oracle.
+- **Cleanup is per session.** Each instance runs under `setsid`, and cleanup kills only those sessions. Before, a machine-wide `pkill -f logos_host_qt` killed every session's runners.
+- **`scripts/ui-parity.sh`** runs the whole suite, one test at a time, and prints a green/red table.
+- **`muster-ui-test.mjs`** already takes the app binary as an argument (`ui/tests/README.md`, "Which UI build it tests").
+
+The baseline, run at `5718d59` against the live fleet:
+
+| Test | `MUSTER_UI=cpp` | `MUSTER_UI=nim` |
+|---|---|---|
+| card | green, 15 s | red: no build |
+| infra (Safe) | green, 15 s | red: no build |
+| infra (threshold) | green, 15 s | red: no build |
+| audit | green, 21 s | red: no build |
+| invite | green, 13 s | red: no build |
+| two-instance | green, 16 s | red: no build |
+| split | green, 21 s | red: no build |
+
+No process from the run outlived it. An unrelated, days-old offscreen runner on the same machine survived, where the old machine-wide `pkill` would have killed it.
+
+The audit self-test also checks that its button is wired, by grepping `muster_ui.rep` for the `downloadAudit` slot. That check is C++-shaped, and T5 re-targets it to the Nim declaration.
+
+### T1: the toolchain (exo-607.2, 2026-09-29)
+
+- **What it is:** `ui-nim/flake.nix` pins nim-seaqt `qt-6.8` (`7d40abd7`) and nimside (`3840606`), and takes nixpkgs from the logos-module-builder rev that `ui/flake.nix` pins.
+- **The Qt is the runner's own.** `seaqt-hello` links `/nix/store/dkfr32yi…-qtbase-6.9.2` and `agvpq5n8…-qtdeclarative-6.9.2`. These are the exact store paths in the C++ runner's closure.
+- **The gate:** `hello/` is one nimside `qobject:` and one QML file. `--self-test` passes 3/3 offscreen, and runs as `checks.<system>.hello`:
+  - QML calls a slot with an argument;
+  - QML writes a property through the generated setter;
+  - a Nim `setGreeting` reaches a QML binding.
+- **Found on the way:**
+  - The `qt-6.8` bindings compile on 6.9.2 without the `-fpermissive` that nora-poc needed.
+  - Nim's C-driver link must name `libstdc++`, because seaqt's wrappers are C++.
+  - Nim 2.2.4 (the pinned nixpkgs) is enough for nimside, whose nimble file asks for 2.2.8 or newer.
