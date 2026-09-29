@@ -631,7 +631,7 @@ Item {
     // A private split is proposed only by whoever fronted it (their shielded key node is
     // not shared in the room).
     property string splitCreditor: ""
-    readonly property string splitFor: room.splitPrivate ? "" : room.splitCreditor
+    readonly property string splitFor: (room.splitPrivate || room.splitBitcoin) ? "" : room.splitCreditor
     function memberLabel(identity) {
         var id = String(identity || "").toLowerCase();
         for (var i = 0; i < room.members.length; ++i) {
@@ -659,24 +659,28 @@ Item {
         return out;
     }
     // The rail the next split settles on (the "Settles on" row): its unit and decimals —
-    // ETH has 18, the LEZ 9 — and whether it is the private split (exo-a90.9).
+    // ETH has 18, the LEZ 9, BTC 8 — and whether it is the private split (exo-a90.9) or a
+    // Bitcoin one (exo-d17: in satoshis, each payer from their own key, no token, and only
+    // whoever fronted it proposes — the room's shared addresses are Ethereum ones).
     readonly property bool splitPrivate: room.policyKind === "lez-split"
+    readonly property bool splitBitcoin: room.policyKind === "btc-split"
     // An Ethereum split may be paid in a token (exo-5ab): the address typed, and what the
     // token says about itself once looked up — its decimals and symbol, display only.
     property string splitToken: ""
     readonly property var splitTokenInfo: {
-        if (room.splitPrivate || room.splitToken.length === 0 || !room.backend) return null;
+        if (room.splitPrivate || room.splitBitcoin || room.splitToken.length === 0 || !room.backend) return null;
         var j = {};
         try { j = JSON.parse(String(room.backend.tokenInfoJson || "{}")); } catch (e) { return null; }
         return (j && !j.error && String(j.token || "") === room.splitToken.toLowerCase()) ? j : null;
     }
-    readonly property int splitDecimals: room.splitPrivate ? 9
+    readonly property int splitDecimals: room.splitPrivate ? 9 : room.splitBitcoin ? 8
                                        : room.splitTokenInfo ? Number(room.splitTokenInfo.decimals) : 18
-    readonly property string splitUnit: room.splitPrivate ? "LEZ"
+    readonly property string splitUnit: room.splitPrivate ? "LEZ" : room.splitBitcoin ? "BTC"
                                       : room.splitTokenInfo ? (String(room.splitTokenInfo.symbol || "") || qsTr("units"))
                                       : "ETH"
     // a token typed but not (yet) readable: the split cannot be composed in it
-    readonly property bool splitTokenPending: !room.splitPrivate && room.splitToken.length > 0 && room.splitTokenInfo === null
+    readonly property bool splitTokenPending: !room.splitPrivate && !room.splitBitcoin && room.splitToken.length > 0
+                                              && room.splitTokenInfo === null
     function ethToWei(eth, decimals) {
         var dec = (decimals === undefined) ? room.splitDecimals : decimals;
         var s = String(eth || "").trim();
@@ -1997,7 +2001,7 @@ Item {
                     // symbol and decimals — shown beside its address, because a token names itself
                     LogosTextField {
                         objectName: "roomSplitToken"
-                        visible: !room.splitPrivate
+                        visible: !room.splitPrivate && !room.splitBitcoin
                         Layout.fillWidth: true
                         placeholderText: qsTr("pay in a token instead of ETH: its address (0x…), or leave empty")
                         font.family: Theme.typography.mono
@@ -2008,7 +2012,7 @@ Item {
                         }
                     }
                     LogosText {
-                        visible: !room.splitPrivate && room.splitToken.length > 0
+                        visible: !room.splitPrivate && !room.splitBitcoin && room.splitToken.length > 0
                         Layout.fillWidth: true
                         Layout.preferredWidth: 0
                         wrapMode: Text.WordWrap
@@ -2027,13 +2031,13 @@ Item {
                     // who fronted it (exo-770): you, or someone else — then it is paid at the
                     // address they shared, and nobody pays until they agree it is theirs
                     LogosText {
-                        visible: !room.splitPrivate && room.members.length > 1
+                        visible: !room.splitPrivate && !room.splitBitcoin && room.members.length > 1
                         text: qsTr("Who paid the bill?")
                         color: Theme.palette.textTertiary
                         font.pixelSize: Theme.typography.badgeText
                     }
                     Flow {
-                        visible: !room.splitPrivate && room.members.length > 1
+                        visible: !room.splitPrivate && !room.splitBitcoin && room.members.length > 1
                         Layout.fillWidth: true
                         spacing: Theme.spacing.tiny
                         Repeater {
@@ -2119,6 +2123,8 @@ Item {
                         text: room.ethToWei(splitTotal.text).length === 0
                               ? qsTr("⚠ Type the total in %1, e.g. 1.2 (at most %2 decimals).").arg(room.splitUnit).arg(room.splitDecimals)
                               : pv === null ? qsTr("Leave at least one person in.")
+                              : room.splitBitcoin && pv.each.length < 4 && Number(pv.each) < 546
+                              ? qsTr("⚠ Each share would be %1 sat — below Bitcoin's 546-sat dust limit, so it could never be paid.").arg(pv.each)
                               : room.splitFor.length > 0
                               ? (pv.n === 1
                                  ? qsTr("1 person owes %4 %1 %3; %4's own share is %2 %3 (it absorbs any rounding). They pay from their own wallet — the payment is public on the chain.")
@@ -2138,7 +2144,8 @@ Item {
                                        .arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine)).arg(room.splitUnit)
                                  : qsTr("%1 people owe you %2 %4 each; your own share is %3 %4 (it absorbs any rounding). Each pays from their own wallet — every payment is public on the chain.")
                                        .arg(pv.n).arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine)).arg(room.splitUnit))
-                        color: pv === null ? Theme.palette.warning : Theme.palette.textSecondary
+                        color: (pv === null || (room.splitBitcoin && pv.each.length < 4 && Number(pv.each) < 546))
+                               ? Theme.palette.warning : Theme.palette.textSecondary
                         font.pixelSize: Theme.typography.badgeText
                     }
                 }
