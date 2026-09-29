@@ -128,9 +128,21 @@ proc effectSummary*(effectJson: string, label: proc (who: string): string = nil,
       if tokenAddr.len == 0: inDecimals(total, (if asset == "LEZ": 9 elif asset == "BTC": 8 else: 18)) & " " & asset
       elif t[1] >= 0: inDecimals(total, t[1]) & " " & (if t[0].len > 0: t[0] else: "units")
       else: total & " base units of token " & short(tokenAddr)
+    # a bill in fiat (exo-3a4): the bill in its currency, then what it comes to in the asset
+    let q = j{"quote"}
+    let billed =
+      if q != nil and q.kind == JObject and q{"currency"}.getStr().len > 0:
+        var fd = 2
+        try: fd = parseInt(q{"fiatDecimals"}.getStr("2"))
+        except ValueError: discard
+        var r = q{"fiatTotal"}.getStr()
+        while r.len <= fd: r = "0" & r
+        let fiat = (if fd == 0: r else: r[0 ..< r.len - fd] & "." & r[r.len - fd .. ^1])
+        fiat & " " & q{"currency"}.getStr() & " (" & shown & ")"
+      else: shown
     let creditor = j{"creditor"}.getStr()
     return EffectSummary(kind: "split", amount: total, unit: unit, to: j{"payTo"}.getStr(),
-      text: "a split" & (if memo.len > 0: " — " & memo else: "") & ": " & shown & ", " &
+      text: "a split" & (if memo.len > 0: " — " & memo else: "") & ": " & billed & ", " &
             $n & (if n == 1: " person owes " else: " people owe ") &
             (if label != nil: label(creditor) else: short(creditor)))
   else: discard

@@ -43,15 +43,28 @@ const
   SplitDomain* = "muster.split.v1"
   SplitSchema* = "muster.effect.split.v1"
   MaxMemo* = 280            ## bytes of room-only text
+  MaxQuoteSource* = 140     ## bytes naming where a fiat quote came from
 
 type
   SplitShare* = object
     who*: string            ## the debtor's room identity: 64-byte encryption identity, lowercase hex
     amount*: string         ## canonical decimal, the asset's smallest unit
 
+  SplitQuote* = object
+    ## A bill in fiat, settled in the split's asset at a recorded quote (exo-3a4, §4.10):
+    ## an external read (invariant 10), in the signed bytes. All canonical decimal text.
+    currency*: string       ## ISO 4217, three capitals ("EUR")
+    fiatTotal*: string      ## the bill in the currency's minor units ("184000" = 1840.00 EUR)
+    fiatDecimals*: string   ## the currency's minor-unit digits ("2")
+    rateFiat*: string       ## the rate: rateAsset of the asset's base units per rateFiat
+    rateAsset*: string      ##   minor fiat units (rateFiat = 10^fiatDecimals: per ONE major unit)
+    source*: string         ## where the quote came from, as the proposer names it
+    at*: string             ## when it was read, unix seconds
+
   Split* = object
     chain*, asset*, total*, creditor*, payTo*, memo*: string
     shares*: seq[SplitShare]
+    quote*: SplitQuote      ## empty (currency "") = a bill in the asset itself
 
   SplitDriver* = ref object of Driver
     family*: string         ## evm.split | lez.split | btc.split
@@ -72,6 +85,8 @@ proc isLowerHex(s: string): bool =
 
 proc isRoomIdentity*(s: string): bool = s.len == 128 and isLowerHex(s)
 
+proc quoted*(q: SplitQuote): bool = q.currency.len > 0
+
 proc isCanonDec*(s: string): bool =
   ## Digits only, no sign, no leading zero, and it fits 256 bits: the ONE spelling of a
   ## non-negative integer (invariant 5 — "030" is refused, never normalized).
@@ -79,6 +94,66 @@ proc isCanonDec*(s: string): bool =
   if s.len > 1 and s[0] == '0': return false
   try: $u256(s) == s
   except CatchableError: false
+
+# ── a bill in fiat (exo-3a4): the conversion, by string arithmetic, never a float ──────
+proc minorUnits*(currency: string): int =
+  ## ISO 4217 minor-unit digits: none for yen and the like, three for the dinars, two
+  ## for everything else.
+  case currency
+  of "JPY", "KRW", "VND", "CLP", "ISK", "UGX", "PYG", "RWF", "XAF", "XOF", "KMF", "GNF", "VUV", "XPF", "DJF": 0
+  of "BHD", "KWD", "OMR", "JOD", "TND", "LYD", "IQD": 3
+  else: 2
+
+proc pow10(n: int): string = "1" & repeat('0', n)
+
+proc toUnits*(amount: string, decimals: int): tuple[ok: bool, units, why: string] =
+  ## "1840.00" at 2 decimals -> "184000": digits and at most one point, no more fraction
+  ## digits than `decimals`, exact. A sign, an exponent or a finer fraction is refused.
+  let s = amount.strip()
+  let parts = s.split('.')
+  if s.len == 0 or parts.len > 2 or parts[0].len == 0 or not parts[0].allIt(it in {'0'..'9'}) or
+     (parts.len == 2 and (parts[1].len == 0 or not parts[1].allIt(it in {'0'..'9'}))):
+    return (false, "", "not a plain decimal amount: " & amount)
+  let frac = (if parts.len == 2: parts[1] else: "")
+  if frac.len > decimals:
+    return (false, "", amount & " has more decimals than " & $decimals)
+  var u = (parts[0] & frac & repeat('0', decimals - frac.len)).strip(leading = true, trailing = false, chars = {'0'})
+  if u.len == 0: u = "0"
+  if not isCanonDec(u): return (false, "", "too large: " & amount)
+  (true, u, "")
+
+proc quoteConversion*(q: SplitQuote): tuple[ok: bool, total, why: string] =
+  ## The total in the asset's base units: fiatTotal × rateAsset ÷ rateFiat, rounded down —
+  ## overflow refused, never wrapped.
+  if not (isCanonDec(q.fiatTotal) and isCanonDec(q.rateAsset) and isCanonDec(q.rateFiat)) or q.rateFiat == "0":
+    return (false, "", "the quote's amounts are not canonical decimals")
+  let a = u256(q.fiatTotal)
+  let r = u256(q.rateAsset)
+  let p = a * r
+  if a != 0.u256 and p div a != r: return (false, "", "the conversion overflows")
+  (true, $(p div u256(q.rateFiat)), "")
+
+proc fiatQuote*(currency, fiatAmount, rate: string, assetDecimals: int, source: string,
+                at: int64): tuple[ok: bool, quote: SplitQuote, total, why: string] =
+  ## A quote for a bill of `fiatAmount` `currency`, at `rate` of the asset per ONE unit of
+  ## the currency (in the asset's own decimals: "0.00031" ETH), read from `source` at `at`.
+  if currency.len != 3 or not currency.allIt(it in {'A'..'Z'}):
+    return (false, SplitQuote(), "", "a currency is its ISO 4217 code, three capitals: " & currency)
+  if source.strip().len == 0 or source.len > MaxQuoteSource:
+    return (false, SplitQuote(), "", "a quote names its source, in at most " & $MaxQuoteSource & " bytes")
+  let fd = minorUnits(currency)
+  let f = toUnits(fiatAmount, fd)
+  if not f.ok: return (false, SplitQuote(), "", f.why)
+  if f.units == "0": return (false, SplitQuote(), "", "the bill must be more than zero")
+  let r = toUnits(rate, assetDecimals)
+  if not r.ok: return (false, SplitQuote(), "", "the rate: " & r.why)
+  if r.units == "0": return (false, SplitQuote(), "", "the rate must be more than zero (in the asset's smallest unit)")
+  let q = SplitQuote(currency: currency, fiatTotal: f.units, fiatDecimals: $fd, rateFiat: pow10(fd),
+                     rateAsset: r.units, source: source.strip(), at: $max(0'i64, at))
+  let c = quoteConversion(q)
+  if not c.ok: return (false, SplitQuote(), "", c.why)
+  if c.total == "0": return (false, SplitQuote(), "", "the bill comes to nothing in the asset at that rate")
+  (true, q, c.total, "")
 
 proc edOf(identity: string): Ed25519Pub =
   var b: seq[byte]
@@ -128,6 +203,20 @@ proc splitOf*(e: Effect): Split =
   if e.schemaId != SplitSchema: raise newException(ValueError, "not a split")
   result = Split(chain: e.textOf("chain"), asset: e.textOf("asset"), total: e.textOf("total"),
                  creditor: e.textOf("creditor"), payTo: e.textOf("payTo"), memo: e.textOf("memo"))
+  let qv = e.fieldOf("quote")
+  if qv.kind == ckMap:
+    for (k, v) in qv.pairs:
+      if k.kind != ckText or v.kind != ckText: raise newException(ValueError, "a quote is text fields")
+      case k.t
+      of "currency": result.quote.currency = v.t
+      of "fiatTotal": result.quote.fiatTotal = v.t
+      of "fiatDecimals": result.quote.fiatDecimals = v.t
+      of "rateFiat": result.quote.rateFiat = v.t
+      of "rateAsset": result.quote.rateAsset = v.t
+      of "source": result.quote.source = v.t
+      of "at": result.quote.at = v.t
+      else: raise newException(ValueError, "a quote has no field " & k.t)
+    if not result.quote.quoted: raise newException(ValueError, "a quote names its currency")
   let sh = e.fieldOf("shares")
   if sh.kind == ckArray:
     for x in sh.arr:
@@ -152,6 +241,19 @@ proc refusal(d: SplitDriver, sp: Split): string =
   if not isRoomIdentity(sp.creditor): return "the creditor is not a room identity (64 bytes, lowercase hex)"
   if not payToOk(d.family, d.chain, sp.payTo): return "payTo is not a " & d.family & " address in its one spelling: " & sp.payTo
   if sp.memo.len > MaxMemo: return "the memo is longer than " & $MaxMemo & " bytes"
+  if sp.quote.quoted:
+    # a bill in fiat (exo-3a4): the total must BE the quote's conversion — derived, never trusted
+    let q = sp.quote
+    if q.currency.len != 3 or not q.currency.allIt(it in {'A'..'Z'}): return "a quote's currency is three capitals"
+    if q.fiatDecimals notin ["0", "1", "2", "3", "4"] or q.rateFiat != pow10(parseInt(q.fiatDecimals)):
+      return "a quote's rate is per one unit of its currency"
+    if not isCanonDec(q.at): return "a quote says when it was read, in unix seconds"
+    if q.source.len == 0 or q.source.len > MaxQuoteSource: return "a quote names its source, in at most " & $MaxQuoteSource & " bytes"
+    let c = quoteConversion(q)
+    if not c.ok: return "the quote: " & c.why
+    if c.total != sp.total:
+      return "the total " & sp.total & " is not the quote's conversion (" & q.fiatTotal & " minor units of " &
+             q.currency & " at " & q.rateAsset & " per " & q.rateFiat & " = " & c.total & ")"
   if sp.shares.len == 0: return "no one owes anything"
   var sum = 0.u256
   for i, s in sp.shares:
@@ -191,7 +293,7 @@ proc debtorsOf(mat: seq[byte]): seq[string] =
   ## A sentinel (a malformed split) names none, so nothing can agree to it.
   try:
     let v = decode(mat)
-    if v.kind != ckArray or v.arr.len != 9 or v.arr[0].kind != ckText or v.arr[0].t != SplitDomain: return
+    if v.kind != ckArray or v.arr.len notin [9, 10] or v.arr[0].kind != ckText or v.arr[0].t != SplitDomain: return
     if v.arr[7].kind != ckArray: return
     for s in v.arr[7].arr:
       if s.kind == ckArray and s.arr.len == 2 and s.arr[0].kind == ckText: result.add s.arr[0].t
@@ -201,7 +303,7 @@ proc creditorOf(mat: seq[byte]): string =
   ## The creditor a materialization names ("" when it is not a split's).
   try:
     let v = decode(mat)
-    if v.kind == ckArray and v.arr.len == 9 and v.arr[0].kind == ckText and v.arr[0].t == SplitDomain and
+    if v.kind == ckArray and v.arr.len in [9, 10] and v.arr[0].kind == ckText and v.arr[0].t == SplitDomain and
        v.arr[5].kind == ckText: return v.arr[5].t
   except CatchableError: discard
 
@@ -250,7 +352,7 @@ proc creditorAgreeRefusal*(e: Effect, me: string, held: seq[string]): string =
   except ValueError: ""
 
 method canonicalize*(d: SplitDriver, e: Effect): Materialization =
-  ## dCBOR [domain, schema, chain, asset, total, creditor, payTo, [[who, amount]…], memo],
+  ## dCBOR [domain, schema, chain, asset, total, creditor, payTo, [[who, amount]…], memo(, quote)],
   ## the chain the driver's (the effect must name the same one). A malformed split is a
   ## sentinel no agreement can name.
   let (ok, sp, why) = d.validSplit(e)
@@ -260,7 +362,13 @@ method canonicalize*(d: SplitDriver, e: Effect): Materialization =
     cbText(SplitDomain), cbText(SplitSchema), cbText(d.chain), cbText(sp.asset), cbText(sp.total),
     cbText(sp.creditor), cbText(sp.payTo),
     cbArray(sp.shares.mapIt(cbArray(@[cbText(it.who), cbText(it.amount)]))),
-    cbText(sp.memo)])))
+    cbText(sp.memo)] &
+    # a bill in fiat: its quote, one element more — a split without one is unchanged
+    (if sp.quote.quoted: @[cbArray(@[cbText(sp.quote.currency), cbText(sp.quote.fiatTotal),
+                                     cbText(sp.quote.fiatDecimals), cbText(sp.quote.rateFiat),
+                                     cbText(sp.quote.rateAsset), cbText(sp.quote.source),
+                                     cbText(sp.quote.at)])]
+     else: @[]))))
 
 method expectMaterialization*(d: SplitDriver, m: Materialization) = d.pending = m.bytes
 
@@ -396,12 +504,20 @@ proc evenShares*(total, creditor: string, parties: seq[string],
     result.add SplitShare(who: w, amount: $(each - off))
 
 proc splitEffectJson*(chain, asset, total, creditor, payTo: string, shares: seq[SplitShare],
-                      memo: string): string =
+                      memo: string, quote = SplitQuote()): string =
   ## The effect JSON a composer proposes: shares sorted by who, so the same split has one
   ## intent id on every host.
   var sh = shares
   sh.sort(proc (a, b: SplitShare): int = cmp(a.who, b.who))
   var arr = newJArray()
   for s in sh: arr.add %*{"who": s.who, "amount": s.amount}
-  $(%*{"effect": "split", "chain": chain, "asset": asset, "total": total, "creditor": creditor,
-       "payTo": payTo, "shares": arr, "memo": memo})
+  var j = %*{"effect": "split", "chain": chain, "asset": asset, "total": total, "creditor": creditor,
+             "payTo": payTo, "shares": arr, "memo": memo}
+  if quote.quoted:
+    # the quote is an external read (invariant 10): declared as sourced, so the proposer
+    # must record the read in the log before anyone's agreement to it can count
+    j["quote"] = %*{"currency": quote.currency, "fiatTotal": quote.fiatTotal,
+                    "fiatDecimals": quote.fiatDecimals, "rateFiat": quote.rateFiat,
+                    "rateAsset": quote.rateAsset, "source": quote.source, "at": quote.at}
+    j["sources"] = %*{"quote": "read"}
+  $j

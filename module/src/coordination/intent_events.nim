@@ -164,6 +164,11 @@ proc effectFromJson*(effectJson: string): Effect =
           fields.add (k, cbText(j{k}.getStr()))
         fields.add ("shares", cbArray(shares))
         fields.add ("memo", cbText(j{"memo"}.getStr()))
+        if j.hasKey("quote") and j["quote"].kind == JObject:
+          # a bill in fiat at a recorded quote (exo-3a4): carried as text, checked by the driver
+          var q: seq[(CborValue, CborValue)]
+          for k, v in j["quote"]: q.add (cbText(k), cbText(v.getStr()))
+          fields.add ("quote", cbMap(q))
         return Effect(schemaId: "muster.effect.split.v1", fields: fields)
       of "safe-tx":
         # A full Safe transaction (exo-a50.1.4): a transfer's to / value / nonce plus
