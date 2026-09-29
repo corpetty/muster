@@ -9,6 +9,12 @@
 # Passes when both instances log the split final and A's balance rose by exactly B's
 # share. Both runners use MUSTER_RPC=<the throwaway anvil>, never a chain you run.
 #
+# SPLIT_ON_BEHALF=1 turns it around (exo-770): B fronted the bill and shares its address
+# into the room (MUSTER_AUTOSHARE); A proposes the split on B's behalf, paid at the
+# address B shared (MUSTER_AUTOSPLIT_FOR); B's client agrees as the creditor only
+# because it holds that address; A pays its share; B's own read confirms it. Passes when
+# both log final and B's balance rose by exactly A's share.
+#
 # What this proves, and what it does not: the backend slots the Split composer and the
 # card call (proposeSplit / contributeInRoom / settlePart), the module, the fleet and the
 # chain, in the real runner. Offscreen, the QML view is never instantiated
@@ -33,6 +39,9 @@ fi
 KEY0=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80   # anvil account 0
 KEY1=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d   # anvil account 1
 ADDR0=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+ADDR1=0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+ONBEHALF="${SPLIT_ON_BEHALF:-}"
+PAYEE=$([ -n "$ONBEHALF" ] && echo "$ADDR1" || echo "$ADDR0")   # who is paid: the creditor
 TOTAL=600000000000000000   # 0.6 ETH: A's own share 0.3, B owes 0.3
 SHARE=300000000000000000
 CFG=$(python3 -c 'import json;print(json.dumps(json.load(open("infra/fleets/logos.test.json"))["delivery_createNode_config"]))')
@@ -44,7 +53,7 @@ anvil --port "$PORT" --silent >"$D/anvil.log" 2>&1 &
 APID=$!
 disown $APID
 for _ in $(seq 1 20); do cast chain-id --rpc-url "$RPC" >/dev/null 2>&1 && break; sleep 0.5; done
-BEFORE=$(cast balance "$ADDR0" --rpc-url "$RPC")
+BEFORE=$(cast balance "$PAYEE" --rpc-url "$RPC")
 
 launch() {  # name, extra env… — each runner in its own session, so cleanup can find it
   local name="$1"; shift
@@ -54,9 +63,16 @@ launch() {  # name, extra env… — each runner in its own session, so cleanup 
   echo $! >"$D/$name.pid"
   disown $!
 }
-launch A MUSTER_DEV_SECP_KEY="$KEY0" MUSTER_AUTOADMIT=1 MUSTER_AUTOSPLIT="$TOTAL"
-sleep 3
-launch B MUSTER_DEV_SECP_KEY="$KEY1" MUSTER_AUTOPAYSPLIT=1
+if [ -n "$ONBEHALF" ]; then
+  echo "on B's behalf: B shares its address, A proposes for B and pays; B agrees as creditor and confirms"
+  launch A MUSTER_DEV_SECP_KEY="$KEY0" MUSTER_AUTOADMIT=1 MUSTER_AUTOSPLIT="$TOTAL" MUSTER_AUTOSPLIT_FOR=1 MUSTER_AUTOPAYSPLIT=1
+  sleep 3
+  launch B MUSTER_DEV_SECP_KEY="$KEY1" MUSTER_AUTOSHARE=1 MUSTER_AUTOPAYSPLIT=1
+else
+  launch A MUSTER_DEV_SECP_KEY="$KEY0" MUSTER_AUTOADMIT=1 MUSTER_AUTOSPLIT="$TOTAL"
+  sleep 3
+  launch B MUSTER_DEV_SECP_KEY="$KEY1" MUSTER_AUTOPAYSPLIT=1
+fi
 
 cleanup() {
   for n in A B; do
@@ -79,19 +95,20 @@ for i in $(seq 1 180); do
 done
 
 saw() { grep -aqE "$1" "$D/$2.log" 2>/dev/null && echo yes || echo no; }
+if [ -n "$ONBEHALF" ]; then P=A; C=B; else P=B; C=A; fi   # the payer and the creditor
 echo "A members=2: $(saw 'members=2' A) · A proposed: $(saw 'MUSTER-LP split propose 0x' A)" \
-     "· B paid: $(saw 'MUSTER-LP split pay .*pending' B) · B reported: $(saw 'MUSTER-LP split reported' B)" \
-     "· A confirmed: $(saw 'MUSTER-LP split confirmed' A)"
+     "· $P paid: $(saw 'MUSTER-LP split pay .*pending' $P) · $P reported: $(saw 'MUSTER-LP split reported' $P)" \
+     "· $C confirmed: $(saw 'MUSTER-LP split confirmed' $C)"
 grep -ahE 'MUSTER-LP split ' "$D/A.log" | tail -6 | sed 's/^/  A │ /'
 grep -ahE 'MUSTER-LP split ' "$D/B.log" | tail -6 | sed 's/^/  B │ /'
 
-AFTER=$(cast balance "$ADDR0" --rpc-url "$RPC")
+AFTER=$(cast balance "$PAYEE" --rpc-url "$RPC")
 GAIN=$(python3 -c "print(int('$AFTER') - int('$BEFORE'))")
 if [ "$ok" = 1 ] && [ "$GAIN" = "$SHARE" ]; then
-  echo "SUCCESS after ~${i}s: final on both instances; A received exactly B's share ($GAIN wei)."
+  echo "SUCCESS after ~${i}s: final on both instances; $C received exactly $P's share ($GAIN wei)."
   cleanup; trap - EXIT
   [ -n "${KEEP_LOGS:-}" ] && echo "logs kept in $D" || rm -rf "$D"
 else
-  echo "FAIL: final on both=$ok, A gained $GAIN wei (want $SHARE) — logs kept in $D"
+  echo "FAIL: final on both=$ok, $C gained $GAIN wei (want $SHARE) — logs kept in $D"
   exit 1
 fi

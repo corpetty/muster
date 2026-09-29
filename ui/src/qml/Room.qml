@@ -437,6 +437,8 @@ Item {
             kind: "intent-propose",
             split: (isSplit && it && it.split) ? it.split : null,
             parts: (isSplit && it && Array.isArray(it.parts)) ? it.parts : [],
+            // who proposed it, by their signed claim (exo-770); [] = unattributed
+            proposedBy: (it && Array.isArray(it.proposedBy)) ? it.proposedBy : [],
             label: isSplit ? qsTr("Split")
                  : isGovernance ? qsTr("Add policy")
                  : isLez ? qsTr("LEZ multisig")
@@ -624,6 +626,36 @@ Item {
     // ETH ↔ wei is string arithmetic here — never a float, never a rounding surprise.
     property var splitOut: ({})              // members left OUT of the next split (identity → true)
     property bool splitCreditorShares: true  // "I'm in it too": the total is shared with you
+    // Who fronted the next split (exo-770): "" = you. Anyone else is the creditor you
+    // propose it for — paid at the address THEY shared, and payable only once they agree.
+    // A private split is proposed only by whoever fronted it (their shielded key node is
+    // not shared in the room).
+    property string splitCreditor: ""
+    readonly property string splitFor: room.splitPrivate ? "" : room.splitCreditor
+    function memberLabel(identity) {
+        var id = String(identity || "").toLowerCase();
+        for (var i = 0; i < room.members.length; ++i) {
+            var m = room.members[i];
+            if (m && String(m.identity || "").toLowerCase() === id)
+                return m.self ? qsTr("you") : (m.alias && String(m.alias).length > 0) ? String(m.alias) : id.slice(0, 10) + "…";
+        }
+        return id.slice(0, 10) + "…";
+    }
+    // The Ethereum address `identity` last shared into the room ("" = none) — shown so you
+    // can see where the split will pay; the module reads the same share from the log itself.
+    function sharedAddressOf(identity) {
+        var id = String(identity || "").toLowerCase(), out = "";
+        for (var i = 0; i < room.messages.length; ++i) {
+            var msg = room.messages[i];
+            if (!msg || String(msg.author || "").toLowerCase() !== id) continue;
+            var o = null;
+            try { o = JSON.parse(msg.body); } catch (e) { o = null; }
+            if (!o || String(o.kind || "") !== "address-share" || String(o.asset || "ETH") !== "ETH") continue;
+            var a = String(o.address || "").toLowerCase();
+            if (/^0x[0-9a-f]{40}$/.test(a) && !/^0x0{40}$/.test(a)) out = a;
+        }
+        return out;
+    }
     // The rail the next split settles on (the "Settles on" row): its unit and decimals —
     // ETH has 18, the LEZ 9 — and whether it is the private split (exo-a90.9).
     readonly property bool splitPrivate: room.policyKind === "lez-split"
@@ -683,12 +715,16 @@ Item {
         while (carry > 0) { out = String(carry % 10) + out; carry = Math.floor(carry / 10); }
         return out.replace(/^0+/, "") || "0";
     }
-    // Who owes you in the next split: every other member you left in.
+    // Who owes in the next split: every member but whoever fronted it, unless left out.
     function splitDebtors() {
         var out = [];
+        var cred = room.splitFor.toLowerCase();
         for (var i = 0; i < room.members.length; ++i) {
             var m = room.members[i];
-            if (m && !m.self && !room.splitOut[String(m.identity)]) out.push(String(m.identity));
+            if (!m) continue;
+            var id = String(m.identity || "");
+            if (cred.length === 0 ? m.self : id.toLowerCase() === cred) continue;
+            if (!room.splitOut[id]) out.push(id);
         }
         return out;
     }
@@ -713,7 +749,9 @@ Item {
         var who = room.splitDebtors();
         if (total.length === 0 || who.length === 0) return;
         if (room.splitTokenPending) return;
+        if (room.splitFor.length > 0 && room.sharedAddressOf(room.splitFor).length === 0) return;
         var spec = { parties: who, creditorShares: room.splitCreditorShares };
+        if (room.splitFor.length > 0) spec.creditor = room.splitFor;   // on their behalf (exo-770)
         if (room.splitTokenInfo) spec.asset = String(room.splitTokenInfo.asset);   // exo-5ab
         // chain "" = the chain your configured RPC serves; it is written into the split,
         // so everyone reviews it before agreeing.
@@ -1456,7 +1494,9 @@ Item {
                 LogosText {
                     text: room.composeType === "statement" ? qsTr("Propose a statement")
                         : room.composeType === "action" ? qsTr("Propose an action")
-                        : room.composeType === "split" ? qsTr("Split a bill you paid")
+                        : room.composeType === "split" ? (room.splitFor.length > 0
+                                                          ? qsTr("Split a bill %1 paid").arg(room.memberLabel(room.splitFor))
+                                                          : qsTr("Split a bill you paid"))
                         : qsTr("Propose a payment")
                     color: Theme.palette.text
                     font.family: Theme.typography.publicSans
@@ -1923,9 +1963,10 @@ Item {
                     }
                 }
 
-                // ── split (exo-a90): the total, who's in, and what each owes ──────────
-                // You are the creditor, paid at your own address; every person named must
-                // agree to their own share before anyone pays. Amounts are ETH here and
+                // ── split (exo-a90): the total, who paid, who's in, and what each owes ──
+                // Whoever paid is the creditor: you, paid at your own address, or someone
+                // else, paid at the address they shared (exo-770). Every person named — the
+                // creditor too — must agree before anyone pays. Amounts are ETH here and
                 // exact wei on the card (string arithmetic — no floats).
                 ColumnLayout {
                     visible: room.composeType === "split"
@@ -1981,9 +2022,52 @@ Item {
                         font.pixelSize: Theme.typography.badgeText
                     }
 
+                    // who fronted it (exo-770): you, or someone else — then it is paid at the
+                    // address they shared, and nobody pays until they agree it is theirs
+                    LogosText {
+                        visible: !room.splitPrivate && room.members.length > 1
+                        text: qsTr("Who paid the bill?")
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                    Flow {
+                        visible: !room.splitPrivate && room.members.length > 1
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.tiny
+                        Repeater {
+                            model: room.members.filter(function (m) { return !!m; })
+                            delegate: LogosButton {
+                                required property var modelData
+                                readonly property string ident: modelData.self ? "" : String(modelData.identity || "")
+                                objectName: "roomSplitPaidBy_" + (modelData.self ? "me" : ident.slice(0, 8))
+                                text: modelData.self ? qsTr("I did") : room.memberLabel(ident)
+                                variant: room.splitCreditor === ident ? LogosButton.Variant.Primary
+                                                                     : LogosButton.Variant.Secondary
+                                onClicked: { room.splitCreditor = ident; room.splitOut = ({}); }
+                            }
+                        }
+                    }
+                    LogosText {
+                        objectName: "roomSplitPaidTo"
+                        visible: room.splitFor.length > 0
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 0
+                        wrapMode: Text.WordWrap
+                        readonly property string addr: room.sharedAddressOf(room.splitFor)
+                        text: addr.length > 0
+                              ? qsTr("Paid to %1, the address %2 shared. Nobody pays until %2 agrees it is theirs.")
+                                    .arg(addr).arg(room.memberLabel(room.splitFor))
+                              : qsTr("⚠ %1 hasn't shared an address in this room: ask them to share one (the Pay composer's “Ask the room”), then split it for them.")
+                                    .arg(room.memberLabel(room.splitFor))
+                        color: addr.length > 0 ? Theme.palette.textSecondary : Theme.palette.warning
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+
                     LogosText {
                         text: room.members.length > 1
-                              ? qsTr("Who owes you a share — tap to leave someone out:")
+                              ? (room.splitFor.length > 0
+                                 ? qsTr("Who owes %1 a share — tap to leave someone out:").arg(room.memberLabel(room.splitFor))
+                                 : qsTr("Who owes you a share — tap to leave someone out:"))
                               : qsTr("Nobody here owes you yet: invite and admit the people who shared it, then split.")
                         color: room.members.length > 1 ? Theme.palette.textTertiary : Theme.palette.warning
                         font.pixelSize: Theme.typography.badgeText
@@ -1995,12 +2079,17 @@ Item {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.tiny
                         Repeater {
-                            model: room.members.filter(function (m) { return m && !m.self; })
+                            // everyone but whoever fronted it — you among them when it was someone else
+                            model: room.members.filter(function (m) {
+                                return m && (room.splitFor.length === 0 ? !m.self
+                                             : String(m.identity || "").toLowerCase() !== room.splitFor.toLowerCase());
+                            })
                             delegate: LogosButton {
                                 required property var modelData
                                 readonly property string ident: String(modelData.identity || "")
                                 objectName: "roomSplitWho_" + ident.slice(0, 8)
-                                text: (modelData.alias && String(modelData.alias).length > 0)
+                                text: modelData.self ? qsTr("You")
+                                      : (modelData.alias && String(modelData.alias).length > 0)
                                       ? String(modelData.alias) : ident.slice(0, 10) + "…"
                                 variant: room.splitOut[ident]
                                          ? LogosButton.Variant.Secondary : LogosButton.Variant.Primary
@@ -2009,7 +2098,10 @@ Item {
                         }
                         LogosButton {
                             objectName: "roomSplitMine"
-                            text: room.splitCreditorShares ? qsTr("✓ I'm in it too") : qsTr("I'm not in it (chip in)")
+                            text: room.splitFor.length > 0
+                                  ? (room.splitCreditorShares ? qsTr("✓ %1 is in it too").arg(room.memberLabel(room.splitFor))
+                                                              : qsTr("%1 is not in it").arg(room.memberLabel(room.splitFor)))
+                                  : room.splitCreditorShares ? qsTr("✓ I'm in it too") : qsTr("I'm not in it (chip in)")
                             variant: room.splitCreditorShares ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
                             onClicked: room.splitCreditorShares = !room.splitCreditorShares
                         }
@@ -2025,6 +2117,14 @@ Item {
                         text: room.ethToWei(splitTotal.text).length === 0
                               ? qsTr("⚠ Type the total in %1, e.g. 1.2 (at most %2 decimals).").arg(room.splitUnit).arg(room.splitDecimals)
                               : pv === null ? qsTr("Leave at least one person in.")
+                              : room.splitFor.length > 0
+                              ? (pv.n === 1
+                                 ? qsTr("1 person owes %4 %1 %3; %4's own share is %2 %3 (it absorbs any rounding). They pay from their own wallet — the payment is public on the chain.")
+                                       .arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine)).arg(room.splitUnit)
+                                       .arg(room.memberLabel(room.splitFor))
+                                 : qsTr("%1 people owe %5 %2 %4 each; %5's own share is %3 %4 (it absorbs any rounding). Each pays from their own wallet — every payment is public on the chain.")
+                                       .arg(pv.n).arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine)).arg(room.splitUnit)
+                                       .arg(room.memberLabel(room.splitFor)))
                               : room.splitPrivate
                               ? (pv.n === 1
                                  ? qsTr("1 person owes you about %1 LEZ. They pay privately from their own wallet: the chain learns only that a private transfer happened, and your own scan finds the note by its amount.")
@@ -2153,6 +2253,7 @@ Item {
                         // AND the room must have enough people to act on it (see the hint):
                         // don't submit a proposal into a room that can't yet agree to it.
                         enabled: room.composeType === "split" ? room.splitPreview(splitTotal.text) !== null && !room.splitTokenPending
+                                                                && (room.splitFor.length === 0 || room.sharedAddressOf(room.splitFor).length > 0)
                                : room.enoughToPropose && (
                                  room.composeType === "statement" ? proposeText.text.length > 0
                                : room.composeType === "action" ? room.chosenAction !== null

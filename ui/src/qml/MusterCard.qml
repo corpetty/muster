@@ -250,6 +250,22 @@ Rectangle {
     }
     readonly property bool iAmDebtor: cardRoot.myPart !== null
     readonly property bool iAmCreditor: !!(cardRoot.split && cardRoot.split.iAmCreditor)
+    // The creditor is a party too (exo-770): their agreement is their word that payTo is
+    // theirs — made at propose when they proposed it, else asked of them here.
+    readonly property bool creditorAgreed: !!(cardRoot.split && cardRoot.split.creditorAgreed)
+    readonly property bool payToMine: !!(cardRoot.split && cardRoot.split.payToMine)
+    // Proposed by someone other than the creditor, on the creditor's behalf: named from
+    // signed claims only — an unattributed proposal (an older room) says nothing.
+    readonly property string onBehalfBy: {
+        if (!cardRoot.split || !cardRoot.card || !Array.isArray(cardRoot.card.proposedBy)) return "";
+        var names = [];
+        for (var i = 0; i < cardRoot.card.proposedBy.length; ++i) {
+            var p = cardRoot.card.proposedBy[i];
+            if (String(p.who || "") === String(cardRoot.split.creditor || "")) return "";
+            names.push(String(p.name || "").length > 0 ? String(p.name) : String(p.who || "").slice(0, 10) + "…");
+        }
+        return names.join(", ");
+    }
     readonly property string creditorName: cardRoot.split
         ? (String(cardRoot.split.creditorName || "").length > 0 ? String(cardRoot.split.creditorName)
            : String(cardRoot.split.creditor || "").slice(0, 10) + "…") : ""
@@ -677,6 +693,37 @@ Rectangle {
                     text: qsTr("Paid in %1 — the token at %2 (a token names itself; the address is what counts).")
                               .arg(cardRoot.unit).arg(cardRoot.token.slice(0, 10) + "…" + cardRoot.token.slice(-6))
                     color: Theme.palette.textTertiary
+                    font.pixelSize: Theme.typography.badgeText
+                }
+
+                // on someone's behalf (exo-770): who proposed it, and whether the creditor has
+                // said payTo is theirs — nobody pays before they do
+                LogosText {
+                    objectName: "cardSplitOnBehalf"
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    visible: cardRoot.onBehalfBy.length > 0
+                    text: cardRoot.creditorAgreed
+                          ? qsTr("Proposed by %1 on %2's behalf. ✓ %3 agreed: the address is theirs.")
+                                .arg(cardRoot.onBehalfBy).arg(cardRoot.creditorName)
+                                .arg(cardRoot.iAmCreditor ? qsTr("You") : cardRoot.creditorName)
+                          : cardRoot.iAmCreditor
+                          ? qsTr("Proposed by %1 on your behalf. Nobody pays until you agree that %2 is yours.")
+                                .arg(cardRoot.onBehalfBy).arg(cardRoot.shortPayTo(String(cardRoot.split.payTo || "")))
+                          : qsTr("Proposed by %1 on %2's behalf. Nobody pays until %2 agrees the address is theirs.")
+                                .arg(cardRoot.onBehalfBy).arg(cardRoot.creditorName)
+                    color: cardRoot.creditorAgreed ? Theme.palette.textSecondary : Theme.palette.warning
+                    font.pixelSize: Theme.typography.badgeText
+                }
+                // the creditor's own client: a payTo it does not hold is never agreed to
+                LogosText {
+                    objectName: "cardSplitPayToNotMine"
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    visible: cardRoot.iAmCreditor && !cardRoot.creditorAgreed && !cardRoot.payToMine
+                    text: qsTr("⚠ %1 is not an address this client holds, so muster will not agree for you: payments would go to whoever holds it. Share your own address and ask for the split again.")
+                              .arg(cardRoot.shortPayTo(String(cardRoot.split ? cardRoot.split.payTo || "" : "")))
+                    color: Theme.palette.warning
                     font.pixelSize: Theme.typography.badgeText
                 }
 
@@ -1603,9 +1650,13 @@ Rectangle {
             visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
                 && !(cardRoot.card && cardRoot.card.approvedByMe)
                 && !cardRoot.ready
-                && (!cardRoot.isSplit || cardRoot.iAmDebtor)   // a split: only who it names agrees
+                // a split: only who it names agrees — each debtor, and the creditor to payTo
+                // being theirs (exo-770), never to an address this client does not hold
+                && (!cardRoot.isSplit || cardRoot.iAmDebtor || (cardRoot.iAmCreditor && cardRoot.payToMine))
             Layout.fillWidth: true
-            text: cardRoot.isSplit ? qsTr("Agree to my share") : qsTr("Approve")
+            text: !cardRoot.isSplit ? qsTr("Approve")
+                : cardRoot.iAmDebtor ? qsTr("Agree to my share")
+                : qsTr("Agree — I paid, and %1 is mine").arg(cardRoot.shortPayTo(String(cardRoot.split.payTo || "")))
             onClicked: cardRoot.approve()
         }
 
@@ -1617,7 +1668,7 @@ Rectangle {
                 && !(cardRoot.card && cardRoot.card.approvedByMe)
                 && !cardRoot.declinedByMe
                 && !cardRoot.ready
-                && (!cardRoot.isSplit || cardRoot.iAmDebtor)
+                && (!cardRoot.isSplit || cardRoot.iAmDebtor || cardRoot.iAmCreditor)
             Layout.fillWidth: true
             text: qsTr("Deny")
             variant: LogosButton.Variant.Secondary
