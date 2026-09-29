@@ -478,9 +478,14 @@ proc sharedAddressOf*(events: seq[Event], who: string): string =
   ## authentic view (roomEvents): a message is author-signed, so a share posted in `who`'s
   ## name by anyone else never reaches here. What a split proposed on someone's behalf pays
   ## them at (exo-770) — the address they gave, never one the proposer typed.
-  let w = who.toLowerAscii()
+  ## An author is compared as hex, with or without "0x" (the hosted module writes "0x" + hex,
+  ## a room identity is bare hex).
+  proc bare(s: string): string =
+    result = s.toLowerAscii()
+    if result.startsWith("0x"): result = result[2 .. ^1]
+  let w = bare(who)
   for m in reduceMessages(events):             # oldest first: the newest share wins
-    if m.author.toLowerAscii() != w: continue
+    if bare(m.author) != w: continue
     try:
       let b = parseJson(m.body)
       if b.kind != JObject or b{"kind"}.getStr() != "address-share" or b{"asset"}.getStr("ETH") != "ETH": continue

@@ -1029,6 +1029,21 @@ void MusterUiBackend::onContextReady()
                 // requestJoin() fires ONCE (above) — the backend's own retry chain
                 // re-announces until admitted, exactly as the UI button now does.
                 loadPending(); loadMembers(); loadMessages(); loadIntents();
+                // Split self-test, on someone's behalf (exo-770): MUSTER_AUTOSHARE shares
+                // this member's address into the room once someone else is in — the
+                // address-share card's "Share an address".
+                static bool shared = false;
+                if (!shared && !qgetenv("MUSTER_AUTOSHARE").isEmpty()
+                    && membersJson().contains("\"self\":false")) {
+                    const QString addr = QJsonDocument::fromJson(settingsJson().toUtf8()).object()
+                                             .value("identity").toObject().value("address").toString();
+                    if (!addr.isEmpty()) {
+                        shared = true;
+                        postMessage(QString::fromUtf8(QJsonDocument(QJsonObject{
+                            {"kind", "address-share"}, {"asset", "ETH"}, {"address", addr}, {"form", 1}})
+                            .toJson(QJsonDocument::Compact)));
+                    }
+                }
                 // Founder-only: admit the first pending asker (one admitter keeps a
                 // single shared epoch), then propose one intent so the other side's
                 // convergence can be observed.
@@ -1037,21 +1052,6 @@ void MusterUiBackend::onContextReady()
                     if (d.isArray() && !d.array().isEmpty()) {
                         const QString id = d.array().first().toObject().value("identity").toString();
                         if (!id.isEmpty()) admit(id);
-                    }
-                    // Split self-test, on someone's behalf (exo-770): MUSTER_AUTOSHARE shares
-                    // this member's address into the room once someone else is in — the
-                    // address-share card's "Share an address".
-                    static bool shared = false;
-                    if (!shared && !qgetenv("MUSTER_AUTOSHARE").isEmpty()
-                        && membersJson().contains("\"self\":false")) {
-                        const QString addr = QJsonDocument::fromJson(settingsJson().toUtf8()).object()
-                                                 .value("identity").toObject().value("address").toString();
-                        if (!addr.isEmpty()) {
-                            shared = true;
-                            postMessage(QString::fromUtf8(QJsonDocument(QJsonObject{
-                                {"kind", "address-share"}, {"asset", "ETH"}, {"address", addr}, {"form", 1}})
-                                .toJson(QJsonDocument::Compact)));
-                        }
                     }
                     static bool proposed = false;
                     // MUSTER_AUTOSPLIT_FOR: propose the split on the OTHER member's behalf —

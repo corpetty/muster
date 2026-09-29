@@ -644,10 +644,12 @@ Item {
     // The Ethereum address `identity` last shared into the room ("" = none) — shown so you
     // can see where the split will pay; the module reads the same share from the log itself.
     function sharedAddressOf(identity) {
-        var id = String(identity || "").toLowerCase(), out = "";
+        // an author is compared as hex, with or without "0x"
+        var bare = function (s) { return String(s || "").toLowerCase().replace(/^0x/, ""); };
+        var id = bare(identity), out = "";
         for (var i = 0; i < room.messages.length; ++i) {
             var msg = room.messages[i];
-            if (!msg || String(msg.author || "").toLowerCase() !== id) continue;
+            if (!msg || bare(msg.author) !== id) continue;
             var o = null;
             try { o = JSON.parse(msg.body); } catch (e) { o = null; }
             if (!o || String(o.kind || "") !== "address-share" || String(o.asset || "ETH") !== "ETH") continue;
