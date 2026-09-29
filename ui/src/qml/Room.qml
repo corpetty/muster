@@ -433,13 +433,16 @@ Item {
         var isLez = effKind === "lez-multisig-proposal";
         // a split (exo-a90): its own body on the card — who owes what, and where each stands
         var isSplit = effKind === "split";
+        // a settle-up (exo-3c6): several splits netted — its own body: the net payments
+        var isSettleUp = effKind === "settle-up";
         return {
             kind: "intent-propose",
             split: (isSplit && it && it.split) ? it.split : null,
+            settleUp: (isSettleUp && it && it.settleUp) ? it.settleUp : null,
             parts: (isSplit && it && Array.isArray(it.parts)) ? it.parts : [],
             // who proposed it, by their signed claim (exo-770); [] = unattributed
             proposedBy: (it && Array.isArray(it.proposedBy)) ? it.proposedBy : [],
-            label: isSplit ? qsTr("Split")
+            label: isSettleUp ? qsTr("Settle up") : isSplit ? qsTr("Split")
                  : isGovernance ? qsTr("Add policy")
                  : isLez ? qsTr("LEZ multisig")
                  : isInvoke ? qsTr("Action")
@@ -455,15 +458,15 @@ Item {
                      : isStatement ? String(eff.text || "") : "",
             // a LEZ step the chain has not included yet: "vote" | "settle" (exo-3c9)
             chainPending: (it && it.chainPending) ? String(it.chainPending) : "",
-            amount: isSplit ? ""
+            amount: (isSplit || isSettleUp) ? ""
                   : (!isStatement && eff.value !== undefined) ? String(eff.value)
                   : (it && it.summary && it.summary.amount) ? String(it.summary.amount) : "",
-            denom: isSplit ? "" : (it && it.summary && it.summary.unit) ? String(it.summary.unit) : "",
-            to: isSplit ? ""
+            denom: (isSplit || isSettleUp) ? "" : (it && it.summary && it.summary.unit) ? String(it.summary.unit) : "",
+            to: (isSplit || isSettleUp) ? ""
               : (!isStatement && eff.to !== undefined) ? String(eff.to)
               : (it && it.summary && it.summary.to && !isInvoke && !isLez) ? String(it.summary.to) : "",
             // the heading, in the family's words (a Bitcoin payment, a LEZ transfer, a new policy…)
-            heading: isSplit ? qsTr("Proposed a split")
+            heading: isSettleUp ? qsTr("Proposed to settle up") : isSplit ? qsTr("Proposed a split")
                    : room.headingFor(it && it.summary ? String(it.summary.kind || "") : ""),
             // who approved, named (or "you"), and whether I did (exo-59c)
             approvers: (it && Array.isArray(it.approvers)) ? it.approvers : [],
@@ -2125,6 +2128,22 @@ Item {
                         font.pixelSize: Theme.typography.badgeText
                     }
 
+                    // settle up instead (exo-3c6): net the room's agreed, unpaid shares on this rail
+                    // into fewer payments — every party agrees before anything is paid
+                    LogosButton {
+                        objectName: "roomSettleUp"
+                        visible: !room.splitPrivate
+                        Layout.preferredWidth: 320
+                        text: qsTr("Settle up the room's open splits instead")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: {
+                            if (!room.backend) return;
+                            room.backend.proposeSettleUp("", room.splitTokenInfo ? String(room.splitTokenInfo.asset) : "",
+                                                         String(splitMemo.text || ""));
+                            room.composing = false;
+                        }
+                    }
+
                     // who fronted it (exo-770): you, or someone else — then it is paid at the
                     // address they shared, and nobody pays until they agree it is theirs
                     LogosText {
@@ -2529,6 +2548,20 @@ Item {
                 }
                 color: Theme.palette.warning
                 font.family: Theme.typography.mono
+                font.pixelSize: Theme.typography.badgeText
+            }
+
+            // A split or settle-up proposal that did nothing says why (exo-3c6): the composer
+            // has closed, so the reason shows here — "nothing to net", a bad quote, no node.
+            LogosText {
+                objectName: "roomSplitProposeError"
+                readonly property var r: room.splitResult
+                visible: !!(r && r.error && (r.op === "propose" || r.op === "settle-up"))
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: visible ? qsTr("⚠ %1 did nothing: %2").arg(r.op === "settle-up" ? qsTr("Settle up") : qsTr("Proposing"))
+                                    .arg(String(r.error) + (r.detail ? " — " + String(r.detail) : "")) : ""
+                color: Theme.palette.warning
                 font.pixelSize: Theme.typography.badgeText
             }
 

@@ -80,6 +80,7 @@ public:
     void importOutside(const QString &intentId, const QString &encoded) override;
     void proposeBtcSpend(const QString &payTo, const QString &amountSat, const QString &feeRate) override;
     void proposeSplit(const QString &chain, const QString &totalWei, const QString &sharesJson, const QString &memo) override;
+    void proposeSettleUp(const QString &chain, const QString &asset, const QString &memo) override;
     void settlePart(const QString &intentId) override;
     void lookupToken(const QString &chain, const QString &token) override;
     void confirmPart(const QString &intentId, const QString &part, const QString &tx) override;
