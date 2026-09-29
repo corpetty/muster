@@ -189,6 +189,17 @@ An Ethereum split may be paid in a token as well as ETH (exo-5ab). The effect na
 
 `split_erc20_anvil_e2e` holds it on anvil against a test token (`tests/fixtures/MusterTestToken.sol`).
 
+### 4.9 Paying in Bitcoin (btc.split)
+
+A third family, `btc.split` (exo-d17), settles a split in BTC on a Bitcoin chain, `bip122:<genesis prefix>`. The agreement is the same as every split's. Amounts are satoshis in canonical decimal. No share may fall below Bitcoin's 546-sat dust limit, because such an output could never be paid; the driver refuses the split with its reason, and the composer warns before Propose.
+
+- **The payer's own key.** A debtor pays from `wpkh(<their muster key>)`, the P2WPKH address of the keystore's secp256k1 authorization key, which never leaves the keystore. Their client reads their coins at that address from **their own node** (`scantxoutset`), chooses coins and change (`buildSpendFrom`, the multisig composer's), and signs every input with the keystore: DER, `SIGHASH_ALL`, over its BIP-143 sighash. The node broadcasts the spend. The fee rate is the member's own setting, else the node's estimate, else its relay minimum: it is read, never invented. A payment has landed once it is in a block.
+- **The creditor's own node.** It confirms a reported txid only when one of its outputs pays `payTo` exactly the share, at the network's confirmation depth (1 on regtest, 6 elsewhere). One satoshi more or less, or the share paid to another address, is refused and named. A node serving another chain is refused before anything is sent or read.
+- **payTo** is a segwit address of the split's own network, in its one lowercase spelling: the creditor's own wpkh address when they propose. A Bitcoin split is proposed only by whoever fronted it, because the room's shared addresses are Ethereum ones.
+- **What the chain learns.** A Bitcoin payment is public: its inputs name the payer, and the payee and amount are visible once broadcast. The coins it spends bind it to one chain (binding *implicit*). As on Ethereum, nothing on chain says which split a payment settles; the link lives in the room.
+
+`split_btc_test` holds it without a node: BIP-173's P2WPKH vector, every input signed by the payer's key, the exact-output match, and the dust and network refusals. `split_btc_regtest_e2e` holds it on a real Bitcoin Core regtest node: two debtors pay from their own coins, a payment one satoshi short and one sent to someone else are refused, and the creditor's own node confirms both shares. `scripts/split-btc-self-test.sh` drives it through the real runner over the live fleet.
+
 ## 5. The invariants, one by one
 
 | # | How the split keeps it |
