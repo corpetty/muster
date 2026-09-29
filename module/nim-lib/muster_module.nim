@@ -83,6 +83,7 @@ import ../src/coordination/attest      # readEvent: the external read a Bitcoin 
 import ../src/drivers/split as splitdrv   # a split: each pays their own share (exo-a90)
 import ../src/coordination/parts        # paying and confirming a part (exo-a90.4)
 import ../src/coordination/parts_evm    # …on an EVM chain, through this member's own wallet and RPC
+import ../src/coordination/settle_up    # net several splits into fewer payments (exo-3c6)
 import ../src/coordination/parts_btc    # …and in Bitcoin, from each debtor's own key, confirmed on the creditor's node (exo-d17)
 import ../src/coordination/parts_lez    # …and privately on the LEZ, found by the creditor's scan (exo-a90.9)
 
@@ -1142,6 +1143,12 @@ proc splitPump() =
       let confirmed = liveConfirmParts(gSession, ks, driverFor, splitSeamFor(pol))
       if gLpDebug and confirmed.len > 0: stderr.writeLine("MUSTER-LP split confirmed " & $(%confirmed))
     except CatchableError: discard
+  # a settle-up final (exo-3c6): the shares it covered that I am owed, marked received —
+  # no chain read is involved (the reference is the settle-up), so no seam is used
+  try:
+    let covered = settleCovered(gSession, ks, driverFor, PartSeam())
+    if gLpDebug and covered.len > 0: stderr.writeLine("MUSTER-LP settle-up covered " & $(%covered))
+  except CatchableError: discard
   if gLpDebug and lezWaits:
     # a private split waits on me: say how far my wallet's scan has got
     let (synced, tip) = splitLezAdapter().scanProgress()
@@ -1323,6 +1330,44 @@ proc musterCoordinateTokenInfo(chain, token: string): string =
     return $(%*{"error": "unreadable", "detail": "your RPC does not serve " & chain &
                                                  ", or " & asset[6 .. ^1] & " does not answer decimals()"})
   $(%*{"asset": asset, "token": asset[6 .. ^1], "symbol": info.symbol, "decimals": info.decimals})
+
+proc musterCoordinateProposeSettleUpImpl(chain, asset, memo: string): string =
+  ## Net the room's agreed, unpaid split shares on one chain and asset into fewer payments
+  ## (exo-3c6): composed from the log (openParts), netted (netTransfers), and proposed —
+  ## the proposer's agreement made then if they are a party. Returns the intent id or {error}.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  var chain = chain.strip()
+  if chain.len == 0: chain = splitPolicy(gCoordKind).account
+  if chain.len == 0:
+    let (ok, c, detail) = splitChainFor("evm-split")
+    if not ok: return $(%*{"error": "no-rpc", "detail": detail})
+    chain = c
+  if chain.startsWith("lez:"):
+    return $(%*{"error": "not-netted", "detail": "the private split is never netted: its shares are told apart by amount"})
+  let kind = (if chain.startsWith("bip122:"): "btc-split" else: "evm-split")
+  if kind notin roomKinds(): return $(%*{"error": "not-admitted", "kind": kind})
+  var a = asset.strip().toLowerAscii()
+  let assetName =
+    if a.len == 0 or a == "eth" or a == "btc": (if kind == "btc-split": "BTC" else: "ETH")
+    elif a.startsWith("erc20:"): a
+    else: "erc20:" & a
+  gSession.poll()
+  let covers = openParts(gSession.roomEvents(), driverFor, chain, assetName)
+  if covers.len < 2:
+    return $(%*{"error": "nothing-to-net", "detail": "fewer than two agreed, unpaid shares on " & chain & " in " & assetName})
+  let effect = settleUpEffectJson(chain, assetName, covers, netTransfers(covers), memo)
+  var ttl = DefaultIntentTtl
+  try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
+  except ValueError: discard
+  inc gMsgSeq
+  let id = liveProposeIntent(gSession, moduleKeystore(), driverFor, kind & "@" & chain, effect,
+                             int64(epochTime()), gMsgSeq, account = chain, ttlSec = ttl)
+  if id.startsWith("0x"): id else: $(%*{"error": id})
+
+proc musterCoordinateProposeSettleUp(chain, asset, memo: string): string =
+  try: result = musterCoordinateProposeSettleUpImpl(chain, asset, memo)
+  except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
+  if gLpDebug: stderr.writeLine("MUSTER-LP settle-up propose " & result)
 
 proc musterCoordinateConfirmPart(intentId, part, tx: string): string =
   try: result = musterCoordinateConfirmPartImpl(intentId, part, tx)
@@ -1766,6 +1811,30 @@ proc musterCoordinateIntents(): string =
     for p in v.proposers:
       props.add %*{"who": p, "name": (if p == myEncHex: "you" else: memberName(p, mine)), "mine": p == myEncHex}
     o["proposedBy"] = props
+    if prof.family in [EvmSplitFamily, BtcSplitFamily] and isSettleUp(effectFromJson(v.effectJson)):
+      # a settle-up (exo-3c6): the net payments instead of the shares they cover — each with
+      # its payer and recipient named, and where it stands (only what each disclosed, inv 9)
+      try:
+        let su = settleUpOf(effectFromJson(v.effectJson))
+        var ts = newJArray()
+        for t in su.transfers:
+          let part = settlePart(t)
+          var st = PartView()
+          for pv in v.parts:
+            if pv.part == part: st = pv
+          ts.add %*{"part": part, "from": t.frm, "fromName": memberName(t.frm, mine), "to": t.to,
+                    "toName": memberName(t.to, mine), "amount": t.amount, "payTo": t.payTo,
+                    "mine": t.frm == myEncHex, "toMe": t.to == myEncHex, "settled": st.settled,
+                    "confirmed": st.confirmed, "tx": st.tx, "paying": splitPayingFor(v.id, part)}
+        var splits: seq[string]
+        for c in su.covers:
+          if c.intent notin splits: splits.add c.intent
+        let tok = (if isErc20Asset(su.asset): tokenInfo(su.chain, su.asset[6 .. ^1]) else: ("", -1))
+        o["settleUp"] = %*{"asset": su.asset, "memo": su.memo, "covers": su.covers.len, "splits": splits.len,
+                           "transfers": ts, "iAmParty": myEncHex in settleParties(su),
+                           "decimals": (if su.asset == "BTC": 8 elif isErc20Asset(su.asset): max(tok[1], 0) else: 18),
+                           "symbol": (if isErc20Asset(su.asset): (if tok[0].len > 0: tok[0] else: "units") else: su.asset)}
+      except CatchableError: discard
     if v.parts.len > 0 and prof.family in [EvmSplitFamily, LezSplitFamily, BtcSplitFamily]:
       # a split (exo-a90): each person's share and where it stands — only what each disclosed
       # (their agreement, their payment report) and what the creditor confirmed (invariant 9)

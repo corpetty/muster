@@ -114,6 +114,19 @@ proc effectSummary*(effectJson: string, label: proc (who: string): string = nil,
                          text: "an action: " & call & " (" & $n & (if n == 1: " arg)" else: " args)"))
   of "btc-spend":
     return btcSummary(j)
+  of "settle-up":
+    # several splits netted (exo-3c6): how many payments settle how many shares, and from
+    # how many splits — never dressed up as one payment
+    let n = j{"transfers"}.getElems().len
+    let m = j{"covers"}.getElems().len
+    var splits: seq[string]
+    for c in j{"covers"}.getElems():
+      if c{"intent"}.getStr() notin splits: splits.add c{"intent"}.getStr()
+    let memo = j{"memo"}.getStr()
+    return EffectSummary(kind: "settle-up", unit: j{"asset"}.getStr(),
+      text: "a settle-up" & (if memo.len > 0: " — " & memo else: "") & ": " &
+            (if n == 0: "no payment" elif n == 1: "1 payment" else: $n & " payments") & " settle " &
+            $m & " shares from " & $splits.len & (if splits.len == 1: " split" else: " splits"))
   of "split":
     # who owes the creditor what (exo-a90.3) — never dressed up as one payment
     let n = j{"shares"}.getElems().len
