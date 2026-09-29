@@ -235,10 +235,7 @@ proc liveFrostContribute*(s: CoordinationSession, ks: Keystore, driverFor: Drive
     return "refused: " & e.msg
   let att = toHex(ks.frostHostAttest(lab, attestationDigest(p)))
   if not verifyAttestation(hh, p, att): return "rejected"
-  var parents: seq[EventId]
-  for e in events:
-    if e.key == "intent/" & intentId & "/propose" or e.key.startsWith("intent/" & intentId & "/sig/"):
-      parents.add eventId(e)
+  let parents = approvalParents(events, driverFor, intentId)   # approvals only (exo-403, exo-96d)
   let sigEv = contributeEvent(intentId, hh, toHex(c.bytes), round = round, parents = parents)
   s.publish(sigEv)
   s.publish(attestEvent(intentId, hh, round, att, parents = @[eventId(sigEv)]))

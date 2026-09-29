@@ -1825,25 +1825,27 @@
         {
           "step": "act",
           "who": "any member",
-          "does": "coordinate_audit(intentId) reduces this member's log to one canonical-CBOR file: the effect and its re-derived materialization; the signing context; the provenance record and the parent-closed lineage it names; every approval with its grade (committed, unattested or rejected) and its signature and attestation events; settlement entries as external reads with the tx hash; and the claims the log alone cannot prove (threshold, stage, disclosure, first epoch). Returns the file as hex, a readable report rendered from it, and its digest.",
+          "does": "coordinate_audit(intentId) reduces this member's log to one canonical-CBOR file: the effect and its re-derived materialization; the signing context; the provenance record and the parent-closed lineage it names; every approval with its grade (committed, unattested or rejected), its signature and attestation events, and any other copy of that signature the record links (exo-96d); settlement entries as external reads with the tx hash; and the claims the log alone cannot prove (threshold, stage, disclosure, first epoch). Returns the file as hex, a readable report rendered from it, and its digest.",
           "signs": "The exporter's secp256k1 key signs digest(hash-input \"muster.signature-audit.v1\" {body: the file body as canonical CBOR}).",
           "reveals": [],
           "evidence": [
             "module/tests/probes/probe_audit_completeness_stepper.nim",
             "module/tests/probes/probe_audit_deterministic.nim",
+            "module/tests/audit_linked_test.nim",
             "scripts/audit-download-self-test.sh"
           ]
         },
         {
           "step": "act",
           "who": "anyone holding the file",
-          "does": "coordinate_verify_audit(hex), or module/tools/muster_audit_verify.nim with no log, keys or network, re-derives the materialization, context, inputs and signing payload from the file; recomputes every content id, the canonical order and the parent closure; checks each approval is signed by the contributor it names and recomputes its grade; and checks the exporter's signature. The first discrepancy is named. Settlement is reported as an external read.",
+          "does": "coordinate_verify_audit(hex), or module/tools/muster_audit_verify.nim with no log, keys or network, re-derives the materialization, context, inputs and signing payload from the file; recomputes every content id, the canonical order and the parent closure; checks each approval, and each copy of it the file carries (under the same key, and linked by what the file carries), is signed by the contributor it names, and recomputes its grade; and checks the exporter's signature. The first discrepancy is named. Settlement is reported as an external read.",
           "signs": "nothing",
           "reveals": [],
           "evidence": [
             "module/tests/probes/probe_audit_tamper_stepper.nim",
             "module/tests/probes/probe_audit_settlement_stepper.nim",
             "module/tests/probes/probe_audit_signer_names_stepper.nim",
+            "module/tests/audit_linked_test.nim",
             "scripts/audit-download-self-test.sh"
           ]
         },
@@ -1885,6 +1887,13 @@
           "why": "the file and the report name exactly the contributors the fold recognizes",
           "evidence": [
             "module/tests/probes/probe_audit_signer_names_stepper.nim"
+          ]
+        },
+        {
+          "what": "handing over a file its own verifier would refuse",
+          "why": "an approval that links a contribution the fold does not count (as one from before exo-96d could) is refused at export, naming the link",
+          "evidence": [
+            "module/tests/audit_linked_test.nim"
           ]
         }
       ],

@@ -322,6 +322,17 @@ proc approvalGrades*(events: seq[Event], driverFor: DriverFor,
     if g.round in 1 .. reached: inReach.add g
   result = inReach
 
+proc approvalParents*(events: seq[Event], driverFor: DriverFor, intentId: string): seq[EventId] =
+  ## What a new approval links (exo-403): the proposal and every approval on the intent,
+  ## as the grades' own events. A member who later reads the approval but not those can
+  ## tell its history reaches events it cannot read, and the audit file, which carries
+  ## exactly those, stays parent-closed. Never any other sig event (exo-96d): junk under a
+  ## name, a non-member's signature, a key the collection never reached is no approval, and
+  ## a link to it would leave the file a parent it does not carry.
+  for e in events:
+    if e.key == "intent/" & intentId & "/propose": result.add eventId(e)
+  for g in approvalGrades(events, driverFor, intentId): result.add eventId(g.sig)
+
 proc gradeOf*(grades: seq[ApprovalGrade], who: string, round: int): AttestGrade =
   for g in grades:
     if g.who == who and g.round == round: return g.grade

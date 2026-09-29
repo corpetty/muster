@@ -163,12 +163,9 @@ proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
   # Link the approval to the proposal and to every approval its signer has seen
   # (exo-403): a member who later reads this approval but not those can tell its
   # history reaches events it cannot read, instead of mistaking a partial view for
-  # the whole one. Content-addressed, so the fold still dedups by (who, round).
-  var parents: seq[EventId]
-  for e in events:
-    if e.key == "intent/" & intentId & "/propose" or
-       e.key.startsWith("intent/" & intentId & "/sig/"):
-      parents.add eventId(e)
+  # the whole one. Approvals only, never any other sig event (exo-96d). Content-
+  # addressed, so the fold still dedups by (who, round).
+  let parents = approvalParents(events, driverFor, intentId)
   let sigEv = contributeEvent(intentId, who, sig, round = curRound, parents = parents)
   s.publish(sigEv)
   if inApp: s.publish(attestEvent(intentId, who, curRound, attestHex, parents = @[eventId(sigEv)]))

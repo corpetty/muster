@@ -235,32 +235,81 @@ proc exportAudit*(events: seq[Event], driverFor: DriverFor, intentId: string,
 
     # approvals, each with its grade and its signature + attestation events
     let grades = approvalGrades(ordered, driverFor, intentId)
-    var approvals: seq[CborValue]
-    for g in grades:
-      # the contribution the fold counted — never merely the first event under its key,
-      # which anyone holding the epoch key could have published as junk (exo-c00)
-      let sigEv = g.sig
-      for par in sigEv.parents: needReadable(par)
-      var atts: seq[Event]
+    var atts = newSeq[seq[Event]](grades.len)
+    for i, g in grades:
+      # g.sig: the contribution the fold counted — never merely the first event under its
+      # key, which anyone holding the epoch key could have published as junk (exo-c00)
       for e in ordered:
-        if e.key == "intent/" & intentId & "/attest/" & g.who & "/" & $g.round:
-          for par in e.parents: needReadable(par)
-          atts.add e
-      atts.sort(proc (a, b: Event): int = cmp(eventId(a), eventId(b)))
-      var attArr: seq[CborValue]
-      for a in atts: attArr.add eventCbor(a)
-      approvals.add cbMap(@[(cbText("who"), cbText(g.who)), (cbText("round"), cbUint(uint64(g.round))),
-                            (cbText("grade"), cbText($g.grade)), (cbText("sig"), eventCbor(sigEv)),
-                            (cbText("attests"), cbArray(attArr))])
+        if e.key == "intent/" & intentId & "/attest/" & g.who & "/" & $g.round: atts[i].add e
+      atts[i].sort(proc (a, b: Event): int = cmp(eventId(a), eventId(b)))
 
     # settlement: the chain's answer as the room observed it — external reads
-    var settlement: seq[CborValue]
+    var settle: seq[Event]
     for kind in ["submit", "final"]:
       for e in ordered:
         if e.key == "intent/" & intentId & "/" & kind:
-          for par in e.parents: needReadable(par)
-          settlement.add eventCbor(e)
+          settle.add e
           break
+
+    # alternates (exo-96d): the counted event under a key can change — a valid copy of a
+    # member's signature that sorts ahead of the original becomes the one carried — so the
+    # original, which other approvals and its own attestation link, is carried beside it:
+    # another valid signature by the same contributor under the same key, checkable from
+    # the file. Only what a carried event links, so nothing unlinked pads the file.
+    var carried = lineage
+    for i, g in grades:
+      carried.incl eventId(g.sig)
+      for a in atts[i]: carried.incl eventId(a)
+    for e in settle: carried.incl eventId(e)
+    var alts = newSeq[seq[Event]](grades.len)
+    var grew = true
+    while grew:
+      grew = false
+      var linked = initHashSet[EventId]()
+      for i, g in grades:
+        for e in @[g.sig] & atts[i] & alts[i]:
+          for par in e.parents: linked.incl par
+      for e in settle:
+        for par in e.parents: linked.incl par
+      for i, g in grades:
+        for e in ordered:
+          let id = eventId(e)
+          if e.key == g.sig.key and id notin carried and id in linked and
+             countable(drv, mat, g.who, g.round, e.value):
+            alts[i].add e
+            carried.incl id
+            grew = true
+    # Parent-closed, or refused with the reason: the export never hands over a file its own
+    # verifier refuses. An approval an older client made linked EVERY sig event, so it can
+    # link one the fold does not count, which the file cannot carry (exo-96d).
+    proc closed(e: Event, what: string) =
+      for par in e.parents:
+        needReadable(par)
+        if par in carried: continue
+        let pk = byId[par].key
+        let q = pk.split('/')
+        if q.len >= 4 and q[0] == "intent" and q[1] == intentId and q[2] == "sig":
+          refuse(what & " links '" & pk & "', a contribution the fold does not count: a file " &
+                 "carrying it could not verify (an approval from before exo-96d linked every signature)")
+        refuse(what & " links '" & pk & "', an entry outside this intent's record")
+    var approvals: seq[CborValue]
+    for i, g in grades:
+      alts[i].sort(proc (a, b: Event): int = cmp(eventId(a), eventId(b)))
+      closed(g.sig, "approval by " & g.who)
+      for a in atts[i]: closed(a, "the attestation of " & g.who & "'s approval")
+      for a in alts[i]: closed(a, "a copy of " & g.who & "'s approval")
+      var attArr, altArr: seq[CborValue]
+      for a in atts[i]: attArr.add eventCbor(a)
+      for a in alts[i]: altArr.add eventCbor(a)
+      var entry = @[(cbText("who"), cbText(g.who)), (cbText("round"), cbUint(uint64(g.round))),
+                    (cbText("grade"), cbText($g.grade)), (cbText("sig"), eventCbor(g.sig)),
+                    (cbText("attests"), cbArray(attArr))]
+      if altArr.len > 0: entry.add (cbText("alternates"), cbArray(altArr))   # absent when none: v1 bytes unchanged
+      approvals.add cbMap(entry)
+    var settlement: seq[CborValue]
+    for e in settle:
+      closed(e, "the " & e.key.split('/')[^1] & " entry")
+      settlement.add eventCbor(e)
 
     var disc: seq[CborValue]
     for r in drv.manifest(effect).fullDisclosure():
@@ -321,17 +370,24 @@ proc verifyAudit*(bytes: seq[byte]): AuditVerdict =
     if canon != ids: refuse("the lineage is not in canonical order")
     var all = initHashSet[EventId]()
     for i in ids: all.incl i
-    type Appr = tuple[who: string, round: int, grade: string, sig: Event, atts: seq[Event]]
+    type Appr = tuple[who: string, round: int, grade: string, sig: Event, atts, alts: seq[Event]]
     var apprs: seq[Appr]
     for v in f.field("approvals").arrayOf("approvals"):
       let sigEv = eventOf(v.field("sig"), "approval signature")
-      var atts: seq[Event]
+      var atts, alts: seq[Event]
       for a in v.field("attests").arrayOf("attestations"): atts.add eventOf(a, "attestation")
+      var hasAlts = false
+      for (k, _) in v.pairs:
+        if k.kind == ckText and k.t == "alternates": hasAlts = true
+      if hasAlts:   # absent when there are none (exo-96d)
+        for a in v.field("alternates").arrayOf("alternates"): alts.add eventOf(a, "approval copy")
+        if alts.len == 0: refuse("an approval carries an empty list of copies")
       if v.field("round").kind != ckUint: refuse("an approval round is not a number")
       apprs.add (who: v.field("who").text("approval who"), round: int(v.field("round").u),
-                 grade: v.field("grade").text("approval grade"), sig: sigEv, atts: atts)
+                 grade: v.field("grade").text("approval grade"), sig: sigEv, atts: atts, alts: alts)
       all.incl eventId(sigEv)
       for a in atts: all.incl eventId(a)
+      for a in alts: all.incl eventId(a)
     var settle: seq[Event]
     for v in f.field("settlement").arrayOf("settlement"):
       let e = eventOf(v, "settlement entry")
@@ -341,7 +397,7 @@ proc verifyAudit*(bytes: seq[byte]): AuditVerdict =
       for par in e.parents:
         if par notin all: refuse("an entry names a parent the file does not carry")
     for a in apprs:
-      for e in @[a.sig] & a.atts:
+      for e in @[a.sig] & a.atts & a.alts:
         for par in e.parents:
           if par notin all: refuse("approval by " & a.who & " links an entry the file does not carry")
     for e in settle:
@@ -390,6 +446,12 @@ proc verifyAudit*(bytes: seq[byte]): AuditVerdict =
     if pf.kind != ckBytes or pf.b != p: refuse("the signing payload does not re-derive")
 
     # every approval: signed by who it names, graded by its attestations
+    var linkedIds = initHashSet[EventId]()
+    for a in apprs:
+      for e in @[a.sig] & a.atts & a.alts:
+        for par in e.parents: linkedIds.incl par
+    for e in settle:
+      for par in e.parents: linkedIds.incl par
     var committed, unattested = 0
     var seenAppr = initHashSet[string]()
     for a in apprs:
@@ -400,6 +462,19 @@ proc verifyAudit*(bytes: seq[byte]): AuditVerdict =
         refuse("approval by " & a.who & " carries another approval's signature")
       if not signedBy(a.who, mat.bytes, a.sig.value):
         refuse("approval by " & a.who & " is not signed by " & a.who & " over the materialization")
+      # its copies (exo-96d): the same approval in other log entries, which what the file
+      # carries links — each under this key and signed by who it names, so checkably the
+      # same approval, never another one smuggled in
+      var prev = ""
+      for c in a.alts:
+        let cid = eventId(c)
+        if cid <= prev: refuse("approval by " & a.who & " carries its copies out of order")
+        prev = cid
+        if cid == eventId(a.sig): refuse("approval by " & a.who & " carries its signature again as a copy")
+        if c.key != a.sig.key: refuse("approval by " & a.who & " carries a copy under another key")
+        if not signedBy(a.who, mat.bytes, c.value):
+          refuse("approval by " & a.who & " carries a copy not signed by " & a.who & " over the materialization")
+        if cid notin linkedIds: refuse("approval by " & a.who & " carries a copy nothing in the file links")
       var ok = false
       for att in a.atts:
         if att.key != "intent/" & intentId & "/attest/" & k:
@@ -505,7 +580,10 @@ proc renderAuditReport*(bytes: seq[byte]): string =
       of "unattested": "signed outside muster and pasted in — it counts, but commits to nothing beyond the transaction"
       of "rejected": "its attestation does not verify — it was not counted"
       else: "")
-    o.add "- `" & a.get("who").str & "` (round " & a.get("round").str & "): **" & g & "** — " & why
+    let copies = a.get("alternates").items.len
+    o.add "- `" & a.get("who").str & "` (round " & a.get("round").str & "): **" & g & "** — " & why &
+      (if copies > 0: " (the same signature is also in " & $copies & " more log " &
+         (if copies == 1: "entry" else: "entries") & " the record links — carried, counted once)" else: "")
   if f.get("approvals").items.len == 0: o.add "- none visible to the exporter"
   o.add ""
   o.add "## Where the inputs came from"

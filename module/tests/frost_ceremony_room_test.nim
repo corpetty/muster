@@ -149,8 +149,10 @@ echo "7. the ceremony's log: one open, three joins, three step-1 and three step-
 # ── 8. junk under a member's name takes nothing from them (exo-c00) ──────────────
 # Anyone holding the epoch key can publish an event under any name. Bob publishes junk as
 # Alice's round-1 contribution before she makes hers: her pump must still contribute (it
-# is not hers), the fold must count her real nonces (her approval lists the junk as a
-# parent, so it sorts first), and the signer set round 2 signs under must include her.
+# is not hers), the fold must count her real nonces even behind junk that sorts first, and
+# the signer set round 2 signs under must include her. (Her approval links approvals only,
+# exo-96d, so a second junk, published after it and ground to sort first, is what puts
+# junk ahead of her real nonces.)
 let effectJson3 = buildFrostSpend(acct, utxos, "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080", 30_000, feeRate = 2)
 let id3 = liveProposeIntent(r.alice, aliceKs, res(r.alice), policy, effectJson3,
                             int64(Now), 3, account = a.address, ttlSec = Ttl)
@@ -167,6 +169,20 @@ block:
   let got = liveFrostContribute(r.alice, aliceKs, res(r.alice), id3, Now)
   doAssert got == "collecting", "junk under Alice's name blocked her round 1: " & got
 pollAll()
+block:
+  var realA: Event
+  for e in r.bob.log.allEvents():
+    if e.key == "intent/" & id3 & "/sig/" & aliceHost & "/1" and e.value != "00".repeat(64): realA = e
+  doAssert realA.key.len > 0, "Alice's real round-1 contribution"
+  var junk2: Event
+  for i in 1 .. 255:
+    junk2 = contributeEvent(id3, aliceHost, toHex(i, 2).toLowerAscii.repeat(64), round = 1, parents = realA.parents)
+    if eventId(junk2) < eventId(realA): break
+  doAssert eventId(junk2) < eventId(realA), "no junk sorts first"
+  r.bob.publish(junk2)
+  pollAll()
+  let order = canonicalOrder(r.bob.log.allEvents()).mapIt(eventId(it))
+  doAssert order.find(eventId(junk2)) < order.find(eventId(realA)), "the junk sorts ahead of Alice's nonces"
 block:
   let got = liveFrostContribute(r.carol, room3CarolKs, res(r.carol), id3, Now)
   doAssert got == "collecting", got
