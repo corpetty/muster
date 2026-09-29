@@ -2047,7 +2047,11 @@ proc musterCoordinateReadiness(intentId: string): string =
   let drv = driverForKind(policy)
   let effect = effectFromJson(effectJson)
   let m = drv.manifest(effect)
-  let r = assessReadiness(m, probeFromFacts(hostFacts(policy)))
+  var facts = hostFacts(policy)
+  # whether YOUR contribution to THIS intent would count, in the driver's own words — how a
+  # split's parties (named in the effect) are graded (exo-272)
+  facts.contributes = drv.mayContribute(effect, myContributorNames(moduleKeystore()))
+  let r = assessReadiness(m, probeFromFacts(facts))
   var o = r.toJson()
   o["intentId"] = %intentId
   o["policy"] = %policy

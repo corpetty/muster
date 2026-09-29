@@ -16,6 +16,7 @@
 import std/[json, strutils, sequtils]
 import ../drivers/driver
 import ../drivers/manifest
+import ../intents/materialization   # Eligibility — the driver's own "would your contribution count"
 import ../crypto/secp256k1     # Address
 import ../crypto/curve25519    # Ed25519Pub
 import ../drivers/safe_rpc     # probeRpc
@@ -60,7 +61,9 @@ proc remedyFor*(r: Requirement): string =
     if r.name.startsWith("bip122:"): "point Settings → Bitcoin node at a node on " & r.name & " (set_setting btc-rpc)"
     elif r.name.startsWith("lez:"): "point Settings → LEZ sequencer at a node serving " & r.name & " (set_setting lez-rpc, lez-chain)"
     else: "point the RPC setting at a node on " & r.name & " (set_setting rpc)"
-  of rqAuthority:   "use a key that is a recognized " & r.name & " — or take part without signing"
+  of rqAuthority:
+    if r.name == "split-party": "only the people a split names agree to it — if you owe a share, ask for the split to be proposed with you in it"
+    else: "use a key that is a recognized " & r.name & " — or take part without signing"
   of rqInfra:
     if r.name == "lez-account": "set up a funded LEZ account in the LEZ Wallet App"
     elif r.name == "lez-rpc": "point Settings → LEZ sequencer at your own (set_setting lez-rpc)"
@@ -137,6 +140,10 @@ type
                                    ## probeBitcoind (getblockhash 0)
     myBtcKey*: string              ## this instance's compressed secp key, hex (exo-a50.2.6)
     btcSigners*: seq[string]       ## the intent's Bitcoin account keys, hex ("" = none)
+    contributes*: Eligibility      ## the intent's driver's own answer for this instance —
+                                   ## Driver.mayContribute(effect, my names) (exo-ed5) — for an
+                                   ## authority whose parties the effect names ("split-party",
+                                   ## exo-272). elUnknown (the default) = not asked → unknown.
     ownersProbe*: proc(url: string, safe: Address): tuple[known: bool, owners: seq[Address], detail: string] {.gcsafe.}
                                    ## nil = use the real getOwners. The Safe owner set is
                                    ## read FROM THE CHAIN (F-10), never the configured set:
@@ -210,6 +217,13 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
     of "roster-member":
       if facts.myEd in facts.roster: (rdMet, "your encryption identity is on the room roster")
       else: (rdMissing, "your encryption identity is not on the room roster")
+    of "split-party":
+      # a split names its parties in the effect — each debtor and the creditor (exo-770) —
+      # so the driver's own answer grades it; whether anyone ELSE is named, it never says
+      case facts.contributes
+      of elYes: (rdMet, "the split names you: your agreement counts")
+      of elNo: (rdMissing, "the split does not name you: your agreement would not count")
+      of elUnknown: (rdUnknown, "cannot tell whether the split names you")
     else: (rdUnknown, "unrecognized authority requirement: " & name)
   result.moduleLoaded = proc(name: string): Grade =
     if facts.invoker == nil:
