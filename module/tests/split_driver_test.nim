@@ -247,4 +247,22 @@ block:
   doAssert "0.0000001 LEZ" in effectSummary(lez).text, effectSummary(lez).text
   echo "9. a split's summary: its own decimals, the creditor by name OK"
 
+# ── 10. an ERC-20 split: its token named once, in one spelling (exo-5ab) ─────────
+block:
+  const Tok = "erc20:0x5fbdb2315678afecb367f032d93f642f64180aa3"
+  let es = evenShares("900000", idOf(devon), @[idOf(ana), idOf(jb)])
+  let e = splitEffectJson(Chain, Tok, "900000", idOf(devon), PayTo, es, "a token bill")
+  doAssert drv.signRefusal(effectFromJson(e)) == "", drv.signRefusal(effectFromJson(e))
+  for bad in ["USDC", "erc20:0x5FbDB2315678afecb367f032d93F642f64180aa3", "erc20:0x5fbdb2315678",
+              "erc20:5fbdb2315678afecb367f032d93f642f64180aa3", "erc20:0x0000000000000000000000000000000000000000"]:
+    let why = drv.signRefusal(effectFromJson(splitEffectJson(Chain, bad, "900000", idOf(devon), PayTo, es, "x")))
+    doAssert "token" in why or "ETH" in why, bad & ": " & why
+  let t = drv.partTransfer(effectFromJson(e), partName(idOf(ana)))
+  doAssert t.ok and t.asset == Tok and t.to == PayTo and t.amount == "300000", $t
+  var named = false
+  for r in drv.manifest(effectFromJson(e)).requirements:
+    if r.kind == rqAsset and Tok in $r: named = true
+  doAssert named, "the manifest names the token a share is paid in"
+  echo "10. an ERC-20 split: erc20:<token> in its one spelling; the share is paid in it OK"
+
 echo "split_driver_test: all OK"
