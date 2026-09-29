@@ -304,6 +304,23 @@ proc approvalGrades*(events: seq[Event], driverFor: DriverFor,
       if verifyAttestation(p[3], p0, a.value): ok = true
     result.add ApprovalGrade(who: p[3], round: round,
       grade: (if ok: agCommitted elif present: agRejected else: agUnattested))
+  # exo-e42: and the fold's round rule. The fold counts a contribution only toward its own
+  # round, which it reaches once every earlier round has `threshold` approvals (a rejected
+  # one closes nothing there either). So a key under a round the collection has not
+  # reached, like one member's copy under round 2 while round 1 waits, or under a round the
+  # driver does not run, is no one's approval, however valid its bytes.
+  let desc = drv.describe()
+  var reached = 1
+  while reached < desc.rounds:
+    var closers = initHashSet[string]()
+    for g in result:
+      if g.round == reached and g.grade != agRejected: closers.incl g.who
+    if closers.len < desc.threshold: break
+    inc reached
+  var inReach: seq[ApprovalGrade]
+  for g in result:
+    if g.round in 1 .. reached: inReach.add g
+  result = inReach
 
 proc gradeOf*(grades: seq[ApprovalGrade], who: string, round: int): AttestGrade =
   for g in grades:

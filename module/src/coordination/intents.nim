@@ -167,6 +167,12 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
   # into the wrong round. Sorting by round makes this hold regardless of how canonical
   # order interleaves the events, and stays a pure function of the event SET (inv 4).
   # Single-round drivers put everything in round 1, so this is a no-op for them.
+  # And a contribution counts only toward ITS OWN round (exo-e42): the collection asks
+  # the driver about the round it is in, not the key's, and a driver whose verify ignores
+  # the round (the room FROST scaffold, every single-round driver) would otherwise take
+  # one member's signature under keys 1, 2, … as that many members. So a key for a round
+  # the collection has not reached, has already closed, or the driver does not run is
+  # skipped — still a function of the set, since the rounds close in sorted order.
   var sigs: seq[tuple[id, who, value: string, round, ord: int]]
   for i, e in ordered:
     let (id, op, who, roundStr) = opOf(e)
@@ -194,6 +200,7 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
     # A contribution under a name that is not its signer's is nobody's approval — dropped
     # BEFORE dedup, so it can neither count twice nor take the named member's slot (exo-a5a).
     if not signedByNamed(driverOf(s.id), result[s.id].materialization, s.who, s.value): continue
+    if s.round != result[s.id].collection.round: continue   # not its round: counts toward no other (exo-e42)
     let dedup = s.id & "/" & $s.round & "/" & s.who      # one contribution per (contributor, round)
     if dedup in seenSig: continue
     seenSig.incl dedup
