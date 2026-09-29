@@ -77,10 +77,10 @@ proc homeItems*(events: seq[Event], driverFor: DriverFor, me: EncIdentity,
         it.what = (if v.parts.len > 0: "agree" else: "approve")
     of "executable", "submitted", "settling":
       if v.parts.len > 0:
-        # a family settled in parts: each party pays its own; nobody else's click is needed
+        # a family settled in parts: each party pays its own — the parts the driver says I
+        # settle (a settle-up payer may owe two people); nobody else's click is needed
         for p in v.parts:
-          let pn = bare(p.part.replace("ed:", ""))
-          if pn in mine and not p.settled:
+          if bare(drv.partAuthor(e, p.part, "settled")) == meHex and not p.settled:
             it.cls = hcNeedsYou
             it.what = "pay"
       elif v.state == "executable":

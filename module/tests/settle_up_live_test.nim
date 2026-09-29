@@ -11,7 +11,7 @@
 ##     received — and the original splits are final on every member.
 ## Needs libsodium + secp256k1 (the keystores).
 
-import std/[json, strutils, sequtils]
+import std/[json, strutils, sequtils, algorithm]
 import ../src/log/log
 import ../src/drivers/driver
 import ../src/drivers/split

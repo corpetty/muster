@@ -25,7 +25,7 @@
 ## btc.split (exo-d17): BTC in satoshis, each share its payer's own single-key spend to a
 ## payTo of the chain's network, confirmed on the creditor's own node, no share below dust.
 
-import std/[json, strutils, sequtils, algorithm]
+import std/[json, strutils, sequtils, algorithm, tables]
 import stint
 import ../dcbor/dcbor
 import ../crypto/curve25519
@@ -288,6 +288,103 @@ proc validSplit(d: SplitDriver, e: Effect): tuple[ok: bool, split: Split, why: s
   except ValueError as err:
     (false, Split(), err.msg)
 
+# ── settle up (exo-3c6, §4.11): net several splits into fewer payments ─────────────
+const
+  SettleUpDomain* = "muster.settle-up.v1"
+  SettleUpSchema* = "muster.effect.settle-up.v1"
+
+type
+  Cover* = object
+    ## One agreed, unpaid part of a split that a settle-up settles: as that split says it.
+    intent*, debtor*, creditor*, amount*, payTo*: string
+  NetTransfer* = object
+    ## One net payment a settle-up makes instead: `frm` pays `to` at `to`'s agreed address.
+    frm*, to*, payTo*, amount*: string
+  SettleUp* = object
+    chain*, asset*, memo*: string
+    covers*: seq[Cover]
+    transfers*: seq[NetTransfer]
+
+proc settleUpOf*(e: Effect): SettleUp =
+  ## The settle-up an effect carries, as carried — validation is settleRefusal's.
+  if e.schemaId != SettleUpSchema: raise newException(ValueError, "not a settle-up")
+  result = SettleUp(chain: e.textOf("chain"), asset: e.textOf("asset"), memo: e.textOf("memo"))
+  let cv = e.fieldOf("covers")
+  if cv.kind == ckArray:
+    for x in cv.arr:
+      if x.kind != ckArray or x.arr.len != 5 or not x.arr.allIt(it.kind == ckText):
+        raise newException(ValueError, "a cover is [intent, debtor, creditor, amount, payTo]")
+      result.covers.add Cover(intent: x.arr[0].t, debtor: x.arr[1].t, creditor: x.arr[2].t,
+                              amount: x.arr[3].t, payTo: x.arr[4].t)
+  let tv = e.fieldOf("transfers")
+  if tv.kind == ckArray:
+    for x in tv.arr:
+      if x.kind != ckArray or x.arr.len != 4 or not x.arr.allIt(it.kind == ckText):
+        raise newException(ValueError, "a transfer is [from, to, payTo, amount]")
+      result.transfers.add NetTransfer(frm: x.arr[0].t, to: x.arr[1].t, payTo: x.arr[2].t, amount: x.arr[3].t)
+
+proc settleParties*(su: SettleUp): seq[string] =
+  ## Everyone the covered parts name — each debtor and each creditor — sorted, once each.
+  for c in su.covers:
+    for w in [c.debtor, c.creditor]:
+      if w notin result: result.add w
+  result.sort()
+
+proc settleRefusal(d: SplitDriver, su: SettleUp): string =
+  ## Why `su` is not a settle-up this driver will sign or pay ("" = it is one).
+  if d.family == LezSplitFamily:
+    return "the private split is never netted: its shares are told apart by amount, which netting would erase"
+  if su.chain != d.chain: return "this settle-up settles on " & su.chain & "; its policy settles on " & d.chain
+  if d.family == EvmSplitFamily and su.asset != "ETH" and not isErc20Asset(su.asset):
+    return "an Ethereum settle-up is in ETH or an erc20:<0x token> (asked: " & su.asset & ")"
+  if d.family == BtcSplitFamily and su.asset != "BTC": return "a Bitcoin settle-up is in BTC"
+  if su.memo.len > MaxMemo: return "the memo is longer than " & $MaxMemo & " bytes"
+  if su.covers.len < 2: return "a settle-up nets at least two parts"
+  var balance = initTable[string, UInt256]()     # owed to them
+  var owes = initTable[string, UInt256]()        # they owe
+  for i, c in su.covers:
+    if not (c.intent.startsWith("0x") and isLowerHex(c.intent[2 .. ^1])): return "a covered intent id is 0x + lowercase hex"
+    if not isRoomIdentity(c.debtor) or not isRoomIdentity(c.creditor): return "a cover names room identities"
+    if c.debtor == c.creditor: return "a cover's debtor is never its creditor"
+    if not isCanonDec(c.amount) or c.amount == "0": return "a covered amount is a canonical decimal above zero"
+    if not payToOk(d.family, d.chain, c.payTo): return "a cover's payTo is not a " & d.family & " address: " & c.payTo
+    if i > 0 and (c.intent, c.debtor) <= (su.covers[i-1].intent, su.covers[i-1].debtor):
+      return "covers are sorted by intent then debtor, each part once"
+    balance[c.creditor] = balance.getOrDefault(c.creditor) + u256(c.amount)
+    owes[c.debtor] = owes.getOrDefault(c.debtor) + u256(c.amount)
+  var paid = initTable[string, UInt256]()
+  var got = initTable[string, UInt256]()
+  let parties = settleParties(su)
+  for i, t in su.transfers:
+    if t.frm notin parties or t.to notin parties: return "a transfer names someone the covered parts do not"
+    if t.frm == t.to: return "a transfer pays someone else"
+    if not isCanonDec(t.amount) or t.amount == "0": return "a transfer amount is a canonical decimal above zero"
+    if i > 0 and (t.frm, t.to) <= (su.transfers[i-1].frm, su.transfers[i-1].to):
+      return "transfers are sorted by from then to, each pair once"
+    # a recipient is paid only where one of the splits owing them agreed
+    if not su.covers.anyIt(it.creditor == t.to and it.payTo == t.payTo):
+      return "a transfer pays " & t.payTo & ", not an address a split owing its recipient agreed"
+    paid[t.frm] = paid.getOrDefault(t.frm) + u256(t.amount)
+    got[t.to] = got.getOrDefault(t.to) + u256(t.amount)
+  # conservation: each member's net across the transfers is their net across the covers
+  for w in parties:
+    let owedIn = balance.getOrDefault(w) + paid.getOrDefault(w)
+    let owedOut = owes.getOrDefault(w) + got.getOrDefault(w)
+    if owedIn != owedOut:
+      return "the transfers do not conserve the balance of " & w[0 ..< 12] & "…: what they are owed less " &
+             "what they owe must equal what they receive less what they pay"
+  ""
+
+proc validSettle(d: SplitDriver, e: Effect): tuple[ok: bool, su: SettleUp, why: string] =
+  try:
+    let su = settleUpOf(e)
+    let why = d.settleRefusal(su)
+    (why.len == 0, su, why)
+  except ValueError as err:
+    (false, SettleUp(), err.msg)
+
+proc isSettleUp*(e: Effect): bool = e.schemaId == SettleUpSchema
+
 proc debtorsOf(mat: seq[byte]): seq[string] =
   ## The debtors a materialization names — decoded from the bytes this driver produced.
   ## A sentinel (a malformed split) names none, so nothing can agree to it.
@@ -307,6 +404,24 @@ proc creditorOf(mat: seq[byte]): string =
        v.arr[5].kind == ckText: return v.arr[5].t
   except CatchableError: discard
 
+proc settlePartiesOf(mat: seq[byte]): seq[string] =
+  ## The parties a settle-up materialization names (every covered debtor and creditor),
+  ## decoded from the bytes this driver produced; none for anything else.
+  try:
+    let v = decode(mat)
+    if v.kind != ckArray or v.arr.len != 7 or v.arr[0].kind != ckText or v.arr[0].t != SettleUpDomain: return
+    if v.arr[4].kind != ckArray: return
+    for c in v.arr[4].arr:
+      if c.kind == ckArray and c.arr.len == 5:
+        for i in [1, 2]:
+          if c.arr[i].kind == ckText and c.arr[i].t notin result: result.add c.arr[i].t
+  except CatchableError: discard
+
+proc settlePart*(t: NetTransfer): string =
+  ## A net transfer's part name: its payer and its recipient ("ed:<from>>ed:<to>") — a
+  ## payer who owes two people settles two parts.
+  partName(t.frm) & ">" & partName(t.to)
+
 # ── the Driver seam ────────────────────────────────────────────────────────────
 method describe*(d: SplitDriver): DriverDescriptor =
   ## The family's one policy: a split needs at least one debtor. What a PROPOSAL needs is
@@ -318,22 +433,38 @@ method describeFor*(d: SplitDriver, e: Effect): DriverDescriptor =
   ## to write, so without the creditor's own agreement anyone could publish "Alice paid —
   ## pay 0x<mine>". The creditor agrees at propose when they propose it themselves.
   result = d.describe()
+  if e.isSettleUp:
+    # a settle-up: everyone the covered parts name — each debtor and each creditor
+    let (ok, su, _) = d.validSettle(e)
+    if ok: result.threshold = settleParties(su).len
+    return
   let (ok, sp, _) = d.validSplit(e)
   if ok: result.threshold = sp.shares.len + 1
 
 method agreesByProposing*(d: SplitDriver, e: Effect, proposer: string): bool =
-  ## The creditor proposing their own split agrees to it then — payTo is theirs to state.
+  ## The creditor proposing their own split agrees to it then — payTo is theirs to state. A
+  ## party proposing a settle-up agrees to it then: they composed it.
+  let who = proposer.toLowerAscii().replace("0x", "")
+  if e.isSettleUp:
+    let (ok, su, _) = d.validSettle(e)
+    return ok and who in settleParties(su)
   let (ok, sp, _) = d.validSplit(e)
-  ok and proposer.toLowerAscii().replace("0x", "") == sp.creditor
+  ok and who == sp.creditor
 
 method environment*(d: SplitDriver): string = d.chain
 
 method mayContribute*(d: SplitDriver, e: Effect, names: seq[string]): Eligibility =
-  ## A party the split names: a debtor, or the creditor (exo-770). A malformed split names
-  ## no one, so nobody's agreement could count.
+  ## A party the split names: a debtor, or the creditor (exo-770); for a settle-up, anyone
+  ## its covered parts name. A malformed effect names no one: nobody's agreement could count.
+  let mine = bareNames(names)
+  if e.isSettleUp:
+    let (sok, su, _) = d.validSettle(e)
+    if not sok: return elNo
+    for who in settleParties(su):
+      if partName(who)[3 .. ^1] in mine: return elYes
+    return elNo
   let (ok, sp, _) = d.validSplit(e)
   if not ok: return elNo
-  let mine = bareNames(names)
   for who in sp.shares.mapIt(it.who) & @[sp.creditor]:
     if partName(who)[3 .. ^1] in mine: return elYes
   elNo
@@ -355,6 +486,18 @@ method canonicalize*(d: SplitDriver, e: Effect): Materialization =
   ## dCBOR [domain, schema, chain, asset, total, creditor, payTo, [[who, amount]…], memo(, quote)],
   ## the chain the driver's (the effect must name the same one). A malformed split is a
   ## sentinel no agreement can name.
+  if e.isSettleUp:
+    # dCBOR [domain, schema, chain, asset, [[intent, debtor, creditor, amount, payTo]…],
+    #        [[from, to, payTo, amount]…], memo] — its own domain, never mistaken for a split
+    let (sok, su, swhy) = d.validSettle(e)
+    if not sok:
+      return Materialization(bytes: encode(cbArray(@[cbText(SettleUpDomain), cbText("invalid: " & swhy)])))
+    return Materialization(bytes: encode(cbArray(@[
+      cbText(SettleUpDomain), cbText(SettleUpSchema), cbText(d.chain), cbText(su.asset),
+      cbArray(su.covers.mapIt(cbArray(@[cbText(it.intent), cbText(it.debtor), cbText(it.creditor),
+                                        cbText(it.amount), cbText(it.payTo)]))),
+      cbArray(su.transfers.mapIt(cbArray(@[cbText(it.frm), cbText(it.to), cbText(it.payTo), cbText(it.amount)]))),
+      cbText(su.memo)])))
   let (ok, sp, why) = d.validSplit(e)
   if not ok:
     return Materialization(bytes: encode(cbArray(@[cbText(SplitDomain), cbText("invalid: " & why)])))
@@ -379,7 +522,7 @@ proc agreerOf(mat: seq[byte], c: Contribution): string =
   var sig: Ed25519Sig
   for i in 0 ..< 64: sig[i] = c.bytes[i]
   let creditor = creditorOf(mat)
-  for who in debtorsOf(mat) & (if creditor.len > 0: @[creditor] else: @[]):
+  for who in debtorsOf(mat) & (if creditor.len > 0: @[creditor] else: @[]) & settlePartiesOf(mat):
     try:
       let pk = edOf(who)
       if edVerify(pk, mat, sig): return "ed:" & hx(pk)
@@ -395,6 +538,13 @@ method identifyContributor*(d: SplitDriver, m: Materialization, c: Contribution)
 method signRefusal*(d: SplitDriver, e: Effect): string =
   ## The malformed-split refusal, and — on THIS client's propose / sign path only — a
   ## party who is not a member of the room: nobody could agree for them.
+  if e.isSettleUp:
+    let (sok, su, swhy) = d.validSettle(e)
+    if not sok: return swhy
+    if d.roster.len > 0:
+      for w in settleParties(su):
+        if w notin d.roster: return "a party (" & w[0 ..< 12] & "…) is not a member of this room"
+    return ""
   let (ok, sp, why) = d.validSplit(e)
   if not ok: return why
   if d.roster.len > 0:
@@ -405,12 +555,26 @@ method signRefusal*(d: SplitDriver, e: Effect): string =
 
 # ── settlement in parts ────────────────────────────────────────────────────────
 method settlementParts*(d: SplitDriver, e: Effect): seq[string] =
+  if e.isSettleUp:
+    let (sok, su, _) = d.validSettle(e)
+    return (if sok: su.transfers.mapIt(settlePart(it)) else: @[])
   let (ok, sp, _) = d.validSplit(e)
   if ok: sp.shares.mapIt(partName(it.who)) else: @[]
 
 method partAuthor*(d: SplitDriver, e: Effect, part, step: string): string =
   ## "settled" by the debtor the part names; "confirmed" by the creditor, the one person
-  ## the debt is owed to. Both named by room identity (invariant 9).
+  ## the debt is owed to. Both named by room identity (invariant 9). A settle-up's part: its
+  ## payer settles it, its recipient confirms it.
+  if e.isSettleUp:
+    let (sok, su, _) = d.validSettle(e)
+    if not sok: return ""
+    for t in su.transfers:
+      if settlePart(t) == part:
+        return (case step
+                of "settled": t.frm
+                of "confirmed": t.to
+                else: "")
+    return ""
   let (ok, sp, _) = d.validSplit(e)
   if not ok: return ""
   for s in sp.shares:
@@ -423,13 +587,32 @@ method partAuthor*(d: SplitDriver, e: Effect, part, step: string): string =
 
 method partTransfer*(d: SplitDriver, e: Effect, part: string): PartTransfer =
   ## The payment that settles `part`: its share, to payTo, in the split's asset, on the
-  ## policy's chain — read from the reviewed effect, never supplied (invariant 1).
+  ## policy's chain — read from the reviewed effect, never supplied (invariant 1). A
+  ## settle-up's part: that net transfer.
+  if e.isSettleUp:
+    let (sok, su, swhy) = d.validSettle(e)
+    if not sok: return PartTransfer(ok: false, error: swhy)
+    for t in su.transfers:
+      if settlePart(t) == part:
+        return PartTransfer(ok: true, chain: d.chain, asset: su.asset, to: t.payTo, amount: t.amount)
+    return PartTransfer(ok: false, error: "not a part of this settle-up")
   let (ok, sp, why) = d.validSplit(e)
   if not ok: return PartTransfer(ok: false, error: why)
   for s in sp.shares:
     if partName(s.who) == part:
       return PartTransfer(ok: true, chain: d.chain, asset: sp.asset, to: sp.payTo, amount: s.amount)
   PartTransfer(ok: false, error: "not a part of this split")
+
+method covers*(d: SplitDriver, e: Effect): seq[CoverClaim] =
+  ## A settle-up settles, when final, each part it covers: that split's share of that
+  ## debtor, paid to that split's payTo, confirmed by that split's creditor — as claimed
+  ## here, and checked by the core against the split itself before anyone agrees.
+  if not e.isSettleUp: return
+  let (ok, su, _) = d.validSettle(e)
+  if not ok: return
+  for c in su.covers:
+    result.add CoverClaim(intent: c.intent, part: partName(c.debtor), chain: d.chain, asset: su.asset,
+                          amount: c.amount, payTo: c.payTo, confirmer: c.creditor)
 
 # ── profile + manifest ─────────────────────────────────────────────────────────
 method profile*(d: SplitDriver): FamilyProfile =
@@ -458,10 +641,19 @@ method manifest*(d: SplitDriver, effect: Effect): ActionManifest =
   ## balance that covers their share; from the proposer, the address to be paid (bound to
   ## payTo). Discloses per rail (§6): on EVM every payment's payer, payee and amount — and,
   ## because several payments reach one address close together, the group itself.
-  let (ok, sp, _) = d.validSplit(effect)
+  var (ok, sp, _) = d.validSplit(effect)
   let lez = d.family == LezSplitFamily
   var touches = @[touch(d.chain, tmWrite)]
   if ok: touches.add touch(d.chain & ":" & sp.payTo, tmWrite)
+  if effect.isSettleUp:
+    # a settle-up pays each recipient where their own split agreed: those addresses move
+    let (sok, su, _) = d.validSettle(effect)
+    if sok:
+      ok = true
+      sp.asset = su.asset
+      for t in su.transfers:
+        let tt = touch(d.chain & ":" & t.payTo, tmWrite)
+        if tt notin touches: touches.add tt
   # a token share is a call on the token contract: its balances are what move
   if ok and isErc20Asset(sp.asset): touches.add touch(d.chain & ":" & sp.asset[6 .. ^1], tmWrite)
   let btc = d.family == BtcSplitFamily
@@ -521,3 +713,55 @@ proc splitEffectJson*(chain, asset, total, creditor, payTo: string, shares: seq[
                     "rateAsset": quote.rateAsset, "source": quote.source, "at": quote.at}
     j["sources"] = %*{"quote": "read"}
   $j
+
+# ── composing a settle-up (exo-3c6) ────────────────────────────────────────────
+proc netTransfers*(covers: seq[Cover]): seq[NetTransfer] =
+  ## The net payments that settle `covers`: each member's balance — what they are owed less
+  ## what they owe — conserved, the largest net debtor paying the largest net creditor until
+  ## one of them is square (ties by identity, so every member computes the same). Each
+  ## recipient is paid at the payTo of the first covered split (by intent id) that owes
+  ## them. Debts that cancel exactly need no payment at all.
+  var credit, debit = initTable[string, UInt256]()
+  var payTo = initTable[string, string]()
+  var sorted = covers
+  sorted.sort(proc (x, y: Cover): int = cmp((x.intent, x.debtor), (y.intent, y.debtor)))
+  for c in sorted:
+    credit[c.creditor] = credit.getOrDefault(c.creditor) + u256(c.amount)
+    debit[c.debtor] = debit.getOrDefault(c.debtor) + u256(c.amount)
+    if c.creditor notin payTo: payTo[c.creditor] = c.payTo
+  var creditors, debtors: seq[(string, UInt256)]
+  var who: seq[string]
+  for w in toSeq(credit.keys) & toSeq(debit.keys):
+    if w notin who: who.add w
+  for w in who:
+    let (cr, db) = (credit.getOrDefault(w), debit.getOrDefault(w))
+    if cr > db: creditors.add (w, cr - db)
+    elif db > cr: debtors.add (w, db - cr)
+  let byAmount = proc (x, y: (string, UInt256)): int =
+    if x[1] != y[1]: (if x[1] > y[1]: -1 else: 1) else: cmp(x[0], y[0])
+  creditors.sort(byAmount)
+  debtors.sort(byAmount)
+  var i, j = 0
+  while i < debtors.len and j < creditors.len:
+    let x = min(debtors[i][1], creditors[j][1])
+    result.add NetTransfer(frm: debtors[i][0], to: creditors[j][0], payTo: payTo[creditors[j][0]], amount: $x)
+    debtors[i][1] = debtors[i][1] - x
+    creditors[j][1] = creditors[j][1] - x
+    if debtors[i][1] == 0.u256: inc i
+    if creditors[j][1] == 0.u256: inc j
+  result.sort(proc (x, y: NetTransfer): int = cmp((x.frm, x.to), (y.frm, y.to)))
+
+proc settleUpEffectJson*(chain, asset: string, covers: seq[Cover], transfers: seq[NetTransfer],
+                         memo: string): string =
+  ## The settle-up a composer proposes: covers sorted by intent then debtor, transfers by
+  ## from then to — one spelling, so the same netting has one intent id on every host.
+  var cs = covers
+  cs.sort(proc (x, y: Cover): int = cmp((x.intent, x.debtor), (y.intent, y.debtor)))
+  var ts = transfers
+  ts.sort(proc (x, y: NetTransfer): int = cmp((x.frm, x.to), (y.frm, y.to)))
+  var ca = newJArray()
+  for c in cs:
+    ca.add %*{"intent": c.intent, "debtor": c.debtor, "creditor": c.creditor, "amount": c.amount, "payTo": c.payTo}
+  var ta = newJArray()
+  for t in ts: ta.add %*{"from": t.frm, "to": t.to, "payTo": t.payTo, "amount": t.amount}
+  $(%*{"effect": "settle-up", "chain": chain, "asset": asset, "covers": ca, "transfers": ta, "memo": memo})

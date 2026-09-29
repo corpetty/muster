@@ -32,6 +32,7 @@ import ./session
 import ./authorship
 import ./intents
 import ./attest
+import ./covers      # a part another intent settles is paid through it, never directly (exo-3c6)
 
 # ── the seam: a member's access to the chain their part settles on ────────────────
 type PartSeam* = ref object of RootObj
@@ -117,13 +118,24 @@ proc liveSettlePartSend*(s: CoordinationSession, ks: Keystore, driverFor: Driver
   let effect = effectFromJson(effectJson)
   let parts = drv.settlementParts(effect)
   if parts.len == 0: return ("not-in-parts", PendingPart())
-  let me = myPartName(ks)
-  if me notin parts: return ("not-a-party", PendingPart())
+  # MY parts: the ones the driver says I settle — one per split (named for me), and on a
+  # settle-up one per person I pay (exo-3c6)
+  let myId = myIdentity(ks)
+  var minePts: seq[string]
+  for p in parts:
+    if drv.partAuthor(effect, p, "settled").toLowerAscii() == myId: minePts.add p
+  if minePts.len == 0: return ("not-a-party", PendingPart())
   let (found, v) = viewOf(events, driverFor, intentId)
   if not found or v.state notin ["executable", "submitted", "settling"]:
     return ((if found and v.state == "final": "already-settled" else: "not-agreed"), PendingPart())
-  let (_, mine) = partViewOf(v, me)
-  if mine.settled: return ("already-settled", PendingPart())
+  var me = ""
+  for p in minePts:
+    if not partViewOf(v, p).p.settled:
+      me = p
+      break
+  if me.len == 0: return ("already-settled", PendingPart())
+  # a part another agreed intent settles (a settle-up) is paid through it, never twice
+  if coveringIntent(events, driverFor, intentId, me).len > 0: return ("covered-by-settle-up", PendingPart())
   let ctx = intentContext(events, intentId)
   if ctx.isPlaceholder: return ("no-context", PendingPart())
   if ctx.expired(nowSec): return ("expired", PendingPart())

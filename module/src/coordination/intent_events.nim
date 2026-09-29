@@ -170,6 +170,24 @@ proc effectFromJson*(effectJson: string): Effect =
           for k, v in j["quote"]: q.add (cbText(k), cbText(v.getStr()))
           fields.add ("quote", cbMap(q))
         return Effect(schemaId: "muster.effect.split.v1", fields: fields)
+      of "settle-up":
+        # A settle-up (exo-3c6, §4.11): the agreed, unpaid split parts it covers — each as its
+        # split says — and the net transfers that settle them instead. Carried as proposed;
+        # the split driver refuses anything not in its one spelling, and the core checks each
+        # cover against its split (coordination/covers) before anyone agrees.
+        var cs, ts: seq[CborValue]
+        for c in j{"covers"}.getElems():
+          cs.add cbArray(@[cbText(c{"intent"}.getStr()), cbText(c{"debtor"}.getStr()), cbText(c{"creditor"}.getStr()),
+                           cbText(c{"amount"}.getStr()), cbText(c{"payTo"}.getStr())])
+        for t in j{"transfers"}.getElems():
+          ts.add cbArray(@[cbText(t{"from"}.getStr()), cbText(t{"to"}.getStr()), cbText(t{"payTo"}.getStr()),
+                           cbText(t{"amount"}.getStr())])
+        var fields: seq[(string, CborValue)]
+        for k in ["chain", "asset"]: fields.add (k, cbText(j{k}.getStr()))
+        fields.add ("covers", cbArray(cs))
+        fields.add ("transfers", cbArray(ts))
+        fields.add ("memo", cbText(j{"memo"}.getStr()))
+        return Effect(schemaId: "muster.effect.settle-up.v1", fields: fields)
       of "safe-tx":
         # A full Safe transaction (exo-a50.1.4): a transfer's to / value / nonce plus
         # data, operation (0 CALL, 1 DELEGATECALL), the gas fields, the gas token and the
@@ -212,6 +230,7 @@ proc effectSchema*(effectJson: string): tuple[id: string, known: bool] =
     of "lez-call": return ("muster.effect.lez-call.v1", true)   # a LEZ FROST group's call (exo-55e)
     of "statement": return ("muster.effect.statement.v1", true)
     of "split": return ("muster.effect.split.v1", true)      # who owes the creditor what (exo-a90.3)
+    of "settle-up": return ("muster.effect.settle-up.v1", true)   # net several splits (exo-3c6)
     of "add-driver": return ("muster.effect.governance.add-driver.v1", true)
     of "invoke":
       let m = j{"module"}.getStr()

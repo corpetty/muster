@@ -135,6 +135,19 @@ proc settlesAPart*(d: Driver, e: Effect, names: seq[string]): Eligibility =
     if b.len > 0 and b[0] in mine: return elYes
   elNo
 
+type CoverClaim* = object
+  ## A part of ANOTHER intent that an effect settles when it is final (a settle-up,
+  ## exo-3c6), as the effect claims it. The core checks each claim against that intent's
+  ## own agreed effect, read by its own driver, before anyone agrees (coordination/covers).
+  intent*, part*: string        ## the other intent, and the part of it covered
+  chain*, asset*: string        ## where that part is paid, as claimed
+  amount*, payTo*: string       ## what it pays, and to where, as claimed
+  confirmer*: string            ## who confirms it (its counterparty), as claimed
+
+method covers*(d: Driver, e: Effect): seq[CoverClaim] {.base, gcsafe.} =
+  ## The parts of other intents `e` settles. Default none.
+  @[]
+
 method partAuthor*(d: Driver, e: Effect, part, step: string): string {.base, gcsafe.} =
   ## Who may record `step` for `part` — "settled" (the party's own report of its
   ## settlement) or "confirmed" (the counterparty's confirmation) — as a room identity

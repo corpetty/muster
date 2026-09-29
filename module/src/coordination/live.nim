@@ -27,6 +27,7 @@ import ./session
 import ./authorship   # the room's authentic view + author-signed publishing (exo-f76)
 import ./intents
 import ./attest
+import ./covers     # an effect settling parts of other intents is checked against them (exo-3c6)
 
 proc hex0x(b: openArray[byte]): string =
   const d = "0123456789abcdef"
@@ -123,6 +124,10 @@ proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
   if signatureHex.len == 0:
     let refusal = drv.signRefusal(effectFromJson(effectJson))
     if refusal.len > 0: return "refused: " & refusal
+    # an effect settling parts of OTHER intents (a settle-up): each part exactly as its own
+    # intent says, still unpaid — checked against the log, never taken on the proposer's word
+    let cover = coverRefusal(events, driverFor, drv, effectFromJson(effectJson), intentId)
+    if cover.len > 0: return "refused: " & cover
   let ctx = intentContext(events, intentId)
   if not ctx.isPlaceholder and ctx.expired(nowSec): return "expired"
   let inApp = signatureHex.len == 0
