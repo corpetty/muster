@@ -1,0 +1,22 @@
+# ui-nim — muster's UI in Nim, on nim-seaqt (exo-607)
+
+This is the port of the UI backend from C++ (`ui/src/muster_ui_backend.cpp`) to Nim, using [nim-seaqt](https://github.com/seaqt/nim-seaqt) and nimside's `qobject:` DSL. The goal is **no C++ in the repo**. Muster is also the playground where Jacek designs the seaqt DSL. The scope, the options and the slice plan are in `docs/design/seaqt-ui.md`; live status is `pb dep tree exo-607`.
+
+## What is here
+
+- **`flake.nix`**: the toolchain. It pins nim-seaqt `qt-6.8` and nimside by commit, and takes nixpkgs from the **same logos-module-builder rev as `ui/flake.nix`**, so it uses the very `qtbase-6.9.2` the runner links (the same store path, not merely the same version). `lib.seaqtApp` builds an app. `checks.<system>.hello` is the toolchain gate.
+- **`nix/seaqt-app.nix`**: one seaqt app runs `nim c` with seaqt and nimside on the path. seaqt's `{.compile.}` pragmas build its generated C++ wrappers during that step. That C++ exists only in the build, never in the repo.
+- **`hello/`**: T1. One nimside `qobject:` and one QML file, bound in both directions. `--self-test` checks that QML can call a slot with an argument, that QML can write a property through its setter, and that a Nim change reaches a QML binding.
+
+```
+cd ui-nim && nix build .#hello && QT_QPA_PLATFORM=offscreen result/bin/seaqt-hello --self-test
+cd ui-nim && nix build .#checks.x86_64-linux.hello     # the same test, in the sandbox
+cd ui-nim && nix run .#hello                           # a real window, on a display
+```
+
+## Rules
+
+- **The Qt must be the runner's, exactly.** seaqt compiles against Qt's private headers. It loads only on the Qt minor version it was generated for, or newer. One process cannot hold two Qt copies. Bump `logos-module-builder` here in the same change as `ui/flake.nix`. Move to seaqt `qt-6.11` only when Logos moves to Qt 6.11.
+- **Pin seaqt and nimside by commit.** Their branches are rebased upstream.
+- **The UI reaches muster_module only through the logos API.** This applies here too. Code sharing means the client that logos-nim-sdk generates from `muster.lidl`. It never means linking the core into the UI process.
+- **Parity is judged by the self-tests.** A Nim UI build is ready when `MUSTER_UI=nim scripts/ui-parity.sh` is green, exactly as it is for `cpp`. See `scripts/lib/ui-build.sh` for the contract a build must meet.
