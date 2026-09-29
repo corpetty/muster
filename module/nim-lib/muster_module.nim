@@ -1055,6 +1055,21 @@ proc splitSeamFor(policy: string): PartSeam =
   if k == "lez-split": PartSeam(newLezPartSeam(chain, splitLezAdapter(), moduleKeystore()))
   else: PartSeam(splitSeam(chain))
 
+var gMyLezPayTos: seq[string]   # my LEZ receive addresses, as last read
+var gMyLezPayTosAt = 0.0
+proc myPayTos(family: string): seq[string] =
+  ## The addresses this client holds that a split of `family` could pay: my EVM address, or
+  ## my LEZ receive addresses (read at most every 30s — the intents projection runs each tick).
+  if family != LezSplitFamily: return @[addrHex(myAddress())]
+  if epochTime() - gMyLezPayTosAt > 30:
+    gMyLezPayTosAt = epochTime()
+    try:
+      var fresh: seq[string]
+      for r in splitLezAdapter().receiveAddresses(moduleKeystore()): fresh.add r.address
+      gMyLezPayTos = fresh
+    except CatchableError: discard
+  gMyLezPayTos
+
 proc splitPayingFor(intentId, part: string): bool =
   for p in gSplitPending:
     if p.pp.intentId == intentId and p.pp.part == part: return true
@@ -1134,7 +1149,9 @@ proc splitPump() =
 proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): string =
   ## Propose splitting a bill THIS member fronted: they are the creditor, paid at their own
   ## address on `chain` (proposer material, written into the effect so it is reviewed and
-  ## signed). Returns the intent id, or {error}.
+  ## signed). With {creditor: <room identity>} it is proposed on that member's behalf
+  ## (exo-770): paid at the address they last shared into the room, and payable only once
+  ## they agree too. Returns the intent id, or {error}.
   if gSession == nil: return $(%*{"error": "not-joined"})
   # WHICH rail: the chain named, else the compose policy's (the Split composer's "Settles
   # on" row — evm-split or lez-split), else an EVM split on the chain the RPC serves. The
@@ -1156,17 +1173,20 @@ proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): s
   if kind notin roomKinds(): return $(%*{"error": "not-admitted", "kind": kind})
   if not isCanonDec(total) or total == "0": return $(%*{"error": "bad-total", "total": total})
   let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
+  var creditor = me
   var shares: seq[SplitShare]
   var asset = (if lez: "LEZ" else: "ETH")
   try:
     let j = parseJson(sharesJson)
+    if j.kind == JObject and j{"creditor"}.getStr().len > 0:
+      creditor = j["creditor"].getStr().toLowerAscii().replace("0x", "")
     if j.kind == JArray:
       # the private split needs every share distinct: its note is matched by amount (§4.7)
-      shares = evenShares(total, me, j.getElems().mapIt(it.getStr().toLowerAscii()), distinctAmounts = lez)
+      shares = evenShares(total, creditor, j.getElems().mapIt(it.getStr().toLowerAscii()), distinctAmounts = lez)
     elif j.kind == JObject and j.hasKey("shares"):
       for x in j["shares"].getElems(): shares.add SplitShare(who: x{"who"}.getStr().toLowerAscii(), amount: x{"amount"}.getStr())
     elif j.kind == JObject and j.hasKey("parties"):
-      shares = evenShares(total, me, j["parties"].getElems().mapIt(it.getStr().toLowerAscii()),
+      shares = evenShares(total, creditor, j["parties"].getElems().mapIt(it.getStr().toLowerAscii()),
                           creditorShares = j{"creditorShares"}.getBool(true), distinctAmounts = lez)
     else: return $(%*{"error": "bad-shares", "detail": "an array of room identities, {parties}, or {shares}"})
     # an Ethereum split in a token (exo-5ab): {…, "asset": "0x<token>" | "erc20:0x<token>"}
@@ -1178,16 +1198,24 @@ proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): s
         if not isErc20Asset(asset): return $(%*{"error": "bad-asset", "detail": asset})
   except CatchableError as e:
     return $(%*{"error": "bad-shares", "detail": e.msg})
-  # payTo: my own address on the rail — the private split's is my shielded key node
+  # payTo: my own address on the rail — the private split's is my shielded key node. On
+  # someone's behalf, the address THEY last shared (their signed address-share), never one
+  # typed here; their own client checks it before agreeing (creditorAgreeRefusal).
   var payTo = addrHex(myAddress())
-  if lez:
+  if creditor != me:
+    if lez: return $(%*{"error": "on-behalf-private", "detail":
+                        "a private split is proposed by whoever fronted it: their shielded address is not shared in the room"})
+    gSession.poll()
+    payTo = sharedAddressOf(gSession.roomEvents(), creditor)
+    if payTo.len == 0: return $(%*{"error": "no-shared-address", "creditor": creditor})
+  elif lez:
     payTo = ""
     try:
       for r in splitLezAdapter().receiveAddresses(moduleKeystore()):
         if r.form == "shielded": payTo = r.address
     except CatchableError as e: return $(%*{"error": "no-lez-wallet", "detail": e.msg})
     if payTo.len == 0: return $(%*{"error": "no-lez-wallet", "detail": "no shielded account to be paid at"})
-  let effect = splitEffectJson(chain, asset, total, me, payTo, shares, memo)
+  let effect = splitEffectJson(chain, asset, total, creditor, payTo, shares, memo)
   var ttl = DefaultIntentTtl
   try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
   except ValueError: discard
@@ -1569,6 +1597,13 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
   if gSession == nil: return "not-joined"
   if signatureHex.len == 0:
     let drv = driverFor(intentPolicyOf(gSession.roomEvents(), intentId))
+    if drv of SplitDriver:
+      # the creditor's agreement is their word that payTo is theirs (exo-770): never given
+      # for an address this client does not hold
+      let why = creditorAgreeRefusal(effectFromJson(effectJsonOf(gSession.roomEvents(), intentId)),
+                                     toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii(),
+                                     myPayTos(drv.profile().family))
+      if why.len > 0: return why
     if drv of LezMultisigDriver: return noteApproved(intentId, musterCoordinateVote(intentId))
     if drv.frostGroupOf().ok:
       # a FROST approval (Bitcoin or LEZ) is two rounds: this member's nonces now, its partial signature
@@ -1678,6 +1713,11 @@ proc musterCoordinateIntents(): string =
     for d in v.decliners:
       decl.add %*{"who": d, "name": memberName(d, mine)}
     o["declinerNames"] = decl
+    # who proposed it — only a signed claim names anyone (exo-770); [] = unattributed
+    var props = newJArray()
+    for p in v.proposers:
+      props.add %*{"who": p, "name": (if p == myEncHex: "you" else: memberName(p, mine)), "mine": p == myEncHex}
+    o["proposedBy"] = props
     if v.parts.len > 0 and prof.family in [EvmSplitFamily, LezSplitFamily]:
       # a split (exo-a90): each person's share and where it stands — only what each disclosed
       # (their agreement, their payment report) and what the creditor confirmed (invariant 9)
@@ -1705,6 +1745,12 @@ proc musterCoordinateIntents(): string =
                         "private": prof.family == LezSplitFamily,
                         "creditor": sp.creditor, "iAmCreditor": sp.creditor == myEncHex,
                         "creditorName": memberName(sp.creditor, mine),
+                        # the creditor is a party (exo-770): whether they agreed, and — on MY
+                        # client, when I am the creditor — whether payTo is an address I hold
+                        "creditorAgreed": partName(sp.creditor) in whos,
+                        "payToMine": sp.creditor == myEncHex and
+                                     creditorAgreeRefusal(effectFromJson(v.effectJson), myEncHex,
+                                                          myPayTos(prof.family)).len == 0,
                         "creditorShare": subDec(sp.total, sum)}
       except CatchableError: discard
     arr.add o

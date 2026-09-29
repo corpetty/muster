@@ -471,3 +471,20 @@ proc reduceMessages*(events: seq[Event]): seq[Message] =
     except CatchableError: continue
   result.sort(proc (a, b: Message): int =
     if a.ts != b.ts: (if a.ts < b.ts: -1 else: 1) else: cmp(a.id, b.id))
+
+proc sharedAddressOf*(events: seq[Event], who: string): string =
+  ## The Ethereum address `who` last shared into the room — their newest address-share card
+  ## ("" when they have shared none), lowercase "0x" + 40 hex. Read it over the room's
+  ## authentic view (roomEvents): a message is author-signed, so a share posted in `who`'s
+  ## name by anyone else never reaches here. What a split proposed on someone's behalf pays
+  ## them at (exo-770) — the address they gave, never one the proposer typed.
+  let w = who.toLowerAscii()
+  for m in reduceMessages(events):             # oldest first: the newest share wins
+    if m.author.toLowerAscii() != w: continue
+    try:
+      let b = parseJson(m.body)
+      if b.kind != JObject or b{"kind"}.getStr() != "address-share" or b{"asset"}.getStr("ETH") != "ETH": continue
+      let a = b{"address"}.getStr().toLowerAscii()
+      if a.len == 42 and a.startsWith("0x") and a[2 .. ^1].allCharsInSet(HexDigits) and a != "0x" & repeat('0', 40):
+        result = a
+    except CatchableError: discard

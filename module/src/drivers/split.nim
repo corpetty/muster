@@ -210,6 +210,19 @@ method agreesByProposing*(d: SplitDriver, e: Effect, proposer: string): bool =
 
 method environment*(d: SplitDriver): string = d.chain
 
+proc creditorAgreeRefusal*(e: Effect, me: string, held: seq[string]): string =
+  ## Before THIS member agrees to a split: "" unless they are its creditor and payTo is not an
+  ## address their client holds (`held`, compared case-blind) — then "payto-not-mine". The
+  ## creditor's agreement is their word that payTo is theirs (exo-770); their client does
+  ## not give it for an address it cannot account for. Not a split: not this check.
+  try:
+    let sp = splitOf(e)
+    if sp.creditor != me.toLowerAscii().replace("0x", ""): return ""
+    for h in held:
+      if h.toLowerAscii() == sp.payTo.toLowerAscii(): return ""
+    "payto-not-mine"
+  except ValueError: ""
+
 method canonicalize*(d: SplitDriver, e: Effect): Materialization =
   ## dCBOR [domain, schema, chain, asset, total, creditor, payTo, [[who, amount]…], memo],
   ## the chain the driver's (the effect must name the same one). A malformed split is a
