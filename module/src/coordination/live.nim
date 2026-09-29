@@ -42,12 +42,16 @@ proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
 
 proc liveProposeIntent*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
                         policy, effectJson: string, nowSec: int64, msgSeq: uint64,
-                        account: string, ttlSec = DefaultIntentTtl): string =
+                        account: string, ttlSec = DefaultIntentTtl,
+                        reads: seq[tuple[field, source: string]] = @[]): string =
   ## Propose an intent into the room: declare its policy, publish the propose and the
   ## context every attestation on it binds to (invariant 2: the driver's environment,
   ## `account` — the Safe, or the room for a room-native decision — the intent id as
   ## the slot, and an expiry `ttlSec` from now), and announce it into the thread as an
-  ## intent-ref card. Returns the intent id.
+  ## intent-ref card. Returns the intent id. `reads` names the effect fields the proposer
+  ## READ from outside the room (a fiat quote, exo-3a4) and where from: each is recorded
+  ## in the log before anyone agrees (invariant 10), so the agreement made by proposing
+  ## can cite it.
   # The intent id commits to its policy, so the SAME effect under two policies is two
   # distinct intents (an intent is a policy boundary). The policy is declared in the
   # log keyed by that id, so every member folds this intent under the same driver.
@@ -66,6 +70,11 @@ proc liveProposeIntent*(s: CoordinationSession, ks: Keystore, driverFor: DriverF
   s.publish(contextEvent(id, SigningContext(
     environment: driverFor(policy).environment(), account: account, slot: id,
     expiry: expiry)))
+  # Each external read that reached the effect, recorded before any agreement (inv 10).
+  if reads.len > 0:
+    let ej = parseJson(effectJson)
+    for r in reads:
+      if ej.hasKey(r.field): s.publish(readEvent(id, r.field, r.source, $ej[r.field]))
   # Who proposed it, signed (exo-770): the room reads a proposal's proposer only from this.
   let me = hex0x(ks.encIdentity().toBytes())
   s.publishAuthored(ks, proposerEvent(id, me))

@@ -200,6 +200,18 @@ A third family, `btc.split` (exo-d17), settles a split in BTC on a Bitcoin chain
 
 `split_btc_test` holds it without a node: BIP-173's P2WPKH vector, every input signed by the payer's key, the exact-output match, and the dust and network refusals. `split_btc_regtest_e2e` holds it on a real Bitcoin Core regtest node: two debtors pay from their own coins, a payment one satoshi short and one sent to someone else are refused, and the creditor's own node confirms both shares. `scripts/split-btc-self-test.sh` drives it through the real runner over the live fleet.
 
+### 4.10 A bill in another currency (a recorded quote)
+
+"1,840 EUR, paid in ETH" needs a rate, and a rate is an external read: exactly what invariant 10 exists for (exo-3a4). The effect carries an optional `quote`:
+
+- **Its fields:** `currency` (ISO 4217, three capitals), `fiatTotal` (the bill in the currency's minor units), `fiatDecimals`, `rateAsset` (the asset's base units per `rateFiat` minor units, so per ONE unit of the currency), `source` (where the rate came from, as the proposer names it) and `at` (unix seconds). All are canonical text.
+- **The conversion is exact.** The total must be `fiatTotal × rateAsset ÷ rateFiat`, rounded down. `fiatQuote` builds a quote from what a person types ("1840.00", "0.00031") by string arithmetic. Anything that cannot convert exactly is refused, never rounded: more decimals than the currency has, a rate finer than one base unit, a sign or an exponent, zero, or an overflow. The driver refuses a quoted split whose total is not its conversion, naming the conversion it expected.
+- **The quote is signed.** It is the materialization's tenth element, so everyone agrees to the rate as well as the total. A split without a quote is byte-for-byte what it was.
+- **The quote is accounted for.** The effect declares it sourced (`"sources": {"quote": "read"}`), and the proposer records the read (`intent/<id>/read/quote`, source `quote:proposer`) in the log **before** their own agreement (`liveProposeIntent(…, reads)`). Proposed without that record, the quote's origin is unaccountable, and nobody's agreement to it counts (`unaccountable-input`).
+- **The card names the quote** before anyone agrees: "A bill of 1840.00 EUR, converted at 1 EUR = 0.00031 ETH — Alice's quote, from "ECB reference rate", ‹time›. Agreeing means trusting this rate: check it first." The quote's credibility is exactly who read it and from where. The room shows that and makes no claim of its own.
+
+Settling is unchanged: each share is in the asset. `split_fiat_test` holds the conversion, the refusals, the signed bytes and invariant 10. On a display, a 1840.00 EUR bill was composed at a typed rate and proposed, and the other member's card named the quote.
+
 ## 5. The invariants, one by one
 
 | # | How the split keeps it |
@@ -289,5 +301,5 @@ The **split body** (S5) shows one row per person: name, amount, and state (*owes
 4. **A new locus rather than stretching an old one (decided, §3).** This is a vocabulary change to the registry, so the atlas and the landscape table regenerate.
 5. **Confirmation is the creditor's (decided).** Nobody else can confirm a private payment, and on a public rail the creditor is still the one the debt concerns. *Open:* whether a public-rail read by *another* member should show on the card as a local, unlogged grade ("your RPC also sees it").
 6. **Amounts as canonical decimal text (decided).** This avoids `uint64` overflow in wei without dCBOR tags. *Open:* whether the platform's cdCDDLe profile (ADR-009, 5b) will want a bignum form; the `schema-id` field is where that would change.
-7. **Fiat bills (open, backlog).** "1,840 EUR" settled in ETH needs a rate. The rate is an external read, and it is exactly the input invariant 10 exists for: the card shows whose quote, from where, and that the room is trusting it (the prototype's "Price quote" plugin).
+7. **Fiat bills (decided, exo-3a4, §4.10).** "1,840 EUR" settled in ETH needs a rate. The rate is an external read, exactly the input invariant 10 exists for. It is the **proposer's quote**, typed with its source, recorded in the log before anyone agrees, and signed with the split; the card shows whose quote, from where and when, and that agreeing means trusting it. *Open:* a price plugin (the prototype's "Price quote") that fetches a rate from a user-configured source (invariant 8). It would be the same recorded read, from another reader.
 8. **Netting (open, backlog).** "Settle up" across several splits is a second effect over the same parts seam. Its effect names the net transfers, and every original split's parts are confirmed by reference.
