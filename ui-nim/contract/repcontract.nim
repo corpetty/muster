@@ -20,7 +20,7 @@
 ## Only the forms `ui/src/muster_ui.rep` uses are mapped: QString PROPs and void SLOTs
 ## of QString parameters. Anything else is a compile error naming it.
 
-import std/[macros, strutils]
+import std/[macros, strutils, sequtils]
 import ./repparse
 export repparse
 
@@ -112,13 +112,22 @@ macro repContract*(T: untyped, repFile: static string): untyped =
   # what the DSL is asked to express, for whoever designs it.
   result.add newConstStmt(postfix(ident($T & "ContractSource"), "*"), newLit(src))
 
-macro repStubs*(T: untyped, repFile: static string, log: untyped): untyped =
+macro repStubs*(T: untyped, repFile: static string, log: untyped,
+                skip: varargs[string]): untyped =
   ## Implement every `<slot>Impl` of `repContract(T, repFile)` by appending the call,
-  ## "name(arg,…)", to the seq[string] `log`. For the contract check (and a stand-in
-  ## until the real backend lands), never for the shipped UI.
+  ## "name(arg,…)", to the seq[string] `log`, except the SLOTs named after `log`, which
+  ## the caller implements: `repStubs(T, rep, calls, "checkHealth")`. For the contract
+  ## check and the hosting probes (a stand-in until the real backend lands), never for
+  ## the shipped UI.
   let rep = parseRep(staticRead(repFile))
+  var names: seq[string]
+  for n in skip: names.add n.strVal
+  for name in names:
+    if not rep.slots.anyIt(it.name == name):
+      error("repStubs: skip names '" & name & "', which is not a SLOT of " & rep.name)
   var s = ""
   for sl in rep.slots:
+    if sl.name in names: continue
     var params = "o: " & $T
     var call = escape(sl.name & "(")
     for i, p in sl.params:

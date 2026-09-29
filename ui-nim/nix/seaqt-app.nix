@@ -10,9 +10,10 @@
 , main                # the .nim entry point, relative to src
 , qml ? [ ]           # QML files installed to $out/share/<pname>/
 , nimFlags ? [ ]
+, extraAttrs ? { }    # passed through to mkDerivation, e.g. qtWrapperArgs
 }:
 
-stdenv.mkDerivation {
+stdenv.mkDerivation ({
   inherit pname version src;
 
   nativeBuildInputs = [ nim pkg-config qt6.wrapQtAppsHook ];
@@ -39,4 +40,4 @@ stdenv.mkDerivation {
   '';
 
   meta.mainProgram = pname;
-}
+} // extraAttrs)

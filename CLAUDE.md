@@ -81,7 +81,7 @@ docs/            00-vision · 01-furps · 02-implementation-plan
 contracts/specs/ typed specs with acceptance oracles, one per invariant (derived-exo-*)
 contracts/families/ the multisig family registry · actions/ the action corpus (exo-661): generated.json (built drivers' describe/profile/manifest, from module/tools/action_corpus.nim, held by action_corpus_test) + family/<id>.json, room.json, wallet.json (authored, checked by scripts/check-action-corpus.py) — rendered by docs/design/multisig-atlas.html, served at https://corpetty.github.io/muster/atlas/
 ui/prototype/    coordination-prototype-v2.html — the standalone HTML reference build
-ui-nim/          the UI in Nim on nim-seaqt + nimside (epic exo-607, docs/design/seaqt-ui.md): flake.nix pins seaqt qt-6.8 against the runner's exact Qt 6.9.2 · nix/seaqt-app.nix · hello/ (T1) · contract/ (T2: repContract, the .rep → nimside qobject: macro, checked index for index against repc)
+ui-nim/          the UI in Nim on nim-seaqt + nimside (epic exo-607, docs/design/seaqt-ui.md): flake.nix pins seaqt qt-6.8 against the runner's exact Qt 6.9.2 · nix/seaqt-app.nix · hello/ (T1) · contract/ (T2: repContract, the .rep → nimside qobject: macro, checked index for index against repc) · app/ (T4a: muster-app, the real QML in a Nim host over liblogos + lp_*)
 scripts/         git hooks
 ```
 
@@ -104,6 +104,7 @@ module/tests/run-suite.sh e2e <name>            # one chain-bound test (TEST_ARG
 scripts/card-self-test.sh                       # offscreen UI round trips; also infra-, audit-download-self-test.sh, two-instance-proof.sh, invite-proof.sh and split-self-test.sh (live fleet; the split also runs a throwaway anvil; split-btc-self-test.sh a fresh Bitcoin Core regtest, under `nix shell nixpkgs#bitcoind`); split-lez-testnet.sh is the private split on the LEZ testnet (real lez_core wallets, a faucet claim, two proofs — ~25 min; wallets kept in .run/lez-split). Each kills only its own instances (per session, `scripts/lib/ui-build.sh`), never another session's runners; `MUSTER_UI=nim` points them at the Nim (seaqt) build
 scripts/ui-parity.sh                            # the UI parity suite: every offscreen self-test above, one at a time, green/red table (MUSTER_UI=cpp|nim, exo-607 T0)
 cd ui-nim && nix build .#checks.x86_64-linux.hello   # the seaqt toolchain gate: nimside qobject: ↔ QML, against the runner's own Qt 6.9.2 (exo-607 T1)
+scripts/nim-app-core-probe.sh                   # exo-607 T4a (option B): the real QML in a Nim host that starts logos-core itself and calls muster_module over lp_* (needs make build)
 scripts/grade-specs.sh [exo-xxx]                 # grade the typed specs with exophial's own oracle (links the probes' closure into module/.probe-env, exo-a7b)
 python3 docs/diagrams/tools/check-manifest.py   # figure-provenance gate (--update, --stamp)
 python3 scripts/check-readme-rot.py             # entry-point README staleness gate vs the Current-phase section (--stamp)

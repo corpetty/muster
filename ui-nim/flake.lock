@@ -3858,6 +3858,23 @@
         "type": "github"
       }
     },
+    "logos-nim-sdk": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1789545445,
+        "narHash": "sha256-iTavzLVciPqG2wVJiDUEKt4Zg2Y1o0UVAaZFYunIo1Q=",
+        "owner": "corpetty",
+        "repo": "logos-nim-sdk",
+        "rev": "9aa82f3ddca199c4ec2c56a03ba0b60b36338ea1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "corpetty",
+        "repo": "logos-nim-sdk",
+        "rev": "9aa82f3ddca199c4ec2c56a03ba0b60b36338ea1",
+        "type": "github"
+      }
+    },
     "logos-nix": {
       "inputs": {
         "nixpkgs": "nixpkgs"
@@ -20675,6 +20692,7 @@
     "root": {
       "inputs": {
         "logos-module-builder": "logos-module-builder",
+        "logos-nim-sdk": "logos-nim-sdk",
         "nim-seaqt": "nim-seaqt",
         "nimside": "nimside"
       }
