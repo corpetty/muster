@@ -45,4 +45,21 @@ block:
   doAssert matchTokenPayment(two, Tok, Alice, "300000") == ""
   echo "2. a share is paid only by that token, exactly the share, to payTo OK"
 
+# ── 3. what a token says about itself: symbol() and decimals(), ABI-decoded ─────
+# Display only (never signed): the card reads "0.3 MTD", and names the token's address
+# beside it, because a token names itself.
+block:
+  proc raw(hex: string): string = hex.toLowerAscii().align(64, '0')   # one 32-byte word, no 0x
+  # symbol() -> string "MTD": offset 0x20, length 3, "MTD" right-padded
+  let sym = "0x" & raw("20") & raw("3") & "4d5444".alignLeft(64, '0')
+  doAssert abiString(sym) == "MTD", abiString(sym)
+  doAssert abiUint8("0x" & raw("6")) == 6 and abiUint8(raw("12")) == 18
+  # a malformed answer is not a symbol, and an out-of-range decimals is refused
+  doAssert abiString("0x1234") == "" and abiString("") == ""
+  doAssert abiUint8("0x" & raw("100")) == -1 and abiUint8("0xzz") == -1
+  # a long, hostile symbol is cut to a readable length
+  let long = "0x" & raw("20") & raw("40") & repeat("41", 64)
+  doAssert abiString(long).len <= 16, abiString(long)
+  echo "3. symbol() and decimals() decode; a malformed or hostile answer is refused or cut OK"
+
 echo "erc20_logs_test: all OK"
