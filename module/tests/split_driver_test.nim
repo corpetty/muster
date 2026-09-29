@@ -265,4 +265,19 @@ block:
   doAssert named, "the manifest names the token a share is paid in"
   echo "10. an ERC-20 split: erc20:<token> in its one spelling; the share is paid in it OK"
 
+# ── 11. the history's words for a token split: the token's own decimals and symbol ──
+block:
+  const Tok = "erc20:0x5fbdb2315678afecb367f032d93f642f64180aa3"
+  let e = splitEffectJson(Chain, Tok, "900000", idOf(devon), PayTo,
+                          evenShares("900000", idOf(devon), @[idOf(ana)]), "Team lunch")
+  # told by the host what the token says about itself (display only): 0.9 MTD
+  let told = effectSummary(e, nil, proc(asset: string): tuple[symbol: string, decimals: int] =
+    (if asset == Tok: ("MTD", 6) else: ("", -1)))
+  doAssert "0.9 MTD" in told.text and "erc20:" notin told.text, told.text
+  # not told: base units, and the token named by a short address — never 18 decimals
+  let blind = effectSummary(e)
+  doAssert "900000 base units of token 0x5fbd" in blind.text and "0.0000" notin blind.text, blind.text
+  doAssert told.amount == "900000", "the raw amount stays"
+  echo "11. a token split's summary reads in the token's own decimals, or in base units OK"
+
 echo "split_driver_test: all OK"
