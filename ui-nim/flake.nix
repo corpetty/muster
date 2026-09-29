@@ -30,6 +30,9 @@
       systems = [ "x86_64-linux" "aarch64-linux" ];
       forAll = f: nixpkgs.lib.genAttrs systems (system: f (import nixpkgs { inherit system; }));
       seaqtApp = pkgs: pkgs.callPackage ./nix/seaqt-app.nix { inherit nim-seaqt nimside; };
+      # The view contract and the QML that uses it, shared with the C++ build (ui/).
+      viewContract = ../ui/src/muster_ui.rep;
+      viewQml = ../ui/src/qml;
     in {
       # A builder for seaqt apps, for the later slices (T2 onward): seaqtApp pkgs { pname; src; main; }
       lib.seaqtApp = seaqtApp;
@@ -37,6 +40,14 @@
       packages = forAll (pkgs: rec {
         # T1: one QML file, one nimside qobject:, bound both ways. `--self-test` asserts it.
         hello = seaqtApp pkgs { pname = "seaqt-hello"; src = ./hello; main = "hello.nim"; qml = [ "hello.qml" ]; };
+        # T2: the view contract, declared by repContract from the .rep the C++ build's repc
+        # reads, and its check (checks.contract). `--dump` prints the generated declaration.
+        contract-test = seaqtApp pkgs {
+          pname = "muster-contract-test";
+          src = ./contract;
+          main = "contract_test.nim";
+          nimFlags = [ "-d:musterRep=${viewContract}" ];
+        };
         default = hello;
       });
 
@@ -46,6 +57,15 @@
         hello = pkgs.runCommand "seaqt-hello-self-test" { } ''
           export HOME=$TMPDIR QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software
           ${self.packages.${pkgs.system}.hello}/bin/seaqt-hello --self-test | tee $out
+        '';
+        # The T2 gate: repc (the pinned qtremoteobjects) generates the typed source from the
+        # view contract; the nimside declaration must present QtRO the same API, index for
+        # index, and every backend.<name> in the real QML must be in it.
+        contract = pkgs.runCommand "muster-contract-check" { } ''
+          export HOME=$TMPDIR QT_QPA_PLATFORM=offscreen
+          ${pkgs.qt6.qtremoteobjects}/libexec/repc -o source ${viewContract} $TMPDIR/rep_source.h
+          ${self.packages.${pkgs.system}.contract-test}/bin/muster-contract-test \
+            --repc $TMPDIR/rep_source.h --qml ${viewQml} | tee $out
         '';
       });
 

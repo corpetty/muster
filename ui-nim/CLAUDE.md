@@ -7,11 +7,19 @@ This is the port of the UI backend from C++ (`ui/src/muster_ui_backend.cpp`) to 
 - **`flake.nix`**: the toolchain. It pins nim-seaqt `qt-6.8` and nimside by commit, and takes nixpkgs from the **same logos-module-builder rev as `ui/flake.nix`**, so it uses the very `qtbase-6.9.2` the runner links (the same store path, not merely the same version). `lib.seaqtApp` builds an app. `checks.<system>.hello` is the toolchain gate.
 - **`nix/seaqt-app.nix`**: one seaqt app runs `nim c` with seaqt and nimside on the path. seaqt's `{.compile.}` pragmas build its generated C++ wrappers during that step. That C++ exists only in the build, never in the repo.
 - **`hello/`**: T1. One nimside `qobject:` and one QML file, bound in both directions. `--self-test` checks that QML can call a slot with an argument, that QML can write a property through its setter, and that a Nim change reaches a QML binding.
+- **`contract/`**: T2, the view contract.
+  - **The macro:** `repContract(MusterUi, "<muster_ui.rep>")` generates a nimside `qobject:` at compile time from the same `.rep` the C++ build's repc reads, so the two backends cannot drift. A repc for nimside.
+  - **What each SLOT becomes:** a guarded slot calling `<slot>Impl`, which is forward-declared, so a missing implementation is a compile error.
+  - **What each PROP becomes:** a READONLY property with a Nim `setX`.
+  - **The check** (`contract_test.nim`, `checks.contract`): compares QtRO's view of that object with repc's typed-source API, index by index; drives all 66 slots and 50 properties through QML; and resolves every `backend.<name>` in `ui/src/qml`.
+  - **`--dump`** prints the generated declaration.
 
 ```
 cd ui-nim && nix build .#hello && QT_QPA_PLATFORM=offscreen result/bin/seaqt-hello --self-test
 cd ui-nim && nix build .#checks.x86_64-linux.hello     # the same test, in the sandbox
 cd ui-nim && nix run .#hello                           # a real window, on a display
+cd ui-nim && nix build .#checks.x86_64-linux.contract  # T2: the contract, index for index with repc
+cd ui-nim && nix run .#contract-test -- --dump         # the nimside declaration repContract generates
 ```
 
 ## Rules
