@@ -91,9 +91,11 @@ proc btcSummary(j: JsonNode): EffectSummary =
   result.text = "a Bitcoin payment: " & $total & " sat → " & short(payees[0]) &
                 (if payees.len > 1: " and " & $(payees.len - 1) & " more" else: "") & fee
 
-proc effectSummary*(effectJson: string, label: proc (who: string): string = nil): EffectSummary =
+proc effectSummary*(effectJson: string, label: proc (who: string): string = nil,
+                    token: proc (asset: string): tuple[symbol: string, decimals: int] = nil): EffectSummary =
   ## `label` names a person the effect carries (a split's creditor) the way the card
-  ## does — "you", an alias (exo-221); without one, a short id.
+  ## does — "you", an alias (exo-221); without one, a short id. `token` says what an ERC-20
+  ## asset calls itself and its decimals (display only, exo-5ab); without it, base units.
   if effectJson.len == 0: return EffectSummary(kind: "unknown", text: "a proposal")
   var j: JsonNode
   try: j = parseJson(effectJson)
@@ -120,7 +122,12 @@ proc effectSummary*(effectJson: string, label: proc (who: string): string = nil)
     let total = numText(j{"total"})
     let memo = j{"memo"}.getStr()
     # the words read in the asset's own decimals (ETH 18, LEZ 9); .amount/.unit stay raw
-    let shown = inDecimals(total, (if asset == "LEZ": 9 else: 18)) & " " & asset
+    let tokenAddr = (if asset.startsWith("erc20:"): asset[6 .. ^1] else: "")
+    let t = (if tokenAddr.len > 0 and token != nil: token(asset) else: ("", -1))
+    let shown =
+      if tokenAddr.len == 0: inDecimals(total, (if asset == "LEZ": 9 else: 18)) & " " & asset
+      elif t[1] >= 0: inDecimals(total, t[1]) & " " & (if t[0].len > 0: t[0] else: "units")
+      else: total & " base units of token " & short(tokenAddr)
     let creditor = j{"creditor"}.getStr()
     return EffectSummary(kind: "split", amount: total, unit: unit, to: j{"payTo"}.getStr(),
       text: "a split" & (if memo.len > 0: " — " & memo else: "") & ": " & shown & ", " &

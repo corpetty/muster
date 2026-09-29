@@ -2035,9 +2035,15 @@ proc musterCoordinateActivity(): string =
       if a.kind == "approve" and a.account.len > 0 and
          approvedByMe(events, a.intentId, @[a.account], myEnc, myNames): "Approved by you"
       elif a.kind == "propose":
-        # "Proposed a split — …: 0.6 ETH, 1 person owes you": the effect's own people, named
-        "Proposed " & effectSummary(effectJsonOf(events, a.intentId),
-                                    proc(who: string): string = memberName(who, mine)).text
+        # "Proposed a split — …: 0.6 ETH, 1 person owes you": the effect's own people, named,
+        # and a token in its own decimals and symbol (display only, exo-5ab)
+        let ej = effectJsonOf(events, a.intentId)
+        var onChain = ""
+        try: onChain = parseJson(ej){"chain"}.getStr()
+        except CatchableError: discard
+        "Proposed " & effectSummary(ej, proc(who: string): string = memberName(who, mine),
+                                    proc(asset: string): tuple[symbol: string, decimals: int] =
+                                      tokenInfo(onChain, asset[6 .. ^1])).text
       else: activityTitle(a, proc(who: string): string = memberName(who, mine))
     arr.add %*{"seq": a.seq, "kind": a.kind, "intentId": a.intentId,
                "account": a.account, "title": title, "detail": a.detail}
