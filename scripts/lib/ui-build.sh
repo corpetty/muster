@@ -16,6 +16,12 @@
 #     onContextReady), since offscreen nothing can click;
 #   * a QML load error reaches the same log.
 #
+# To see the C++ backend's own lines (its [muster_ui] qInfo, the autopilot's decisions)
+# in a self-test's logs, run it with QT_FORCE_STDERR_LOGGING=1: ui_launch passes the
+# environment through, and without it Qt sends ui-host's logging to the systemd journal
+# (`journalctl --user _PID=<ui-host pid>`), not to the runner's log. exo-ca3 was
+# diagnosed from the journal that way.
+#
 # Cleanup is per instance: each launch runs in its own session (setsid) and
 # ui_cleanup kills exactly those sessions (the runner and the logos_host_qt
 # children it spawned), so a self-test never takes down another session's runners.
