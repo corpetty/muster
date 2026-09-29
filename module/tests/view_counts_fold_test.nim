@@ -397,4 +397,106 @@ block:
   check("Safe: one owner under round keys 1 and 2", alone, safeFor, id, wantApprovals = 1, wantRound = 1)
   echo "7e. Safe: one owner under two round keys is one approval OK"
 
+# ── 8. junk under a member's name takes nothing from them (exo-c00) ─────────────────
+# Any epoch-key holder can publish an invalid contribution under a member's name, and grind
+# its bytes until canonical order puts it ahead of the member's real one. The fold dedups
+# by (who, round) and only then verified, so the junk took the member's slot and their real
+# approval was dropped as a duplicate, while the grades (which verify first) still counted
+# it. A contribution fills a (who, round) slot only if the driver verifies it, and every
+# surface cites the event the fold counted.
+proc junkFirst(id, who: string, real: Event, round = 1): Event =
+  ## An invalid contribution under <who>'s name that sorts ahead of <who>'s real one: the
+  ## same parents, its bytes ground until its id is the smaller.
+  for i in 0 .. 255:
+    result = contributeEvent(id, who, toHex(i, 2).toLowerAscii.repeat(65), round = round, parents = real.parents)
+    if eventId(result) < eventId(real): return
+  doAssert false, "no junk sorts first"
+
+proc citesReal(label: string, events: seq[Event], dfor: DriverFor, id, who: string, real, junk: Event) =
+  ## Every surface that names <who>'s approval cites the event the fold counted.
+  var realPos, junkPos = -1
+  for i, e in canonicalOrder(events):
+    if eventId(e) == eventId(real): realPos = i
+    if eventId(e) == eventId(junk): junkPos = i
+  doAssert junkPos >= 0 and junkPos < realPos, label & ": the junk does not sort first"
+  var n = 0
+  for p in intentProvenance(events, dfor, id):
+    if p.cls == icContribution and p.account == who:
+      doAssert p.logPos == realPos, label & ": intentProvenance cites log position " & $p.logPos &
+        ", the counted signature is at " & $realPos
+      inc n
+  for p in logProvenance(events, dfor):
+    if p.kind == "sig" and p.intentId == id and p.account == who:
+      doAssert p.seq == realPos, label & ": logProvenance cites " & $p.seq & ", not " & $realPos
+      inc n
+  for a in reduceActivity(events, dfor):
+    if a.kind == "approve" and a.intentId == id and a.account == who:
+      doAssert a.seq == realPos, label & ": the activity feed cites " & $a.seq & ", not " & $realPos
+      inc n
+  doAssert n == 3, label & ": a surface does not name the approval"
+
+block:
+  let thr = newThresholdDriver(@[a.identity().ed, b.identity().ed], k = 2)
+  let thrFor: DriverFor = proc(kind: string): Driver = thr
+  const stmtJson = """{"effect":"statement","text":"junk first"}"""
+  let id = intentIdFor(stmtJson, "threshold")
+  let m = canonicalize(thr, effectFromJson(stmtJson))
+  let sigA = hx(edSign(a, m.bytes))
+  let sigB = hx(edSign(b, m.bytes))
+  let nameA = contributorOf(thr, stmtJson, sigA)
+  let realA = contributeEvent(id, nameA, sigA)
+  let junk = junkFirst(id, nameA, realA)
+  let ev = @[policyDeclEvent(id, "threshold"), proposeEvent(id, stmtJson), realA, junk,
+             contributeEvent(id, contributorOf(thr, stmtJson, sigB), sigB)]
+  doAssert foldState(ev, thrFor, id) == ("executable", 1, 2),
+    "threshold: junk under a's name took a's slot: " & $foldState(ev, thrFor, id)
+  check("threshold: junk under a's name, sorted first", ev, thrFor, id, wantApprovals = 2, wantRound = 2)
+  citesReal("threshold", ev, thrFor, id, nameA, realA, junk)
+  echo "8a. threshold: junk under a member's name sorted first takes nothing from them OK"
+
+block:
+  var keys: seq[array[32, byte]]
+  var owners: seq[Address]
+  for k in 1 .. 3:
+    var sk: array[32, byte]; sk[31] = byte(k)
+    keys.add sk; owners.add addressOf(sk)
+  var safeAddr: Address
+  for i in 0 ..< 20: safeAddr[i] = byte(0x10 + i)
+  let sd = newSafeDriver(chainId = 31337, safe = safeAddr, owners = owners, threshold = 2)
+  let safeFor: DriverFor = proc(kind: string): Driver = sd
+  const payJson = """{"to":"0x00112233445566778899aabbccddeeff00112233","value":3000,"nonce":0}"""
+  let id = intentIdFor(payJson)
+  let pm = canonicalize(sd, effectFromJson(payJson))
+  var h: array[32, byte]
+  for i in 0 ..< 32: h[i] = pm.bytes[i]
+  let s0 = hx(signRecoverable(h, keys[0]))
+  let s1 = hx(signRecoverable(h, keys[1]))
+  let n0 = contributorOf(sd, payJson, s0)
+  let real0 = contributeEvent(id, n0, s0)
+  let junk = junkFirst(id, n0, real0)
+  let ev = @[proposeEvent(id, payJson), real0, junk, contributeEvent(id, contributorOf(sd, payJson, s1), s1)]
+  doAssert foldState(ev, safeFor, id) == ("executable", 1, 2),
+    "Safe: junk under an owner's name took their slot: " & $foldState(ev, safeFor, id)
+  check("Safe: junk under an owner's name, sorted first", ev, safeFor, id, wantApprovals = 2, wantRound = 2)
+  citesReal("Safe", ev, safeFor, id, n0, real0, junk)
+  echo "8b. Safe: junk under an owner's name sorted first takes nothing from them OK"
+
+block:
+  let fr = newFrostDriver(@[a.identity().ed, b.identity().ed, c.identity().ed], k = 2)
+  let frFor: DriverFor = proc(kind: string): Driver = fr
+  const stmtJson = """{"effect":"statement","text":"frost, junk first"}"""
+  let id = intentIdFor(stmtJson, "frost")
+  let m = canonicalize(fr, effectFromJson(stmtJson))
+  proc contrib(k: EncKeys, round: int): Event =
+    let s = hx(edSign(k, m.bytes))
+    contributeEvent(id, contributorOf(fr, stmtJson, s), s, round = round)
+  let realA1 = contrib(a, 1)
+  let junk = junkFirst(id, realA1.key.split('/')[3], realA1)
+  let ev = @[policyDeclEvent(id, "frost"), proposeEvent(id, stmtJson), realA1, junk, contrib(b, 1),
+             contrib(a, 2), contrib(b, 2)]
+  doAssert foldState(ev, frFor, id) == ("executable", 2, 2),
+    "room FROST: junk under a's round-1 name took a's slot: " & $foldState(ev, frFor, id)
+  check("room FROST: junk under a's round-1 name, sorted first", ev, frFor, id, wantApprovals = 2, wantRound = 2)
+  echo "8c. room FROST: junk under a member's round-1 name sorted first takes nothing from them OK"
+
 echo "view_counts_fold_test: all OK"
