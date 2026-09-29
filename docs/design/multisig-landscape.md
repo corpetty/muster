@@ -122,6 +122,7 @@ One row per family, generated from the registry (`contracts/families/registry.js
 | `lez.frost-public-account` | aggregate | partial (t-of-n) | **none** | 2 ⚿ · dkg | new-address | – / – / public | sequence · none | – | draft | built |
 | `evm.split` | each | same bytes | explicit | 1 · none | fixed | – / spend / public | none · optional | – | demo | built |
 | `lez.split` | each | same bytes | **none** | 1 · none | fixed | – / – / **shielded** | none · optional | – | demo | built |
+| `btc.split` | each | same bytes | implicit | 1 · none | fixed | – / spend / public | none · optional | – | demo | built |
 <!-- landscape-table:end -->
 
 **Gotchas that shape the design.** All are verified; the sources are in the registry.
