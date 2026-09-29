@@ -688,7 +688,7 @@
           {
             "kind": "asset",
             "name": "share",
-            "party": "contributor",
+            "party": "payer",
             "needs": {
               "class": "asset",
               "target": "eip155:31337/ETH",
@@ -1662,7 +1662,7 @@
           {
             "kind": "asset",
             "name": "share",
-            "party": "contributor",
+            "party": "payer",
             "needs": {
               "class": "asset",
               "target": "lez:testnet/LEZ",

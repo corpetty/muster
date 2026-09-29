@@ -66,7 +66,7 @@ Requirement
             (address + asset added in K1 so participant-supplied material is first-class;
              the closed vocabulary grows by slice, never ad hoc)
   name      "safe-owner" | "eip155:31337" | "rpc" | …               (as today)
-  party     instance | proposer | contributor | counterparty         (was scope: instance | contributor)
+  party     instance | proposer | contributor | payer | counterparty (was scope: instance | contributor)
   needs     MaterialClass + constraint  e.g. authority on safe:0x…, address on lez:* any form, asset ETH ≥ effect.value
 ```
 
@@ -75,6 +75,7 @@ Requirement
 - **instance** — this client, whoever it is (an RPC, a loaded module). Unchanged.
 - **proposer** — bound at compose time and **written into the effect**: the source account, the asset and amount, the destination. Because it is in the effect it is in the materialization, so it is signed (invariant 1) and replay-bound (invariant 2). Nothing new on the signing path.
 - **contributor** — supplied by each contributor from their own holdings at contribute time: which owner key signs, which FROST share. It rides in the contribution, keyed as the driver already keys it; the driver verifies it as today.
+- **payer** — supplied by each party who settles their *own* part of the effect (a driver's `settlementParts`): a split's debtors, each paying their share from their own balance. It is not every contributor: since exo-770 a split's creditor agrees too, and pays nothing, so their card never asks them for a share. Readiness and the recipient's offers include a payer slot only for a member who settles a part (`settlesAPart`), and keep it, graded unknown, when that cannot be told (exo-272).
 - **counterparty** — held by a specific *other* party and needed before the effect is complete: the payee's address, the payee's chosen disclosure form. This is the new case, and the one the recipient's prompt is about.
 
 Conformance checks a declared requirement names a class the catalogue can hold, and that a `proposer` requirement's `needs` refers to an effect field (so a driver cannot require material that has nowhere to land). An external-finality driver must declare its payee address requirement as `counterparty` when the effect has a destination field. The six drivers declare; an undeclared driver's card says so, never guesses (the M1 rule, unchanged).

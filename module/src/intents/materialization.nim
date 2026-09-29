@@ -125,6 +125,16 @@ method settlementParts*(d: Driver, e: Effect): seq[string] {.base, gcsafe.} =
   ## submits the whole, as every family before the each-locus does.
   @[]
 
+proc settlesAPart*(d: Driver, e: Effect, names: seq[string]): Eligibility =
+  ## Whether the member known by `names` settles a part of `e` themselves — one of the
+  ## driver's settlementParts — so a `payer` requirement (their own share) is theirs to
+  ## meet (exo-272). A whole-account family has no parts: no.
+  let mine = bareNames(names)
+  for p in d.settlementParts(e):
+    let b = bareNames([p])
+    if b.len > 0 and b[0] in mine: return elYes
+  elNo
+
 method partAuthor*(d: Driver, e: Effect, part, step: string): string {.base, gcsafe.} =
   ## Who may record `step` for `part` — "settled" (the party's own report of its
   ## settlement) or "confirmed" (the counterparty's confirmation) — as a room identity

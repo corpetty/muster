@@ -1810,8 +1810,12 @@ proc musterCoordinateOffers(intentId: string): string =
   let events = gSession.roomEvents()
   let effectJson = effectJsonOf(events, intentId)
   if effectJson.len == 0: return $(%*{"error": "unknown-intent", "intentId": intentId})
-  let m = driverForKind(intentPolicyOf(events, intentId)).manifest(effectFromJson(effectJson))
-  var o = offersPayload(recipientOffers(m.requirements, moduleCatalogue(), m))
+  let drv = driverForKind(intentPolicyOf(events, intentId))
+  let effect = effectFromJson(effectJson)
+  let m = drv.manifest(effect)
+  # a share is offered only to a member who settles a part (exo-272): never the creditor
+  let pays = drv.settlesAPart(effect, myContributorNames(moduleKeystore()))
+  var o = offersPayload(recipientOffers(m.requirements, moduleCatalogue(), m, pays))
   o["intentId"] = %intentId
   result = $o
   if gLpDebug: stderr.writeLine("MUSTER-LP offers " & result)
@@ -2051,6 +2055,7 @@ proc musterCoordinateReadiness(intentId: string): string =
   # whether YOUR contribution to THIS intent would count, in the driver's own words — how a
   # split's parties (named in the effect) are graded (exo-272)
   facts.contributes = drv.mayContribute(effect, myContributorNames(moduleKeystore()))
+  facts.pays = drv.settlesAPart(effect, myContributorNames(moduleKeystore()))   # is a share mine to pay
   let r = assessReadiness(m, probeFromFacts(facts))
   var o = r.toJson()
   o["intentId"] = %intentId

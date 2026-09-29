@@ -1479,7 +1479,8 @@ Rectangle {
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
                                 text: String(modelData.kind) + ": " + String(modelData.name)
-                                    + (modelData.party === "contributor" ? qsTr(" (each signer)") : "")
+                                    + (modelData.party === "contributor" ? qsTr(" (each signer)")
+                                       : modelData.party === "payer" ? qsTr(" (each person who pays their part)") : "")
                                     + (modelData.detail ? " — " + String(modelData.detail) : "")
                                 color: Theme.palette.text
                                 font.pixelSize: Theme.typography.badgeText

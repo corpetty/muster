@@ -39,6 +39,8 @@ type
     authorityHeld*:       proc(name: string): Grade {.gcsafe.}
     infraConfigured*:     proc(name: string): Grade {.gcsafe.}
     capabilityGranted*:   proc(name: string): Grade {.gcsafe.}
+    pays*: Eligibility    ## whether this instance settles a part itself (a `payer` slot is
+                          ## its own); elNo drops those slots, elUnknown keeps them, unknown
 
   ReadinessItem* = object
     requirement*: Requirement
@@ -105,7 +107,10 @@ proc assessReadiness*(m: ActionManifest, p: ReadinessProbe): Readiness =
     # surfaced by the offers surface (exo-45e K4), not gated here. The full manifest still
     # travels in the payload, so the card can show every requirement; only the graded
     # items and the ready verdict are the instance's own.
-    if r.party notin {rpInstance, rpContributor}: continue
+    if r.party notin {rpInstance, rpContributor, rpPayer}: continue
+    # a payer's slot (their own share) is only a payer's: the creditor who agrees pays
+    # nothing (exo-272). Unknown keeps it — shown and graded, never silently dropped.
+    if r.party == rpPayer and p.pays == elNo: continue
     let g = grade(p, r)
     result.items.add ReadinessItem(requirement: r, status: g.status, detail: g.detail,
                                    remedy: (if g.status == rdMet: "" else: remedyFor(r)))
@@ -140,6 +145,8 @@ type
                                    ## probeBitcoind (getblockhash 0)
     myBtcKey*: string              ## this instance's compressed secp key, hex (exo-a50.2.6)
     btcSigners*: seq[string]       ## the intent's Bitcoin account keys, hex ("" = none)
+    pays*: Eligibility             ## whether this instance settles a part of the intent itself
+                                   ## (Driver settlesAPart, exo-272); elUnknown = not asked
     contributes*: Eligibility      ## the intent's driver's own answer for this instance —
                                    ## Driver.mayContribute(effect, my names) (exo-ed5) — for an
                                    ## authority whose parties the effect names ("split-party",
@@ -152,6 +159,7 @@ type
 
 proc probeFromFacts*(f: HostFacts): ReadinessProbe =
   let facts = f
+  result.pays = facts.pays
   result.infraConfigured = proc(name: string): Grade =
     if name == "rpc":
       if facts.rpcUrl.len > 0: (rdMet, "rpc = " & facts.rpcUrl)

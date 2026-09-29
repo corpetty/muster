@@ -20,6 +20,7 @@ import std/[strutils, json]
 import ./../drivers/manifest        # Requirement, ActionManifest, MaterialClass, RequirementParty
 import ./../wallet/material         # Material, Disclosable, MaterialGrade, catalogue
 import ./../intents/disclosure      # DisclosureRow
+import ./../intents/materialization  # Eligibility — does this member settle a part (exo-272)
 
 export material.Disclosable, material.MaterialGrade
 
@@ -90,10 +91,14 @@ proc proposerOffers*(reqs: seq[Requirement], cat: seq[Material], m: ActionManife
   ## destination I supply directly).
   offersFor(reqs, cat, m, {rpProposer})
 
-proc recipientOffers*(reqs: seq[Requirement], cat: seq[Material], m: ActionManifest): seq[Offer] =
-  ## The recipient's slots: what a proposal asks ME to supply — a contribution key, or a
-  ## counterparty address/asset the effect needs before it completes.
-  offersFor(reqs, cat, m, {rpContributor, rpCounterparty})
+proc recipientOffers*(reqs: seq[Requirement], cat: seq[Material], m: ActionManifest,
+                      pays = elUnknown): seq[Offer] =
+  ## The recipient's slots: what a proposal asks ME to supply — a contribution key, a
+  ## counterparty address/asset the effect needs before it completes, and — when I settle
+  ## a part myself (`pays`, Driver settlesAPart) — my own share. A creditor who agrees and
+  ## pays nothing is never offered one (exo-272); unknown keeps the slot.
+  offersFor(reqs, cat, m, (if pays == elNo: {rpContributor, rpCounterparty}
+                           else: {rpContributor, rpCounterparty, rpPayer}))
 
 proc satisfiable*(offers: seq[Offer]): bool =
   ## Every slot this surface is about has at least one of my holdings. An empty offer
