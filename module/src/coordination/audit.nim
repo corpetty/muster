@@ -14,7 +14,8 @@
 ## parent closure; checks each driver signature is by the contributor it names and
 ## recomputes each grade from the attestations; then checks the exporter's signature.
 ## The first discrepancy is named. Settlement is reported as what it is — an external
-## read — never as verified against the chain. What the file cannot prove (that a
+## read — never as verified against the chain; each settlement entry is a leaf of the
+## file, carried without its ancestry, since nothing the file proves depends on it. What the file cannot prove (that a
 ## signer is a Safe owner, that the chain agrees) is outside it, and said so.
 ##
 ## `renderAuditReport` is a pure rendering of the file for people. It carries the
@@ -245,22 +246,17 @@ proc exportAudit*(events: seq[Event], driverFor: DriverFor, intentId: string,
       atts[i] = g.attests
       atts[i].sort(proc (a, b: Event): int = cmp(eventId(a), eventId(b)))
 
-    # settlement: the chain's answer as the room observed it — external reads. Of several,
-    # one whose parents the record holds (an honest one has none), so one parented outside
-    # the intent cannot stand in for it (exo-093).
-    var inRecord = lineage
-    for g in grades:
-      for e in g.copies & g.attests: inRecord.incl eventId(e)
+    # settlement: the chain's answer as the room observed it — external reads. Each is a
+    # LEAF of the file (exo-dc6): a member's report of what it sent or saw on chain, which
+    # nothing the file proves depends on, so it is carried with its content id checked but
+    # not its ancestry. Whatever it links, even something outside the intent, cannot block
+    # the export.
     var settle: seq[Event]
     for kind in ["submit", "final"]:
-      var pick, first: Event
-      var found, closed = false
       for e in ordered:
-        if e.key != "intent/" & intentId & "/" & kind: continue
-        if not found: (first = e; found = true)
-        if e.parents.allIt(it in inRecord): (pick = e; closed = true; break)
-      if closed: settle.add pick
-      elif found: settle.add first      # parented outside the record: the export refuses it below, naming it
+        if e.key == "intent/" & intentId & "/" & kind:
+          settle.add e
+          break
 
     # alternates (exo-96d): the counted event under a key can change — a valid copy of a
     # member's signature that sorts ahead of the original becomes the one carried — so the
@@ -271,7 +267,6 @@ proc exportAudit*(events: seq[Event], driverFor: DriverFor, intentId: string,
     for i, g in grades:
       carried.incl eventId(g.sig)
       for a in atts[i]: carried.incl eventId(a)
-    for e in settle: carried.incl eventId(e)
     var alts = newSeq[seq[Event]](grades.len)
     var grew = true
     while grew:
@@ -280,8 +275,6 @@ proc exportAudit*(events: seq[Event], driverFor: DriverFor, intentId: string,
       for i, g in grades:
         for e in @[g.sig] & atts[i] & alts[i]:
           for par in e.parents: linked.incl par
-      for e in settle:
-        for par in e.parents: linked.incl par
       for i, g in grades:
         for e in g.copies:            # countable, and inside the intent's record (exo-093)
           let id = eventId(e)
@@ -317,9 +310,7 @@ proc exportAudit*(events: seq[Event], driverFor: DriverFor, intentId: string,
       if altArr.len > 0: entry.add (cbText("alternates"), cbArray(altArr))   # absent when none: v1 bytes unchanged
       approvals.add cbMap(entry)
     var settlement: seq[CborValue]
-    for e in settle:
-      closed(e, "the " & e.key.split('/')[^1] & " entry")
-      settlement.add eventCbor(e)
+    for e in settle: settlement.add eventCbor(e)   # a leaf: its parents are not the file's (exo-dc6)
 
     var disc: seq[CborValue]
     for r in drv.manifest(effect).fullDisclosure():
@@ -398,7 +389,7 @@ proc verifyAudit*(bytes: seq[byte]): AuditVerdict =
       all.incl eventId(sigEv)
       for a in atts: all.incl eventId(a)
       for a in alts: all.incl eventId(a)
-    var settle: seq[Event]
+    var settle: seq[Event]    # leaves: each is checked against its content id, never for its parents (exo-dc6)
     for v in f.field("settlement").arrayOf("settlement"):
       let e = eventOf(v, "settlement entry")
       settle.add e
@@ -410,9 +401,6 @@ proc verifyAudit*(bytes: seq[byte]): AuditVerdict =
       for e in @[a.sig] & a.atts & a.alts:
         for par in e.parents:
           if par notin all: refuse("approval by " & a.who & " links an entry the file does not carry")
-    for e in settle:
-      for par in e.parents:
-        if par notin all: refuse("a settlement entry names a parent the file does not carry")
 
     # the intent: its proposal, policy and identity
     if effectJsonOf(lineage, intentId) != effectJson: refuse("the effect does not match the proposal in the lineage")
@@ -460,8 +448,6 @@ proc verifyAudit*(bytes: seq[byte]): AuditVerdict =
     for a in apprs:
       for e in @[a.sig] & a.atts & a.alts:
         for par in e.parents: linkedIds.incl par
-    for e in settle:
-      for par in e.parents: linkedIds.incl par
     var committed, unattested = 0
     var seenAppr = initHashSet[string]()
     for a in apprs:

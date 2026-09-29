@@ -300,7 +300,13 @@ proc lineageIds*(events: seq[Event], driverFor: DriverFor, intentId: string): Ha
     for p in byId[id].parents: queue.add p
 
 proc closedWithin(cands: seq[Copy], lineage: HashSet[EventId]): HashSet[EventId] =
-  ## The candidates whose every parent is in the lineage or is another such candidate.
+  ## The candidates whose every parent is in the lineage or is another such candidate of
+  ## the same round or an earlier one (exo-dc6). Honest copies satisfy that: a member
+  ## contributes to the round being collected and links the approvals graded so far. It
+  ## means the record of rounds up to r never depends on a later round, so everything the
+  ## record holds for a reached round is something the audit file can carry.
+  var roundOf = initTable[EventId, int]()
+  for c in cands: roundOf[c.id] = c.round
   var grew = true
   while grew:
     grew = false
@@ -308,7 +314,8 @@ proc closedWithin(cands: seq[Copy], lineage: HashSet[EventId]): HashSet[EventId]
       if c.id in result: continue
       var inside = true
       for p in c.e.parents:
-        if p notin lineage and p notin result: (inside = false; break)
+        if p in lineage: continue
+        if p notin result or roundOf[p] > c.round: (inside = false; break)
       if inside: (result.incl c.id; grew = true)
 
 proc intentRecord(events: seq[Event], driverFor: DriverFor, intentId: string): IntentRecord =
