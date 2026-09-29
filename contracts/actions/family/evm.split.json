@@ -328,6 +328,208 @@
         }
       ],
       "unverified": []
+    },
+    {
+      "id": "evm.split/settle-up",
+      "name": "Settle up: net several splits into fewer payments",
+      "area": "family",
+      "family": "evm.split",
+      "kind": "evm-split",
+      "status": "built",
+      "summary": "The room's agreed, unpaid split shares on one chain and asset, netted: each member's balance across them is kept exactly (what they are owed less what they owe), and the net payments replace the shares — each recipient paid only at an address a split owing them agreed. Every party the covered shares name agrees; once agreed the covered shares are paid only through the settle-up; once its payments are confirmed, each creditor's client marks the shares it covered received, and the splits go final as ever.",
+      "generated": "evm-split/settle-up",
+      "effect": {
+        "schema": "muster.effect.settle-up.v1",
+        "fields": [
+          {
+            "name": "chain",
+            "means": "the CAIP-2 chain every covered share and every net payment is on — the policy's qualifier"
+          },
+          {
+            "name": "asset",
+            "means": "ETH or erc20:<0x token> (or BTC on btc.split); the private split is never netted"
+          },
+          {
+            "name": "covers",
+            "means": "[{intent, debtor, creditor, amount, payTo}] sorted by intent then debtor — each an agreed, unpaid share exactly as its split says it (checked against the split before anyone agrees)"
+          },
+          {
+            "name": "transfers",
+            "means": "[{from, to, payTo, amount}] sorted by from then to — the net payments; conserve every member's balance across the covers; each payTo an address a split owing its recipient agreed"
+          },
+          {
+            "name": "memo",
+            "means": "room-only text, at most 280 bytes"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "any member (a party's proposal is their agreement)",
+          "does": "Settle up the room's open splits: the module gathers every agreed, unpaid, uncovered share on the chain and asset (openParts), nets them — the largest net debtor paying the largest net creditor until square, ties by identity (netTransfers) — and proposes the settle-up under the same policy (evm-split@<chain>). Fewer than two open shares: nothing to net.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/settle_up_test.nim",
+            "module/tests/settle_up_live_test.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "every party the covered shares name (each debtor and each creditor)",
+          "does": "Before agreeing, each client checks every cover against its split in the room's log (coordination/covers): an agreed split, the share unpaid and not already being settled, exactly its chain, asset, amount, payTo and creditor — a misstated cover gets no agreement. Then the member's room key signs the settle-up's materialization, as for a split.",
+          "signs": "an Ed25519 signature by the party's room identity over dCBOR ['muster.settle-up.v1', 'muster.effect.settle-up.v1', chain, asset, covers, transfers, memo]; plus the muster attestation over P",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/settle_up_live_test.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "each payer, then each recipient; then each covered share's creditor",
+          "does": "Each net payment is a part: its payer pays it from their own wallet (a payer owing two people pays two parts), its recipient's client confirms it from their own read. While the settle-up is agreed, paying a covered share directly is refused. Once the settle-up is final (or needs no payment at all), each creditor's client marks the shares it covered received — the creditor's word, so each split goes final exactly as a split does.",
+          "signs": "each payer's own transfer; each report signed by its author's room key",
+          "reveals": [
+            {
+              "field": "payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payee",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/settle_up_live_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one",
+          "does": "Every net payment confirmed: the settle-up is final, and the covered shares are marked received; the splits it covered go final.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/settle_up_live_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a settle-up whose transfers do not conserve every member's balance across the covered shares",
+          "why": "the driver refuses it, naming whose balance breaks",
+          "evidence": [
+            "module/tests/settle_up_test.nim"
+          ]
+        },
+        {
+          "what": "a net payment to an address no split owing its recipient agreed",
+          "why": "the driver refuses it: a recipient is paid only where their own split said",
+          "evidence": [
+            "module/tests/settle_up_test.nim"
+          ]
+        },
+        {
+          "what": "a cover that misstates its split (amount, payTo, creditor, chain, asset), or covers a share already paid or already being settled",
+          "why": "coordination/covers checks every cover against the split in the log; nobody's agreement is given (invariant 1 across intents)",
+          "evidence": [
+            "module/tests/settle_up_live_test.nim"
+          ]
+        },
+        {
+          "what": "paying a covered share directly once a settle-up covering it is agreed",
+          "why": "'covered-by-settle-up': it is paid through the settle-up, never twice",
+          "evidence": [
+            "module/tests/settle_up_live_test.nim"
+          ]
+        },
+        {
+          "what": "netting the private split",
+          "why": "its shares are told apart by amount, which netting would erase — refused by the driver and the hosted method",
+          "evidence": [
+            "module/tests/settle_up_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_propose_settle_up",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_settle_part",
+        "coordinate_decline"
+      ],
+      "ui": "Room → + → Split → \"Settle up the room's open splits instead\"; the card: \"Settle up · <memo> — N payments instead of M shares from K splits\", each net payment \"payer → recipient amount\" with where it stands → Agree to settle up → Pay <amount> to <recipient>; the recipient's client confirms, then each creditor's client marks the covered shares received",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Settling up keeps every member's balance exactly and pays each recipient only where their own split said",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A share is never paid twice: once a settle-up covering it is agreed, it is paid only through the settle-up",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Nothing makes anyone pay a net payment; the room shows who has",
+          "credibility": "motivational",
+          "party": "each payer"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/settle_up_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/settle_up_live_test.nim"
+        }
+      ],
+      "unverified": []
     }
   ]
 }

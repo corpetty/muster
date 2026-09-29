@@ -757,6 +757,188 @@
       },
       "signRefusal": ""
     },
+    "evm-split/settle-up": {
+      "kind": "evm-split",
+      "variant": "settle-up",
+      "family": "evm.split",
+      "effectExample": {
+        "schema": "muster.effect.settle-up.v1",
+        "fields": {
+          "chain": "eip155:31337",
+          "asset": "ETH",
+          "covers": [
+            [
+              "0x1111111111111111",
+              "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+              "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+              "300",
+              "0x1111111111111111111111111111111111111111"
+            ],
+            [
+              "0x2222222222222222",
+              "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+              "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+              "200",
+              "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
+            ]
+          ],
+          "transfers": [
+            [
+              "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+              "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+              "0x1111111111111111111111111111111111111111",
+              "100"
+            ]
+          ],
+          "memo": "Lisbon"
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 2,
+        "finality": "external",
+        "domain": "muster.settle-up.v1"
+      },
+      "environment": "eip155:31337",
+      "profile": {
+        "declared": true,
+        "family": "evm.split",
+        "settlement": "evm",
+        "locus": "each",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "explicit",
+        "ordering": "none",
+        "expiry": "optional",
+        "setup": "none",
+        "membershipChange": "fixed",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "never",
+          "signers": "at-settle",
+          "effect": "public"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "demo",
+        "chain": "eip155:31337",
+        "account": "",
+        "k": 1,
+        "n": 0,
+        "bypassesKnown": true,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 2,
+          "finality": "external",
+          "domain": "muster.settle-up.v1"
+        },
+        "requirements": [
+          {
+            "kind": "environment",
+            "name": "eip155:31337",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "eip155:31337",
+              "field": ""
+            }
+          },
+          {
+            "kind": "infra",
+            "name": "rpc",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "rpc",
+              "field": ""
+            }
+          },
+          {
+            "kind": "authority",
+            "name": "split-party",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "split-party",
+              "field": ""
+            }
+          },
+          {
+            "kind": "asset",
+            "name": "share",
+            "party": "payer",
+            "needs": {
+              "class": "asset",
+              "target": "eip155:31337/ETH",
+              "field": ""
+            }
+          },
+          {
+            "kind": "address",
+            "name": "pay-to",
+            "party": "proposer",
+            "needs": {
+              "class": "address",
+              "target": "eip155:31337",
+              "field": "payTo"
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          },
+          {
+            "field": "payer",
+            "to": "chain-observer"
+          },
+          {
+            "field": "payee",
+            "to": "chain-observer"
+          },
+          {
+            "field": "amount",
+            "to": "chain-observer"
+          },
+          {
+            "field": "group-linkage",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signed-tx",
+            "to": "rpc-provider"
+          }
+        ],
+        "touches": [
+          {
+            "target": "eip155:31337",
+            "mode": "write"
+          },
+          {
+            "target": "eip155:31337:0x1111111111111111111111111111111111111111",
+            "mode": "write"
+          }
+        ]
+      },
+      "signRefusal": ""
+    },
     "evm-split/split": {
       "kind": "evm-split",
       "variant": "split",

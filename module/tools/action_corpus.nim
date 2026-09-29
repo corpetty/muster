@@ -212,6 +212,15 @@ proc effectJsonFor(kind, variant: string, d: Driver): string =
     splitEffectJson("lez:testnet", "LEZ", "900000000", SplitCreditor,
                     "priv:" & repeat("ab", 32) & ":02" & repeat("cd", 32),
                     evenShares("900000000", SplitCreditor, @SplitDebtors, distinctAmounts = true), "Dinner")
+  of "evm-split/settle-up":
+    # settle up (exo-3c6): two agreed splits between the creditor and one debtor netted —
+    # the debtor owes 300 on the first, the creditor owes 200 on the second: one payment of 100
+    let s1 = "0x" & repeat("11", 8)
+    let s2 = "0x" & repeat("22", 8)
+    let covers = @[Cover(intent: s1, debtor: SplitDebtors[0], creditor: SplitCreditor, amount: "300", payTo: Payee),
+                   Cover(intent: s2, debtor: SplitCreditor, creditor: SplitDebtors[0], amount: "200",
+                         payTo: "0x70997970c51812dc3a010c7d01b50e0d17dc79c8")]
+    settleUpEffectJson("eip155:31337", "ETH", covers, netTransfers(covers), "Lisbon")
   of "btc-split/split":
     # a split paid in Bitcoin: 0.009 BTC (in satoshis) among the creditor and two debtors,
     # paid to the creditor's own wpkh address — here BIP-173's generator-key address on regtest
@@ -227,7 +236,7 @@ const Variants* = [
   ("invoke", "module-call"), ("invoke", "lez-transfer"),
   ("btc-p2wsh", "spend"), ("btc-tapscript", "spend"), ("btc-frost", "spend"),
   ("lez-multisig", "transfer"), ("lez-multisig", "vault-init"), ("lez-frost", "transfer"),
-  ("evm-split", "split"), ("lez-split", "split"), ("btc-split", "split")]
+  ("evm-split", "split"), ("evm-split", "settle-up"), ("lez-split", "split"), ("btc-split", "split")]
 
 # ── JSON ──────────────────────────────────────────────────────────────────────
 proc cborJson(v: CborValue): JsonNode =
