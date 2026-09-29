@@ -7,7 +7,7 @@
       "family": "lez.split",
       "kind": "lez-split",
       "status": "built",
-      "summary": "The same agreement as evm.split — each debtor signs their own share with their room key — settled so the chain names no payer, no payee and no amount: the creditor shares a shielded key node, each debtor pays shielded → shielded from their own LEZ wallet, and the creditor's own scan confirms each share when a note of exactly that amount arrives. Every share is a different amount, a few base units apart, so a note can be attributed to its share without the chain naming anyone.",
+      "summary": "The same agreement as evm.split — each debtor signs their own share with their room key, and the creditor agrees by proposing it — settled so the chain names no payer, no payee and no amount: the creditor shares a shielded key node, each debtor pays shielded → shielded from their own LEZ wallet, and the creditor's own scan confirms each share when a note of exactly that amount arrives. Every share is a different amount, a few base units apart, so a note can be attributed to its share without the chain naming anyone.",
       "generated": "lez-split/split",
       "effect": {
         "schema": "muster.effect.split.v1",
@@ -68,8 +68,8 @@
         },
         {
           "step": "approve",
-          "who": "each debtor the split names",
-          "does": "Agrees to their own share in-app with their room key, exactly as for evm.split; only a named debtor's key counts.",
+          "who": "each debtor the split names, and the creditor",
+          "does": "Agrees to their own share in-app with their room key, exactly as for evm.split; only a named party's key counts. The creditor's agreement (their word that payTo is theirs) is made when they propose: a private split is proposed only by its creditor, whose shielded key node is not shared in the room (exo-770).",
           "signs": "an Ed25519 signature by the debtor's room identity over the split's dCBOR materialization; plus a muster attestation over P",
           "reveals": [
             {

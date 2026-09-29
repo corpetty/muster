@@ -16,8 +16,8 @@ Devon paid 1.2 ETH for dinner for four. The split is Ana, JB and you each owing 
 
 | Step | What happens | Who acts | What is signed |
 |---|---|---|---|
-| **propose** | Devon proposes the split: the total, who owes how much, the address to pay, the chain. | the creditor (v1: the proposer *is* the creditor) | nothing yet |
-| **collect** | Each person named reviews **their own share** and agrees. | each debtor | their room key (Ed25519) signs the split's materialization, with a muster attestation over the context (invariants 2, 10) |
+| **propose** | Devon proposes the split: the total, who owes how much, the address to pay, the chain. Or a member proposes it on Devon's behalf, paid at the address Devon shared into the room (§4.2). | the creditor, or anyone on their behalf | the proposer's signed claim to have proposed it (not an agreement) |
+| **collect** | Each person named reviews **their own share** and agrees. The creditor agrees too: their agreement is their word that the address to pay is theirs. When Devon proposes, his agreement is made then. | each debtor, and the creditor | their room key (Ed25519) signs the split's materialization, with a muster attestation over the context (invariants 2, 10) |
 | **executable** | Everyone named has agreed: the split is **agreed**. | — | — |
 | **submit** | Each debtor pays their share from their own wallet. Muster builds the payment from the agreed split; the person types nothing. | each debtor | their own wallet signs a normal transfer (EIP-155 on EVM) |
 | **settle** | Devon's client reads each reported payment from **its own** chain read and confirms it. Devon can also mark a share "received outside muster" (cash, a bank transfer). | the creditor | an author-signed confirmation in the room |
@@ -88,14 +88,20 @@ The **materialization** is dCBOR `[domain "muster.split.v1", schemaId, chain, as
 
 ### 4.2 Agreement: the parties are named in the effect
 
-`describeFor(effect)` is a new base driver method whose default is `describe()`. The core calls it wherever it needs *one proposal's* policy: `startCollection`, the intent views, the activity feed, audit and `coordinate_intents`. For a split it returns `rounds 1, threshold = number of debtors, finality external`.
+`describeFor(effect)` is a new base driver method whose default is `describe()`. The core calls it wherever it needs *one proposal's* policy: `startCollection`, the intent views, the activity feed, audit and `coordinate_intents`. For a split it returns `rounds 1, threshold = number of debtors + 1 (the creditor), finality external`.
 
-A **contribution** is a debtor's Ed25519 signature over the materialization. It uses the same scheme as the threshold driver, but the signer set is **the debtors this materialization names**, decoded from the bytes the driver itself produced, not the room roster. So:
+A **contribution** is a party's Ed25519 signature over the materialization: a debtor's, or the creditor's. It uses the same scheme as the threshold driver, but the signer set is **the parties this materialization names**, decoded from the bytes the driver itself produced, not the room roster. So:
 
 - a room member who is not in the split cannot agree to it;
 - a later change to the roster (someone joins) never changes an existing split's threshold (the wart `unanimous` has today);
 - `identifyContributor` names the debtor `ed:<hex>`, which is the existing convention, so attestations (`verifyAttestation`'s `ed:` arm), grades, "approved by me" and every view work unchanged;
 - in-app agreement is `liveContribute`'s existing Ed25519 branch. There is no new signing path.
+
+**Why the creditor agrees too (exo-770).** A split's content is anyone's to write. When only the debtors agreed, a member could publish "Alice paid — pay 0x‹mine›": the card said Alice paid, the debtors agreed, and they paid whoever wrote the address. The creditor's signature over the materialization, which carries `payTo`, is their word that the address is theirs, so no split is payable without it. Three pieces keep today's flow unchanged and make the on-behalf flow honest:
+
+- **Agreeing by proposing.** A driver seam, `agreesByProposing(effect, proposer)` (default false), says when proposing *is* agreeing. For a split it is true when the proposer is the creditor, and `liveProposeIntent` then contributes that agreement with the proposer's own key. A creditor proposing their own split does nothing new.
+- **Signed proposer claims.** Every proposal of every kind now publishes `intent/<id>/proposer/<who>`, an author-signed event (`authorship.nim`). The intent id is content-addressed from the effect and the policy, so the claim vouches for exactly what was proposed. `IntentView.proposers` reads only signed claims, and the card says "Proposed by X on Y's behalf". A claim is attribution, not acceptance: what makes a split payable is still every party's agreement. Proposals from older rooms are unattributed.
+- **On someone's behalf.** `coordinate_propose_split` takes `{creditor}`. The split pays the Ethereum address that member last shared into the room (`sharedAddressOf`: their newest address-share, author-signed, so one posted in their name never counts), and it is refused with `no-shared-address` when they have shared none. Before the creditor's client agrees, it checks that it holds `payTo` (`creditorAgreeRefusal`: `payto-not-mine`), so the creditor never vouches for an address they cannot account for. A private split is proposed only by its creditor, because their shielded key node is not shared in the room.
 
 ### 4.3 Settlement in parts
 
@@ -196,7 +202,7 @@ An Ethereum split may be paid in a token as well as ETH (exo-5ab). The effect na
 | 7 | A split names members of the current epoch. A later joiner reads nothing before their seam, and is never a party to an earlier split. |
 | 8 | Every payment goes through the payer's own RPC, and every confirmation through the creditor's. No service tallies anything. |
 | 9 | What the card says about a person is only what that person disclosed: their agreement, their payment report, the creditor's confirmation. Readiness grades **my** balance against **my** share, never whether someone else can afford theirs. |
-| 10 | The agreement's inputs are the proposal, the policy and the context (peer messages). `payTo` is the proposer's own material, in the effect. A later FX quote (backlog) is a recorded external read. |
+| 10 | The agreement's inputs are the proposal, the policy and the context (peer messages). `payTo` is the creditor's own material: in the effect when they propose, or taken from their author-signed address-share when proposed on their behalf. Either way, the creditor's agreement vouches for it (exo-770). A later FX quote (backlog) is a recorded external read. |
 
 ## 6. What each observer learns: the education square
 
@@ -227,7 +233,7 @@ The fixed rows (`card_rows.nim`) gain the `each` wording:
 | Changing signers | The people are named in each split; a different group is a new split. |
 | Ways around the rule | None for the agreement. Paying is up to each person. *motivational* |
 
-The **split body** (S5) shows one row per person: name, amount, and state (*owes* · *agreed* · *paid ↗ tx* · *received ✓* · *received outside muster*). Below that sits "Your share: 0.3 ETH → Devon", then **Agree** (the existing Approve), **Pay my share** (when agreed, you owe, and have not paid), **Mark received** (the creditor), and the existing Deny ("that's not my share").
+The **split body** (S5) shows one row per person: name, amount, and state (*owes* · *agreed* · *paid ↗ tx* · *received ✓* · *received outside muster*). Below that sits "Your share: 0.3 ETH → Devon", then **Agree** (the existing Approve), **Pay my share** (when agreed, you owe, and have not paid), **Mark received** (the creditor), and the existing Deny ("that's not my share"). A split proposed on the creditor's behalf also says "Proposed by X on Devon's behalf" and whether Devon has agreed. Devon's own card offers "Agree — I paid, and ‹payTo› is mine", or, when his client does not hold `payTo`, a warning in its place (exo-770).
 
 ## 8. Where it lives
 
@@ -267,7 +273,7 @@ The **split body** (S5) shows one row per person: name, amount, and state (*owes
 ## 10. Decisions and open questions
 
 1. **Agree-then-pay, not pay-as-you-agree (decided).** It keeps contracting before settlement, and it means a revised split never strands a payment (§2). *Open:* for large rooms, a proposer-set "anyone may pay once they agree" flag. That would be a second `describeFor` shape, not a core change.
-2. **The creditor is the proposer in v1 (decided).** "I paid, split it" is the common case. Proposing on someone else's behalf is request-first (`material-and-disclosure.md` §3.4): the creditor shares `payTo`, then the complete split is proposed.
+2. **The creditor agrees, whoever proposes (decided, exo-770).** "I paid, split it" is the common case, and there proposing is the creditor's agreement. Proposing on someone else's behalf is request-first (`material-and-disclosure.md` §3.4): the creditor shares an address, the split is proposed with it, and it is payable only once the creditor agrees too (§4.2). The alternative, gating `payTo` on a match with the creditor's disclosure, was set aside, because the creditor's own signature says more than a match does and it closes the forged-creditor hole for every split.
 3. **Even shares round down, and the creditor absorbs the remainder (decided).** The creditor's own share is `total − sum(shares)`. It is visible, and at most N−1 of the smallest unit. Any other split (by nights, by item) is just different explicit amounts; the driver only checks the arithmetic.
 4. **A new locus rather than stretching an old one (decided, §3).** This is a vocabulary change to the registry, so the atlas and the landscape table regenerate.
 5. **Confirmation is the creditor's (decided).** Nobody else can confirm a private payment, and on a public rail the creditor is still the one the debt concerns. *Open:* whether a public-rail read by *another* member should show on the card as a local, unlogged grade ("your RPC also sees it").
