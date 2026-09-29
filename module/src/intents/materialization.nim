@@ -89,6 +89,13 @@ method describeFor*(d: Driver, e: Effect): DriverDescriptor {.base, gcsafe.} =
   ## the collection, the card's "M of N", the activity feed, the audit file.
   d.describe()
 
+method agreesByProposing*(d: Driver, e: Effect, proposer: string): bool {.base, gcsafe.} =
+  ## Whether the member proposing `e` (their room identity, hex) is a party whose own
+  ## agreement the proposal should carry — made then, by their key, as any other
+  ## agreement is (exo-770). Default false: a Safe owner who proposes still signs like the
+  ## rest. A split's creditor proposing their own split agrees to it, payTo included.
+  false
+
 method settlementParts*(d: Driver, e: Effect): seq[string] {.base, gcsafe.} =
   ## The parties who each settle their OWN part of `e`, named as the driver names a
   ## contributor ("ed:<hex>"), in the driver's order. Default: none — one member

@@ -282,6 +282,14 @@ proc signedByNamed*(driver: Driver, m: Materialization, who, signatureHex: strin
 proc proposeEvent*(intentId, effectJson: string): Event =
   Event(key: "intent/" & intentId & "/propose", value: effectJson)
 
+proc proposerEvent*(intentId, author: string): Event =
+  ## Who proposed an intent, in their own words (exo-770): an author-bearing event, signed
+  ## by the proposer's room key over the room and this key — and the intent id is
+  ## content-addressed from the effect and the policy, so the signature vouches for
+  ## exactly what was proposed. A proposal without one is unattributed.
+  let a = author.toLowerAscii().replace("0x", "")
+  Event(key: "intent/" & intentId & "/proposer/" & a, value: $(%*{"author": a}))
+
 proc contributeEvent*(intentId, contributor, signatureHex: string,
                       round = 1, parents: seq[EventId] = @[]): Event =
   ## `round` is the collection round this contribution belongs to. It is part of the

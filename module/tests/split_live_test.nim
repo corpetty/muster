@@ -82,15 +82,16 @@ block:
   doAssert refused.startsWith("refused:") and "not a member" in refused, refused
   echo "1. a split among members is proposed; one naming a stranger is refused OK"
 
-# ── 2. nobody pays before everyone named has agreed; only a debtor agrees ─────────
+# ── 2. nobody pays before everyone named has agreed — the creditor at propose ─────
 block:
   let (early, _) = liveSettlePartSend(r.bob, bobKs, splitFor, id, bobSeam, Now)
   doAssert early == "not-agreed", early
-  doAssert agree(r.alice, aliceKs, id) == "rejected", "the creditor is not a debtor"
+  # Alice proposed her own split: her agreement was made then (exo-770); again is a no-op
+  doAssert agree(r.alice, aliceKs, id) == "collecting", "the creditor has agreed; the debtors have not"
   doAssert agree(r.bob, bobKs, id) == "collecting"
   doAssert agree(r.carol, room3CarolKs, id) == "executable"
   doAssert ledger.sent.len == 0, "nothing was sent before agreement"
-  echo "2. no payment before every debtor agreed; the creditor cannot agree for them OK"
+  echo "2. no payment before every debtor agreed; the creditor agreed at propose, and cannot agree for them OK"
 
 # ── 3. a split is never submitted whole, and only a party pays ────────────────────
 block:

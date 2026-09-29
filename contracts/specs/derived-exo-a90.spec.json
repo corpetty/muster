@@ -93,7 +93,7 @@
     {
       "type": "model_check",
       "restatement_clause_id": "s2",
-      "proves": "Every order of a fixed split event set (propose, both agreements, A settled, A confirmed, a forged settled for B, a bare final \u2014 seven events, 5040 orders): each state is the event delivered first and folds every order of the other six, as-is and with every event duplicated, against the identity order's view (state, approvals, threshold, every part's settled/confirmed/tx/authors) \u2014 seven states x 720 orders = all 5040. Catches part counting by arrival rather than canonical order, a dedup that counts a duplicate twice, and forged or bare events whose effect depends on where they land (invariant 4).",
+      "proves": "Every order of a fixed split event set (propose, both debtors' agreements and the creditor's, A settled, A confirmed, a forged settled for B, a bare final \u2014 eight events, 40320 orders): each state is the event delivered first and folds every order of the other seven, as-is and with every event duplicated, against the identity order's view (state, approvals, threshold, every part's settled/confirmed/tx/authors) \u2014 eight states x 5040 orders = all 40320. Catches part counting by arrival rather than canonical order, a dedup that counts a duplicate twice, and forged or bare events whose effect depends on where they land (invariant 4).",
       "run": [
         "nim",
         "r",
@@ -145,7 +145,7 @@
     {
       "type": "model_check",
       "restatement_clause_id": "s4",
-      "proves": "Every subset of {agree A, agree B, settled A, settled B, confirmed A, confirmed B, bare submit, bare final} is folded and compared to the rule alone: not all agreed -> proposed/collecting with reports ignored; all agreed -> executable; any settled -> submitted; any confirmed -> settling (confirmed implies settled); all confirmed -> final; a bare submit or final never has an effect. Catches a bare final finalizing, final with a part unconfirmed, reports counting before agreement, and confirmed not implying settled.",
+      "proves": "Every subset of {agree A, agree B, the creditor agrees, settled A, settled B, confirmed A, confirmed B, bare submit, bare final} (512; each of 256 states folds its subset with and without the creditor's agreement) is folded and compared to the rule alone: not everyone named agreed (both debtors and the creditor) -> proposed/collecting with reports ignored; all agreed -> executable; any settled -> submitted; any confirmed -> settling (confirmed implies settled); all confirmed -> final; a bare submit or final never has an effect. Catches a bare final finalizing, final with a part unconfirmed, reports counting before agreement, and confirmed not implying settled.",
       "run": [
         "nim",
         "r",

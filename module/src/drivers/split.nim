@@ -10,10 +10,12 @@
 ##     never more than the total (the creditor's own share is the rest), the chain the
 ##     policy's. Anything else is refused with its reason and canonicalizes to a sentinel
 ##     no signature can name (invariants 1, 5);
-##   * the THRESHOLD is how many debtors the effect names (describeFor, §4.2), and an
-##     agreement is a debtor's Ed25519 room-key signature over the materialization — the
-##     signer set is decoded from the materialization itself, never the room roster, so a
-##     member the split does not name can never agree and a later joiner never moves it;
+##   * the THRESHOLD is everyone the effect names — each debtor and the creditor
+##     (describeFor, §4.2; the creditor since exo-770, whose agreement is their word that
+##     payTo is theirs, made at propose when they propose it) — and an agreement is that
+##     party's Ed25519 room-key signature over the materialization — the signer set is
+##     decoded from the materialization itself, never the room roster, so a member the
+##     split does not name can never agree and a later joiner never moves it;
 ##   * each debtor is a PART (§4.3): settled by that debtor, confirmed by the creditor, and
 ##     the transfer that settles it is derived here from the reviewed effect (invariant 1);
 ##   * the PROFILE is the each locus; the manifest says what each rail discloses (§6).
@@ -179,6 +181,14 @@ proc debtorsOf(mat: seq[byte]): seq[string] =
       if s.kind == ckArray and s.arr.len == 2 and s.arr[0].kind == ckText: result.add s.arr[0].t
   except CatchableError: discard
 
+proc creditorOf(mat: seq[byte]): string =
+  ## The creditor a materialization names ("" when it is not a split's).
+  try:
+    let v = decode(mat)
+    if v.kind == ckArray and v.arr.len == 9 and v.arr[0].kind == ckText and v.arr[0].t == SplitDomain and
+       v.arr[5].kind == ckText: return v.arr[5].t
+  except CatchableError: discard
+
 # ── the Driver seam ────────────────────────────────────────────────────────────
 method describe*(d: SplitDriver): DriverDescriptor =
   ## The family's one policy: a split needs at least one debtor. What a PROPOSAL needs is
@@ -186,9 +196,17 @@ method describe*(d: SplitDriver): DriverDescriptor =
   DriverDescriptor(rounds: 1, serializationDomain: SplitDomain, finality: finExternal, threshold: 1)
 
 method describeFor*(d: SplitDriver, e: Effect): DriverDescriptor =
+  ## Every debtor the split names, AND its creditor (exo-770): a split's content is anyone's
+  ## to write, so without the creditor's own agreement anyone could publish "Alice paid —
+  ## pay 0x<mine>". The creditor agrees at propose when they propose it themselves.
   result = d.describe()
   let (ok, sp, _) = d.validSplit(e)
-  if ok: result.threshold = sp.shares.len
+  if ok: result.threshold = sp.shares.len + 1
+
+method agreesByProposing*(d: SplitDriver, e: Effect, proposer: string): bool =
+  ## The creditor proposing their own split agrees to it then — payTo is theirs to state.
+  let (ok, sp, _) = d.validSplit(e)
+  ok and proposer.toLowerAscii().replace("0x", "") == sp.creditor
 
 method environment*(d: SplitDriver): string = d.chain
 
@@ -208,11 +226,13 @@ method canonicalize*(d: SplitDriver, e: Effect): Materialization =
 method expectMaterialization*(d: SplitDriver, m: Materialization) = d.pending = m.bytes
 
 proc agreerOf(mat: seq[byte], c: Contribution): string =
-  ## "ed:<hex>" of the debtor whose room key signed `mat`, else "".
+  ## "ed:<hex>" of the party whose room key signed `mat` — a debtor, or the creditor, whose
+  ## agreement is their word that payTo is theirs (exo-770) — else "".
   if c.bytes.len != 64: return ""
   var sig: Ed25519Sig
   for i in 0 ..< 64: sig[i] = c.bytes[i]
-  for who in debtorsOf(mat):
+  let creditor = creditorOf(mat)
+  for who in debtorsOf(mat) & (if creditor.len > 0: @[creditor] else: @[]):
     try:
       let pk = edOf(who)
       if edVerify(pk, mat, sig): return "ed:" & hx(pk)
