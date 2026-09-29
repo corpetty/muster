@@ -43,6 +43,9 @@ type
     rpProposer     = "proposer"      ## bound at compose time and written INTO the effect
     rpContributor  = "contributor"   ## supplied by each contributor from their own holdings
     rpCounterparty = "counterparty"  ## held by a specific OTHER party, shared before the effect completes
+    rpPayer        = "payer"         ## supplied by each party who settles their OWN part
+                                     ## (Driver.settlementParts) — a split's debtors, not every
+                                     ## signer: its creditor agrees and pays nothing (exo-272)
 
   MaterialClass* = enum
     ## The closed vocabulary of material a party can hold (§3.1). Distinct from the

@@ -341,7 +341,7 @@ method manifest*(d: SplitDriver, effect: Effect): ActionManifest =
       req(rqEnvironment, d.chain),
       (if lez: req(rqModule, "lez_core") else: req(rqInfra, "rpc")),
       req(rqAuthority, "split-party", rpContributor),
-      req(rqAsset, "share", rpContributor, need(mcAsset, d.chain & "/" & asset)),
+      req(rqAsset, "share", rpPayer, need(mcAsset, d.chain & "/" & asset)),   # a debtor's; the creditor pays nothing
       req(rqAddress, "pay-to", rpProposer, need(mcAddress, d.chain, "payTo"))],
     discloses: (if lez: @[row("a-private-transfer", obChainObserver), row("signed-tx", obRpcProvider)]
                 else: @[row("payer", obChainObserver), row("payee", obChainObserver),

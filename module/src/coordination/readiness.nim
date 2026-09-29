@@ -16,6 +16,7 @@
 import std/[json, strutils, sequtils]
 import ../drivers/driver
 import ../drivers/manifest
+import ../intents/materialization   # Eligibility — the driver's own "would your contribution count"
 import ../crypto/secp256k1     # Address
 import ../crypto/curve25519    # Ed25519Pub
 import ../drivers/safe_rpc     # probeRpc
@@ -38,6 +39,8 @@ type
     authorityHeld*:       proc(name: string): Grade {.gcsafe.}
     infraConfigured*:     proc(name: string): Grade {.gcsafe.}
     capabilityGranted*:   proc(name: string): Grade {.gcsafe.}
+    pays*: Eligibility    ## whether this instance settles a part itself (a `payer` slot is
+                          ## its own); elNo drops those slots, elUnknown keeps them, unknown
 
   ReadinessItem* = object
     requirement*: Requirement
@@ -60,7 +63,9 @@ proc remedyFor*(r: Requirement): string =
     if r.name.startsWith("bip122:"): "point Settings → Bitcoin node at a node on " & r.name & " (set_setting btc-rpc)"
     elif r.name.startsWith("lez:"): "point Settings → LEZ sequencer at a node serving " & r.name & " (set_setting lez-rpc, lez-chain)"
     else: "point the RPC setting at a node on " & r.name & " (set_setting rpc)"
-  of rqAuthority:   "use a key that is a recognized " & r.name & " — or take part without signing"
+  of rqAuthority:
+    if r.name == "split-party": "only the people a split names agree to it — if you owe a share, ask for the split to be proposed with you in it"
+    else: "use a key that is a recognized " & r.name & " — or take part without signing"
   of rqInfra:
     if r.name == "lez-account": "set up a funded LEZ account in the LEZ Wallet App"
     elif r.name == "lez-rpc": "point Settings → LEZ sequencer at your own (set_setting lez-rpc)"
@@ -102,7 +107,10 @@ proc assessReadiness*(m: ActionManifest, p: ReadinessProbe): Readiness =
     # surfaced by the offers surface (exo-45e K4), not gated here. The full manifest still
     # travels in the payload, so the card can show every requirement; only the graded
     # items and the ready verdict are the instance's own.
-    if r.party notin {rpInstance, rpContributor}: continue
+    if r.party notin {rpInstance, rpContributor, rpPayer}: continue
+    # a payer's slot (their own share) is only a payer's: the creditor who agrees pays
+    # nothing (exo-272). Unknown keeps it — shown and graded, never silently dropped.
+    if r.party == rpPayer and p.pays == elNo: continue
     let g = grade(p, r)
     result.items.add ReadinessItem(requirement: r, status: g.status, detail: g.detail,
                                    remedy: (if g.status == rdMet: "" else: remedyFor(r)))
@@ -137,6 +145,12 @@ type
                                    ## probeBitcoind (getblockhash 0)
     myBtcKey*: string              ## this instance's compressed secp key, hex (exo-a50.2.6)
     btcSigners*: seq[string]       ## the intent's Bitcoin account keys, hex ("" = none)
+    pays*: Eligibility             ## whether this instance settles a part of the intent itself
+                                   ## (Driver settlesAPart, exo-272); elUnknown = not asked
+    contributes*: Eligibility      ## the intent's driver's own answer for this instance —
+                                   ## Driver.mayContribute(effect, my names) (exo-ed5) — for an
+                                   ## authority whose parties the effect names ("split-party",
+                                   ## exo-272). elUnknown (the default) = not asked → unknown.
     ownersProbe*: proc(url: string, safe: Address): tuple[known: bool, owners: seq[Address], detail: string] {.gcsafe.}
                                    ## nil = use the real getOwners. The Safe owner set is
                                    ## read FROM THE CHAIN (F-10), never the configured set:
@@ -145,6 +159,7 @@ type
 
 proc probeFromFacts*(f: HostFacts): ReadinessProbe =
   let facts = f
+  result.pays = facts.pays
   result.infraConfigured = proc(name: string): Grade =
     if name == "rpc":
       if facts.rpcUrl.len > 0: (rdMet, "rpc = " & facts.rpcUrl)
@@ -210,6 +225,13 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
     of "roster-member":
       if facts.myEd in facts.roster: (rdMet, "your encryption identity is on the room roster")
       else: (rdMissing, "your encryption identity is not on the room roster")
+    of "split-party":
+      # a split names its parties in the effect — each debtor and the creditor (exo-770) —
+      # so the driver's own answer grades it; whether anyone ELSE is named, it never says
+      case facts.contributes
+      of elYes: (rdMet, "the split names you: your agreement counts")
+      of elNo: (rdMissing, "the split does not name you: your agreement would not count")
+      of elUnknown: (rdUnknown, "cannot tell whether the split names you")
     else: (rdUnknown, "unrecognized authority requirement: " & name)
   result.moduleLoaded = proc(name: string): Grade =
     if facts.invoker == nil:
