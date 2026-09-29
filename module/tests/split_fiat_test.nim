@@ -11,7 +11,10 @@
 ##     read, every input is accountable and the creditor's agreement counts; proposed
 ##     without it, nobody's agreement does (invariant 10) — no quote of unknown origin is
 ##     ever signed;
-##   * the words say both: the bill in its currency and what it comes to in the asset.
+##   * the words say both: the bill in its currency and what it comes to in the asset;
+##   * the same holds in every asset a split is paid in (exo-a90.18): BTC in satoshis (and a
+##     converted share below the dust limit refused), a token in its own decimals, and the
+##     private split in LEZ, whose shares stay pairwise distinct.
 ## Needs libsodium + secp256k1 (the keystores).
 
 import std/[json, strutils]
@@ -32,6 +35,8 @@ import ../src/coordination/attest
 import ../src/coordination/authorship
 import ../src/coordination/effect_summary
 import ./probes/live_room
+import ../src/bitcoin/[script, keys]
+import ../src/wallet/[lez_core, lez_adapter]
 
 const Chain = "eip155:31337"
 const Policy = "evm-split@" & Chain
@@ -126,5 +131,64 @@ block:
   let sm = effectSummary(quoted)
   doAssert "1840.00 EUR" in sm.text and "0.5704 ETH" in sm.text, sm.text
   echo "4. the words say 1840.00 EUR and 0.5704 ETH OK"
+
+# ── 5. BTC: the quote converts to satoshis; a converted share below dust is refused ──
+const Regtest = "bip122:0f9188f13cb7b2c71f2a335e3a4fc328"
+proc filled(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
+block:
+  let btcDrv = newSplitDriver(BtcSplitFamily, Regtest, @[alice, bob, carol])
+  let payTo = p2wpkhAddress("bcrt", compressedPubKey(filled(7)))
+  let bq = fiatQuote("EUR", "1840.00", "0.0000104", 8, "a BTC/EUR quote", At)
+  doAssert bq.ok, bq.why
+  doAssert bq.quote.rateAsset == "1040" and bq.total == "1913600", "1840.00 EUR × 1040 sat = 1,913,600 sat: " & bq.total
+  let e = effectFromJson(splitEffectJson(Regtest, "BTC", bq.total, alice, payTo,
+                                         evenShares(bq.total, alice, @[bob, carol]), "Cabin", bq.quote))
+  doAssert btcDrv.signRefusal(e) == "", btcDrv.signRefusal(e)
+  doAssert decode(canonicalize(btcDrv, e).bytes).arr.len == 10, "the quote is signed on Bitcoin too"
+  let sm = effectSummary(splitEffectJson(Regtest, "BTC", bq.total, alice, payTo,
+                                         evenShares(bq.total, alice, @[bob, carol]), "Cabin", bq.quote))
+  doAssert "1840.00 EUR" in sm.text and "0.019136 BTC" in sm.text, sm.text
+  # a small bill: 1.00 EUR is 1040 sat, a third of it (346) is below the 546-sat dust limit
+  let tiny = fiatQuote("EUR", "1.00", "0.0000104", 8, "a BTC/EUR quote", At)
+  doAssert tiny.ok and tiny.total == "1040", tiny.total
+  let dust = effectFromJson(splitEffectJson(Regtest, "BTC", tiny.total, alice, payTo,
+                                            evenShares(tiny.total, alice, @[bob, carol]), "Gum", tiny.quote))
+  doAssert "dust" in btcDrv.signRefusal(dust), "a converted share below dust is refused: " & btcDrv.signRefusal(dust)
+  echo "5. BTC: 1840.00 EUR converts to 1,913,600 sat and is signed; a dust share after conversion is refused OK"
+
+# ── 6. a token: the quote converts in the token's own decimals ───────────────────
+block:
+  const Usdc = "erc20:0x5fbdb2315678afecb367f032d93f642f64180aa3"
+  let tq = fiatQuote("EUR", "1840.00", "1.08", 6, "a USDC/EUR quote", At)
+  doAssert tq.ok and tq.quote.rateAsset == "1080000" and tq.total == "1987200000",
+           "1840.00 EUR × 1.08 = 1987.2 at 6 decimals: " & tq.total
+  let e = effectFromJson(splitEffectJson(Chain, Usdc, tq.total, alice, PayTo,
+                                         evenShares(tq.total, alice, @[bob, carol]), "Dinner", tq.quote))
+  doAssert drv.signRefusal(e) == "", drv.signRefusal(e)
+  doAssert decode(canonicalize(drv, e).bytes).arr.len == 10
+  let t = drv.partTransfer(e, partName(bob))
+  doAssert t.ok and t.asset == Usdc and t.amount == "662400000", "a third, in the token's base units: " & t.amount
+  echo "6. a token: 1840.00 EUR converts to 1987.2 USDC in its 6 decimals; each share is paid in the token OK"
+
+# ── 7. the private split: a quoted total, shares still pairwise distinct ─────────
+block:
+  const Lez = "lez:testnet"
+  let lezDrv = newSplitDriver(LezSplitFamily, Lez, @[alice, bob, carol])
+  let w = newLezAdapter(newFakeLezCore(newFakeLezChain()))
+  var payTo = ""
+  for (form, address) in w.receiveAddresses(aliceKs):
+    if form == "shielded": payTo = address
+  doAssert payTo.startsWith("priv:"), payTo
+  let lq = fiatQuote("EUR", "12.00", "0.5", 9, "a LEZ/EUR quote", At)
+  doAssert lq.ok and lq.total == "6000000000", "12.00 EUR × 0.5 LEZ = 6 LEZ at 9 decimals: " & lq.total
+  let shares = evenShares(lq.total, alice, @[bob, carol], distinctAmounts = true)
+  doAssert shares.len == 2 and shares[0].amount != shares[1].amount, "told apart by amount"
+  let e = effectFromJson(splitEffectJson(Lez, "LEZ", lq.total, alice, payTo, shares, "Dinner", lq.quote))
+  doAssert lezDrv.signRefusal(e) == "", lezDrv.signRefusal(e)
+  doAssert decode(canonicalize(lezDrv, e).bytes).arr.len == 10
+  let same = effectFromJson(splitEffectJson(Lez, "LEZ", lq.total, alice, payTo,
+                                            evenShares(lq.total, alice, @[bob, carol]), "Dinner", lq.quote))
+  doAssert lezDrv.signRefusal(same).len > 0, "equal shares are still refused on the private rail"
+  echo "7. the private split: 12.00 EUR converts to 6 LEZ, signed; its shares stay pairwise distinct OK"
 
 echo "split_fiat_test: all OK"
