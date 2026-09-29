@@ -163,12 +163,9 @@ proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
   # Link the approval to the proposal and to every approval its signer has seen
   # (exo-403): a member who later reads this approval but not those can tell its
   # history reaches events it cannot read, instead of mistaking a partial view for
-  # the whole one. Content-addressed, so the fold still dedups by (who, round).
-  var parents: seq[EventId]
-  for e in events:
-    if e.key == "intent/" & intentId & "/propose" or
-       e.key.startsWith("intent/" & intentId & "/sig/"):
-      parents.add eventId(e)
+  # the whole one. Approvals only, never any other sig event (exo-96d). Content-
+  # addressed, so the fold still dedups by (who, round).
+  let parents = approvalParents(events, driverFor, intentId)
   let sigEv = contributeEvent(intentId, who, sig, round = curRound, parents = parents)
   s.publish(sigEv)
   if inApp: s.publish(attestEvent(intentId, who, curRound, attestHex, parents = @[eventId(sigEv)]))
@@ -231,10 +228,18 @@ proc liveImportOutside*(s: CoordinationSession, ks: Keystore, driverFor: DriverF
   if got.len == 0:
     return OutsideImport(error: "no-signatures",
                          detail: "it carries no signature by one of the account's keys over the whole proposal")
+  let m = canonicalize(drv, effectFromJson(effectJson))
   for (signer, c) in got:
+    # Already in the room only if the room holds one of the signer's the fold can count:
+    # junk someone published under their name is not theirs, and must not keep their real
+    # signature out (exo-c00).
     var seen = false
     for e in events:
-      if e.key.startsWith("intent/" & intentId & "/sig/" & signer): seen = true
+      let p = e.key.split('/')
+      if p.len >= 4 and p[0] == "intent" and p[1] == intentId and p[2] == "sig" and
+         p[3].toLowerAscii == signer.toLowerAscii and
+         countable(drv, m, p[3], (if p.len >= 5: (try: parseInt(p[4]) except ValueError: 1) else: 1), e.value):
+        seen = true
     if seen:
       result.already.add signer
       continue
