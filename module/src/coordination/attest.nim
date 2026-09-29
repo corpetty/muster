@@ -225,12 +225,13 @@ proc attestationDigest*(p: seq[byte]): array[32, byte] =
 
 proc verifyAttestation*(who: string, p: seq[byte], sigHex: string): bool =
   ## Does `sigHex` attest P as `who`? The contributor id names the key type (the
-  ## drivers' convention): "0x…" a secp address (sig over keccak256(P)), "ed:…" an
-  ## Ed25519 key (sig over P). Anything else cannot be verified, so it never is.
+  ## drivers' convention): "0x…" a secp address (sig over keccak256(P)), "ed:…" or
+  ## "frost:…" an Ed25519 key (sig over P; the room FROST scaffold names its signers
+  ## "frost:", exo-75c). Anything else cannot be verified, so it never is.
   if p.len == 0: return false
   let sig = hexToBytes(sigHex)
-  if who.startsWith("ed:"):
-    let pk = hexToBytes(who[3 .. ^1])
+  if who.startsWith("ed:") or who.startsWith("frost:"):
+    let pk = hexToBytes(who[who.find(':') + 1 .. ^1])
     if pk.len != 32 or sig.len != 64: return false
     var edPk: Ed25519Pub
     var edSig: Ed25519Sig

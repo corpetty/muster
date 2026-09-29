@@ -148,10 +148,11 @@ proc fileDriver(policy: string, ctx: SigningContext): Driver =
 
 proc signedBy(who: string, mat: seq[byte], sigHex: string): bool =
   ## Is `sigHex` a signature over the materialization by the contributor `who` names?
-  ## The in-app path signs the 32-byte digest (secp) or the materialization (Ed25519).
+  ## The in-app path signs the 32-byte digest (secp) or the materialization (Ed25519;
+  ## named "ed:", or "frost:" by the room FROST scaffold, exo-75c).
   let sig = hexBytes(sigHex)
-  if who.startsWith("ed:"):
-    let pk = hexBytes(who[3 .. ^1])
+  if who.startsWith("ed:") or who.startsWith("frost:"):
+    let pk = hexBytes(who[who.find(':') + 1 .. ^1])
     if pk.len != 32 or sig.len != 64: return false
     var edPk: Ed25519Pub
     var edSig: Ed25519Sig
