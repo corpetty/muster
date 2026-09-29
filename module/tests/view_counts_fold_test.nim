@@ -11,8 +11,9 @@
 ## log provenance. Invariant 9: what the client says about a member is only what that
 ## member disclosed; a view that claims an approval the decision does not contain says more.
 ##
-## The oracle is the fold itself, never a re-implementation of it: a (who, round) is
-## counted iff removing its contribution lowers the number the fold accepted. Each surface
+## The oracle is the fold itself, never a re-implementation of it: the contributions are fed
+## to reduceIntents one at a time, in the order it processes them, and a (who, round) is
+## counted iff folding it in raised the number the fold accepted. Each surface
 ## must name exactly that set, for every driver family with its own verify rule — a room
 ## threshold, a Safe, the room FROST scaffold, a real two-round FROST (btc.frost-bip445,
 ## whose contributions carry their round), the vote-locus LEZ receipt, and the split (whose
@@ -50,13 +51,28 @@ proc foldAccepted(events: seq[Event], dfor: DriverFor, id: string): int =
   let it = reduceIntents(events, dfor)[id]
   (it.collection.round - 1) * it.collection.descriptor.threshold + it.collection.acceptedThisRound
 
-proc foldCounted(events: seq[Event], dfor: DriverFor, id: string): HashSet[string] =
-  ## The (who, round) keys the fold counted: removing one lowers what it accepted.
-  let total = foldAccepted(events, dfor, id)
-  for e in events:
+proc foldOrder(events: seq[Event], id: string): seq[Event] =
+  ## The contributions to `id` in the order reduceIntents folds them: by key round, then
+  ## canonical order within a round.
+  var xs: seq[(int, int, Event)]
+  for i, e in canonicalOrder(events):
     let k = keyOf(e, id)
-    if k.len == 0 or k in result: continue
-    if foldAccepted(events.filterIt(keyOf(it, id) != k), dfor, id) < total: result.incl k
+    if k.len > 0: xs.add ((try: parseInt(k.rsplit('/', 1)[1]) except CatchableError: 1), i, e)
+  xs.sort(proc (a, b: (int, int, Event)): int = (if a[0] != b[0]: cmp(a[0], b[0]) else: cmp(a[1], b[1])))
+  for x in xs: result.add x[2]
+
+proc foldCounted(events: seq[Event], dfor: DriverFor, id: string): HashSet[string] =
+  ## The (who, round) keys the fold counted: fed one at a time in its own order, each one
+  ## that raised what it accepted. exo-9fb: removing one at a time instead let a later
+  ## contribution take the freed place (a round-1 payload keyed round 2, counted toward a
+  ## short round 1, exo-e42), so the verdict hung on the random order of FROST's events.
+  var fed = events.filterIt(keyOf(it, id).len == 0)
+  var total = foldAccepted(fed, dfor, id)
+  for e in foldOrder(events, id):
+    fed.add e
+    let t = foldAccepted(fed, dfor, id)
+    if t > total: result.incl keyOf(e, id)
+    total = t
 
 proc whoOf(keys: HashSet[string]): HashSet[string] =
   for k in keys: result.incl k.rsplit('/', 1)[0]
