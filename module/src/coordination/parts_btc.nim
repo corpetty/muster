@@ -105,7 +105,9 @@ method sendPart*(s: BtcPartSeam, t: PartTransfer): tuple[ok: bool, tx, detail: s
   if why.len > 0: return (false, "", why)
   try:
     let hrp = networkByCaip2(s.chain).hrp
-    let coins = s.node.utxosOf(s.payerAddress())
+    # never a coin a payment already in the mempool spends: two parts paid back to back
+    # must not conflict (exo-a90.18)
+    let coins = s.node.spendableUtxosOf(s.payerAddress())
     let signed = signedShare(s.ks, hrp, coins, t.to, parseBiggestUInt(t.amount).uint64, s.rateOf())
     let r = s.node.submit(PreparedTx(chain: s.chain, to: t.to,
                                      payload: $(%*{"rawtx": hexOf(signed.serialize()), "txid": signed.txidHex()})),
