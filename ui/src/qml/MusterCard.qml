@@ -235,6 +235,15 @@ Rectangle {
     property string splitNote: ""
     readonly property var split: (cardRoot.card && cardRoot.card.split) ? cardRoot.card.split : null
     readonly property bool isSplit: cardRoot.split !== null
+    // A settle-up (exo-3c6): the net payments instead of the shares they cover.
+    readonly property var settleUp: (cardRoot.card && cardRoot.card.settleUp) ? cardRoot.card.settleUp : null
+    readonly property bool isSettleUp: cardRoot.settleUp !== null
+    readonly property var myTransfer: {
+        if (!cardRoot.settleUp) return null;
+        var ts = cardRoot.settleUp.transfers || [];
+        for (var i = 0; i < ts.length; ++i) if (ts[i].mine && !ts[i].settled) return ts[i];
+        return null;
+    }
     // A split's payTo, readable: an address stays whole; a shielded key node — ~200 hex
     // characters that no one reads and that would run off the card — is named as one and
     // shortened, the way the address-share card does.
@@ -272,9 +281,11 @@ Rectangle {
     // The split's asset and its decimals (ETH 18, LEZ 9): base units → a readable amount,
     // by string — never a float.
     // a token's own symbol (exo-5ab) — display only; its address is named on the card
-    readonly property string unit: cardRoot.split ? String(cardRoot.split.symbol || cardRoot.split.asset || "ETH") : "ETH"
+    readonly property string unit: cardRoot.split ? String(cardRoot.split.symbol || cardRoot.split.asset || "ETH")
+                                 : cardRoot.settleUp ? String(cardRoot.settleUp.symbol || cardRoot.settleUp.asset || "ETH") : "ETH"
     readonly property string token: cardRoot.split ? String(cardRoot.split.token || "") : ""
-    readonly property int decimals: cardRoot.split ? Number(cardRoot.split.decimals || 18) : 18
+    readonly property int decimals: cardRoot.split ? Number(cardRoot.split.decimals || 18)
+                                  : cardRoot.settleUp ? Number(cardRoot.settleUp.decimals || 18) : 18
     function eth(wei) {
         var dec = cardRoot.decimals;
         var s = String(wei || "0").replace(/^0+/, "");
@@ -604,6 +615,68 @@ Rectangle {
                 font.family: Theme.typography.publicSans
                 font.pixelSize: Theme.typography.subtitleText
                 font.weight: Theme.typography.weightMedium
+            }
+
+            // ── a settle-up (exo-3c6): the net payments instead, and where each stands ──
+            ColumnLayout {
+                objectName: "cardSettleUp"
+                visible: cardRoot.isSettleUp
+                Layout.fillWidth: true
+                spacing: 2
+
+                LogosText {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: cardRoot.settleUp
+                          ? qsTr("Settle up%1 — %2 instead of %3 from %4")
+                                .arg(String(cardRoot.settleUp.memo || "").length > 0 ? " · " + String(cardRoot.settleUp.memo) : "")
+                                .arg((cardRoot.settleUp.transfers || []).length === 1 ? qsTr("1 payment")
+                                     : qsTr("%1 payments").arg((cardRoot.settleUp.transfers || []).length))
+                                .arg(qsTr("%1 shares").arg(Number(cardRoot.settleUp.covers || 0)))
+                                .arg(Number(cardRoot.settleUp.splits || 0) === 1 ? qsTr("1 split")
+                                     : qsTr("%1 splits").arg(Number(cardRoot.settleUp.splits || 0)))
+                          : ""
+                    color: Theme.palette.text
+                    font.family: Theme.typography.publicSans
+                    font.pixelSize: Theme.typography.subtitleText
+                    font.weight: Theme.typography.weightMedium
+                }
+                Repeater {
+                    model: cardRoot.settleUp ? (cardRoot.settleUp.transfers || []) : []
+                    delegate: RowLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        LogosText {
+                            Layout.preferredWidth: 220
+                            elide: Text.ElideRight
+                            text: (String(modelData.fromName || "") || String(modelData.from).slice(0, 10) + "…") + "  →  "
+                                  + (String(modelData.toName || "") || String(modelData.to).slice(0, 10) + "…")
+                            color: Theme.palette.text
+                            font.pixelSize: Theme.typography.secondaryText
+                        }
+                        LogosText {
+                            text: qsTr("%1 %2").arg(cardRoot.eth(modelData.amount)).arg(cardRoot.unit)
+                            color: Theme.palette.textSecondary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        LogosText {
+                            Layout.fillWidth: true
+                            text: modelData.confirmed ? qsTr("received ✓") : modelData.settled ? qsTr("paid — awaiting the recipient's read")
+                                  : modelData.paying ? qsTr("paying…") : cardRoot.ready ? qsTr("to pay") : qsTr("once everyone agrees")
+                            color: modelData.confirmed ? Theme.palette.success : Theme.palette.textTertiary
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                    }
+                }
+                LogosText {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: qsTr("Each member's balance across these splits is kept exactly; each person is paid where their own split said. Once agreed, the covered shares are paid only through this; once its payments are received, each creditor marks the shares it covered received.")
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: Theme.typography.badgeText
+                }
             }
 
             // ── a split (exo-a90): who owes whom what, and where each share stands ──
@@ -1681,8 +1754,10 @@ Rectangle {
                 // a split: only who it names agrees — each debtor, and the creditor to payTo
                 // being theirs (exo-770), never to an address this client does not hold
                 && (!cardRoot.isSplit || cardRoot.iAmDebtor || (cardRoot.iAmCreditor && cardRoot.payToMine))
+                && (!cardRoot.isSettleUp || !!cardRoot.settleUp.iAmParty)
             Layout.fillWidth: true
-            text: !cardRoot.isSplit ? qsTr("Approve")
+            text: cardRoot.isSettleUp ? qsTr("Agree to settle up")
+                : !cardRoot.isSplit ? qsTr("Approve")
                 : cardRoot.iAmDebtor ? qsTr("Agree to my share")
                 : qsTr("Agree — I paid, and %1 is mine").arg(cardRoot.shortPayTo(String(cardRoot.split.payTo || "")))
             onClicked: cardRoot.approve()
@@ -1701,6 +1776,21 @@ Rectangle {
             text: qsTr("Deny")
             variant: LogosButton.Variant.Secondary
             onClicked: cardRoot.deny()
+        }
+
+        // A settle-up (exo-3c6): once every party agreed, each pays their own net payments —
+        // derived from the agreed settle-up, one at a time; the recipient's client confirms.
+        LogosButton {
+            objectName: "cardPaySettle"
+            visible: cardRoot.kind === "intent-propose" && cardRoot.isSettleUp && cardRoot.ready
+                && cardRoot.myTransfer !== null && !cardRoot.myTransfer.paying
+            Layout.fillWidth: true
+            text: cardRoot.myTransfer
+                  ? qsTr("Pay %1 %2 to %3").arg(cardRoot.eth(cardRoot.myTransfer.amount)).arg(cardRoot.unit)
+                        .arg(String(cardRoot.myTransfer.toName || "").length > 0 ? cardRoot.myTransfer.toName
+                             : String(cardRoot.myTransfer.to).slice(0, 10) + "…")
+                  : ""
+            onClicked: cardRoot.settlePart()
         }
 
         // A split (exo-a90): once everyone named has agreed, each pays their OWN share from

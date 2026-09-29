@@ -235,6 +235,9 @@ class MusterUi
     // received outside muster). Each lands on splitJson {op, id, …} or {op, id, error};
     // intents reload after.
     SLOT(void proposeSplit(const QString &chain, const QString &totalWei, const QString &sharesJson, const QString &memo))
+    // Settle up (exo-3c6): net the room's agreed, unpaid split shares on a chain and asset
+    // into fewer payments; lands on splitJson {op: "settle-up", …} like a split's propose.
+    SLOT(void proposeSettleUp(const QString &chain, const QString &asset, const QString &memo))
     SLOT(void settlePart(const QString &intentId))
     // A token a split may be paid in (exo-5ab), as it describes itself — the composer's "pay
     // in a token" field: lands on tokenInfoJson {asset, token, symbol, decimals} or {error}.

@@ -652,6 +652,17 @@ void MusterUiBackend::proposeSplit(const QString &chain, const QString &totalWei
     loadMessages();
 }
 
+void MusterUiBackend::proposeSettleUp(const QString &chain, const QString &asset, const QString &memo)
+{
+    // coordinate_propose_settle_up: the room's open shares on this chain and asset, netted —
+    // every party the covered shares name agrees before anything is paid.
+    const QString r = modules().muster_module.coordinate_propose_settle_up(chain.trimmed(), asset.trimmed(), memo);
+    qInfo() << "[muster_ui] coordinate_propose_settle_up" << chain << asset << "->" << r;
+    setSplitJson(splitOutcome("settle-up", "", r));
+    loadIntents();
+    loadMessages();
+}
+
 void MusterUiBackend::settlePart(const QString &intentId)
 {
     // coordinate_settle_part: MY share, from my own wallet — the module derives the
