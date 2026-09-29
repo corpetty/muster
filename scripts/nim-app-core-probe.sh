@@ -19,12 +19,22 @@ APP=$(cd ui-nim && nix build .#muster-app --no-link --print-out-paths --accept-f
 D=$(mktemp -d)
 echo "modules: $MODULES"
 echo "app:     $APP"
-LOGOS_INSTANCE_ID="nimapp$$" QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
-  setsid "$APP/bin/muster-app" --self-test-core --modules "$MODULES" --user-dir "$D/user" >"$D/app.log" 2>&1 &
-PID=$!
-SID=$(ps -o sid= -p "$PID" 2>/dev/null | tr -d ' ')
-wait "$PID"; rc=$?
-[ -n "$SID" ] && pkill -9 -s "$SID" 2>/dev/null
+INSTANCE="nimapp$$"
+# The app writes its own pid from inside its new session: `setsid` forks when its caller
+# leads a process group, and then $! names a process that has already gone; -w keeps
+# setsid itself alive until the app exits, so `wait` gets the app's status.
+LOGOS_INSTANCE_ID="$INSTANCE" QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+  setsid -w bash -c 'echo $$ >"$1/pid"; shift; exec "$@"' _ "$D" \
+    "$APP/bin/muster-app" --self-test-core --modules "$MODULES" --user-dir "$D/user" >"$D/app.log" 2>&1 &
+wait $!; rc=$?
+# The app stops its module hosts itself (logos_core_cleanup). If it died before it could,
+# they are in sessions of their own (liblogos starts them with setsid), so stop them by
+# the instance id they inherited, and nothing else.
+PID=$(cat "$D/pid" 2>/dev/null)
+[ -n "$PID" ] && kill -9 "$PID" 2>/dev/null
+for p in $(pgrep -f 'logos_host' 2>/dev/null); do
+  tr '\0' '\n' </proc/"$p"/environ 2>/dev/null | grep -qx "LOGOS_INSTANCE_ID=$INSTANCE" && kill -9 "$p" 2>/dev/null
+done
 grep -aE '^(PASS|FAIL|SUCCESS|FAILED)|QML:' "$D/app.log"
 if [ "$rc" = 0 ]; then rm -rf "$D"; else echo "logs kept in $D"; fi
 exit "$rc"

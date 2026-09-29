@@ -5,7 +5,8 @@
 #   scripts/ui-parity.sh                  # the C++ build (.run/runner)
 #   MUSTER_UI=nim scripts/ui-parity.sh    # the Nim build (.run/runner-nim)
 #   scripts/ui-parity.sh card invite      # only the named tests
-# Each test runs on the live Logos fleet; split also starts a throwaway anvil. The LEZ
+# Each test runs on the live Logos fleet; split also starts a throwaway anvil, split-btc a
+# fresh Bitcoin Core regtest (bitcoind via nix shell). The LEZ
 # testnet split (~25 min, real proofs) is not in the suite: run it by hand.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -19,8 +20,9 @@ declare -A SUITE=(
   [invite]="scripts/invite-proof.sh"
   [two-instance]="scripts/two-instance-proof.sh"
   [split]="scripts/split-self-test.sh"
+  [split-btc]="nix shell nixpkgs#bitcoind -c scripts/split-btc-self-test.sh"
 )
-ORDER=(card infra-safe infra-threshold audit invite two-instance split)
+ORDER=(card infra-safe infra-threshold audit invite two-instance split split-btc)
 [ $# -gt 0 ] && ORDER=("$@")
 
 LOGS=$(mktemp -d)
