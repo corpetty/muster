@@ -27,6 +27,7 @@ import ../src/crypto/curve25519
 import ../src/coordination/intent_events    # effectFromJson
 import ../src/coordination/accounts         # driverForPolicy
 import ../src/coordination/parts_btc
+import ../src/coordination/effect_summary
 
 const Regtest = "bip122:0f9188f13cb7b2c71f2a335e3a4fc328"
 const Mainnet = "bip122:000000000019d6689c085ae165831e93"
@@ -128,5 +129,13 @@ block:
                                   paySpk, "100000")
   doAssert "does not pay" in elsewhere, elsewhere
   echo "5. the creditor confirms only an output paying payTo exactly the share OK"
+
+# ── 6. the words read in BTC's own decimals (8), never ETH's 18 ─────────────────
+block:
+  let sm = effectSummary(splitEffectJson(Regtest, "BTC", "450000", idOf(creditor), payTo,
+                         evenShares("450000", idOf(creditor), @[idOf(debtorA), idOf(debtorB)]), "cabin"))
+  doAssert "0.0045 BTC" in sm.text, "a Bitcoin split reads in BTC: " & sm.text
+  doAssert sm.amount == "450000" and sm.unit == "sat", "the raw amount stays in satoshis: " & sm.unit
+  echo "6. a Bitcoin split reads 0.0045 BTC; its raw amount stays in satoshis OK"
 
 echo "split_btc_test: all OK"
