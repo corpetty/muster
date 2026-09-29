@@ -293,4 +293,108 @@ block:
         prop & @[agree(ana), agree(jb), agree(outsider), agree(you), agree(devon)], dFor, id, 4, 4)
   echo "6. split: a non-party's agreement is on no surface; the creditor's is on every one OK"
 
+# ── 7. one member, under several round keys (exo-e42) ──────────────────────────────
+# A contribution's round is part of its key, so a member can publish ONE valid signature
+# under round 1, 2, 3, … The fold dedups by (who, round), but it verified each copy at the
+# round the collection was in, not the key's. For a driver whose verify ignores the round
+# (the room FROST scaffold, and every single-round driver) each copy then counted as
+# another member: A/1 + A/2 closed a 2-of-3 round, A/3 + A/4 the next. A contribution
+# counts only toward its own round, and every surface agrees.
+proc foldState(events: seq[Event], dfor: DriverFor, id: string): (string, int, int) =
+  let it = reduceIntents(events, dfor)[id]
+  ($it.state, it.collection.round, it.collection.acceptedThisRound)
+
+proc viewOf(events: seq[Event], dfor: DriverFor, id: string): IntentView =
+  for v in reduceIntentViews(events, dfor):
+    if v.id == id: return v
+
+block:
+  let fr = newFrostDriver(@[a.identity().ed, b.identity().ed, c.identity().ed], k = 2)
+  let frFor: DriverFor = proc(kind: string): Driver = fr
+  const stmtJson = """{"effect":"statement","text":"frost, alone"}"""
+  let id = intentIdFor(stmtJson, "frost")
+  let m = canonicalize(fr, effectFromJson(stmtJson))
+  proc contrib(k: EncKeys, round: int): Event =
+    let s = hx(edSign(k, m.bytes))
+    contributeEvent(id, contributorOf(fr, stmtJson, s), s, round = round)
+  let prop = @[policyDeclEvent(id, "frost"), proposeEvent(id, stmtJson)]
+  var alone = prop
+  for r in 1 .. 4: alone.add contrib(a, r)
+
+  let (st, rnd, acc) = foldState(alone, frFor, id)
+  doAssert st != "executable",
+    "room FROST: one member completed a 2-of-3 alone by publishing under round keys 1..4"
+  doAssert st == "collecting" and rnd == 1 and acc == 1,
+    "room FROST: one member alone is 1 of 2 in round 1, not " & st & " round " & $rnd & " (" & $acc & ")"
+  let v = viewOf(alone, frFor, id)
+  doAssert v.state == "collecting" and v.approvals == 1 and v.round == 1 and v.roundApprovals == 1,
+    "room FROST alone: the card says " & $v.approvals & " approved, round " & $v.round &
+    " (" & $v.roundApprovals & " this round)"
+  check("room FROST: one member under round keys 1..4", alone, frFor, id, wantApprovals = 1, wantRound = 1)
+  echo "7a. room FROST: one member under four round keys is one approval in round 1 OK"
+
+  # A round-2 contribution published early counts once round 1 closes — the keys under
+  # rounds the driver does not run never do, and no surface shows them.
+  let withB = alone & @[contrib(b, 1), contrib(b, 2)]
+  doAssert foldState(withB, frFor, id) == ("executable", 2, 2),
+    "room FROST: a and b in both rounds is executable, got " & $foldState(withB, frFor, id)
+  check("room FROST: a early in round 2, and under rounds 3 and 4", withB, frFor, id,
+        wantApprovals = 2, wantRound = 2)
+  for g in approvalGrades(withB, frFor, id):
+    doAssert g.round in 1 .. 2, "room FROST: a grade for round " & $g.round & " of a 2-round driver"
+  for e in reduceActivity(withB, frFor):
+    doAssert "round 3" notin e.detail and "round 4" notin e.detail,
+      "room FROST: the activity feed narrates a round the driver does not run: " & e.detail
+  echo "7b. room FROST: an early round-2 key counts once round 1 closes; rounds 3 and 4 never do OK"
+
+  # A third member's round-1 contribution, after round 1 closed, is not a round-2 one.
+  let surplus = prop & @[contrib(a, 1), contrib(b, 1), contrib(c, 1), contrib(a, 2)]
+  doAssert foldState(surplus, frFor, id) == ("collecting", 2, 1),
+    "room FROST: a surplus round-1 contribution spilled into round 2: " & $foldState(surplus, frFor, id)
+  let vs = viewOf(surplus, frFor, id)
+  doAssert vs.state == "collecting" and vs.round == 2 and vs.roundApprovals == 1,
+    "room FROST surplus: the card says round " & $vs.round & " with " & $vs.roundApprovals & " this round"
+  echo "7c. room FROST: a surplus round-1 contribution does not count toward round 2 OK"
+
+block:
+  # A single-round driver: the same signature under round keys 1 and 2 is still one member.
+  let thr = newThresholdDriver(@[a.identity().ed, b.identity().ed], k = 2)
+  let thrFor: DriverFor = proc(kind: string): Driver = thr
+  const stmtJson = """{"effect":"statement","text":"we agree, alone"}"""
+  let id = intentIdFor(stmtJson, "threshold")
+  let sigA = hx(edSign(a, canonicalize(thr, effectFromJson(stmtJson)).bytes))
+  let nameA = contributorOf(thr, stmtJson, sigA)
+  let alone = @[policyDeclEvent(id, "threshold"), proposeEvent(id, stmtJson),
+                contributeEvent(id, nameA, sigA, round = 1), contributeEvent(id, nameA, sigA, round = 2)]
+  doAssert foldState(alone, thrFor, id) == ("collecting", 1, 1),
+    "threshold: one member completed a 2-of-2 alone under round keys 1 and 2: " & $foldState(alone, thrFor, id)
+  doAssert viewOf(alone, thrFor, id).approvals == 1, "threshold alone: the card's approvals"
+  check("threshold: one member under round keys 1 and 2", alone, thrFor, id, wantApprovals = 1, wantRound = 1)
+  echo "7d. threshold: one member under two round keys is one approval OK"
+
+block:
+  var keys: seq[array[32, byte]]
+  var owners: seq[Address]
+  for k in 1 .. 3:
+    var sk: array[32, byte]; sk[31] = byte(k)
+    keys.add sk; owners.add addressOf(sk)
+  var safeAddr: Address
+  for i in 0 ..< 20: safeAddr[i] = byte(0x10 + i)
+  let sd = newSafeDriver(chainId = 31337, safe = safeAddr, owners = owners, threshold = 2)
+  let safeFor: DriverFor = proc(kind: string): Driver = sd
+  const payJson = """{"to":"0x00112233445566778899aabbccddeeff00112233","value":2000,"nonce":0}"""
+  let id = intentIdFor(payJson)
+  let pm = canonicalize(sd, effectFromJson(payJson))
+  var h: array[32, byte]
+  for i in 0 ..< 32: h[i] = pm.bytes[i]
+  let s0 = hx(signRecoverable(h, keys[0]))
+  let n0 = contributorOf(sd, payJson, s0)
+  let alone = @[proposeEvent(id, payJson), contributeEvent(id, n0, s0, round = 1),
+                contributeEvent(id, n0, s0, round = 2)]
+  doAssert foldState(alone, safeFor, id) == ("collecting", 1, 1),
+    "Safe: one owner completed a 2-of-3 alone under round keys 1 and 2: " & $foldState(alone, safeFor, id)
+  doAssert viewOf(alone, safeFor, id).approvals == 1, "Safe alone: the card's approvals"
+  check("Safe: one owner under round keys 1 and 2", alone, safeFor, id, wantApprovals = 1, wantRound = 1)
+  echo "7e. Safe: one owner under two round keys is one approval OK"
+
 echo "view_counts_fold_test: all OK"
