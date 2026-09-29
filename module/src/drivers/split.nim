@@ -434,7 +434,9 @@ method describeFor*(d: SplitDriver, e: Effect): DriverDescriptor =
   ## pay 0x<mine>". The creditor agrees at propose when they propose it themselves.
   result = d.describe()
   if e.isSettleUp:
-    # a settle-up: everyone the covered parts name — each debtor and each creditor
+    # a settle-up: everyone the covered parts name — each debtor and each creditor — under
+    # its own serialization domain
+    result.serializationDomain = SettleUpDomain
     let (ok, su, _) = d.validSettle(e)
     if ok: result.threshold = settleParties(su).len
     return

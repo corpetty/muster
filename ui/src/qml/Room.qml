@@ -1316,7 +1316,8 @@ Item {
                                 String((msg.liveIntent && msg.liveIntent.policy) || "") === "invoke"
                             // a split settles in PARTS — each person pays their own share — so
                             // there is nothing for one member to submit (exo-a90)
-                            readonly property bool isSplit: !!(msg.liveIntent && msg.liveIntent.split)
+                            // settled in parts: a split, or a settle-up (exo-3c6) — never "Settle on-chain"
+                            readonly property bool isSplit: !!(msg.liveIntent && (msg.liveIntent.split || msg.liveIntent.settleUp))
                             readonly property int partsDone: {
                                 var ps = (msg.liveIntent && msg.liveIntent.parts) || [];
                                 var n = 0;

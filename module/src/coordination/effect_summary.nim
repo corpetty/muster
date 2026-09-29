@@ -125,7 +125,7 @@ proc effectSummary*(effectJson: string, label: proc (who: string): string = nil,
     let memo = j{"memo"}.getStr()
     return EffectSummary(kind: "settle-up", unit: j{"asset"}.getStr(),
       text: "a settle-up" & (if memo.len > 0: " — " & memo else: "") & ": " &
-            (if n == 0: "no payment" elif n == 1: "1 payment" else: $n & " payments") & " settle " &
+            (if n == 0: "no payment settles " elif n == 1: "1 payment settles " else: $n & " payments settle ") &
             $m & " shares from " & $splits.len & (if splits.len == 1: " split" else: " splits"))
   of "split":
     # who owes the creditor what (exo-a90.3) — never dressed up as one payment
