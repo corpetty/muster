@@ -25,7 +25,7 @@
     # logos_sdk: the lp_* binding (and later the client generated from muster.lidl), at
     # the SAME rev module/metadata.json pins, so the view and the module speak one SDK.
     logos-nim-sdk = {
-      url = "github:corpetty/logos-nim-sdk/9aa82f3ddca199c4ec2c56a03ba0b60b36338ea1";
+      url = "github:corpetty/logos-nim-sdk/6077eb70a8709dccf3d60601121dbf66e794b89c";
       flake = false;
     };
     # T3: seaqt-gen, the generator that produced nim-seaqt qt-6.8@7d40abd7. nix/seaqt-ro.nix

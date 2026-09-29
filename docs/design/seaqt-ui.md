@@ -314,7 +314,7 @@ It links the runner's `qtbase` and `qtremoteobjects` 6.9.2 exactly.
 1. `ffi.nim` binds no consumer-side token calls, `lp_inform_module_token` and `lp_token_get`. Its users so far are modules, which receive a token, whereas a host registers one. The probe declares them locally (`ui-nim/app/logos_core.nim`).
 2. `ffi.nim`'s opaque handles are `importc: "struct LpClient"` with no file-scope declaration. Under gcc 14, each prototype then declares its own `struct LpClient`, and passing one handle to another prototype is a hard error. The probe emits `struct LpClient; struct LpSubscription;` in each module that names them. The SDK should emit it once.
 
-A fix for both is drafted and verified: the probe builds and passes against a patched `ffi.nim` with both local workarounds removed. It goes to logos-nim-sdk as its own change.
+**Both are fixed upstream:** [corpetty/logos-nim-sdk#6](https://github.com/corpetty/logos-nim-sdk/pull/6), merged as `6077eb7`. muster's pin moved there in exo-607.12, in both `module/metadata.json` and `ui-nim/flake.nix`, and the two local workarounds are gone.
 
 **Not yet:** the view has only `checkHealth` implemented, and the other 65 slots are T5. The host does not yet take `--user-dir` or run the `MUSTER_AUTO*` autopilot, which is T0's contract for a Nim build (T6).
 
