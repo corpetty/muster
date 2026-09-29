@@ -2857,6 +2857,15 @@ proc musterCoordinateMembers(): string =
                "alias": contactBook().aliasOf(idHex)}
   $arr
 
+proc homeSummary(ej: string, label: proc(who: string): string): string =
+  ## What an intent moves, in words, as the room history says it: members named once
+  ## (exo-221), a token in its own decimals and symbol (display only, exo-5ab).
+  var onChain = ""
+  try: onChain = parseJson(ej){"chain"}.getStr()
+  except CatchableError: discard
+  effectSummary(ej, label, proc(asset: string): tuple[symbol: string, decimals: int] =
+                             tokenInfo(onChain, asset[6 .. ^1])).text
+
 proc musterCoordinateConversations(): string =
   ## Every joined room, as {topic, address, lastTs, active, needs, waiting, settled} —
   ## the home surface's room list. The active room is flagged; lastTs is each room's
@@ -2869,7 +2878,10 @@ proc musterCoordinateConversations(): string =
   let myAddr = toHex(ks.address())
   let myEnc = ks.encIdentity()
   let myNames = myContributorNames(ks)
-  let myPart = partName(toHex(myEnc.toBytes()).toLowerAscii().replace("0x", ""))
+  let myEncHex = toHex(myEnc.toBytes()).toLowerAscii().replace("0x", "")
+  let myPart = partName(myEncHex)
+  let mine = @[myEncHex] & myNames
+  let label = proc(who: string): string = memberName(who, mine)   # one name per member (exo-221)
   for topic, s in gSessions:
     if topic in gInboxTopics: continue      # an inbox is a drop-box, not a room to list
     s.poll()
@@ -2893,7 +2905,7 @@ proc musterCoordinateConversations(): string =
       case cls
       of hcNeedsYou:
         needs.add %*{"id": it.id, "what": it.what, "state": it.state,
-                     "text": effectSummary(it.effectJson).text}
+                     "text": homeSummary(it.effectJson, label)}
       of hcWaiting: inc waiting
       of hcSettled: inc settled
     arr.add %*{"topic": topic, "address": myAddr, "lastTs": lastTs,
