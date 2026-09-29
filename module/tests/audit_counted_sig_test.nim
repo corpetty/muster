@@ -6,6 +6,9 @@
 ## key. The audit export carried the junk as her approval, and verifyAudit then refused the
 ## whole file: one member could make any intent's audit unverifiable. The file must carry
 ## the event the fold counted, and verify from its own bytes.
+##
+## The junk arrives after both approvals, so no carried approval lists it as a parent: an
+## approval that links an uncounted event is its own defect (exo-96d), whatever its name.
 ## Build: see probes/live_room.nim (the secp closure + stint + libsodium).
 
 import std/[strutils, sequtils]
@@ -17,6 +20,7 @@ for policy in ["threshold", "safe"]:
   doAssert r.approveAs("alice", id) == "collecting"
   let realA = sigEventsFor(r.events(), id)[0]
   let who = realA.key.split('/')[3]
+  doAssert r.approveAs("bob", id) == "executable"
   # Bob's junk under Alice's name: the same parents, ground until it sorts first.
   var junk: Event
   for i in 0 .. 255:
@@ -24,7 +28,7 @@ for policy in ["threshold", "safe"]:
     if eventId(junk) < eventId(realA): break
   doAssert eventId(junk) < eventId(realA), "no junk sorts first"
   r.bob.publish(junk)
-  doAssert r.approveAs("bob", id) == "executable",
+  doAssert intentState(r.events(), liveDriverFor, id) == "executable",
     policy & ": junk under Alice's name took her slot in the fold"
 
   let file = r.exportAs("alice", id)
