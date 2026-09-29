@@ -96,7 +96,9 @@ proc closurePaths(): seq[string] =
     if p.hasKey("subdir"): dir = dir / p["subdir"].getStr()
     if dirExists(dir): result.add "--path:" & dir
 
-let tmp = getTempDir() / "muster_exo526_host"
+# one directory per run: several sessions may build this probe at once, and a shared one
+# makes their `ar` steps collide (seen 2026-09-28)
+let tmp = getTempDir() / ("muster_exo526_host_" & $getCurrentProcessId())
 createDir(tmp)
 let staticLib = tmp / "libmuster_module_probe.a"
 let harnessBin = tmp / "host_return_harness"
@@ -151,6 +153,8 @@ let observed = observations.len
 if observed == 0:
   fail("harness produced no client observations")
 emitTrials(observations)   # one trace, every observed call a state (the grader's envelope)
+try: removeDir(tmp)        # this run's own build directory
+except OSError: discard
 
 doAssert allTyped,
   "a host client observed a non-typed (bool/empty/default) return — the " &
