@@ -53,3 +53,44 @@ proc matchTokenPayment*(ts: seq[TokenTransfer], token, to, amount: string): stri
     if t.toHex == dst:
       return "it pays " & t.valueDec & " of " & tok & " to " & dst & "; the share is " & amount
   "it pays " & same[0].toHex & ", not " & dst
+
+# ── what a token says about itself (display only — never signed) ─────────────────
+proc hexBytes(h: string): seq[byte] =
+  let s = bare(h)
+  if s.len mod 2 != 0 or not isHex(s): return @[]
+  for i in countup(0, s.len - 2, 2): result.add byte(parseHexInt(s[i .. i + 1]))
+
+proc wordAt(b: seq[byte], at: int): int =
+  ## A 32-byte big-endian word as an int, or -1 when out of range / too large to be an offset.
+  if at < 0 or at + 32 > b.len: return -1
+  for i in at ..< at + 28:
+    if b[i] != 0: return -1
+  (int(b[at + 28]) shl 24) or (int(b[at + 29]) shl 16) or (int(b[at + 30]) shl 8) or int(b[at + 31])
+
+proc abiString*(hex: string): string =
+  ## symbol() / name() decoded: an ABI string (offset, length, bytes), or — older tokens —
+  ## a bytes32. Printable ASCII only, cut to 16 characters: a token names itself, so what it
+  ## says is shown briefly and beside its address, never trusted. "" when malformed.
+  let b = hexBytes(hex)
+  var raw: seq[byte]
+  if b.len == 32:
+    for x in b:
+      if x == 0: break
+      raw.add x
+  else:
+    let off = wordAt(b, 0)
+    if off < 0: return ""
+    let n = wordAt(b, off)
+    if n < 0 or off + 32 + n > b.len: return ""
+    raw = b[off + 32 ..< off + 32 + n]
+  for x in raw:
+    if x >= 0x20 and x < 0x7f: result.add char(x)
+  if result.len > 16: result = result[0 ..< 16]
+
+proc abiUint8*(hex: string): int =
+  ## decimals() decoded, or -1 when malformed or beyond 36 (no real token needs more, and
+  ## a display with 70 decimals is a hostile one).
+  let b = hexBytes(hex)
+  if b.len != 32: return -1
+  let v = wordAt(b, 0)
+  if v < 0 or v > 36: -1 else: v

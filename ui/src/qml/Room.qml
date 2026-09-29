@@ -627,8 +627,22 @@ Item {
     // The rail the next split settles on (the "Settles on" row): its unit and decimals —
     // ETH has 18, the LEZ 9 — and whether it is the private split (exo-a90.9).
     readonly property bool splitPrivate: room.policyKind === "lez-split"
-    readonly property int splitDecimals: room.splitPrivate ? 9 : 18
-    readonly property string splitUnit: room.splitPrivate ? "LEZ" : "ETH"
+    // An Ethereum split may be paid in a token (exo-5ab): the address typed, and what the
+    // token says about itself once looked up — its decimals and symbol, display only.
+    property string splitToken: ""
+    readonly property var splitTokenInfo: {
+        if (room.splitPrivate || room.splitToken.length === 0 || !room.backend) return null;
+        var j = {};
+        try { j = JSON.parse(String(room.backend.tokenInfoJson || "{}")); } catch (e) { return null; }
+        return (j && !j.error && String(j.token || "") === room.splitToken.toLowerCase()) ? j : null;
+    }
+    readonly property int splitDecimals: room.splitPrivate ? 9
+                                       : room.splitTokenInfo ? Number(room.splitTokenInfo.decimals) : 18
+    readonly property string splitUnit: room.splitPrivate ? "LEZ"
+                                      : room.splitTokenInfo ? (String(room.splitTokenInfo.symbol || "") || qsTr("units"))
+                                      : "ETH"
+    // a token typed but not (yet) readable: the split cannot be composed in it
+    readonly property bool splitTokenPending: !room.splitPrivate && room.splitToken.length > 0 && room.splitTokenInfo === null
     function ethToWei(eth, decimals) {
         var dec = (decimals === undefined) ? room.splitDecimals : decimals;
         var s = String(eth || "").trim();
@@ -698,7 +712,9 @@ Item {
         var total = room.ethToWei(totalEth);
         var who = room.splitDebtors();
         if (total.length === 0 || who.length === 0) return;
-        var spec = room.splitCreditorShares ? who : { parties: who, creditorShares: false };
+        if (room.splitTokenPending) return;
+        var spec = { parties: who, creditorShares: room.splitCreditorShares };
+        if (room.splitTokenInfo) spec.asset = String(room.splitTokenInfo.asset);   // exo-5ab
         // chain "" = the chain your configured RPC serves; it is written into the split,
         // so everyone reviews it before agreeing.
         room.backend.proposeSplit("", total, JSON.stringify(spec), String(memo || ""));
@@ -1934,6 +1950,37 @@ Item {
                         }
                     }
 
+                    // pay in a token instead of ETH (exo-5ab): the token's own answer — its
+                    // symbol and decimals — shown beside its address, because a token names itself
+                    LogosTextField {
+                        objectName: "roomSplitToken"
+                        visible: !room.splitPrivate
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("pay in a token instead of ETH: its address (0x…), or leave empty")
+                        font.family: Theme.typography.mono
+                        onTextChanged: {
+                            var t = String(text).trim().toLowerCase();
+                            room.splitToken = /^0x[0-9a-f]{40}$/.test(t) ? t : (t.length > 0 ? t : "");
+                            if (/^0x[0-9a-f]{40}$/.test(t) && room.backend) room.backend.lookupToken("", t);
+                        }
+                    }
+                    LogosText {
+                        visible: !room.splitPrivate && room.splitToken.length > 0
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 0
+                        wrapMode: Text.WordWrap
+                        text: room.splitTokenInfo
+                              ? qsTr("%1 — the token at %2 says so; %3 decimals. A token names itself: check the address.")
+                                    .arg(room.splitUnit)
+                                    .arg(room.splitToken.slice(0, 8) + "…" + room.splitToken.slice(-6))
+                                    .arg(room.splitDecimals)
+                              : !/^0x[0-9a-f]{40}$/.test(room.splitToken)
+                              ? qsTr("⚠ A token is named by its address: 0x and 40 hex characters.")
+                              : qsTr("⚠ Your RPC could not read that token (no decimals()) — is it on this chain?")
+                        color: room.splitTokenInfo ? Theme.palette.textSecondary : Theme.palette.warning
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+
                     LogosText {
                         text: room.members.length > 1
                               ? qsTr("Who owes you a share — tap to leave someone out:")
@@ -1985,10 +2032,10 @@ Item {
                                  : qsTr("%1 people owe you about %2 LEZ each — every share a few base units apart, so your scan can tell whose payment arrived without the chain naming anyone; your own share absorbs the rest. Each pays privately from their own wallet: the chain learns only that private transfers happened.")
                                        .arg(pv.n).arg(room.weiToEth(pv.each)))
                               : (pv.n === 1
-                                 ? qsTr("1 person owes you %1 ETH; your own share is %2 ETH (it absorbs any rounding). They pay from their own wallet — the payment is public on the chain.")
-                                       .arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine))
-                                 : qsTr("%1 people owe you %2 ETH each; your own share is %3 ETH (it absorbs any rounding). Each pays from their own wallet — every payment is public on the chain.")
-                                       .arg(pv.n).arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine)))
+                                 ? qsTr("1 person owes you %1 %3; your own share is %2 %3 (it absorbs any rounding). They pay from their own wallet — the payment is public on the chain.")
+                                       .arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine)).arg(room.splitUnit)
+                                 : qsTr("%1 people owe you %2 %4 each; your own share is %3 %4 (it absorbs any rounding). Each pays from their own wallet — every payment is public on the chain.")
+                                       .arg(pv.n).arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine)).arg(room.splitUnit))
                         color: pv === null ? Theme.palette.warning : Theme.palette.textSecondary
                         font.pixelSize: Theme.typography.badgeText
                     }
@@ -2105,7 +2152,7 @@ Item {
                         // balance — can't over-send (exo-bf9); the ⚠ above says why it's off.
                         // AND the room must have enough people to act on it (see the hint):
                         // don't submit a proposal into a room that can't yet agree to it.
-                        enabled: room.composeType === "split" ? room.splitPreview(splitTotal.text) !== null
+                        enabled: room.composeType === "split" ? room.splitPreview(splitTotal.text) !== null && !room.splitTokenPending
                                : room.enoughToPropose && (
                                  room.composeType === "statement" ? proposeText.text.length > 0
                                : room.composeType === "action" ? room.chosenAction !== null

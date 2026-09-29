@@ -71,6 +71,7 @@ import ../src/wallet/types             # chain-agnostic wallet types
 import ../src/wallet/adapter           # ChainAdapter seam + Wallet aggregate
 import ../src/wallet/evm_adapter       # the EVM/Safe chain
 import ../src/wallet/evm_rpc           # rpcChainId: the chain the configured RPC serves (a split's)
+import ../src/wallet/erc20_logs        # a token's symbol()/decimals(), display only (exo-5ab)
 import ../src/wallet/mock_chain        # a second, non-EVM chain (proves agnosticism)
 import ../src/wallet/lez_core          # the LEZ wallet seam + FakeLezCore (P-L3 swaps in real)
 import ../src/wallet/lez_adapter       # the Logos Execution Zone chain (send assets via Logos)
@@ -1029,6 +1030,24 @@ proc splitSeam(chain: string): EvmPartSeam =
   newEvmPartSeam(chain, gRpcUrl, newEvmAdapter(wchain, gRpcUrl, fromUnlocked = false), moduleKeystore(),
                  Account(chain: wchain, form: afPublic, id: addrHex(myAddress())))
 
+var gTokenInfo = initTable[string, tuple[symbol: string, decimals: int]]()
+
+proc tokenInfo(chain, token: string): tuple[symbol: string, decimals: int] =
+  ## What a split's token says about itself — symbol() and decimals() — read through THIS
+  ## member's own RPC when it serves `chain`, cached. Display only (exo-5ab): the effect's
+  ## amounts are base units, and nothing here is ever signed. ("", -1) when unreadable, and
+  ## the card then shows base units beside the token's address.
+  let key = chain & "|" & token
+  if key in gTokenInfo: return gTokenInfo[key]
+  result = ("", -1)
+  try:
+    if "eip155:" & rpcChainId(gRpcUrl) == chain:
+      let sym = abiString(toHex(rpcCall(gRpcUrl, token, @[0x95'u8, 0xd8, 0x9b, 0x41], "latest")))
+      let dec = abiUint8(toHex(rpcCall(gRpcUrl, token, @[0x31'u8, 0x3c, 0xe5, 0x67], "latest")))
+      result = (sym, dec)
+      if dec >= 0: gTokenInfo[key] = result
+  except CatchableError: discard
+
 proc splitSeamFor(policy: string): PartSeam =
   ## The seam a split's policy settles through: this member's own EVM wallet + RPC, or —
   ## for the private split — their own LEZ wallet on the private rail (exo-a90.9).
@@ -1138,6 +1157,7 @@ proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): s
   if not isCanonDec(total) or total == "0": return $(%*{"error": "bad-total", "total": total})
   let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
   var shares: seq[SplitShare]
+  var asset = (if lez: "LEZ" else: "ETH")
   try:
     let j = parseJson(sharesJson)
     if j.kind == JArray:
@@ -1149,6 +1169,13 @@ proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): s
       shares = evenShares(total, me, j["parties"].getElems().mapIt(it.getStr().toLowerAscii()),
                           creditorShares = j{"creditorShares"}.getBool(true), distinctAmounts = lez)
     else: return $(%*{"error": "bad-shares", "detail": "an array of room identities, {parties}, or {shares}"})
+    # an Ethereum split in a token (exo-5ab): {…, "asset": "0x<token>" | "erc20:0x<token>"}
+    if j.kind == JObject and j.hasKey("asset"):
+      let a = j["asset"].getStr().strip().toLowerAscii()
+      if a.len > 0 and a != "eth":
+        if lez: return $(%*{"error": "bad-asset", "detail": "a private split is paid in LEZ"})
+        asset = (if a.startsWith("erc20:"): a else: "erc20:" & a)
+        if not isErc20Asset(asset): return $(%*{"error": "bad-asset", "detail": asset})
   except CatchableError as e:
     return $(%*{"error": "bad-shares", "detail": e.msg})
   # payTo: my own address on the rail — the private split's is my shielded key node
@@ -1160,7 +1187,7 @@ proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): s
         if r.form == "shielded": payTo = r.address
     except CatchableError as e: return $(%*{"error": "no-lez-wallet", "detail": e.msg})
     if payTo.len == 0: return $(%*{"error": "no-lez-wallet", "detail": "no shielded account to be paid at"})
-  let effect = splitEffectJson(chain, (if lez: "LEZ" else: "ETH"), total, me, payTo, shares, memo)
+  let effect = splitEffectJson(chain, asset, total, me, payTo, shares, memo)
   var ttl = DefaultIntentTtl
   try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
   except ValueError: discard
@@ -1202,6 +1229,24 @@ proc musterCoordinateSettlePart(intentId: string): string =
   try: result = musterCoordinateSettlePartImpl(intentId)
   except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
   if gLpDebug: stderr.writeLine("MUSTER-LP split pay " & intentId & " " & result)
+
+proc musterCoordinateTokenInfo(chain, token: string): string =
+  ## A token a split may be paid in, as it describes itself (exo-5ab) — for the composer's
+  ## "in a token" field: its decimals turn "0.9" into base units, its symbol labels the
+  ## preview, and its address is shown beside it. Display only.
+  let t = token.strip().toLowerAscii()
+  let asset = (if t.startsWith("erc20:"): t else: "erc20:" & t)
+  if not isErc20Asset(asset): return $(%*{"error": "not-a-token", "detail": token})
+  var chain = chain
+  if chain.len == 0:                     # "" = the chain your configured RPC serves
+    let (ok, c, detail) = rpcChainCaip2()
+    if not ok: return $(%*{"error": "no-rpc", "detail": detail})
+    chain = c
+  let info = tokenInfo(chain, asset[6 .. ^1])
+  if info.decimals < 0:
+    return $(%*{"error": "unreadable", "detail": "your RPC does not serve " & chain &
+                                                 ", or " & asset[6 .. ^1] & " does not answer decimals()"})
+  $(%*{"asset": asset, "token": asset[6 .. ^1], "symbol": info.symbol, "decimals": info.decimals})
 
 proc musterCoordinateConfirmPart(intentId, part, tx: string): string =
   try: result = musterCoordinateConfirmPartImpl(intentId, part, tx)
@@ -1650,9 +1695,13 @@ proc musterCoordinateIntents(): string =
                        "amount": amount, "settled": pv.settled, "confirmed": pv.confirmed,
                        "tx": pv.tx, "mine": who == myEncHex, "paying": splitPayingFor(v.id, pv.part)}
         o["parts"] = parts
+        # a token says its own symbol and decimals (display only, exo-5ab); ETH and LEZ are known
+        let tok = (if isErc20Asset(sp.asset): tokenInfo(sp.chain, sp.asset[6 .. ^1]) else: ("", -1))
         o["split"] = %*{"total": sp.total, "asset": sp.asset, "payTo": sp.payTo, "memo": sp.memo,
                         # the asset's decimals, so the card shows 0.3 LEZ, not 0.0000000003
-                        "decimals": (if sp.asset == "LEZ": 9 else: 18),
+                        "decimals": (if sp.asset == "LEZ": 9 elif isErc20Asset(sp.asset): max(tok[1], 0) else: 18),
+                        "symbol": (if isErc20Asset(sp.asset): (if tok[0].len > 0: tok[0] else: "units") else: sp.asset),
+                        "token": (if isErc20Asset(sp.asset): sp.asset[6 .. ^1] else: ""),
                         "private": prof.family == LezSplitFamily,
                         "creditor": sp.creditor, "iAmCreditor": sp.creditor == myEncHex,
                         "creditorName": memberName(sp.creditor, mine),

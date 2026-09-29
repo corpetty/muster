@@ -255,7 +255,9 @@ Rectangle {
            : String(cardRoot.split.creditor || "").slice(0, 10) + "…") : ""
     // The split's asset and its decimals (ETH 18, LEZ 9): base units → a readable amount,
     // by string — never a float.
-    readonly property string unit: cardRoot.split ? String(cardRoot.split.asset || "ETH") : "ETH"
+    // a token's own symbol (exo-5ab) — display only; its address is named on the card
+    readonly property string unit: cardRoot.split ? String(cardRoot.split.symbol || cardRoot.split.asset || "ETH") : "ETH"
+    readonly property string token: cardRoot.split ? String(cardRoot.split.token || "") : ""
     readonly property int decimals: cardRoot.split ? Number(cardRoot.split.decimals || 18) : 18
     function eth(wei) {
         var dec = cardRoot.decimals;
@@ -662,6 +664,18 @@ Rectangle {
                                 .arg(cardRoot.eth(cardRoot.split.creditorShare)).arg(cardRoot.unit)
                                 .arg(cardRoot.shortPayTo(String(cardRoot.split.payTo || "")))
                           : ""
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: Theme.typography.badgeText
+                }
+
+                // a split paid in a token: which token, by address — its symbol is its own claim
+                LogosText {
+                    objectName: "cardSplitToken"
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    visible: cardRoot.token.length > 0
+                    text: qsTr("Paid in %1 — the token at %2 (a token names itself; the address is what counts).")
+                              .arg(cardRoot.unit).arg(cardRoot.token.slice(0, 10) + "…" + cardRoot.token.slice(-6))
                     color: Theme.palette.textTertiary
                     font.pixelSize: Theme.typography.badgeText
                 }
