@@ -67,7 +67,7 @@ echo "0. two agreed splits: dinner (Alice owed 300 by Bob and Carol), taxi (Bob 
 
 # ── 1. composing a settle-up from the room's open parts ──────────────────────────
 sync()
-let open = openParts(r.alice.roomEvents(), splitFor, Chain, "ETH")
+let open = openParts(r.alice.roomEvents(), splitFor, Chain, "ETH", Now)
 doAssert open.len == 4, "four agreed, unpaid parts: " & $open.len
 let net = netTransfers(open)
 doAssert net.len == 2 and net.allIt(it.frm == carol)

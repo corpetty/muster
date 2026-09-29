@@ -21,9 +21,10 @@ import ./intents
 import ./covers
 import ./parts
 
-proc openParts*(events: seq[Event], driverFor: DriverFor, chain, asset: string): seq[Cover] =
+proc openParts*(events: seq[Event], driverFor: DriverFor, chain, asset: string, nowSec: uint64): seq[Cover] =
   ## Every agreed split's unpaid part on `chain` in `asset`, as that split says it — its
-  ## debtor, creditor, share and payTo — and not already covered by a settle-up.
+  ## debtor, creditor, share and payTo — and not covered by a settle-up at `nowSec` (one
+  ## that expired unpaid past the grace window covers nothing, coordination/covers).
   for v in reduceIntentViews(events, driverFor):
     if v.parts.len == 0 or v.state notin ["executable", "submitted", "settling"]: continue
     var e: Effect
@@ -39,7 +40,7 @@ proc openParts*(events: seq[Event], driverFor: DriverFor, chain, asset: string):
       var paid = false
       for p in v.parts:
         if p.part == part and (p.settled or p.confirmed): paid = true
-      if paid or coveringIntent(events, driverFor, v.id, part).len > 0: continue
+      if paid or coveringIntent(events, driverFor, v.id, part, nowSec).len > 0: continue
       result.add Cover(intent: v.id, debtor: sh.who, creditor: sp.creditor, amount: sh.amount, payTo: sp.payTo)
 
 proc settleCovered*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, seam: PartSeam): seq[string] =

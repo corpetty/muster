@@ -84,6 +84,7 @@ import ../src/drivers/split as splitdrv   # a split: each pays their own share (
 import ../src/coordination/parts        # paying and confirming a part (exo-a90.4)
 import ../src/coordination/parts_evm    # …on an EVM chain, through this member's own wallet and RPC
 import ../src/coordination/settle_up    # net several splits into fewer payments (exo-3c6)
+import ../src/coordination/covers       # whether a settle-up still covers a share, at this clock (exo-a90.16)
 import ../src/coordination/parts_btc    # …and in Bitcoin, from each debtor's own key, confirmed on the creditor's node (exo-d17)
 import ../src/coordination/parts_lez    # …and privately on the LEZ, found by the creditor's scan (exo-a90.9)
 
@@ -1352,7 +1353,7 @@ proc musterCoordinateProposeSettleUpImpl(chain, asset, memo: string): string =
     elif a.startsWith("erc20:"): a
     else: "erc20:" & a
   gSession.poll()
-  let covers = openParts(gSession.roomEvents(), driverFor, chain, assetName)
+  let covers = openParts(gSession.roomEvents(), driverFor, chain, assetName, uint64(epochTime()))
   if covers.len < 2:
     return $(%*{"error": "nothing-to-net", "detail": "fewer than two agreed, unpaid shares on " & chain & " in " & assetName})
   let effect = settleUpEffectJson(chain, assetName, covers, netTransfers(covers), memo)
@@ -1725,8 +1726,11 @@ proc musterCoordinateIntents(): string =
   let myEncHex = toHex(myEnc.toBytes()).toLowerAscii()
   let myNames = myContributorNames(moduleKeystore())
   let mine = @[myEncHex] & myNames
+  let nowS = uint64(epochTime())
+  let views = reduceIntentViews(events, driverFor)
+  let coveredNow = coverIndex(events, driverFor, views, nowS)
   var arr = newJArray()
-  for v in reduceIntentViews(events, driverFor):
+  for v in views:
     # Each intent renders under ITS OWN driver — the policy it was proposed with
     # (v.policy) — so a room carrying a Safe intent and a threshold intent shows each
     # honestly at once (invariant 6). txhash is the driver-re-derived materialization —
@@ -1830,7 +1834,14 @@ proc musterCoordinateIntents(): string =
         for c in su.covers:
           if c.intent notin splits: splits.add c.intent
         let tok = (if isErc20Asset(su.asset): tokenInfo(su.chain, su.asset[6 .. ^1]) else: ("", -1))
+        # past its expiry with nothing paid, it pays nothing more; once the grace window has
+        # passed too it covers nothing, and its shares are payable directly (exo-a90.16)
+        let ctx = intentContext(events, v.id)
+        let expiredUnpaid = not ctx.isPlaceholder and ctx.expired(nowS) and not beganSettling(v) and
+                            su.transfers.len > 0
         o["settleUp"] = %*{"asset": su.asset, "memo": su.memo, "covers": su.covers.len, "splits": splits.len,
+                           "expired": expiredUnpaid, "lapsed": coverLapsed(events, driverFor, v, nowS),
+                           "releasesAt": (if expiredUnpaid: $(ctx.expiry + CoverReleaseGraceS) else: ""),
                            "transfers": ts, "iAmParty": myEncHex in settleParties(su),
                            "decimals": (if su.asset == "BTC": 8 elif isErc20Asset(su.asset): max(tok[1], 0) else: 18),
                            "symbol": (if isErc20Asset(su.asset): (if tok[0].len > 0: tok[0] else: "units") else: su.asset)}
@@ -1850,7 +1861,9 @@ proc musterCoordinateIntents(): string =
           parts.add %*{"part": pv.part, "who": who,
                        "name": memberName(who, mine),
                        "amount": amount, "settled": pv.settled, "confirmed": pv.confirmed,
-                       "tx": pv.tx, "mine": who == myEncHex, "paying": splitPayingFor(v.id, pv.part)}
+                       "tx": pv.tx, "mine": who == myEncHex, "paying": splitPayingFor(v.id, pv.part),
+                       # paid only through a settle-up that covers it, while one does (exo-3c6, exo-a90.16)
+                       "covered": not pv.settled and not pv.confirmed and v.id & "/" & pv.part in coveredNow}
         o["parts"] = parts
         # a token says its own symbol and decimals (display only, exo-5ab); ETH and LEZ are known
         let tok = (if isErc20Asset(sp.asset): tokenInfo(sp.chain, sp.asset[6 .. ^1]) else: ("", -1))
@@ -3025,7 +3038,7 @@ proc musterCoordinateConversations(): string =
     var items: seq[HomeItem]
     let saved = gSession
     gSession = s
-    try: items = homeItems(events, driverFor, myEnc, myNames)
+    try: items = homeItems(events, driverFor, myEnc, myNames, uint64(epochTime()))
     except CatchableError as e:
       if gLpDebug: stderr.writeLine("MUSTER-LP home " & topic & " " & e.msg)
     finally: gSession = saved
