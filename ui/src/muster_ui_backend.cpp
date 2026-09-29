@@ -1029,6 +1029,21 @@ void MusterUiBackend::onContextReady()
                 // requestJoin() fires ONCE (above) — the backend's own retry chain
                 // re-announces until admitted, exactly as the UI button now does.
                 loadPending(); loadMembers(); loadMessages(); loadIntents();
+                // Split self-test, on someone's behalf (exo-770): MUSTER_AUTOSHARE shares
+                // this member's address into the room once someone else is in — the
+                // address-share card's "Share an address".
+                static bool shared = false;
+                if (!shared && !qgetenv("MUSTER_AUTOSHARE").isEmpty()
+                    && membersJson().contains("\"self\":false")) {
+                    const QString addr = QJsonDocument::fromJson(settingsJson().toUtf8()).object()
+                                             .value("identity").toObject().value("address").toString();
+                    if (!addr.isEmpty()) {
+                        shared = true;
+                        postMessage(QString::fromUtf8(QJsonDocument(QJsonObject{
+                            {"kind", "address-share"}, {"asset", "ETH"}, {"address", addr}, {"form", 1}})
+                            .toJson(QJsonDocument::Compact)));
+                    }
+                }
                 // Founder-only: admit the first pending asker (one admitter keeps a
                 // single shared epoch), then propose one intent so the other side's
                 // convergence can be observed.
@@ -1039,7 +1054,11 @@ void MusterUiBackend::onContextReady()
                         if (!id.isEmpty()) admit(id);
                     }
                     static bool proposed = false;
-                    if (!proposed && membersJson().contains("\"self\":false")) {
+                    // MUSTER_AUTOSPLIT_FOR: propose the split on the OTHER member's behalf —
+                    // they fronted it, this member owes — once they have shared an address
+                    const bool forOther = !qgetenv("MUSTER_AUTOSPLIT_FOR").isEmpty();
+                    if (!proposed && membersJson().contains("\"self\":false")
+                        && (!forOther || messagesJson().contains("address-share"))) {
                         proposed = true;
                         // Split self-test (exo-a90.8): MUSTER_AUTOSPLIT=<total, base units>
                         // splits a bill this founder fronted with the other member, on the
@@ -1049,12 +1068,20 @@ void MusterUiBackend::onContextReady()
                         const QByteArray autosplit = qgetenv("MUSTER_AUTOSPLIT");
                         if (!autosplit.isEmpty()) {
                             QJsonArray others;
-                            for (const auto &m : QJsonDocument::fromJson(membersJson().toUtf8()).array())
+                            QString me;
+                            for (const auto &m : QJsonDocument::fromJson(membersJson().toUtf8()).array()) {
                                 if (!m.toObject().value("self").toBool())
                                     others.append(m.toObject().value("identity").toString());
+                                else
+                                    me = m.toObject().value("identity").toString();
+                            }
+                            const QString shares = forOther && !others.isEmpty()
+                                ? QString::fromUtf8(QJsonDocument(QJsonObject{
+                                      {"parties", QJsonArray{me}}, {"creditor", others.first()}})
+                                      .toJson(QJsonDocument::Compact))
+                                : QString::fromUtf8(QJsonDocument(others).toJson(QJsonDocument::Compact));
                             proposeSplit(QString::fromUtf8(qgetenv("MUSTER_AUTOSPLIT_CHAIN")),
-                                         QString::fromUtf8(autosplit),
-                                         QString::fromUtf8(QJsonDocument(others).toJson(QJsonDocument::Compact)),
+                                         QString::fromUtf8(autosplit), shares,
                                          QStringLiteral("split self-test"));
                         } else {
                             proposeInRoom(QStringLiteral("{\"to\":\"0x1111111111111111111111111111111111111111\",\"value\":1000,\"nonce\":0}"));
@@ -1077,6 +1104,15 @@ void MusterUiBackend::onContextReady()
                         QJsonObject mine;
                         for (const auto &p : it.value("parts").toArray())
                             if (p.toObject().value("mine").toBool()) mine = p.toObject();
+                        // the creditor of a split proposed on their behalf (exo-770): agree
+                        // that payTo is theirs — only when their own client holds it
+                        const QJsonObject sp = it.value("split").toObject();
+                        if (mine.isEmpty() && sp.value("iAmCreditor").toBool() && !sp.value("creditorAgreed").toBool()
+                            && sp.value("payToMine").toBool() && (st == "proposed" || st == "collecting")
+                            && !agreed.contains(id)) {
+                            agreed.insert(id);
+                            contributeInRoom(id, QString(), QString());
+                        }
                         if (mine.isEmpty()) continue;
                         if ((st == "proposed" || st == "collecting") && !it.value("approvedByMe").toBool()
                             && !agreed.contains(id)) {

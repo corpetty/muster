@@ -244,7 +244,8 @@ block:
   moved[0].amount = "201"
   let t = effectFromJson(splitEffectJson("eip155:31337", "ETH", "600", idHex(creditor),
                                          "0x1111111111111111111111111111111111111111", moved, "lunch"))
-  doAssert describeFor(drv, e).threshold == 2 and drv.describe().threshold == 1
+  # two debtors and the creditor (exo-770: the creditor's agreement is their word payTo is theirs)
+  doAssert describeFor(drv, e).threshold == 3 and drv.describe().threshold == 1
   let sig = edSign(debtors[0], canonicalize(drv, e).bytes)
   let r = checkConformance(drv, e, t, Contribution(bytes: @sig))
   doAssert r.allPass(), "split driver must conform: failed " & $r.failed()

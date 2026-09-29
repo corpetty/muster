@@ -613,7 +613,7 @@
       },
       "describe": {
         "rounds": 1,
-        "threshold": 2,
+        "threshold": 3,
         "finality": "external",
         "domain": "muster.split.v1"
       },
@@ -650,7 +650,7 @@
         "declared": true,
         "agreement": {
           "rounds": 1,
-          "threshold": 2,
+          "threshold": 3,
           "finality": "external",
           "domain": "muster.split.v1"
         },
@@ -1587,7 +1587,7 @@
       },
       "describe": {
         "rounds": 1,
-        "threshold": 2,
+        "threshold": 3,
         "finality": "external",
         "domain": "muster.split.v1"
       },
@@ -1624,7 +1624,7 @@
         "declared": true,
         "agreement": {
           "rounds": 1,
-          "threshold": 2,
+          "threshold": 3,
           "finality": "external",
           "domain": "muster.split.v1"
         },

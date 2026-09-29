@@ -14,6 +14,7 @@
 ##   account/<caip10>/disclose/<who>      an account disclosure
 ##   frost/<cid>/join/<who>               a FROST ceremony join
 ##   intent/<id>/part/<part>/<step>       a part report (exo-a90.2): the value's "author"
+##   intent/<id>/proposer/<who>           who proposed the intent (exo-770)
 ##
 ## Each of those carries `authorSig`: the named author's Ed25519 signature (the
 ## encryption identity's signing half, F-14) over a domain-separated hash-input record
@@ -112,6 +113,7 @@ proc authorOf*(e: Event): tuple[authored: bool, author: string] =
     if p[0] == "intent" and p[2] == "material": return (true, (if p.len >= 5: p[4] else: ""))
     if p[0] == "account" and p[2] == "disclose": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "frost" and p[2] == "join": return (true, (if p.len >= 4: p[3] else: ""))
+    if p[0] == "intent" and p[2] == "proposer": return (true, (if p.len >= 4: p[3] else: ""))
   (false, "")
 
 proc claimOf(room: string, e: Event, author: string, body: JsonNode): HashInput =

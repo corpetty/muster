@@ -303,6 +303,7 @@ type IntentView* = object
                           ## when rounds == 1
   declines*: int          ## distinct members who declined to take part (informational)
   decliners*: seq[string] ## who declined, sorted
+  proposers*: seq[string] ## who proposed it, by their signed claim, in log order ([] = unattributed)
   schemaId*: string       ## the effect's declared schema id (v0 vocabulary, ADR-009)
   committed*: int         ## approvals whose muster attestation verifies over the re-derived P (exo-ef1)
   unattested*: int        ## approvals pasted from outside muster — counted, never shown as committed
@@ -336,6 +337,14 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
     var decliners: seq[string]
     for w in declined.getOrDefault(id, initHashSet[string]()): decliners.add w
     decliners.sort()
+    # who proposed it: the signed claims (exo-770) — the caller's authentic events, so a
+    # claim in another's name never arrives here
+    var proposers: seq[string]
+    let pre = "intent/" & id & "/proposer/"
+    for e in ordered:
+      if e.key.startsWith(pre):
+        let who = e.key[pre.len .. ^1]
+        if who.len > 0 and who notin proposers: proposers.add who
     let ej = effectJsonOf(events, id)
     let sch = effectSchema(ej)
     # Approvals come from the grades, so a rejected (mis-attested) approval never
@@ -359,6 +368,7 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
                           roundApprovals: roundApprovers.len,
                           declines: declined.getOrDefault(id, initHashSet[string]()).len,
                           decliners: decliners,
+                          proposers: proposers,
                           schemaId: sch.id,
                           schemaKnown: sch.known,
                           threshold: desc.threshold,

@@ -36,6 +36,10 @@ proc hex0x(b: openArray[byte]): string =
 const DefaultIntentTtl* = 7'i64 * 24 * 3600
   ## How long a proposal stays signable when the proposer names no lifetime.
 
+proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
+                     intentId, signatureHex, keyRef: string,
+                     bindingCtx: LinkContext, nowSec: uint64 = 0): string
+
 proc liveProposeIntent*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
                         policy, effectJson: string, nowSec: int64, msgSeq: uint64,
                         account: string, ttlSec = DefaultIntentTtl): string =
@@ -58,9 +62,18 @@ proc liveProposeIntent*(s: CoordinationSession, ks: Keystore, driverFor: DriverF
   s.publish(policyDeclEvent(id, policy))
   s.publish(proposeEvent(id, effectJson))
   let ttl = (if ttlSec > 0: ttlSec else: DefaultIntentTtl)
+  let expiry = uint64(max(0'i64, nowSec) + ttl)
   s.publish(contextEvent(id, SigningContext(
     environment: driverFor(policy).environment(), account: account, slot: id,
-    expiry: uint64(max(0'i64, nowSec) + ttl))))
+    expiry: expiry)))
+  # Who proposed it, signed (exo-770): the room reads a proposal's proposer only from this.
+  let me = hex0x(ks.encIdentity().toBytes())
+  s.publishAuthored(ks, proposerEvent(id, me))
+  # A party whose agreement proposing carries (a split's creditor) agrees now, by their
+  # own key, through the ordinary contribution path — attested, context-bound.
+  if driverFor(policy).agreesByProposing(effectFromJson(effectJson), me):
+    discard liveContribute(s, ks, driverFor, id, "", "",
+                           LinkContext(account: account, slot: "0", expiry: expiry), uint64(max(0'i64, nowSec)))
   # Announce the proposal INTO the conversation: a reference card, authored and
   # timestamped like any message, so the proposal appears inline in the thread. The
   # card is a positional reference, never the source of truth.

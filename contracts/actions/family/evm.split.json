@@ -7,7 +7,7 @@
       "family": "evm.split",
       "kind": "evm-split",
       "status": "built",
-      "summary": "One member fronted a bill; the split names every debtor, their share and the address to pay. Each debtor agrees to their own share with their room key; once everyone named has agreed, each pays their share from their own wallet, the creditor confirms each payment, and the split is final when every share is confirmed. No shared account: nothing on the chain counts or enforces the agreement.",
+      "summary": "One member fronted a bill; the split names every debtor, their share and the address to pay. Each debtor agrees to their own share with their room key, and the creditor agrees that the address is theirs (by proposing, or on a split proposed on their behalf); once everyone named has agreed, each pays their share from their own wallet, the creditor confirms each payment, and the split is final when every share is confirmed. No shared account: nothing on the chain counts or enforces the agreement.",
       "generated": "evm-split/split",
       "effect": {
         "schema": "muster.effect.split.v1",
@@ -30,7 +30,7 @@
           },
           {
             "name": "payTo",
-            "means": "the creditor's receiving address, lowercase — proposer material, so it is reviewed and signed"
+            "means": "the creditor's receiving address, lowercase — the creditor's own material, reviewed and signed: their own address when they propose, the address they last shared into the room when proposed on their behalf — and their agreement vouches for it"
           },
           {
             "name": "shares",
@@ -45,8 +45,8 @@
       "steps": [
         {
           "step": "propose",
-          "who": "the creditor (v1: the proposer is the person who fronted the bill)",
-          "does": "Composes the split — even shares round down and the creditor absorbs the remainder (evenShares), or explicit amounts — with their own receiving address as payTo, under the policy evm-split@<CAIP-2 chain>. The driver refuses anything not in the split's one spelling (non-canonical decimals, unsorted or repeated debtors, the creditor as a debtor, shares above the total, a chain other than the policy's), and on this client's propose path a party who is not a room member.",
+          "who": "the creditor, or any member on their behalf (exo-770)",
+          "does": "Composes the split — even shares round down and the creditor absorbs the remainder (evenShares), or explicit amounts — with their own receiving address as payTo (on someone's behalf: the address that member last shared, their author-signed address-share), under the policy evm-split@<CAIP-2 chain>. The driver refuses anything not in the split's one spelling (non-canonical decimals, unsorted or repeated debtors, the creditor as a debtor, shares above the total, a chain other than the policy's), and on this client's propose path a party who is not a room member.",
           "signs": "",
           "reveals": [
             {
@@ -70,7 +70,7 @@
         {
           "step": "approve",
           "who": "each debtor the split names",
-          "does": "Reviews their own share and agrees in-app: the keystore signs the re-derived materialization with the member's Ed25519 room key. The threshold is every debtor the effect names (describeFor), decoded from the materialization itself — never the room roster — so the creditor and members the split does not name can never agree, and a later joiner never moves it. A debtor may Deny instead ('that is not my share').",
+          "does": "Reviews their own share and agrees in-app: the keystore signs the re-derived materialization with the member's Ed25519 room key. The threshold is every party the effect names — each debtor and the creditor (describeFor) — decoded from the materialization itself, never the room roster, so members the split does not name can never agree, and a later joiner never moves it. A debtor may Deny instead ('that is not my share').",
           "signs": "an Ed25519 signature by the debtor's room identity over dCBOR ['muster.split.v1', 'muster.effect.split.v1', chain, asset, total, creditor, payTo, [[who, amount]…], memo]; plus a muster attestation by the same key over P = (context, the materialization, the provenance record)",
           "reveals": [
             {
@@ -144,10 +144,17 @@
       ],
       "refusals": [
         {
-          "what": "an agreement by anyone the split does not name as a debtor (the creditor, another member)",
-          "why": "the driver identifies no debtor for it; it never counts",
+          "what": "an agreement by anyone the split does not name as a party (another member)",
+          "why": "the driver identifies no party for it; it never counts",
           "evidence": [
             "module/tests/split_driver_test.nim"
+          ]
+        },
+        {
+          "what": "a creditor's agreement to a payTo their own client does not hold (a split proposed on their behalf at another address)",
+          "why": "'payto-not-mine': the creditor's agreement is their word that payTo is theirs (exo-770); coordinate_contribute refuses before any signature",
+          "evidence": [
+            "module/tests/split_creditor_test.nim"
           ]
         },
         {
@@ -180,10 +187,11 @@
           ]
         },
         {
-          "what": "paying before every debtor agreed, paying twice, or paying a share that is not yours",
+          "what": "paying before every debtor and the creditor agreed, paying twice, or paying a share that is not yours",
           "why": "'not-agreed' / 'already-settled' / 'not-a-party', nothing sent",
           "evidence": [
-            "module/tests/split_live_test.nim"
+            "module/tests/split_live_test.nim",
+            "module/tests/split_creditor_test.nim"
           ]
         },
         {

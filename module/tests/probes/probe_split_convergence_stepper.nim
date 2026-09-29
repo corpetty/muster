@@ -2,16 +2,16 @@
 ## confirmed, its lifecycle — is a pure function of the room's log: the same event set in
 ## any order, with any duplication, folds to the identical state on every member.
 ##
-## STEPPER: over a fixed seven-event set for a two-debtor split: the proposal, both
-## agreements, A's settled report, A's confirmation, a FORGED settled report for B
-## (authored by A — the fold must drop it wherever it lands), and a bare final (which must
-## never move a parts intent). State = which event is delivered FIRST (seven states,
-## chained head -> head+1); each state folds EVERY order of the remaining six (720), as-is
-## AND with every event delivered twice, and the view — lifecycle, approvals, threshold,
-## and every part's settled / confirmed / tx / authors — must equal the identity order's.
-## Seven states x 720 orders = all 5040 orders, at seven grader calls rather than 5040
-## (each call is a separate `nim r`). Run by hand (no argv), it checks all 5040 with
-## doAssert.
+## STEPPER: over a fixed eight-event set for a two-debtor split: the proposal, both
+## debtors' agreements and the creditor's (a party since exo-770), A's settled report, A's
+## confirmation, a FORGED settled report for B (authored by A — the fold must drop it
+## wherever it lands), and a bare final (which must never move a parts intent). State =
+## which event is delivered FIRST (eight states, chained head -> head+1); each state folds
+## EVERY order of the remaining seven (5040), as-is AND with every event delivered twice,
+## and the view — lifecycle, approvals, threshold, and every part's settled / confirmed /
+## tx / authors — must equal the identity order's. Eight states x 5040 orders = all 40320
+## orders, at eight grader calls rather than 40320 (each call is a separate `nim r`). Run
+## by hand (no argv), it checks all 40320 with doAssert.
 
 import std/[json, algorithm]
 import ../../src/intents/materialization
@@ -36,6 +36,7 @@ let events = @[
   proposeEvent(id, effect),
   agreement(bobKs),
   agreement(carolKs),
+  agreement(aliceKs),                                           # the creditor agrees too
   partEvent(id, partName(bob), "settled", bob, "0xa1"),
   partEvent(id, partName(bob), "confirmed", alice, "0xa1"),
   partEvent(id, partName(carol), "settled", bob, "0xforged"),   # wrong author: never counts
@@ -48,7 +49,8 @@ proc viewOf(evs: seq[Event]): View =
   ("absent", 0, 0, @[])
 
 let reference = viewOf(events)
-doAssert reference.state == "settling" and reference.approvals == 2 and reference.parts.len == 2,
+doAssert reference.state == "settling" and reference.approvals == 3 and reference.threshold == 3 and
+         reference.parts.len == 2,
          "the reference view is the one the rule gives: " & $reference.state
 
 proc correct(perm: seq[int]): bool =
@@ -70,12 +72,12 @@ proc state(h: int): JsonNode = %*{"head": h, "decision_correct": headCorrect(h)}
 
 let arg = oracleStateArg()
 if arg == nil:
-  var p = @[0, 1, 2, 3, 4, 5, 6]
+  var p = @[0, 1, 2, 3, 4, 5, 6, 7]
   var n = 0
   while true:
     doAssert correct(p), "order " & permString(p) & " folds to a different view"
     inc n
     if not p.nextPermutation(): break
-  doAssert n == 5040
+  doAssert n == 40320
 let here = oracleStateInt(arg, "head", 0)
 emitSuccessors(@[state((here + 1) mod events.len)])

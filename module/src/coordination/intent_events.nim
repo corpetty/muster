@@ -282,6 +282,14 @@ proc signedByNamed*(driver: Driver, m: Materialization, who, signatureHex: strin
 proc proposeEvent*(intentId, effectJson: string): Event =
   Event(key: "intent/" & intentId & "/propose", value: effectJson)
 
+proc proposerEvent*(intentId, author: string): Event =
+  ## Who proposed an intent, in their own words (exo-770): an author-bearing event, signed
+  ## by the proposer's room key over the room and this key — and the intent id is
+  ## content-addressed from the effect and the policy, so the signature vouches for
+  ## exactly what was proposed. A proposal without one is unattributed.
+  let a = author.toLowerAscii().replace("0x", "")
+  Event(key: "intent/" & intentId & "/proposer/" & a, value: $(%*{"author": a}))
+
 proc contributeEvent*(intentId, contributor, signatureHex: string,
                       round = 1, parents: seq[EventId] = @[]): Event =
   ## `round` is the collection round this contribution belongs to. It is part of the
@@ -463,3 +471,25 @@ proc reduceMessages*(events: seq[Event]): seq[Message] =
     except CatchableError: continue
   result.sort(proc (a, b: Message): int =
     if a.ts != b.ts: (if a.ts < b.ts: -1 else: 1) else: cmp(a.id, b.id))
+
+proc sharedAddressOf*(events: seq[Event], who: string): string =
+  ## The Ethereum address `who` last shared into the room — their newest address-share card
+  ## ("" when they have shared none), lowercase "0x" + 40 hex. Read it over the room's
+  ## authentic view (roomEvents): a message is author-signed, so a share posted in `who`'s
+  ## name by anyone else never reaches here. What a split proposed on someone's behalf pays
+  ## them at (exo-770) — the address they gave, never one the proposer typed.
+  ## An author is compared as hex, with or without "0x" (the hosted module writes "0x" + hex,
+  ## a room identity is bare hex).
+  proc bare(s: string): string =
+    result = s.toLowerAscii()
+    if result.startsWith("0x"): result = result[2 .. ^1]
+  let w = bare(who)
+  for m in reduceMessages(events):             # oldest first: the newest share wins
+    if bare(m.author) != w: continue
+    try:
+      let b = parseJson(m.body)
+      if b.kind != JObject or b{"kind"}.getStr() != "address-share" or b{"asset"}.getStr("ETH") != "ETH": continue
+      let a = b{"address"}.getStr().toLowerAscii()
+      if a.len == 42 and a.startsWith("0x") and a[2 .. ^1].allCharsInSet(HexDigits) and a != "0x" & repeat('0', 40):
+        result = a
+    except CatchableError: discard

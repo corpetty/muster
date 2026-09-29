@@ -96,10 +96,10 @@ block:
   refusedFor(splitJson(creditor = "abcd"), "room identity")
   echo "1. the split has one spelling; every malformed variant is refused with its reason OK"
 
-# ── 2. the threshold is how many the effect names; only a debtor agrees ──────────
+# ── 2. the threshold is everyone the effect names: each debtor and the creditor ───
 block:
   doAssert drv.describe().threshold == 1
-  doAssert describeFor(drv, e).threshold == 3, "three debtors named"
+  doAssert describeFor(drv, e).threshold == 4, "three debtors and the creditor (exo-770)"
   let m = canonicalize(drv, e)
   drv.expectMaterialization(m)
   proc sig(k: EncKeys, bytes: seq[byte]): Contribution =
@@ -107,12 +107,15 @@ block:
     Contribution(bytes: @s)
   doAssert drv.verifyContribution(sig(ana, m.bytes), 1), "a debtor agrees"
   doAssert identifyContributor(drv, m, sig(ana, m.bytes)) == edName(ana)
-  doAssert not drv.verifyContribution(sig(devon, m.bytes), 1), "the creditor is not a debtor"
+  doAssert drv.verifyContribution(sig(devon, m.bytes), 1), "the creditor agrees too: their word that payTo is theirs"
+  doAssert identifyContributor(drv, m, sig(devon, m.bytes)) == edName(devon)
+  doAssert drv.agreesByProposing(e, idOf(devon)) and not drv.agreesByProposing(e, idOf(ana)),
+           "only the creditor's own proposal carries their agreement"
   doAssert not drv.verifyContribution(sig(outsider, m.bytes), 1), "a member the split does not name"
   doAssert identifyContributor(drv, m, sig(outsider, m.bytes)) == ""
   let other = canonicalize(drv, effectFromJson(splitJson(memo = "Lunch")))
   doAssert not drv.verifyContribution(sig(ana, other.bytes), 1), "an agreement to another split"
-  echo "2. describeFor = 3 debtors; only a named debtor's room key agrees OK"
+  echo "2. describeFor = 3 debtors + the creditor; only a named party's room key agrees OK"
 
 # ── 3. the parts: each debtor, settled by them, confirmed by the creditor ────────
 block:
@@ -200,7 +203,9 @@ block:
   doAssert intentState(evs & @[contributeEvent(id, edName(outsider), sOut)], dfor, id) == "collecting",
            "two of three debtors; the outsider's agreement never counts in the fold"
   evs.add agree(you)
-  doAssert intentState(evs, dfor, id) == "executable", "every debtor agreed"
+  doAssert intentState(evs, dfor, id) == "collecting", "every debtor agreed; the creditor has not (exo-770)"
+  evs.add agree(devon)
+  doAssert intentState(evs, dfor, id) == "executable", "everyone named agreed, the creditor too"
   for k in [ana, jb, you]:
     evs.add partEvent(id, edName(k), "settled", idOf(k), "0x" & hx(k.identity().ed)[0 ..< 8])
   evs.add partEvent(id, edName(ana), "settled", idOf(jb), "0xforged")          # jb cannot report for ana
@@ -212,7 +217,7 @@ block:
   var v: IntentView
   for x in reduceIntentViews(evs, dfor):
     if x.id == id: v = x
-  doAssert v.threshold == 3 and v.approvals == 3 and v.parts.len == 3
+  doAssert v.threshold == 4 and v.approvals == 4 and v.parts.len == 3, "four agree; three pay"
   doAssert v.parts.allIt(it.confirmed and it.confirmedBy == idOf(devon))
   echo "7. the room fold runs a split to final on the real driver OK"
 
