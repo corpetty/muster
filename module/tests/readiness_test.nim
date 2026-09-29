@@ -15,6 +15,7 @@ import ../src/coordination/intent_events   # effectFromJson
 import ../src/drivers/manifest
 import ../src/coordination/readiness
 import ../src/coordination/invoker
+import ../src/coordination/offers
 import ../src/crypto/secp256k1
 import ../src/crypto/curve25519
 
@@ -167,5 +168,22 @@ block:
   let blank = assessReadiness(sm, probeFromFacts(HostFacts()))
   doAssert blank.item(rqAuthority).status == rdUnknown, blank.item(rqAuthority).detail
   echo "7. split-party graded from the split: debtor and creditor met, anyone else missing, unasked unknown OK"
+
+  # ── 8. only a PAYER is asked for a share: the creditor agrees, and pays nothing (exo-272) ──
+  proc itemsFor(k: EncKeys): Readiness =
+    assessReadiness(sm, probeFromFacts(HostFacts(contributes: sd.mayContribute(se, names(k)),
+                                                 pays: sd.settlesAPart(se, names(k)))))
+  proc hasShare(r: Readiness): bool =
+    for it in r.items:
+      if it.requirement.kind == rqAsset: return true
+  doAssert itemsFor(debtor).hasShare(), "a debtor's card asks for their share"
+  doAssert not itemsFor(creditor).hasShare(), "the creditor's card does not"
+  doAssert hasShare(assessReadiness(sm, probeFromFacts(HostFacts()))), "unasked: the slot shows, unknown — never hidden"
+  # the recipient's offers follow the same rule
+  proc shareOffered(pays: Eligibility): bool =
+    for o in recipientOffers(sm.requirements, @[], sm, pays):
+      if o.requirement.kind == rqAsset: return true
+  doAssert shareOffered(elYes) and not shareOffered(elNo) and shareOffered(elUnknown)
+  echo "8. a share is asked of the people who pay it, never of the creditor OK"
 
 echo "readiness_test: all OK"

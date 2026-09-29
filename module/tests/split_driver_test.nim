@@ -152,8 +152,14 @@ block:
   for rq in man.requirements:
     if rq.party == rpProposer and rq.needs.class == mcAddress and rq.needs.field == "payTo": payTo = true
     if rq.kind == rqAuthority and rq.party == rpContributor: party = true
-    if rq.kind == rqAsset and rq.party == rpContributor: share = true
-  doAssert payTo and party and share, "payTo is proposer material; a debtor needs their room key and their share"
+    if rq.kind == rqAsset and rq.party == rpPayer: share = true
+  doAssert payTo and party and share,
+           "payTo is proposer material; a party needs their room key; only a PAYER needs their share (exo-272)"
+  # the creditor agrees (exo-770) but pays nothing: settlesAPart tells payers from signers
+  doAssert drv.settlesAPart(e, @[edName(ana)]) == elYes, "a debtor settles a part"
+  doAssert drv.settlesAPart(e, @[edName(devon)]) == elNo, "the creditor agrees, and pays nothing"
+  doAssert drv.settlesAPart(e, @["ed:" & repeat("ab", 32)]) == elNo, "a stranger settles nothing"
+  doAssert newStubDriver().settlesAPart(e, @[edName(ana)]) == elNo, "a whole-account driver has no parts"
   for f in ["payer", "payee", "amount"]:
     doAssert man.discloses.anyIt(it.field == f and it.to == obChainObserver), "EVM: " & f & " is public"
   doAssert man.touches.anyIt(it.target == Chain & ":" & PayTo and it.mode == tmWrite)
