@@ -332,6 +332,177 @@
       },
       "signRefusal": ""
     },
+    "btc-split/split": {
+      "kind": "btc-split",
+      "variant": "split",
+      "family": "btc.split",
+      "effectExample": {
+        "schema": "muster.effect.split.v1",
+        "fields": {
+          "chain": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+          "asset": "BTC",
+          "total": "900000",
+          "creditor": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+          "payTo": "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080",
+          "shares": [
+            [
+              "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+              "300000"
+            ],
+            [
+              "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2",
+              "300000"
+            ]
+          ],
+          "memo": "Cabin"
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 3,
+        "finality": "external",
+        "domain": "muster.split.v1"
+      },
+      "environment": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+      "profile": {
+        "declared": true,
+        "family": "btc.split",
+        "settlement": "bitcoin",
+        "locus": "each",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "implicit",
+        "ordering": "none",
+        "expiry": "optional",
+        "setup": "none",
+        "membershipChange": "fixed",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "never",
+          "signers": "at-settle",
+          "effect": "public"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "demo",
+        "chain": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+        "account": "",
+        "k": 1,
+        "n": 0,
+        "bypassesKnown": true,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 3,
+          "finality": "external",
+          "domain": "muster.split.v1"
+        },
+        "requirements": [
+          {
+            "kind": "environment",
+            "name": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+              "field": ""
+            }
+          },
+          {
+            "kind": "infra",
+            "name": "bitcoind-rpc",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "bitcoind-rpc",
+              "field": ""
+            }
+          },
+          {
+            "kind": "authority",
+            "name": "split-party",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "split-party",
+              "field": ""
+            }
+          },
+          {
+            "kind": "asset",
+            "name": "share",
+            "party": "payer",
+            "needs": {
+              "class": "asset",
+              "target": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328/BTC",
+              "field": ""
+            }
+          },
+          {
+            "kind": "address",
+            "name": "pay-to",
+            "party": "proposer",
+            "needs": {
+              "class": "address",
+              "target": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+              "field": "payTo"
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          },
+          {
+            "field": "payer",
+            "to": "chain-observer"
+          },
+          {
+            "field": "payee",
+            "to": "chain-observer"
+          },
+          {
+            "field": "amount",
+            "to": "chain-observer"
+          },
+          {
+            "field": "group-linkage",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signed-tx",
+            "to": "rpc-provider"
+          }
+        ],
+        "touches": [
+          {
+            "target": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328",
+            "mode": "write"
+          },
+          {
+            "target": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328:bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080",
+            "mode": "write"
+          }
+        ]
+      },
+      "signRefusal": ""
+    },
     "btc-tapscript/spend": {
       "kind": "btc-tapscript",
       "variant": "spend",

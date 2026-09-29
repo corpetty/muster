@@ -1,10 +1,13 @@
 ## Bitcoin scripts a multisig family builds (exo-a50.2.1): pushes, the P2WSH
 ## `sortedmulti` witnessScript (BIP-383), the tapscript `multi_a` / `sortedmulti_a` leaf
-## (BIP-387), and the P2WSH / P2TR scriptPubKeys.
+## (BIP-387), and the P2WSH / P2TR scriptPubKeys; and a single key's P2WPKH (BIP-141) —
+## how a debtor of a Bitcoin split pays from their own key (exo-d17).
 
 import std/algorithm
+import nimcrypto/ripemd
 import ../hashing/sha256
 import ./tx
+import ./bech32
 
 const
   OP_0* = 0x00'u8
@@ -76,3 +79,21 @@ proc p2wshScriptPubKey*(witnessScript: openArray[byte]): seq[byte] =
 proc p2trScriptPubKey*(outputKey: openArray[byte]): seq[byte] =
   if outputKey.len != 32: raise newException(BtcError, "a taproot output key is 32 bytes")
   @[OP_1, 0x20'u8] & @outputKey
+
+# ── a single key: P2WPKH (BIP-141), the address a split's debtor pays from ───────
+proc hash160*(b: openArray[byte]): array[20, byte] =
+  ## RIPEMD-160(SHA-256(b)): the key hash a P2WPKH output commits to.
+  ripemd160.digest(sha256(b)).data
+
+proc p2wpkhScriptPubKey*(pub33: openArray[byte]): seq[byte] =
+  if pub33.len != 33: raise newException(BtcError, "a P2WPKH key is a 33-byte compressed key")
+  @[OP_0, 0x14'u8] & @(hash160(pub33))
+
+proc p2pkhScriptCode*(pub33: openArray[byte]): seq[byte] =
+  ## The scriptCode a P2WPKH input's BIP-143 sighash commits to (without its length):
+  ## OP_DUP OP_HASH160 <20> OP_EQUALVERIFY OP_CHECKSIG.
+  @[0x76'u8, 0xa9'u8, 0x14'u8] & @(hash160(pub33)) & @[0x88'u8, OP_CHECKSIG]
+
+proc p2wpkhAddress*(hrp: string, pub33: openArray[byte]): string =
+  if pub33.len != 33: raise newException(BtcError, "a P2WPKH key is a 33-byte compressed key")
+  encodeSegwitAddress(hrp, 0, hash160(pub33))

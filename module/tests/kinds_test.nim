@@ -54,6 +54,7 @@ proc configFor(kind: string): JsonNode =
   of "lez-frost": %*{"chain": "lez:local", "recovery": frostTestRecoveryHex()}
   of "evm-split": %*{"chain": "eip155:31337"}
   of "lez-split": %*{"chain": "lez:testnet"}
+  of "btc-split": %*{"chain": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328"}
   else: %*{"roster": roster.mapIt(edHex(it)), "k": 2}
 
 # ── 1. the one list builds, and each kind is the family it says it is ─────────
@@ -78,13 +79,14 @@ block:
 # ── 2. founding set + the composer's mapping come from the list ───────────────
 block:
   doAssert foundingKinds() == @["safe", "threshold", "frost", "invoke", "eip191", "btc-p2wsh", "btc-tapscript",
-                               "lez-multisig", "btc-frost", "lez-frost", "evm-split", "lez-split"], $foundingKinds()
+                               "lez-multisig", "btc-frost", "lez-frost", "evm-split", "lez-split", "btc-split"],
+           $foundingKinds()
   doAssert "unanimous" notin foundingKinds(), "unanimous is admitted by proposal, not founded"
   doAssert kindsFor("payment") == @["safe", "btc-p2wsh", "btc-tapscript", "lez-multisig", "btc-frost", "lez-frost"],
            $kindsFor("payment")
   doAssert kindsFor("action") == @["invoke"], $kindsFor("action")
   doAssert kindsFor("statement") == @["threshold", "frost", "eip191", "unanimous"], $kindsFor("statement")
-  doAssert kindsFor("split") == @["evm-split", "lez-split"], $kindsFor("split")   # the each locus (exo-a90.3, .9)
+  doAssert kindsFor("split") == @["evm-split", "lez-split", "btc-split"], $kindsFor("split")   # the each locus (exo-a90.3, .9, exo-d17)
   let j = kindsJson(@["safe", "threshold"])
   doAssert j.len == Kinds.len
   for o in j:

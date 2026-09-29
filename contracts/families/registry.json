@@ -1361,6 +1361,33 @@
       "muster": {"status": "built", "driver": "module/src/drivers/split.nim", "why": "the educational payoff of the split: the same agreement as evm.split, and the chain learns nothing that links the group. Built and tested on a shared fake chain (split_lez_test): a shielded payTo, every share a distinct amount, debtors pay shielded → shielded only (a public source is refused), and the creditor's own scan confirms a part only when a note of exactly that share arrived at payTo and is not already claimed. Hosted and in the UI, and run end to end on the LEZ testnet across two instances with real lez_core wallets (scripts/split-lez-testnet.sh, 2026-09-28): the debtor paid privately, the creditor's own scan found a note of exactly the share, final on both. The composer and card were looked at on a display (Xvfb) through a whole private split, and fixed (exo-9a4)."},
       "unverified": ["whether a LEZ privacy-preserving transaction commits to a zone/chain id"],
       "sources": ["https://github.com/logos-blockchain/logos-execution-zone"]
+    },
+    {
+      "id": "btc.split",
+      "name": "Split a bill, settled in Bitcoin",
+      "chains": ["bip122:*"],
+      "settlement": "bitcoin",
+      "locus": "each",
+      "scheme": "shared-bytes",
+      "curves": ["ed25519", "secp256k1-ecdsa"],
+      "signs": "the agreement: each debtor's room key (Ed25519) over dCBOR [domain, schema, chain, asset, total, creditor, payTo, shares, memo]; the settlement: each debtor's own single-key Bitcoin spend (P2WPKH, DER over BIP-143) paying payTo their share",
+      "commits": "content",
+      "binding": "implicit",
+      "rounds": 1,
+      "secretState": false,
+      "setup": "none",
+      "membershipChange": "fixed",
+      "ordering": "none",
+      "expiry": "optional",
+      "reveals": {"policy": "never", "signers": "at-settle", "effect": "public"},
+      "approverCost": "none",
+      "bypasses": [],
+      "interop": [],
+      "infra": ["bitcoind-rpc"],
+      "maturity": "demo",
+      "notes": "The split, paid in BTC: each debtor pays their share in satoshis from their own key — wpkh of their muster key, coins read from their own node — and the creditor's own node confirms a payment when an output pays payTo exactly the share at the network's confirmation depth. Every payment is an ordinary Bitcoin transaction: its inputs name the payer, and payee and amount are public once broadcast; the coins it spends bind it to one chain. No share may be below the 546-sat dust limit. Muster never tags a payment on-chain with the split; the link lives in the room.",
+      "muster": {"status": "built", "driver": "module/src/drivers/split.nim", "why": "the third split family (exo-d17): the same driver, the parts seam and a Bitcoin part seam (coordination/parts_btc.nim). Built and held without a node (split_btc_test: BIP-173's P2WPKH vector, every input signed by the payer's key over BIP-143, the creditor's exact-output match, dust and network refusals) and end to end on a real Bitcoin Core regtest (split_btc_regtest_e2e: two debtors pay from their own coins, a one-satoshi-short payment and one to someone else are refused, the creditor's own node confirms both, final on all three). Hosted (coordinate_propose_split on a bip122 chain, settle / confirm through the member's own node)."},
+      "sources": ["https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki", "https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki", "https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki"]
     }
   ]
 }

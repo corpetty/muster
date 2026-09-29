@@ -39,7 +39,7 @@ import ../src/coordination/readiness        # toJson(ActionManifest), toJson(Dri
 import ../src/coordination/intent_events    # effectFromJson — the hosted propose path's parser
 import ../src/lez/multisig                  # vaultPda / vaultSeed / LezAction
 import ../src/frost/chilldkg
-import ../src/bitcoin/[tx, bech32]
+import ../src/bitcoin/[tx, bech32, script]
 import ../src/crypto/secp256k1             # Address
 import ../src/wallet/evm_adapter            # erc20TransferData
 import ../src/wallet/lez_encoding           # amountLe16Hex
@@ -63,6 +63,7 @@ let lezMultisigCfg = %*{"chain": "lez:local", "pda": "lee-v0.2", "program": repe
 
 # ── the fixtures for what the hosted composers read from a chain ──────────────
 const Payee = "0x1111111111111111111111111111111111111111"        ## a Safe transfer's payee
+const BtcRegtest = "bip122:0f9188f13cb7b2c71f2a335e3a4fc328"   ## the btc-split fixture's chain (exo-d17)
 const SplitCreditor = repeat("c1", 64)   ## a split's room identities (64 bytes, hex): who fronted…
 const SplitDebtors = [repeat("d1", 64), repeat("d2", 64)]   ## …and who owes
 const Erc20Token = "0x2222222222222222222222222222222222222222"   ## a contract-call target
@@ -111,6 +112,7 @@ proc configOf(kind: string): JsonNode =
   of "lez-frost": %*{"chain": "lez:local", "recovery": frostRecovery}
   of "evm-split": %*{"chain": "eip155:31337", "members": [SplitCreditor, SplitDebtors[0], SplitDebtors[1]]}
   of "lez-split": %*{"chain": "lez:testnet", "members": [SplitCreditor, SplitDebtors[0], SplitDebtors[1]]}
+  of "btc-split": %*{"chain": BtcRegtest, "members": [SplitCreditor, SplitDebtors[0], SplitDebtors[1]]}
   else: raise newException(ValueError, "no corpus fixture for kind " & kind)
 
 # ── the effects, built as the hosted composers build them ─────────────────────
@@ -210,6 +212,12 @@ proc effectJsonFor(kind, variant: string, d: Driver): string =
     splitEffectJson("lez:testnet", "LEZ", "900000000", SplitCreditor,
                     "priv:" & repeat("ab", 32) & ":02" & repeat("cd", 32),
                     evenShares("900000000", SplitCreditor, @SplitDebtors, distinctAmounts = true), "Dinner")
+  of "btc-split/split":
+    # a split paid in Bitcoin: 0.009 BTC (in satoshis) among the creditor and two debtors,
+    # paid to the creditor's own wpkh address — here BIP-173's generator-key address on regtest
+    splitEffectJson(BtcRegtest, "BTC", "900000", SplitCreditor,
+                    p2wpkhAddress("bcrt", hexToBytes("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")),
+                    evenShares("900000", SplitCreditor, @SplitDebtors), "Cabin")
   else: raise newException(ValueError, "no corpus effect for " & kind & "/" & variant)
 
 const Variants* = [
@@ -219,7 +227,7 @@ const Variants* = [
   ("invoke", "module-call"), ("invoke", "lez-transfer"),
   ("btc-p2wsh", "spend"), ("btc-tapscript", "spend"), ("btc-frost", "spend"),
   ("lez-multisig", "transfer"), ("lez-multisig", "vault-init"), ("lez-frost", "transfer"),
-  ("evm-split", "split"), ("lez-split", "split")]
+  ("evm-split", "split"), ("lez-split", "split"), ("btc-split", "split")]
 
 # ── JSON ──────────────────────────────────────────────────────────────────────
 proc cborJson(v: CborValue): JsonNode =
