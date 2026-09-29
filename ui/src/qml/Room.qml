@@ -2047,6 +2047,7 @@ Item {
                     // currency, and the rate is YOUR quote — recorded with the proposal
                     LogosButton {
                         objectName: "roomSplitFiat"
+                        Layout.preferredWidth: 320   // the label whole, never "…curre…"
                         text: room.splitFiat ? qsTr("✓ The bill is in another currency") : qsTr("The bill is in another currency")
                         variant: room.splitFiat ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
                         onClicked: room.splitFiat = !room.splitFiat

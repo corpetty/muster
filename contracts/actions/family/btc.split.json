@@ -39,6 +39,10 @@
           {
             "name": "memo",
             "means": "room-only text, at most 280 bytes"
+          },
+          {
+            "name": "quote",
+            "means": "optional — a bill in another currency (exo-3a4): {currency, fiatTotal in its minor units, fiatDecimals, rateFiat, rateAsset, source, at}; the rate is the proposer's quote, recorded in the log as an external read before anyone agrees (\"sources\": {\"quote\": \"read\"}, invariant 10), and the total must be exactly its conversion"
           }
         ]
       },
@@ -214,6 +218,13 @@
           "evidence": [
             "module/nim-lib/muster_module.nim"
           ]
+        },
+        {
+          "what": "a bill in fiat whose total is not exactly its quote's conversion, or whose quote was never recorded as a read",
+          "why": "the driver refuses the total with the conversion it expected; without the recorded read the quote is an unaccountable input, so no agreement to it counts ('unaccountable-input', invariant 10)",
+          "evidence": [
+            "module/tests/split_fiat_test.nim"
+          ]
         }
       ],
       "hosted": [
@@ -277,6 +288,10 @@
         {
           "kind": "test",
           "path": "module/tests/split_live_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/split_fiat_test.nim"
         }
       ],
       "unverified": [

@@ -1587,3 +1587,4 @@
 {"type":"status_update","timestamp":"2026-09-29T17:01:26.379057514Z","issue_id":"exo-a90.11.3","payload":{"status":"in_progress"}}
 {"type":"close","timestamp":"2026-09-29T17:20:12.491785384Z","issue_id":"exo-a90.11.3","payload":{}}
 {"type":"status_update","timestamp":"2026-09-29T17:28:29.418024229Z","issue_id":"exo-a90.11.5","payload":{"status":"in_progress"}}
+{"type":"close","timestamp":"2026-09-29T17:39:54.948767677Z","issue_id":"exo-a90.11.5","payload":{}}
