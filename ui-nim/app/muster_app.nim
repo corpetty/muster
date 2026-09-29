@@ -8,7 +8,8 @@
 ## record each call.
 ## Step 2: the host starts logos-core itself (liblogos's C API, as
 ## logos-standalone-app does), registers the view's token with capability_module,
-## and calls muster_module over lp_*, the ABI logos-nim-sdk binds. checkHealth is
+## and calls muster_module over lp_*, the ABI logos-nim-sdk binds (its ffi, token calls
+## included, since logos-nim-sdk#6). checkHealth is
 ## implemented for real. A result arrives on the Qt main thread, where the client
 ## lives, so the callback sets the PROP directly.
 ##
@@ -23,12 +24,6 @@ import nimside, seaqt/[qguiapplication, qcoreapplication, qquickview, qqmlengine
   qqmlcontext, qqmlerror, qurl, qvariant, qwindow]
 import logos_sdk/ffi
 import ../contract/repcontract, ./logos_core
-
-# The file-scope forward declaration logos_core.nim explains, again for this module's
-# own C file, which names lp_* prototypes too.
-{.emit: """/*TYPESECTION*/
-struct LpClient; struct LpSubscription;
-""".}
 
 const
   musterRep {.strdefine.} = ""        ## ui/src/muster_ui.rep, the view contract
