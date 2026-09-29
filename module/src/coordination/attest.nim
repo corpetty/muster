@@ -275,7 +275,11 @@ proc approvalGrades*(events: seq[Event], driverFor: DriverFor,
   if ej.len == 0: return                  # not proposed here: the fold has no intent to count toward
   let drv = driverFor(intentPolicyOf(events, intentId))
   var m: Materialization
-  try: m = canonicalize(drv, effectFromJson(ej))
+  var desc: DriverDescriptor
+  try:
+    let effect = effectFromJson(ej)
+    m = canonicalize(drv, effect)
+    desc = describeFor(drv, effect)       # this proposal's policy, the one the fold's collection runs (exo-18d)
   except CatchableError: return           # nothing to verify against, so nothing verifies
   drv.expectMaterialization(m)
   var seen = initHashSet[string]()
@@ -308,8 +312,8 @@ proc approvalGrades*(events: seq[Event], driverFor: DriverFor,
   # round, which it reaches once every earlier round has `threshold` approvals (a rejected
   # one closes nothing there either). So a key under a round the collection has not
   # reached, like one member's copy under round 2 while round 1 waits, or under a round the
-  # driver does not run, is no one's approval, however valid its bytes.
-  let desc = drv.describe()
+  # driver does not run, is no one's approval, however valid its bytes. The rounds and the
+  # threshold are the proposal's own (describeFor), as in the fold.
   var reached = 1
   while reached < desc.rounds:
     var closers = initHashSet[string]()
