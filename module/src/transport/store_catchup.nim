@@ -83,6 +83,18 @@ proc nextQuery*(c: var StoreCatchup, topic: string, nowMs, lookbackMs: int64):
   req["timeStart"] = %((nowMs - lookbackMs) * 1_000_000)
   (true, false, req, c.nextPeer())
 
+proc cursorOf(resp: JsonNode): string =
+  ## The response's paginationCursor, "" = none. liblogosdelivery serializes it (with `%*`)
+  ## as a nim-results Opt[string] — {"oResultPrivate": true, "vResultPrivate": "0x…"}, or
+  ## {"oResultPrivate": false} — the same wrapping its messages carry; a plain string is
+  ## read too.
+  let c = resp{"paginationCursor"}
+  if c == nil: return ""
+  case c.kind
+  of JString: c.getStr()
+  of JObject: (if c{"oResultPrivate"}.getBool(false): c{"vResultPrivate"}.getStr() else: "")
+  else: ""
+
 proc onResponse*(c: var StoreCatchup, resp: JsonNode) =
   ## A store response (the delivery module's StoreQueryResponse JSON). For the page a topic
   ## awaits: keep its cursor for the next page, or — no cursor — the topic is read whole.
@@ -101,7 +113,7 @@ proc onResponse*(c: var StoreCatchup, resp: JsonNode) =
     c.paging[topic] = p
     return
   p.fails = 0
-  let cursor = resp{"paginationCursor"}.getStr()
+  let cursor = cursorOf(resp)
   if cursor.len == 0 or cursor == p.cursor:
     c.caught.incl topic                 # the last page: read whole
     c.paging.del topic
