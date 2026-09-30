@@ -1895,6 +1895,8 @@ proc musterCoordinateIntents(): string =
         o["parts"] = parts
         # a token says its own symbol and decimals (display only, exo-5ab); ETH and LEZ are known
         let tok = (if isErc20Asset(sp.asset): tokenInfo(sp.chain, sp.asset[6 .. ^1]) else: ("", -1))
+        let sctx = intentContext(events, v.id)
+        let splitExpired = not sctx.isPlaceholder and sctx.expired(nowS)
         o["split"] = %*{"total": sp.total, "asset": sp.asset, "payTo": sp.payTo, "memo": sp.memo,
                         # the asset's decimals, so the card shows 0.3 LEZ, not 0.0000000003
                         "decimals": (if sp.asset == "LEZ": 9 elif sp.asset == "BTC": 8
@@ -1913,9 +1915,8 @@ proc musterCoordinateIntents(): string =
                         "creditorShare": subDec(sp.total, sum),
                         # past its expiry (exo-a90.15): no share of it is paid any more; while a
                         # share is unpaid and not being settled, it can be renewed (renewalOf)
-                        "expired": (let c = intentContext(events, v.id); not c.isPlaceholder and c.expired(nowS)),
-                        "renewable": (let c = intentContext(events, v.id); not c.isPlaceholder and c.expired(nowS)) and
-                                     renewalOf(events, driverFor, v.id, nowS).why.len == 0}
+                        "expired": splitExpired,
+                        "renewable": splitExpired and renewalOf(events, driverFor, v.id, nowS).why.len == 0}
         # a bill in fiat (exo-3a4): the quote the room is trusting — its currency, amount,
         # rate, source and time — for the card to name before anyone agrees
         if sp.quote.quoted:
