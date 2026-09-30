@@ -636,11 +636,15 @@ Rectangle {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: cardRoot.settleUp
-                          ? qsTr("Settle up%1 — %2 instead of %3 from %4")
+                          // fewer payments than shares: netting ("instead of"); as many: a renewal,
+                          // each share paid again as it was (exo-a90.15) — "for"
+                          ? ((cardRoot.settleUp.transfers || []).length < Number(cardRoot.settleUp.covers || 0)
+                             ? qsTr("Settle up%1 — %2 instead of %3 from %4") : qsTr("Settle up%1 — %2 for %3 from %4"))
                                 .arg(String(cardRoot.settleUp.memo || "").length > 0 ? " · " + String(cardRoot.settleUp.memo) : "")
                                 .arg((cardRoot.settleUp.transfers || []).length === 1 ? qsTr("1 payment")
                                      : qsTr("%1 payments").arg((cardRoot.settleUp.transfers || []).length))
-                                .arg(qsTr("%1 shares").arg(Number(cardRoot.settleUp.covers || 0)))
+                                .arg(Number(cardRoot.settleUp.covers || 0) === 1 ? qsTr("1 share")
+                                     : qsTr("%1 shares").arg(Number(cardRoot.settleUp.covers || 0)))
                                 .arg(Number(cardRoot.settleUp.splits || 0) === 1 ? qsTr("1 split")
                                      : qsTr("%1 splits").arg(Number(cardRoot.settleUp.splits || 0)))
                           : ""
@@ -1843,6 +1847,8 @@ Rectangle {
             wrapMode: Text.WordWrap
             text: !cardRoot.split ? ""
                   : !cardRoot.ready ? qsTr("Expired before everyone agreed. Propose it again with a different note to start over.")
+                  : cardRoot.split.renewalPending
+                  ? qsTr("Expired: no share of it can be paid now. A renewal of its unpaid shares is waiting below for everyone it names to agree.")
                   : cardRoot.split.renewable
                   ? qsTr("Expired: no share of it can be paid now. Renewing asks everyone who still owes a share to agree again, under a new expiry; once they pay, this split is settled too.")
                   : cardRoot.split.private ? qsTr("Expired: no share of it can be paid now. A private split is not renewed — propose it again.")

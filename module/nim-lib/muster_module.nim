@@ -1755,6 +1755,14 @@ proc musterCoordinateIntents(): string =
   let nowS = uint64(epochTime())
   let views = reduceIntentViews(events, driverFor)
   let coveredNow = coverIndex(events, driverFor, views, nowS)
+  # intents a proposal not yet agreed would settle part of (a renewal waiting for everyone):
+  # not offered for renewal again meanwhile (exo-a90.15)
+  var pendingCover: HashSet[string]
+  for w in views:
+    if w.state notin ["proposed", "collecting"]: continue
+    try:
+      for c in driverFor(w.policy).covers(effectFromJson(w.effectJson)): pendingCover.incl c.intent
+    except CatchableError: discard
   var arr = newJArray()
   for v in views:
     # Each intent renders under ITS OWN driver — the policy it was proposed with
@@ -1916,7 +1924,9 @@ proc musterCoordinateIntents(): string =
                         # past its expiry (exo-a90.15): no share of it is paid any more; while a
                         # share is unpaid and not being settled, it can be renewed (renewalOf)
                         "expired": splitExpired,
-                        "renewable": splitExpired and renewalOf(events, driverFor, v.id, nowS).why.len == 0}
+                        "renewable": splitExpired and v.id notin pendingCover and
+                                     renewalOf(events, driverFor, v.id, nowS).why.len == 0,
+                        "renewalPending": splitExpired and v.id in pendingCover}
         # a bill in fiat (exo-3a4): the quote the room is trusting — its currency, amount,
         # rate, source and time — for the card to name before anyone agrees
         if sp.quote.quoted:

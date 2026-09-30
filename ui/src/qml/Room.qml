@@ -1354,6 +1354,10 @@ Item {
                                     text: readyBox.isSplit
                                           ? (readyBox.st === "final"
                                              ? qsTr("✓ Settled — every share confirmed by who it was owed to.")
+                                             // past its expiry nothing more is paid under it (exo-a90.15/16)
+                                             : (msg.liveIntent && ((msg.liveIntent.split && msg.liveIntent.split.expired)
+                                                                   || (msg.liveIntent.settleUp && msg.liveIntent.settleUp.expired)))
+                                             ? qsTr("Expired — nothing more is paid under it.")
                                              : readyBox.st === "executable"
                                              ? qsTr("✓ Agreed — each person now pays their own share.")
                                              : qsTr("Settling — %1 of %2 shares confirmed.")
