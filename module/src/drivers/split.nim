@@ -339,7 +339,9 @@ proc settleRefusal(d: SplitDriver, su: SettleUp): string =
     return "an Ethereum settle-up is in ETH or an erc20:<0x token> (asked: " & su.asset & ")"
   if d.family == BtcSplitFamily and su.asset != "BTC": return "a Bitcoin settle-up is in BTC"
   if su.memo.len > MaxMemo: return "the memo is longer than " & $MaxMemo & " bytes"
-  if su.covers.len < 2: return "a settle-up nets at least two parts"
+  # one part is enough: a settle-up of one split's unpaid shares is how a split past its
+  # expiry is renewed (exo-a90.15); the composer still nets two or more (nothing-to-net)
+  if su.covers.len < 1: return "a settle-up covers at least one part"
   var balance = initTable[string, UInt256]()     # owed to them
   var owes = initTable[string, UInt256]()        # they owe
   for i, c in su.covers:

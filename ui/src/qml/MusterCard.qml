@@ -231,6 +231,9 @@ Rectangle {
     // the creditor — mark one person's share received outside muster.
     signal settlePart()
     signal confirmPart(string part)
+    // A split past its expiry (exo-a90.15): renew its unpaid shares — a settle-up of it.
+    signal renewSplit()
+    readonly property bool splitExpired: !!(cardRoot.split && cardRoot.split.expired) && !cardRoot.paid
     // The last pay / confirm outcome for THIS split, set by the room ("" = none).
     property string splitNote: ""
     readonly property var split: (cardRoot.card && cardRoot.card.split) ? cardRoot.card.split : null
@@ -306,6 +309,7 @@ Rectangle {
                               : p.settledUp ? qsTr("✓ paid through a settle-up") : qsTr("✓ received outside muster");
         if (p.settled) return qsTr("paid (%1) — %2 has not seen it yet").arg(String(p.tx || "").slice(0, 10) + "…")
                                                                      .arg(cardRoot.creditorName);
+        if (p.unresolved) return qsTr("sent — not landed by now; muster keeps watching and won't send it twice");
         if (p.paying) return qsTr("paying…");
         if (p.covered) return qsTr("in a settle-up — paid through it");
         var agreed = false;
@@ -633,11 +637,15 @@ Rectangle {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: cardRoot.settleUp
-                          ? qsTr("Settle up%1 — %2 instead of %3 from %4")
+                          // fewer payments than shares: netting ("instead of"); as many: a renewal,
+                          // each share paid again as it was (exo-a90.15) — "for"
+                          ? ((cardRoot.settleUp.transfers || []).length < Number(cardRoot.settleUp.covers || 0)
+                             ? qsTr("Settle up%1 — %2 instead of %3 from %4") : qsTr("Settle up%1 — %2 for %3 from %4"))
                                 .arg(String(cardRoot.settleUp.memo || "").length > 0 ? " · " + String(cardRoot.settleUp.memo) : "")
                                 .arg((cardRoot.settleUp.transfers || []).length === 1 ? qsTr("1 payment")
                                      : qsTr("%1 payments").arg((cardRoot.settleUp.transfers || []).length))
-                                .arg(qsTr("%1 shares").arg(Number(cardRoot.settleUp.covers || 0)))
+                                .arg(Number(cardRoot.settleUp.covers || 0) === 1 ? qsTr("1 share")
+                                     : qsTr("%1 shares").arg(Number(cardRoot.settleUp.covers || 0)))
                                 .arg(Number(cardRoot.settleUp.splits || 0) === 1 ? qsTr("1 split")
                                      : qsTr("%1 splits").arg(Number(cardRoot.settleUp.splits || 0)))
                           : ""
@@ -669,6 +677,7 @@ Rectangle {
                         LogosText {
                             Layout.fillWidth: true
                             text: modelData.confirmed ? qsTr("received ✓") : modelData.settled ? qsTr("paid — awaiting the recipient's read")
+                                  : modelData.unresolved ? qsTr("sent — not landed yet, still watched")
                                   : modelData.paying ? qsTr("paying…") : cardRoot.settleUp.expired ? qsTr("expired")
                                   : cardRoot.ready ? qsTr("to pay") : qsTr("once everyone agrees")
                             color: modelData.confirmed ? Theme.palette.success : Theme.palette.textTertiary
@@ -1776,6 +1785,7 @@ Rectangle {
                 // being theirs (exo-770), never to an address this client does not hold
                 && (!cardRoot.isSplit || cardRoot.iAmDebtor || (cardRoot.iAmCreditor && cardRoot.payToMine))
                 && (!cardRoot.isSettleUp || !!cardRoot.settleUp.iAmParty)
+                && !cardRoot.splitExpired      // past its expiry an agreement is refused (inv 2)
             Layout.fillWidth: true
             text: cardRoot.isSettleUp ? qsTr("Agree to settle up")
                 : !cardRoot.isSplit ? qsTr("Approve")
@@ -1821,13 +1831,40 @@ Rectangle {
         LogosButton {
             objectName: "cardPayShare"
             visible: cardRoot.kind === "intent-propose" && cardRoot.isSplit && cardRoot.iAmDebtor
-                && cardRoot.ready && !cardRoot.paid
+                && cardRoot.ready && !cardRoot.paid && !cardRoot.splitExpired
                 && cardRoot.myPart !== null && !cardRoot.myPart.settled && !cardRoot.myPart.paying
                 && !cardRoot.myPart.covered
             Layout.fillWidth: true
             text: cardRoot.myPart ? qsTr("Pay my share — %1 %2").arg(cardRoot.eth(cardRoot.myPart.amount)).arg(cardRoot.unit)
                                   : qsTr("Pay my share")
             onClicked: cardRoot.settlePart()
+        }
+        // Past its expiry (exo-a90.15) no share of a split is paid. Say so, and — while a share
+        // is unpaid and not already being settled — offer to renew those shares: a settle-up
+        // of this split, which everyone they name agrees to again, under a fresh expiry.
+        LogosText {
+            objectName: "cardSplitExpired"
+            visible: cardRoot.kind === "intent-propose" && cardRoot.isSplit && cardRoot.splitExpired
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: !cardRoot.split ? ""
+                  : !cardRoot.ready ? qsTr("Expired before everyone agreed. Propose it again with a different note to start over.")
+                  : cardRoot.split.renewalPending
+                  ? qsTr("Expired: no share of it can be paid now. A renewal of its unpaid shares is waiting below for everyone it names to agree.")
+                  : cardRoot.split.renewable
+                  ? qsTr("Expired: no share of it can be paid now. Renewing asks everyone who still owes a share to agree again, under a new expiry; once they pay, this split is settled too.")
+                  : cardRoot.split.private ? qsTr("Expired: no share of it can be paid now. A private split is not renewed — propose it again.")
+                  : qsTr("Expired: no share of it can be paid now. Its unpaid shares are already in a renewal or a settle-up.")
+            color: Theme.palette.warning
+            font.pixelSize: Theme.typography.badgeText
+        }
+        LogosButton {
+            objectName: "cardRenewSplit"
+            visible: cardRoot.kind === "intent-propose" && cardRoot.isSplit && cardRoot.splitExpired
+                     && cardRoot.ready && !!cardRoot.split.renewable && (cardRoot.iAmDebtor || cardRoot.iAmCreditor)
+            Layout.fillWidth: true
+            text: qsTr("Renew the unpaid shares")
+            onClicked: cardRoot.renewSplit()
         }
         LogosText {
             objectName: "cardSplitNote"

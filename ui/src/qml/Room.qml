@@ -1056,11 +1056,15 @@ Item {
                                 if (room.backend && msg.liveIntent)
                                     room.backend.confirmPart(String(msg.liveIntent.id || ""), part, "");
                             }
+                            onRenewSplit: if (room.backend && msg.liveIntent)
+                                              room.backend.renewSplit(String(msg.liveIntent.id || ""))
                             splitNote: (room.splitResult && room.splitResult.id && msg.liveIntent
                                         && String(room.splitResult.id) === String(msg.liveIntent.id || "")
                                         && room.splitResult.op !== "propose")
                                        ? (room.splitResult.error
-                                          ? qsTr("⚠ %1").arg(String(room.splitResult.error) + (room.splitResult.detail ? ": " + String(room.splitResult.detail) : ""))
+                                          ? (String(room.splitResult.error) === "paying"
+                                             ? qsTr("Your earlier payment of this share has not landed yet. Muster will not send another while it might; it shows as paid once it lands.")
+                                             : qsTr("⚠ %1").arg(String(room.splitResult.error) + (room.splitResult.detail ? ": " + String(room.splitResult.detail) : "")))
                                           : room.splitResult.op === "pay"
                                           ? (room.myPartSettled(msg.liveIntent) ? ""
                                              : String(room.splitResult.pending || "") === "pending"
@@ -1075,6 +1079,8 @@ Item {
                                                                    Number(((msg.liveIntent && msg.liveIntent.split) || {}).decimals || 18)))
                                                 .arg(String(((msg.liveIntent && msg.liveIntent.split) || {}).asset || "ETH"))
                                                 .arg(String(room.splitResult.pending || "").slice(0, 12) + "…"))
+                                          : room.splitResult.op === "renew"
+                                          ? qsTr("Renewal proposed — it appears below; everyone who still owes a share agrees to it again.")
                                           : qsTr("Marked received."))
                                        : ""
                             onOpenSettings: room.settingsRequested()
@@ -1350,6 +1356,10 @@ Item {
                                     text: readyBox.isSplit
                                           ? (readyBox.st === "final"
                                              ? qsTr("✓ Settled — every share confirmed by who it was owed to.")
+                                             // past its expiry nothing more is paid under it (exo-a90.15/16)
+                                             : (msg.liveIntent && ((msg.liveIntent.split && msg.liveIntent.split.expired)
+                                                                   || (msg.liveIntent.settleUp && msg.liveIntent.settleUp.expired)))
+                                             ? qsTr("Expired — nothing more is paid under it.")
                                              : readyBox.st === "executable"
                                              ? qsTr("✓ Agreed — each person now pays their own share.")
                                              : qsTr("Settling — %1 of %2 shares confirmed.")
@@ -2461,6 +2471,8 @@ Item {
                              : r.op === "confirm" ? qsTr("The share was not confirmed")
                              : r.op === "settle-up" ? qsTr("Nothing was settled up")
                              : qsTr("The split was not proposed");
+                    if (String(r.error || "") === "expired-duplicate")
+                        return qsTr("⚠ %1 — an identical split expired in this room. Change its note to propose it again, or renew the old one's unpaid shares from its card.").arg(what);
                     return qsTr("⚠ %1 — %2%3").arg(what).arg(String(r.error || ""))
                                .arg(r.detail ? ": " + String(r.detail) : "");
                 }

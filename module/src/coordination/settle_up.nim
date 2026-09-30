@@ -7,14 +7,18 @@
 ##                 split says — what a settle-up can cover (none already covered by one);
 ##   settleCovered once a settle-up is final (or needs no payment at all), the creditor's
 ##                 client marks each part it covered received — the creditor's word, as for
-##                 a share received outside muster, and the split goes final as ever.
+##                 a share received outside muster, and the split goes final as ever;
+##   renewalOf     a settle-up of ONE split's unpaid shares, named by when it was made: how
+##                 a split past its expiry is paid after all (exo-a90.15) — everyone its
+##                 unpaid shares name agrees again, under the renewal's own, fresh expiry.
 
-import std/[strutils]
+import std/[strutils, times, unicode]
 import ../log/log
 import ../crypto/keystore
 import ../intents/materialization
 import ../drivers/driver
 import ../drivers/split
+import ../drivers/kinds      # splitPolicy: which family a split is
 import ./session
 import ./authorship
 import ./intents
@@ -64,3 +68,42 @@ proc settleCovered*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, 
       if c.confirmer.toLowerAscii() != me: continue
       let r = liveConfirmPart(s, ks, driverFor, c.intent, c.part, seam, "")
       if r in ["executable", "submitted", "settling", "final"]: result.add c.intent & "/" & c.part
+
+proc renewalOf*(events: seq[Event], driverFor: DriverFor, intentId: string, nowSec: uint64):
+    tuple[effectJson, why: string, covers: seq[Cover]] =
+  ## A renewal of the split `intentId` (exo-a90.15, docs/design/split-the-bill.md §4.12): a
+  ## settle-up covering exactly its unpaid shares, as the split says them, each paid by its
+  ## own debtor to the split's payTo. Its memo names when it was made, so renewing again —
+  ## after a renewal lapsed unpaid (exo-a90.16) — is a new intent with its own expiry, never
+  ## the old one. `why` says what cannot be renewed: an unknown or final intent, one that is
+  ## not a split, the private split (never netted: it is proposed again), or a split with
+  ## no unpaid, unsettled share left.
+  var found = false
+  var v: IntentView
+  for w in reduceIntentViews(events, driverFor):
+    if w.id == intentId: (found = true; v = w)
+  if not found: return ("", "unknown-intent", @[])
+  if v.state == "final": return ("", "nothing to renew: the split is final", @[])
+  var e: Effect
+  try: e = effectFromJson(v.effectJson)
+  except CatchableError: return ("", "not a split", @[])
+  if e.schemaId != SplitSchema: return ("", "not a split", @[])
+  if splitPolicy(v.policy).kind == "lez-split":
+    return ("", "the private split is never netted: propose it again", @[])
+  var sp: Split
+  try: sp = splitOf(e)
+  except ValueError: return ("", "not a split", @[])
+  var covers: seq[Cover]
+  for c in openParts(events, driverFor, sp.chain, sp.asset, nowSec):
+    if c.intent == intentId: covers.add c
+  if covers.len == 0:
+    return ("", "nothing to renew: every share is paid, or already being settled", @[])
+  let stamp = "Renewed " & fromUnix(int64(nowSec)).utc.format("yyyy-MM-dd HH:mm:ss") & " UTC"
+  var memo = stamp & (if sp.memo.len > 0: " — " & sp.memo else: "")
+  if memo.len > MaxMemo:                      # keep whole characters within the limit
+    var cut = ""
+    for r in memo.runes:
+      if cut.len + r.size > MaxMemo: break
+      cut.add $r
+    memo = cut
+  (settleUpEffectJson(sp.chain, sp.asset, covers, netTransfers(covers), memo), "", covers)

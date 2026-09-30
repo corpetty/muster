@@ -64,6 +64,26 @@ method landedRef*(s: PartSeam, t: PartTransfer, tx: string): string {.base.} =
   ## running in the background) overrides it with the chain's own transaction reference.
   tx
 
+type PendingPart* = object
+  ## A part's transfer sent and not yet landed: what completing it publishes.
+  intentId*: string
+  part*: string
+  tx*: string
+  transfer*: PartTransfer
+  spends*: seq[string]      ## what the payment consumed that another can't — Bitcoin "txid:vout"
+                            ## — so the chain can tell whether it may still land (exo-a90.23)
+
+method lastSpends*(s: PartSeam): seq[string] {.base.} =
+  ## What the last sendPart consumed that no other payment can (a Bitcoin payment's coins,
+  ## "txid:vout"), kept with it so partGone can ask about them later — after a restart too.
+  @[]
+
+method partGone*(s: PartSeam, t: PartTransfer, pp: PendingPart): tuple[gone: bool, detail: string] {.base.} =
+  ## Whether the chain says the payment `pp` can never land, so paying the part again cannot
+  ## pay it twice (exo-a90.23). A seam that cannot tell never says gone: its payment stays
+  ## in flight until it lands or fails.
+  (false, "this rail cannot tell whether " & pp.tx & " may still land")
+
 method payDeadlineS*(s: PartSeam): float {.base.} =
   ## How long an in-flight payment may take to land before the host stops waiting for it.
   ## A seam that proves (minutes) overrides it with more than its proving budget.
@@ -96,13 +116,6 @@ proc confirmedRefs(events: seq[Event], driverFor: DriverFor): HashSet[string] =
       if p.confirmed and p.tx.len > 0: result.incl normRef(p.tx)
 
 # ── paying my part ─────────────────────────────────────────────────────────────
-type PendingPart* = object
-  ## A part's transfer sent and not yet landed: what completing it publishes.
-  intentId*: string
-  part*: string
-  tx*: string
-  transfer*: PartTransfer
-
 proc liveSettlePartSend*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, intentId: string,
                          seam: PartSeam, nowSec: uint64,
                          inFlight: seq[PendingPart] = @[]): tuple[outcome: string, pending: PendingPart] =
@@ -161,7 +174,7 @@ proc liveSettlePartSend*(s: CoordinationSession, ks: Keystore, driverFor: Driver
   # the wallet refused to send (a rail it will not take, no note that covers it, a scan
   # still catching up) or the chain did: either way nothing was sent, and the detail says why
   if not sent.ok: return ("refused: the payment was not sent: " & sent.detail, PendingPart())
-  ("", PendingPart(intentId: intentId, part: me, tx: sent.tx, transfer: t))
+  ("", PendingPart(intentId: intentId, part: me, tx: sent.tx, transfer: t, spends: seam.lastSpends()))
 
 proc liveSettlePartComplete*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, seam: PartSeam,
                              pp: PendingPart): string =
@@ -259,6 +272,7 @@ type
     payer*: string
     tx*: string
     landed*: bool
+    dropped*: bool           ## left the pretend mempool without landing: it never will
 
   FakeLedger* = ref object
     ## One pretend chain every member's seam shares: sends are recorded, and land when mined.
@@ -273,8 +287,14 @@ proc newFakePartSeam*(ledger: FakeLedger, payer: string): FakePartSeam =
   FakePartSeam(ledger: ledger, payer: payer)
 
 proc mine*(l: FakeLedger) =
-  ## Every sent transfer lands.
-  for t in l.sent.mitems: t.landed = true
+  ## Every sent transfer still waiting lands.
+  for t in l.sent.mitems:
+    if not t.dropped: t.landed = true
+
+proc drop*(l: FakeLedger, tx: string) =
+  ## `tx` leaves the pretend mempool unlanded: it can never land now.
+  for t in l.sent.mitems:
+    if t.tx == tx and not t.landed: t.dropped = true
 
 proc find(l: FakeLedger, tx: string): int =
   for i, t in l.sent:
@@ -289,8 +309,14 @@ method sendPart*(s: FakePartSeam, t: PartTransfer): tuple[ok: bool, tx, detail: 
 method partLanded*(s: FakePartSeam, t: PartTransfer, tx: string): tuple[ok: bool, detail: string] =
   let i = s.ledger.find(tx)
   if i < 0: return (false, "no transfer " & tx)
+  if s.ledger.sent[i].dropped: return (false, tx & " was dropped: it will never land")
   if not s.ledger.sent[i].landed: return (false, tx & " has not landed yet")
   (true, "")
+
+method partGone*(s: FakePartSeam, t: PartTransfer, pp: PendingPart): tuple[gone: bool, detail: string] =
+  let i = s.ledger.find(pp.tx)
+  if i >= 0 and s.ledger.sent[i].dropped: (true, pp.tx & " was dropped")
+  else: (false, pp.tx & " may still land")
 
 method checkReceived*(s: FakePartSeam, t: PartTransfer, tx: string): tuple[ok: bool, detail: string] =
   ## The ledger's own record of `tx` against the part: landed, on the chain, the asset, the

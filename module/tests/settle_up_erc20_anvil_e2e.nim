@@ -10,7 +10,9 @@
 ## Held: each net payment is exactly transfer(recipient's payTo, net amount) on the split's
 ## token, from Carol's own key, the second at the next nonce (both pending at once, neither
 ## replacing the other); each recipient confirms its own from the receipt's Transfer log; the
-## settle-up, then both splits, final on every member; the token balances move exactly.
+## settle-up, then both splits, final on every member; the token balances move exactly. And
+## (exo-a90.23) a payment the chain can no longer land is known as such: pending or mined it
+## is not gone; dropped from the mempool with its nonce free again, it is.
 import std/[os, strutils, json, httpclient, sequtils, algorithm]
 import stint
 import ../src/log/log
@@ -175,5 +177,25 @@ for s in [r.alice, r.bob, r.carol]:
 doAssert tokenBalance(token, payA) - beforeA == u256(400_000) and tokenBalance(token, payB) - beforeB == u256(100_000),
          "Alice +0.4 and Bob +0.1 MTD exactly"
 echo "3. confirmed from the Transfer logs; the settle-up and both splits final on all three; balances exact OK"
+
+# ── 4. partGone: gone only when the RPC no longer knows it and its nonce is settled ────
+block:
+  let t = PartTransfer(ok: true, chain: Chain, asset: asset, to: payA, amount: "1000")
+  discard rpc("evm_setAutomine", %*[false])
+  let sent = seam.sendPart(t)
+  doAssert sent.ok, sent.detail
+  let p = PendingPart(tx: sent.tx, transfer: t, spends: seam.lastSpends())
+  doAssert p.spends.len == 1 and p.spends[0].startsWith("nonce:"), $p.spends
+  doAssert not seam.partGone(t, p).gone, "pending: it may still land"
+  discard rpc("anvil_dropTransaction", %*[sent.tx])
+  let why = seam.partGone(t, p)
+  doAssert why.gone, "dropped, its nonce free again: a new payment takes it, so at most one lands — " & why.detail
+  let again = seam.sendPart(t)
+  doAssert again.ok and seam.lastSpends() == p.spends, "the new payment takes the same nonce: " & $seam.lastSpends()
+  discard rpc("evm_mine", newJArray())
+  discard rpc("evm_setAutomine", %*[true])
+  doAssert not seam.partGone(t, PendingPart(tx: again.tx, transfer: t, spends: seam.lastSpends())).gone,
+           "a mined payment is never gone"
+  echo "4. partGone: pending or mined it may land; dropped with its nonce free, a new payment takes the nonce OK"
 
 echo "settle_up_erc20_anvil_e2e: all OK"

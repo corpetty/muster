@@ -82,6 +82,7 @@ public:
     void proposeSplit(const QString &chain, const QString &totalWei, const QString &sharesJson, const QString &memo) override;
     void proposeSettleUp(const QString &chain, const QString &asset, const QString &memo) override;
     void settlePart(const QString &intentId) override;
+    void renewSplit(const QString &intentId) override;
     void lookupToken(const QString &chain, const QString &token) override;
     void confirmPart(const QString &intentId, const QString &part, const QString &tx) override;
     void proposeLezTransfer(const QString &recipient, const QString &amount) override;
