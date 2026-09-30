@@ -1062,7 +1062,9 @@ Item {
                                         && String(room.splitResult.id) === String(msg.liveIntent.id || "")
                                         && room.splitResult.op !== "propose")
                                        ? (room.splitResult.error
-                                          ? qsTr("⚠ %1").arg(String(room.splitResult.error) + (room.splitResult.detail ? ": " + String(room.splitResult.detail) : ""))
+                                          ? (String(room.splitResult.error) === "paying"
+                                             ? qsTr("Your earlier payment of this share has not landed yet. Muster will not send another while it might; it shows as paid once it lands.")
+                                             : qsTr("⚠ %1").arg(String(room.splitResult.error) + (room.splitResult.detail ? ": " + String(room.splitResult.detail) : "")))
                                           : room.splitResult.op === "pay"
                                           ? (room.myPartSettled(msg.liveIntent) ? ""
                                              : String(room.splitResult.pending || "") === "pending"

@@ -309,6 +309,7 @@ Rectangle {
                               : p.settledUp ? qsTr("✓ paid through a settle-up") : qsTr("✓ received outside muster");
         if (p.settled) return qsTr("paid (%1) — %2 has not seen it yet").arg(String(p.tx || "").slice(0, 10) + "…")
                                                                      .arg(cardRoot.creditorName);
+        if (p.unresolved) return qsTr("sent — not landed by now; muster keeps watching and won't send it twice");
         if (p.paying) return qsTr("paying…");
         if (p.covered) return qsTr("in a settle-up — paid through it");
         var agreed = false;
@@ -676,6 +677,7 @@ Rectangle {
                         LogosText {
                             Layout.fillWidth: true
                             text: modelData.confirmed ? qsTr("received ✓") : modelData.settled ? qsTr("paid — awaiting the recipient's read")
+                                  : modelData.unresolved ? qsTr("sent — not landed yet, still watched")
                                   : modelData.paying ? qsTr("paying…") : cardRoot.settleUp.expired ? qsTr("expired")
                                   : cardRoot.ready ? qsTr("to pay") : qsTr("once everyone agrees")
                             color: modelData.confirmed ? Theme.palette.success : Theme.palette.textTertiary

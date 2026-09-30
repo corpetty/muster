@@ -69,6 +69,7 @@ type BtcPartSeam* = ref object of PartSeam
   node*: BitcoindAdapter      ## this member's own node
   ks*: Keystore
   feeRate*: int               ## sat/vB; 0 = ask the node
+  spent: seq[string]          ## the last payment's coins, "txid:vout" (lastSpends)
 
 proc newBtcPartSeam*(chain: string, node: BitcoindAdapter, ks: Keystore, feeRate = 0): BtcPartSeam =
   BtcPartSeam(chain: chain, node: node, ks: ks, feeRate: feeRate)
@@ -109,12 +110,46 @@ method sendPart*(s: BtcPartSeam, t: PartTransfer): tuple[ok: bool, tx, detail: s
     # must not conflict (exo-a90.18)
     let coins = s.node.spendableUtxosOf(s.payerAddress())
     let signed = signedShare(s.ks, hrp, coins, t.to, parseBiggestUInt(t.amount).uint64, s.rateOf())
+    # the coins this payment spends: kept with it, so the chain can later say whether it
+    # may still land (partGone, exo-a90.23)
+    s.spent = @[]
+    for i in signed.inputs:
+      var r = i.prevout.txid
+      for k in 0 ..< 16: swap(r[k], r[31 - k])
+      s.spent.add toHex(r) & ":" & $i.prevout.vout
     let r = s.node.submit(PreparedTx(chain: s.chain, to: t.to,
                                      payload: $(%*{"rawtx": hexOf(signed.serialize()), "txid": signed.txidHex()})),
                           s.ks)
     (true, r.id, "")
   except CatchableError as e:
     (false, "", e.msg)
+
+method lastSpends*(s: BtcPartSeam): seq[string] = s.spent
+
+method partGone*(s: BtcPartSeam, t: PartTransfer, pp: PendingPart): tuple[gone: bool, detail: string] =
+  ## A Bitcoin payment can never land once one of its coins was spent by ANOTHER transaction.
+  ## That is only knowable with the node's transaction index: then a payment the node does
+  ## not know (neither in its mempool nor in a block) whose coin is spent was spent by
+  ## someone else. Without the index a confirmed payment of ours would look unknown too, so
+  ## the answer is never "gone" — the payment stays in flight. Coins still unspent: the
+  ## payment could yet be broadcast, so it is not gone either.
+  try:
+    let idx = s.node.call("getindexinfo", %*["txindex"])
+    if not idx{"txindex"}{"synced"}.getBool(false):
+      return (false, "your node keeps no transaction index: it cannot tell whether " & pp.tx & " may still land")
+    try:
+      discard s.node.call("getrawtransaction", %*[pp.tx, true])
+      return (false, pp.tx & " is known to your node")
+    except CatchableError: discard
+    for sp in pp.spends:
+      let c = sp.rfind(':')
+      if c <= 0: continue
+      let o = s.node.call("gettxout", %*[sp[0 ..< c], parseInt(sp[c + 1 .. ^1]), true])
+      if o == nil or o.kind != JObject:
+        return (true, pp.tx & " is unknown to your node and its coin " & sp & " was spent by another transaction")
+    (false, pp.tx & " is unknown to your node, but its coins are unspent: it could still be broadcast")
+  except CatchableError as e:
+    (false, "could not read your node: " & e.msg)
 
 method partLanded*(s: BtcPartSeam, t: PartTransfer, tx: string): tuple[ok: bool, detail: string] =
   try:

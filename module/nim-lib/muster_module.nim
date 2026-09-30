@@ -85,6 +85,7 @@ import ../src/coordination/parts        # paying and confirming a part (exo-a90.
 import ../src/coordination/parts_evm    # …on an EVM chain, through this member's own wallet and RPC
 import ../src/coordination/settle_up    # net several splits into fewer payments (exo-3c6)
 import ../src/coordination/covers       # whether a settle-up still covers a share, at this clock (exo-a90.16)
+import ../src/coordination/pending_parts  # payments in flight, never forgotten while they might land (exo-a90.23)
 import ../src/coordination/parts_btc    # …and in Bitcoin, from each debtor's own key, confirmed on the creditor's node (exo-d17)
 import ../src/coordination/parts_lez    # …and privately on the LEZ, found by the creditor's scan (exo-a90.9)
 
@@ -1019,13 +1020,12 @@ proc splitChainFor(kind: string): tuple[ok: bool, chain, detail: string] =
 # member — if they are a split's creditor — confirms every reported payment their own RPC
 # shows paying them the share (coordination/parts.nim). Nothing is published before the
 # chain has it.
-type SplitPending = object
-  session: CoordinationSession   ## the room the payment belongs to; it completes only there
-  seam: PartSeam
-  pp: PendingPart
-  started: float
-
-var gSplitPending: seq[SplitPending]
+# The payments this client sent and has not seen land (coordination/pending_parts,
+# exo-a90.23): in flight until they land, fail, or the chain says they never will — never
+# dropped at a deadline — and saved beside the identity, so a restart forgets none of them.
+var gSplitBook: PendingBook
+var gSplitBookLoaded = false
+var gSplitSeams = initTable[string, PartSeam]()   ## intent id -> the seam paying it (rebuilt after a restart)
 var gSplitRecent: seq[JsonNode]  ## the last outcomes, newest last
 var gSplitPumpAt = 0.0
 var gLezScanNext = 0.0   ## when the private split's background scan steps next (exo-270a)
@@ -1087,38 +1087,80 @@ proc myPayTos(family: string): seq[string] =
     except CatchableError: discard
   gMyLezPayTos
 
+proc splitBookPath(): string =
+  var dir = context().instancePersistencePath
+  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  dir / "split-pending.json"
+
+proc loadSplitBook() =
+  if gSplitBookLoaded: return
+  gSplitBookLoaded = true
+  try: gSplitBook = bookFromJson(parseJson(readFile(splitBookPath())))
+  except CatchableError: discard       # nothing saved yet
+
+proc saveSplitBook() =
+  try:
+    let p = splitBookPath()
+    createDir(parentDir(p))
+    writeFile(p & ".tmp", $gSplitBook.toJson())
+    moveFile(p & ".tmp", p)
+  except CatchableError as e:
+    if gLpDebug: stderr.writeLine("MUSTER-LP split book not saved: " & e.msg)
+
+proc seamOfPending(s: CoordinationSession, pp: PendingPart): PartSeam =
+  ## The seam a payment in the book is watched through: the one that sent it, or — after a
+  ## restart — the one its intent's policy settles through.
+  if pp.intentId notin gSplitSeams:
+    gSplitSeams[pp.intentId] = splitSeamFor(intentPolicyOf(s.roomEvents(), pp.intentId))
+  gSplitSeams[pp.intentId]
+
 proc splitPayingFor(intentId, part: string): bool =
-  for p in gSplitPending:
-    if p.pp.intentId == intentId and p.pp.part == part: return true
+  loadSplitBook()
+  for e in gSplitBook.entries:
+    if e.pp.intentId == intentId and e.pp.part == part: return true
+  false
+
+proc splitUnresolvedFor(intentId, part: string): bool =
+  for e in gSplitBook.entries:
+    if e.pp.intentId == intentId and e.pp.part == part and e.unresolved: return true
   false
 
 proc splitPump() =
   if gSession == nil or epochTime() - gSplitPumpAt < 2.0: return
   gSplitPumpAt = epochTime()
   let ks = moduleKeystore()
-  var keep: seq[SplitPending]
-  for p in gSplitPending:
-    if p.session != gSession:
-      keep.add p
-      continue
-    var outcome = ""
+  loadSplitBook()
+  let now = epochTime()
+  let due = gSplitBook.due(now)
+  var changed = false
+  for k in countdown(due.high, 0):     # highest index first: a settled entry leaves the book
+    let i = due[k]
+    let e = gSplitBook.entries[i]
+    if e.topic != gTopic: continue     # a payment completes only in its own room
+    let seam = seamOfPending(gSession, e.pp)
+    var res = crPending
+    var said = ""
     try:
-      let r = liveSettlePartComplete(p.session, ks, driverFor, p.seam, p.pp)
-      if not r.startsWith("unconfirmed") or "failed on" in r: outcome = r
+      let r = liveSettlePartComplete(gSession, ks, driverFor, seam, e.pp)
+      if not r.startsWith("unconfirmed"): (res = crLanded; said = r)
+      elif "failed on" in r: (res = crFailed; said = r)
+      elif e.unresolved or now - e.startedS > e.deadlineS:
+        # past its deadline it is not dropped: only the chain's word releases it
+        let g = seam.partGone(e.pp.transfer, e.pp)
+        if g.gone: (res = crGone; said = g.detail)
     except CatchableError:
-      discard                          # an unreachable RPC: try again next tick
-    # the seam's own deadline: a private (LEZ) payment proves for minutes before it lands
-    if outcome.len == 0 and epochTime() - p.started > p.seam.payDeadlineS():
-      outcome = "timed out: the payment never landed"
-    if outcome.len == 0: keep.add p
-    else:
-      if gLpDebug: stderr.writeLine("MUSTER-LP split reported " & p.pp.intentId & " " & outcome &
-                                    " tx=" & p.seam.landedRef(p.pp.transfer, p.pp.tx))
-      gSplitRecent.add %*{"intentId": p.pp.intentId, "part": p.pp.part,
-                          "tx": p.seam.landedRef(p.pp.transfer, p.pp.tx),
-                          "outcome": outcome, "at": int64(epochTime())}
-      if gSplitRecent.len > 20: gSplitRecent.delete(0)
-  gSplitPending = keep
+      discard                          # an unreachable RPC or node: ask again later
+    let outcome = gSplitBook.record(i, res, now)
+    if outcome.len == 0: continue
+    changed = true
+    let full = (if said.len > 0: said & " — " & outcome else: outcome)
+    if gLpDebug: stderr.writeLine("MUSTER-LP split reported " & e.pp.intentId & " " & full &
+                                  " tx=" & seam.landedRef(e.pp.transfer, e.pp.tx))
+    gSplitRecent.add %*{"intentId": e.pp.intentId, "part": e.pp.part,
+                        "tx": seam.landedRef(e.pp.transfer, e.pp.tx),
+                        "outcome": full, "at": int64(now)}
+    if gSplitRecent.len > 20: gSplitRecent.delete(0)
+  if changed: saveSplitBook()
   # a private split waiting on me — mine to pay or to confirm — keeps my LEZ wallet's scan
   # moving from the proposal on, so it is at the tip when the payment has to be sent or
   # found (a real scan is slow: lez_core stores after every block). One bounded step a
@@ -1288,13 +1330,14 @@ proc musterCoordinateSettlePartImpl(intentId: string): string =
     return $(%*{"error": "no-btc-node", "detail": "a Bitcoin share is paid through your own node: Settings → Bitcoin node"})
   let seam = splitSeamFor(policy)
   # what this host already sent in this room and has not yet seen land: never paid twice
-  var inFlight: seq[PendingPart]
-  for p in gSplitPending:
-    if p.session == gSession: inFlight.add p.pp
+  loadSplitBook()
+  let inFlight = gSplitBook.inFlight(gTopic)
   let (outcome, pp) = liveSettlePartSend(gSession, moduleKeystore(), driverFor, intentId, seam,
                                          uint64(epochTime()), inFlight)
   if outcome.len > 0: return $(%*{"error": outcome})
-  gSplitPending.add SplitPending(session: gSession, seam: seam, pp: pp, started: epochTime())
+  gSplitBook.add(gTopic, pp, epochTime(), seam.payDeadlineS())
+  gSplitSeams[intentId] = seam
+  saveSplitBook()
   $(%*{"pending": pp.tx, "amount": pp.transfer.amount, "to": pp.transfer.to, "chain": pp.transfer.chain})
 
 proc musterCoordinateConfirmPartImpl(intentId, part, tx: string): string =
@@ -1863,7 +1906,8 @@ proc musterCoordinateIntents(): string =
           ts.add %*{"part": part, "from": t.frm, "fromName": memberName(t.frm, mine), "to": t.to,
                     "toName": memberName(t.to, mine), "amount": t.amount, "payTo": t.payTo,
                     "mine": t.frm == myEncHex, "toMe": t.to == myEncHex, "settled": st.settled,
-                    "confirmed": st.confirmed, "tx": st.tx, "paying": splitPayingFor(v.id, part)}
+                    "confirmed": st.confirmed, "tx": st.tx, "paying": splitPayingFor(v.id, part),
+                    "unresolved": splitUnresolvedFor(v.id, part)}
         var splits: seq[string]
         for c in su.covers:
           if c.intent notin splits: splits.add c.intent
@@ -1896,6 +1940,7 @@ proc musterCoordinateIntents(): string =
                        "name": memberName(who, mine),
                        "amount": amount, "settled": pv.settled, "confirmed": pv.confirmed,
                        "tx": pv.tx, "mine": who == myEncHex, "paying": splitPayingFor(v.id, pv.part),
+                       "unresolved": splitUnresolvedFor(v.id, pv.part),
                        # paid only through a settle-up that covers it, while one does (exo-3c6, exo-a90.16)
                        "covered": not pv.settled and not pv.confirmed and v.id & "/" & pv.part in coveredNow,
                        # confirmed with no chain reference because a settle-up paid it (exo-a90.19)

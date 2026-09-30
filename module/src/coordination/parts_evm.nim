@@ -19,6 +19,7 @@ type EvmPartSeam* = ref object of PartSeam
   adapter*: EvmAdapter      ## this member's wallet on that chain
   ks*: Keystore
   frm*: Account             ## the account this member pays from
+  spent: seq[string]        ## the last payment's nonce, "nonce:<n>" (lastSpends)
 
 proc newEvmPartSeam*(chain, url: string, adapter: EvmAdapter, ks: Keystore, frm: Account): EvmPartSeam =
   EvmPartSeam(chain: chain, url: url, adapter: adapter, ks: ks, frm: frm)
@@ -45,10 +46,39 @@ method sendPart*(s: EvmPartSeam, t: PartTransfer): tuple[ok: bool, tx, detail: s
         Amount(asset: AssetId(chain: s.adapter.describe().chain, symbol: t.asset, kind: akToken,
                               reference: t.asset[6 .. ^1]), raw: t.amount)
       else: Amount(asset: s.adapter.describe().nativeAsset, raw: t.amount)
+    # the nonce this payment takes (the adapter signs at the pending count): kept with it,
+    # so the chain can later say whether it may still land (partGone, exo-a90.23)
+    let nonce = rpcNonce(s.url, s.frm.id)
     let r = s.adapter.submit(s.adapter.prepareTransfer(s.frm, t.to, amt), s.ks)
+    s.spent = @["nonce:" & $nonce]
     (true, r.id, "")
   except CatchableError as e:
     (false, "", e.msg)
+
+method lastSpends*(s: EvmPartSeam): seq[string] = s.spent
+
+method partGone*(s: EvmPartSeam, t: PartTransfer, pp: PendingPart): tuple[gone: bool, detail: string] =
+  ## An Ethereum payment can never land once your RPC no longer knows it AND its nonce is
+  ## settled one way or the other: used by another mined transaction, or free again — then a
+  ## new payment takes that same nonce, and at most one of the two can ever be mined. A
+  ## payment your RPC still knows (pending or mined) is never gone; nor is one whose nonce is
+  ## unknown, or when the RPC cannot be read.
+  var nonce = -1'i64
+  for sp in pp.spends:
+    if sp.startsWith("nonce:"):
+      try: nonce = parseBiggestInt(sp[6 .. ^1]) except ValueError: discard
+  if nonce < 0: return (false, "the nonce " & pp.tx & " took is not known")
+  try:
+    if rpcTransferOf(s.url, pp.tx).found: return (false, pp.tx & " is known to your RPC")
+    let mined = rpcNonceMined(s.url, s.frm.id)
+    let pending = rpcNonce(s.url, s.frm.id)
+    if mined > uint64(nonce):
+      return (true, pp.tx & " is unknown to your RPC and nonce " & $nonce & " was used by another transaction")
+    if pending <= uint64(nonce):
+      return (true, pp.tx & " left the mempool unmined; nonce " & $nonce & " is free, so a new payment takes it")
+    (false, pp.tx & " is unknown to your RPC, but something is pending at nonce " & $nonce)
+  except CatchableError as e:
+    (false, "could not read your RPC: " & e.msg)
 
 method partLanded*(s: EvmPartSeam, t: PartTransfer, tx: string): tuple[ok: bool, detail: string] =
   case rpcReceiptStatus(s.url, tx)

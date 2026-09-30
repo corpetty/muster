@@ -13,7 +13,7 @@
 ##   * the book survives a restart: it round-trips through its saved form, every field;
 ##   * a payment in one room never holds back another room's parts.
 
-import std/[json, sequtils]
+import std/[json, sequtils, strutils]
 import ../src/intents/materialization
 import ../src/coordination/parts
 import ../src/coordination/pending_parts

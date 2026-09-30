@@ -74,6 +74,11 @@ proc rpcNonce*(url, addrHex: string): uint64 =
   rpcTry(url, "eth_getTransactionCount"):
     q(waitFor c.eth_getTransactionCount(Address.fromHex(addrHex), "pending"))
 
+proc rpcNonceMined*(url, addrHex: string): uint64 =
+  ## The account's nonce counted over mined transactions only ("latest").
+  rpcTry(url, "eth_getTransactionCount"):
+    q(waitFor c.eth_getTransactionCount(Address.fromHex(addrHex), "latest"))
+
 proc rpcSendRaw*(url: string, raw: seq[byte]): string =
   rpcTry(url, "eth_sendRawTransaction"):
     (waitFor c.eth_sendRawTransaction(raw)).to0xHex

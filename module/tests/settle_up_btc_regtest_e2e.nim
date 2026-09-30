@@ -11,7 +11,8 @@
 ## pays from another of Carol's coins, so both are accepted; each pays its recipient's own
 ## address exactly its net amount; each recipient's own node confirms its payment at depth;
 ## the settle-up is final, and once each creditor marks what it covered received, both splits
-## are final on every member.
+## are final on every member. And (exo-a90.23) a payment the chain can no longer land is
+## known as such: in the mempool it is not gone; replaced by another spend of its coin, it is.
 
 import std/[os, strutils, json, math, sequtils, algorithm]
 import ../src/log/log
@@ -140,5 +141,28 @@ for s in [r.alice, r.bob, r.carol]:
 doAssert receivedAt(payA) - beforeA == 400_000 and receivedAt(payB) - beforeB == 100_000,
          "Alice +400,000 and Bob +100,000 sat exactly"
 echo "3. both confirmed from each recipient's own node; the settle-up and both splits final on all three OK"
+
+# ── 4. partGone: a payment is gone only once another transaction spent its coin ───────
+block:
+  let t = PartTransfer(ok: true, chain: Chain, asset: "BTC", to: payA, amount: "50000")
+  let sent = seam.sendPart(t)
+  doAssert sent.ok, sent.detail
+  let p = PendingPart(tx: sent.tx, transfer: t, spends: seam.lastSpends())
+  doAssert p.spends.len >= 1, "the coins it spends are kept with it"
+  doAssert not seam.partGone(t, p).gone, "in the mempool: it may still land"
+  # the same coin, spent again at a higher fee back to Carol herself: it replaces the payment
+  let coin = p.spends[0]
+  let c = coin.rfind(':')
+  var coins: seq[BtcUtxo]
+  for u in node.utxosOf(carolAddr):
+    if u.txid == coin[0 ..< c] and $u.vout == coin[c + 1 .. ^1]: coins.add u
+  doAssert coins.len == 1, "the payment's coin is still confirmed-unspent: " & coin
+  let replacement = signedShare(room3CarolKs, networkByCaip2(Chain).hrp, coins, carolAddr, 40_000, feeRate = 30)
+  discard rpc("sendrawtransaction", %*[replacement.serialize().toHex()])
+  let why = seam.partGone(t, p)
+  doAssert why.gone, "replaced by another spend of its coin, it can never land: " & why.detail
+  mine()
+  doAssert seam.partGone(t, p).gone, "and still, once the replacement is mined"
+  echo "4. partGone: in the mempool it may still land; once another spend takes its coin, it never can OK"
 
 echo "settle_up_btc_regtest_e2e: all OK"
