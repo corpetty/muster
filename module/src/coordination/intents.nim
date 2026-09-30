@@ -538,6 +538,15 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
   var approvers = initTable[string, HashSet[string]]()   # id -> {who/round} seen
   var lastSig = initTable[string, int]()                 # id -> index of its last sig
   var proposeSeq = initTable[string, int]()              # id -> index of its propose (groups the intent's lines together, in the order intents were proposed)
+  # a part confirmed with no chain reference that an agreed or final intent covers (a
+  # settle-up, exo-3c6) was paid through it — named as such, never "received outside muster"
+  var coveredBy = initTable[string, string]()            # "<intent>/<part>" -> the covering intent
+  for v in reduceIntentViews(events, driverFor):
+    if v.state notin ["executable", "submitted", "settling", "final"]: continue
+    try:
+      for c in driverFor(v.policy).covers(effectFromJson(v.effectJson)):
+        if c.intent != v.id and c.intent & "/" & c.part notin coveredBy: coveredBy[c.intent & "/" & c.part] = v.id
+    except CatchableError: discard
   for i in 0 ..< ordered.len:
     let p = ordered[i].key.split('/')
     if p.len >= 4 and p[0] == "membership" and p[2] == "admit":
@@ -611,7 +620,9 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
       else:
         result.add ActivityEntry(seq: i, order: 0, kind: "part-confirmed", intentId: id,
           account: author, subject: p[3], title: shortId(author) & " confirmed " & shortId(p[3]) & "'s part",
-          detail: (if tx.len > 0: "read " & shortId(tx) & " on the chain" else: "received outside muster"))
+          detail: (if tx.len > 0: "read " & shortId(tx) & " on the chain"
+                   elif id & "/" & p[3] in coveredBy: "paid through " & activityEffectLabel(events, coveredBy[id & "/" & p[3]])
+                   else: "received outside muster"))
     else: discard
   # Derived "ready" line: narrate the threshold being met, positioned right after the
   # intent's last approval. Authoritative from the fold's own state — never a

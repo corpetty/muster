@@ -336,7 +336,13 @@ Item {
              : kind === "delegatecall" ? qsTr("Proposed a DELEGATECALL")
              : "";
     }
-    function isBtcIntent(it) { return String((it && it.policy) || "").indexOf("btc-") === 0; }
+    // a Bitcoin intent that spends from a shared account — what a PSBT can carry to a signer
+    // outside muster. A split or a settle-up has no shared account: each pays their own.
+    function isBtcIntent(it) {
+        return String((it && it.policy) || "").indexOf("btc-") === 0 && !(it && (it.split || it.settleUp));
+    }
+    // a Bitcoin split whose shares would be below the 546-sat dust limit can never be paid
+    function splitDust(pv) { return room.splitBitcoin && pv !== null && pv !== undefined && Number(pv.each) < 546; }
     // Refresh the action menu when the action composer opens — the module queries each
     // candidate module's methods (never a blind scan), so not on the message tick.
     // Also keep the policy coherent with the kind (payment→Safe, statement→endorsement),
@@ -1082,7 +1088,7 @@ Item {
                             // a split is agreed with the debtor's room key — there is no
                             // outside signature to paste (exo-a90)
                             visible: msg.isIntentRef && msg.liveIntent !== null && !msg.approving
-                                     && !msg.liveIntent.split
+                                     && !msg.liveIntent.split && !msg.liveIntent.settleUp
                             Layout.leftMargin: Theme.spacing.medium
                             text: qsTr("Paste a signature instead")
                             variant: LogosButton.Variant.Secondary
@@ -1533,9 +1539,13 @@ Item {
         // ── composer: chat + propose ──────────────────────────────────────
         // A proposal originates in the conversation the same way a message does —
         // the "+" opens the effect fields, and proposing posts it inline as a card.
+        // Its fields fill the column but never widen it: long placeholders and rows of
+        // kind buttons used to push the right-hand column past the window's edge when the
+        // composer opened (exo-a90.19, seen on a display).
         ColumnLayout {
             visible: room.joined
             Layout.fillWidth: true
+            Layout.preferredWidth: 0
             spacing: Theme.spacing.small
 
             // proposal compose, revealed by "+".
@@ -2241,7 +2251,7 @@ Item {
                               ? (room.splitFiat ? qsTr("⚠ The bill and the rate are needed to work out each share (see above).")
                                  : qsTr("⚠ Type the total in %1, e.g. 1.2 (at most %2 decimals).").arg(room.splitUnit).arg(room.splitDecimals))
                               : pv === null ? qsTr("Leave at least one person in.")
-                              : room.splitBitcoin && pv.each.length < 4 && Number(pv.each) < 546
+                              : room.splitDust(pv)
                               ? qsTr("⚠ Each share would be %1 sat — below Bitcoin's 546-sat dust limit, so it could never be paid.").arg(pv.each)
                               : room.splitFor.length > 0
                               ? (pv.n === 1
@@ -2262,7 +2272,10 @@ Item {
                                        .arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine)).arg(room.splitUnit)
                                  : qsTr("%1 people owe you %2 %4 each; your own share is %3 %4 (it absorbs any rounding). Each pays from their own wallet — every payment is public on the chain.")
                                        .arg(pv.n).arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine)).arg(room.splitUnit))
-                        color: (pv === null || (room.splitBitcoin && pv.each.length < 4 && Number(pv.each) < 546))
+                              // a Bitcoin share in the unit it is paid and confirmed in: exact satoshis
+                              + (room.splitBitcoin && pv !== null && !room.splitDust(pv)
+                                 ? qsTr(" Each share is exactly %1 sat.").arg(pv.each) : "")
+                        color: (pv === null || room.splitDust(pv))
                                ? Theme.palette.warning : Theme.palette.textSecondary
                         font.pixelSize: Theme.typography.badgeText
                     }
@@ -2380,6 +2393,7 @@ Item {
                         // AND the room must have enough people to act on it (see the hint):
                         // don't submit a proposal into a room that can't yet agree to it.
                         enabled: room.composeType === "split" ? room.splitPreview(splitTotal.text) !== null && !room.splitTokenPending
+                                                                && !room.splitDust(room.splitPreview(splitTotal.text))
                                                                 && (!room.splitFiat || String(room.splitFiatSource).trim().length > 0)
                                                                 && (room.splitFor.length === 0 || room.sharedAddressOf(room.splitFor).length > 0)
                                : room.enoughToPropose && (
@@ -2445,6 +2459,7 @@ Item {
                     var r = room.splitResult || {};
                     var what = r.op === "pay" ? qsTr("Your share was not paid")
                              : r.op === "confirm" ? qsTr("The share was not confirmed")
+                             : r.op === "settle-up" ? qsTr("Nothing was settled up")
                              : qsTr("The split was not proposed");
                     return qsTr("⚠ %1 — %2%3").arg(what).arg(String(r.error || ""))
                                .arg(r.detail ? ": " + String(r.detail) : "");
@@ -2549,20 +2564,6 @@ Item {
                 }
                 color: Theme.palette.warning
                 font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.badgeText
-            }
-
-            // A split or settle-up proposal that did nothing says why (exo-3c6): the composer
-            // has closed, so the reason shows here — "nothing to net", a bad quote, no node.
-            LogosText {
-                objectName: "roomSplitProposeError"
-                readonly property var r: room.splitResult
-                visible: !!(r && r.error && (r.op === "propose" || r.op === "settle-up"))
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: visible ? qsTr("⚠ %1 did nothing: %2").arg(r.op === "settle-up" ? qsTr("Settle up") : qsTr("Proposing"))
-                                    .arg(String(r.error) + (r.detail ? " — " + String(r.detail) : "")) : ""
-                color: Theme.palette.warning
                 font.pixelSize: Theme.typography.badgeText
             }
 

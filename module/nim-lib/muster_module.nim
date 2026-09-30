@@ -1867,7 +1867,9 @@ proc musterCoordinateIntents(): string =
                        "amount": amount, "settled": pv.settled, "confirmed": pv.confirmed,
                        "tx": pv.tx, "mine": who == myEncHex, "paying": splitPayingFor(v.id, pv.part),
                        # paid only through a settle-up that covers it, while one does (exo-3c6, exo-a90.16)
-                       "covered": not pv.settled and not pv.confirmed and v.id & "/" & pv.part in coveredNow}
+                       "covered": not pv.settled and not pv.confirmed and v.id & "/" & pv.part in coveredNow,
+                       # confirmed with no chain reference because a settle-up paid it (exo-a90.19)
+                       "settledUp": pv.confirmed and pv.tx.len == 0 and v.id & "/" & pv.part in coveredNow}
         o["parts"] = parts
         # a token says its own symbol and decimals (display only, exo-5ab); ETH and LEZ are known
         let tok = (if isErc20Asset(sp.asset): tokenInfo(sp.chain, sp.asset[6 .. ^1]) else: ("", -1))
