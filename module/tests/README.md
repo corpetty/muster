@@ -32,6 +32,7 @@ arguments), `MUSTER_NIMPKGS` (the closure dir).
 | `btc_regtest_e2e`, `phase_d_exit_test` | a **fresh** Bitcoin Core regtest, `infra/bitcoind/regtest.sh` | `[rpcUrl] [user] [password]` (`http://127.0.0.1:18443`, `muster`, `muster`) |
 | `lez_multisig_live_e2e`, `lez_frost_account_e2e`, `lez_frost_room_e2e` | a LEZ v0.2.4 sequencer, `infra/lez/localnet.sh`, or the public testnet | `[sequencerUrl] [blockSeconds]` (`http://127.0.0.1:3040`, `15`); `lez_multisig_live_e2e` also reads `MUSTER_LEZ_MULTISIG_BIN` |
 | `split_anvil_e2e` | any fresh anvil (chain id 31337, its default funded accounts; no Safe) | `[rpcUrl]` (`http://127.0.0.1:8547`) |
+| `settle_up_across_anvil_e2e` | any fresh anvil (chain id 31337, its default funded accounts); the Bitcoin split it covers needs no node — it goes final by its creditor's word | `[rpcUrl]` (`http://127.0.0.1:8545`) |
 
 ```bash
 SAFE=$(infra/anvil/devnet.sh | grep -oE '0x[0-9a-fA-F]{40}' | tail -1)   # from the repo root
