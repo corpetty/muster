@@ -238,10 +238,13 @@ Rectangle {
     // A settle-up (exo-3c6): the net payments instead of the shares they cover.
     readonly property var settleUp: (cardRoot.card && cardRoot.card.settleUp) ? cardRoot.card.settleUp : null
     readonly property bool isSettleUp: cardRoot.settleUp !== null
+    // The next payment of mine to send: unsettled and not already on its way. A payer owing
+    // two people may send the second while the first lands — the module skips what this host
+    // has in flight, in the same order (exo-a90.18), so it pays the one this button names.
     readonly property var myTransfer: {
         if (!cardRoot.settleUp) return null;
         var ts = cardRoot.settleUp.transfers || [];
-        for (var i = 0; i < ts.length; ++i) if (ts[i].mine && !ts[i].settled) return ts[i];
+        for (var i = 0; i < ts.length; ++i) if (ts[i].mine && !ts[i].settled && !ts[i].paying) return ts[i];
         return null;
     }
     // A split's payTo, readable: an address stays whole; a shielded key node — ~200 hex
@@ -1801,7 +1804,7 @@ Rectangle {
             objectName: "cardPaySettle"
             visible: cardRoot.kind === "intent-propose" && cardRoot.isSettleUp && cardRoot.ready
                 && !cardRoot.settleUp.expired
-                && cardRoot.myTransfer !== null && !cardRoot.myTransfer.paying
+                && cardRoot.myTransfer !== null
             Layout.fillWidth: true
             text: cardRoot.myTransfer
                   ? qsTr("Pay %1 %2 to %3").arg(cardRoot.eth(cardRoot.myTransfer.amount)).arg(cardRoot.unit)

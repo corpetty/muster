@@ -102,6 +102,16 @@ proc utxosOf*(a: BitcoindAdapter, address: string): seq[BtcUtxo] =
     result.add BtcUtxo(txid: u{"txid"}.getStr(), vout: uint32(u{"vout"}.getInt()),
                        value: toSat(u{"amount"}), scriptPubKey: u{"scriptPubKey"}.getStr())
 
+proc spendableUtxosOf*(a: BitcoindAdapter, address: string): seq[BtcUtxo] =
+  ## The address's confirmed coins that no transaction in the node's mempool already spends
+  ## (gettxout with the mempool included answers null for those). scantxoutset reads the
+  ## chain alone, so a payment sent a moment ago still shows its coins unspent there; a
+  ## second payment built from them would conflict with the first — refused, or worse,
+  ## replacing it (Core's full RBF) — exo-a90.18.
+  for u in a.utxosOf(address):
+    let r = a.call("gettxout", %*[u.txid, int(u.vout), true])
+    if r != nil and r.kind == JObject: result.add u
+
 method describe*(a: BitcoindAdapter): ChainDescriptor =
   ChainDescriptor(chain: a.network.caip2, displayName: "Bitcoin (" & a.network.name & ")",
                   nativeAsset: a.nativeAsset(), accountForms: @[afPublic],

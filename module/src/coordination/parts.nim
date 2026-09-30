@@ -104,11 +104,14 @@ type PendingPart* = object
   transfer*: PartTransfer
 
 proc liveSettlePartSend*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, intentId: string,
-                         seam: PartSeam, nowSec: uint64): tuple[outcome: string, pending: PendingPart] =
+                         seam: PartSeam, nowSec: uint64,
+                         inFlight: seq[PendingPart] = @[]): tuple[outcome: string, pending: PendingPart] =
   ## Pay MY part of an agreed intent from my own wallet. outcome "" = sent (pending holds
   ## what completion needs), else a refusal with nothing sent or published: unknown-intent,
-  ## unsupported-driver, not-in-parts, not-a-party, not-agreed, already-settled, no-context,
-  ## expired, "refused: …".
+  ## unsupported-driver, not-in-parts, not-a-party, not-agreed, already-settled, paying,
+  ## no-context, expired, "refused: …". `inFlight` is what this host has sent and not yet
+  ## seen land: the log shows those parts unpaid until their report, so they are skipped —
+  ## never paid twice — and when every part left is in flight the answer is "paying".
   s.poll()
   let events = s.roomEvents()
   let effectJson = effectJsonOf(events, intentId)
@@ -129,11 +132,18 @@ proc liveSettlePartSend*(s: CoordinationSession, ks: Keystore, driverFor: Driver
   if not found or v.state notin ["executable", "submitted", "settling"]:
     return ((if found and v.state == "final": "already-settled" else: "not-agreed"), PendingPart())
   var me = ""
+  var busy = false
   for p in minePts:
-    if not partViewOf(v, p).p.settled:
-      me = p
-      break
-  if me.len == 0: return ("already-settled", PendingPart())
+    if partViewOf(v, p).p.settled: continue
+    var flying = false
+    for f in inFlight:
+      if f.intentId == intentId and f.part == p: flying = true
+    if flying:
+      busy = true
+      continue
+    me = p
+    break
+  if me.len == 0: return ((if busy: "paying" else: "already-settled"), PendingPart())
   # a part another agreed intent settles (a settle-up) is paid through it, never twice
   if coveringIntent(events, driverFor, intentId, me, nowSec).len > 0: return ("covered-by-settle-up", PendingPart())
   let ctx = intentContext(events, intentId)

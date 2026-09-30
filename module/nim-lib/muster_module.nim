@@ -1287,8 +1287,12 @@ proc musterCoordinateSettlePartImpl(intentId: string): string =
   if splitPolicy(policy).kind == "btc-split" and gBtcRpc.len == 0:
     return $(%*{"error": "no-btc-node", "detail": "a Bitcoin share is paid through your own node: Settings → Bitcoin node"})
   let seam = splitSeamFor(policy)
+  # what this host already sent in this room and has not yet seen land: never paid twice
+  var inFlight: seq[PendingPart]
+  for p in gSplitPending:
+    if p.session == gSession: inFlight.add p.pp
   let (outcome, pp) = liveSettlePartSend(gSession, moduleKeystore(), driverFor, intentId, seam,
-                                         uint64(epochTime()))
+                                         uint64(epochTime()), inFlight)
   if outcome.len > 0: return $(%*{"error": outcome})
   gSplitPending.add SplitPending(session: gSession, seam: seam, pp: pp, started: epochTime())
   $(%*{"pending": pp.tx, "amount": pp.transfer.amount, "to": pp.transfer.to, "chain": pp.transfer.chain})
