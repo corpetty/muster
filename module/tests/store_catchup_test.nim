@@ -129,4 +129,21 @@ block:
   doAssert retry.fire and retry.deep, "a failed page is asked again next tick"
   echo "8. a dead store node never stalls the history OK"
 
+# ── 9. the cursor as the kernel actually sends it ──────────────────────────────────
+# liblogosdelivery serializes StoreQueryResponseHex with `%*`, and its paginationCursor is a
+# nim-results Opt[string]: {"oResultPrivate": true, "vResultPrivate": "0x…"} when there is
+# one, {"oResultPrivate": false} when not — the same wrapping its messages carry. Seen live:
+# a plain-string read took every full page for the last, and paging stopped after 50.
+block:
+  var d = newStoreCatchup(Peers)
+  let p1 = d.nextQuery(Room, 1000, Lookback)
+  d.onResponse(%*{"requestId": p1.req["requestId"].getStr(), "statusCode": 200, "statusDesc": "OK",
+                  "messages": [], "paginationCursor": {"oResultPrivate": true, "vResultPrivate": "0xabc"}})
+  let p2 = d.nextQuery(Room, 2000, Lookback)
+  doAssert p2.deep and p2.req["paginationCursor"].getStr() == "0xabc", "the Opt-wrapped cursor is followed: " & $p2.req
+  d.onResponse(%*{"requestId": p2.req["requestId"].getStr(), "statusCode": 200, "statusDesc": "OK",
+                  "messages": [], "paginationCursor": {"oResultPrivate": false}})
+  doAssert d.caughtUp(Room), "an empty Opt ends the history"
+  echo "9. the cursor as liblogosdelivery sends it (an Opt): followed, and an empty one ends it OK"
+
 echo "store_catchup_test: all OK"
