@@ -353,6 +353,13 @@
         "The token program id is read from the user's sequencer (getProgramIds) at compose and is not recorded as an external read; the card's summary is inferred from the instruction's shape, not from checking the target is the token program. From reading nim-lib/muster_module.nim and ui/src/qml/Room.qml.",
         "Header comments in drivers/lez_multisig.nim, lez_vote_test and phase_c_exit_test say the member's LEZ wallet signs, 'never muster'; the live path signs with a member key the muster keystore derives (lez_member_keys_test, lez_multisig_live_e2e). The registry says the latter.",
         "The ready box's Settle on-chain for this family is wired from the profile's settlement, but has not been clicked through on screen."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "7-the-lez-multisig-on-the-public-testnet",
+          "what": "Part 7: the LEZ multisig on the public testnet"
+        }
       ]
     },
     {
@@ -1069,6 +1076,13 @@
       "unverified": [
         "The hosted lez_multisig_create proc and its automatic disclosure on inclusion (the LEZ pump) are not driven by a test; lez_multisig_live_e2e sends the same Create through the same chain seam and discloses by hand.",
         "The registry notes say members are fresh accounts 'the program claims'. That is the published c45100b program (modelled in lez_multisig_chain_test); the rebuilt program muster creates against leaves them unowned (lez_multisig_live_e2e step 2)."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "7-the-lez-multisig-on-the-public-testnet",
+          "what": "Part 7: the LEZ multisig on the public testnet"
+        }
       ]
     }
   ]

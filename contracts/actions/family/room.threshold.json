@@ -228,6 +228,13 @@
       ],
       "unverified": [
         "k = min(2, members) is how nim-lib/muster_module.nim (roomDriver) builds the hosted driver; the tests build their own rosters."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "3-a-decision-the-room-signs",
+          "what": "Part 3: a decision the room signs"
+        }
       ]
     },
     {
@@ -389,6 +396,13 @@
       "unverified": [
         "governance_test proves roomDriverKinds admits 'unanimous' after an approved add-driver; that coordinate_set_policy refuses it before is from reading nim-lib/muster_module.nim (musterCoordinateSetPolicy).",
         "That the fold does not check admission, and that n follows the current membership, are from reading nim-lib/muster_module.nim (roomDriver, driverForPolicy); no test covers either."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "3-a-decision-the-room-signs",
+          "what": "Part 3: a decision the room signs"
+        }
       ]
     },
     {
@@ -556,6 +570,13 @@
       ],
       "unverified": [
         "That roomDriverKinds ignores the add-driver's policy is from reading coordination/intents.nim; governance_test folds it under a threshold driver only."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "3-a-decision-the-room-signs",
+          "what": "Part 3: a decision the room signs"
+        }
       ]
     }
   ]

@@ -296,6 +296,210 @@
       ],
       "unverified": [
         "the Split composer and card in BTC looked at on a display"
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6f-in-bitcoin",
+          "what": "Part 6f: in Bitcoin"
+        }
+      ]
+    },
+    {
+      "id": "btc.split/settle-up",
+      "name": "Settle up in Bitcoin: net several splits into fewer payments",
+      "area": "family",
+      "family": "btc.split",
+      "kind": "btc-split",
+      "status": "built",
+      "summary": "evm.split/settle-up on Bitcoin: the room's agreed, unpaid BTC split shares on one network, netted in satoshis into fewer payments — every member's balance across them kept exactly, each recipient paid only at a wpkh address a split owing them agreed. Every party the covered shares name agrees; each net payment is then a part, paid from the payer's own key through their own node and confirmed by the recipient's own node, exactly as a Bitcoin split's share is. The netting and the cover checks are the chain-agnostic ones the Ethereum settle-up runs; what is Bitcoin's is the asset (BTC only) and the payment.",
+      "generated": "btc-split/settle-up",
+      "effect": {
+        "schema": "muster.effect.settle-up.v1",
+        "fields": [
+          {
+            "name": "chain",
+            "means": "the bip122 chain every covered share and every net payment is on — the policy's qualifier"
+          },
+          {
+            "name": "asset",
+            "means": "BTC — a Bitcoin settle-up is in BTC; amounts are satoshis"
+          },
+          {
+            "name": "covers",
+            "means": "[{intent, debtor, creditor, amount, payTo}] sorted by intent then debtor — each an agreed, unpaid share exactly as its split says it"
+          },
+          {
+            "name": "transfers",
+            "means": "[{from, to, payTo, amount}] sorted by from then to — the net payments; conserve every member's balance; each payTo a wpkh address a split owing its recipient agreed"
+          },
+          {
+            "name": "memo",
+            "means": "room-only text, at most 280 bytes"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "any member (a party's proposal is their agreement)",
+          "does": "In a room whose split policy is btc-split@<bip122 chain>: Settle up the room's open splits. The module gathers every agreed, unpaid, uncovered BTC share on that chain (openParts), nets them (netTransfers) and proposes the settle-up under the same policy. Fewer than two open shares: nothing to net.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/settle_up_test.nim",
+            "module/tests/settle_up_live_test.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "every party the covered shares name (each debtor and each creditor)",
+          "does": "Each client checks every cover against its split in the room's log (coordination/covers) before agreeing; then the member's room key signs the settle-up's materialization.",
+          "signs": "an Ed25519 signature by the party's room identity over dCBOR ['muster.settle-up.v1', 'muster.effect.settle-up.v1', chain, asset, covers, transfers, memo]; plus the muster attestation over P",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/settle_up_live_test.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "each payer, then each recipient; then each covered share's creditor",
+          "does": "Each net payment is paid as a Bitcoin split's share is: from the payer's own coins at wpkh(<their muster key>), read from their own node, every input signed DER over BIP-143 through the keystore; the recipient's own node confirms an output paying payTo exactly the amount, at the network's depth. Once final, each creditor's client marks the shares it covered received.",
+          "signs": "each payer's own Bitcoin transaction; each report signed by its author's room key",
+          "reveals": [
+            {
+              "field": "payer",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "payee",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "amount",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/split_btc_test.nim",
+            "module/tests/settle_up_live_test.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one",
+          "does": "Every net payment confirmed: the settle-up is final, and the covered shares are marked received; the splits it covered go final.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/settle_up_live_test.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a Bitcoin settle-up in anything but BTC",
+          "why": "the driver refuses it: 'a Bitcoin settle-up is in BTC'",
+          "evidence": [
+            "module/tests/action_corpus_test.nim"
+          ]
+        },
+        {
+          "what": "a settle-up whose transfers do not conserve every member's balance, or pay an address no split owing the recipient agreed",
+          "why": "the driver's settle-up rules are the same on every chain",
+          "evidence": [
+            "module/tests/settle_up_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_propose_settle_up",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_settle_part",
+        "coordinate_decline"
+      ],
+      "ui": "Room → + → Split with \"Settles on\" Split (Bitcoin) → \"Settle up the room's open splits instead\"; the settle-up card → Agree to settle up → Pay <amount> to <recipient> (from your own coins, through your own node); the recipient's client confirms",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "Settling up keeps every member's balance exactly and pays each recipient only where their own split said",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Nothing makes anyone pay a net payment; the room shows who has",
+          "credibility": "motivational",
+          "party": "each payer"
+        },
+        {
+          "claim": "Every net payment is public on the chain — payer, payee, amount",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/action_corpus_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/settle_up_live_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/split_btc_test.nim"
+        }
+      ],
+      "unverified": [
+        "No test on main yet settles up in BTC end to end: the netting and cover checks are held on Ethereum splits, and a Bitcoin share's payment by split_btc_test — a regtest run of the two together is in progress (settle_up_btc_regtest_e2e)",
+        "Netting can leave a payment below the 546-sat dust floor every Bitcoin share must clear (each covered share is at least 546 sat; their difference need not be), and propose does not refuse it; a node will not relay an output below its own dust threshold (294 sat for wpkh at Bitcoin Core's defaults), so such a payment could not land"
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6f-in-bitcoin",
+          "what": "Part 6f: in Bitcoin"
+        }
       ]
     }
   ]

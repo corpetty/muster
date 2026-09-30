@@ -255,6 +255,13 @@
           "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/v0.2.4/lee/state_machine/src/privacy_preserving_transaction/message.rs#L21-L27",
           "what": "LEZ v0.2.4: a privacy-preserving message is public actions, nonces, private actions and validity windows — no zone or chain id"
         }
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6g-the-private-split-on-the-lez-testnet",
+          "what": "Part 6g: the private split on the LEZ testnet"
+        }
       ]
     }
   ]

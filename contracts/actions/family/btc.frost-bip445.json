@@ -291,6 +291,13 @@
         "The card's amount → payee line for a Bitcoin spend comes from the module's effect summary (the payment outputs, change excluded; card_words_test); it has not been seen on screen.",
         "coordinate_submit polls the node for about four seconds; if the spend is not final by then it returns pending, and nothing later publishes the final event for a Bitcoin intent (only LEZ settles are re-watched by the pump). From reading nim-lib/muster_module.nim, not a test.",
         "The ready box's Settle on-chain for this family is wired from the profile's settlement, but has not been clicked through on screen."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "5b-a-frost-key",
+          "what": "Part 5b: a FROST key"
+        }
       ]
     },
     {
@@ -613,6 +620,13 @@
       ],
       "unverified": [
         "The hosted checks on t, n and the id, and 'not-a-participant' for a member who joins after the first n, are from reading nim-lib/muster_module.nim and coordination/aggregate.nim; no test covers them."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "5b-a-frost-key",
+          "what": "Part 5b: a FROST key"
+        }
       ]
     }
   ]

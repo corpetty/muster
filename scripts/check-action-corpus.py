@@ -24,6 +24,8 @@ evidence it cites. Design: docs/design/action-atlas.md.
   FAIL  a room / wallet / setup action without its own requirements and disclosure
   FAIL  an evidence, step or refusal path that is not on disk (built / partial)
   FAIL  a hosted method that module/src/api/muster.lidl does not declare
+  FAIL  a `try` link (where to try the action by hand) whose runbook is not on disk,
+        or whose anchor is no heading in it — or one on an action that is not built
   FAIL  a built, partial or candidate family with no actions
   FAIL  the corpus embedded in the atlas is out of date (--write refreshes it)
   WARN  an action carrying `unverified` claims (listed, so they are not forgotten)
@@ -92,6 +94,40 @@ def spliced_atlas(corpus: dict) -> tuple[str, str]:
     data = json.dumps(corpus, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
     block = '\n<script id="actions" type="application/json">' + data + "</script>\n"
     return page, page[:i] + block + page[j:]
+
+
+def heading_anchors(path: Path) -> set[str]:
+    """The anchors GitHub gives a Markdown file's headings: lowercased, everything but
+    letters, digits, spaces, hyphens and underscores dropped, spaces made hyphens; a
+    repeated heading gets -1, -2, … (headings inside fenced code are not headings)."""
+    out: set[str] = set()
+    fenced = False
+    for line in path.read_text().splitlines():
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        m = None if fenced else re.match(r"^#{1,6}\s+(.*?)\s*#*\s*$", line)
+        if not m: continue
+        slug = re.sub(r"[^\w\- ]", "", m.group(1).strip().lower()).replace(" ", "-")
+        base, n = slug, 1
+        while slug in out:
+            slug, n = f"{base}-{n}", n + 1
+        out.add(slug)
+    return out
+
+
+def check_try(where: str, a: dict, fails: list[str]) -> None:
+    """`try`: [{path, anchor, what}] — where a person can do this action by hand."""
+    links = a.get("try", [])
+    if links and a.get("status") != "built":
+        fails.append(f"{where}: only a built action can be tried by hand")
+    for t in links:
+        path, anchor = t.get("path", ""), t.get("anchor", "")
+        if not t.get("what"): fails.append(f"{where}: a try link needs `what` (the words to show)")
+        if not exists(path):
+            fails.append(f"{where}: try link {path!r} is not on disk"); continue
+        if anchor and anchor not in heading_anchors(ROOT / path):
+            fails.append(f"{where}: try link {path}#{anchor} names no heading in it")
 
 
 def check_rows(where: str, a: dict, fails: list[str]) -> None:
@@ -190,6 +226,7 @@ def main() -> int:
                 for k in ("requirements", "disclosure"):
                     if k not in a: fails.append(f"{where}: a room / wallet / setup action carries its own `{k}`")
             check_rows(where, a, fails)
+            check_try(where, a, fails)
             # ── evidence resolves ─────────────────────────────────────────────────
             if status in ("built", "partial"):
                 for e in a.get("evidence", []):

@@ -61,6 +61,7 @@ vocabulary and must cite a primary source.
 | `invariants` | which of the ten it leans on | authored | authored |
 | `credibility` | per claim: imperative / motivational / exposed (the claims registry's axis) | authored | authored |
 | `evidence` | tests and probes (paths must exist) | authored, checked | primary sources (URLs), required |
+| `try` | where a person can do it by hand: `[{path, anchor, what}]`, a runbook section (`docs/runbooks/client-tour.md`) | authored, checked: the file is on disk and the anchor is one of its headings | — |
 
 The closed vocabularies are the code's: requirement kinds, parties and material classes
 from `drivers/manifest.nim`; observers from `intents/disclosure.nim` (`room-member`,
@@ -139,7 +140,9 @@ An **action**. Each authored file is `{ "actions": [ … ] }`:
   - `frost/statement`, `eip191/statement`;
   - `invoke/module-call`, `invoke/lez-transfer`;
   - `btc-p2wsh/spend`, `btc-tapscript/spend`, `btc-frost/spend`;
-  - `lez-multisig/transfer`, `lez-multisig/vault-init`, `lez-frost/transfer`.
+  - `lez-multisig/transfer`, `lez-multisig/vault-init`, `lez-frost/transfer`;
+  - `evm-split/split`, `evm-split/settle-up`, `lez-split/split`, `btc-split/split`,
+    `btc-split/settle-up`.
 - **`step`** is one of `propose` · `approve` · `ceremony` · `vote` · `settle` · `final` ·
   `act`. `act` is a one-step action: a room or wallet operation.
 - **`when`** is one of `propose` · `approve` · `settle` · `final` · `act` · `always`. The
@@ -164,6 +167,8 @@ An **action**. Each authored file is `{ "actions": [ … ] }`:
   - a declared action with no primary source;
   - an evidence path that is not on disk;
   - a hosted method not in `muster.lidl`;
+  - a `try` link whose runbook is not on disk or whose anchor is no heading in it, or a
+    `try` link on an action that is not built;
   - a family action whose status disagrees with its family's registry status;
   - a built or candidate family with no action;
   - the atlas's embedded copy being stale (`--write` refreshes it, as
