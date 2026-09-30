@@ -302,7 +302,8 @@ Rectangle {
     function partState(p) {
         if (!p) return "";
         if (p.confirmed) return String(p.tx || "").indexOf("note:") === 0 ? qsTr("✓ received — a private note of exactly this share")
-                              : String(p.tx || "").length > 0 ? qsTr("✓ received") : qsTr("✓ received outside muster");
+                              : String(p.tx || "").length > 0 ? qsTr("✓ received")
+                              : p.settledUp ? qsTr("✓ paid through a settle-up") : qsTr("✓ received outside muster");
         if (p.settled) return qsTr("paid (%1) — %2 has not seen it yet").arg(String(p.tx || "").slice(0, 10) + "…")
                                                                      .arg(cardRoot.creditorName);
         if (p.paying) return qsTr("paying…");
