@@ -1,0 +1,300 @@
+{
+  "id": "derived-exo-a90.20",
+  "original_statement": "exo-a90.20: extend the split's typed spec (contracts/specs/derived-exo-a90.spec.json, graded 6/6) to what landed after it: settle-up (exo-3c6: conservation, the cover check, covered parts paid only through it and marked received only once it is final), fiat bills (exo-3a4: the total IS the quote's exact conversion; the quote reaches the signed bytes only as a recorded read, inv 10), proposer != creditor (exo-770: payable only once the creditor agrees; payto-not-mine), btc.split (exo-d17: the creditor confirms an output of exactly the share at depth), settle-up expiry (exo-a90.16: an unpaid settle-up releases its covers after the grace window; a started one finishes), renewal (exo-a90.15), and payments in flight (exo-a90.18/.23: never paid twice; released only when the chain says it can never land).",
+  "restatement": "After derived-exo-a90, a split gained a creditor who agrees, fiat bills, settling up, expiry and renewal, Bitcoin shares and a book of payments in flight; whatever the input, the client keeps eight more guarantees: (s1) A split is payable only once every party it names has agreed: each debtor, and the creditor, whose agreement is their word that payTo is theirs. Anyone may write a split. The creditor's client refuses to agree to a payTo it doesn't hold (payto-not-mine), and a creditor who proposes agrees by proposing. (s2) A bill in another currency is converted exactly: the total is the fiat amount in minor units times the rate in the asset's base units. Anything not exactly convertible is refused. The quote (currency, amount, rate, source, time) is in the signed bytes and reaches them only as a recorded external read. Without that read, no agreement counts (invariant 10). (s3) A settle-up nets agreed, unpaid split shares without changing what anyone is owed: every member's balance across the covered shares equals their balance across the net transfers; each cover says exactly what its split says, for a split that is agreed, unpaid, and not already covered; each recipient is paid only at an address a split owing them named; the private split is never netted. (s4) Once a settle-up is agreed, the shares it covers are paid only through it, and paying one directly is refused. A covered share is marked received only once the settle-up is final, and only by its own creditor. Nothing is paid twice. (s5) A settle-up that paid nothing pays nothing more past its expiry, and releases its covered shares once a grace window, longer than any payment can stay in flight, has passed. A settle-up that began paying finishes past its expiry and keeps covering. A plain split past its expiry still pays nothing. (s6) A split past its expiry is renewed as a settle-up of exactly its unpaid shares, which everyone they name agrees to again under a fresh expiry. Renewing again after a renewal lapsed is a new intent. Re-proposing an identical expired split is refused with a reason. (s7) While a payment of a share has been sent and not seen to land, paying it again sends nothing. This holds across a restart of the payer's client and past any deadline. The share is released only when the chain says that payment can never land. A Bitcoin payment never spends a coin a pending payment already spends. (s8) A Bitcoin share is paid from the debtor's own key, in satoshis, never below the 546-sat dust limit. The creditor's own node confirms it only when a transaction pays payTo exactly the share at the network's confirmation depth. A different amount or address is refused and named.",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "A split is payable only once every party it names has agreed: each debtor, and the creditor, whose agreement is their word that payTo is theirs. Anyone may write a split. The creditor's client refuses to agree to a payTo it doesn't hold (payto-not-mine), and a creditor who proposes agrees by proposing."
+    },
+    {
+      "id": "s2",
+      "text": "A bill in another currency is converted exactly: the total is the fiat amount in minor units times the rate in the asset's base units. Anything not exactly convertible is refused. The quote (currency, amount, rate, source, time) is in the signed bytes and reaches them only as a recorded external read. Without that read, no agreement counts (invariant 10)."
+    },
+    {
+      "id": "s3",
+      "text": "A settle-up nets agreed, unpaid split shares without changing what anyone is owed: every member's balance across the covered shares equals their balance across the net transfers; each cover says exactly what its split says, for a split that is agreed, unpaid, and not already covered; each recipient is paid only at an address a split owing them named; the private split is never netted."
+    },
+    {
+      "id": "s4",
+      "text": "Once a settle-up is agreed, the shares it covers are paid only through it, and paying one directly is refused. A covered share is marked received only once the settle-up is final, and only by its own creditor. Nothing is paid twice."
+    },
+    {
+      "id": "s5",
+      "text": "A settle-up that paid nothing pays nothing more past its expiry, and releases its covered shares once a grace window, longer than any payment can stay in flight, has passed. A settle-up that began paying finishes past its expiry and keeps covering. A plain split past its expiry still pays nothing."
+    },
+    {
+      "id": "s6",
+      "text": "A split past its expiry is renewed as a settle-up of exactly its unpaid shares, which everyone they name agrees to again under a fresh expiry. Renewing again after a renewal lapsed is a new intent. Re-proposing an identical expired split is refused with a reason."
+    },
+    {
+      "id": "s7",
+      "text": "While a payment of a share has been sent and not seen to land, paying it again sends nothing. This holds across a restart of the payer's client and past any deadline. The share is released only when the chain says that payment can never land. A Bitcoin payment never spends a coin a pending payment already spends."
+    },
+    {
+      "id": "s8",
+      "text": "A Bitcoin share is paid from the debtor's own key, in satoshis, never below the 546-sat dust limit. The creditor's own node confirms it only when a transaction pays payTo exactly the share at the network's confirmation depth. A different amount or address is refused and named."
+    }
+  ],
+  "goal": "A typed spec, derived-exo-a90.20, with one top-strength acceptance oracle per guarantee, graded against the live code by scripts/grade-specs.sh: none of the eight can regress without a spec going red.",
+  "acceptance_criteria": [
+    "A split is payable only once every party it names has agreed: each debtor, and the creditor, whose agreement is their word that payTo is theirs. Anyone may write a split. The creditor's client refuses to agree to a payTo it doesn't hold (payto-not-mine), and a creditor who proposes agrees by proposing.",
+    "A bill in another currency is converted exactly: the total is the fiat amount in minor units times the rate in the asset's base units. Anything not exactly convertible is refused. The quote (currency, amount, rate, source, time) is in the signed bytes and reaches them only as a recorded external read. Without that read, no agreement counts (invariant 10).",
+    "A settle-up nets agreed, unpaid split shares without changing what anyone is owed: every member's balance across the covered shares equals their balance across the net transfers; each cover says exactly what its split says, for a split that is agreed, unpaid, and not already covered; each recipient is paid only at an address a split owing them named; the private split is never netted.",
+    "Once a settle-up is agreed, the shares it covers are paid only through it, and paying one directly is refused. A covered share is marked received only once the settle-up is final, and only by its own creditor. Nothing is paid twice.",
+    "A settle-up that paid nothing pays nothing more past its expiry, and releases its covered shares once a grace window, longer than any payment can stay in flight, has passed. A settle-up that began paying finishes past its expiry and keeps covering. A plain split past its expiry still pays nothing.",
+    "A split past its expiry is renewed as a settle-up of exactly its unpaid shares, which everyone they name agrees to again under a fresh expiry. Renewing again after a renewal lapsed is a new intent. Re-proposing an identical expired split is refused with a reason.",
+    "While a payment of a share has been sent and not seen to land, paying it again sends nothing. This holds across a restart of the payer's client and past any deadline. The share is released only when the chain says that payment can never land. A Bitcoin payment never spends a coin a pending payment already spends.",
+    "A Bitcoin share is paid from the debtor's own key, in satoshis, never below the 546-sat dust limit. The creditor's own node confirms it only when a transaction pays payTo exactly the share at the network's confirmation depth. A different amount or address is refused and named."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "A split is payable only once every party it names has agreed: each debtor, and the creditor, whose agreement is their word that payTo is theirs. Anyone may write a split. The creditor's client refuses to agree to a payTo it doesn't hold (payto-not-mine), and a creditor who proposes agrees by proposing."
+    },
+    {
+      "id": "c2",
+      "text": "A bill in another currency is converted exactly: the total is the fiat amount in minor units times the rate in the asset's base units. Anything not exactly convertible is refused. The quote (currency, amount, rate, source, time) is in the signed bytes and reaches them only as a recorded external read. Without that read, no agreement counts (invariant 10)."
+    },
+    {
+      "id": "c3",
+      "text": "A settle-up nets agreed, unpaid split shares without changing what anyone is owed: every member's balance across the covered shares equals their balance across the net transfers; each cover says exactly what its split says, for a split that is agreed, unpaid, and not already covered; each recipient is paid only at an address a split owing them named; the private split is never netted."
+    },
+    {
+      "id": "c4",
+      "text": "Once a settle-up is agreed, the shares it covers are paid only through it, and paying one directly is refused. A covered share is marked received only once the settle-up is final, and only by its own creditor. Nothing is paid twice."
+    },
+    {
+      "id": "c5",
+      "text": "A settle-up that paid nothing pays nothing more past its expiry, and releases its covered shares once a grace window, longer than any payment can stay in flight, has passed. A settle-up that began paying finishes past its expiry and keeps covering. A plain split past its expiry still pays nothing."
+    },
+    {
+      "id": "c6",
+      "text": "A split past its expiry is renewed as a settle-up of exactly its unpaid shares, which everyone they name agrees to again under a fresh expiry. Renewing again after a renewal lapsed is a new intent. Re-proposing an identical expired split is refused with a reason."
+    },
+    {
+      "id": "c7",
+      "text": "While a payment of a share has been sent and not seen to land, paying it again sends nothing. This holds across a restart of the payer's client and past any deadline. The share is released only when the chain says that payment can never land. A Bitcoin payment never spends a coin a pending payment already spends."
+    },
+    {
+      "id": "c8",
+      "text": "A Bitcoin share is paid from the debtor's own key, in satoshis, never below the 546-sat dust limit. The creditor's own node confirms it only when a transaction pays payTo exactly the share at the network's confirmation depth. A different amount or address is refused and named."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s1",
+      "proves": "Each of 32 cases runs the REAL live path in a room of four over a fake ledger: who has agreed (each subset of debtor Bob, debtor Carol and creditor Alice) x who proposed (Alice; Bob on her behalf) x whether Alice's client holds payTo. A transfer of Bob's share is sent iff all three agreed; Alice's agreement through her client is accepted iff it holds payTo, else refused payto-not-mine; a creditor-proposer counts as agreed from the proposal alone, an on-behalf proposer never counts as the creditor. Catches a split payable before its creditor agrees, agreement to an address the creditor doesn't hold, and a proposer mistaken for the creditor.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_split_creditor_agrees_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 40,
+      "description": "A split is payable only once every party it names has agreed: each debtor, and the creditor, whose agreement is their word that payTo is theirs. Anyone may write a split. The creditor's client refuses to agree to a payTo it doesn't hold (payto-not-mine), and a creditor who proposes agrees by proposing.",
+      "clause_id": "c1"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s2",
+      "proves": "A grid of 300 quotes: currency (JPY 0 minor places, EUR 2, KWD 3) x amount (including too many decimals, zero, an exponent) x asset (a 6-decimal token, BTC at 8, LEZ at 9 - the private split, ETH at 18) x rate (including one finer than any base unit, and zero), one grader state per row of five rates. The probe converts with its OWN big-integer arithmetic: fiatQuote returns exactly that total or is refused exactly when no conversion exists; the driver accepts a split of the total and refuses total +/- 1 (BTC also refuses dust); another source or time gives other signed bytes, and the materialization carries the quote as its tenth element; over the live path (all but BTC) an agreement counts when the proposal recorded the quote as an external read and is refused unaccountable-input when it did not. Catches rounding instead of refusing, a total that drifts from its quote, a quote outside the signed bytes, and a quote signed without its provenance.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_split_fiat_quote_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "row": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 70,
+      "description": "A bill in another currency is converted exactly: the total is the fiat amount in minor units times the rate in the asset's base units. Anything not exactly convertible is refused. The quote (currency, amount, rate, source, time) is in the signed bytes and reaches them only as a recorded external read. Without that read, no agreement counts (invariant 10).",
+      "clause_id": "c2"
+    },
+    {
+      "type": "metamorphic",
+      "restatement_clause_id": "s3",
+      "relation_class": "conservation",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_settle_up_conservation.nim"
+      ],
+      "cwd": "module",
+      "proves": "Eight seeded rooms of four over the live path: several Ethereum splits among random members, every party agreed, some shares paid over a fake ledger, a slice already covered by an agreed settle-up, and one agreed private split. A settle-up is composed with the REAL openParts and netTransfers, and mutated settle-ups (a cover one higher, a foreign payTo, a paid share, a share already covered, the private split on its zone) are put to a covered party's agreement. Every flow is non-negative so none can cancel: per member |balance over the covers - balance over the net transfers|; per cover 1 if it misstates its split (read independently from the log) or covers an unagreed, paid, covered or private share; per transfer 1 if paid at an address no split owing its recipient named; per mutation 1 if agreement is accepted; per trial 1 if the honest settle-up is refused; per mutation kind 1 if it never ran. Conservation at zero: nothing moved between members, nothing misstated, nothing forged, and no check passed vacuously.",
+      "description": "A settle-up nets agreed, unpaid split shares without changing what anyone is owed: every member's balance across the covered shares equals their balance across the net transfers; each cover says exactly what its split says, for a split that is agreed, unpaid, and not already covered; each recipient is paid only at an address a split owing them named; the private split is never netted.",
+      "clause_id": "c3"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s4",
+      "proves": "Dinner and a taxi, both agreed, netted by Alice into two payments (Carol pays Alice 400 and Bob 100). The state is a bitmask over six settle-up events (Bob agrees, Carol agrees, each payment reported, each confirmed), all 64 reachable by BFS, each built over the live path. The settle-up is agreed iff both agreed and its state then follows its parts; Carol's direct payment of her dinner share is refused covered-by-settle-up iff the settle-up is agreed; each creditor's settleCovered marks a covered share received, with no payment reference, iff the settle-up is final; Carol's own mark on her share never counts. Catches a covered share paid twice, shares marked received before the money moved, and a debtor closing their own share.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_settle_up_payment_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "events": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 70,
+      "description": "Once a settle-up is agreed, the shares it covers are paid only through it, and paying one directly is refused. A covered share is marked received only once the settle-up is final, and only by its own creditor. Nothing is paid twice.",
+      "clause_id": "c4"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s5",
+      "proves": "81 cases over the live path at the case's clock: kind (a settle-up with payments, one whose debts cancel exactly, a plain split) x payments made before expiry (none, the first, all) x clock (before expiry, inside the grace window, past it) x action (Carol pays her own next part, pays a covered share directly, a new settle-up covers it). Unpaid settle-up: its own payment goes only before expiry, a direct payment and a new cover only past the grace window; begun: its remaining payment goes at any clock, a direct payment or new cover never; cancelling: never releases; plain split: pays only before expiry and only if unpaid. Catches covers that never release, release inside the window (a double payment), abandoning a started settle-up, and relaxing expiry for plain splits.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_settle_up_expiry_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 90,
+      "description": "A settle-up that paid nothing pays nothing more past its expiry, and releases its covered shares once a grace window, longer than any payment can stay in flight, has passed. A settle-up that began paying finishes past its expiry and keeps covering. A plain split past its expiry still pays nothing.",
+      "clause_id": "c5"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s6",
+      "proves": "48 cases over the live path: the split (agreed and unpaid, one share paid, final, never agreed) x clock (before expiry, long after) x an earlier renewal (none, live, lapsed) x family (evm.split, lez.split). renewalOf covers exactly the unpaid shares as the split says them (debtor, creditor, amount, payTo) or gives a reason (private, final, never agreed, already covered by a live renewal); a renewal's id never equals a lapsed renewal's; everyone it names agrees under its fresh expiry, and paying through it makes the split final; re-proposing the identical split answers expired-duplicate iff it has expired. Catches a renewal that re-bills paid shares, renewing onto a spent id, and a silent no-op re-proposal.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_split_renew_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 55,
+      "description": "A split past its expiry is renewed as a settle-up of exactly its unpaid shares, which everyone they name agrees to again under a fresh expiry. Renewing again after a renewal lapsed is a new intent. Re-proposing an identical expired split is refused with a reason.",
+      "clause_id": "c6"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s7",
+      "proves": "Every history of up to five actions by Bob, a debtor of two agreed splits (pay dinner, pay lunch, restart - the book round-trips through its saved form and the seam is rebuilt, the pay deadline passes and the hosted pump step runs, the chain mines, drops, or - on Bitcoin - conflicts the latest pending payment), about 3,800 over two rails: the fake ledger and a fake Bitcoin node the seam's own JSON-RPC code talks to unmodified. Successors come from the rule's own account of the history; a grader state is a history of up to two actions, and a two-action state replays and checks every continuation of itself to five. At every step, against the probe's OWN model: a send goes out iff the book holds no payment of that share and none was reported, else paying or already-settled; the pump reports landed payments and releases exactly those the chain can never land, keeping every other however late; no share has two landed payments, on the model and on the chain; and on Bitcoin no payment spends a coin a payment still pending in the mempool spends. Catches paying twice after a deadline or a restart, releasing a payment that could still land, and a Bitcoin payment that conflicts with one in flight.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_part_in_flight_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "rail": "fake",
+          "hist": "",
+          "decision_correct": true
+        },
+        {
+          "rail": "btc",
+          "hist": "",
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 40,
+      "description": "While a payment of a share has been sent and not seen to land, paying it again sends nothing. This holds across a restart of the payer's client and past any deadline. The share is released only when the chain says that payment can never land. A Bitcoin payment never spends a coin a pending payment already spends.",
+      "clause_id": "c7"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s8",
+      "proves": "108 cases on testnet (depth 6) against a fake Bitcoin node the seam talks to unmodified: share (545, 546, 150000 sat) x the paying output (share - 1, share, share + 1) x its address (payTo, another) x confirmations (0, 5, 6) x the debtor's coins (at their own key, only someone else's). The driver refuses a split iff a share is below 546 sat, and refuses a payTo written for another network; the creditor's checkReceived confirms iff the output pays payTo exactly the share with 6 confirmations, else the refusal names the amounts, the address, or the confirmations; the debtor pays only from coins at wpkh(their own key), every input's signature verifying under that key over its BIP-143 sighash, and with only someone else's coins sends nothing. Catches confirming a short or misdirected payment, confirming too early, dust splits, and paying from coins that aren't the debtor's.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_btc_split_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 115,
+      "description": "A Bitcoin share is paid from the debtor's own key, in satoshis, never below the 546-sat dust limit. The creditor's own node confirms it only when a transaction pays payTo exactly the share at the network's confirmation depth. A different amount or address is refused and named.",
+      "clause_id": "c8"
+    }
+  ],
+  "criticality": "catastrophic",
+  "declared_new_entrypoints": [
+    "tests/probes/probe_split_creditor_agrees_stepper.nim",
+    "tests/probes/probe_split_fiat_quote_stepper.nim",
+    "tests/probes/probe_settle_up_conservation.nim",
+    "tests/probes/probe_settle_up_payment_stepper.nim",
+    "tests/probes/probe_settle_up_expiry_stepper.nim",
+    "tests/probes/probe_split_renew_stepper.nim",
+    "tests/probes/probe_part_in_flight_stepper.nim",
+    "tests/probes/probe_btc_split_stepper.nim"
+  ]
+}
