@@ -295,27 +295,46 @@ const
 
 type
   Cover* = object
-    ## One agreed, unpaid part of a split that a settle-up settles: as that split says it.
+    ## One agreed, unpaid part of a split that a settle-up settles: as that split says it —
+    ## on its own chain, in its own asset (a settle-up in one asset: the settle-up's).
     intent*, debtor*, creditor*, amount*, payTo*: string
+    chain*, asset*: string
   NetTransfer* = object
     ## One net payment a settle-up makes instead: `frm` pays `to` at `to`'s agreed address.
     frm*, to*, payTo*, amount*: string
+  SettleRate* = object
+    ## Across assets (§4.13): `rate` base units of the payment asset per `per` base units of
+    ## `asset` on `chain` — the proposer's quote, from `source` at `at` (unix seconds).
+    chain*, asset*, rate*, per*, source*, at*: string
   SettleUp* = object
     chain*, asset*, memo*: string
     covers*: seq[Cover]
     transfers*: seq[NetTransfer]
+    rates*: seq[SettleRate]     ## none: a settle-up in one asset, exactly as exo-3c6 made it
 
 proc settleUpOf*(e: Effect): SettleUp =
   ## The settle-up an effect carries, as carried — validation is settleRefusal's.
   if e.schemaId != SettleUpSchema: raise newException(ValueError, "not a settle-up")
   result = SettleUp(chain: e.textOf("chain"), asset: e.textOf("asset"), memo: e.textOf("memo"))
+  let rv = e.fieldOf("rates")
+  if rv.kind == ckArray:
+    for x in rv.arr:
+      if x.kind != ckArray or x.arr.len != 6 or not x.arr.allIt(it.kind == ckText):
+        raise newException(ValueError, "a rate is [chain, asset, rate, per, source, at]")
+      result.rates.add SettleRate(chain: x.arr[0].t, asset: x.arr[1].t, rate: x.arr[2].t, per: x.arr[3].t,
+                                  source: x.arr[4].t, at: x.arr[5].t)
+  let across = result.rates.len > 0
   let cv = e.fieldOf("covers")
   if cv.kind == ckArray:
     for x in cv.arr:
-      if x.kind != ckArray or x.arr.len != 5 or not x.arr.allIt(it.kind == ckText):
-        raise newException(ValueError, "a cover is [intent, debtor, creditor, amount, payTo]")
+      # in one asset a cover is the settle-up's; across assets each names its own (§4.13)
+      if x.kind != ckArray or x.arr.len != (if across: 7 else: 5) or not x.arr.allIt(it.kind == ckText):
+        raise newException(ValueError, (if across: "across assets a cover is [intent, debtor, creditor, amount, payTo, chain, asset]"
+                                        else: "a cover is [intent, debtor, creditor, amount, payTo]"))
       result.covers.add Cover(intent: x.arr[0].t, debtor: x.arr[1].t, creditor: x.arr[2].t,
-                              amount: x.arr[3].t, payTo: x.arr[4].t)
+                              amount: x.arr[3].t, payTo: x.arr[4].t,
+                              chain: (if across: x.arr[5].t else: result.chain),
+                              asset: (if across: x.arr[6].t else: result.asset))
   let tv = e.fieldOf("transfers")
   if tv.kind == ckArray:
     for x in tv.arr:
@@ -330,6 +349,36 @@ proc settleParties*(su: SettleUp): seq[string] =
       if w notin result: result.add w
   result.sort()
 
+proc familyOfChain*(chain: string): string =
+  ## The split family whose shares a chain carries: Ethereum and Bitcoin publicly, the LEZ
+  ## privately (the private split).
+  if chain.startsWith("eip155:"): EvmSplitFamily
+  elif chain.startsWith("bip122:"): BtcSplitFamily
+  elif chain.startsWith("lez:"): LezSplitFamily
+  else: ""
+
+proc assetOk(family, asset: string): bool =
+  case family
+  of EvmSplitFamily: asset == "ETH" or isErc20Asset(asset)
+  of BtcSplitFamily: asset == "BTC"
+  else: false
+
+proc convertedAmount*(c: Cover, rates: seq[SettleRate], payChain, payAsset: string):
+    tuple[ok: bool, amount, why: string] =
+  ## What `c` is worth in the payment asset (§4.13): itself when it is the payment asset,
+  ## else amount × rate ÷ per at its asset's rate, rounded down — the debtor keeps the
+  ## remainder, under one base unit. Nothing when there is no rate, or it converts to nothing.
+  if not isCanonDec(c.amount): return (false, "", "a covered amount is a canonical decimal")
+  if c.chain == payChain and c.asset == payAsset: return (true, c.amount, "")
+  for r in rates:
+    if r.chain != c.chain or r.asset != c.asset: continue
+    if not isCanonDec(r.rate) or not isCanonDec(r.per) or r.per == "0":
+      return (false, "", "a rate is two canonical decimals, per above zero")
+    let v = u256(c.amount) * u256(r.rate) div u256(r.per)
+    if v == 0.u256: return (false, "", c.amount & " " & c.asset & " converts to nothing at " & r.rate & "/" & r.per)
+    return (true, $v, "")
+  (false, "", "no rate for " & c.asset & " on " & c.chain)
+
 proc settleRefusal(d: SplitDriver, su: SettleUp): string =
   ## Why `su` is not a settle-up this driver will sign or pay ("" = it is one).
   if d.family == LezSplitFamily:
@@ -342,18 +391,40 @@ proc settleRefusal(d: SplitDriver, su: SettleUp): string =
   # one part is enough: a settle-up of one split's unpaid shares is how a split past its
   # expiry is renewed (exo-a90.15); the composer still nets two or more (nothing-to-net)
   if su.covers.len < 1: return "a settle-up covers at least one part"
-  var balance = initTable[string, UInt256]()     # owed to them
-  var owes = initTable[string, UInt256]()        # they owe
+  # across assets (§4.13): one rate for each other chain and asset the covers use, in one order
+  let across = su.rates.len > 0
+  for i, r in su.rates:
+    let fam = familyOfChain(r.chain)
+    if fam == LezSplitFamily:
+      return "the private split is never netted: its shares are told apart by amount, which netting would erase"
+    if fam.len == 0 or not assetOk(fam, r.asset): return "a rate names a public split's chain and asset: " & r.asset & " on " & r.chain
+    if r.chain == su.chain and r.asset == su.asset: return "the payment asset needs no rate"
+    if i > 0 and (r.chain, r.asset) <= (su.rates[i-1].chain, su.rates[i-1].asset):
+      return "rates are sorted by chain then asset, each once"
+    if not isCanonDec(r.rate) or r.rate == "0" or not isCanonDec(r.per) or r.per == "0":
+      return "a rate is two canonical decimals above zero"
+    if r.source.strip().len == 0 or r.source.len > MaxQuoteSource:
+      return "a rate names its source, in at most " & $MaxQuoteSource & " bytes"
+    if not isCanonDec(r.at): return "a rate names when it was read, in unix seconds"
+    if not su.covers.anyIt(it.chain == r.chain and it.asset == r.asset):
+      return "a rate for " & r.asset & " on " & r.chain & ", which no cover is in"
+  var balance = initTable[string, UInt256]()     # owed to them, in the payment asset
+  var owes = initTable[string, UInt256]()        # they owe, in the payment asset
   for i, c in su.covers:
     if not (c.intent.startsWith("0x") and isLowerHex(c.intent[2 .. ^1])): return "a covered intent id is 0x + lowercase hex"
     if not isRoomIdentity(c.debtor) or not isRoomIdentity(c.creditor): return "a cover names room identities"
     if c.debtor == c.creditor: return "a cover's debtor is never its creditor"
     if not isCanonDec(c.amount) or c.amount == "0": return "a covered amount is a canonical decimal above zero"
-    if not payToOk(d.family, d.chain, c.payTo): return "a cover's payTo is not a " & d.family & " address: " & c.payTo
+    let fam = familyOfChain(c.chain)
+    if fam == LezSplitFamily:
+      return "the private split is never netted: its shares are told apart by amount, which netting would erase"
+    if not payToOk(fam, c.chain, c.payTo): return "a cover's payTo is not a " & fam & " address: " & c.payTo
     if i > 0 and (c.intent, c.debtor) <= (su.covers[i-1].intent, su.covers[i-1].debtor):
       return "covers are sorted by intent then debtor, each part once"
-    balance[c.creditor] = balance.getOrDefault(c.creditor) + u256(c.amount)
-    owes[c.debtor] = owes.getOrDefault(c.debtor) + u256(c.amount)
+    let conv = convertedAmount(c, su.rates, su.chain, su.asset)
+    if not conv.ok: return conv.why
+    balance[c.creditor] = balance.getOrDefault(c.creditor) + u256(conv.amount)
+    owes[c.debtor] = owes.getOrDefault(c.debtor) + u256(conv.amount)
   var paid = initTable[string, UInt256]()
   var got = initTable[string, UInt256]()
   let parties = settleParties(su)
@@ -363,9 +434,18 @@ proc settleRefusal(d: SplitDriver, su: SettleUp): string =
     if not isCanonDec(t.amount) or t.amount == "0": return "a transfer amount is a canonical decimal above zero"
     if i > 0 and (t.frm, t.to) <= (su.transfers[i-1].frm, su.transfers[i-1].to):
       return "transfers are sorted by from then to, each pair once"
-    # a recipient is paid only where one of the splits owing them agreed
-    if not su.covers.anyIt(it.creditor == t.to and it.payTo == t.payTo):
-      return "a transfer pays " & t.payTo & ", not an address a split owing its recipient agreed"
+    # a recipient is paid only where one of the splits owing them ON THIS CHAIN agreed; across
+    # chains, one owed only elsewhere at an address of this chain they vouch for by agreeing
+    # (settleAgreeRefusal, §4.13) — in one asset every cover is on this chain
+    let owedHere = su.covers.filterIt(it.creditor == t.to and it.chain == su.chain)
+    if owedHere.len > 0 or not across:
+      if not owedHere.anyIt(it.payTo == t.payTo):
+        return "a transfer pays " & t.payTo & ", not an address a split owing its recipient agreed"
+    else:
+      if not su.covers.anyIt(it.creditor == t.to): return "a transfer pays someone no covered split owes"
+      if not payToOk(d.family, d.chain, t.payTo):
+        return "a recipient owed only on other chains is paid at a " & d.family & " address of " & d.chain &
+               " they vouch for, not " & t.payTo
     paid[t.frm] = paid.getOrDefault(t.frm) + u256(t.amount)
     got[t.to] = got.getOrDefault(t.to) + u256(t.amount)
   # conservation: each member's net across the transfers is their net across the covers
@@ -411,10 +491,10 @@ proc settlePartiesOf(mat: seq[byte]): seq[string] =
   ## decoded from the bytes this driver produced; none for anything else.
   try:
     let v = decode(mat)
-    if v.kind != ckArray or v.arr.len != 7 or v.arr[0].kind != ckText or v.arr[0].t != SettleUpDomain: return
+    if v.kind != ckArray or v.arr.len notin [7, 8] or v.arr[0].kind != ckText or v.arr[0].t != SettleUpDomain: return
     if v.arr[4].kind != ckArray: return
     for c in v.arr[4].arr:
-      if c.kind == ckArray and c.arr.len == 5:
+      if c.kind == ckArray and c.arr.len in [5, 7]:
         for i in [1, 2]:
           if c.arr[i].kind == ckText and c.arr[i].t notin result: result.add c.arr[i].t
   except CatchableError: discard
@@ -473,6 +553,21 @@ method mayContribute*(d: SplitDriver, e: Effect, names: seq[string]): Eligibilit
     if partName(who)[3 .. ^1] in mine: return elYes
   elNo
 
+proc settleAgreeRefusal*(e: Effect, me: string, held: seq[string]): string =
+  ## Before THIS member agrees to a settle-up across chains (§4.13): "" unless it pays them
+  ## at an address no split owing them on its chain agreed — one they vouch for — and that
+  ## address is not one their client holds (`held`, case-blind): then "payto-not-mine". Not
+  ## a settle-up, or paid where a split agreed: not this check.
+  try:
+    let su = settleUpOf(e)
+    let who = me.toLowerAscii().replace("0x", "")
+    for t in su.transfers:
+      if t.to != who: continue
+      if su.covers.anyIt(it.creditor == who and it.chain == su.chain and it.payTo == t.payTo): continue
+      if not held.anyIt(it.toLowerAscii() == t.payTo.toLowerAscii()): return "payto-not-mine"
+    ""
+  except ValueError: ""
+
 proc creditorAgreeRefusal*(e: Effect, me: string, held: seq[string]): string =
   ## Before THIS member agrees to a split: "" unless they are its creditor and payTo is not an
   ## address their client holds (`held`, compared case-blind) — then "payto-not-mine". The
@@ -492,16 +587,23 @@ method canonicalize*(d: SplitDriver, e: Effect): Materialization =
   ## sentinel no agreement can name.
   if e.isSettleUp:
     # dCBOR [domain, schema, chain, asset, [[intent, debtor, creditor, amount, payTo]…],
-    #        [[from, to, payTo, amount]…], memo] — its own domain, never mistaken for a split
+    #        [[from, to, payTo, amount]…], memo] — its own domain, never mistaken for a split.
+    # Across assets (§4.13) each cover adds its own chain and asset, and the rates are an
+    # eighth element [[chain, asset, rate, per, source, at]…]; in one asset, unchanged.
     let (sok, su, swhy) = d.validSettle(e)
     if not sok:
       return Materialization(bytes: encode(cbArray(@[cbText(SettleUpDomain), cbText("invalid: " & swhy)])))
+    let across = su.rates.len > 0
     return Materialization(bytes: encode(cbArray(@[
       cbText(SettleUpDomain), cbText(SettleUpSchema), cbText(d.chain), cbText(su.asset),
       cbArray(su.covers.mapIt(cbArray(@[cbText(it.intent), cbText(it.debtor), cbText(it.creditor),
-                                        cbText(it.amount), cbText(it.payTo)]))),
+                                        cbText(it.amount), cbText(it.payTo)] &
+                                      (if across: @[cbText(it.chain), cbText(it.asset)] else: @[])))),
       cbArray(su.transfers.mapIt(cbArray(@[cbText(it.frm), cbText(it.to), cbText(it.payTo), cbText(it.amount)]))),
-      cbText(su.memo)])))
+      cbText(su.memo)] &
+      (if across: @[cbArray(su.rates.mapIt(cbArray(@[cbText(it.chain), cbText(it.asset), cbText(it.rate),
+                                                     cbText(it.per), cbText(it.source), cbText(it.at)])))]
+       else: @[]))))
   let (ok, sp, why) = d.validSplit(e)
   if not ok:
     return Materialization(bytes: encode(cbArray(@[cbText(SplitDomain), cbText("invalid: " & why)])))
@@ -615,7 +717,8 @@ method covers*(d: SplitDriver, e: Effect): seq[CoverClaim] =
   let (ok, su, _) = d.validSettle(e)
   if not ok: return
   for c in su.covers:
-    result.add CoverClaim(intent: c.intent, part: partName(c.debtor), chain: d.chain, asset: su.asset,
+    # each cover on its own chain, in its own asset (§4.13): the core checks it against its split
+    result.add CoverClaim(intent: c.intent, part: partName(c.debtor), chain: c.chain, asset: c.asset,
                           amount: c.amount, payTo: c.payTo, confirmer: c.creditor)
 
 # ── profile + manifest ─────────────────────────────────────────────────────────
@@ -719,20 +822,34 @@ proc splitEffectJson*(chain, asset, total, creditor, payTo: string, shares: seq[
   $j
 
 # ── composing a settle-up (exo-3c6) ────────────────────────────────────────────
-proc netTransfers*(covers: seq[Cover]): seq[NetTransfer] =
+proc netTransfers*(covers: seq[Cover], rates: seq[SettleRate] = @[], payChain = "", payAsset = "",
+                   vouched = initTable[string, string]()): seq[NetTransfer] =
   ## The net payments that settle `covers`: each member's balance — what they are owed less
   ## what they owe — conserved, the largest net debtor paying the largest net creditor until
   ## one of them is square (ties by identity, so every member computes the same). Each
   ## recipient is paid at the payTo of the first covered split (by intent id) that owes
   ## them. Debts that cancel exactly need no payment at all.
+  ##
+  ## Across assets (§4.13, `payChain` given): each cover counts at its value in the payment
+  ## asset (convertedAmount), a recipient is paid where the first covered split ON THE
+  ## PAYMENT CHAIN owing them agreed, and one owed only elsewhere at the address in
+  ## `vouched` ("" when none is known: the composer refuses it). A cover that does not
+  ## convert nets nothing at all. With no `payChain`, every cover is in one asset.
   var credit, debit = initTable[string, UInt256]()
   var payTo = initTable[string, string]()
   var sorted = covers
   sorted.sort(proc (x, y: Cover): int = cmp((x.intent, x.debtor), (y.intent, y.debtor)))
   for c in sorted:
-    credit[c.creditor] = credit.getOrDefault(c.creditor) + u256(c.amount)
-    debit[c.debtor] = debit.getOrDefault(c.debtor) + u256(c.amount)
-    if c.creditor notin payTo: payTo[c.creditor] = c.payTo
+    var amount = u256(c.amount)
+    if payChain.len > 0:
+      let conv = convertedAmount(c, rates, payChain, payAsset)
+      if not conv.ok: return @[]
+      amount = u256(conv.amount)
+    credit[c.creditor] = credit.getOrDefault(c.creditor) + amount
+    debit[c.debtor] = debit.getOrDefault(c.debtor) + amount
+    if c.creditor notin payTo and (payChain.len == 0 or c.chain == payChain): payTo[c.creditor] = c.payTo
+  for w in credit.keys:
+    if w notin payTo: payTo[w] = vouched.getOrDefault(w, "")
   var creditors, debtors: seq[(string, UInt256)]
   var who: seq[string]
   for w in toSeq(credit.keys) & toSeq(debit.keys):
@@ -756,16 +873,31 @@ proc netTransfers*(covers: seq[Cover]): seq[NetTransfer] =
   result.sort(proc (x, y: NetTransfer): int = cmp((x.frm, x.to), (y.frm, y.to)))
 
 proc settleUpEffectJson*(chain, asset: string, covers: seq[Cover], transfers: seq[NetTransfer],
-                         memo: string): string =
+                         memo: string, rates: seq[SettleRate] = @[]): string =
   ## The settle-up a composer proposes: covers sorted by intent then debtor, transfers by
   ## from then to — one spelling, so the same netting has one intent id on every host.
+  ## Across assets (§4.13, `rates` given) each cover names its own chain and asset, the rates
+  ## are sorted by chain then asset, and they are declared an external read (invariant 10):
+  ## the proposer records the read before anyone's agreement to them can count.
+  let across = rates.len > 0
   var cs = covers
   cs.sort(proc (x, y: Cover): int = cmp((x.intent, x.debtor), (y.intent, y.debtor)))
   var ts = transfers
   ts.sort(proc (x, y: NetTransfer): int = cmp((x.frm, x.to), (y.frm, y.to)))
   var ca = newJArray()
   for c in cs:
-    ca.add %*{"intent": c.intent, "debtor": c.debtor, "creditor": c.creditor, "amount": c.amount, "payTo": c.payTo}
+    var o = %*{"intent": c.intent, "debtor": c.debtor, "creditor": c.creditor, "amount": c.amount, "payTo": c.payTo}
+    if across: (o["chain"] = %c.chain; o["asset"] = %c.asset)
+    ca.add o
   var ta = newJArray()
   for t in ts: ta.add %*{"from": t.frm, "to": t.to, "payTo": t.payTo, "amount": t.amount}
-  $(%*{"effect": "settle-up", "chain": chain, "asset": asset, "covers": ca, "transfers": ta, "memo": memo})
+  var j = %*{"effect": "settle-up", "chain": chain, "asset": asset, "covers": ca, "transfers": ta, "memo": memo}
+  if across:
+    var rs = rates
+    rs.sort(proc (x, y: SettleRate): int = cmp((x.chain, x.asset), (y.chain, y.asset)))
+    var ra = newJArray()
+    for r in rs:
+      ra.add %*{"chain": r.chain, "asset": r.asset, "rate": r.rate, "per": r.per, "source": r.source, "at": r.at}
+    j["rates"] = ra
+    j["sources"] = %*{"rates": "read"}
+  $j

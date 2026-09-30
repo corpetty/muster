@@ -175,10 +175,17 @@ proc effectFromJson*(effectJson: string): Effect =
         # split says — and the net transfers that settle them instead. Carried as proposed;
         # the split driver refuses anything not in its one spelling, and the core checks each
         # cover against its split (coordination/covers) before anyone agrees.
-        var cs, ts: seq[CborValue]
+        # Across assets (§4.13) a cover also names its own chain and asset, and the rates ride
+        # beside them; the driver requires both or neither.
+        var cs, ts, rs: seq[CborValue]
         for c in j{"covers"}.getElems():
-          cs.add cbArray(@[cbText(c{"intent"}.getStr()), cbText(c{"debtor"}.getStr()), cbText(c{"creditor"}.getStr()),
-                           cbText(c{"amount"}.getStr()), cbText(c{"payTo"}.getStr())])
+          var cv = @[cbText(c{"intent"}.getStr()), cbText(c{"debtor"}.getStr()), cbText(c{"creditor"}.getStr()),
+                     cbText(c{"amount"}.getStr()), cbText(c{"payTo"}.getStr())]
+          if c.hasKey("chain") or c.hasKey("asset"): cv.add @[cbText(c{"chain"}.getStr()), cbText(c{"asset"}.getStr())]
+          cs.add cbArray(cv)
+        for r in j{"rates"}.getElems():
+          rs.add cbArray(@[cbText(r{"chain"}.getStr()), cbText(r{"asset"}.getStr()), cbText(r{"rate"}.getStr()),
+                           cbText(r{"per"}.getStr()), cbText(r{"source"}.getStr()), cbText(r{"at"}.getStr())])
         for t in j{"transfers"}.getElems():
           ts.add cbArray(@[cbText(t{"from"}.getStr()), cbText(t{"to"}.getStr()), cbText(t{"payTo"}.getStr()),
                            cbText(t{"amount"}.getStr())])
@@ -187,6 +194,7 @@ proc effectFromJson*(effectJson: string): Effect =
         fields.add ("covers", cbArray(cs))
         fields.add ("transfers", cbArray(ts))
         fields.add ("memo", cbText(j{"memo"}.getStr()))
+        if j.hasKey("rates"): fields.add ("rates", cbArray(rs))
         return Effect(schemaId: "muster.effect.settle-up.v1", fields: fields)
       of "safe-tx":
         # A full Safe transaction (exo-a50.1.4): a transfer's to / value / nonce plus
