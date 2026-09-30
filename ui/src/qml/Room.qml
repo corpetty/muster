@@ -1056,6 +1056,8 @@ Item {
                                 if (room.backend && msg.liveIntent)
                                     room.backend.confirmPart(String(msg.liveIntent.id || ""), part, "");
                             }
+                            onRenewSplit: if (room.backend && msg.liveIntent)
+                                              room.backend.renewSplit(String(msg.liveIntent.id || ""))
                             splitNote: (room.splitResult && room.splitResult.id && msg.liveIntent
                                         && String(room.splitResult.id) === String(msg.liveIntent.id || "")
                                         && room.splitResult.op !== "propose")
@@ -1075,6 +1077,8 @@ Item {
                                                                    Number(((msg.liveIntent && msg.liveIntent.split) || {}).decimals || 18)))
                                                 .arg(String(((msg.liveIntent && msg.liveIntent.split) || {}).asset || "ETH"))
                                                 .arg(String(room.splitResult.pending || "").slice(0, 12) + "…"))
+                                          : room.splitResult.op === "renew"
+                                          ? qsTr("Renewal proposed — it appears below; everyone who still owes a share agrees to it again.")
                                           : qsTr("Marked received."))
                                        : ""
                             onOpenSettings: room.settingsRequested()
@@ -2461,6 +2465,8 @@ Item {
                              : r.op === "confirm" ? qsTr("The share was not confirmed")
                              : r.op === "settle-up" ? qsTr("Nothing was settled up")
                              : qsTr("The split was not proposed");
+                    if (String(r.error || "") === "expired-duplicate")
+                        return qsTr("⚠ %1 — an identical split expired in this room. Change its note to propose it again, or renew the old one's unpaid shares from its card.").arg(what);
                     return qsTr("⚠ %1 — %2%3").arg(what).arg(String(r.error || ""))
                                .arg(r.detail ? ": " + String(r.detail) : "");
                 }

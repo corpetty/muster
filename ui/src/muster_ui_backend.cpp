@@ -673,6 +673,17 @@ void MusterUiBackend::settlePart(const QString &intentId)
     loadIntents();
 }
 
+void MusterUiBackend::renewSplit(const QString &intentId)
+{
+    // coordinate_renew_split: a split past its expiry, its unpaid shares renewed as a
+    // settle-up of that one split — everyone they name agrees again (exo-a90.15).
+    const QString r = modules().muster_module.coordinate_renew_split(intentId);
+    qInfo() << "[muster_ui] coordinate_renew_split" << intentId << "->" << r;
+    setSplitJson(splitOutcome("renew", intentId, r));
+    loadIntents();
+    loadMessages();
+}
+
 void MusterUiBackend::lookupToken(const QString &chain, const QString &token)
 {
     // coordinate_token_info: what the token says about itself, through your own RPC —

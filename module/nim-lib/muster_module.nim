@@ -1369,6 +1369,28 @@ proc musterCoordinateProposeSettleUpImpl(chain, asset, memo: string): string =
                              int64(epochTime()), gMsgSeq, account = chain, ttlSec = ttl)
   if id.startsWith("0x"): id else: $(%*{"error": id})
 
+proc musterCoordinateRenewSplitImpl(intentId: string): string =
+  ## Renew a split past its expiry (exo-a90.15): a settle-up of its unpaid shares
+  ## (settle_up.renewalOf), proposed under the split's own policy.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  let events = gSession.roomEvents()
+  let (effect, why, _) = renewalOf(events, driverFor, intentId, uint64(epochTime()))
+  if why.len > 0: return $(%*{"error": why})
+  let policy = intentPolicyOf(events, intentId)
+  var ttl = DefaultIntentTtl
+  try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
+  except ValueError: discard
+  inc gMsgSeq
+  let id = liveProposeIntent(gSession, moduleKeystore(), driverFor, policy, effect,
+                             int64(epochTime()), gMsgSeq, account = splitPolicy(policy).account, ttlSec = ttl)
+  if id.startsWith("0x"): id else: $(%*{"error": id})
+
+proc musterCoordinateRenewSplit(intentId: string): string =
+  try: result = musterCoordinateRenewSplitImpl(intentId)
+  except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
+  if gLpDebug: stderr.writeLine("MUSTER-LP split renew " & intentId & " " & result)
+
 proc musterCoordinateProposeSettleUp(chain, asset, memo: string): string =
   try: result = musterCoordinateProposeSettleUpImpl(chain, asset, memo)
   except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
@@ -1888,7 +1910,12 @@ proc musterCoordinateIntents(): string =
                         "payToMine": sp.creditor == myEncHex and
                                      creditorAgreeRefusal(effectFromJson(v.effectJson), myEncHex,
                                                           myPayTos(prof.family)).len == 0,
-                        "creditorShare": subDec(sp.total, sum)}
+                        "creditorShare": subDec(sp.total, sum),
+                        # past its expiry (exo-a90.15): no share of it is paid any more; while a
+                        # share is unpaid and not being settled, it can be renewed (renewalOf)
+                        "expired": (let c = intentContext(events, v.id); not c.isPlaceholder and c.expired(nowS)),
+                        "renewable": (let c = intentContext(events, v.id); not c.isPlaceholder and c.expired(nowS)) and
+                                     renewalOf(events, driverFor, v.id, nowS).why.len == 0}
         # a bill in fiat (exo-3a4): the quote the room is trusting — its currency, amount,
         # rate, source and time — for the card to name before anyone agrees
         if sp.quote.quoted:
