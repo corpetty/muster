@@ -9,7 +9,9 @@
 ##     page with no cursor — each next page asks for the cursor the last one gave, of the
 ##     SAME store peer (a cursor is that node's), and never two pages in flight at once;
 ##   * only then does the topic switch to the sliding window, round-robin over the peers;
-##   * a lost or failed page is asked again from the same cursor once it times out;
+##   * a lost or failed page is asked again from the same cursor once it times out — of
+##     another peer while there is no cursor yet, and from the start on another peer once
+##     the paging peer has failed MaxPageRetries times (a dead store node never stalls it);
 ##   * a store that keeps returning cursors is cut off after MaxDeepPages;
 ##   * each topic pages on its own.
 
@@ -98,5 +100,33 @@ block:
     doAssert pages <= MaxDeepPages, "cut off"
   doAssert pages == MaxDeepPages and d.caughtUp(Room)
   echo "7. a store that never stops paging is cut off after ", MaxDeepPages, " pages OK"
+
+# ── 8. a dead store node never stalls the history ───────────────────────────────────
+block:
+  var d = newStoreCatchup(Peers)
+  var t = 0'i64
+  let first = d.nextQuery(Room, t, Lookback)
+  t += PageTimeoutMs + 1
+  let again = d.nextQuery(Room, t, Lookback)
+  doAssert again.deep and again.peer != first.peer, "no cursor yet: the first page is asked of another peer"
+  d.onResponse(page(again.req, "0xc1"))
+  t += 1000
+  let paging = d.nextQuery(Room, t, Lookback)
+  doAssert paging.req["paginationCursor"].getStr() == "0xc1" and paging.peer == again.peer
+  var last = paging
+  for i in 1 ..< MaxPageRetries:
+    t += PageTimeoutMs + 1
+    last = d.nextQuery(Room, t, Lookback)
+    doAssert last.peer == again.peer and last.req["paginationCursor"].getStr() == "0xc1", "the cursor's node, retried"
+  t += PageTimeoutMs + 1
+  let restart = d.nextQuery(Room, t, Lookback)
+  doAssert restart.deep and not restart.req.hasKey("paginationCursor") and restart.peer != again.peer,
+           "after " & $MaxPageRetries & " failures: from the start, on another peer"
+  # a failed answer (not 200) counts as a failure too, and is asked again
+  d.onResponse(%*{"requestId": restart.req["requestId"].getStr(), "statusCode": 503, "statusDesc": "busy"})
+  t += 1000
+  let retry = d.nextQuery(Room, t, Lookback)
+  doAssert retry.fire and retry.deep, "a failed page is asked again next tick"
+  echo "8. a dead store node never stalls the history OK"
 
 echo "store_catchup_test: all OK"
