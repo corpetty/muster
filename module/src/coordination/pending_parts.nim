@@ -11,9 +11,12 @@
 ## chain says it can never land (the seam's partGone). The book is saved after every change
 ## and read back on start, so a restart forgets nothing.
 
-import std/[json, sequtils]
+import std/[json, sequtils, strutils]
 import ../intents/materialization   # PartTransfer
-import ./parts                      # PendingPart
+import ../crypto/keystore
+import ./intent_events              # DriverFor
+import ./session
+import ./parts                      # PendingPart, liveSettlePartComplete
 
 const UnresolvedCheckS* = 30.0
   ## how often an unresolved payment is asked about again (a fresh one: every tick)
@@ -76,6 +79,38 @@ proc record*(b: var PendingBook, i: int, r: CheckResult, nowS: float): string =
     else:
       if e.unresolved: b.entries[i].nextCheckS = nowS + UnresolvedCheckS
       ""
+
+proc pumpBook*(b: var PendingBook, topic: string, s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
+               seamOf: proc (pp: PendingPart): PartSeam, nowS: float,
+               note: proc (msg: string) = nil): seq[tuple[pp: PendingPart, outcome, said: string]] =
+  ## One pass over the payments of `topic`'s room that are due (the hosted pump runs it on
+  ## the intents tick): each is asked about through its seam — landed (its report is
+  ## published), failed on chain, or, once past its deadline, gone by the chain's word — and
+  ## the book records the answer. Returns what left the book or turned unresolved, with what
+  ## the chain said. `seamOf` may raise (e.g. right after a restart, before the room's log
+  ## names the intent's policy): that payment simply waits.
+  let due = b.due(nowS)
+  for k in countdown(due.high, 0):     # highest index first: a settled entry leaves the book
+    let i = due[k]
+    let e = b.entries[i]
+    if e.topic != topic: continue      # a payment completes only in its own room
+    var res = crPending
+    var said = ""
+    try:
+      let seam = seamOf(e.pp)
+      let r = liveSettlePartComplete(s, ks, driverFor, seam, e.pp)
+      if not r.startsWith("unconfirmed"): (res = crLanded; said = r)
+      elif "failed on" in r: (res = crFailed; said = r)
+      else:
+        if note != nil: note(e.pp.intentId & " " & e.pp.tx & ": " & r)
+        if e.unresolved or nowS - e.startedS > e.deadlineS:
+          # past its deadline it is not dropped: only the chain's word releases it
+          let g = seam.partGone(e.pp.transfer, e.pp)
+          if g.gone: (res = crGone; said = g.detail)
+    except CatchableError as ex:       # an unreachable node or RPC: ask again later
+      if note != nil: note(e.pp.intentId & " not checked: " & ex.msg)
+    let outcome = b.record(i, res, nowS)
+    if outcome.len > 0: result.add (e.pp, outcome, said)
 
 # ── the saved form ───────────────────────────────────────────────────────────────
 proc toJson*(b: PendingBook): JsonNode =

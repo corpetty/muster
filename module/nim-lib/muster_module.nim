@@ -1147,36 +1147,18 @@ proc splitPump() =
   let ks = moduleKeystore()
   loadSplitBook()
   let now = epochTime()
-  let due = gSplitBook.due(now)
+  let seamOf = proc (pp: PendingPart): PartSeam = seamOfPending(gSession, pp)
+  var note: proc (msg: string) = nil
+  if gLpDebug: note = proc (msg: string) = stderr.writeLine("MUSTER-LP split pending " & msg)
   var changed = false
-  for k in countdown(due.high, 0):     # highest index first: a settled entry leaves the book
-    let i = due[k]
-    let e = gSplitBook.entries[i]
-    if e.topic != gTopic: continue     # a payment completes only in its own room
-    var res = crPending
-    var said = ""
-    try:
-      let seam = seamOfPending(gSession, e.pp)
-      let r = liveSettlePartComplete(gSession, ks, driverFor, seam, e.pp)
-      if gLpDebug and r.startsWith("unconfirmed"):
-        stderr.writeLine("MUSTER-LP split pending " & e.pp.intentId & " " & e.pp.tx & ": " & r)
-      if not r.startsWith("unconfirmed"): (res = crLanded; said = r)
-      elif "failed on" in r: (res = crFailed; said = r)
-      elif e.unresolved or now - e.startedS > e.deadlineS:
-        # past its deadline it is not dropped: only the chain's word releases it
-        let g = seam.partGone(e.pp.transfer, e.pp)
-        if g.gone: (res = crGone; said = g.detail)
-    except CatchableError as ex:       # an unreachable RPC or node: ask again later
-      if gLpDebug: stderr.writeLine("MUSTER-LP split pending " & e.pp.intentId & " not checked: " & ex.msg)
-    let outcome = gSplitBook.record(i, res, now)
-    if outcome.len == 0: continue
+  for (pp, outcome, said) in gSplitBook.pumpBook(gTopic, gSession, ks, driverFor, seamOf, now, note):
     changed = true
-    let seam = gSplitSeams.getOrDefault(e.pp.intentId, PartSeam())
+    let seam = gSplitSeams.getOrDefault(pp.intentId, PartSeam())
     let full = (if said.len > 0: said & " — " & outcome else: outcome)
-    if gLpDebug: stderr.writeLine("MUSTER-LP split reported " & e.pp.intentId & " " & full &
-                                  " tx=" & seam.landedRef(e.pp.transfer, e.pp.tx))
-    gSplitRecent.add %*{"intentId": e.pp.intentId, "part": e.pp.part,
-                        "tx": seam.landedRef(e.pp.transfer, e.pp.tx),
+    if gLpDebug: stderr.writeLine("MUSTER-LP split reported " & pp.intentId & " " & full &
+                                  " tx=" & seam.landedRef(pp.transfer, pp.tx))
+    gSplitRecent.add %*{"intentId": pp.intentId, "part": pp.part,
+                        "tx": seam.landedRef(pp.transfer, pp.tx),
                         "outcome": full, "at": int64(now)}
     if gSplitRecent.len > 20: gSplitRecent.delete(0)
   if changed: saveSplitBook()
