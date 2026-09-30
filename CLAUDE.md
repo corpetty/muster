@@ -98,6 +98,8 @@ make build                                      # build the standalone runner in
 make run                                        # launch the real UI standalone (logos-standalone-app), seeded as anvil Safe owner 0
 make run-fleet PEER=alice                       # a peer on the live Logos fleet; PEER=bob in a second terminal (auto-seeded owners 0/1)
 make clean-peer PEER=alice                      # wipe one peer's identity + wallet (seeding applies only on a fresh identity)
+scripts/try-infra.sh up                         # every local chain the hands-on tour uses, own ports: anvil :8555 (the real Safe + the MTD token), bitcoind regtest :18453 (payers + 2-of-3 multisigs funded, a block every 10 s); addresses in .run/try/env; also status | env | down | btc … | eth …
+scripts/try-peer.sh alice --fresh               # a peer seeded for that infra on the live fleet (bob/carol in more terminals; --lez for the real LEZ wallet) — the tour: docs/runbooks/client-tour.md
 make help                                       # every target
 module/tests/run-suite.sh                       # every unit test + invariant probe, in parallel; the Nim closure at metadata.json's pins
 module/tests/run-suite.sh e2e <name>            # one chain-bound test (TEST_ARGS= for its args); bring its chain up first — module/tests/README.md

@@ -357,6 +357,13 @@
       ],
       "unverified": [
         "A settle still pending after coordinate_submit's ~4 s poll is re-watched by the module's pump (every tick, at most every 2 s, for up to 10 minutes) and final is published when the receipt lands; no test drives that path — from reading nim-lib/muster_module.nim."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "4-a-safe-payment-settled-on-chain",
+          "what": "Part 4: a Safe payment, settled on chain"
+        }
       ]
     },
     {

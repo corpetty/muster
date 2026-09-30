@@ -228,6 +228,13 @@
         "The token program id comes from the sequencer (getProgramIds) and is not recorded as an external read; only the nonce is.",
         "The card now recognizes the lez-call effect (effectSchema) and offers Approve, but it has not been clicked through on screen against a live sequencer.",
         "The ready box's Settle on-chain for this family is wired from the profile's settlement, but has not been clicked through on screen."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "8-lez-frost",
+          "what": "Part 8: LEZ FROST"
+        }
       ]
     },
     {
@@ -554,6 +561,13 @@
         "The hosted checks on t, n and the id, and 'not-a-participant' for a member who joins after the first n, are from reading nim-lib/muster_module.nim and coordination/aggregate.nim; no test covers them.",
         "A disclosure whose account id does not derive from its recovery data is refused by lezFrostAccountOfDisclosure (drivers/lez_frost.nim); only the positive derivation is tested (lez_frost_room_e2e). The Bitcoin twin's refusal is tested (btc_frost_driver_test).",
         "The ceremony's step-by-step checks (joins, step messages, no secret in the log, the room as coordinator) are tested on a regtest ceremony (frost_ceremony_room_test); a lez: ceremony runs the same code (coordination/aggregate.nim) with a different final disclosure, and is tested end to end for its outcome (lez_frost_room_e2e step 1)."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "8-lez-frost",
+          "what": "Part 8: LEZ FROST"
+        }
       ]
     }
   ]

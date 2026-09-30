@@ -385,6 +385,13 @@
         "The card's amount → payee line for a Bitcoin spend comes from the module's effect summary (the payment outputs, change excluded; card_words_test); it has not been seen on screen.",
         "coordinate_submit polls the node for about four seconds; if the spend is not final by then it returns pending, and nothing later publishes the final event for a Bitcoin intent (only LEZ settles are re-watched by the pump). From reading nim-lib/muster_module.nim, not a test.",
         "The ready box's Settle on-chain for this family is wired from the profile's settlement, but has not been clicked through on screen."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "5a-a-multisig-with-a-signer-outside-muster",
+          "what": "Part 5a: a Bitcoin multisig, with a signer outside muster"
+        }
       ]
     }
   ]

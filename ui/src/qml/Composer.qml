@@ -317,6 +317,8 @@ Item {
                     Layout.fillWidth: true
                     text: composer.pickedPolicy === "safe"
                           ? qsTr("This settles on a shared Safe — signed off by the room, on-chain. You can change how the room approves once you're in it.")
+                          : String(composer.pickedPolicy).endsWith("-split")
+                          ? qsTr("Each person pays their own share from their own wallet, on the chain; the room holds only the agreement. Once you're in it, pick where it settles: Ethereum, Bitcoin, or privately on the LEZ.")
                           : qsTr("This is a group endorsement — the room signs off, nothing touches a chain. You can change how the room approves once you're in it.")
                     color: Theme.palette.textTertiary
                     font.pixelSize: Theme.typography.secondaryText

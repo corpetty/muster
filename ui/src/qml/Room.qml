@@ -2376,7 +2376,10 @@ Item {
                         placeholderText: room.isBtcPolicy ? qsTr("amount (sat)")
                                        : room.isLezPolicy ? qsTr("amount (token units)") : qsTr("amount (wei)")
                         font.family: Theme.typography.mono
-                        validator: IntValidator { bottom: 0 }
+                        // Any run of digits: amounts are arbitrary precision (wei exceeds
+                        // 32 bits: 0.001 ETH is 10^15). IntValidator capped input at
+                        // 2147483647 (exo-4da).
+                        validator: RegularExpressionValidator { regularExpression: /[0-9]*/ }
                     }
 
                     // a Bitcoin payment's fee rate: sat/vB over an upper bound of its

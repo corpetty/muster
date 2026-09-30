@@ -227,6 +227,17 @@ proc effectJsonFor(kind, variant: string, d: Driver): string =
     splitEffectJson(BtcRegtest, "BTC", "900000", SplitCreditor,
                     p2wpkhAddress("bcrt", hexToBytes("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")),
                     evenShares("900000", SplitCreditor, @SplitDebtors), "Cabin")
+  of "btc-split/settle-up":
+    # settle up in Bitcoin: two agreed splits between the creditor and one debtor netted,
+    # in satoshis — 300000 owed one way, 200000 the other: one payment of 100000, to the
+    # wpkh address the split owing its recipient agreed
+    let s1 = "0x" & repeat("11", 8)
+    let s2 = "0x" & repeat("22", 8)
+    let credTo = p2wpkhAddress("bcrt", hexToBytes("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"))
+    let debtTo = p2wpkhAddress("bcrt", hexToBytes("02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"))
+    let covers = @[Cover(intent: s1, debtor: SplitDebtors[0], creditor: SplitCreditor, amount: "300000", payTo: credTo),
+                   Cover(intent: s2, debtor: SplitCreditor, creditor: SplitDebtors[0], amount: "200000", payTo: debtTo)]
+    settleUpEffectJson(BtcRegtest, "BTC", covers, netTransfers(covers), "Cabin")
   else: raise newException(ValueError, "no corpus effect for " & kind & "/" & variant)
 
 const Variants* = [
@@ -236,7 +247,7 @@ const Variants* = [
   ("invoke", "module-call"), ("invoke", "lez-transfer"),
   ("btc-p2wsh", "spend"), ("btc-tapscript", "spend"), ("btc-frost", "spend"),
   ("lez-multisig", "transfer"), ("lez-multisig", "vault-init"), ("lez-frost", "transfer"),
-  ("evm-split", "split"), ("evm-split", "settle-up"), ("lez-split", "split"), ("btc-split", "split")]
+  ("evm-split", "split"), ("evm-split", "settle-up"), ("lez-split", "split"), ("btc-split", "split"), ("btc-split", "settle-up")]
 
 # ── JSON ──────────────────────────────────────────────────────────────────────
 proc cborJson(v: CborValue): JsonNode =

@@ -936,81 +936,6 @@ void MusterUiBackend::onContextReady()
                     qInfo() << "[muster_ui] AUTOINVITE: no contact named" << who;
                 });
             }
-            // LEZ testnet self-test (exo-14d): MUSTER_AUTOLEZFUND funds THIS instance's
-            // private balance the way a person would on testnet, through the module's own
-            // wallet path — claim the pinata faucet into the public account
-            // (wallet_lez_setup; MUSTER_LEZ_PINATA, hex, defaults to the testnet pinata),
-            // then shield all that arrived to MY OWN key node (wallet_send takes the shield
-            // rail) and wait for that proof to land. The note lands at an account the scan
-            // discovers — which is what a debtor then pays from. Needs MUSTER_LEZ_REAL.
-            if (!qgetenv("MUSTER_AUTOLEZFUND").isEmpty()) {
-                s_lezFunding = true;
-                const QByteArray p = qgetenv("MUSTER_LEZ_PINATA");
-                const QString pinata = p.isEmpty()
-                    ? QStringLiteral("cafecafecafecafecafecafecafecafecafecafecafecafecafecafecafecafe")
-                    : QString::fromUtf8(p);
-                auto *ft = new QTimer(this);
-                ft->setInterval(5000);
-                connect(ft, &QTimer::timeout, this, [this, ft, pinata]() {
-                    static int stage = 0;
-                    static QString pub, keyNode;
-                    static qint64 retryAt = 0, claimedAt = 0;
-                    const qint64 now = QDateTime::currentSecsSinceEpoch();
-                    if (now < retryAt) return;
-                    const QString lez = QStringLiteral("lez:testnet");
-                    if (stage == 0) {                   // the accounts, and one faucet claim
-                        // The claim solves the faucet's proof of work on the module thread
-                        // (seconds, sometimes more than this call waits): an EMPTY answer is a
-                        // claim still in flight, not a refusal — only an error is retried.
-                        QString r;
-                        if (claimedAt == 0) {
-                            r = modules().muster_module.wallet_lez_setup(pinata);
-                            qInfo() << "[muster_ui] LEZFUND setup ->" << r;
-                            if (r.contains("\"error\"")) { retryAt = now + 30; return; }
-                            claimedAt = now;
-                        }
-                        for (const auto &v : QJsonDocument::fromJson(
-                                 modules().muster_module.wallet_accounts().toUtf8()).array()) {
-                            const QJsonObject a = v.toObject();
-                            if (a.value("chain").toString() != lez) continue;
-                            if (a.value("form").toString() == "public") pub = a.value("id").toString();
-                            if (a.value("form").toString() == "shielded") keyNode = a.value("share").toString();
-                        }
-                        qInfo() << "[muster_ui] LEZFUND public" << pub << "key node" << keyNode.left(24);
-                        if (pub.isEmpty() || keyNode.isEmpty()) return;
-                        stage = 1;
-                    } else if (stage == 1) {            // the claim lands when a block commits
-                        QString raw;
-                        for (const auto &v : QJsonDocument::fromJson(
-                                 modules().muster_module.wallet_balances().toUtf8()).array()) {
-                            const QJsonObject b = v.toObject();
-                            if (b.value("chain").toString() == lez && b.value("account").toString() == pub)
-                                raw = b.value("raw").toString();
-                        }
-                        qInfo() << "[muster_ui] LEZFUND public balance" << raw;
-                        if (raw.isEmpty() || raw == "0") {
-                            // a claim lands when a block commits; ten minutes of nothing is a lost one
-                            if (now - claimedAt > 600) { claimedAt = 0; stage = 0; }
-                            return;
-                        }
-                        const QString r = modules().muster_module.wallet_send(lez, pub, keyNode, QStringLiteral("LEZ"), raw);
-                        qInfo() << "[muster_ui] LEZFUND shield" << raw << "->" << r;
-                        if (r.contains("\"error\"")) { retryAt = now + 30; return; }
-                        stage = 2;
-                    } else if (stage == 2) {            // the shield proves in the background
-                        const QString f = modules().muster_module.wallet_finality(lez, QStringLiteral("pending"));
-                        qInfo() << "[muster_ui] LEZFUND shield finality ->" << f;
-                        if (f.contains("\"final\"")) {
-                            qInfo() << "[muster_ui] LEZFUND funded";
-                            s_lezFunding = false;
-                            ft->stop();
-                        } else if (f.contains("\"failed\"")) {
-                            stage = 1;                  // shield what is public again
-                        }
-                    }
-                });
-                ft->start();
-            }
             // Card self-test (exo-002.3): MUSTER_AUTOPROPOSE=<effect json> proposes it
             // once joined, then asks the module for that intent's readiness (the card's
             // "What this needs" round trip) and, with MUSTER_AUTODECLINE set, declines
@@ -1159,4 +1084,84 @@ void MusterUiBackend::onContextReady()
             t->start();
         });
     }
+
+    // LEZ testnet self-test (exo-14d): MUSTER_AUTOLEZFUND funds THIS instance's
+    // private balance the way a person would on testnet, through the module's own
+    // wallet path — claim the pinata faucet into the public account
+    // (wallet_lez_setup; MUSTER_LEZ_PINATA, hex, defaults to the testnet pinata),
+    // then shield all that arrived to MY OWN key node (wallet_send takes the shield
+    // rail) and wait for that proof to land. The note lands at an account the scan
+    // discovers — which is what a debtor then pays from. Needs MUSTER_LEZ_REAL.
+    // Runs on its own, not only inside an autojoin run, so a person trying the tour can
+    // fund a wallet the same way (scripts/try-peer.sh --lez-fund).
+    QTimer::singleShot(5000, this, [this]() {
+        if (!qgetenv("MUSTER_AUTOLEZFUND").isEmpty()) {
+            s_lezFunding = true;
+            const QByteArray p = qgetenv("MUSTER_LEZ_PINATA");
+            const QString pinata = p.isEmpty()
+                ? QStringLiteral("cafecafecafecafecafecafecafecafecafecafecafecafecafecafecafecafe")
+                : QString::fromUtf8(p);
+            auto *ft = new QTimer(this);
+            ft->setInterval(5000);
+            connect(ft, &QTimer::timeout, this, [this, ft, pinata]() {
+                static int stage = 0;
+                static QString pub, keyNode;
+                static qint64 retryAt = 0, claimedAt = 0;
+                const qint64 now = QDateTime::currentSecsSinceEpoch();
+                if (now < retryAt) return;
+                const QString lez = QStringLiteral("lez:testnet");
+                if (stage == 0) {                   // the accounts, and one faucet claim
+                    // The claim solves the faucet's proof of work on the module thread
+                    // (seconds, sometimes more than this call waits): an EMPTY answer is a
+                    // claim still in flight, not a refusal — only an error is retried.
+                    QString r;
+                    if (claimedAt == 0) {
+                        r = modules().muster_module.wallet_lez_setup(pinata);
+                        qInfo() << "[muster_ui] LEZFUND setup ->" << r;
+                        if (r.contains("\"error\"")) { retryAt = now + 30; return; }
+                        claimedAt = now;
+                    }
+                    for (const auto &v : QJsonDocument::fromJson(
+                             modules().muster_module.wallet_accounts().toUtf8()).array()) {
+                        const QJsonObject a = v.toObject();
+                        if (a.value("chain").toString() != lez) continue;
+                        if (a.value("form").toString() == "public") pub = a.value("id").toString();
+                        if (a.value("form").toString() == "shielded") keyNode = a.value("share").toString();
+                    }
+                    qInfo() << "[muster_ui] LEZFUND public" << pub << "key node" << keyNode.left(24);
+                    if (pub.isEmpty() || keyNode.isEmpty()) return;
+                    stage = 1;
+                } else if (stage == 1) {            // the claim lands when a block commits
+                    QString raw;
+                    for (const auto &v : QJsonDocument::fromJson(
+                             modules().muster_module.wallet_balances().toUtf8()).array()) {
+                        const QJsonObject b = v.toObject();
+                        if (b.value("chain").toString() == lez && b.value("account").toString() == pub)
+                            raw = b.value("raw").toString();
+                    }
+                    qInfo() << "[muster_ui] LEZFUND public balance" << raw;
+                    if (raw.isEmpty() || raw == "0") {
+                        // a claim lands when a block commits; ten minutes of nothing is a lost one
+                        if (now - claimedAt > 600) { claimedAt = 0; stage = 0; }
+                        return;
+                    }
+                    const QString r = modules().muster_module.wallet_send(lez, pub, keyNode, QStringLiteral("LEZ"), raw);
+                    qInfo() << "[muster_ui] LEZFUND shield" << raw << "->" << r;
+                    if (r.contains("\"error\"")) { retryAt = now + 30; return; }
+                    stage = 2;
+                } else if (stage == 2) {            // the shield proves in the background
+                    const QString f = modules().muster_module.wallet_finality(lez, QStringLiteral("pending"));
+                    qInfo() << "[muster_ui] LEZFUND shield finality ->" << f;
+                    if (f.contains("\"final\"")) {
+                        qInfo() << "[muster_ui] LEZFUND funded";
+                        s_lezFunding = false;
+                        ft->stop();
+                    } else if (f.contains("\"failed\"")) {
+                        stage = 1;                  // shield what is public again
+                    }
+                }
+            });
+            ft->start();
+        }
+    });
 }

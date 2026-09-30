@@ -139,6 +139,13 @@
       "unverified": [
         "The EVM balance read is tested only for parsing and for the unreachable-RPC failure; no test reads a live node.",
         "With MUSTER_LEZ_REAL set, the first wallet call in each process creates a new public LEZ account (and registers it on chain) and a new private one: LezAdapter caches accounts in memory only (lez_adapter.nim accounts, lez_lp.nim createAccount). Read from source; not run."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "9-wallet-and-send-λ",
+          "what": "Part 9: wallet and Send λ"
+        }
       ]
     },
     {

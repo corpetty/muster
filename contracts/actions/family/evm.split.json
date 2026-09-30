@@ -334,7 +334,29 @@
           "path": "module/tests/split_fiat_test.nim"
         }
       ],
-      "unverified": []
+      "unverified": [],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6a-a-bill-in-eth",
+          "what": "Part 6a: a bill in ETH"
+        },
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6b-in-a-token",
+          "what": "Part 6b: in a token"
+        },
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6c-for-someone-else",
+          "what": "Part 6c: for someone else"
+        },
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6d-a-bill-in-another-currency",
+          "what": "Part 6d: a bill in another currency"
+        }
+      ]
     },
     {
       "id": "evm.split/settle-up",
@@ -544,7 +566,19 @@
           "path": "module/tests/settle_up_live_test.nim"
         }
       ],
-      "unverified": []
+      "unverified": [],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6e-settle-up",
+          "what": "Part 6e: settle up"
+        },
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6g-renew-an-expired-split",
+          "what": "Part 6g: renew an expired split"
+        }
+      ]
     }
   ]
 }

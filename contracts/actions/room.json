@@ -191,6 +191,13 @@
       "unverified": [
         "The topic normalization (toContentTopic) is read from source; invites_test.nim carries a simplified copy, not the module's function.",
         "The composer's random room name is QML (Composer.qml derivedTopic); no test reads a composed topic."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "1-rooms-that-name-nobody",
+          "what": "Part 1: rooms that name nobody"
+        }
       ]
     },
     {
@@ -490,6 +497,13 @@
       "unverified": [
         "The 3 s / 20-attempt re-send of a join request is UI behaviour (muster_ui_backend.cpp scheduleJoinRetry); no test covers it.",
         "That no hosted method removes a member is read from muster.lidl; epoch_crypto_test.nim proves removal only at the crypto layer."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "1-rooms-that-name-nobody",
+          "what": "Part 1: rooms that name nobody"
+        }
       ]
     },
     {
@@ -815,6 +829,13 @@
       ],
       "unverified": [
         "That the 'from' field is unauthenticated is read from source (sealTo is an anonymous sealed box; nothing checks 'from')."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "1-rooms-that-name-nobody",
+          "what": "Part 1: rooms that name nobody"
+        }
       ]
     },
     {
@@ -992,6 +1013,18 @@
           "url": "https://github.com/corpetty/muster/blob/main/module/src/coordination/intent_events.nim",
           "what": "newMessageEvent: the key, value and id"
         }
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "2-chat-and-who-said-it",
+          "what": "Part 2: chat and who said it"
+        },
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6c-for-someone-else",
+          "what": "Part 6c: for someone else"
+        }
       ]
     },
     {
@@ -1144,6 +1177,13 @@
       ],
       "unverified": [
         "That no driver acts on declines is read from source (no driver under module/src/drivers/ reads them)."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "3-a-decision-the-room-signs",
+          "what": "Part 3: a decision the room signs"
+        }
       ]
     },
     {
@@ -1559,6 +1599,18 @@
       "unverified": [
         "The Safe refusals (unreadable signers, threshold above signers) are hosted glue read from source; no test calls the hosted method.",
         "coordinate_flow does not list account disclosures (flow.nim folds messages, intents and admits only), so the flow view omits this action's rows."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "4-a-safe-payment-settled-on-chain",
+          "what": "Part 4: a Safe payment, settled on chain"
+        },
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "5a-a-multisig-with-a-signer-outside-muster",
+          "what": "Part 5a: a Bitcoin multisig, with a signer outside muster"
+        }
       ]
     },
     {
@@ -1793,6 +1845,13 @@
       "unverified": [
         "The hosted argument checks (t, n, id) and the not-a-participant refusal are read from source.",
         "coordinate_flow does not list FROST ceremony entries (flow.nim folds messages, intents and admits only)."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "5b-a-frost-key",
+          "what": "Part 5b: a FROST key"
+        }
       ]
     },
     {
@@ -1974,6 +2033,13 @@
           "kind": "source",
           "url": "https://github.com/corpetty/muster/blob/main/contracts/specs/derived-exo-403.spec.json",
           "what": "the audit-file spec and its oracles"
+        }
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "3-a-decision-the-room-signs",
+          "what": "Part 3: a decision the room signs"
         }
       ]
     },
@@ -2321,6 +2387,18 @@
       ],
       "unverified": [
         "That the owner-set read sends the Safe address and not yours is read from source (readiness.nim authorityHeld); readiness_test.nim injects the probe."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "3-a-decision-the-room-signs",
+          "what": "Part 3: a decision the room signs"
+        },
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "4-a-safe-payment-settled-on-chain",
+          "what": "Part 4: a Safe payment, settled on chain"
+        }
       ]
     },
     {
@@ -2534,6 +2612,13 @@
       ],
       "unverified": [
         "The hosted refusals (not admitted, no-account, choose-account) are read from source; the tests cover the fold's resolution, not the hosted method."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6-split-the-bill",
+          "what": "Part 6: split the bill"
+        }
       ]
     },
     {
@@ -2636,6 +2721,13 @@
       "unverified": [
         "The flow view omits account disclosures and FROST ceremony entries (flow.nim folds messages, intents and admits only).",
         "coordinate_provenance still describes a message's author as 'what the sender wrote … not a verified signature' (intents.nim logProvenance); since exo-f76 the room verifies it."
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "3-a-decision-the-room-signs",
+          "what": "Part 3: a decision the room signs"
+        }
       ]
     },
     {
