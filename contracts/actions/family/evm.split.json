@@ -241,6 +241,13 @@
           "evidence": [
             "module/tests/split_fiat_test.nim"
           ]
+        },
+        {
+          "what": "paying, or agreeing to, a split past its expiry; proposing a split identical to one that expired in the room",
+          "why": "invariant 2: 'expired', nothing sent; 'expired-duplicate' — its unpaid shares are renewed instead (coordinate_renew_split: a settle-up of that one split, which everyone they name agrees to again under a fresh expiry)",
+          "evidence": [
+            "module/tests/split_renew_test.nim"
+          ]
         }
       ],
       "hosted": [
