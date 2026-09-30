@@ -312,7 +312,7 @@
       "family": "btc.split",
       "kind": "btc-split",
       "status": "built",
-      "summary": "evm.split/settle-up on Bitcoin: the room's agreed, unpaid BTC split shares on one network, netted in satoshis into fewer payments — every member's balance across them kept exactly, each recipient paid only at a wpkh address a split owing them agreed. Every party the covered shares name agrees; each net payment is then a part, paid from the payer's own key through their own node and confirmed by the recipient's own node, exactly as a Bitcoin split's share is. The netting and the cover checks are the chain-agnostic ones the Ethereum settle-up runs; what is Bitcoin's is the asset (BTC only) and the payment.",
+      "summary": "evm.split/settle-up on Bitcoin: the room's agreed, unpaid BTC split shares on one network, netted in satoshis into fewer payments — every member's balance across them kept exactly, each recipient paid only at a wpkh address a split owing them agreed. Every party the covered shares name agrees; each net payment is then a part, paid from the payer's own key through their own node and confirmed by the recipient's own node, exactly as a Bitcoin split's share is. The netting and the cover checks are the chain-agnostic ones the Ethereum settle-up runs; what is Bitcoin's is the asset (BTC only) and the payment. Held end to end on a real Bitcoin Core regtest node: two net payments from one payer sent back to back, the second never spending a coin the first already spent in the mempool.",
       "generated": "btc-split/settle-up",
       "effect": {
         "schema": "muster.effect.settle-up.v1",
@@ -412,7 +412,8 @@
           ],
           "evidence": [
             "module/tests/split_btc_test.nim",
-            "module/tests/settle_up_live_test.nim"
+            "module/tests/settle_up_live_test.nim",
+            "module/tests/settle_up_btc_regtest_e2e.nim"
           ]
         },
         {
@@ -422,7 +423,8 @@
           "signs": "",
           "reveals": [],
           "evidence": [
-            "module/tests/settle_up_live_test.nim"
+            "module/tests/settle_up_live_test.nim",
+            "module/tests/settle_up_btc_regtest_e2e.nim"
           ]
         }
       ],
@@ -479,6 +481,10 @@
       "evidence": [
         {
           "kind": "test",
+          "path": "module/tests/settle_up_btc_regtest_e2e.nim"
+        },
+        {
+          "kind": "test",
           "path": "module/tests/action_corpus_test.nim"
         },
         {
@@ -491,7 +497,6 @@
         }
       ],
       "unverified": [
-        "No test on main yet settles up in BTC end to end: the netting and cover checks are held on Ethereum splits, and a Bitcoin share's payment by split_btc_test — a regtest run of the two together is in progress (settle_up_btc_regtest_e2e)",
         "Netting can leave a payment below the 546-sat dust floor every Bitcoin share must clear (each covered share is at least 546 sat; their difference need not be), and propose does not refuse it; a node will not relay an output below its own dust threshold (294 sat for wpkh at Bitcoin Core's defaults), so such a payment could not land"
       ],
       "try": [

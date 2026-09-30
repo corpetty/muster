@@ -259,8 +259,8 @@
       "try": [
         {
           "path": "docs/runbooks/client-tour.md",
-          "anchor": "6g-the-private-split-on-the-lez-testnet",
-          "what": "Part 6g: the private split on the LEZ testnet"
+          "anchor": "6h-the-private-split-on-the-lez-testnet",
+          "what": "Part 6h: the private split on the LEZ testnet"
         }
       ]
     }

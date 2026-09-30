@@ -1,12 +1,12 @@
 # Runbook: try everything — two instances, one machine
 
-**As of 2026-09-29 (main after #186).** Two instances on one machine, driven by you,
+**As of 2026-09-30 (main after #195).** Two instances on one machine, driven by you,
 through everything the client can do today. Two scripts do all the setup:
 `scripts/try-infra.sh` brings up every local chain the tour uses, already funded, and
 `scripts/try-peer.sh` launches each peer seeded for it. After that, every part is
 clicking.
 
-Every label, command and setting below was read from the code on 2026-09-29. The code
+Every label, command and setting below was read from the code on 2026-09-30. The code
 wins over this page. If a label differs, note it: that is a finding too. **Known rough
 edges** are listed where you will meet them, so you can tell a known issue from a new one.
 Steps nobody has yet done on screen are marked **first on screen**; what you see there is
@@ -20,8 +20,8 @@ the finding.
 | [3](#3-a-decision-the-room-signs) | A decision the room signs, and its audit trail | — | 10 min |
 | [4](#4-a-safe-payment-settled-on-chain) | A Safe payment, settled on chain | anvil (up) | 10 min |
 | [5](#5-bitcoin-a-multisig-and-a-frost-key) | Bitcoin: a multisig with a signer outside muster, and a FROST key | regtest (up) | 20 min |
-| [6](#6-split-the-bill) | Split the bill: ETH, a token, for someone else, another currency, settle up, Bitcoin | anvil + regtest (up) | 30 min |
-| [6g](#6g-the-private-split-on-the-lez-testnet) | The private split on the LEZ testnet | internet; proofs of minutes each | 40 min |
+| [6](#6-split-the-bill) | Split the bill: ETH, a token, for someone else, another currency, settle up, Bitcoin, renewing an expired split | anvil + regtest (up) | 35 min |
+| [6h](#6h-the-private-split-on-the-lez-testnet) | The private split on the LEZ testnet | internet; proofs of minutes each | 40 min |
 | [7](#7-the-lez-multisig-on-the-public-testnet) | The LEZ multisig on the public testnet | internet; ~40 s blocks | 20 min |
 | [8](#8-lez-frost) | LEZ FROST | internet | 10 min |
 | [9](#9-wallet-and-send-λ) | Wallet and Send λ | — | 5 min |
@@ -565,8 +565,8 @@ owing them agreed.
    from 2 splits*, one row **Bob → Alice · 0.0042 ETH · once everyone agrees**.
 4. **Bob:** **Agree to settle up**. Then **Pay 0.0042 ETH to Alice**.
 5. ✓ Expect the row to reach **received ✓** without Alice clicking. The settle-up goes
-   final, and so do both splits it covered: their shares are marked received by the
-   creditor's client.
+   final, and so do both splits it covered: their shares read **✓ paid through a
+   settle-up**, marked by each creditor's client.
 
 While the settle-up is agreed, paying a covered share directly is refused. A settle-up
 never nets the private split: its shares are told apart by amount.
@@ -577,7 +577,8 @@ Alice's and Bob's payer addresses already hold 0.05 BTC each (`TRY_ALICE_BTC`,
 `TRY_BOB_BTC`). A payer pays from `wpkh(<their muster key>)`, through their own node.
 
 1. **Alice:** **+** → **Split** → **Split (Bitcoin)**. **total (BTC)** `0.02`,
-   **✓ I'm in it too**, Bob in, then **Propose**.
+   **✓ I'm in it too**, Bob in. ✓ Expect the preview to end *Each share is exactly
+   1000000 sat.*: a Bitcoin share is paid and confirmed in satoshis. **Propose.**
    ✓ Expect the card to pay Alice's own wpkh address, `TRY_ALICE_BTC`.
 2. **Bob:** **Agree to my share**, then **Pay my share — 0.01 BTC**. His client reads his
    coins from his node, signs each input through his keystore, and broadcasts.
@@ -593,22 +594,50 @@ Alice's and Bob's payer addresses already hold 0.05 BTC each (`TRY_ALICE_BTC`,
    ✓ Expect `"total_amount": 0.06000000`: her 0.05 and Bob's 0.01.
 
 A Bitcoin split is proposed only by whoever fronted it: the room's shared addresses are
-Ethereum ones. Settling up works on Bitcoin too (**first on screen**): two open BTC
-splits, then **Settle up the room's open splits instead** under **Split (Bitcoin)**.
+Ethereum ones. Settling up works on Bitcoin too: two open BTC splits, then **Settle up
+the room's open splits instead** under **Split (Bitcoin)**. A share below Bitcoin's
+546-sat dust limit can never be paid, so **Propose** stays off while the preview warns.
 
-**Known rough edges**
+### 6g. Renew an expired split
+
+A split's agreement expires (after 7 days by default). A share still unpaid then cannot
+be paid under it, and paying against an expired agreement is refused. Renewing proposes a
+settle-up of its unpaid shares under a fresh expiry, and everyone who still owes agrees
+again. To see it without waiting a week, give Alice's proposals a two-minute expiry.
+
+1. Close Alice's window and relaunch her with the short expiry, without `--fresh`, then
+   open the room from **Home**:
+
+   ```bash
+   MUSTER_INTENT_TTL_S=120 scripts/try-peer.sh alice
+   ```
+
+2. **Alice:** **+** → **Split** → **Split (Ethereum)**, total `0.002`, **✓ I'm in it
+   too**, Bob in, then **Propose**. **Bob:** **Agree to my share**, and don't pay it.
+3. Wait two minutes. ✓ Expect on both cards: *Expired: no share of it can be paid now.
+   Renewing asks everyone who still owes a share to agree again, under a new expiry;
+   once they pay, this split is settled too.* and a button **Renew the unpaid shares**.
+4. **Bob:** **Renew the unpaid shares**. His client has the usual 7-day expiry, so the
+   renewal gets it. ✓ Expect *Renewal proposed — it appears below; everyone who still
+   owes a share agrees to it again.*, a settle-up card for Bob's one unpaid share, and
+   on the old card *A renewal of its unpaid shares is waiting below for everyone it names
+   to agree.*
+5. **Alice:** **Agree to settle up**. **Bob:** **Pay 0.001 ETH to Alice**.
+   ✓ Expect the renewal to go final, and the expired split with it: Bob's share reads
+   **✓ paid through a settle-up**.
+6. Close Alice's window and relaunch her with the usual expiry:
+
+   ```bash
+   scripts/try-peer.sh alice
+   ```
+
+**Known rough edges in Part 6**
 - The rail row shows **1 needed** beside the split buttons, though every party must agree.
-- A Bitcoin split card offers **Sign outside muster (PSBT)**, which answers
-  *⚠ No PSBT — no-outside-format*.
-- A settle-up card offers **Paste a signature instead**.
 - After paying in a token, the note names it `erc20:0x…`, not by its symbol.
-- Once a settle-up is final, the shares it covered read **✓ received outside muster**.
-- Errors under the composer can show twice, and a settle-up error reads *The split was
-  not proposed*.
 - The verify box's **shown** row is blank on a split card.
 - Nothing on screen shows your Bitcoin payer address; it is in `.run/try/env`.
 
-### 6g. The private split on the LEZ testnet
+### 6h. The private split on the LEZ testnet
 
 **First by hand.** The same split, paid shielded to shielded on the LEZ testnet: the chain
 learns only that private transfers happened, never who paid whom or how much. The
@@ -768,7 +797,7 @@ the view through the Nim host. The room surfaces are not wired in the Nim host y
 For each part: ✓, or what you saw instead. For first-on-screen steps, what you saw even
 if it looks right. Beyond that, what felt wrong, slow or confusing. Timings help most
 for the handshake (Part 1), the chain waits (Parts 5–8) and the private split's proofs
-(Part 6g).
+(Part 6h).
 
 **Known rough edges** (so you can skip reporting these):
 - Nothing mints a LEZ token or funds a vault or group account (`exo-2752`), so the LEZ

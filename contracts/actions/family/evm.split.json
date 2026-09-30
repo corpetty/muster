@@ -572,6 +572,11 @@
           "path": "docs/runbooks/client-tour.md",
           "anchor": "6e-settle-up",
           "what": "Part 6e: settle up"
+        },
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6g-renew-an-expired-split",
+          "what": "Part 6g: renew an expired split"
         }
       ]
     }
