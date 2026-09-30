@@ -1112,8 +1112,14 @@ proc saveSplitBook() =
 proc seamOfPending(s: CoordinationSession, pp: PendingPart): PartSeam =
   ## The seam a payment in the book is watched through: the one that sent it, or — after a
   ## restart — the one its intent's policy settles through.
+  ## Right after a restart the room's log may not have caught up yet: until it names the
+  ## intent's policy there is no seam to build — never a guessed one, which would watch the
+  ## wrong chain for good (seen live: a Bitcoin payment watched through the EVM seam).
   if pp.intentId notin gSplitSeams:
-    gSplitSeams[pp.intentId] = splitSeamFor(intentPolicyOf(s.roomEvents(), pp.intentId))
+    let policy = intentPolicyOf(s.roomEvents(), pp.intentId)
+    if splitPolicy(policy).kind notin ["evm-split", "lez-split", "btc-split"]:
+      raise newException(ValueError, "the room's log does not name " & pp.intentId & "'s policy yet")
+    gSplitSeams[pp.intentId] = splitSeamFor(policy)
   gSplitSeams[pp.intentId]
 
 proc splitPayingFor(intentId, part: string): bool =
