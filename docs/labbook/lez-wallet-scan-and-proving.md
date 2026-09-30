@@ -129,3 +129,39 @@ Run 2 died because `split-lez-testnet.sh` was edited while it ran. Bash reads a 
 it executes, so the running copy met a syntax error at the edited line. Its `EXIT` trap
 then killed both runners eight minutes into a payment proof. The script's body is now
 one `{ … }` compound command, which bash reads whole before running any of it.
+
+## 10. A private transaction names no zone; its roots bind it to one (exo-a90.22)
+
+Invariant 2 wants a payment to be worthless anywhere but where it was meant. The run left
+open whether a LEZ privacy-preserving transaction commits to a zone id. Read at the
+testnet's tag `v0.2.4` and at muster's pin's `v0.2.2` (`logos-blockchain/logos-execution-zone`;
+the two agree on every line below):
+
+- **Nothing in it names a zone.** The message is `public_actions`, `nonces`,
+  `private_actions` and a block and timestamp validity window
+  (`lee/state_machine/src/privacy_preserving_transaction/message.rs:21`), hashed under a
+  fixed prefix (`:12`). No chain or zone id appears anywhere in `lee/` (`chain_index` in
+  the key tree is HD derivation). A public transaction is the same, as the multisig work
+  already found.
+- **What binds it is state.** Each private action carries a nullifier and the
+  commitment-set root it was proven against. The sequencer accepts a nullifier only if that
+  root is in **its own** root history (`state/mod.rs:357–372`, `root_history.contains`,
+  called from `validated_state_diff/mod.rs:423`); every insertion adds the new root
+  (`state/mod.rs:46–51`). Spending a private account uses an update nullifier over its
+  current commitment with a membership proof (`privacy_preserving_circuit/src/output.rs:347`),
+  so the root includes that commitment. A new private account (the payee's, on a
+  shielded payment) gets an initialization nullifier with a root the prover supplies
+  (`output.rs:65`), again checked against the zone's history.
+
+**For the private split:** a debtor pays from their own private account, whose commitment
+exists only on the zone where they received it. The payment's root therefore exists only
+there, and another zone refuses it with `Unrecognized commitment set digest`. Replay on
+the same zone fails on the spent nullifier.
+
+**What is left exposed:** a zone that shares this one's commitment history, such as a fork
+or a replica started from its state, would accept the same transaction. So would a zone
+from the same genesis, for a transaction whose every private input cites only the genesis
+root (`{DUMMY_COMMITMENT}`, `state/mod.rs:123`) and whose public inputs' nonces also
+match there. A shield from a public account into a brand-new private account, proven
+against the genesis root, is that case. The private split never is, because its payment
+spends a private account.

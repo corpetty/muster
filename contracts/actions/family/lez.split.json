@@ -211,9 +211,13 @@
           "party": "each person who owes"
         },
         {
-          "claim": "Whether a LEZ privacy-preserving transaction commits to a zone id is unverified",
+          "claim": "A private payment names no zone, but lands only where it was proven: each private input cites a commitment-set root the zone checks against its own history, and a debtor's payment spends their own private account there",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A zone that shares this one's commitment history — a fork or a replica — would accept the same transaction",
           "credibility": "exposed",
-          "party": "anyone holding the transaction, on another zone"
+          "party": "a fork or replica of the zone"
         }
       ],
       "evidence": [
@@ -240,10 +244,17 @@
         {
           "kind": "test",
           "path": "module/tests/split_fiat_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/v0.2.4/lee/state_machine/src/state/mod.rs#L357-L372",
+          "what": "LEZ v0.2.4: a nullifier is accepted only if the commitment-set root it cites is in this zone's own root history"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/v0.2.4/lee/state_machine/src/privacy_preserving_transaction/message.rs#L21-L27",
+          "what": "LEZ v0.2.4: a privacy-preserving message is public actions, nonces, private actions and validity windows — no zone or chain id"
         }
-      ],
-      "unverified": [
-        "whether a LEZ privacy-preserving transaction commits to a zone/chain id"
       ]
     }
   ]
