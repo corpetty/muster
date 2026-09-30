@@ -24,6 +24,8 @@ import ../drivers/driver
 import ../crypto/curve25519
 import ./intents
 import ./attest
+import ./covers
+import std/tables
 
 type
   HomeClass* = enum
@@ -43,15 +45,19 @@ proc bare(s: string): string =
   if result.startsWith("0x"): result = result[2 .. ^1]
 
 proc homeItems*(events: seq[Event], driverFor: DriverFor, me: EncIdentity,
-                myNames: seq[string]): seq[HomeItem] =
+                myNames: seq[string], nowSec: uint64 = 0): seq[HomeItem] =
   ## Every intent in `events` (a room's authentic view), classed for the member whose
   ## encryption identity is `me` and whose contributor names are `myNames`
-  ## (attest.myContributorNames).
+  ## (attest.myContributorNames). At `nowSec` (0 = no clock), a part is mine to pay only
+  ## while paying it would go ahead: not past its intent's expiry (unless the rest of a
+  ## settle-up that began paying), and not covered by a settle-up (exo-a90.16).
   const hexd = "0123456789abcdef"
   var meHex = ""
   for b in me.toBytes(): (meHex.add hexd[int(b shr 4)]; meHex.add hexd[int(b and 0x0F)])
   let mine = bareNames(myNames)
-  for v in reduceIntentViews(events, driverFor):
+  let views = reduceIntentViews(events, driverFor)
+  let covered = coverIndex(events, driverFor, views, nowSec)
+  for v in views:
     var it = HomeItem(id: v.id, state: v.state, cls: hcWaiting, policy: v.policy, effectJson: v.effectJson)
     if v.state == "final":
       it.cls = hcSettled
@@ -78,9 +84,13 @@ proc homeItems*(events: seq[Event], driverFor: DriverFor, me: EncIdentity,
     of "executable", "submitted", "settling":
       if v.parts.len > 0:
         # a family settled in parts: each party pays its own — the parts the driver says I
-        # settle (a settle-up payer may owe two people); nobody else's click is needed
+        # settle (a settle-up payer may owe two people); nobody else's click is needed — and
+        # only what paying would go ahead with (coordination/parts: expiry, covers)
+        let payable = not intentContext(events, v.id).expired(nowSec) or
+                      (beganSettling(v) and drv.covers(e).len > 0)
         for p in v.parts:
-          if bare(drv.partAuthor(e, p.part, "settled")) == meHex and not p.settled:
+          if bare(drv.partAuthor(e, p.part, "settled")) == meHex and not p.settled and payable and
+             v.id & "/" & p.part notin covered:
             it.cls = hcNeedsYou
             it.what = "pay"
       elif v.state == "executable":

@@ -303,6 +303,7 @@ Rectangle {
         if (p.settled) return qsTr("paid (%1) — %2 has not seen it yet").arg(String(p.tx || "").slice(0, 10) + "…")
                                                                      .arg(cardRoot.creditorName);
         if (p.paying) return qsTr("paying…");
+        if (p.covered) return qsTr("in a settle-up — paid through it");
         var agreed = false;
         var ap = (cardRoot.card && Array.isArray(cardRoot.card.approvers)) ? cardRoot.card.approvers : [];
         for (var i = 0; i < ap.length; ++i) if (String(ap[i].who) === String(p.part)) agreed = true;
@@ -664,7 +665,8 @@ Rectangle {
                         LogosText {
                             Layout.fillWidth: true
                             text: modelData.confirmed ? qsTr("received ✓") : modelData.settled ? qsTr("paid — awaiting the recipient's read")
-                                  : modelData.paying ? qsTr("paying…") : cardRoot.ready ? qsTr("to pay") : qsTr("once everyone agrees")
+                                  : modelData.paying ? qsTr("paying…") : cardRoot.settleUp.expired ? qsTr("expired")
+                                  : cardRoot.ready ? qsTr("to pay") : qsTr("once everyone agrees")
                             color: modelData.confirmed ? Theme.palette.success : Theme.palette.textTertiary
                             font.pixelSize: Theme.typography.badgeText
                         }
@@ -675,6 +677,21 @@ Rectangle {
                     wrapMode: Text.WordWrap
                     text: qsTr("Each member's balance across these splits is kept exactly; each person is paid where their own split said. Once agreed, the covered shares are paid only through this; once its payments are received, each creditor marks the shares it covered received.")
                     color: Theme.palette.textTertiary
+                    font.pixelSize: Theme.typography.badgeText
+                }
+                // expired before anyone paid (exo-a90.16): it pays nothing more, and after a
+                // day's grace — for a payment sent just before the expiry — it covers nothing
+                LogosText {
+                    objectName: "cardSettleUpExpired"
+                    visible: !!(cardRoot.settleUp && cardRoot.settleUp.expired)
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: !cardRoot.settleUp ? ""
+                          : cardRoot.settleUp.lapsed
+                          ? qsTr("Expired before anyone paid. It no longer covers its shares: each can be paid directly again, or settled up anew.")
+                          : qsTr("Expired before anyone paid. Its shares are released %1, in case a payment sent just before the expiry is still to be reported.")
+                                .arg(new Date(Number(cardRoot.settleUp.releasesAt) * 1000).toLocaleString())
+                    color: Theme.palette.warning
                     font.pixelSize: Theme.typography.badgeText
                 }
             }
@@ -1783,6 +1800,7 @@ Rectangle {
         LogosButton {
             objectName: "cardPaySettle"
             visible: cardRoot.kind === "intent-propose" && cardRoot.isSettleUp && cardRoot.ready
+                && !cardRoot.settleUp.expired
                 && cardRoot.myTransfer !== null && !cardRoot.myTransfer.paying
             Layout.fillWidth: true
             text: cardRoot.myTransfer
@@ -1801,6 +1819,7 @@ Rectangle {
             visible: cardRoot.kind === "intent-propose" && cardRoot.isSplit && cardRoot.iAmDebtor
                 && cardRoot.ready && !cardRoot.paid
                 && cardRoot.myPart !== null && !cardRoot.myPart.settled && !cardRoot.myPart.paying
+                && !cardRoot.myPart.covered
             Layout.fillWidth: true
             text: cardRoot.myPart ? qsTr("Pay my share — %1 %2").arg(cardRoot.eth(cardRoot.myPart.amount)).arg(cardRoot.unit)
                                   : qsTr("Pay my share")

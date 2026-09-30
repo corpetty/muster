@@ -414,7 +414,7 @@
         {
           "step": "settle",
           "who": "each payer, then each recipient; then each covered share's creditor",
-          "does": "Each net payment is a part: its payer pays it from their own wallet (a payer owing two people pays two parts), its recipient's client confirms it from their own read. While the settle-up is agreed, paying a covered share directly is refused. Once the settle-up is final (or needs no payment at all), each creditor's client marks the shares it covered received — the creditor's word, so each split goes final exactly as a split does.",
+          "does": "Each net payment is a part: its payer pays it from their own wallet (a payer owing two people pays two parts), its recipient's client confirms it from their own read. While the settle-up is agreed, paying a covered share directly is refused. Past its expiry, a settle-up that paid nothing pays nothing more, and a day later it covers nothing, so its shares can be paid directly or settled up again; one whose payments have begun is finished past its expiry, and its shares stay covered. Once the settle-up is final (or needs no payment at all), each creditor's client marks the shares it covered received — the creditor's word, so each split goes final exactly as a split does.",
           "signs": "each payer's own transfer; each report signed by its author's room key",
           "reveals": [
             {
@@ -435,7 +435,8 @@
             }
           ],
           "evidence": [
-            "module/tests/settle_up_live_test.nim"
+            "module/tests/settle_up_live_test.nim",
+            "module/tests/settle_up_expiry_test.nim"
           ]
         },
         {
@@ -483,6 +484,13 @@
           "why": "its shares are told apart by amount, which netting would erase — refused by the driver and the hosted method",
           "evidence": [
             "module/tests/settle_up_test.nim"
+          ]
+        },
+        {
+          "what": "paying a settle-up past its expiry when none of its payments has begun; paying a covered share directly while a settle-up still covers it",
+          "why": "invariant 2: 'expired', nothing sent; 'covered-by-settle-up' until the unpaid settle-up has been expired a day (coordination/covers), so a payment sent just before the expiry is never paid twice",
+          "evidence": [
+            "module/tests/settle_up_expiry_test.nim"
           ]
         }
       ],

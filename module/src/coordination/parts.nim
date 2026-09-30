@@ -135,10 +135,15 @@ proc liveSettlePartSend*(s: CoordinationSession, ks: Keystore, driverFor: Driver
       break
   if me.len == 0: return ("already-settled", PendingPart())
   # a part another agreed intent settles (a settle-up) is paid through it, never twice
-  if coveringIntent(events, driverFor, intentId, me).len > 0: return ("covered-by-settle-up", PendingPart())
+  if coveringIntent(events, driverFor, intentId, me, nowSec).len > 0: return ("covered-by-settle-up", PendingPart())
   let ctx = intentContext(events, intentId)
   if ctx.isPlaceholder: return ("no-context", PendingPart())
-  if ctx.expired(nowSec): return ("expired", PendingPart())
+  # Paying against an expired agreement is refused (invariant 2) — except the rest of an
+  # intent that settles OTHER intents' parts (a settle-up) once its payments have begun: what
+  # it already moved replaced the parts it covers, so it is finished, never abandoned
+  # (exo-a90.16, coordination/covers).
+  if ctx.expired(nowSec) and not (beganSettling(v) and drv.covers(effect).len > 0):
+    return ("expired", PendingPart())
   # invariant 1: the payment is the driver's reading of the AGREED effect — never supplied
   let t = drv.partTransfer(effect, me)
   if not t.ok: return ("refused: " & t.error, PendingPart())

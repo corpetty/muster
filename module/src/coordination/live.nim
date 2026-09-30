@@ -126,7 +126,7 @@ proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
     if refusal.len > 0: return "refused: " & refusal
     # an effect settling parts of OTHER intents (a settle-up): each part exactly as its own
     # intent says, still unpaid — checked against the log, never taken on the proposer's word
-    let cover = coverRefusal(events, driverFor, drv, effectFromJson(effectJson), intentId)
+    let cover = coverRefusal(events, driverFor, drv, effectFromJson(effectJson), intentId, nowSec)
     if cover.len > 0: return "refused: " & cover
   let ctx = intentContext(events, intentId)
   if not ctx.isPlaceholder and ctx.expired(nowSec): return "expired"
