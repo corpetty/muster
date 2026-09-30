@@ -8,7 +8,9 @@
 ##     the settle-up — paying one directly is refused;
 ##   * a payer who owes two people pays two parts; each recipient confirms their own;
 ##   * when the settle-up is final, each creditor's client marks the parts it covered
-##     received — and the original splits are final on every member.
+##     received — and the original splits are final on every member;
+##   * the room's history says each covered part was paid through the settle-up, never
+##     "received outside muster" (exo-a90.19: seen on a display).
 ## Needs libsodium + secp256k1 (the keystores).
 
 import std/[json, strutils, sequtils, algorithm]
@@ -113,5 +115,16 @@ doAssert settleCovered(r.carol, room3CarolKs, splitFor, newFakePartSeam(ledger, 
 for s in [r.alice, r.bob, r.carol]:
   doAssert stateOn(s, dinner) == "final" and stateOn(s, taxi) == "final", "both splits final on every member"
 echo "4. once settled up, each creditor marks the covered parts received: both splits final on all three OK"
+
+# ── 5. the history names the settle-up, never "received outside muster" ──────────
+block:
+  sync()
+  var lines: seq[string]
+  for a in reduceActivity(r.alice.roomEvents(), splitFor):
+    if a.kind == "part-confirmed" and a.intentId in [dinner, taxi]: lines.add a.detail
+  doAssert lines.len == 4, $lines
+  for l in lines:
+    doAssert l.startsWith("paid through a settle-up"), "a covered part names what paid it: " & l
+  echo "5. the history says each covered part was paid through the settle-up OK"
 
 echo "settle_up_live_test: all OK"
