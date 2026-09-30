@@ -64,6 +64,14 @@ proc liveProposeIntent*(s: CoordinationSession, ks: Keystore, driverFor: DriverF
   let refusal = driverFor(policy).signRefusal(effectFromJson(effectJson))
   if refusal.len > 0: return "refused: " & refusal
   let id = intentIdFor(effectJson, policy)
+  # The same effect under the same policy is the same intent. If one already expired here,
+  # proposing it again would only re-announce an intent bound to its old, spent expiry —
+  # say so (exo-a90.15); a split past its expiry is renewed instead (settle_up.renewalOf).
+  block:
+    let known = s.roomEvents()
+    if effectJsonOf(known, id).len > 0:
+      let ctx = intentContext(known, id)
+      if not ctx.isPlaceholder and ctx.expired(uint64(max(0'i64, nowSec))): return "expired-duplicate"
   s.publish(policyDeclEvent(id, policy))
   s.publish(proposeEvent(id, effectJson))
   let ttl = (if ttlSec > 0: ttlSec else: DefaultIntentTtl)
