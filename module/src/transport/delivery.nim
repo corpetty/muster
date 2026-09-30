@@ -19,6 +19,7 @@ import ./transport
 import logos_sdk/ffi        # lp_* C-ABI bindings (was ./lp_ffi, now the shared SDK)
 import logos_sdk/bytes      # {"_bytes":<b64url>} codec
 import ./inbound_queue
+import ./store_catchup    # which store query next: a topic's whole history, then the window (exo-aaf)
 
 # Transport diagnostics — off unless MUSTER_LP_DEBUG is set. When the delivery
 # node boot or cross-host relay misbehaves, this surfaces the lp createNode/start
@@ -44,9 +45,6 @@ let gCatchupLookbackMs* = max(gCatchupPeriodMs, envMs("MUSTER_CATCHUP_LOOKBACK_M
   ## each steady-state query reaches back this far (ms). Wide enough to tolerate
   ## clock skew and a few missed polls (ingest dedups the overlap), small enough
   ## that a 1s cadence stays cheap. Never below the period.
-const DeepCatchupTicks = 3
-  ## the first few queries per topic fetch full recent history (no time bound) so a
-  ## late joiner catches up on a room older than the lookback; then windowed.
 
 type
   DeliveryTransport* = ref object of Transport
@@ -56,11 +54,9 @@ type
     queue: InboundQueue                           ## foreign-thread callbacks land here; poll() drains
     timeoutMs: cint
     nodeStarted: cint                             ## 1 once createNode+start returned; gates lifecycle
-    storePeers: seq[string]                       ## store service multiaddrs (all entryNodes); empty disables catchup
-    storePeerIdx: int                             ## round-robin cursor into storePeers — a dead node stalls one tick, not all
+    catchup: StoreCatchup                         ## store peers (all entryNodes; none disables catchup) + each topic's paging
     storeQueue: InboundQueue                      ## async store-query responses land here; poll() parses them
     lastCatchupMs: int64                          ## throttle: only re-query the store every gCatchupPeriodMs
-    catchupTicks: Table[string, int]              ## per-topic query count; first DeepCatchupTicks fetch full history, then windowed
 
 proc invoke(t: DeliveryTransport, meth, argsJson: string): JsonNode =
   ## One synchronous inter-module call. Returns the result JSON (or nil on error).
@@ -127,7 +123,6 @@ proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000): DeliveryTra
   ## messageReceived subscription. `nodeConfigJson` is delivery's createNode config
   ## (the user-configurable endpoint set — invariant 8 lives in this string).
   result = DeliveryTransport(handlers: initTable[string, seq[MessageHandler]](),
-                             catchupTicks: initTable[string, int](),
                              timeoutMs: cint(timeoutMs))
   initInboundQueue(result.queue)             # ready before any callback can fire
   initInboundQueue(result.storeQueue)
@@ -135,13 +130,15 @@ proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000): DeliveryTra
   # config (the fleet's own nodes serve store). fireCatchup round-robins across them,
   # so a peer that's down or throttling stalls one tick, not the whole catchup. Empty
   # if the config names none (catchup then disabled).
+  var peers: seq[string]
   try:
     let j = parseJson(nodeConfigJson)
     if j.kind == JObject and j.hasKey("entryNodes") and j["entryNodes"].kind == JArray:
       for n in j["entryNodes"]:
         let s = n.getStr()
-        if s.len > 0: result.storePeers.add s
+        if s.len > 0: peers.add s
   except CatchableError: discard
+  result.catchup = newStoreCatchup(peers)
   if gLpDebug: stderr.writeLine("MUSTER-LP creating delivery client (mode=" & $lp_get_mode() & ")")
   result.client = lp_client_create("delivery_module", "muster_module", nil, nil)
   if result.client == nil:
@@ -208,34 +205,22 @@ proc fireCatchup(t: DeliveryTransport, contentTopic: string) =
   ## poll's dispatch; onStoreResult enqueues the response, poll parses it. The query
   ## follows delivery's storeQuery(jsonQuery, peerAddr, timeoutMs) contract.
   ##
-  ## The first DeepCatchupTicks queries fetch full recent history (no time bound) so
-  ## a late joiner catches up; after that each query is bounded to `timeStart = now -
-  ## gCatchupLookbackMs`, a sliding window that stays cheap however long the room runs,
-  ## so a 1s cadence doesn't re-parse the whole topic. Ingest dedups the window overlap
-  ## (R-2/R-4), and the log reduces order-independently (inv 4), so paginationForward
-  ## (kept `true`, the proven direction) and the window boundary are both harmless.
-  if t.storePeers.len == 0: return
-  # Round-robin the store peer: a down/throttling node costs one tick, not the catchup.
-  let peer = t.storePeers[t.storePeerIdx mod t.storePeers.len]
-  t.storePeerIdx = (t.storePeerIdx + 1) mod t.storePeers.len
-  let nowMs = int64(epochTime() * 1000)
-  let tick = t.catchupTicks.getOrDefault(contentTopic, 0)
-  t.catchupTicks[contentTopic] = tick + 1
-  var req = %*{"requestId": "muster-" & $nowMs,
-               "includeData": true, "paginationForward": true,
-               "contentTopics": [contentTopic], "paginationLimit": 50}
-  if tick >= DeepCatchupTicks:
-    # Waku store filters on the message's own (nanosecond) timestamp. Second-precision
-    # is plenty for a floor and avoids float64 losing ns digits at epoch scale.
-    req["timeStart"] = %((nowMs - gCatchupLookbackMs) * 1_000_000)
+  ## Which query is store_catchup's (exo-aaf): a topic is first read WHOLE — paged from
+  ## its start, following the store's cursor on the peer that issued it — so a member who
+  ## joins or relaunches rebuilds the entire room, not its oldest page and its last
+  ## minute. Then each query reaches back `gCatchupLookbackMs`, a sliding window that stays
+  ## cheap however long the room runs. Ingest dedups every overlap (R-2/R-4), and the log
+  ## reduces order-independently (inv 4).
+  let q = t.catchup.nextQuery(contentTopic, int64(epochTime() * 1000), gCatchupLookbackMs)
+  if not q.fire: return
   var args = newJArray()
-  args.add %($req)                 # jsonQuery (tstr)
-  args.add %peer                   # peerAddr (tstr)
+  args.add %($q.req)               # jsonQuery (tstr)
+  args.add %q.peer                 # peerAddr (tstr)
   args.add %(t.timeoutMs.int)      # timeoutMs (int)
   let argsStr = $args
   if gLpDebug: stderr.writeLine("MUSTER-LP storeQuery " & contentTopic &
-                                (if tick >= DeepCatchupTicks: " windowed" else: " deep") &
-                                " peer=" & peer)
+                                (if q.deep: " deep" & (if q.req.hasKey("paginationCursor"): " cursor" else: "")
+                                 else: " windowed") & " peer=" & q.peer)
   discard lp_invoke_async(t.client, cstring"storeQuery", argsStr.cstring,
                           t.timeoutMs, onStoreResult, cast[pointer](t))
 
@@ -266,7 +251,7 @@ method poll*(t: DeliveryTransport) =
   # so a message the relay never surfaced (sparse-shard mesh) still arrives. Fire on
   # the module thread (async invoke returns immediately); responses land on the store
   # queue, parsed below.
-  if t.storePeers.len > 0 and t.nodeStarted == 1:
+  if t.catchup.peers.len > 0 and t.nodeStarted == 1:
     let nowMs = int64(epochTime() * 1000)
     if nowMs - t.lastCatchupMs > gCatchupPeriodMs:
       t.lastCatchupMs = nowMs
@@ -286,6 +271,7 @@ method poll*(t: DeliveryTransport) =
     var resp: JsonNode
     try: resp = parseJson(env["value"].getStr())
     except CatchableError: continue
+    t.catchup.onResponse(resp)       # the next page of a topic's history, or: read whole
     if resp.kind != JObject or not resp.hasKey("messages") or resp["messages"].kind != JArray:
       continue
     for m in resp["messages"]:

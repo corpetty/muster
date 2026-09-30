@@ -263,3 +263,28 @@ local fork (the fork has 5 later commits muster needs) — do not switch to it.
 
 Tracked under exo-e17. The token fix, the fleet resource, the async/deferred boot, and the
 single-instance fold are done; cross-host relay over the fleet is the open item.
+
+## Catch-up read only the oldest 50 messages (exo-aaf, 2026-09-29)
+
+Found on a display. Two runners were relaunched into a room of about 100 messages (three
+Bitcoin splits and a settle-up) and came back showing it as it had been five minutes
+earlier: the settle-up and its payments were missing, and a share it had paid was offered
+for payment again. Nothing is persisted in the user dir, so a relaunch rebuilds the room from
+store queries alone. The "deep" queries asked for `paginationForward: true, paginationLimit:
+50` with **no cursor**, so each of the three returned the same oldest 50. After those, every
+query was windowed to the last minute, so anything in between was never fetched.
+
+The store does page: `storeQuery` echoes `requestId` and returns `paginationCursor`
+(`logos-delivery-module`, `src/delivery_module_plugin.h`). `transport/store_catchup.nim`
+now reads a topic whole before windowing it. It pages from the start, asks for each next
+cursor of the peer that issued it, keeps one page in flight, and ends only on a page without
+a cursor. A lost page is retried, on another peer if the paging peer keeps failing.
+`store_catchup_test` holds the state machine; the relaunch was repeated to check it live.
+
+**The cursor is not a string.** The first relaunch on the fix still stopped after one full
+page. liblogosdelivery serializes `StoreQueryResponseHex` with `%*`, and its
+`paginationCursor` is a nim-results `Opt[string]`. On the wire that is
+`{"oResultPrivate": true, "vResultPrivate": "0x…"}`, or `{"oResultPrivate": false}` when
+there is none: the same wrapping the response's messages carry, and that `poll` already
+unwraps. A `getStr()` on it returns `""`, which reads as the last page. The request side
+takes a plain hex string.
