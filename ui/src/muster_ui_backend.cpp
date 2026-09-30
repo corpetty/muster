@@ -1037,12 +1037,37 @@ void MusterUiBackend::onContextReady()
                 }
                 // Split self-test, the debtor's side: MUSTER_AUTOPAYSPLIT agrees to MY share of
                 // any split that names me, then pays it once everyone has agreed — the card's
-                // "Agree to my share" and "Pay my share". Agreeing is attempted once; a pay
-                // the module refuses (a LEZ wallet still scanning the chain, say) is tried
-                // again after 10s, and none is tried while MUSTER_AUTOLEZFUND is funding.
+                // "Agree to my share" and "Pay my share". A pay the module refuses (a LEZ
+                // wallet still scanning the chain, say) is tried again after 10s, and none is
+                // tried while MUSTER_AUTOLEZFUND is funding.
+                //
+                // An agreement the module refuses for a reason that can be transient is tried
+                // again every 2s, for up to 60s (exo-ca3). A proposal reaches a member as
+                // several log events: the propose, then its signing context
+                // (intent/<id>/context) and any reads. Over the fleet's ~1s store poll these
+                // can land in different ticks. Then the split is in this member's view before
+                // its context is, and the module rightly refuses to sign ("no-context",
+                // invariant 2). Agreeing once and never again stalled the test: 1 run in 5.
                 if (!qgetenv("MUSTER_AUTOPAYSPLIT").isEmpty()) {
                     static QSet<QString> agreed, paid;
-                    static QHash<QString, qint64> payAgainAt;
+                    static QHash<QString, qint64> payAgainAt, agreeAgainAt, agreeGiveUpAt;
+                    // Agree to `id`; if the refusal can be transient, try again in 2s (≤ 60s).
+                    const auto agree = [this](const QString &id) {
+                        const qint64 now = QDateTime::currentSecsSinceEpoch();
+                        if (now < agreeAgainAt.value(id, 0)) return;
+                        contributeInRoom(id, QString(), QString());
+                        const QJsonObject r = QJsonDocument::fromJson(contributeJson().toUtf8()).object();
+                        const QString why = r.value("reason").toString();
+                        const bool transient = !r.value("ok").toBool()
+                            && (why == "no-context" || why == "unknown-intent" || why == "unaccountable-input");
+                        if (!agreeGiveUpAt.contains(id)) agreeGiveUpAt[id] = now + 60;
+                        if (transient && now < agreeGiveUpAt.value(id)) {
+                            agreeAgainAt[id] = now + 2;
+                            qInfo() << "[muster_ui] SELFTEST agree" << id << "refused" << why << "- again in 2s";
+                        } else {
+                            agreed.insert(id);   // agreed, or refused for good: stop asking
+                        }
+                    };
                     for (const auto &v : QJsonDocument::fromJson(intentsJson().toUtf8()).array()) {
                         const QJsonObject it = v.toObject();
                         if (!it.contains("split")) continue;
@@ -1057,14 +1082,12 @@ void MusterUiBackend::onContextReady()
                         if (mine.isEmpty() && sp.value("iAmCreditor").toBool() && !sp.value("creditorAgreed").toBool()
                             && sp.value("payToMine").toBool() && (st == "proposed" || st == "collecting")
                             && !agreed.contains(id)) {
-                            agreed.insert(id);
-                            contributeInRoom(id, QString(), QString());
+                            agree(id);
                         }
                         if (mine.isEmpty()) continue;
                         if ((st == "proposed" || st == "collecting") && !it.value("approvedByMe").toBool()
                             && !agreed.contains(id)) {
-                            agreed.insert(id);
-                            contributeInRoom(id, QString(), QString());
+                            agree(id);
                         } else if (!s_lezFunding && (st == "executable" || st == "submitted" || st == "settling")
                                    && !mine.value("settled").toBool() && !mine.value("paying").toBool()
                                    && !paid.contains(id)

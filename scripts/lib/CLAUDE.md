@@ -6,3 +6,4 @@
 - **The contract** in `ui-build.sh`'s header is what makes the self-tests a parity oracle for the Nim build. Change it only together with every script that relies on it.
 - **Cleanup is per session.** `ui_launch` starts each instance under `setsid`, and `ui_cleanup` kills only those sessions. Never go back to a machine-wide `pkill -f logos_host_qt`: other sessions and other self-tests run on the same machine.
 - `scripts/ui-parity.sh` runs the whole suite for one build and prints a green/red table.
+- **The C++ backend's own log lines** (its `[muster_ui]` qInfo, the autopilot's decisions) do not reach a self-test's logs by default; Qt sends them to the systemd journal. Run with `QT_FORCE_STDERR_LOGGING=1` to put them in the logs (exo-ca3).

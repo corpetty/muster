@@ -2571,6 +2571,17 @@ Item {
                         return qsTr("⚠ Not in a room — join one first.");
                     if (reason === "unknown-intent")
                         return qsTr("⚠ That proposal isn't in the room's log yet — give it a moment.");
+                    // A proposal reaches you as several log entries; its signing context can
+                    // arrive a moment after the proposal itself (exo-ca3). Nothing is signed
+                    // without it (invariant 2), so say that, and that trying again will do.
+                    if (reason === "no-context")
+                        return qsTr("⚠ Nothing was signed — this proposal's signing context (the "
+                                  + "environment, account and expiry your signature binds to) hasn't "
+                                  + "reached you yet. Give it a moment and approve again.");
+                    if (reason === "unaccountable-input")
+                        return qsTr("⚠ Nothing was signed — an input that reached this proposal's bytes "
+                                  + "can't be accounted for. If its log entry is still on the way, "
+                                  + "approving again in a moment will work; if not, it can't be signed.");
                     if (reason === "attestation-mismatch")
                         return qsTr("⚠ Your approval wasn't published — the attestation your key made "
                                   + "doesn't verify as the signer the driver recovered, so every member "
