@@ -1097,6 +1097,8 @@ proc loadSplitBook() =
   gSplitBookLoaded = true
   try: gSplitBook = bookFromJson(parseJson(readFile(splitBookPath())))
   except CatchableError: discard       # nothing saved yet
+  if gLpDebug: stderr.writeLine("MUSTER-LP split book " & splitBookPath() & ": " & $gSplitBook.entries.len &
+                                " payment(s) in flight")
 
 proc saveSplitBook() =
   try:
@@ -1137,22 +1139,25 @@ proc splitPump() =
     let i = due[k]
     let e = gSplitBook.entries[i]
     if e.topic != gTopic: continue     # a payment completes only in its own room
-    let seam = seamOfPending(gSession, e.pp)
     var res = crPending
     var said = ""
     try:
+      let seam = seamOfPending(gSession, e.pp)
       let r = liveSettlePartComplete(gSession, ks, driverFor, seam, e.pp)
+      if gLpDebug and r.startsWith("unconfirmed"):
+        stderr.writeLine("MUSTER-LP split pending " & e.pp.intentId & " " & e.pp.tx & ": " & r)
       if not r.startsWith("unconfirmed"): (res = crLanded; said = r)
       elif "failed on" in r: (res = crFailed; said = r)
       elif e.unresolved or now - e.startedS > e.deadlineS:
         # past its deadline it is not dropped: only the chain's word releases it
         let g = seam.partGone(e.pp.transfer, e.pp)
         if g.gone: (res = crGone; said = g.detail)
-    except CatchableError:
-      discard                          # an unreachable RPC or node: ask again later
+    except CatchableError as ex:       # an unreachable RPC or node: ask again later
+      if gLpDebug: stderr.writeLine("MUSTER-LP split pending " & e.pp.intentId & " not checked: " & ex.msg)
     let outcome = gSplitBook.record(i, res, now)
     if outcome.len == 0: continue
     changed = true
+    let seam = gSplitSeams.getOrDefault(e.pp.intentId, PartSeam())
     let full = (if said.len > 0: said & " — " & outcome else: outcome)
     if gLpDebug: stderr.writeLine("MUSTER-LP split reported " & e.pp.intentId & " " & full &
                                   " tx=" & seam.landedRef(e.pp.transfer, e.pp.tx))
