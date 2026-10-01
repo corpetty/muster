@@ -129,6 +129,32 @@ Where it stands, with five of `logos.dev`'s six nodes still unreachable from her
 `two-instance-proof.sh` passed 4 of 4 (23 s each) and `split-self-test.sh` 4 of 4 (36–41 s),
 and `scripts/ui-parity.sh` was 8 of 8 green, each test faster than before the upgrade.
 
+## The second outage, and parity without the fleet (2026-10-01, afternoon)
+
+From about 11:50 EDT, 10 of the 12 entry nodes across `logos.dev` and `logos.test` dropped
+:30303 by IPv4 (the recipe above). The hosts were up, since :8000 on the same hosts
+answered with a reset, and outbound :30303 from here worked (portquiz.net). The one
+`logos.dev` node that still took TCP refused the libp2p dial. One `logos.test` node
+answered under a key that `fleets.logos.co` did not list yet ("Noise handshake, peer id
+don't match"), so the registry, not muster's pin, was stale. Every two-instance
+self-test went red with no code at fault. (Resolving a node by name can also give its
+IPv6 address, and with no v6 route that fails "network unreachable": probe the IPv4
+address from the table.)
+
+**`MUSTER_FLEET=local`** (exo-eb6.7) runs the self-tests with no fleet. The instances make
+a network of their own on this host, in delivery's own e2e shape (`tests/e2e/libs/helpers.py`
+`make_delivery_config`): cluster 198, one shard, relay only, each node on a free
+127.0.0.1 port. The first instance a test launches is the hub. `ui_peer_config` reads the
+hub's address from delivery's "Started libp2p node" line, about 3 s after launch, and
+each later instance dials it (`staticnodes`). A config with no preset passes to delivery
+verbatim (`node_config.nim`). `MUSTER_FLEET=local scripts/ui-parity.sh` went 8 of 8 green
+in about 2 minutes, during the outage.
+
+What it proves and what it does not: the room's code end to end between two real
+runners (handshake, invite, both splits, settlement). Not the fleet, discovery, or store
+catch-up: with no store node, receipt is live only. The fleet runs stay the live check;
+the local run says whether a red fleet run is the fleet.
+
 ## Sources
 
 - Logos Testnet v0.3 announcement: <https://blog.logos.co/article/logos-testnet-v03-live>

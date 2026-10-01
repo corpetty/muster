@@ -5,12 +5,16 @@
 #   scripts/ui-parity.sh                  # the C++ build (.run/runner)
 #   MUSTER_UI=nim scripts/ui-parity.sh    # the Nim build (.run/runner-nim)
 #   scripts/ui-parity.sh card invite      # only the named tests
-# Each test runs on the live Logos fleet; split also starts a throwaway anvil, split-btc a
+#   MUSTER_FLEET=local scripts/ui-parity.sh   # no fleet: the instances' own network (exo-eb6.7)
+# Each test runs on the live Logos fleet (MUSTER_FLEET, logos.dev by default), or with
+# MUSTER_FLEET=local on a network the instances make on this host, which checks the code
+# while the fleet is down. split also starts a throwaway anvil, split-btc a
 # fresh Bitcoin Core regtest (bitcoind via nix shell). The LEZ
 # testnet split (~25 min, real proofs) is not in the suite: run it by hand.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 export MUSTER_UI="${MUSTER_UI:-cpp}"
+export MUSTER_FLEET="${MUSTER_FLEET:-logos.dev}"
 
 declare -A SUITE=(
   [card]="scripts/card-self-test.sh"
@@ -38,7 +42,7 @@ for name in "${ORDER[@]}"; do
 done
 
 echo
-echo "UI parity · MUSTER_UI=$MUSTER_UI · $(git rev-parse --short HEAD) · $(date -u +%Y-%m-%dT%H:%MZ)"
+echo "UI parity · MUSTER_UI=$MUSTER_UI · MUSTER_FLEET=$MUSTER_FLEET · $(git rev-parse --short HEAD) · $(date -u +%Y-%m-%dT%H:%MZ)"
 fail=0
 for name in "${ORDER[@]}"; do
   printf '  %-16s %-6s %4ss\n' "$name" "${RESULT[$name]}" "${SECS[$name]}"
