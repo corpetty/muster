@@ -75,7 +75,7 @@ Delivery **v0.3.0** (2026-09-30, nwaku v0.39.0) turns RLN on for the `logos.test
 nothing more. muster moved its default there (exo-eb6.1, exo-eb6.2). `MUSTER_FLEET`,
 `TRY_FLEET` and `make run-fleet FLEET=` still pick `logos.test`.
 
-## Moving muster to delivery v0.3.0: five traps (2026-10-01)
+## Moving muster to delivery v0.3.0: six traps (2026-10-01)
 
 Each one was found live, through `two-instance-proof.sh` and `split-self-test.sh` on
 `logos.dev`, and each fix has a test in `module/tests/` where it can be held without a node.
@@ -110,14 +110,24 @@ Each one was found live, through `two-instance-proof.sh` and `split-self-test.sh
    byte values. muster read only the array, so store catch-up recovered nothing; that is
    what broke the split self-test (`delivery_received_test` §4).
 
+6. **muster's own store polling stalled the module.** muster asked every topic's
+   store window each second, because on v0.2 the store was the only way to receive. With
+   five of six store peers unreachable, each query held the delivery module on a dead
+   dial for up to 5 s, sends queued behind it, and the handshake failed one run in three,
+   in a "pass, pass, fail" pattern that looked like rate limiting but survived a
+   cool-down. With store queries made rare it passed 4 of 4, faster. Now a topic's history
+   is still paged at full speed, but its sliding window is asked every 15 s
+   (`MUSTER_CATCHUP_WINDOW_MS`), and one query may hold delivery at most 3 s
+   (`MUSTER_STORE_TIMEOUT_MS`) (`store_catchup_test` §11).
+
 One thing v0.3 fixed for us: **live receive works**. v0.2.0's relay never surfaced a
 received message on muster's shard (blocker 3 in `two-instance-live-wire-blockers.md`),
 so cross-host receive rode store polling alone. On v0.3.0 both peers log `inbound
 source=live` frames, and store catch-up fills the gaps.
 
-Where it stands: `two-instance-proof.sh` passes on `logos.dev`. `split-self-test.sh`
-passed 2 of 3 in 49 s each. The third run failed in the handshake while five of the six
-`logos.dev` nodes were unreachable from here and each peer held one relay connection.
+Where it stands, with five of `logos.dev`'s six nodes still unreachable from here:
+`two-instance-proof.sh` passed 4 of 4 (23 s each) and `split-self-test.sh` 4 of 4 (36–41 s),
+and `scripts/ui-parity.sh` was 8 of 8 green, each test faster than before the upgrade.
 
 ## Sources
 
