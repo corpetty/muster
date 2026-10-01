@@ -1,6 +1,6 @@
 # keystore_module as muster's EVM key backend (epic exo-149)
 
-**Status:** K1 landed (2026-10-01); K2 (this note's subject) needs one decision, §4.
+**Status:** K1 landed (2026-10-01). §4 decided 2026-10-01: C, plus A as a flagged interim; B is the target (exo-149.6).
 **Sources:** `keystore_module` = logos-co/logos-evm-keystore-module@2318c679
 (`docs/specs.md` §request_approval; `rust-lib/src/approval.rs`, `keystore.rs`). The
 platform view of the EVM stack is in the Logos Module Atlas: `stacks/evm-wallet.md` and
@@ -82,9 +82,10 @@ the keystore cannot render them.
   not on the intent. It can be requested once, when the member selects the keystore
   account (K5), and reused. Each approval then carries one extra leg (#2), not two.
 
-**Recommendation:** C, plus A as an interim labelled as such: behind a setting, off by
-default outside testnet, with the risk stated on the card. Then B as the target, via
-its own ADR. K2's mechanics (§5) are the same under A and B, so they can land first.
+**Decided (2026-10-01):** C, plus A as an interim labelled as such: behind a setting, off
+by default outside testnet, with the risk stated on the card. Then B as the target, via
+its own ADR (exo-149.6). K2's mechanics (§5) are the same under A and B, so they land
+first.
 
 ## 5. The asynchronous seam (K2)
 
