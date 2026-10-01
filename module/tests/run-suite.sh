@@ -34,7 +34,7 @@ mkdir -p "$OUT"
 E2E=(safe_anvil_e2e safe_real_anvil_e2e coordinate_submit_anvil btc_regtest_e2e split_btc_regtest_e2e
      phase_d_exit_test lez_multisig_live_e2e lez_frost_account_e2e lez_frost_room_e2e
      split_anvil_e2e split_erc20_anvil_e2e settle_up_btc_regtest_e2e settle_up_erc20_anvil_e2e
-     lez_frost_v030_e2e)
+     lez_frost_v030_e2e lez_frost_room_v030_e2e)
 
 # 1. The closure, at the pinned revs (fetched on a miss).
 NIMPKGS="$(tools/nim-closure.sh)" || exit 1

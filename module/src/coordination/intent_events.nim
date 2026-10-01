@@ -113,6 +113,26 @@ proc effectFromJson*(effectJson: string): Effect =
           for i in 0 ..< h.len div 2:
             try: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
             except ValueError: discard
+        if j{"lez"}.getStr() == "v0.3":
+          # The v0.3.0 line (exo-eb6.4 L3): the program by account id, each row's program
+          # shard, the instruction as borsh bytes, the signer's nonce, and the fee
+          # declaration — exactly what a v0.3 public message commits to.
+          var shards, signers3, nonces3: seq[CborValue]
+          for s in j{"shards"}.getElems():
+            shards.add cbMap(@[(cbText("account"), cbBytes(zhex(s{"account"}.getStr()))),
+                               (cbText("program"), cbBytes(zhex(s{"program"}.getStr())))])
+          for sgn in j{"signers"}.getElems(): signers3.add cbBytes(zhex(sgn.getStr()))
+          for n in j{"nonces"}.getElems(): nonces3.add cbText(n.getStr())
+          var fields = @[("programAccount", cbBytes(zhex(j{"programAccount"}.getStr()))),
+                         ("shards", cbArray(shards)), ("instruction", cbBytes(zhex(j{"instruction"}.getStr()))),
+                         ("signers", cbArray(signers3)), ("nonces", cbArray(nonces3))]
+          let f = j{"fee"}
+          if f != nil and f.kind == JObject:
+            fields.add ("fee", cbMap(@[(cbText("payer"), cbBytes(zhex(f{"payer"}.getStr()))),
+                                       (cbText("gasLimit"), cbText(f{"gasLimit"}.getStr())),
+                                       (cbText("tip"), cbText(f{"tip"}.getStr())),
+                                       (cbText("maxFee"), cbText(f{"maxFee"}.getStr()))]))
+          return Effect(schemaId: "muster.effect.lez-call.v2", fields: fields)
         var accts, signers, nonces, ins: seq[CborValue]
         for a in j{"accounts"}.getElems(): accts.add cbBytes(zhex(a.getStr()))
         for sgn in j{"signers"}.getElems(): signers.add cbBytes(zhex(sgn.getStr()))
@@ -227,7 +247,9 @@ proc effectSchema*(effectJson: string): tuple[id: string, known: bool] =
     of "safe-tx": return ("muster.effect.safe-tx.v1", true)
     of "btc-spend": return ("muster.effect.btc-spend.v1", true)
     of "lez-multisig-proposal": return ("muster.effect.lez-multisig-proposal.v1", true)
-    of "lez-call": return ("muster.effect.lez-call.v1", true)   # a LEZ FROST group's call (exo-55e)
+    of "lez-call":                                           # a LEZ FROST group's call (exo-55e)
+      # v2 is the LEZ v0.3.0 line (exo-eb6.4 L3); v1 the v0.2.4 one
+      return ((if j{"lez"}.getStr() == "v0.3": "muster.effect.lez-call.v2" else: "muster.effect.lez-call.v1"), true)
     of "statement": return ("muster.effect.statement.v1", true)
     of "split": return ("muster.effect.split.v1", true)      # who owes the creditor what (exo-a90.3)
     of "settle-up": return ("muster.effect.settle-up.v1", true)   # net several splits (exo-3c6)

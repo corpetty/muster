@@ -98,13 +98,13 @@ block:
   doAssert $a.nonce == "1" and $a.balance == "999999999996032"
   doAssert a.shards.len == 1 and a.shards[0].program == NativeTokenProgram
   doAssert a.owner.len == 0 and a.data.len == 0, "v0.3 has no single owner or data"
-  doAssert not a.fresh
+  doAssert not a.fresh and a.v3, "the zone's line is read off the shape"
   let empty = accountStateOf(parseJson("""{"nonce":0,"data":{"shards":{}}}"""))
   doAssert $empty.balance == "0" and empty.fresh
   # the v0.2.4 shape still reads as before
   let v2 = accountStateOf(parseJson("""{"program_owner":[1,0,0,0,0,0,0,0],"balance":5,"data":[7,8],"nonce":"3"}"""))
   doAssert v2.owner.len == 32 and v2.owner[0] == 1 and $v2.balance == "5" and v2.data == @[7'u8, 8] and $v2.nonce == "3"
-  doAssert not v2.fresh
+  doAssert not v2.fresh and not v2.v3
 echo "6. getAccount on v0.3: nonce + program shards, the native balance from the native shard; v0.2.4 still reads OK"
 
 echo "lez_tx_v030_test: LEZ v0.3.0 public transactions, byte for byte against LEZ's own types — all OK"

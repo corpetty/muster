@@ -183,6 +183,19 @@ method sendWitnessed*(c: LezMultisigLive, program: seq[byte], accounts, signers:
   let ws = witnesses.mapIt(LezWitness(signature: it[0], xonly: it[1]))
   c.sendWith(program, accounts, signers, words, proc(h: array[32, byte]): seq[LezWitness] = ws)
 
+method sendBuilt*(c: LezMultisigLive, leeTx: seq[byte], hash: string): LezTx =
+  ## Send prepared bytes (the v0.3.0 line) and await them, as sendWith does.
+  var sent: string
+  try: sent = c.rpc.sendTransaction(leeTx)
+  except WalletError as e:
+    if "\"code\"" in e.msg: return LezTx(ok: false, error: "the sequencer refused it: " & e.msg)
+    raise e
+  if sent.toLowerAscii() != hash.toLowerAscii():
+    return LezTx(ok: false, error: "the sequencer answered hash " & sent & " for transaction " & hash)
+  c.sent[hash.toLowerAscii()] = epochTime()
+  if not c.waitForInclusion: return LezTx(ok: true, hash: hash.toLowerAscii())
+  c.awaitInclusion(hash.toLowerAscii())
+
 proc sendSigned*(c: LezMultisigLive, program: seq[byte], accounts: seq[seq[byte]], signers: seq[seq[byte]],
                  words: seq[uint32]): LezTx =
   ## A public transaction to any program, signed by the keystore's member keys for

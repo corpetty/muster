@@ -19,6 +19,7 @@ type
     data*: seq[byte]                  ## v0.2.4: the account's data; v0.3: []
     nonce*: UInt128
     shards*: seq[tuple[program, data: seq[byte]]]  ## v0.3: every program shard
+    v3*: bool                         ## the zone answered in v0.3.0's shape: which line it runs
 
 proc u128Of(n: JsonNode): UInt128 =
   case n.kind
@@ -39,6 +40,7 @@ proc accountStateOf*(j: JsonNode): LezAccountState =
   result.nonce = u128Of(j["nonce"])
   let d = j{"data"}
   if d != nil and d.kind == JObject and d.hasKey("shards"):             # v0.3.0
+    result.v3 = true
     for program, data in d["shards"].pairs:
       let p = accountIdFromBase58(program)
       let bytes = bytesOf(data)

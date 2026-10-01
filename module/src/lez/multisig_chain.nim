@@ -92,6 +92,11 @@ method sendWitnessed*(c: LezMultisigChain, program: seq[byte], accounts, signers
   ## A public transaction whose witnesses (signature, x-only key) someone already made,
   ## e.g. a FROST aggregate (lez.frost-public-account). The live chain sends it.
   raise newException(WalletError, "LezMultisigChain.sendWitnessed is abstract")
+method sendBuilt*(c: LezMultisigChain, leeTx: seq[byte], hash: string): LezTx {.base.} =
+  ## A transaction someone already built and witnessed, as the bytes sendTransaction
+  ## carries, and the hash it must answer with: the v0.3.0 line's (exo-eb6.4 L3), whose
+  ## message lez/tx.nim builds. The live chain sends it and awaits it.
+  raise newException(WalletError, "LezMultisigChain.sendBuilt is abstract")
 
 proc readState*(c: LezMultisigChain, createKey: seq[byte]): tuple[found: bool, state: MultisigState, height: uint64] =
   ## The multisig's state, decoded from its PDA; raises LezDecodeError on a malformed account.
