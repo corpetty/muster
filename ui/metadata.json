@@ -12,7 +12,9 @@
   "dependencies": [
     "muster_module",
     "delivery_module",
-    "lez_core"
+    "lez_core",
+    "liblogos_lez_rln_module",
+    "liblogos_rln_module"
   ],
   "codegen": {
     "rep": "src/muster_ui.rep"
