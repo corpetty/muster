@@ -1468,14 +1468,15 @@ proc musterCoordinateOpenAssets(): string =
     counts[k] = counts.getOrDefault(k) + 1
   var arr = newJArray()
   for k in groups:
-    arr.add %*{"chain": k[0], "asset": k[1], "parts": counts[k], "symbol": assetSymbol(k[0], k[1]),
+    arr.add %*{"chain": k[0], "chainLabel": chainLabel(k[0]), "asset": k[1], "parts": counts[k],
+               "symbol": assetSymbol(k[0], k[1]),
                "decimals": assetDecimals(k[0], k[1])}
   # the chain a settle-up proposed with chain "" pays on: the compose policy's, else my RPC's
   var payChain = splitPolicy(gCoordKind).account
   if payChain.len == 0:
     let (ok, c, _) = splitChainFor("evm-split")
     if ok: payChain = c
-  $(%*{"assets": arr, "payChain": payChain})
+  $(%*{"assets": arr, "payChain": payChain, "payChainLabel": chainLabel(payChain)})
 
 proc musterCoordinateProposeSettleUpAcrossImpl(chain, asset, ratesJson, memo: string): string =
   ## Settle up across assets and chains: paid on `chain` in `asset`, covering every open
@@ -1520,7 +1521,8 @@ proc musterCoordinateProposeSettleUpAcrossImpl(chain, asset, ratesJson, memo: st
   if composed.why.startsWith("no-address:"):
     let who = composed.why["no-address:".len .. ^1]
     return $(%*{"error": "no-address", "who": who, "name": memberName(who, myIds()), "chain": chain,
-                "detail": memberName(who, myIds()) & " has shared no address on " & chain & " to be paid at"})
+                "chainLabel": chainLabel(chain),
+                "detail": memberName(who, myIds()) & " has shared no address on " & chainLabel(chain) & " to be paid at"})
   if composed.why.len > 0: return $(%*{"error": composed.why})
   # my own agreement is made by proposing: never for an address this client does not hold
   let family = (if kind == "btc-split": BtcSplitFamily else: EvmSplitFamily)
@@ -2062,10 +2064,12 @@ proc musterCoordinateIntents(): string =
         for c in su.covers:
           if (c.chain & "|" & c.asset) in seenAssets: continue
           seenAssets.add c.chain & "|" & c.asset
-          inAssets.add %*{"chain": c.chain, "asset": c.asset, "symbol": assetSymbol(c.chain, c.asset),
+          inAssets.add %*{"chain": c.chain, "chainLabel": chainLabel(c.chain), "asset": c.asset,
+                          "symbol": assetSymbol(c.chain, c.asset),
                           "shares": su.covers.countIt(it.chain == c.chain and it.asset == c.asset)}
         o["settleUp"] = %*{"asset": su.asset, "memo": su.memo, "covers": su.covers.len, "splits": splits.len,
-                           "chain": su.chain, "across": su.rates.len > 0, "rates": rs, "coverAssets": inAssets,
+                           "chain": su.chain, "chainLabel": chainLabel(su.chain), "across": su.rates.len > 0,
+                           "rates": rs, "coverAssets": inAssets,
                            "expired": expiredUnpaid, "lapsed": coverLapsed(events, driverFor, v, nowS),
                            "releasesAt": (if expiredUnpaid: $(ctx.expiry + CoverReleaseGraceS) else: ""),
                            "transfers": ts, "iAmParty": myEncHex in settleParties(su),
