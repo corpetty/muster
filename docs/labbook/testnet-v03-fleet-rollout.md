@@ -75,6 +75,50 @@ Delivery **v0.3.0** (2026-09-30, nwaku v0.39.0) turns RLN on for the `logos.test
 nothing more. muster moved its default there (exo-eb6.1, exo-eb6.2). `MUSTER_FLEET`,
 `TRY_FLEET` and `make run-fleet FLEET=` still pick `logos.test`.
 
+## Moving muster to delivery v0.3.0: five traps (2026-10-01)
+
+Each one was found live, through `two-instance-proof.sh` and `split-self-test.sh` on
+`logos.dev`, and each fix has a test in `module/tests/` where it can be held without a node.
+
+1. **Neither builder can parse delivery v0.3.0's contract.** Its `.lidl` declares
+   `optional_depends [libp2p_module, liblogos_rln_module]`. Both of muster's builders
+   generate a wrapper from every dependency's `.lidl`: the UI's (basecamp's, ADR-013) and
+   the module's (the codegen fork). Their LIDL parsers predate the keyword and stop:
+   `Unexpected token 'optional_depends' in module body`. muster never calls delivery
+   through that wrapper; the module calls it over raw `lp_*`. So each flake hands its
+   builder the contract with that one line removed (`deliveryForUi`, `deliveryForModule`).
+   The runner still bundles the real module, `packages.<sys>.lgx`, untouched.
+2. **`messageReceived` gained `source` before `timestamp`.** It went from
+   `(messageHash, contentTopic, payload, timestamp)` to `(…, payload, source, timestamp)`.
+   Read by position, every v0.3 message's timestamp was the string `"live"`, read as 0
+   (`transport/received.nim`, `delivery_received_test`).
+3. **One bare top-level key pins the port.** v0.3 reads a config of layered keys
+   (`preset`, `mode`, `messagingOverrides`) with OS-assigned ports. A bare key beside
+   them, as muster's `entryNodes` was, switches it to the legacy flat shape, whose TCP
+   port defaults to 60000. A second instance on the same machine then failed to start
+   (`START_NODE failed`). v0.3's presets carry their own entry nodes, so muster now keeps
+   them for itself only, as store peers (`transport/node_config.nim`,
+   `delivery_node_config_test`). From here every QUIC dial to `logos.dev` timed out, so
+   QUIC is off unless `MUSTER_DELIVERY_QUIC=1`.
+4. **A store query that cannot dial says so with no request id.** The answer is
+   `{"error": "…PEER_DIAL_FAILURE: <peer id>", "success": false}`. muster's catch-up never
+   saw these, kept rotating through dead peers, and waited out a 10 s timeout on each
+   history page lost to one. The peer is now backed off: skipped for 5 s, doubling to a
+   minute, cleared by an answer (`store_catchup_test` §10).
+5. **Stored payloads are base64 now.** A store answer's message comes back unwrapped (no
+   `vResultPrivate`), its payload a standard-base64 string where v0.2 sent an array of
+   byte values. muster read only the array, so store catch-up recovered nothing; that is
+   what broke the split self-test (`delivery_received_test` §4).
+
+One thing v0.3 fixed for us: **live receive works**. v0.2.0's relay never surfaced a
+received message on muster's shard (blocker 3 in `two-instance-live-wire-blockers.md`),
+so cross-host receive rode store polling alone. On v0.3.0 both peers log `inbound
+source=live` frames, and store catch-up fills the gaps.
+
+Where it stands: `two-instance-proof.sh` passes on `logos.dev`. `split-self-test.sh`
+passed 2 of 3 in 49 s each. The third run failed in the handshake while five of the six
+`logos.dev` nodes were unreachable from here and each peer held one relay connection.
+
 ## Sources
 
 - Logos Testnet v0.3 announcement: <https://blog.logos.co/article/logos-testnet-v03-live>
