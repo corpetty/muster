@@ -2410,7 +2410,10 @@ proc musterConnectivity(): string =
       delLevel = "warn"; delDetail = "joined; node info unavailable"
   rows.add %*{"key": "delivery", "name": "Delivery", "level": delLevel, "detail": delDetail,
               "source": "room", "introducedBy": []}
-  rows.add rlnRowNow()               # the node's RLN membership (exo-eb6.3): what sending needs
+  # the node's RLN membership (exo-eb6.3), only where the room relies on it: a node on
+  # logos.test sends nothing without one; elsewhere it is no dependency (exo-428), and
+  # rln_status says "not needed" for Settings
+  if presetOf(gDeliveryConfig) == RlnPreset: rows.add rlnRowNow()
   if gSession == nil:
     result = $(%*{"rows": rows})
     if gLpDebug: stderr.writeLine("MUSTER-LP connectivity " & result)
