@@ -125,3 +125,33 @@ The same shape as the LEZ proving pump and the RLN probe's async reads:
   - `evm_signer_cli` approves `<handle> <bundle_id> @pwfile`.
   - The pump folds the contribution, the attestation verifies, and two owners reach
     executable.
+
+## 7. Verified end to end (2026-10-01)
+
+`scripts/keystore-approval-logoscore-test.sh` passes under logoscore 0.3.1, against
+anvil and the real Safe v1.4.1. muster contributed with `keystore_module`'s owner 0 and
+got `awaiting-approval`. `evm_signer_cli`, acting as the human, rendered the request as
+below and approved it (`signed_count: 2`). muster's tick then fetched both signatures,
+checked each recovers to owner 0 over muster's own hashes (so the keystore's signing
+hash equals muster's `safeTxHash`), and published the approval: `collecting`, with 1
+approval by `0xf39f…2266`.
+
+```
+2 item(s) to sign:
+  [1] Sign EIP-712 typed data
+      Domain: chainId=31337, verifyingContract=0xeb4520e32862d2adfa2af042f0b5ea2041dee841
+      Type: SafeTx
+      Message:  baseGas: 0 · data: 0x · gasPrice: 0 · gasToken: 0x0…0 · nonce: 0 ·
+                operation: 0 · refundReceiver: 0x0…0 · safeTxGas: 0 ·
+                to: 0x70997970c51812dc3a010c7d01b50e0d17dc79c8 · value: 1
+      Signing hash: 0xbddffaa9dbd6811dd56fd4c8be1c5191ddd4273a5991873ea279b7bf5d311156
+  [2] Sign an OPAQUE 32-byte digest
+      Purpose (claimed by the requester): Muster attestation (interim): …
+      Digest: 0xa530324e94cc3be517314746c99f2c72c360efad54128d49c80a077f26807712
+      This signer cannot show you what this authorises.
+```
+
+Leg 2 is the interim cost of §4, stated in the signer's own words; exo-149.6 removes it.
+**Seen here, for K5:** the intents view marks the approval `mine: false`. muster's "is
+this me" check knows only its own keystore's keys, not the `keystore_module` account
+the member chose.
