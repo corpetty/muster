@@ -41,7 +41,7 @@ proc envMs(name: string, default, floor: int64): int64 =
   if e.len == 0: return default
   try: max(floor, parseInt(e).int64) except CatchableError: default
 
-var gStoreShown = 0   ## store responses logged whole under MUSTER_LP_DEBUG (the first few)
+var gStoreFailed, gStoreAnswered = 0   ## store responses seen, under MUSTER_LP_DEBUG
 
 let gCatchupPeriodMs* = envMs("MUSTER_CATCHUP_MS", 1000, 200)
   ## re-query the store this often (ms). Default 1s ≈ chat cadence; floor 200ms.
@@ -265,10 +265,13 @@ method poll*(t: DeliveryTransport) =
     #   { "value": "<json string>" }                       # lp result envelope
     #   value -> { "messages": [ { "messageHash",
     #       "message": { "vResultPrivate": { "contentTopic", "payload": [byte,…] } } } ] }
-    if gLpDebug and gStoreShown < 6:      # the first few responses whole: their shape is checked live
-      inc gStoreShown
+    if gLpDebug:                         # the first few of each kind whole: their shape is checked live
       let r = bytesToStr(raw)
-      stderr.writeLine("MUSTER-LP store response: " & r[0 ..< min(r.len, 700)])
+      let failed = r.contains("\"success\":false")
+      if failed: inc gStoreFailed else: inc gStoreAnswered
+      if (failed and gStoreFailed <= 3) or (not failed and gStoreAnswered <= 4):
+        stderr.writeLine("MUSTER-LP store response (" & (if failed: "failed #" & $gStoreFailed
+                         else: "answered #" & $gStoreAnswered) & "): " & r[0 ..< min(r.len, 900)])
     var env: JsonNode
     try: env = parseJson(bytesToStr(raw))
     except CatchableError: continue
