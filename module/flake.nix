@@ -54,6 +54,12 @@
     # consumes (549cf115); mapped to the module name `lez_core` below so
     # lp_client_create("lez_core") resolves in the standalone runner.
     lez_core.url = "github:logos-blockchain/logos-execution-zone-module/549cf1159f20fa0c3fe8e88a5ab71de68a5aa34b";
+    # The official EVM keystore (exo-149): muster_module reads its accounts and requests
+    # signatures from it over lp_* (src/wallet/keystore_probe.nim). Pinned to the commit
+    # Basecamp 0.3.1's default catalog released as keystore_module 0.1.0 (tag
+    # keystore_module-v0.1.0 in logos-co/logos-modules-release); mapped to the module
+    # name `keystore_module` below.
+    logos-evm-keystore-module.url = "github:logos-co/logos-evm-keystore-module/2318c679e2b7176967bd45052f3d64b2a8b06931";
   };
 
   outputs = inputs@{ self, logos-module-builder, ... }:
@@ -83,7 +89,8 @@
         (logos-module-builder.lib.mkLogosModule {
           src = ./.;
           configFile = ./metadata.json;
-          flakeInputs = { delivery_module = deliveryForModule; lez_core = inputs.lez_core; } // inputs;
+          flakeInputs = { delivery_module = deliveryForModule; lez_core = inputs.lez_core;
+                         keystore_module = inputs.logos-evm-keystore-module; } // inputs;
         }).packages.${system});
     };
 }

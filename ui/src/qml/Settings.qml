@@ -44,6 +44,21 @@ Item {
         onTriggered: settings.backend.loadRlnStatus()
     }
 
+    // The official EVM keystore row (keystore_status, exo-149.1 K1): {level, detail,
+    // remedy?, identity?, approvers, accounts:[{address, label, wallet}]}; {} until the
+    // first read lands. keystore_module holds the EVM keys; muster only asks.
+    readonly property var keystore: {
+        try { return JSON.parse(backend ? backend.keystoreStatusJson : "{}") || ({}); }
+        catch (e) { return ({}); }
+    }
+    Timer {
+        interval: 5000
+        repeat: true
+        triggeredOnStart: true
+        running: settings.visible && !!settings.backend
+        onTriggered: settings.backend.loadKeystoreStatus()
+    }
+
     // The shareable chat id: the 64-byte encryption identity (ed25519 ++ x25519) that
     // coordinate_admit takes — exactly what someone needs to add you to a room. The
     // three keys are shown separately below; this is the one string you hand out.
@@ -482,6 +497,64 @@ Item {
                                  + "it has an active membership, funded on the registry's own zone. logos.dev runs no RLN.")
                         color: Theme.palette.textTertiary
                         font.pixelSize: Theme.typography.badgeText
+                    }
+
+                    // ── EVM keystore (exo-149.1 K1) ──
+                    // keystore_module holds the EVM keys; muster reads its accounts and will
+                    // ask it for signatures a person approves in the signer. This row says
+                    // whether it is there and whether it sees muster's requests as muster's.
+                    LogosText {
+                        Layout.topMargin: Theme.spacing.small
+                        text: qsTr("EVM KEYSTORE")
+                        color: Theme.palette.textTertiary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                        font.weight: Theme.typography.weightMedium
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        Rectangle {
+                            Layout.alignment: Qt.AlignTop
+                            Layout.topMargin: 5
+                            Layout.preferredWidth: 8
+                            Layout.preferredHeight: 8
+                            radius: 4
+                            color: settings.keystore.level === "ok" ? Theme.palette.success
+                                 : settings.keystore.level === "warn" ? Theme.palette.warning
+                                 : settings.keystore.level === "down" ? Theme.palette.error
+                                 : Theme.palette.textTertiary
+                        }
+                        LogosText {
+                            objectName: "settingsKeystoreDetail"
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: settings.keystore.detail ? String(settings.keystore.detail) : qsTr("checking…")
+                            color: Theme.palette.textSecondary
+                            font.pixelSize: Theme.typography.secondaryText
+                        }
+                    }
+                    LogosText {
+                        Layout.fillWidth: true
+                        visible: !!settings.keystore.remedy
+                        wrapMode: Text.WordWrap
+                        text: String(settings.keystore.remedy || "")
+                        color: Theme.palette.warning
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                    Repeater {
+                        model: settings.keystore.accounts || []
+                        delegate: LogosText {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            elide: Text.ElideMiddle
+                            text: (modelData.label ? modelData.label + "  " : "")
+                                  + (modelData.wallet ? "(" + modelData.wallet + ")  " : "")
+                                  + modelData.address
+                            color: Theme.palette.textSecondary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                        }
                     }
 
                     LogosText {

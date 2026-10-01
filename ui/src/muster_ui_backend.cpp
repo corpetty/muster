@@ -9,6 +9,7 @@
 #include <QFile>
 #include <QStandardPaths>
 #include <QSet>
+#include <memory>
 #include <QDateTime>
 
 // Generated umbrella: LogosModules (behind modules()) built from
@@ -505,6 +506,14 @@ void MusterUiBackend::loadRlnStatus()
     setRlnStatusJson(modules().muster_module.rln_status());
 }
 
+void MusterUiBackend::loadKeystoreStatus()
+{
+    // keystore_status → the official EVM keystore (exo-149.1 K1): whether keystore_module
+    // attributes our calls to muster_module, who approves, which accounts could sign. The
+    // module's reads are async, so this never blocks; Settings polls it while open.
+    setKeystoreStatusJson(modules().muster_module.keystore_status());
+}
+
 void MusterUiBackend::loadSecurityLevels()
 {
     // security_levels → the room's active null-ladder level on the three axes (exo-1ec.5),
@@ -912,6 +921,21 @@ void MusterUiBackend::onContextReady()
     // found running the tour: the inbox never started, so Bob never saw an invitation.
     // If the module hasn't answered, run them again until it does.
     retryStartup(20);
+
+    // Diagnostic/headless self-test hook (exo-149.1 K1): MUSTER_KEYSTORE_PROBE=1 reads
+    // keystore_status every 2 s for a minute and logs each answer, so an offscreen runner
+    // shows whether keystore_module attributes muster's calls to muster_module. The first
+    // read only sends the async reads; the answers land on the next. Off unless set.
+    if (!qgetenv("MUSTER_KEYSTORE_PROBE").isEmpty()) {
+        auto *t = new QTimer(this);
+        auto n = std::make_shared<int>(0);
+        connect(t, &QTimer::timeout, this, [this, t, n]() {
+            loadKeystoreStatus();
+            qInfo().noquote() << "[muster_ui] KEYSTORE" << keystoreStatusJson();
+            if (++*n >= 30) t->stop();
+        });
+        t->start(2000);
+    }
 
     // Diagnostic/headless self-test hook: if MUSTER_AUTOJOIN_TOPIC is set, join that
     // room a few seconds after startup — no GUI click needed. Runs on the ui-host's

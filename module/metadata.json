@@ -10,7 +10,8 @@
   "main": "muster_module_plugin",
   "dependencies": [
     "delivery_module",
-    "lez_core"
+    "lez_core",
+    "keystore_module"
   ],
   "include": [],
   "capabilities": [],

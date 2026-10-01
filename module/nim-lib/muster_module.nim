@@ -86,6 +86,8 @@ import ../src/coordination/parts_evm    # …on an EVM chain, through this membe
 import ../src/coordination/settle_up    # net several splits into fewer payments (exo-3c6)
 import ../src/transport/rln_status     # the node's RLN membership as a connectivity row (exo-eb6.3)
 import ../src/transport/rln_probe      # …read from delivery and the two RLN modules
+import ../src/wallet/keystore_status   # the official EVM keystore as a status row (exo-149.1 K1)
+import ../src/wallet/keystore_probe    # …read from keystore_module over lp_*
 import ../src/coordination/covers       # whether a settle-up still covers a share, at this clock (exo-a90.16)
 import ../src/coordination/pending_parts  # payments in flight, never forgotten while they might land (exo-a90.23)
 import ../src/coordination/parts_btc    # …and in Bitcoin, from each debtor's own key, confirmed on the creditor's node (exo-d17)
@@ -2375,6 +2377,19 @@ proc musterRln_status(): string =
   try: result = $rlnRowNow()
   except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
   if gLpDebug: stderr.writeLine("MUSTER-LP rln " & result)
+
+# ── the official EVM keystore (exo-149.1 K1) ─────────────────────────────────────
+var gKeystoreProbe: KeystoreProbe = nil
+
+proc musterKeystore_status(): string =
+  ## keystore_module as a status row: does it attribute our calls to muster_module, is
+  ## an approver named, which accounts could we ask it to sign with. The probe's reads
+  ## are async, so this never waits on keystore_module (it may be busy in an approve).
+  try:
+    if gKeystoreProbe == nil: gKeystoreProbe = newKeystoreProbe()
+    result = $keystoreRow(gKeystoreProbe.read())
+  except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
+  if gLpDebug: stderr.writeLine("MUSTER-LP keystore " & result)
 
 proc musterConnectivity(): string =
   ## Liveness of the infrastructure the room relies on (invariant 8: store nodes and
