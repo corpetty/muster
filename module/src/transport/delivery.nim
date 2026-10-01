@@ -275,6 +275,10 @@ method poll*(t: DeliveryTransport) =
     var env: JsonNode
     try: env = parseJson(bytesToStr(raw))
     except CatchableError: continue
+    let down = dialFailurePeer(env)            # a peer we could not dial: back it off
+    if down.len > 0:
+      t.catchup.onPeerFailure(down, int64(epochTime() * 1000))
+      continue
     if env.kind != JObject or not env.hasKey("value"): continue
     var resp: JsonNode
     try: resp = parseJson(env["value"].getStr())
