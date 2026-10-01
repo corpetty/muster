@@ -61,12 +61,29 @@
       nixpkgs = logos-module-builder.inputs.nixpkgs;
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems f;
+      # delivery_module as this builder sees it (exo-eb6.1). The host module set gets
+      # the real module (its packages.<sys>.lgx, untouched). But this builder also
+      # generates a wrapper from every dependency's packages.<sys>.lidl, and delivery
+      # v0.3.0's contract declares `optional_depends [...]`, which its LIDL parser
+      # predates. muster calls delivery over raw lp_* (src/transport/delivery.nim),
+      # never through that wrapper, so the contract is handed over without that line.
+      deliveryForModule =
+        let d = inputs.logos-delivery-module;
+        in d // {
+          packages = builtins.mapAttrs (system: ps: ps // {
+            lidl = (import nixpkgs { inherit system; }).runCommand
+              "delivery_module-lidl-for-muster-module" { } ''
+                mkdir -p $out
+                sed '/^[[:space:]]*optional_depends[[:space:]]/d' ${ps.lidl}/delivery_module.lidl > $out/delivery_module.lidl
+              '';
+          }) d.packages;
+        };
     in {
       packages = forAllSystems (system:
         (logos-module-builder.lib.mkLogosModule {
           src = ./.;
           configFile = ./metadata.json;
-          flakeInputs = { delivery_module = inputs.logos-delivery-module; lez_core = inputs.lez_core; } // inputs;
+          flakeInputs = { delivery_module = deliveryForModule; lez_core = inputs.lez_core; } // inputs;
         }).packages.${system});
     };
 }

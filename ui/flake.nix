@@ -39,6 +39,23 @@
 
   outputs = inputs@{ logos-module-builder, ... }:
     let
+      # delivery_module as this builder sees it (exo-eb6.1). The runner bundles the
+      # real module (its packages.<sys>.lgx, untouched). But this builder's code
+      # generator also parses every dependency's packages.<sys>.lidl, and delivery
+      # v0.3.0's contract declares `optional_depends [...]`, which its LIDL parser
+      # (basecamp's, ADR-013) predates. muster_ui never calls delivery, so its contract
+      # is handed over without that one line; nothing the UI uses changes.
+      deliveryForUi =
+        let d = inputs.logos-delivery-module;
+        in d // {
+          packages = builtins.mapAttrs (system: ps: ps // {
+            lidl = (import logos-module-builder.inputs.nixpkgs { inherit system; }).runCommand
+              "delivery_module-lidl-for-muster-ui" { } ''
+                mkdir -p $out
+                sed '/^[[:space:]]*optional_depends[[:space:]]/d' ${ps.lidl}/delivery_module.lidl > $out/delivery_module.lidl
+              '';
+          }) d.packages;
+        };
       base = logos-module-builder.lib.mkLogosQmlModule {
         src = ./.;
         configFile = ./metadata.json;
@@ -48,7 +65,7 @@
         # delivery_module is muster_module's transitive dependency; it is provided
         # here (mapped from logos-delivery-module) so the builder can pull it into
         # the same module set — muster_ui does not call it, so it declares no client.
-        flakeInputs = { delivery_module = inputs.logos-delivery-module; lez_core = inputs.lez_core; } // inputs;
+        flakeInputs = { delivery_module = deliveryForUi; lez_core = inputs.lez_core; } // inputs;
       };
 
       nixpkgs = logos-module-builder.inputs.nixpkgs;
