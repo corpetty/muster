@@ -45,11 +45,11 @@ block:
   doAssert lezAccountStatus(fake, "500").state == "missing", "a spend needs funds — underfunded"
   echo "2. account exists: met for a receive, missing (underfunded) for a spend OK"
 
-# ── 3. funded via the faucet (claimPinata) → met for the spend ────────────────────
+# ── 3. funded (at genesis: LEZ v0.3 has no faucet) → met for the spend ────────
 block:
   let fake = newFakeLezCore()
   let a = fake.createAccount(lakPublic)
-  discard fake.claimPinata("pinata-1", a.id)          # the fake faucet credits 1e9
+  fake.fund(a.id, "1000000000")          # genesis credits 1e9
   let (s, d) = lezAccountStatus(fake, "500")
   doAssert s == "met" and "balance" in d, d
   echo "3. funded account → met for the spend OK"
@@ -78,7 +78,7 @@ block:
   block:
     let fake = newFakeLezCore()
     let a = fake.createAccount(lakPublic)
-    discard fake.claimPinata("p", a.id)
+    fake.fund(a.id, "1000000000")
     var f = HostFacts()
     f.lezReady = mkLezReady(fake, "1")
     doAssert assessReadiness(m, probeFromFacts(f)).ready

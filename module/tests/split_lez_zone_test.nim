@@ -77,7 +77,8 @@ proc keyNode(w: LezAdapter, ks: Keystore): string =
   for (f, address) in w.receiveAddresses(ks):
     if f == "shielded": return address
 proc shieldToSelf(w: LezAdapter, ks: Keystore, raw: string) =
-  ## The zone's funding path: faucet → public, then shield to MY OWN key node. The note
+  ## The zone's funding path: funds reach the public account (a transfer from someone
+  ## who holds native LEZ; v0.3 has no faucet), then shield to MY OWN key node. The note
   ## lands at an account the scan discovers — not the shielded account muster created.
   let native = w.describe().nativeAsset
   let tx = w.prepareTransfer(form(w, ks, afPublic), keyNode(w, ks), Amount(asset: native, raw: raw))

@@ -99,9 +99,8 @@ method createAccount*(c: LpLezCore, kind: LezAccountKind): LezAccount =
   if kind == lakPublic:
     let id = c.rawCall("create_account_public", "[]", kReadMs)
     if id.len == 0: raise newException(WalletError, "lez_core create_account_public failed")
-    # ACTIVATE a fresh public account on-chain, or the sequencer silently drops txns
-    # to it (labbook §9 / the atomic-swap POC). Registering is safe for public accounts.
-    discard c.rawCall("register_public_account", args(%id), kReadMs)
+    # No registration: on LEZ v0.3 a fresh public account is claimed by its first funded
+    # transfer (lez_core 0.5.0 dropped register_public_account, exo-eb6.4).
     c.save()
     LezAccount(id: id, kind: lakPublic)
   else:
@@ -233,27 +232,3 @@ method sync*(c: LpLezCore): int =
   (c.synced, c.tip) = (reached, tip)
   if code == LezSyncOk and reached > last: c.save()
   code
-
-method claimPinata*(c: LpLezCore, pinataId, account: string): LezResult =
-  ## Faucet: read the pinata challenge (its 33-byte data = [difficulty, seed[0..32]]),
-  ## solve the PoW ourselves (the module takes a pre-solved solution), and claim. The
-  ## claim is accepted on send; the credit lands only when a block commits (minutes).
-  let acct = c.rawCall("get_account_public", args(%pinataId), kReadMs)
-  if acct.len == 0: return LezResult(success: false, error: "pinata account unreadable")
-  # `data` as hex text, or — the sequencer's own shape, which the demo read — an array of
-  # byte values; either way 33 bytes
-  var dataHex = ""
-  try:
-    let d = parseJson(acct){"data"}
-    if d != nil and d.kind == JString: dataHex = d.getStr()
-    elif d != nil and d.kind == JArray:
-      for b in d: dataHex.add toHex(b.getInt(), 2).toLowerAscii()
-  except CatchableError: discard
-  if dataHex.len < 2: return LezResult(success: false, error: "pinata challenge missing")
-  let difficulty = parseHexInt(dataHex[0 .. 1])          # first byte = difficulty
-  let seedHex = dataHex[2 .. ^1]                          # remaining bytes = seed
-  var solution = ""
-  try: solution = pinataSolve(seedHex, difficulty)
-  except CatchableError as e: return LezResult(success: false, error: "PoW: " & e.msg)
-  result = parseEnvelope(c.rawCall("claim_pinata", args(%pinataId, %account, %solution), kReadMs))
-  if result.success: c.save()

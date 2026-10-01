@@ -1,13 +1,12 @@
 ## Pure LEZ wire encodings — the parts of talking to lez_core that are just bytes, so
 ## they unit-test without the module loaded. Ported from the working demo (Zone.h's
-## amountLe16Hex) and the swap POC (faucet.rs's PoW). Design: docs/design/lez-adapter.md.
+## amountLe16Hex). Design: docs/design/lez-adapter.md.
 
 import std/[strutils, json]
-import ../hashing/sha256
 
 proc decToLe16*(dec: string): array[16, byte] =
   ## A non-negative decimal amount → 16 little-endian bytes (the zone takes every
-  ## amount and the pinata PoW solution as a u128 in this form). Repeated /256 by hand,
+  ## amount as a u128 in this form). Repeated /256 by hand,
   ## so it needs no bignum dep and handles the full u128 range.
   var digits = dec.strip()
   if digits.len == 0: digits = "0"
@@ -50,25 +49,6 @@ proc fromHex(s: string): seq[byte] =
   var h = s
   if h.len >= 2 and h[0] == '0' and (h[1] == 'x' or h[1] == 'X'): h = h[2 .. ^1]
   for i in 0 ..< h.len div 2: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
-
-proc pinataSolve*(seedHex: string, difficulty: int, maxTries = 1 shl 26): string =
-  ## The pinata proof-of-work (faucet.rs): find a u128 `solution` whose SHA-256 of
-  ## (seed ‖ solution_le16) has its leftmost `difficulty` bytes all zero. Returns the
-  ## solution as 16-byte LE hex — what claim_pinata's `solution_le16_hex` takes. The
-  ## module does NOT brute-force this; muster must (the swap POC does the same).
-  let seed = fromHex(seedHex)
-  var sol: uint64 = 0
-  while int(sol) < maxTries:
-    let solLe = decToLe16($sol)
-    var buf = seed
-    for b in solLe: buf.add b
-    let h = sha256(buf)
-    var ok = true
-    for i in 0 ..< difficulty:
-      if h[i] != 0: ok = false; break
-    if ok: return toHex(solLe)
-    inc sol
-  raise newException(ValueError, "pinata PoW: no solution within " & $maxTries & " tries")
 
 proc keyNodeJson*(npk, vpk: string): string =
   ## The `to_keys_json` a shielded/private transfer takes — exactly get_private_account_keys'

@@ -1,8 +1,10 @@
-## LEZ provisioning fallback (exo-44b, the no-broker path): muster can create+activate a
-## LEZ account and claim the faucet DIRECTLY over lez_core (core-to-core), so it is not
+## LEZ provisioning fallback (exo-44b, the no-broker path): muster can make sure this
+## instance has a LEZ account DIRECTLY over lez_core (core-to-core), so it is not
 ## hard-blocked on the LEZ Wallet App or the app-to-app broker. Delegating stays preferred;
-## this is the fallback. Hermetic (FakeLezCore + in-memory keystore); links secp + stint +
-## libsodium.
+## this is the fallback. Since LEZ v0.3 (exo-eb6.4) there is no faucet and no account
+## registration: provisioning funds nothing, and an account is ready only once someone
+## who holds native LEZ sends it some. Hermetic (FakeLezCore + in-memory keystore); links
+## secp + stint + libsodium.
 
 import std/strutils
 import ../src/wallet/lez_core
@@ -12,38 +14,34 @@ import ../src/crypto/keystore
 proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
 let ks = newInMemoryKeystore(seed(1), seed(2))
 
-# ── 1. provision with no faucet: an account is created + activated, no funds yet ──
+# ── 1. a fresh instance: an account exists, unfunded, and the detail names it ─────
 block:
   let a = newLezAdapter(newFakeLezCore())
-  let (account, state, detail) = a.provision(ks)      # no pinata → account-ensure only
+  let (account, state, detail) = a.provision(ks)
   doAssert account.len > 0, "a public LEZ account now exists"
-  doAssert state == "met", "an account (no spend needed) is ready: " & detail
-  echo "1. provision(no faucet): a public account is created + activated OK"
+  doAssert state == "missing", "an unfunded account is not ready: " & detail
+  doAssert account in detail and "no faucet" in detail,
+    "the detail names the account to fund and says why nothing funded it: " & detail
+  echo "1. provision: a public account exists, unfunded, and the account to fund is named OK"
 
-# ── 2. provision with the faucet: the account is funded, ready for a spend ─────────
+# ── 2. once someone funds it (here, genesis), it is ready ─────────────────────────
 block:
-  let a = newLezAdapter(newFakeLezCore())
-  let (account, state, detail) = a.provision(ks, "pinata-challenge-1")
-  doAssert account.len > 0
-  doAssert state == "met" and "balance" in detail, "the faucet funded it: " & detail
-  echo "2. provision(faucet): the account is funded and ready to spend OK"
+  let core = newFakeLezCore()
+  let a = newLezAdapter(core)
+  let first = a.provision(ks)
+  core.fund(first.account, "1000000000")
+  let (account, state, detail) = a.provision(ks)
+  doAssert account == first.account, "the same account is reused, not duplicated"
+  doAssert state == "met" and "balance" in detail, "a funded account is ready: " & detail
+  echo "2. funded from outside, the same account is ready OK"
 
-# ── 3. idempotent: provisioning again reuses the account, tops it up ──────────────
+# ── 3. provisioning funds nothing, however often it is asked ──────────────────────
 block:
-  let a = newLezAdapter(newFakeLezCore())
-  let first = a.provision(ks, "p")
-  let again = a.provision(ks, "p")
-  doAssert again.account == first.account, "the same account is reused, not duplicated"
-  echo "3. provision is idempotent — the account is reused OK"
-
-# ── 4. a faucet failure raises — never a false 'funded' ───────────────────────────
-block:
-  let fake = newFakeLezCore()
-  fake.failNextTransfer = true      # not a transfer, but proves the raise-on-failure contract
-  let a = newLezAdapter(fake)
-  # account-ensure without a faucet still succeeds (no transfer involved).
+  let core = newFakeLezCore()
+  let a = newLezAdapter(core)
+  for _ in 0 ..< 3: discard a.provision(ks)
   let (account, _, _) = a.provision(ks)
-  doAssert account.len > 0
-  echo "4. account-ensure needs no faucet; a faucet failure would raise (never a false receipt) OK"
+  doAssert core.getBalanceRaw(account, true) == "0", "no faucet, no free money"
+  echo "3. provisioning never credits an account OK"
 
 echo "lez_provision_test: all OK"
