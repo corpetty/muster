@@ -1,7 +1,7 @@
 # RLN membership for logos.test (exo-eb6.3)
 
-Status: **research, waiting on decisions** (2026-10-01). Nothing here is built. The
-questions in §5 decide what is.
+Status: **two of four decided (2026-10-01); nothing built yet.** §6 records the decisions
+and the design they lead to; §5's questions 1 and 3 are still open.
 
 ## 1. Why it is needed
 
@@ -96,3 +96,62 @@ registry's zone.
    one be made: the bridge, or a request to the Logos team?
 4. **Disclosure.** Is one funder behind all of a person's (or a demo's) memberships
    acceptable, or should each peer be funded so the chain cannot group them?
+
+## 6. Decisions (2026-10-01) and the design they lead to
+
+**Q4, disclosure: one funder behind several memberships is acceptable.**
+
+**Q2, who owns membership: muster facilitates it.** The operator's framing: a host manages
+membership, but every muster user runs a node and starts conversations, so every one of
+them hosts, and every one needs a membership. muster therefore helps each member get one
+for their own node. The membership still belongs to the node, and muster drives the RLN
+modules' own flow rather than inventing one.
+
+What that flow already does by itself, from the modules' contracts (`liblogos_rln_module`
+0.10.0):
+
+- **The keystore unlocks itself.** At init the module self-provisions a 32-byte secret, keeps
+  it in a 0600 file beside the keystore, and resumes on every restart with no unlock call.
+  Nobody types a password (`unlock_keystore_auto`; `LOGOS_RLN_DISABLE_AUTO_UNLOCK=1` opts
+  out). That answers option C's worry about a second password.
+- **Registration runs itself once funded.** A membership `start()` provisions waits for its
+  payer to hold the price plus a fee reserve (~1.8×10⁸ native at base fee 8), then
+  registers; `get_membership_state` and `membership_state_changed` report pending → active.
+- So the only step a person must take is **getting the payer funded**.
+
+**Funding, three paths:**
+
+1. **Self-funded.** muster shows the node's RLN payer (`liblogos_lez_rln_module.wallet_status`)
+   and its native balance (`get_native_balance`). Anyone sends it native LEZ on the
+   registry's zone. That zone is its own chain: sequencer `209.38.241.182:3240`, at block 961
+   on 2026-10-01, while `testnet.lez.logos.co` was at 381. It is **not** the zone muster's
+   wallet uses.
+2. **Gifted within the room.** `logos-co/logos-rln-gifter` (LIP-158) lets a funded
+   *gifter* node register memberships on behalf of authenticated clients. The client never
+   holds funds, and its identity secret never leaves its machine. Authentication is a
+   pluggable vector, and one reference vector, `eth-auth-module`, checks an EIP-191
+   signature over the identity commitment against an allowlist. Every muster member
+   already has a secp256k1 authorization key and discloses its address in the room
+   (F-14). So a funded member can serve as the room's gifter with the room members'
+   addresses as the allowlist, and each member requests a membership by signing with
+   their muster key. One funder behind several memberships is what Q4 accepted. It needs
+   `rln_gifter_module`, `eth-auth-module` and `libp2p_module` (the gifter protocol runs
+   over libp2p custom streams), and the gifter's node must be dialable by the others.
+3. **A public gifter**, if the Logos team runs one for the testnet: the same `request`,
+   another peer. Unknown; worth asking.
+
+**Slices**, each one verifiable before the next:
+
+- **R1:** bundle `liblogos_rln_module` and `liblogos_lez_rln_module` in the runner (delivery's
+  flake re-exports both as `.lgx`). Show the node's RLN state, membership state, payer and
+  balance in the connectivity panel and Settings. On `logos.test`, check it live up to
+  "awaiting funding". Needs no funds.
+- **R2:** self-funding (path 1). Verified once any payer is funded (Q3).
+- **R3:** the room gifter (path 2). A spec first: what the allowlist proves, what the chain
+  and the gifter learn, and whether a gifter may refuse a member.
+- **R4:** switch the default fleet to `logos.test` (Q1) once a membership has gone active
+  end to end.
+
+**Still open:** Q1, the default fleet, stays `logos.dev` until R4. Q3 asks who funds the
+first payer or gifter: a funded native-LEZ account on the registry's zone, the bridge, or a
+public gifter.
