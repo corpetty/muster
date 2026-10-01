@@ -68,3 +68,15 @@ block neverFalseGreen:
   doAssert rlnRow(RlnInputs(preset: "logos.test", node: "Ready",
                             wallet: %*{"state": "failed", "detail": "bad"}))["level"].getStr() == "down"
   echo "5. nothing unread reads as ok: no node, no wallet, no balance are unknown; failures are down OK"
+
+block nodeState:
+  # delivery's rlnState() is a `result`: its value may arrive as the state alone, as a
+  # JSON object {state, message}, or inside the lp envelope; anything else is no state
+  doAssert parseRlnState("Ready") == ("Ready", "")
+  doAssert parseRlnState("""{"state":"Failed","message":"no chain"}""") == ("Failed", "no chain")
+  doAssert parseRlnState("""{"success":true,"value":"Initializing","error":null}""") == ("Initializing", "")
+  doAssert parseRlnState("""{"success":true,"value":"{\"state\":\"Ready\",\"message\":\"\"}"}""") == ("Ready", "")
+  doAssert parseRlnState("""{"success":true,"value":{"state":"Disabled"}}""") == ("Disabled", "")
+  doAssert parseRlnState("") == ("", "") and parseRlnState("{}") == ("", "")
+  doAssert parseRlnState("""{"success":false,"error":"no node","value":null}""") == ("", "")
+  echo "6. delivery's rlnState, however wrapped: the state and its message OK"

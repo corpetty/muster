@@ -84,6 +84,8 @@ import ../src/drivers/split as splitdrv   # a split: each pays their own share (
 import ../src/coordination/parts        # paying and confirming a part (exo-a90.4)
 import ../src/coordination/parts_evm    # …on an EVM chain, through this member's own wallet and RPC
 import ../src/coordination/settle_up    # net several splits into fewer payments (exo-3c6)
+import ../src/transport/rln_status     # the node's RLN membership as a connectivity row (exo-eb6.3)
+import ../src/transport/rln_probe      # …read from delivery and the two RLN modules
 import ../src/coordination/covers       # whether a settle-up still covers a share, at this clock (exo-a90.16)
 import ../src/coordination/pending_parts  # payments in flight, never forgotten while they might land (exo-a90.23)
 import ../src/coordination/parts_btc    # …and in Bitcoin, from each debtor's own key, confirmed on the creditor's node (exo-d17)
@@ -2351,6 +2353,29 @@ proc introducersJson(who: seq[Introducer]): JsonNode =
   result = newJArray()
   for w in who: result.add %*{"intentId": w.intentId, "policy": w.policy}
 
+# ── the node's RLN membership (exo-eb6.3 R1) ─────────────────────────────────────
+var gRlnProbe: RlnProbe = nil
+var gRlnNode: tuple[state, message: string]
+var gRlnNodeAt = 0.0
+
+proc rlnRowNow(): JsonNode =
+  ## This node's RLN membership row. Off logos.test it costs nothing; on it, delivery's
+  ## state (local) is read at most every 5 s and the RLN modules' replies through the
+  ## probe, whose chain reads never block this thread.
+  let preset = presetOf(gDeliveryConfig)
+  if preset == RlnPreset and gSession != nil and epochTime() - gRlnNodeAt > 5.0:
+    gRlnNode = parseRlnState(gSession.rlnState())
+    gRlnNodeAt = epochTime()
+  elif gSession == nil:
+    gRlnNode = ("", "")
+  if gRlnProbe == nil: gRlnProbe = newRlnProbe()
+  rlnRow(gRlnProbe.read(preset, gRlnNode.state, gRlnNode.message))
+
+proc musterRln_status(): string =
+  try: result = $rlnRowNow()
+  except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
+  if gLpDebug: stderr.writeLine("MUSTER-LP rln " & result)
+
 proc musterConnectivity(): string =
   ## Liveness of the infrastructure the room relies on (invariant 8: store nodes and
   ## RPC are untrusted, user-chosen infra — so their reachability must be *visible*,
@@ -2385,6 +2410,7 @@ proc musterConnectivity(): string =
       delLevel = "warn"; delDetail = "joined; node info unavailable"
   rows.add %*{"key": "delivery", "name": "Delivery", "level": delLevel, "detail": delDetail,
               "source": "room", "introducedBy": []}
+  rows.add rlnRowNow()               # the node's RLN membership (exo-eb6.3): what sending needs
   if gSession == nil:
     result = $(%*{"rows": rows})
     if gLpDebug: stderr.writeLine("MUSTER-LP connectivity " & result)

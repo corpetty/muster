@@ -81,6 +81,12 @@ method nodeInfo*(t: Transport): string {.base, gcsafe.} =
   ## overrides this with its node's live view of itself. Never on a signing path.
   "{}"
 
+method rlnState*(t: Transport): string {.base, gcsafe.} =
+  ## The node's RLN state as its transport reports it (exo-eb6.3): delivery v0.3.0's
+  ## rlnState() reply, raw (transport/rln_status.parseRlnState reads it). "" when the
+  ## transport has no node, as the in-process LocalTransport never does.
+  ""
+
 # ── content address ───────────────────────────────────────────────────────────
 
 proc messageHashOf*(contentTopic: string, payload: seq[byte]): string =

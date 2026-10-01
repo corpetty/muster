@@ -181,6 +181,7 @@ proc securityLevel*(s: CoordinationSession): SecurityLevel = s.crypto.securityLe
   ## distinct from `pendingBindings` (join-requests not yet admitted).
 
 proc nodeInfo*(s: CoordinationSession): string = s.transport.nodeInfo()
+proc rlnState*(s: CoordinationSession): string = s.transport.rlnState()
   ## The transport node's live view of itself (delivery: getNodeInfo) — for the
   ## connectivity indicators. "{}" for the in-process transport / a down node.
 

@@ -317,6 +317,14 @@ method poll*(t: DeliveryTransport) =
       for h in t.handlers[topic]:
         if h != nil: h(msg)
 
+method rlnState*(t: DeliveryTransport): string {.gcsafe.} =
+  ## delivery v0.3.0's rlnState(): local to the module (no chain), so asked directly.
+  ## "" when the call fails or the node predates it.
+  try:
+    let r = t.invoke("rlnState", "[]")
+    if r == nil: "" else: $r
+  except CatchableError: ""
+
 method nodeInfo*(t: DeliveryTransport): string {.gcsafe.} =
   ## The delivery node's own view of itself (getNodeInfo) — proof the embedded lp
   ## node actually booted, for the connectivity indicator. "{}" if the call fails

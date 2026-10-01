@@ -40,6 +40,27 @@ proc presetOf*(cfgJson: string): string =
   except CatchableError: discard
   ""
 
+proc parseRlnState*(raw: string): tuple[state, message: string] =
+  ## Delivery's rlnState() reply, however it arrives: the state alone ("Ready"), a JSON
+  ## object {state, message}, or either inside the lp result envelope {success, value}.
+  ## ("", "") when it carries no state (no node yet, an error, nothing).
+  var j: JsonNode
+  try: j = parseJson(raw)
+  except CatchableError:
+    return (if raw.len > 0 and raw.allCharsInSet(Letters): (raw, "") else: ("", ""))
+  for _ in 0 .. 3:                       # unwrap the envelope and any JSON-in-a-string
+    case j.kind
+    of JString:
+      let s = j.getStr()
+      try: j = parseJson(s)
+      except CatchableError: return (s, "")
+    of JObject:
+      if j.hasKey("state"): return (j{"state"}.getStr(), j{"message"}.getStr())
+      if j.hasKey("value") and j{"success"}.getBool(true): j = j["value"]
+      else: return ("", "")
+    else: return ("", "")
+  ("", "")
+
 proc decLess(a, b: string): bool =
   ## a < b for canonical decimal strings (u128 balances exceed JSON numbers)
   let x = a.strip(chars = {'0'}, trailing = false)
