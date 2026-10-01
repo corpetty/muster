@@ -112,13 +112,26 @@ method balance*(a: LezAdapter, account: Account, asset: AssetId): Amount =
     raise newException(WalletError, "LEZ balance unavailable for " & account.id)
   amount(asset, raw)
 
+const LezPublicFeeCap = "134400000"
+  ## What lez_core declares as a public transaction's max_fee on LEZ v0.3: the LEZ wallet's
+  ## max_fee_for(DEFAULT_GAS_LIMIT) = (2_000_000 + 100_000) × 64 (lez/wallet/src/lib.rs @
+  ## v0.3.0; the same value lez/tx.nim's defaultFee declares, held to LEZ's own vectors)
+
 method estimateFee*(a: LezAdapter, frm: Account, to: string, amt: Amount): FeeEstimate =
-  ## A shielded transfer pays a PROOF cost, not gas — and the proof takes minutes, so
-  ## the note says so honestly (this is a job, not an interaction; see the labbook).
+  ## LEZ v0.3 (exo-eb6.4): a privacy-preserving transaction — a shield, a deshield, a
+  ## private transfer — carries no fee field and pays none ("fee-exempt under the interim
+  ## policy", the sequencer's fees.rs). Its cost is the proof, minutes of the sender's own
+  ## machine, so the note says so (a job, not an interaction; see the labbook). A public
+  ## transfer pays a fee, declared up to the cap and the rest refunded: a plain transfer
+  ## paid 2_968 base units on a local v0.3 zone.
   let shielded = frm.form == afShielded or to.startsWith("priv:")
-  FeeEstimate(fee: amount(a.native, "1000000"),
-              note: (if shielded: "shielded proof cost — proving takes minutes"
-                     else: "public transfer fee"))
+  if shielded:
+    FeeEstimate(fee: amount(a.native, "0"),
+                note: "fee-exempt on LEZ v0.3; the cost is the proof — proving takes minutes")
+  else:
+    FeeEstimate(fee: amount(a.native, LezPublicFeeCap),
+                note: "public transfer fee: at most " & LezPublicFeeCap &
+                      " base units, the unused part refunded (a plain transfer pays a few thousand)")
 
 # The `to` convention: a public destination is a plain account id; a SHIELDED
 # destination is "priv:<npk>:<vpk>" — the recipient's key node, since a shielded send
