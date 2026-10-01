@@ -109,8 +109,10 @@ a{color:var(--signal)}
 .fam .nm{font-weight:600;font-size:13.5px;line-height:1.3}
 .fam .sub{grid-column:1/-1;font-family:var(--mono);font-size:10.5px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap}
 .empty{padding:24px 14px;color:var(--muted);font-family:var(--mono);font-size:11.5px}
-.detail{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px)}
-@media (max-width:760px){.detail{position:static}}
+/* The detail scrolls on its own. Sticky alone left a card taller than the window
+   unreachable past its first screen until the page had scrolled the whole list. */
+.detail{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);max-height:calc(100vh - env(safe-area-inset-top,0px) - 24px);max-height:calc(100dvh - env(safe-area-inset-top,0px) - 24px);overflow-y:auto;scrollbar-width:thin;padding-bottom:14px}
+@media (max-width:760px){.detail{position:static;max-height:none;overflow:visible;padding-bottom:0}}
 
 /* the muster card */
 .card{background:var(--raised);border:1px solid var(--rule);border-radius:8px;box-shadow:0 1px 0 var(--rule-soft),0 10px 30px -18px rgba(20,30,25,.35);overflow:hidden}
@@ -661,10 +663,13 @@ function renderList(){
     if (window.matchMedia("(max-width:760px)").matches) document.getElementById("detail").scrollIntoView({behavior:"smooth", block:"start"});
   });
 }
+/* A detail pane scrolls on its own: a new selection opens at its top, a re-render of the same one keeps its place. */
+function toTopOnNew(el, id){ if (el.dataset.shown !== id){ el.dataset.shown = id; el.scrollTop = 0; } }
 function renderDetail(){
   const f = byId[state.sel];
   const inCmp = state.cmp.includes(f.id);
   const acts = actionsOf(f.id);
+  toTopOnNew(document.getElementById("detail"), f.id);
   document.getElementById("detail").innerHTML = cardHTML(f) +
     `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="chip" id="to-cmp" ${inCmp ? 'aria-pressed="true"' : ""}>${inCmp ? "In comparison ✓" : "＋ Compare"}</button>
      <button class="chip" id="open-cmp">Open Compare →</button></div>` +
@@ -882,6 +887,7 @@ function renderActionDetail(){
   const a = aById[state.aSel];
   if (!a){ el.innerHTML = `<div class="empty">No actions in the corpus yet.</div>`; return; }
   el.innerHTML = actionHTML(a);
+  toTopOnNew(el, a.id);
   el.querySelectorAll("[data-fam]").forEach(b => b.onclick = () => { state.sel = b.dataset.fam; store.set("sel", state.sel); setTab("atlas"); render(); });
 }
 function openAction(id, stay){
