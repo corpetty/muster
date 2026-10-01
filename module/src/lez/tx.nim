@@ -149,6 +149,8 @@ proc instructionWords*(op: MultisigOp, layout: ProposalLayout): seq[uint32] =
           else: 4'u32)
     w.wU64(op.index)
     w.wBytes32(op.createKey)
+  of moExecuteConfig:
+    raise newException(ValueError, "v0.2.4 executes a config proposal with Execute; ExecuteConfig is v0.3's")
   of moProposeConfig:
     case op.config.kind
     of caAddMember:
@@ -286,6 +288,46 @@ proc defaultFee*(payer: seq[byte]): LezFee =
   need32(payer, "a fee payer")
   LezFee(payer: payer, gasLimit: DefaultGasLimit, tip: 0,
          maxFee: ((DefaultGasLimit + AssumedDataBytes) * AssumedBaseFee).stuint(128))
+
+# ── the multisig's instructions and rows on v0.3.0 (exo-eb6.4.4) ─────────────────
+proc instructionBorsh*(op: MultisigOp): seq[byte] =
+  ## v0.3: multisig_core::Instruction for `op`, borsh (the port's lib.rs; held to its
+  ## vectors). Variants: CreateMultisig 0, Propose 1, ProposeConfig 2, Approve 3, Reject 4,
+  ## Execute 5, ExecuteConfig 6.
+  proc u64le(x: uint64): seq[byte] =
+    for i in 0 ..< 8: result.add byte((x shr uint64(8*i)) and 0xff)
+  proc vec32(xs: seq[seq[byte]]): seq[byte] =
+    let n = uint32(xs.len)
+    for i in 0 ..< 4: result.add byte((n shr uint32(8*i)) and 0xff)
+    for x in xs:
+      need32(x, "a 32-byte field")
+      result.add x
+  need32(op.createKey, "a create key")
+  case op.kind
+  of moCreate:
+    if op.threshold < 0 or op.threshold > 255: raise newException(ValueError, "not a u8: " & $op.threshold)
+    @[0'u8] & op.createKey & @[byte(op.threshold)] & vec32(op.members)
+  of moPropose: @[1'u8] & op.createKey & u64le(op.index) & encodeTargetCall(op.action)
+  of moProposeConfig: @[2'u8] & op.createKey & u64le(op.index) & encodeConfigAction(op.config)
+  of moApprove: @[3'u8] & op.createKey & u64le(op.index)
+  of moReject: @[4'u8] & op.createKey & u64le(op.index)
+  of moExecute: @[5'u8] & op.createKey & u64le(op.index) & vec32(op.approvers) & encodeTargetCall(op.action)
+  of moExecuteConfig: @[6'u8] & op.createKey & u64le(op.index) & vec32(op.approvers) & encodeConfigAction(op.config)
+
+proc opShards*(scheme: PdaScheme, program: seq[byte], op: MultisigOp, signer: seq[byte]): seq[LezShard] =
+  ## v0.3: the rows, each selecting the program's own shard — the state; then the
+  ## proposal; then the proposer or voter (authorized by the transaction's witness), or for
+  ## Execute the call's own rows in its order (a chained call selects only the
+  ## transaction's rows).
+  let state = LezShard(account: statePda(scheme, program, op.createKey), program: program)
+  if op.kind == moCreate: return @[state]
+  let prop = LezShard(account: proposalPda(scheme, program, op.createKey, op.index), program: program)
+  case op.kind
+  of moExecute:
+    result = @[state, prop]
+    for (a, p) in op.action.shards: result.add LezShard(account: a, program: p)
+  of moExecuteConfig: result = @[state, prop]
+  else: result = @[state, prop, LezShard(account: signer, program: program)]
 
 proc bU64(b: var seq[byte], x: uint64) =
   for i in 0 ..< 8: b.add byte((x shr (8*i)) and 0xff)

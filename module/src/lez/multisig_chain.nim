@@ -16,6 +16,13 @@
 ## accounts stored as the program's borsh bytes at their PDAs — so muster's read path
 ## decodes real layouts. A refused transaction is not included: it changes nothing and
 ## charges nothing. The live binding over lez_core is exo-3c9.
+##
+## With layout v0.3 it reproduces the v0.3 port instead (plan/apply, exo-eb6.4.4), and the
+## v0.3 chain's rule for a refusal: the transaction is INCLUDED, keeps its fee and burns
+## its signer's nonce, and nothing else changes — `submit` answers ok, as the real chain's
+## sequencer does, and the program's reason is kept in `lastRefusal` (the real chain does not
+## say it). Every v0.3 op is signed by its sender, who pays its own fee. An Execute whose call
+## is a native transfer out of the vault moves the fake's balances.
 
 import std/[json, tables, strutils, sequtils]
 import stint
@@ -28,7 +35,8 @@ import ./multisig
 type
   MultisigOpKind* = enum
     moCreate = "create", moPropose = "propose", moProposeConfig = "propose-config",
-    moApprove = "approve", moReject = "reject", moExecute = "execute"
+    moApprove = "approve", moReject = "reject", moExecute = "execute",
+    moExecuteConfig = "execute-config"   ## v0.3: ExecuteConfig is its own instruction
 
   MultisigOp* = object
     kind*: MultisigOpKind
@@ -39,6 +47,7 @@ type
     action*: LezAction            ## propose
     config*: ConfigAction         ## propose-config
     accounts*: seq[seq[byte]]     ## execute: the target accounts, in order
+    approvers*: seq[seq[byte]]    ## v0.3 execute / execute-config: the approvals it counts
 
   LezTx* = object
     ok*: bool
@@ -60,6 +69,7 @@ type
     accounts*: seq[seq[byte]]
     authorized*: seq[uint8]
     pdaSeeds*: seq[seq[byte]]
+    data*: seq[byte]              ## v0.3: the call's borsh instruction
 
   LezMultisigChain* = ref object of ChainAdapter
     chain*: string                ## CAIP-2, e.g. "lez:testnet"
@@ -79,6 +89,13 @@ proc rejectOp*(createKey: seq[byte], index: uint64): MultisigOp =
   MultisigOp(kind: moReject, createKey: createKey, index: index)
 proc executeOp*(createKey: seq[byte], index: uint64, accounts: seq[seq[byte]]): MultisigOp =
   MultisigOp(kind: moExecute, createKey: createKey, index: index, accounts: accounts)
+proc executeOpV03*(createKey: seq[byte], index: uint64, approvers: seq[seq[byte]], call: LezAction): MultisigOp =
+  ## v0.3: Execute names the approvers it counts and carries the call (what the proposal
+  ## must commit to); its rows are the state, the proposal, then the call's rows.
+  MultisigOp(kind: moExecute, createKey: createKey, index: index, approvers: approvers, action: call,
+             accounts: call.accounts)
+proc executeConfigOp*(createKey: seq[byte], index: uint64, approvers: seq[seq[byte]], cfg: ConfigAction): MultisigOp =
+  MultisigOp(kind: moExecuteConfig, createKey: createKey, index: index, approvers: approvers, config: cfg)
 
 method height*(c: LezMultisigChain): uint64 {.base.} =
   raise newException(WalletError, "LezMultisigChain.height is abstract")
@@ -147,8 +164,17 @@ method submit*(c: LezMultisigChain, tx: PreparedTx, ks: Keystore): TxRef =
   try:
     let p = parseJson(tx.payload)
     if p{"op"}.getStr() != "execute": raise newException(WalletError, "only a prepared execute is submitted here")
-    op = executeOp(unhx(p{"createKey"}.getStr()), uint64(p{"index"}.getBiggestInt()),
-                   p{"accounts"}.getElems().mapIt(unhx(it.getStr())))
+    if p{"lez"}.getStr() == "v0.3":
+      let c = p["call"]
+      var shards: seq[tuple[account, program: seq[byte]]]
+      for x in c["shards"]: shards.add (unhx(x["account"].getStr()), unhx(x["program"].getStr()))
+      op = executeOpV03(unhx(p{"createKey"}.getStr()), uint64(p{"index"}.getBiggestInt()),
+                        p["approvers"].getElems().mapIt(unhx(it.getStr())),
+                        lezCallV03(unhx(c["target"].getStr()), shards, unhx(c["data"].getStr()),
+                                   c["pdaSeeds"].getElems().mapIt(unhx(it.getStr()))))
+    else:
+      op = executeOp(unhx(p{"createKey"}.getStr()), uint64(p{"index"}.getBiggestInt()),
+                     p{"accounts"}.getElems().mapIt(unhx(it.getStr())))
   except WalletError as e: raise e
   except CatchableError as e: raise newException(WalletError, "not a LEZ multisig payload: " & e.msg)
   let (signer, payer) = relayerParts(tx.frm.id)
@@ -175,6 +201,7 @@ type
     tip: uint64
     feePerTx*: uint64
     chainedCalls*: seq[ChainedCallRecord]
+    lastRefusal*: string          ## v0.3: why the last included transaction changed nothing ("" = it took)
 
   Refused = object of CatchableError
 
@@ -210,8 +237,150 @@ proc refuse(msg: string) {.noreturn.} = raise newException(Refused, msg)
 proc check(cond: bool, msg: string) =
   if not cond: refuse(msg)
 
+proc sameCall(a, b: LezAction): bool =
+  a.target == b.target and a.shards == b.shards and a.data == b.data and a.pdaSeeds == b.pdaSeeds
+
+proc nativeTransferAmount(a: LezAction): tuple[ok: bool, amount: uint64] =
+  ## A native transfer (the native token program, account 0; borsh Transfer { amount }),
+  ## amounts that fit the fake's u64 balances.
+  let zero = newSeq[byte](32)
+  if a.target != zero or a.shards.len != 2 or a.shards.anyIt(it.program != zero): return
+  if a.data.len != 17 or a.data[0] != 0 or a.data[9 .. 16].anyIt(it != 0): return
+  var x: uint64
+  for i in 0 ..< 8: x = x or (uint64(a.data[1 + i]) shl uint64(8*i))
+  (true, x)
+
+proc submitV03(f: FakeLezMultisig, signer: seq[byte], op: MultisigOp): LezTx =
+  ## The v0.3 port's plan and apply checks, with its messages (multisig_program/src/lib.rs).
+  let sk = hx(signer)
+  if f.accts.getOrDefault(sk).balance < f.feePerTx:
+    # a payer who cannot cover the fee's reserve: no correct block includes it
+    return LezTx(ok: false, error: "the payer cannot cover the fee (" & $f.feePerTx & ")")
+  var next = f.accts                               # all-or-nothing: work on a copy
+  var calls: seq[ChainedCallRecord]
+  proc acct(id: seq[byte]): FakeAccount = next.getOrDefault(hx(id))
+  proc put(id: seq[byte], a: FakeAccount) = next[hx(id)] = a
+  let stateId = statePda(f.scheme, f.program, op.createKey)
+  let propId = proposalPda(f.scheme, f.program, op.createKey, op.index)
+  proc loadState(): MultisigState =
+    let a = acct(stateId)
+    check(a.data.len > 0, "no multisig here")
+    decodeState(a.data)
+  proc saveState(s: MultisigState) =
+    var a = acct(stateId)
+    a.data = encodeState(s)
+    a.owner = f.program
+    put(stateId, a)
+  proc loadProposal(): Proposal =
+    let a = acct(propId)
+    check(a.data.len > 0, "no proposal here")
+    decodeProposal(a.data, plV03)
+  proc saveProposal(p: Proposal) =
+    var a = acct(propId)
+    a.data = encodeProposal(p, plV03)
+    a.owner = f.program
+    put(propId, a)
+  proc ownVault(a: LezAction) =
+    check(a.pdaSeeds.allIt(it == vaultSeed(op.createKey)), "a proposal may authorize only its own multisig's vault")
+  proc quorum(s: MultisigState, approvers: seq[seq[byte]]) =
+    for i, a in approvers:
+      check(a notin approvers[0 ..< i], "an approver is named twice")
+      check(a in s.members, "an approver is not a current member")
+    check(approvers.len >= s.threshold, "fewer approvers than the threshold")
+  var refusal = ""
+  try:
+    case op.kind
+    of moCreate:
+      check(op.members.len in 1 .. 10, "1 to 10 members")
+      for i, m in op.members: check(m notin op.members[0 ..< i], "a member appears twice")
+      check(op.threshold >= 1 and op.threshold <= op.members.len, "1 ≤ threshold ≤ members")
+      check(acct(stateId).data.len == 0, "a multisig already exists here")
+      saveState(MultisigState(createKey: op.createKey, threshold: op.threshold, members: op.members))
+    of moPropose, moProposeConfig:
+      if op.kind == moPropose: ownVault(op.action)
+      elif op.config.kind == caChangeThreshold: check(op.config.threshold >= 1, "a threshold is at least 1")
+      var s = loadState()
+      check(signer in s.members, "the proposer is not a member")
+      check(op.index == s.transactionIndex + 1, "not the next proposal index")
+      check(acct(propId).data.len == 0, "a proposal already exists here")
+      s.transactionIndex = op.index
+      saveState(s)
+      saveProposal(if op.kind == moPropose: newProposal(op.index, signer, op.createKey, op.action)
+                   else: newConfigProposal(op.index, signer, op.createKey, op.config))
+    of moApprove, moReject:
+      let s = loadState()
+      check(signer in s.members, "the voter is not a member")
+      var p = loadProposal()
+      check(p.status == psActive, "the proposal is no longer active")
+      if op.kind == moApprove: check(p.approve(signer), "already approved")
+      else: check(p.reject(signer), "already rejected")
+      saveProposal(p)
+    of moExecute:
+      ownVault(op.action)
+      quorum(loadState(), op.approvers)
+      var p = loadProposal()
+      check(p.status == psActive, "the proposal is no longer active")
+      check(not p.hasConfig and sameCall(p.action, op.action), "not the call this proposal commits to")
+      for a in op.approvers: check(a in p.approved, "a named approver did not approve this proposal")
+      p.status = psExecuted
+      saveProposal(p)
+      calls.add ChainedCallRecord(program: op.action.target, accounts: op.action.shards.mapIt(it.account),
+                                  pdaSeeds: op.action.pdaSeeds, data: op.action.data)
+      let (native, amount) = nativeTransferAmount(op.action)
+      if native:
+        let (src, dst) = (op.action.shards[0].account, op.action.shards[1].account)
+        check(src == vaultPda(f.scheme, f.program, op.createKey), "native transfer sender is not authorized")
+        var a = acct(src)
+        check(a.balance >= amount, "sender holds less than the transferred amount")
+        a.balance -= amount
+        put(src, a)
+        var b = acct(dst)
+        b.balance += amount
+        put(dst, b)
+    of moExecuteConfig:
+      var s = loadState()
+      quorum(s, op.approvers)
+      case op.config.kind
+      of caAddMember:
+        check(op.config.member notin s.members, "already a member")
+        check(s.members.len < 10, "at most 10 members")
+        s.members.add op.config.member
+      of caRemoveMember:
+        check(op.config.member in s.members, "not a member")
+        check(s.members.len > s.threshold, "removing a member would leave fewer members than the threshold")
+        s.members.keepItIf(it != op.config.member)
+      of caChangeThreshold:
+        check(op.config.threshold >= 1 and op.config.threshold <= s.members.len, "1 ≤ threshold ≤ members")
+        s.threshold = op.config.threshold
+      saveState(s)
+      var p = loadProposal()
+      check(p.status == psActive, "the proposal is no longer active")
+      check(p.hasConfig and p.config == op.config, "not the call this proposal commits to")
+      for a in op.approvers: check(a in p.approved, "a named approver did not approve this proposal")
+      p.status = psExecuted
+      saveProposal(p)
+  except Refused as e: refusal = e.msg
+  except LezDecodeError as e: refusal = "not a multisig account: " & e.msg
+  # included either way: the signer pays its fee and its nonce advances; a refusal keeps
+  # nothing else (v0.3: "a failed action is ordinary execution semantics")
+  if refusal.len > 0: next = f.accts
+  var sa = next.getOrDefault(sk)
+  sa.balance -= f.feePerTx
+  inc sa.nonce
+  next[sk] = sa
+  f.accts = next
+  f.lastRefusal = refusal
+  inc f.tip
+  if refusal.len == 0: f.chainedCalls.add calls
+  var h: seq[byte]
+  for b in sk & ":v0.3:" & $op.kind & ":" & $op.index & ":" & $f.tip & ":" & $sa.nonce: h.add byte(b)
+  let hash = hx(@(sha256(h)))
+  f.txs[hash] = f.tip
+  LezTx(ok: true, hash: hash, height: f.tip)
+
 method submit*(f: FakeLezMultisig, signer: seq[byte], op: MultisigOp, payer: seq[byte] = @[]): LezTx =
   let payerKey = hx(if payer.len > 0: payer else: signer)
+  if f.layout == plV03: return f.submitV03(signer, op)
   if f.accts.getOrDefault(payerKey).balance < f.feePerTx:
     return LezTx(ok: false, error: "the payer cannot cover the fee (" & $f.feePerTx & ")")
   var next = f.accts                               # all-or-nothing: work on a copy
@@ -326,6 +495,7 @@ method submit*(f: FakeLezMultisig, signer: seq[byte], op: MultisigOp, payer: seq
                                     accounts: op.accounts, authorized: p.action.authorized,
                                     pdaSeeds: p.action.pdaSeeds)
       saveProposal(p)
+    of moExecuteConfig: refuse("v0.2.4 executes a config proposal with Execute")
   except Refused as e:
     return LezTx(ok: false, error: e.msg)
   except LezDecodeError as e:

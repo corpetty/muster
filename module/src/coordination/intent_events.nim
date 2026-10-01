@@ -91,6 +91,19 @@ proc effectFromJson*(effectJson: string): Effect =
           for i in 0 ..< h.len div 2:
             try: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
             except ValueError: discard
+        if j{"lez"}.getStr() == "v0.3":
+          # The v0.3 port (exo-eb6.4.4): the call as its proposal commits to it — the
+          # program by account id, every row's (account, program shard), the instruction's
+          # borsh bytes, the PDA seeds.
+          var shards, seeds3: seq[CborValue]
+          for x in j{"shards"}.getElems():
+            shards.add cbMap(@[(cbText("account"), cbBytes(lhex(x{"account"}.getStr()))),
+                               (cbText("program"), cbBytes(lhex(x{"program"}.getStr())))])
+          for x in j{"pdaSeeds"}.getElems(): seeds3.add cbBytes(lhex(x.getStr()))
+          return Effect(schemaId: "muster.effect.lez-multisig-proposal.v2", fields: @[
+            ("index", cbUint(uint64(j{"index"}.getBiggestInt(0)))), ("target", cbBytes(lhex(j{"target"}.getStr()))),
+            ("shards", cbArray(shards)), ("data", cbBytes(lhex(j{"data"}.getStr()))),
+            ("pdaSeeds", cbArray(seeds3))])
         var fields = @[("index", cbUint(uint64(j{"index"}.getBiggestInt(0)))),
                        ("target", cbBytes(lhex(j{"target"}.getStr())))]
         var ins, accts, seeds, auth: seq[CborValue]
@@ -254,7 +267,9 @@ proc effectSchema*(effectJson: string): tuple[id: string, known: bool] =
     of "transfer": return ("muster.effect.transfer.v1", true)
     of "safe-tx": return ("muster.effect.safe-tx.v1", true)
     of "btc-spend": return ("muster.effect.btc-spend.v1", true)
-    of "lez-multisig-proposal": return ("muster.effect.lez-multisig-proposal.v1", true)
+    of "lez-multisig-proposal":                              # v2: the LEZ v0.3 port (exo-eb6.4.4)
+      return ((if j{"lez"}.getStr() == "v0.3": "muster.effect.lez-multisig-proposal.v2"
+               else: "muster.effect.lez-multisig-proposal.v1"), true)
     of "lez-call":                                           # a LEZ FROST group's call (exo-55e)
       # v2 is the LEZ v0.3.0 line (exo-eb6.4 L3); v1 the v0.2.4 one
       return ((if j{"lez"}.getStr() == "v0.3": "muster.effect.lez-call.v2" else: "muster.effect.lez-call.v1"), true)

@@ -209,6 +209,21 @@ method assemble*(s: LezMultisigSettlement, drv: Driver, effect: Effect,
   if have < need:
     return Assembled(ok: false, error: "insufficient-approvals", have: have, need: need,
                      detail: $have & " of the " & $need & " approvals are on chain (height " & $prop.height & ")")
+  if a.layout == plV03:
+    # the v0.3 port: Execute names the approvals it counts — those the chain holds from
+    # current members — and carries the call the proposal commits to, which S5 just
+    # matched to what the room reviewed (exo-eb6.4.4)
+    let state = decodeState(chain.readAccount(a.statePda).data)
+    let approvers = decodeProposal(prop.data, a.layout).approved.filterIt(it in state.members)
+    return Assembled(ok: true, have: have, need: need,
+      tx: PreparedTx(chain: a.chain, frm: s.relayer, to: lhx(a.statePda),
+                     payload: $(%*{"op": "execute", "lez": "v0.3", "createKey": lhx(a.createKey), "index": idx,
+                                   "approvers": approvers.mapIt(lhx(it)),
+                                   "call": {"target": lhx(action.target),
+                                            "shards": action.shards.mapIt(%*{"account": lhx(it.account),
+                                                                              "program": lhx(it.program)}),
+                                            "data": lhx(action.data), "pdaSeeds": action.pdaSeeds.mapIt(lhx(it))},
+                                   "proposal": lhx(proposalPda(a.scheme, a.program, a.createKey, idx))})))
   Assembled(ok: true, have: have, need: need,
     tx: PreparedTx(chain: a.chain, frm: s.relayer, to: lhx(a.statePda),
                    payload: $(%*{"op": "execute", "createKey": lhx(a.createKey), "index": idx,
@@ -227,13 +242,16 @@ method submit*(s: LezMultisigSettlement, tx: PreparedTx, ks: Keystore): TxRef =
 
 method watch*(s: LezMultisigSettlement, txRef: TxRef): Finality =
   ## Final only when the transaction landed AND the chain says the proposal is Executed.
+  ## Landed and not Executed is a refusal: on LEZ v0.3 a refused transaction is included
+  ## (and pays); on v0.2.4 one that landed always took (exo-eb6.4.4).
   let f = s.adapter.finality(txRef)
   if f.status != fsFinal or s.watching.len == 0 or not (s.adapter of LezMultisigChain): return f
   try:
     let r = LezMultisigChain(s.adapter).readAccount(s.watching)
     if r.found and decodeProposal(r.data, LezMultisigChain(s.adapter).layout).status == psExecuted:
       Finality(status: fsFinal, detail: "Executed on chain (height " & $r.height & ")")
-    else: Finality(status: fsPending, detail: "included, but the chain does not show the proposal Executed")
+    else: Finality(status: fsFailed, detail: "the Execute was included and the chain refused it: the proposal " &
+                                             "is not Executed (on LEZ v0.3 a refused transaction is included, and pays)")
   except CatchableError as e: Finality(status: fsPending, detail: "could not read the proposal: " & e.msg)
 
 # ── a FROST group acting on LEZ (exo-55e) ──────────────────────────────────────

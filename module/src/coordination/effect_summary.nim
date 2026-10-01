@@ -55,6 +55,21 @@ proc isTokenTransfer(ins, accts: JsonNode): bool =
   not ins.isNil and ins.kind == JArray and ins.len == 5 and ins[0].getBiggestInt() == 0 and
     not accts.isNil and accts.kind == JArray and accts.len == 2
 
+proc nativeTransferV03(shards: JsonNode, data: string): tuple[ok: bool, amount, to: string] =
+  ## A LEZ v0.3 native transfer (exo-eb6.4.4): two rows on the native token program's shard
+  ## (program account 0) and borsh Transfer { amount: u128 } — variant 0, then 16 bytes LE.
+  const zero = "0000000000000000000000000000000000000000000000000000000000000000"
+  var h = data.strip().toLowerAscii()
+  if h.startsWith("0x"): h = h[2 .. ^1]
+  if shards.isNil or shards.kind != JArray or shards.len != 2 or h.len != 34 or h[0 .. 1] != "00": return
+  for x in shards.getElems():
+    if x{"program"}.getStr().toLowerAscii() != zero: return
+  var a = 0.u256
+  for i in countdown(15, 0):
+    try: a = (a shl 8) + parseHexInt(h[2 + 2*i .. 3 + 2*i]).uint64.u256
+    except ValueError: return
+  (true, $a, shards[1]{"account"}.getStr())
+
 proc argCount(args: JsonNode): int =
   if args.isNil: return 0
   if args.kind == JArray: return args.len
@@ -160,6 +175,22 @@ proc effectSummary*(effectJson: string, label: proc (who: string): string = nil,
             $n & (if n == 1: " person owes " else: " people owe ") &
             (if label != nil: label(creditor) else: short(creditor)))
   else: discard
+  if j{"lez"}.getStr() == "v0.3":                              # the LEZ v0.3 line (exo-eb6.4.4)
+    if j.hasKey("index") and j.hasKey("target"):               # a multisig proposal (v2)
+      let idx = numText(j["index"])
+      let t = nativeTransferV03(j{"shards"}, j{"data"}.getStr())
+      if t.ok:
+        return EffectSummary(kind: "lez-proposal", amount: t.amount, unit: "LEZ base units", to: t.to,
+          text: "on-chain proposal #" & idx & ": transfer " & inDecimals(t.amount, 9) & " LEZ from the vault to " & short(t.to))
+      return EffectSummary(kind: "lez-proposal", to: j["target"].getStr(),
+        text: "on-chain proposal #" & idx & ": call " & short(j["target"].getStr()))
+    if j.hasKey("programAccount"):                              # a FROST group's call (lez-call v2)
+      let t = nativeTransferV03(j{"shards"}, j{"instruction"}.getStr())
+      if t.ok:
+        return EffectSummary(kind: "lez-transfer", amount: t.amount, unit: "LEZ base units", to: t.to,
+                             text: "a LEZ transfer: " & inDecimals(t.amount, 9) & " LEZ → " & short(t.to))
+      return EffectSummary(kind: "lez-call", to: j["programAccount"].getStr(),
+                           text: "a LEZ call to " & short(j["programAccount"].getStr()))
   if j.hasKey("program") and j.hasKey("instruction"):         # a LEZ call
     if isTokenTransfer(j["instruction"], j{"accounts"}):
       let amt = u128Words(j["instruction"], 1)

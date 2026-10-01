@@ -17,7 +17,8 @@ balance back.
 `program_loader`, the funder paying, and prints the program's account id: its header
 account, from which every PDA it owns is derived. The v0.3 multisig program (exo-eb6.4.4,
 `docs/design/lez-multisig-v03.md`) is deployed this way, and its own e2e (`e2e_v03` in the
-port's workspace) runs against this zone with `localnet.sh fund` as its funding command.
+port's workspace) runs against this zone with `localnet.sh fund` as its funding command,
+and muster's room drives it there (`module/tests/lez_multisig_live_v030_e2e.nim`).
 
 On v0.3 a transaction whose program refuses it is still included, pays its fee and burns
 its signers' nonces; the RPC reports no outcome. Judge a step by the state it changes,
