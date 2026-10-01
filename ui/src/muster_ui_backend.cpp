@@ -693,6 +693,35 @@ void MusterUiBackend::renewSplit(const QString &intentId)
     loadMessages();
 }
 
+void MusterUiBackend::loadOpenAssets()
+{
+    // coordinate_open_assets: what a settle-up across assets could cover (exo-a90.17)
+    const QString r = modules().muster_module.coordinate_open_assets();
+    qInfo() << "[muster_ui] coordinate_open_assets ->" << r;
+    setOpenAssetsJson(r);
+}
+
+void MusterUiBackend::proposeSettleUpAcross(const QString &chain, const QString &asset, const QString &ratesJson,
+                                            const QString &memo)
+{
+    // coordinate_propose_settle_up_across: paid in one asset, every other priced at my rate —
+    // a recorded read; every party agrees before anything is paid (exo-a90.17).
+    const QString r = modules().muster_module.coordinate_propose_settle_up_across(chain.trimmed(), asset.trimmed(),
+                                                                                   ratesJson, memo);
+    qInfo() << "[muster_ui] coordinate_propose_settle_up_across" << chain << asset << ratesJson << "->" << r;
+    setSplitJson(splitOutcome("settle-up", "", r));
+    loadIntents();
+    loadMessages();
+}
+
+void MusterUiBackend::shareAddress(const QString &chain)
+{
+    // coordinate_share_address: MY address for a chain, as an author-signed address-share card
+    const QString r = modules().muster_module.coordinate_share_address(chain.trimmed());
+    qInfo() << "[muster_ui] coordinate_share_address" << chain << "->" << r;
+    loadMessages();
+}
+
 void MusterUiBackend::lookupToken(const QString &chain, const QString &token)
 {
     // coordinate_token_info: what the token says about itself, through your own RPC —

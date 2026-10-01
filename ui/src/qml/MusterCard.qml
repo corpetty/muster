@@ -241,6 +241,19 @@ Rectangle {
     // A settle-up (exo-3c6): the net payments instead of the shares they cover.
     readonly property var settleUp: (cardRoot.card && cardRoot.card.settleUp) ? cardRoot.card.settleUp : null
     readonly property bool isSettleUp: cardRoot.settleUp !== null
+    // Across chains (exo-a90.17): a payment to ME at an address I vouch for that this client
+    // does not hold — my agreement would vouch for someone else's address, so it is not offered.
+    readonly property bool vouchedNotMine: {
+        if (!cardRoot.settleUp) return false;
+        var ts = cardRoot.settleUp.transfers || [];
+        for (var i = 0; i < ts.length; ++i) if (ts[i].toMe && ts[i].vouched && !ts[i].payToMine) return true;
+        return false;
+    }
+    // whose quote the rates are: the signed proposer claim (exo-770), "you" when it is mine
+    readonly property string proposerName: {
+        var ps = (cardRoot.card && Array.isArray(cardRoot.card.proposedBy)) ? cardRoot.card.proposedBy : [];
+        return ps.length > 0 ? (String(ps[0].name || "") || String(ps[0].who || "").slice(0, 10) + "…") : qsTr("the proposer");
+    }
     // The next payment of mine to send: unsettled and not already on its way. A payer owing
     // two people may send the second while the first lands — the module skips what this host
     // has in flight, in the same order (exo-a90.18), so it pays the one this button names.
@@ -434,7 +447,10 @@ Rectangle {
             LogosText {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: qsTr("This room needs somewhere to send funds. Share an address to continue.")
+                text: String((cardRoot.card && cardRoot.card.asset) || "ETH") === "BTC"
+                      ? qsTr("This room needs a Bitcoin address on %1 to pay you at. Sharing gives your own key's address there.")
+                            .arg(String((cardRoot.card && cardRoot.card.chain) || ""))
+                      : qsTr("This room needs somewhere to send funds. Share an address to continue.")
                 color: Theme.palette.textSecondary
                 font.family: Theme.typography.publicSans
                 font.pixelSize: Theme.typography.secondaryText
@@ -654,6 +670,53 @@ Rectangle {
                     font.pixelSize: Theme.typography.subtitleText
                     font.weight: Theme.typography.weightMedium
                 }
+                // across assets and chains (exo-a90.17): what it covers, and each rate — the
+                // proposer's quote, named before anyone agrees, like a fiat bill's
+                LogosText {
+                    objectName: "cardSettleUpAcross"
+                    visible: !!(cardRoot.settleUp && cardRoot.settleUp.across)
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: {
+                        if (!cardRoot.settleUp || !cardRoot.settleUp.across) return "";
+                        var as = (cardRoot.settleUp.coverAssets || []).map(function (a) {
+                            return qsTr("%1 on %2").arg(String(a.symbol || a.asset)).arg(String(a.chain));
+                        });
+                        return qsTr("Covers shares in %1; every payment is %2 on %3.")
+                               .arg(as.join(", ")).arg(cardRoot.unit).arg(String(cardRoot.settleUp.chain || ""));
+                    }
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: Theme.typography.secondaryText
+                }
+                Repeater {
+                    model: (cardRoot.settleUp && cardRoot.settleUp.across) ? (cardRoot.settleUp.rates || []) : []
+                    delegate: LogosText {
+                        required property var modelData
+                        objectName: "cardSettleUpRate"
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: String(modelData.perUnit || "").length > 0
+                              ? qsTr("1 %1 = %2 %3 — %4's rate, from “%5”, %6")
+                                    .arg(String(modelData.symbol || modelData.asset)).arg(cardRoot.eth(modelData.perUnit))
+                                    .arg(cardRoot.unit).arg(cardRoot.proposerName).arg(String(modelData.source || ""))
+                                    .arg(new Date(Number(modelData.at) * 1000).toLocaleString())
+                              : qsTr("%1 %2 base units per %3 base units of %4 — %5's rate, from “%6” (this client could not read %4's decimals)")
+                                    .arg(String(modelData.rate)).arg(cardRoot.unit).arg(String(modelData.per))
+                                    .arg(String(modelData.symbol || modelData.asset)).arg(cardRoot.proposerName)
+                                    .arg(String(modelData.source || ""))
+                        color: Theme.palette.text
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                }
+                LogosText {
+                    visible: !!(cardRoot.settleUp && cardRoot.settleUp.across)
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: qsTr("Agreeing means trusting these rates: check them first. Each share is converted at its rate, rounded down; nothing in muster makes a rate fair.")
+                    color: Theme.palette.warning
+                    font.pixelSize: Theme.typography.badgeText
+                }
                 Repeater {
                     model: cardRoot.settleUp ? (cardRoot.settleUp.transfers || []) : []
                     delegate: RowLayout {
@@ -685,10 +748,30 @@ Rectangle {
                         }
                     }
                 }
+                // a recipient owed only on other chains is paid at an address they vouch for
+                Repeater {
+                    model: cardRoot.settleUp ? (cardRoot.settleUp.transfers || []).filter(function (t) { return t.vouched; }) : []
+                    delegate: LogosText {
+                        required property var modelData
+                        objectName: "cardSettleUpVouched"
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: modelData.toMe && !modelData.payToMine
+                              ? qsTr("⚠ You would be paid at %1, which this client does not hold — so it will not agree for you.")
+                                    .arg(String(modelData.payTo))
+                              : qsTr("%1 is paid at %2 — an address %1 shared for this chain; their agreement vouches for it.")
+                                    .arg(String(modelData.toName || "") || String(modelData.to).slice(0, 10) + "…")
+                                    .arg(String(modelData.payTo))
+                        color: modelData.toMe && !modelData.payToMine ? Theme.palette.warning : Theme.palette.textTertiary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                }
                 LogosText {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: qsTr("Each member's balance across these splits is kept exactly; each person is paid where their own split said. Once agreed, the covered shares are paid only through this; once its payments are received, each creditor marks the shares it covered received.")
+                    text: cardRoot.settleUp && cardRoot.settleUp.across
+                          ? qsTr("Each member's balance across these splits is kept exactly, at these rates. Once agreed, the covered shares are paid only through this; once its payments are received, each creditor marks the shares it covered received, on whatever chain they were.")
+                          : qsTr("Each member's balance across these splits is kept exactly; each person is paid where their own split said. Once agreed, the covered shares are paid only through this; once its payments are received, each creditor marks the shares it covered received.")
                     color: Theme.palette.textTertiary
                     font.pixelSize: Theme.typography.badgeText
                 }
@@ -1766,7 +1849,8 @@ Rectangle {
             objectName: "cardShareAddress"
             visible: cardRoot.kind === "address-request"
             Layout.fillWidth: true
-            text: qsTr("Share an address")
+            text: String((cardRoot.card && cardRoot.card.asset) || "ETH") === "BTC" ? qsTr("Share my Bitcoin address")
+                  : qsTr("Share an address")
             onClicked: cardRoot.shareAddress()
         }
 
@@ -1785,6 +1869,7 @@ Rectangle {
                 // being theirs (exo-770), never to an address this client does not hold
                 && (!cardRoot.isSplit || cardRoot.iAmDebtor || (cardRoot.iAmCreditor && cardRoot.payToMine))
                 && (!cardRoot.isSettleUp || !!cardRoot.settleUp.iAmParty)
+                && !cardRoot.vouchedNotMine    // never vouch for an address this client does not hold
                 && !cardRoot.splitExpired      // past its expiry an agreement is refused (inv 2)
             Layout.fillWidth: true
             text: cardRoot.isSettleUp ? qsTr("Agree to settle up")

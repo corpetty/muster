@@ -687,6 +687,33 @@ Item {
     readonly property string splitUnit: room.splitPrivate ? "LEZ" : room.splitBitcoin ? "BTC"
                                       : room.splitTokenInfo ? (String(room.splitTokenInfo.symbol || "") || qsTr("units"))
                                       : "ETH"
+    // Settle up across assets and chains (exo-a90.17): paid in this rail's asset; every other
+    // asset the room owes in, priced at the rate typed here — the proposer's recorded quote.
+    property bool acrossOpen: false
+    property var acrossRates: ({})          // "chain|asset" → the typed rate, per ONE unit
+    readonly property var openAssets: {
+        try { return JSON.parse(backend ? String(backend.openAssetsJson || "{}") : "{}"); }
+        catch (e) { return ({}); }
+    }
+    readonly property string acrossPayAsset: room.splitBitcoin ? "BTC"
+                                           : room.splitTokenInfo ? String(room.splitTokenInfo.asset) : "ETH"
+    readonly property var acrossOthers: {
+        var out = [];
+        var a = (room.openAssets && room.openAssets.assets) || [];
+        for (var i = 0; i < a.length; ++i)
+            if (!(String(a[i].chain) === String(room.openAssets.payChain || "")
+                  && String(a[i].asset) === room.acrossPayAsset)) out.push(a[i]);
+        return out;
+    }
+    readonly property var acrossPriced: {
+        var out = [];
+        for (var i = 0; i < room.acrossOthers.length; ++i) {
+            var o = room.acrossOthers[i];
+            var r = String(room.acrossRates[o.chain + "|" + o.asset] || "").trim();
+            if (r.length > 0) out.push({chain: String(o.chain), asset: String(o.asset), rate: r});
+        }
+        return out;
+    }
     // a token typed but not (yet) readable: the split cannot be composed in it
     readonly property bool splitTokenPending: !room.splitPrivate && !room.splitBitcoin && room.splitToken.length > 0
                                               && room.splitTokenInfo === null
@@ -1502,6 +1529,12 @@ Item {
                             Layout.fillWidth: true
                             card: msg.parsedCard || ({})
                             onShareAddress: {
+                                // a Bitcoin address is my own key's on that network: the module
+                                // knows it, not this view (exo-a90.17)
+                                if (room.backend && String((msg.parsedCard || {}).asset || "ETH") === "BTC") {
+                                    room.backend.shareAddress(String((msg.parsedCard || {}).chain || ""));
+                                    return;
+                                }
                                 if (room.backend)
                                     room.backend.postMessage(JSON.stringify({
                                         kind: "address-share", asset: "ETH",
@@ -2165,6 +2198,107 @@ Item {
                         }
                     }
 
+                    // across assets and chains (exo-a90.17): the shares owed in other assets
+                    // or on other chains too, each at the rate YOU give — everyone agrees to it
+                    LogosButton {
+                        objectName: "roomSettleUpAcrossOpen"
+                        visible: !room.splitPrivate && !room.acrossOpen
+                        Layout.preferredWidth: 320
+                        text: qsTr("Settle up across assets and chains…")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: {
+                            room.acrossRates = ({});
+                            room.acrossOpen = true;
+                            if (room.backend) room.backend.loadOpenAssets();
+                        }
+                    }
+                    ColumnLayout {
+                        objectName: "roomSettleUpAcrossBox"
+                        visible: !room.splitPrivate && room.acrossOpen
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.tiny
+                        LogosText {
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 0
+                            wrapMode: Text.WordWrap
+                            text: qsTr("Paid in %1. Give a rate for each other asset the room owes in: the shares in it are converted at your rate, rounded down. Everyone the shares name must agree, and agreeing means trusting your rates.")
+                                  .arg(room.splitUnit)
+                            color: Theme.palette.textSecondary
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        Repeater {
+                            model: room.acrossOthers
+                            delegate: RowLayout {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                spacing: Theme.spacing.small
+                                LogosText {
+                                    text: qsTr("1 %1 on %2 (%3) =").arg(String(modelData.symbol || modelData.asset))
+                                          .arg(String(modelData.chain))
+                                          .arg(Number(modelData.parts) === 1 ? qsTr("1 share") : qsTr("%1 shares").arg(modelData.parts))
+                                    color: Theme.palette.text
+                                    font.pixelSize: Theme.typography.secondaryText
+                                }
+                                LogosTextField {
+                                    objectName: "roomAcrossRate_" + String(modelData.asset).replace(/[^A-Za-z0-9]/g, "").slice(0, 16)
+                                    Layout.preferredWidth: 140
+                                    placeholderText: qsTr("rate")
+                                    onTextChanged: {
+                                        var r = Object.assign({}, room.acrossRates);
+                                        r[String(modelData.chain) + "|" + String(modelData.asset)] = String(text);
+                                        room.acrossRates = r;
+                                    }
+                                }
+                                LogosText {
+                                    text: room.splitUnit
+                                    color: Theme.palette.textSecondary
+                                    font.pixelSize: Theme.typography.secondaryText
+                                }
+                            }
+                        }
+                        LogosText {
+                            visible: room.acrossOthers.length === 0
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: qsTr("The room owes in no other asset and on no other chain right now.")
+                            color: Theme.palette.textTertiary
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        LogosTextField {
+                            id: acrossSource
+                            objectName: "roomAcrossSource"
+                            visible: room.acrossOthers.length > 0
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("where these rates come from (everyone sees this)")
+                        }
+                        RowLayout {
+                            spacing: Theme.spacing.small
+                            LogosButton {
+                                objectName: "roomSettleUpAcross"
+                                text: qsTr("Propose the settle-up")
+                                enabled: room.acrossPriced.length > 0 && String(acrossSource.text || "").trim().length > 0
+                                onClicked: {
+                                    if (!room.backend) return;
+                                    var rates = room.acrossPriced.map(function (r) {
+                                        return {chain: r.chain, asset: r.asset, rate: r.rate,
+                                                source: String(acrossSource.text || "").trim()};
+                                    });
+                                    room.backend.proposeSettleUpAcross("", room.acrossPayAsset === "ETH" || room.acrossPayAsset === "BTC"
+                                                                           ? "" : room.acrossPayAsset,
+                                                                       JSON.stringify(rates), String(splitMemo.text || ""));
+                                    room.acrossOpen = false;
+                                    room.composing = false;
+                                }
+                            }
+                            LogosButton {
+                                objectName: "roomSettleUpAcrossCancel"
+                                text: qsTr("Cancel")
+                                variant: LogosButton.Variant.Secondary
+                                onClicked: room.acrossOpen = false
+                            }
+                        }
+                    }
+
                     // who fronted it (exo-770): you, or someone else — then it is paid at the
                     // address they shared, and nobody pays until they agree it is theirs
                     LogosText {
@@ -2474,6 +2608,9 @@ Item {
                              : r.op === "confirm" ? qsTr("The share was not confirmed")
                              : r.op === "settle-up" ? qsTr("Nothing was settled up")
                              : qsTr("The split was not proposed");
+                    if (String(r.error || "") === "no-address")
+                        return qsTr("⚠ %1 — %2 has shared no address on %3 to be paid at. Ask them to share one, then propose again.")
+                               .arg(what).arg(String(r.name || "")).arg(String(r.chain || ""));
                     if (String(r.error || "") === "expired-duplicate")
                         return qsTr("⚠ %1 — an identical split expired in this room. Change its note to propose it again, or renew the old one's unpaid shares from its card.").arg(what);
                     return qsTr("⚠ %1 — %2%3").arg(what).arg(String(r.error || ""))
@@ -2481,6 +2618,24 @@ Item {
                 }
                 color: Theme.palette.warning
                 font.pixelSize: Theme.typography.badgeText
+            }
+
+            // a settle-up across chains needs an address the recipient shared (exo-a90.17): ask
+            LogosButton {
+                objectName: "roomAskAddress"
+                visible: !!(room.splitResult && String(room.splitResult.error || "") === "no-address")
+                Layout.preferredWidth: 320
+                text: qsTr("Ask %1 to share an address").arg(String((room.splitResult && room.splitResult.name) || ""))
+                variant: LogosButton.Variant.Secondary
+                onClicked: {
+                    if (!room.backend) return;
+                    var ch = String(room.splitResult.chain || "");
+                    room.backend.postMessage(JSON.stringify({
+                        kind: "address-request", intent: "settle-up",
+                        asset: ch.indexOf("bip122:") === 0 ? "BTC" : "ETH", chain: ch,
+                        purpose: qsTr("Settle up across chains: an address on %1").arg(ch)
+                    }));
+                }
             }
 
             // a Bitcoin payment that could not be proposed says why (no node configured,

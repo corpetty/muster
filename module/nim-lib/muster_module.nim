@@ -1440,6 +1440,128 @@ proc musterCoordinateProposeSettleUp(chain, asset, memo: string): string =
   except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
   if gLpDebug: stderr.writeLine("MUSTER-LP settle-up propose " & result)
 
+# ── settling up across assets and chains (exo-a90.17, split-the-bill.md §4.13) ─────────
+proc assetDecimals(chain, asset: string): int =
+  ## An asset's decimals: ETH 18, BTC 8, a token's own decimals() through my RPC (-1 when
+  ## unreadable) — for the composer's "1 BTC = 21.4 ETH" and the card, never a check.
+  if asset == "ETH": 18
+  elif asset == "BTC": 8
+  elif isErc20Asset(asset): tokenInfo(chain, asset[6 .. ^1]).decimals
+  else: -1
+
+proc assetSymbol(chain, asset: string): string =
+  if isErc20Asset(asset):
+    let t = tokenInfo(chain, asset[6 .. ^1])
+    if t.symbol.len > 0: t.symbol else: "units"
+  else: asset
+
+proc musterCoordinateOpenAssets(): string =
+  ## What a settle-up across assets could cover: the open shares on every public rail,
+  ## grouped by chain and asset (openPartsAll).
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  var groups: seq[(string, string)]
+  var counts = initTable[(string, string), int]()
+  for c in openPartsAll(gSession.roomEvents(), driverFor, uint64(epochTime())):
+    let k = (c.chain, c.asset)
+    if k notin counts: groups.add k
+    counts[k] = counts.getOrDefault(k) + 1
+  var arr = newJArray()
+  for k in groups:
+    arr.add %*{"chain": k[0], "asset": k[1], "parts": counts[k], "symbol": assetSymbol(k[0], k[1]),
+               "decimals": assetDecimals(k[0], k[1])}
+  # the chain a settle-up proposed with chain "" pays on: the compose policy's, else my RPC's
+  var payChain = splitPolicy(gCoordKind).account
+  if payChain.len == 0:
+    let (ok, c, _) = splitChainFor("evm-split")
+    if ok: payChain = c
+  $(%*{"assets": arr, "payChain": payChain})
+
+proc musterCoordinateProposeSettleUpAcrossImpl(chain, asset, ratesJson, memo: string): string =
+  ## Settle up across assets and chains: paid on `chain` in `asset`, covering every open
+  ## share in it or in an asset `ratesJson` prices ({chain, asset, rate per ONE unit, source}).
+  ## The rates go into base units on both sides (settleRate) and are proposed as MY recorded
+  ## read (invariant 10).
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  var chain = chain.strip()
+  if chain.len == 0: chain = splitPolicy(gCoordKind).account
+  if chain.len == 0:
+    let (ok, c, detail) = splitChainFor("evm-split")
+    if not ok: return $(%*{"error": "no-rpc", "detail": detail})
+    chain = c
+  if chain.startsWith("lez:"):
+    return $(%*{"error": "not-netted", "detail": "the private split is never netted: its shares are told apart by amount"})
+  let kind = (if chain.startsWith("bip122:"): "btc-split" else: "evm-split")
+  if kind notin roomKinds(): return $(%*{"error": "not-admitted", "kind": kind})
+  proc assetOf(chain, a: string): string =
+    let x = a.strip().toLowerAscii()
+    if x.len == 0 or x == "eth" or x == "btc": (if chain.startsWith("bip122:"): "BTC" else: "ETH")
+    elif x.startsWith("erc20:"): x
+    else: "erc20:" & x
+  let payAsset = assetOf(chain, asset)
+  let payDec = assetDecimals(chain, payAsset)
+  if payDec < 0: return $(%*{"error": "unknown-decimals", "chain": chain, "asset": payAsset})
+  var rates: seq[SettleRate]
+  let now = uint64(epochTime())
+  var rj: JsonNode
+  try: rj = parseJson(if ratesJson.strip().len == 0: "[]" else: ratesJson)
+  except CatchableError: return $(%*{"error": "bad-rates", "detail": "rates is a JSON array"})
+  for r in rj.getElems():
+    let rc = r{"chain"}.getStr().strip()
+    let ra = assetOf(rc, r{"asset"}.getStr())
+    let dec = assetDecimals(rc, ra)
+    if dec < 0: return $(%*{"error": "unknown-decimals", "chain": rc, "asset": ra})
+    let sr = settleRate(rc, ra, r{"rate"}.getStr(), payDec, dec, r{"source"}.getStr(), int64(now))
+    if not sr.ok: return $(%*{"error": "bad-rate", "asset": ra, "detail": sr.why})
+    rates.add sr.rate
+  gSession.poll()
+  let events = gSession.roomEvents()
+  let composed = settleUpAcross(events, driverFor, chain, payAsset, rates, memo, now)
+  if composed.why.startsWith("no-address:"):
+    let who = composed.why["no-address:".len .. ^1]
+    return $(%*{"error": "no-address", "who": who, "name": memberName(who, myIds()), "chain": chain,
+                "detail": memberName(who, myIds()) & " has shared no address on " & chain & " to be paid at"})
+  if composed.why.len > 0: return $(%*{"error": composed.why})
+  # my own agreement is made by proposing: never for an address this client does not hold
+  let family = (if kind == "btc-split": BtcSplitFamily else: EvmSplitFamily)
+  let mine = settleAgreeRefusal(effectFromJson(composed.effectJson),
+                                toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii(), myPayTos(family))
+  if mine.len > 0: return $(%*{"error": mine, "detail": "you would be paid at an address this client does not hold"})
+  var ttl = DefaultIntentTtl
+  try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
+  except ValueError: discard
+  inc gMsgSeq
+  let reads = (if rates.len > 0: @[(field: "rates", source: "rates:proposer")] else: @[])
+  let id = liveProposeIntent(gSession, moduleKeystore(), driverFor, kind & "@" & chain, composed.effectJson,
+                             int64(now), gMsgSeq, account = chain, ttlSec = ttl, reads = reads)
+  if id.startsWith("0x"): id else: $(%*{"error": id})
+
+proc musterCoordinateProposeSettleUpAcross(chain, asset, rates, memo: string): string =
+  try: result = musterCoordinateProposeSettleUpAcrossImpl(chain, asset, rates, memo)
+  except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
+  if gLpDebug: stderr.writeLine("MUSTER-LP settle-up across propose " & result)
+
+proc musterCoordinateShareAddress(chain: string): string =
+  ## Post MY address for `chain` as an author-signed address-share card: my Ethereum
+  ## address, or the Bitcoin address of my own key on that network.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let c = chain.strip()
+  var body: JsonNode
+  if c.startsWith("bip122:"):
+    var hrp = ""
+    try: hrp = networkByCaip2(c).hrp
+    except CatchableError: return $(%*{"error": "unknown-network", "chain": c})
+    body = %*{"kind": "address-share", "asset": "BTC", "chain": c,
+              "address": p2wpkhAddress(hrp, moduleKeystore().btcPubKey()), "form": 1}
+  elif c.len == 0 or c.startsWith("eip155:"):
+    body = %*{"kind": "address-share", "asset": "ETH", "address": addrHex(myAddress()).toLowerAscii(), "form": 1}
+  else: return $(%*{"error": "no-shared-address", "detail": "nothing is paid to a shared address on " & c})
+  let author = toHex(moduleKeystore().encIdentity().toBytes())
+  inc gMsgSeq
+  let (_, ev) = newMessageEvent(author, int64(epochTime()), $body, gMsgSeq)
+  gSession.publishAuthored(moduleKeystore(), ev)
+  $(%*{"address": body["address"].getStr()})
+
 proc musterCoordinateConfirmPart(intentId, part, tx: string): string =
   try: result = musterCoordinateConfirmPartImpl(intentId, part, tx)
   except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
@@ -1768,6 +1890,11 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
                                      toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii(),
                                      myPayTos(drv.profile().family))
       if why.len > 0: return why
+      # a settle-up across chains paying me at an address I vouch for: only one I hold (§4.13)
+      let whySettle = settleAgreeRefusal(effectFromJson(effectJsonOf(gSession.roomEvents(), intentId)),
+                                         toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii(),
+                                         myPayTos(drv.profile().family))
+      if whySettle.len > 0: return whySettle
     if drv of LezMultisigDriver: return noteApproved(intentId, musterCoordinateVote(intentId))
     if drv.frostGroupOf().ok:
       # a FROST approval (Bitcoin or LEZ) is two rounds: this member's nonces now, its partial signature
@@ -1904,11 +2031,16 @@ proc musterCoordinateIntents(): string =
           var st = PartView()
           for pv in v.parts:
             if pv.part == part: st = pv
+          # across chains (§4.13): a recipient owed only elsewhere, paid at an address they vouch for
+          let vouched = su.rates.len > 0 and
+                        not su.covers.anyIt(it.creditor == t.to and it.chain == su.chain and it.payTo == t.payTo)
           ts.add %*{"part": part, "from": t.frm, "fromName": memberName(t.frm, mine), "to": t.to,
                     "toName": memberName(t.to, mine), "amount": t.amount, "payTo": t.payTo,
                     "mine": t.frm == myEncHex, "toMe": t.to == myEncHex, "settled": st.settled,
                     "confirmed": st.confirmed, "tx": st.tx, "paying": splitPayingFor(v.id, part),
-                    "unresolved": splitUnresolvedFor(v.id, part)}
+                    "unresolved": splitUnresolvedFor(v.id, part), "vouched": vouched,
+                    "payToMine": t.to == myEncHex and
+                                 settleAgreeRefusal(effectFromJson(v.effectJson), myEncHex, myPayTos(prof.family)).len == 0}
         var splits: seq[string]
         for c in su.covers:
           if c.intent notin splits: splits.add c.intent
@@ -1918,7 +2050,22 @@ proc musterCoordinateIntents(): string =
         let ctx = intentContext(events, v.id)
         let expiredUnpaid = not ctx.isPlaceholder and ctx.expired(nowS) and not beganSettling(v) and
                             su.transfers.len > 0
+        # across assets (§4.13): each rate as signed and per ONE unit of its asset (in the
+        # payment asset's base units, for the card to format), and the assets the covers are in
+        var rs = newJArray()
+        for r in su.rates:
+          let dec = assetDecimals(r.chain, r.asset)
+          rs.add %*{"chain": r.chain, "asset": r.asset, "symbol": assetSymbol(r.chain, r.asset), "decimals": dec,
+                    "rate": r.rate, "per": r.per, "perUnit": ratePerUnit(r, dec), "source": r.source, "at": r.at}
+        var inAssets = newJArray()
+        var seenAssets: seq[string]
+        for c in su.covers:
+          if (c.chain & "|" & c.asset) in seenAssets: continue
+          seenAssets.add c.chain & "|" & c.asset
+          inAssets.add %*{"chain": c.chain, "asset": c.asset, "symbol": assetSymbol(c.chain, c.asset),
+                          "shares": su.covers.countIt(it.chain == c.chain and it.asset == c.asset)}
         o["settleUp"] = %*{"asset": su.asset, "memo": su.memo, "covers": su.covers.len, "splits": splits.len,
+                           "chain": su.chain, "across": su.rates.len > 0, "rates": rs, "coverAssets": inAssets,
                            "expired": expiredUnpaid, "lapsed": coverLapsed(events, driverFor, v, nowS),
                            "releasesAt": (if expiredUnpaid: $(ctx.expiry + CoverReleaseGraceS) else: ""),
                            "transfers": ts, "iAmParty": myEncHex in settleParties(su),

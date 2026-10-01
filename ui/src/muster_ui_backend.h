@@ -82,6 +82,10 @@ public:
     void proposeBtcSpend(const QString &payTo, const QString &amountSat, const QString &feeRate) override;
     void proposeSplit(const QString &chain, const QString &totalWei, const QString &sharesJson, const QString &memo) override;
     void proposeSettleUp(const QString &chain, const QString &asset, const QString &memo) override;
+    void loadOpenAssets() override;
+    void proposeSettleUpAcross(const QString &chain, const QString &asset, const QString &ratesJson,
+                               const QString &memo) override;
+    void shareAddress(const QString &chain) override;
     void settlePart(const QString &intentId) override;
     void renewSplit(const QString &intentId) override;
     void lookupToken(const QString &chain, const QString &token) override;
