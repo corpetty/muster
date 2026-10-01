@@ -646,10 +646,15 @@ learns only that private transfers happened, never who paid whom or how much. Th
 creditor's own wallet scan finds a note of exactly the share. It has run end to end on
 the testnet by script (`scripts/split-lez-testnet.sh`); this is the first time by hand.
 
-It needs real LEZ wallets on both sides, and Bob needs a private balance. There is no
-faucet button in the app yet, so `--lez-fund` does what a person would: one claim from the
-testnet faucet (about 150 base units) into Bob's public account, then a shield of all of
-it to his own key node. Each proof takes minutes; allow about 40 minutes in all.
+It needs real LEZ wallets on both sides, and Bob needs a private balance. `--lez-fund`
+does what a person would: it waits for native LEZ to reach Bob's public account, then
+shields all of it to his own key node. Each proof takes minutes; allow about 40 minutes
+in all.
+
+> **Since 2026-09-30 the LEZ testnet runs v0.3.0, which has no faucet** (exo-eb6.4). Bob's
+> log shows `LEZFUND awaiting funds at <account>`: someone who holds native LEZ on the
+> testnet has to send to that account. muster's private rails are also unverified against
+> v0.3's 256-bit private ids (exo-357), so treat this section as last verified on v0.2.4.
 
 1. Close both windows, then relaunch, without `--fresh` (keep the identities and the
    room). Back in each window, open the room from **Home**: after a restart its row is
@@ -669,9 +674,10 @@ it to his own key node. Each proof takes minutes; allow about 40 minutes in all.
    grep LEZFUND .run/try/bob.log
    ```
 
-   It moves through `LEZFUND setup`, `LEZFUND public balance …` (the claim, once a block
-   includes it), `LEZFUND shield`, and ends at `LEZFUND funded`: about 10 minutes, most
-   of it the shield's proof and a first scan from block 0.
+   It moves through `LEZFUND setup`, `LEZFUND awaiting funds at <account>` (until
+   someone sends native LEZ there), `LEZFUND public balance …`, `LEZFUND shield`, and
+   ends at `LEZFUND funded`: about 10 minutes once funded, most of it the shield's proof
+   and a first scan from block 0.
 3. **Alice:** **+** → **Split** → **Split privately (LEZ)**. **total (LEZ)** `0.0000001`
    (100 base units: LEZ has 9 decimals, and the faucet pays little). **✓ I'm in it too**,
    Bob in.

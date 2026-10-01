@@ -73,6 +73,10 @@ The automatic hand-off (L4) needs **two** independent things, and muster is only
 - **Blocker A — no app declares the capability.** Confirmed: `lez_wallet_ui` (the LEZ Wallet App) declares no `provides`, so there is no capability to `logos.request`. **muster can fix this itself with a shim** — a thin `ui_qml` app that depends on `lez_core`, declares `provides: ["lez.wallet.setup"]`, and drives `lez_core`'s `create_account` / `register` / `claim_pinata` / `transfer_shielded` (all headless `lp_*` calls) in its handler. We do not have to wait on the wallet app; we (or a responsive community maintainer) can ship the provider.
 - **Blocker B — the shell does not dispatch `logos.request`.** A shim does **not** fix this: if the Basecamp app-to-app broker is not routing intents, *no* provider — official, community, or our own shim — is reachable through `logos.request`. This one is the shell's, and the sharp upstream ask (`docs/upstream/app-to-app-intent-broker.md`).
 
+> **2026-10-01, LEZ v0.3 (exo-eb6.4):** the faucet and account activation are gone from the
+> zone and from lez_core 0.5.0. `provision(ks)` / `wallet_lez_setup()` now ensure an account
+> and report whether it holds native LEZ, naming the account to fund; they fund nothing.
+
 **The de-risking move: muster can provision LEZ directly over `lez_core`, no broker, no wallet app.** Account creation, activation, and the pinata faucet are the *same kind* of `lp_*` call muster already makes for the transfer. `LezAdapter.provision(ks, pinataId)` + `wallet_lez_setup` ensure a public account and (with a faucet challenge id) fund it, core-to-core (the sanctioned pattern, §6.4). This is the **fallback**, not the default — delegating to the wallet app stays preferred for UX and for keeping keys in one home — but it means muster is **not hard-blocked** on either upstream piece for a working LEZ flow.
 
 | Situation | muster's path |

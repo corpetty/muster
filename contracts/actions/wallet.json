@@ -719,10 +719,10 @@
     },
     {
       "id": "wallet/lez-setup",
-      "name": "Set up and fund a LEZ account (fallback)",
+      "name": "Set up a LEZ account (fallback)",
       "area": "wallet",
       "status": "partial",
-      "summary": "Ensures this instance has a public LEZ account, activated on chain, and optionally funds it from the pinata faucet, driving lez_core directly (exo-44b). It is the fallback: delegating setup to the LEZ Wallet App is preferred when the Basecamp broker exists. It runs on the deterministic FakeLezCore by default. The real lez_core path (LpLezCore) is used only when MUSTER_LEZ_REAL is set and lez_core is loaded, and it falls back to the fake if lez_core cannot be reached. Only the fake path is exercised by tests; the live send against testnet.lez.logos.co has not been run. Nobody else approves a wallet send, so there is no agreement field.",
+      "summary": "Ensures this instance has a public LEZ account and says whether it holds native LEZ, driving lez_core directly (exo-44b). It funds nothing: LEZ v0.3 removed the testnet's faucet and account registration (exo-eb6.4), and a fresh public account is claimed on chain by its first funded transfer, from someone who holds native LEZ. It is the fallback: delegating setup to the LEZ Wallet App is preferred when the Basecamp broker exists. It runs on the deterministic FakeLezCore by default. The real lez_core path (LpLezCore) is used only when MUSTER_LEZ_REAL is set and lez_core is loaded, and it falls back to the fake if lez_core cannot be reached. Nobody else approves a wallet send, so there is no agreement field.",
       "requirements": [
         {
           "kind": "module",
@@ -747,16 +747,12 @@
           "mode": "write"
         },
         {
-          "target": "module:lez_core.register_public_account",
-          "mode": "write"
-        },
-        {
-          "target": "module:lez_core.claim_pinata",
-          "mode": "write"
+          "target": "module:lez_core.get_balance",
+          "mode": "read"
         },
         {
           "target": "chain:lez:testnet",
-          "mode": "write"
+          "mode": "read"
         }
       ],
       "disclosure": [
@@ -764,19 +760,14 @@
           "field": "public account id",
           "observer": "rpc-provider",
           "when": "act"
-        },
-        {
-          "field": "public account id",
-          "observer": "chain-observer",
-          "when": "settle"
         }
       ],
       "steps": [
         {
           "step": "act",
           "who": "the member",
-          "does": "wallet_lez_setup(pinataId) ensures a public account (create_account_public, then register_public_account — activation on chain, because the sequencer silently drops transactions to an inactive account) and a private one. With a pinata id it reads the faucet's challenge (difficulty and seed), solves the proof of work locally, and calls claim_pinata to fund the public account. Returns {account, state: met | missing | unknown, detail}. The keys stay in lez_core.",
-          "signs": "lez_core signs the activation and the claim inside its own wallet; muster's keystore signs nothing.",
+          "does": "wallet_lez_setup() ensures a public account (create_account_public; on LEZ v0.3 there is no registration) and a private one, then reads the public account's native balance. Returns {account, state: met | missing | unknown, detail}: met once it holds native LEZ, missing with the account someone who holds native LEZ must send to, unknown when the zone cannot be read. The keys stay in lez_core.",
+          "signs": "nothing: creating an account is local to lez_core's wallet, and muster's keystore signs nothing.",
           "reveals": [
             {
               "field": "public account id",
@@ -785,30 +776,21 @@
           ],
           "evidence": [
             "module/tests/lez_provision_test.nim",
-            "module/tests/wallet_lez_encoding_test.nim",
             "module/tests/lez_readiness_test.nim"
-          ]
-        },
-        {
-          "step": "settle",
-          "who": "the zone",
-          "does": "The activation and the faucet credit land when a block commits (minutes); the public account id is on the public record.",
-          "signs": "nothing more",
-          "reveals": [
-            {
-              "field": "public account id",
-              "observer": "chain-observer"
-            }
-          ],
-          "evidence": [
-            "module/src/wallet/lez_lp.nim"
           ]
         }
       ],
       "refusals": [
         {
-          "what": "a failed faucet claim reported as funded",
-          "why": "it raises; never a false receipt",
+          "what": "an unfunded account reported as ready",
+          "why": "state is met only when the account holds native LEZ; unfunded, it is missing and the detail names the account to fund",
+          "evidence": [
+            "module/tests/lez_provision_test.nim"
+          ]
+        },
+        {
+          "what": "crediting an account",
+          "why": "there is no faucet to claim from on LEZ v0.3; provisioning never funds",
           "evidence": [
             "module/tests/lez_provision_test.nim"
           ]
@@ -830,11 +812,11 @@
       ],
       "claims": [
         {
-          "claim": "A faucet failure is an error, never a false receipt.",
+          "claim": "An unfunded account is reported missing, with the account to fund, never ready.",
           "credibility": "imperative"
         },
         {
-          "claim": "Activation and the faucet claim put the public account id on the public record.",
+          "claim": "Reading the balance shows the sequencer's RPC this instance's public account id.",
           "credibility": "exposed"
         },
         {
@@ -849,10 +831,6 @@
         },
         {
           "kind": "test",
-          "path": "module/tests/wallet_lez_encoding_test.nim"
-        },
-        {
-          "kind": "test",
           "path": "module/tests/lez_readiness_test.nim"
         },
         {
@@ -863,7 +841,12 @@
         {
           "kind": "source",
           "url": "https://github.com/corpetty/muster/blob/main/module/src/wallet/lez_lp.nim",
-          "what": "createAccount / claimPinata over lez_core"
+          "what": "createAccount over lez_core"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone-module/blob/b89e5d24df5babc2490d2e5d47756fb1f33435dd/src/lez_core_module.h",
+          "what": "lez_core 0.5.0: no claim_pinata, no register_public_account"
         },
         {
           "kind": "source",
@@ -872,7 +855,7 @@
         }
       ],
       "unverified": [
-        "Activation, the local proof of work against the live faucet and the on-chain timing are read from lez_lp.nim and lez-adapter.md; tests run the fake core."
+        "The real lez_core 0.5.0 path against the v0.3 testnet: account creation and the balance read are read from lez_lp.nim and lez_core's header; tests run the fake core."
       ]
     },
     {
