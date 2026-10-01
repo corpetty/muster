@@ -21,6 +21,7 @@ import logos_sdk/bytes      # {"_bytes":<b64url>} codec
 import ./inbound_queue
 import ./store_catchup    # which store query next: a topic's whole history, then the window (exo-aaf)
 import ./received         # a messageReceived event, v0.2 or v0.3 (exo-eb6.1)
+import ./node_config      # what createNode gets, and the store peers (exo-eb6.1)
 
 # Transport diagnostics — off unless MUSTER_LP_DEBUG is set. When the delivery
 # node boot or cross-host relay misbehaves, this surfaces the lp createNode/start
@@ -132,16 +133,11 @@ proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000): DeliveryTra
   # Store service peers for mesh-independent catchup — ALL entryNodes of the delivery
   # config (the fleet's own nodes serve store). fireCatchup round-robins across them,
   # so a peer that's down or throttling stalls one tick, not the whole catchup. Empty
-  # if the config names none (catchup then disabled).
-  var peers: seq[string]
-  try:
-    let j = parseJson(nodeConfigJson)
-    if j.kind == JObject and j.hasKey("entryNodes") and j["entryNodes"].kind == JArray:
-      for n in j["entryNodes"]:
-        let s = n.getStr()
-        if s.len > 0: peers.add s
-  except CatchableError: discard
-  result.catchup = newStoreCatchup(peers)
+  # if the config names none (catchup then disabled). What createNode itself gets is
+  # node_config.nim's (exo-eb6.1): a preset's config without its entryNodes, QUIC off
+  # unless MUSTER_DELIVERY_QUIC=1.
+  let nc = nodeConfigFor(nodeConfigJson, quic = getEnv("MUSTER_DELIVERY_QUIC") == "1")
+  result.catchup = newStoreCatchup(nc.storePeers)
   if gLpDebug: stderr.writeLine("MUSTER-LP creating delivery client (mode=" & $lp_get_mode() & ")")
   result.client = lp_client_create("delivery_module", "muster_module", nil, nil)
   if result.client == nil:
@@ -152,7 +148,8 @@ proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000): DeliveryTra
   # synchronous createNode reaches delivery and succeeds; the async variant booted
   # the node but the receive path never surfaced messages, so we match the proven
   # sync ordering (the event handler is registered against a started node).
-  var args = newJArray(); args.add %nodeConfigJson
+  if gLpDebug: stderr.writeLine("MUSTER-LP createNode config=" & nc.createNode)
+  var args = newJArray(); args.add %nc.createNode
   let cn = result.invoke("createNode", $args)
   if gLpDebug: stderr.writeLine("MUSTER-LP createNode result=" & (if cn != nil: $cn else: "<nil>"))
   discard result.invoke("start", "[]")
