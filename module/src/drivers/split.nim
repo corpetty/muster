@@ -406,10 +406,10 @@ proc ratePerUnit*(r: SettleRate, assetDecimals: int): string =
   ## card shows: rate × 10^assetDecimals ÷ per, rounded down. "" when it cannot be read.
   if assetDecimals < 0 or assetDecimals > 77 or not isCanonDec(r.rate) or not isCanonDec(r.per) or r.per == "0":
     return ""
-  let (x, m) = (u256(r.rate), u256(pow10(assetDecimals)))
-  let p = x * m
-  if p div m != x: return ""
-  $(p div u256(r.per))
+  # 512 bits: the product may pass 256 even when the rate per unit fits (a large rate × 10^18)
+  let v = parse(r.rate, StUint[512]) * parse(pow10(assetDecimals), StUint[512]) div parse(r.per, StUint[512])
+  if v > (1.stuint(512) shl 256) - 1.stuint(512): return ""
+  $v
 
 proc settleRefusal(d: SplitDriver, su: SettleUp): string =
   ## Why `su` is not a settle-up this driver will sign or pay ("" = it is one).

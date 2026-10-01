@@ -230,6 +230,9 @@ block:
   doAssert not settleRate(Evm, "ETH", "0.0000001", 6, 18, "s", 0).ok, "finer than one base unit of the payment asset"
   doAssert not settleRate(Evm, Usdc, "1", 18, -1, "s", 0).ok, "a token whose decimals could not be read"
   doAssert ratePerUnit(SettleRate(rate: "7", per: "0"), 8) == "" and ratePerUnit(r.rate, -1) == ""
+  # a rate per unit that fits, though rate × 10^decimals does not (found by derived-exo-a90.17 s1)
+  let huge = settleRate(Evm, "ETH", repeat('9', 70), 6, 18, "s", 0)
+  doAssert huge.ok and ratePerUnit(huge.rate, 18) == huge.rate.rate, "read back without a 256-bit overflow"
   echo "7. a rate as a person gives it is kept exact in base units, and read back per one unit OK"
 
 echo "settle_up_across_test: all OK"
