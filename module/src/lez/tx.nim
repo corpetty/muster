@@ -1,4 +1,6 @@
-## LEZ v0.2.4 public transactions, as bytes (exo-3c9: the live binding).
+## LEZ public transactions, as bytes: v0.2.4 (exo-3c9: the live binding) and, below,
+## v0.3.0 (exo-eb6.4 L3), the line the testnet runs since 2026-09-30. The v0.2.4 encoder
+## stays for the local v0.2.4 line until the LEZ multisig and FROST move.
 ##
 ## What a member's multisig transaction IS on the chain the testnet runs, pinned to
 ## logos-execution-zone v0.2.4 (lee/state_machine/src/{public_transaction,signature,
@@ -18,7 +20,7 @@
 ## Encoding only: nothing here signs or touches the network. The signing chain is
 ## wallet/lez_multisig_live.nim, with the member's key in the keystore.
 
-import std/[strutils]
+import std/[strutils, options]
 import stint
 import ../hashing/sha256
 import ./multisig
@@ -225,3 +227,109 @@ proc leeTxDeploy*(bytecode: seq[byte]): seq[byte] =
 
 proc deployTxHash*(bytecode: seq[byte]): string =
   hexOf(sha256(deployBorsh(bytecode)))
+
+# ── LEZ v0.3.0 (exo-eb6.4 L3) ─────────────────────────────────────────────────
+# Pinned to logos-execution-zone v0.3.0 (lee/state_machine/src/public_transaction,
+# fees.rs; lee_core account::ProgramShardSelector, native_token) and held to
+# tests/vectors/lez-tx-v030, from those crates themselves.
+#
+#   Message      borsh { program_account_id: [u8; 32],
+#                        shard_selectors: Vec<{ account_id: [u8; 32], program_account_id: [u8; 32] }>,
+#                        nonces: Vec<u128>, instruction_data: Vec<u8> (borsh of the instruction),
+#                        fee: Option<{ payer: [u8; 32], gas_limit: u64, tip: u64, max_fee: u128 }> }
+#   hash         SHA-256("/LEE/v0.3/Message/Public/" padded ‖ borsh(Message)), as in v0.2.4
+#   witness      Vec<(BIP-340 [u8; 64], x-only key [u8; 32])>: every signer, the fee payer
+#                included (a co-signing payer's nonce follows the others)
+#   transaction  borsh { message, witness_set }; hash SHA-256 of it; LeeTransaction::Public
+#                = 0x00 ‖ that, base64 on the wire
+
+const
+  NativeTokenProgram* = newSeq[byte](32)
+    ## the reserved native token program's account: all zero (lee_core NATIVE_TOKEN_PROGRAM_ID)
+  DefaultGasLimit* = 2_000_000'u64
+    ## the LEZ wallet's DEFAULT_GAS_LIMIT (lez/wallet/src/lib.rs @ v0.3.0)
+  AssumedDataBytes = 100_000'u64
+  AssumedBaseFee = 64'u64
+    ## the LEZ wallet sizes max_fee as (gas_limit + 100_000) × 64: 8× the genesis minimum
+    ## base fee, so a declaration survives early congestion. Unused fee is refunded.
+
+type
+  LezShard* = object
+    account*: seq[byte]           ## 32-byte account id
+    program*: seq[byte]           ## the program whose shard of that account the call sees
+
+  LezFee* = object
+    payer*: seq[byte]             ## the account debited; it signs, as every signer does
+    gasLimit*: uint64
+    tip*: uint64
+    maxFee*: UInt128              ## the cap on the fee reservation; the payer must cover it
+
+  LezMessage3* = object
+    programAccount*: seq[byte]    ## the program called, by account id (32)
+    shards*: seq[LezShard]        ## the rows it reads, in its order
+    nonces*: seq[UInt128]         ## one per signer, in witness order (a co-signing payer last)
+    instruction*: seq[byte]       ## the instruction, borsh
+    fee*: Option[LezFee]          ## none only for system transactions
+
+proc nativeShard*(account: seq[byte]): LezShard =
+  ## An account's native-balance shard (ProgramShardSelector::native_balance).
+  need32(account, "an account id")
+  LezShard(account: account, program: NativeTokenProgram)
+
+proc nativeTransfer*(amount: UInt128): seq[byte] =
+  ## The native token program's instruction: borsh Transfer { amount: u128 } (variant 0).
+  @[0'u8] & @(amount.toBytesLE())
+
+proc defaultFee*(payer: seq[byte]): LezFee =
+  ## The LEZ wallet's own default declaration: gas 2_000_000, tip 0,
+  ## max_fee (gas + 100_000) × 64 = 134_400_000.
+  need32(payer, "a fee payer")
+  LezFee(payer: payer, gasLimit: DefaultGasLimit, tip: 0,
+         maxFee: ((DefaultGasLimit + AssumedDataBytes) * AssumedBaseFee).stuint(128))
+
+proc bU64(b: var seq[byte], x: uint64) =
+  for i in 0 ..< 8: b.add byte((x shr (8*i)) and 0xff)
+
+proc messageBorsh*(m: LezMessage3): seq[byte] =
+  need32(m.programAccount, "a program account id")
+  result.add m.programAccount
+  result.bU32(uint32(m.shards.len))
+  for s in m.shards:
+    need32(s.account, "an account id")
+    need32(s.program, "a program account id")
+    result.add s.account
+    result.add s.program
+  result.bU32(uint32(m.nonces.len))
+  for n in m.nonces: result.add @(n.toBytesLE())
+  result.bU32(uint32(m.instruction.len))
+  result.add m.instruction
+  if m.fee.isNone: result.add 0'u8
+  else:
+    let f = m.fee.get
+    need32(f.payer, "a fee payer")
+    result.add 1'u8
+    result.add f.payer
+    result.bU64(f.gasLimit)
+    result.bU64(f.tip)
+    result.add @(f.maxFee.toBytesLE())
+
+proc messageHash*(m: LezMessage3): array[32, byte] =
+  ## What each signer signs, the fee payer included.
+  sha256(padded(MessagePrefix) & messageBorsh(m))
+
+proc publicTxBorsh*(m: LezMessage3, witnesses: seq[LezWitness]): seq[byte] =
+  result = messageBorsh(m)
+  result.bU32(uint32(witnesses.len))
+  for w in witnesses:
+    if w.signature.len != 64: raise newException(ValueError, "a signature must be 64 bytes")
+    need32(w.xonly, "an x-only key")
+    result.add w.signature
+    result.add w.xonly
+
+proc publicTxHash*(m: LezMessage3, witnesses: seq[LezWitness]): string =
+  ## The transaction's hash as the chain reports it (lowercase hex).
+  hexOf(sha256(publicTxBorsh(m, witnesses)))
+
+proc leeTxPublic*(m: LezMessage3, witnesses: seq[LezWitness]): seq[byte] =
+  ## LeeTransaction::Public: what sendTransaction carries (base64 of these bytes).
+  @[0'u8] & publicTxBorsh(m, witnesses)
