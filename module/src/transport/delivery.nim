@@ -40,6 +40,8 @@ proc envMs(name: string, default, floor: int64): int64 =
   if e.len == 0: return default
   try: max(floor, parseInt(e).int64) except CatchableError: default
 
+var gStoreShown = 0   ## store responses logged whole under MUSTER_LP_DEBUG (the first few)
+
 let gCatchupPeriodMs* = envMs("MUSTER_CATCHUP_MS", 1000, 200)
   ## re-query the store this often (ms). Default 1s ≈ chat cadence; floor 200ms.
 let gCatchupLookbackMs* = max(gCatchupPeriodMs, envMs("MUSTER_CATCHUP_LOOKBACK_MS", 60_000, 1000))
@@ -240,7 +242,8 @@ method poll*(t: DeliveryTransport) =
     if not parseMessageReceived(arr, ev): continue
     let topic = ev.contentTopic
     let payload = ev.payload
-    if gLpDebug and ev.source.len > 0: stderr.writeLine("MUSTER-LP inbound source=" & ev.source)
+    if gLpDebug: stderr.writeLine("MUSTER-LP inbound source=" & ev.source & " topic=" & ev.contentTopic &
+                                  " bytes=" & $ev.payload.len)
     let msg = IncomingMessage(contentTopic: topic, payload: payload,
                               messageHash: messageHashOf(topic, payload),
                               timestamp: ev.timestamp)
@@ -265,6 +268,10 @@ method poll*(t: DeliveryTransport) =
     #   { "value": "<json string>" }                       # lp result envelope
     #   value -> { "messages": [ { "messageHash",
     #       "message": { "vResultPrivate": { "contentTopic", "payload": [byte,…] } } } ] }
+    if gLpDebug and gStoreShown < 6:      # the first few responses whole: their shape is checked live
+      inc gStoreShown
+      let r = bytesToStr(raw)
+      stderr.writeLine("MUSTER-LP store response: " & r[0 ..< min(r.len, 700)])
     var env: JsonNode
     try: env = parseJson(bytesToStr(raw))
     except CatchableError: continue
