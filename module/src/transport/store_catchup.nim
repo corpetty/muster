@@ -44,6 +44,7 @@ type
     sentTo: OrderedTable[string, string] ## requestId -> the peer it was asked of (recent)
     downUntil: Table[string, int64]     ## peer -> skip it until then (ms)
     downCount: Table[string, int]       ## peer -> dial failures in a row
+    lastWindow: Table[string, int64]    ## topic -> when its window was last asked (ms)
 
 proc newStoreCatchup*(peers: seq[string]): StoreCatchup =
   StoreCatchup(peers: peers)
@@ -99,11 +100,16 @@ proc noteSent(c: var StoreCatchup, rid, peer: string) =
       break
     c.sentTo.del oldest
 
-proc nextQuery*(c: var StoreCatchup, topic: string, nowMs, lookbackMs: int64):
+proc nextQuery*(c: var StoreCatchup, topic: string, nowMs, lookbackMs: int64,
+                windowEveryMs = 0'i64):
     tuple[fire: bool, deep: bool, req: JsonNode, peer: string] =
   ## The store query to fire now for `topic`, if any: the next page of its history until
-  ## it is read whole, then the sliding window. fire=false while a page is in flight.
+  ## it is read whole, then the sliding window — at most once every `windowEveryMs` (0 =
+  ## every call). fire=false while a page is in flight, or before the window is due.
   if c.peers.len == 0: return (false, false, newJNull(), "")
+  if topic in c.caught and windowEveryMs > 0 and topic in c.lastWindow and
+     nowMs - c.lastWindow[topic] < windowEveryMs:
+    return (false, false, newJNull(), "")
   inc c.seqNo
   let rid = "muster-" & $nowMs & "-" & $c.seqNo
   var req = %*{"requestId": rid, "includeData": true, "paginationForward": true,
@@ -137,6 +143,7 @@ proc nextQuery*(c: var StoreCatchup, topic: string, nowMs, lookbackMs: int64):
   # Waku store filters on the message's own (nanosecond) timestamp; second precision is a
   # plenty floor and avoids float64 losing ns digits at epoch scale.
   req["timeStart"] = %((nowMs - lookbackMs) * 1_000_000)
+  c.lastWindow[topic] = nowMs
   let peer = c.nextPeer(nowMs)
   c.noteSent(rid, peer)
   (true, false, req, peer)

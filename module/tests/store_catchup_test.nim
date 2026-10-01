@@ -202,4 +202,37 @@ block:
   doAssert dialFailurePeer(newJNull()) == ""
   echo "10. a store peer that cannot be dialled is backed off, skipped, and cleared by an answer OK"
 
+# ── 11. once a topic is read whole, its window is asked only every so often (exo-eb6.1) ─
+# On delivery v0.3.0 live receive works and the module backfills a restarted node itself,
+# so the window is a safety net, not the receive path it was on v0.2. Seen live: with five
+# of six store peers unreachable, a store query per topic per second held the delivery
+# module on dead dials, sends queued behind them, and the membership handshake failed one
+# run in three; with the window asked rarely, it passed four in four. History is still
+# paged as fast as answers come: a joiner rebuilds the room from it.
+block:
+  var d = newStoreCatchup(Peers)
+  var t = 0'i64
+  const Every = 15_000'i64
+  let h1 = d.nextQuery(Room, t, Lookback, windowEveryMs = Every)
+  doAssert h1.fire and h1.deep
+  d.onResponse(page(h1.req, "0xh"))
+  t += 1000
+  let h2 = d.nextQuery(Room, t, Lookback, windowEveryMs = Every)
+  doAssert h2.fire and h2.deep, "history pages are not held back by the window's pace"
+  d.onResponse(page(h2.req, ""))
+  t += 1000
+  let w1 = d.nextQuery(Room, t, Lookback, windowEveryMs = Every)
+  doAssert w1.fire and not w1.deep, "the first window right after the history"
+  var fired = 0
+  for i in 1 .. 14:
+    t += 1000
+    if d.nextQuery(Room, t, Lookback, windowEveryMs = Every).fire: inc fired
+  doAssert fired == 0, "no window before " & $Every & " ms: " & $fired
+  t += 1000
+  doAssert d.nextQuery(Room, t, Lookback, windowEveryMs = Every).fire, "the window again after " & $Every & " ms"
+  # each topic keeps its own pace
+  let o = d.nextQuery(Other, t, Lookback, windowEveryMs = Every)
+  doAssert o.fire and o.deep
+  echo "11. once read whole, a topic's window is asked only every windowEveryMs; history at full speed OK"
+
 echo "store_catchup_test: all OK"

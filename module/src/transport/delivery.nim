@@ -45,7 +45,15 @@ var gStoreFailed, gStoreAnswered = 0   ## store responses seen, under MUSTER_LP_
 
 let gCatchupPeriodMs* = envMs("MUSTER_CATCHUP_MS", 1000, 200)
   ## re-query the store this often (ms). Default 1s ≈ chat cadence; floor 200ms.
-let gCatchupLookbackMs* = max(gCatchupPeriodMs, envMs("MUSTER_CATCHUP_LOOKBACK_MS", 60_000, 1000))
+let gCatchupWindowMs* = envMs("MUSTER_CATCHUP_WINDOW_MS", 15_000, 0)
+  ## once a topic's history is read, its sliding window is asked only this often (ms).
+  ## On delivery v0.3.0 live receive works and the module backfills on its own, so the
+  ## window is a safety net; a query per topic per second held the module on dead store
+  ## dials and stalled its sends (exo-eb6.1). 0 = every catch-up tick, as on v0.2.
+let gStoreTimeoutMs* = envMs("MUSTER_STORE_TIMEOUT_MS", 3000, 500)
+  ## how long delivery may spend on one store query; one to a dead peer holds it that long
+let gCatchupLookbackMs* = max(max(gCatchupPeriodMs, gCatchupWindowMs) * 2,
+                              envMs("MUSTER_CATCHUP_LOOKBACK_MS", 60_000, 1000))
   ## each steady-state query reaches back this far (ms). Wide enough to tolerate
   ## clock skew and a few missed polls (ingest dedups the overlap), small enough
   ## that a 1s cadence stays cheap. Never below the period.
@@ -211,12 +219,13 @@ proc fireCatchup(t: DeliveryTransport, contentTopic: string) =
   ## minute. Then each query reaches back `gCatchupLookbackMs`, a sliding window that stays
   ## cheap however long the room runs. Ingest dedups every overlap (R-2/R-4), and the log
   ## reduces order-independently (inv 4).
-  let q = t.catchup.nextQuery(contentTopic, int64(epochTime() * 1000), gCatchupLookbackMs)
+  let q = t.catchup.nextQuery(contentTopic, int64(epochTime() * 1000), gCatchupLookbackMs,
+                              windowEveryMs = gCatchupWindowMs)
   if not q.fire: return
   var args = newJArray()
   args.add %($q.req)               # jsonQuery (tstr)
   args.add %q.peer                 # peerAddr (tstr)
-  args.add %(t.timeoutMs.int)      # timeoutMs (int)
+  args.add %(gStoreTimeoutMs.int)   # timeoutMs (int): bounded, a dead peer holds delivery this long
   let argsStr = $args
   if gLpDebug: stderr.writeLine("MUSTER-LP storeQuery " & contentTopic &
                                 (if q.deep: " deep" & (if q.req.hasKey("paginationCursor"): " cursor" else: "")
