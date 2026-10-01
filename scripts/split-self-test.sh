@@ -44,7 +44,7 @@ ONBEHALF="${SPLIT_ON_BEHALF:-}"
 PAYEE=$([ -n "$ONBEHALF" ] && echo "$ADDR1" || echo "$ADDR0")   # who is paid: the creditor
 TOTAL=600000000000000000   # 0.6 ETH: A's own share 0.3, B owes 0.3
 SHARE=300000000000000000
-CFG=$(python3 -c 'import json;print(json.dumps(json.load(open("infra/fleets/logos.test.json"))["delivery_createNode_config"]))')
+CFG=$(ui_fleet_config)
 TOPIC="/muster/1/split-$(date +%s)/proto"
 D=$(mktemp -d)
 echo "topic: $TOPIC · anvil: $RPC · logs: $D"

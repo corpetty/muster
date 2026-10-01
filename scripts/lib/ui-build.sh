@@ -33,6 +33,20 @@ case "$MUSTER_UI" in
   *) echo "MUSTER_UI must be cpp or nim, got '$MUSTER_UI'" >&2; exit 2 ;;
 esac
 
+# The delivery fleet a self-test's instances join, by its infra/fleets/<name>.json:
+#   MUSTER_FLEET=logos.dev   (default) cluster 3, no RLN — a node starts with nothing more
+#   MUSTER_FLEET=logos.test  cluster 2, RLN on since Testnet v0.3: a delivery v0.3 node
+#                            starts there only with the RLN modules and an active,
+#                            funded membership (exo-eb6.3), so it is not the default yet
+MUSTER_FLEET="${MUSTER_FLEET:-logos.dev}"
+
+# ui_fleet_config — the selected fleet's createNode config, as one line of JSON.
+ui_fleet_config() {
+  local f="infra/fleets/$MUSTER_FLEET.json"
+  [ -f "$f" ] || { echo "no fleet config $f (MUSTER_FLEET=$MUSTER_FLEET; infra/fleets/refresh.sh)" >&2; exit 2; }
+  python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))["delivery_createNode_config"]))' "$f"
+}
+
 # ui_require_runner — exit 1 (red) with the reason when the selected build is absent.
 ui_require_runner() {
   if [ ! -x "$RUNNER" ]; then

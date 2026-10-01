@@ -362,7 +362,7 @@ Item {
                             id: deliveryField
                             objectName: "settingsDelivery"
                             Layout.fillWidth: true
-                            placeholderText: qsTr("full createNode JSON, or a fleet name like 'logos.test'")
+                            placeholderText: qsTr("full createNode JSON, or a fleet name: 'logos.dev' or 'logos.test'")
                             font.family: Theme.typography.mono
                         }
                         LogosButton {
@@ -375,13 +375,23 @@ Item {
                             }
                         }
                     }
-                    // one-click preset — the default already points here, but this
-                    // restores it after a hand edit, no JSON to paste.
-                    LogosButton {
-                        objectName: "settingsDeliveryFleet"
-                        text: qsTr("Use the logos.test fleet")
-                        variant: LogosButton.Variant.Secondary
-                        onClicked: if (settings.backend) settings.backend.setSetting("delivery", "logos.test")
+                    // one-click presets, no JSON to paste. logos.dev is the default; since
+                    // Testnet v0.3 a node on logos.test starts only with an active RLN
+                    // membership (exo-eb6.3), so the button says so.
+                    RowLayout {
+                        spacing: Theme.spacing.small
+                        LogosButton {
+                            objectName: "settingsDeliveryFleet"
+                            text: qsTr("Use the logos.dev fleet")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: if (settings.backend) settings.backend.setSetting("delivery", "logos.dev")
+                        }
+                        LogosButton {
+                            objectName: "settingsDeliveryFleetTest"
+                            text: qsTr("Use logos.test (needs an RLN membership)")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: if (settings.backend) settings.backend.setSetting("delivery", "logos.test")
+                        }
                     }
 
                     LogosText {
