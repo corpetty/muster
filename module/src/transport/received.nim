@@ -1,7 +1,7 @@
 ## A delivery `messageReceived` event, parsed (exo-eb6.1). Pure: no lp_* calls, so it is
 ## tested without a node. delivery.nim's poll() feeds it each event's JSON args array.
 
-import std/json
+import std/[json, base64]
 import logos_sdk/bytes      # {"_bytes":<b64url>} codec
 
 type
@@ -32,7 +32,24 @@ proc parseMessageReceived*(arr: JsonNode, ev: var ReceivedEvent): bool =
 
 proc storedPayload*(p: JsonNode, payload: var seq[byte]): bool =
   ## A stored message's payload, as a store response carries it; false when unreadable.
+  ##   delivery v0.2.x: an array of byte values
+  ##   delivery v0.3.0: a standard-base64 string
   payload = @[]
-  if p == nil or p.kind != JArray: return false
-  for b in p: payload.add byte(b.getInt() and 0xFF)
-  true
+  if p == nil: return false
+  case p.kind
+  of JArray:
+    for b in p:
+      if b.kind != JInt: return false
+      payload.add byte(b.getInt() and 0xFF)
+    true
+  of JString:
+    let s = p.getStr()
+    for ch in s:
+      if ch notin {'A'..'Z', 'a'..'z', '0'..'9', '+', '/', '='}: return false
+    try:
+      let raw = base64.decode(s)
+      payload = newSeq[byte](raw.len)
+      for i, ch in raw: payload[i] = byte(ch)
+      true
+    except ValueError: false
+  else: false
