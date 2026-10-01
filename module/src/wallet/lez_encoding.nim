@@ -63,3 +63,23 @@ proc parseKeyNode*(json: string): tuple[npk, vpk: string] =
     (npk: j{"nullifier_public_key"}.getStr(""), vpk: j{"viewing_public_key"}.getStr(""))
   except CatchableError:
     (npk: "", vpk: "")
+
+proc pointWalletConfig*(configJson, sequencer: string): tuple[changed: bool, json: string] =
+  ## lez_core writes its own default wallet config, pointed at the public testnet. An
+  ## instance on another zone (MUSTER_LEZ_RPC / the lez-rpc setting: a local v0.3 chain,
+  ## exo-eb6.4) points that config at its zone, keeping everything else. `changed` is
+  ## false when it already names that zone (a trailing slash apart), when no zone is
+  ## named, or when the config cannot be read: then it is left as lez_core wrote it.
+  result = (false, configJson)
+  if sequencer.len == 0: return
+  var c: JsonNode
+  try: c = parseJson(configJson)
+  except CatchableError: return
+  if c.kind != JObject: return
+  let want = sequencer.strip(chars = {'/'}, leading = false)
+  let seqs = c{"sequencers"}
+  if seqs != nil and seqs.kind == JArray and seqs.len == 1 and
+     seqs[0]{"sequencer_addr"}.getStr().strip(chars = {'/'}, leading = false) == want:
+    return
+  c["sequencers"] = %*[{"sequencer_addr": sequencer}]
+  result = (true, $c)

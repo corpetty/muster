@@ -3240,7 +3240,9 @@ proc moduleWallet(): Wallet =
       if getEnv("MUSTER_LEZ_REAL").len > 0:
         try:
           let dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
-          LezCore(newLpLezCore(dir))
+          # its wallet on this instance's zone (the lez-rpc setting), as the multisig and
+          # FROST paths are; lez_core's own default is the public testnet
+          LezCore(newLpLezCore(dir, sequencer = gLezRpc))
         except CatchableError as e:
           stderr.writeLine("MUSTER-LEZ: real lez_core unavailable, using fake — " & e.msg)
           LezCore(newFakeLezCore())

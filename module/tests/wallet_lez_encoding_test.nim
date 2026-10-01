@@ -26,4 +26,20 @@ block:
   doAssert parseKeyNode("garbage").npk == "", "a malformed key node reads empty, not a crash"
   echo "2. key node JSON round-trips OK"
 
+# ── the wallet's sequencer: this instance's LEZ zone, not lez_core's default ───────
+block:
+  # lez_core writes its own default config, pointed at the public testnet; an instance on
+  # another zone (a local v0.3 chain, exo-eb6.4) points it at that zone, keeping the rest
+  const dflt = """{"sequencers":[{"sequencer_addr":"https://testnet.lez.logos.co/"}],"seq_poll_timeout":"30s"}"""
+  let (changed, j) = pointWalletConfig(dflt, "http://127.0.0.1:3040")
+  doAssert changed
+  let c = parseJson(j)
+  doAssert c["sequencers"].len == 1 and c["sequencers"][0]["sequencer_addr"].getStr() == "http://127.0.0.1:3040", j
+  doAssert c["seq_poll_timeout"].getStr() == "30s", "the rest of the config is kept"
+  # the same zone, a trailing slash apart, is no change: nothing rewritten, nothing reopened
+  doAssert not pointWalletConfig(dflt, "https://testnet.lez.logos.co").changed
+  doAssert not pointWalletConfig(dflt, "").changed, "no zone named: lez_core's own default stands"
+  doAssert not pointWalletConfig("not json", "http://x").changed, "an unreadable config is left alone"
+  echo "3. the wallet config points at this instance's zone, and only when it differs OK"
+
 echo "wallet_lez_encoding_test: all OK"
