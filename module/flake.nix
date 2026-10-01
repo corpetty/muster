@@ -45,10 +45,10 @@
     };
     # The real transport (P3): muster_module calls delivery_module over the lp_*
     # C ABI (src/transport/delivery.nim) — it boots delivery's embedded Waku node
-    # and carries the sealed coordination frames. Same repo the demo consumes
-    # (v0.2.0); mapped to the module name `delivery_module` below so
+    # and carries the sealed coordination frames. v0.3.0 is Testnet v0.3's
+    # (exo-eb6.1); mapped to the module name `delivery_module` below so
     # metadata.json#dependencies resolves it into the host module set.
-    logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.2.0";
+    logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.3.0";
     # The Logos Execution Zone wallet (P-L3): muster_module calls lez_core over lp_*
     # (src/wallet/lez_lp.nim) to send assets on the zone. Same repo/pin the demo
     # consumes (549cf115); mapped to the module name `lez_core` below so

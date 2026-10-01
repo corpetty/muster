@@ -26,9 +26,11 @@
     # The real transport (P3): muster_module depends on delivery_module (it calls it
     # over the lp_* ABI to boot delivery's Waku node and carry the sealed room
     # frames). It must therefore be in the standalone runner's module set, so
-    # coordinate_join's lp_client_create("delivery_module") resolves. Same repo/pin
-    # the demo consumes (v0.2.0); mapped to the module name `delivery_module` below.
-    logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.2.0";
+    # coordinate_join's lp_client_create("delivery_module") resolves. v0.3.0 is
+    # Testnet v0.3's (exo-eb6.1): logos.dev is cluster 3 there, and logos.test needs
+    # the RLN modules and a funded membership (exo-eb6.3). Mapped to the module name
+    # `delivery_module` below.
+    logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.3.0";
     # The LEZ wallet (P-L3): muster_module calls lez_core over lp_* to send assets on
     # the zone, so it must be in the standalone runner's module set for
     # lp_client_create("lez_core") to resolve. Same repo/pin the demo consumes (549cf115).
