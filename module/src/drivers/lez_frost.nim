@@ -204,8 +204,23 @@ method verifyContribution*(d: LezFrostDriver, c: Contribution, round: int): bool
 method identifyContributor*(d: LezFrostDriver, m: Materialization, c: Contribution): string =
   verifyFrost(d.account.group, hashesIn(m), c)
 
+proc nativeTransferOut*(c: LezCall, account: seq[byte]): Option[UInt128] =
+  ## The amount, when `c` is a v0.3 native transfer out of `account`: the native token
+  ## program, two rows (`account`'s native shard, then the recipient's), and borsh
+  ## Transfer { amount } (variant 0, a u128). Anything else: none.
+  if not c.v3 or c.programAccount != NativeTokenProgram or c.shards.len != 2: return
+  if c.shards[0] != nativeShard(account) or c.shards[1].program != NativeTokenProgram: return
+  if c.instruction.len != 17 or c.instruction[0] != 0: return
+  var le: array[16, byte]
+  for i in 0 ..< 16: le[i] = c.instruction[1 + i]
+  some UInt128.fromBytesLE(le)
+
 method signRefusal*(d: LezFrostDriver, e: Effect): string =
   ## Before anyone signs: a well-formed call whose one signer is this account, at one nonce.
+  ## On v0.3, also one whose outcome muster can tell: a refused call is still included,
+  ## pays its fee and burns the nonce, and the chain reports no outcome (exo-eb6.4.6). A
+  ## native transfer out of the group's own account is one: settlement sends it only when
+  ## the account covers it at the signed nonce, and then inclusion means it took effect.
   var c: LezCall
   try: c = callOf(e)
   except CatchableError as err: return "not a LEZ call: " & err.msg
@@ -216,6 +231,9 @@ method signRefusal*(d: LezFrostDriver, e: Effect): string =
     if c.fee.isNone: return "the call declares no fee: on LEZ v0.3 every transaction pays one"
     if c.fee.get.payer != d.account.accountId:
       return "the call's fee is paid by another account: the group pays its own fee here"
+    if nativeTransferOut(c, d.account.accountId).isNone:
+      return "on LEZ v0.3 a refused call is still included and the chain reports no outcome, so the " &
+             "group signs only a call whose outcome muster can tell: a native transfer out of its own account"
   elif c.words.len == 0: return "the call has no instruction"
   ""
 

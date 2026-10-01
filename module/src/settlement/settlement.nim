@@ -15,7 +15,7 @@
 ## (exo-a50.2.5) and Phase C's LEZ multisig settlement (exo-0c9, the vote locus: count the
 ## votes on chain, then Execute) sit beside it.
 
-import std/[json, algorithm, strutils, sequtils]
+import std/[json, algorithm, strutils, sequtils, options]
 import ../intents/materialization
 import ../drivers/driver
 import ../drivers/profile
@@ -245,8 +245,14 @@ proc zx(b: seq[byte]): string =
 method assemble*(s: LezFrostSettlement, drv: Driver, effect: Effect,
                  contributions: seq[SettleContribution]): Assembled =
   ## Re-read the account's nonce (S5): a signature for a nonce the chain moved past can
-  ## never land, so it is refused and the room proposes again. Then one aggregate BIP-340
-  ## signature from a complete signer set, verified under x(Q) before anything is sent.
+  ## never land, so it is refused and the room proposes again. On v0.3, a transfer the
+  ## account cannot cover with its fee cap at that nonce is refused too: the chain would
+  ## include it, charge its gas and move nothing, and report no outcome (exo-eb6.4.6). One
+  ## it covers can only take effect once included: the chain authenticates the nonce
+  ## before it runs anything, so no other transaction of the group's lands in between,
+  ## nothing but the group's own signature debits its account, and the fee it reserves is
+  ## at most the declared cap. Then one aggregate BIP-340 signature from a complete signer
+  ## set, verified under x(Q) before anything is sent.
   if not (drv of LezFrostDriver):
     return Assembled(ok: false, error: "not-settleable", detail: "a LEZ FROST settlement needs a LEZ FROST driver")
   if not (s.adapter of LezMultisigChain):
@@ -261,6 +267,16 @@ method assemble*(s: LezFrostSettlement, drv: Driver, effect: Effect,
       return Assembled(ok: false, error: "not-settleable",
         detail: "the account's nonce moved (" & $call.nonces[0] & " signed, " & $now.nonce &
                 " on chain): this signature can never land — propose again")
+    if call.v3:
+      let amount = nativeTransferOut(call, d.account.accountId)
+      if amount.isNone:
+        return Assembled(ok: false, error: "not-settleable", detail: d.signRefusal(effect))
+      let need = amount.get + call.fee.get.maxFee
+      if now.balance < need:
+        return Assembled(ok: false, error: "not-settleable",
+          detail: "the account holds " & $now.balance & ", which does not cover the transfer (" & $amount.get &
+                  ") and its fee cap (" & $call.fee.get.maxFee & "): sent, it would be included, pay its " &
+                  "gas and move nothing")
   except CatchableError as e:
     return Assembled(ok: false, error: "not-settleable", detail: "could not read the account's nonce: " & e.msg)
   let cs = contributions.mapIt(Contribution(bytes: it.bytes))
@@ -303,7 +319,11 @@ method submit*(s: LezFrostSettlement, tx: PreparedTx, ks: Keystore): TxRef =
   if not r.ok: raise newException(WalletError, "the chain refused it: " & r.error)
   TxRef(chain: tx.chain, id: r.hash)
 
-method watch*(s: LezFrostSettlement, txRef: TxRef): Finality = s.adapter.finality(txRef)
+method watch*(s: LezFrostSettlement, txRef: TxRef): Finality =
+  ## Final once included. On v0.2.4 a refused call was dropped; on v0.3 one is included
+  ## too, so assemble sends only a native transfer the account covers at its signed nonce,
+  ## which can only take effect (exo-eb6.4.6).
+  s.adapter.finality(txRef)
 
 proc settlementFor*(drv: Driver, adapter: ChainAdapter, relayer: Account): Settlement =
   ## The settlement a driver's family needs — read from its PROFILE. nil when the

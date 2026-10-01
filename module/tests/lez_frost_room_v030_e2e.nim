@@ -12,7 +12,10 @@
 ##   5. the settlement seam re-reads the nonce, aggregates one BIP-340 signature, builds the
 ##      v0.3 transaction and sends it: final once included. The amount moved, and the
 ##      account paid a fee within its cap;
-##   6. a proposal whose nonce the chain has moved past is refused at settle.
+##   6. a proposal whose nonce the chain has moved past is refused at settle;
+##   7. a transfer of the account's whole balance — which leaves nothing for its fee — is
+##      refused at settle: on v0.3 the chain would include it, charge its gas, move nothing
+##      and report no outcome, so "included" read as final (exo-eb6.4.6).
 ## Usage: lez_frost_room_v030_e2e [sequencerUrl] [blockSeconds] (default http://127.0.0.1:3040 15)
 ## Needs the web3 closure (chronos, json-rpc, bearssl) + the secp closure + libsodium, and
 ## the local zone up (infra/lez/localnet.sh).
@@ -156,5 +159,16 @@ block:
 let stale = stl.assemble(drv, effectFromJson(effectJsonOf(r.alice.log.allEvents(), id2)), contributionsOf(id2))
 doAssert not stale.ok and "nonce" in stale.detail, stale.detail
 echo "6. a proposal whose nonce the chain moved past: refused at settle, never sent OK"
+
+# ── 7. a transfer the account cannot cover is refused at settle ───────────────
+let held = c.rpc.getAccount(acct.accountId).balance
+let tooMuch = held                                  # all of it: nothing left for the fee
+let id3 = propose($tooMuch, 3)
+rounds(id3)
+let uncovered = stl.assemble(drv, effectFromJson(effectJsonOf(r.alice.log.allEvents(), id3)), contributionsOf(id3))
+doAssert not uncovered.ok and "cover" in uncovered.detail, "an uncovered transfer must not be sent: " &
+  (if uncovered.ok: "assembled, and the chain would include it, revert it and charge its gas" else: uncovered.detail)
+doAssert c.rpc.getAccount(acct.accountId).balance == held, "nothing was sent"
+echo "7. a transfer of the account's whole balance (", held, "): refused at settle, never sent OK"
 
 echo "lez_frost_room_v030_e2e: a FROST group acts on LEZ v0.3 from the room, paying its own fee — all OK"

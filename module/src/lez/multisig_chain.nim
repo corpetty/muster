@@ -52,6 +52,7 @@ type
     owner*: seq[byte]             ## the owning program ("" = none)
     height*: uint64               ## the chain height the read was taken at
     nonce*: UInt128               ## the account's nonce (how many transactions it signed)
+    balance*: UInt128             ## its native balance
 
   ChainedCallRecord* = object
     program*: seq[byte]
@@ -199,7 +200,8 @@ method readAccount*(f: FakeLezMultisig, id: seq[byte]): LezRead =
   let k = hx(id)
   if k notin f.accts: return LezRead(found: false, height: f.tip)
   let a = f.accts[k]
-  LezRead(found: a.data.len > 0 or a.owner.len > 0, data: a.data, owner: a.owner, height: f.tip, nonce: u128(a.nonce))
+  LezRead(found: a.data.len > 0 or a.owner.len > 0, data: a.data, owner: a.owner, height: f.tip, nonce: u128(a.nonce),
+          balance: a.balance.stuint(128))
 
 method txIncluded*(f: FakeLezMultisig, hash: string): tuple[known: bool, height: uint64] =
   if hash in f.txs: (true, f.txs[hash]) else: (false, 0'u64)
