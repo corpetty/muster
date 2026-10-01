@@ -4,7 +4,9 @@
 # admits a signing request only from a caller the runtime attributes as a plain module;
 # muster_module calls it over lp_* (protocol-0.2 Nim glue calling a protocol-0.9 Rust
 # module), and nothing had checked what the keystore sees. One runner, no room, no
-# fleet: MUSTER_KEYSTORE_PROBE=1 makes the UI read keystore_status every 2 s and log it.
+# fleet: MUSTER_KEYSTORE_PROBE=1 makes the UI read keystore_status every 2 s, and
+# MUSTER_LP_DEBUG=1 makes muster_module log each answer ("MUSTER-LP keystore {…}"; the
+# UI host's own qInfo lines do not reach the runner's log).
 #
 # Pass: the row's identity is {kind: module, identity: muster_module}, it names the
 # keystore's default approver (evm_signer_ui), and its level is not down. A fresh
@@ -24,7 +26,7 @@ echo "runner launched offscreen; waiting for keystore_module to answer (up to ${
 
 # the last keystore row the UI logged that carries an identity, as one line of JSON
 last_row() {
-  grep -a '\[muster_ui\] KEYSTORE' "$D/A.log" 2>/dev/null | sed 's/.*\[muster_ui\] KEYSTORE //' \
+  grep -a 'MUSTER-LP keystore ' "$D/A.log" 2>/dev/null | sed 's/.*MUSTER-LP keystore //' \
     | python3 -c 'import sys,json
 rows=[]
 for l in sys.stdin:
@@ -55,7 +57,7 @@ assert "evm_signer_ui" in r.get("approvers",[]), "no default approver: %r" % r
 assert r.get("level") in ("ok","warn"), "level %r: %r" % (r.get("level"), r)
 print("attested as", idn["kind"], idn["identity"], "· approvers", r["approvers"], "·", len(r.get("accounts",[])), "accounts ·", r["level"], "·", r["detail"])' \
   || ok=0
-grep -a -m3 'Module loaded: keystore_module\|keystore_module' "$D/A.log" | head -3
+grep -a -m1 'Module loaded: keystore_module' "$D/A.log" || echo "keystore_module never loaded"
 
 if [ "$ok" = 1 ]; then
   echo "PASS: keystore_module attributes muster's calls to muster_module"
