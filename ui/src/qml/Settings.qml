@@ -29,6 +29,21 @@ Item {
     }
     readonly property var identity: (settings.s && settings.s.identity) ? settings.s.identity : ({})
 
+    // This node's RLN membership row (rln_status, exo-eb6.3): {level, detail, remedy?,
+    // payer?, balance?}; {} until the first read lands, which renders as "checking…".
+    readonly property var rln: {
+        try { return JSON.parse(backend ? backend.rlnStatusJson : "{}") || ({}); }
+        catch (e) { return ({}); }
+    }
+    // read while the view is open: the module answers at once (its chain reads are async)
+    Timer {
+        interval: 5000
+        repeat: true
+        triggeredOnStart: true
+        running: settings.visible && !!settings.backend
+        onTriggered: settings.backend.loadRlnStatus()
+    }
+
     // The shareable chat id: the 64-byte encryption identity (ed25519 ++ x25519) that
     // coordinate_admit takes — exactly what someone needs to add you to a room. The
     // three keys are shown separately below; this is the one string you hand out.
@@ -376,8 +391,8 @@ Item {
                         }
                     }
                     // one-click presets, no JSON to paste. logos.dev is the default; since
-                    // Testnet v0.3 a node on logos.test starts only with an active RLN
-                    // membership (exo-eb6.3), so the button says so.
+                    // Testnet v0.3 a node on logos.test sends nothing until it has an active
+                    // RLN membership (exo-eb6.3), so the button says so.
                     RowLayout {
                         spacing: Theme.spacing.small
                         LogosButton {
@@ -392,6 +407,81 @@ Item {
                             variant: LogosButton.Variant.Secondary
                             onClicked: if (settings.backend) settings.backend.setSetting("delivery", "logos.test")
                         }
+                    }
+
+                    // ── RLN membership (exo-eb6.3) ──
+                    // This node's own membership: on logos.test a node sends nothing without
+                    // one. The RLN modules register by themselves once the node's payer is
+                    // funded, so the one thing shown to act on is that payer, whole, to copy.
+                    LogosText {
+                        Layout.topMargin: Theme.spacing.small
+                        text: qsTr("RLN MEMBERSHIP")
+                        color: Theme.palette.textTertiary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                        font.weight: Theme.typography.weightMedium
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        Rectangle {
+                            Layout.alignment: Qt.AlignTop
+                            Layout.topMargin: 5
+                            Layout.preferredWidth: 8
+                            Layout.preferredHeight: 8
+                            radius: 4
+                            color: settings.rln.level === "ok" ? Theme.palette.success
+                                 : settings.rln.level === "warn" ? Theme.palette.warning
+                                 : settings.rln.level === "down" ? Theme.palette.error
+                                 : Theme.palette.textTertiary
+                        }
+                        LogosText {
+                            objectName: "settingsRlnDetail"
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: settings.rln.detail ? String(settings.rln.detail) : qsTr("checking…")
+                            color: Theme.palette.textSecondary
+                            font.pixelSize: Theme.typography.secondaryText
+                        }
+                    }
+                    LogosText {
+                        Layout.fillWidth: true
+                        visible: !!settings.rln.remedy
+                        wrapMode: Text.WordWrap
+                        text: String(settings.rln.remedy || "")
+                        color: Theme.palette.warning
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: rlnPayerField.text.length > 0
+                        spacing: Theme.spacing.small
+                        TextEdit {
+                            id: rlnPayerField
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignVCenter
+                            readOnly: true
+                            selectByMouse: true
+                            wrapMode: TextEdit.WrapAnywhere
+                            text: String(settings.rln.payer || "")
+                            color: Theme.palette.textSecondary
+                            selectionColor: Theme.palette.primary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        LogosButton {
+                            objectName: "copyRlnPayer"
+                            text: qsTr("Copy payer")
+                            onClicked: { rlnPayerField.selectAll(); rlnPayerField.copy(); rlnPayerField.deselect(); }
+                        }
+                    }
+                    LogosText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: qsTr("On logos.test every message carries an RLN proof, so a node sends nothing until "
+                                 + "it has an active membership, funded on the registry's own zone. logos.dev runs no RLN.")
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: Theme.typography.badgeText
                     }
 
                     LogosText {

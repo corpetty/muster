@@ -35,6 +35,11 @@
     # the zone, so it must be in the standalone runner's module set for
     # lp_client_create("lez_core") to resolve. Same repo/pin the demo consumes (549cf115).
     lez_core.url = "github:logos-blockchain/logos-execution-zone-module/549cf1159f20fa0c3fe8e88a5ab71de68a5aa34b";
+    # The RLN modules a delivery v0.3 node on logos.test needs (exo-eb6.3 R1). The packages
+    # are delivery v0.3.0's own re-exports, so their versions are the ones it was built
+    # against; this pins only their LIDL contracts, at the same rev (logos-rln-modules
+    # 25357cf), for the code generator.
+    logos-rln-modules = { url = "github:logos-co/logos-rln-modules/25357cfd877ba18d6e0880564b8fd7ba0abf2d70"; flake = false; };
   };
 
   outputs = inputs@{ logos-module-builder, ... }:
@@ -56,6 +61,20 @@
               '';
           }) d.packages;
         };
+      # The RLN modules as this builder sees them (exo-eb6.3 R1). The runner's host predates
+      # `optional_dependencies`, the way delivery v0.3.0 declares them, so it would never
+      # load them for delivery; muster declares them itself instead. Each is delivery's
+      # re-exported .lgx, plus its contract from logos-rln-modules for the generator.
+      rlnModule = name: lidlPath: {
+        packages = builtins.mapAttrs (system: ps: {
+          lgx = ps."${name}-lgx";
+          lidl = (import logos-module-builder.inputs.nixpkgs { inherit system; }).runCommand
+            "${name}-lidl-for-muster-ui" { } ''
+              mkdir -p $out
+              cp ${inputs.logos-rln-modules}/${lidlPath} $out/${name}.lidl
+            '';
+        }) inputs.logos-delivery-module.packages;
+      };
       base = logos-module-builder.lib.mkLogosQmlModule {
         src = ./.;
         configFile = ./metadata.json;
@@ -65,7 +84,12 @@
         # delivery_module is muster_module's transitive dependency; it is provided
         # here (mapped from logos-delivery-module) so the builder can pull it into
         # the same module set — muster_ui does not call it, so it declares no client.
-        flakeInputs = { delivery_module = deliveryForUi; lez_core = inputs.lez_core; } // inputs;
+        flakeInputs = {
+          delivery_module = deliveryForUi;
+          lez_core = inputs.lez_core;
+          liblogos_rln_module = rlnModule "liblogos_rln_module" "logos-rln-module/rust-lib/liblogos_rln_module.lidl";
+          liblogos_lez_rln_module = rlnModule "liblogos_lez_rln_module" "logos-lez-rln-module/rust-lib/liblogos_lez_rln_module.lidl";
+        } // inputs;
       };
 
       nixpkgs = logos-module-builder.inputs.nixpkgs;

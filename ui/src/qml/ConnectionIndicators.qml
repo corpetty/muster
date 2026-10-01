@@ -47,6 +47,7 @@ Item {
 
     // why this row is here: the room's own transport, or the proposal(s) that need it
     function whyOf(e) {
+        if (e.key === "rln") return qsTr("what this node needs to send on logos.test");
         if (e.source === "room") return qsTr("the room's own transport");
         var who = Array.isArray(e.introducedBy) ? e.introducedBy : [];
         if (who.length === 0) return qsTr("introduced by a proposal");

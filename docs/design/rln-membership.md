@@ -1,7 +1,8 @@
 # RLN membership for logos.test (exo-eb6.3)
 
-Status: **two of four decided (2026-10-01); nothing built yet.** §6 records the decisions
-and the design they lead to; §5's questions 1 and 3 are still open.
+Status: **two of four decided (2026-10-01); R1 built and checked live (2026-10-01).**
+§6 records the decisions, the design they lead to, and what R1 found; §5's questions 1
+and 3 are still open.
 
 ## 1. Why it is needed
 
@@ -9,7 +10,11 @@ Since Testnet v0.3, `logos.test` rate-limits every message with RLN (Rate-Limiti
 Nullifiers). A delivery v0.3.0 node on that preset:
 
 - loads `liblogos_rln_module` ≥ 0.10.0 and `liblogos_lez_rln_module` ≥ 4.2.1;
-- **does not start** until its RLN membership is `active` (or `grace_period`);
+- runs without a membership, but **sends nothing** until its RLN membership is `active`
+  (or `grace_period`): it holds each message and retries ("Failed to attach RLN proof,
+  retrying next round"), while its `rlnState()` reads `Ready`, which describes the RLN
+  subsystem, not a membership. (The modules' docs read as "does not start"; R1's live run
+  showed otherwise, §6.)
 - attaches an RLN proof to everything it sends.
 
 Proof *validation* is off at launch. The Logos blog says it switches on "roughly two
@@ -146,6 +151,16 @@ What that flow already does by itself, from the modules' contracts (`liblogos_rl
   flake re-exports both as `.lgx`). Show the node's RLN state, membership state, payer and
   balance in the connectivity panel and Settings. On `logos.test`, check it live up to
   "awaiting funding". Needs no funds.
+  **Built (2026-10-01, exo-4a7a).** The runner bundles both modules (muster_ui declares
+  them: the July host predates delivery's `optional_dependencies`). `rln_status` and, on
+  `logos.test` only, a connectivity row (`transport/rln_status.nim`, pure;
+  `transport/rln_probe.nim` reads delivery's `rlnState`, the lez-rln `wallet_status`
+  locally, and the payer's balance and the membership state async, so the module thread
+  never waits on a chain); Settings shows the row with the payer to copy, and off
+  `logos.test` says RLN is not needed. `scripts/rln-self-test.sh` checked it live: within
+  25 s of joining a room the keystore auto-unlocked, the wallet was provisioned on the
+  registry's zone, a payer derived, its balance read as 0, and the row read "awaiting
+  funding", naming the payer, the zone and the amount. No funds were needed.
 - **R2:** self-funding (path 1). Verified once any payer is funded (Q3).
 - **R3:** the room gifter (path 2). A spec first: what the allowlist proves, what the chain
   and the gifter learn, and whether a gifter may refuse a member.

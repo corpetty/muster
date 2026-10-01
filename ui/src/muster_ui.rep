@@ -425,4 +425,10 @@ class MusterUi
     // room's join key), "waiting-for-room-key" (no member has announced one yet — the
     // ask was re-requested), or "" before any ask. The scope panel says which (exo-59c).
     PROP(QString joinStatus="" READONLY)
+
+    // This node's RLN membership (rln_status, exo-eb6.3): the one connectivity row
+    // {key:"rln", level, detail, remedy?, payer?, balance?}, also off logos.test, where
+    // it says RLN is not needed. Settings renders it, with the payer to copy and fund.
+    SLOT(void loadRlnStatus())
+    PROP(QString rlnStatusJson="{}" READONLY)
 }

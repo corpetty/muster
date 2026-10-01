@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Offscreen proof that the room's infrastructure is dictated by its drivers (exo-428):
 # one runner auto-joins a fresh room — its connectivity must name ONLY the delivery
-# node (no RPC probed) — then proposes. Under POLICY=safe (default) the proposal must
+# node (and on logos.test the node's RLN membership; no RPC probed) — then proposes. Under POLICY=safe (default) the proposal must
 # INTRODUCE the RPC row, naming the proposal; under POLICY=threshold it must not.
 # Keys off the module's MUSTER_LP_DEBUG stderr lines, as card-self-test.sh does.
 #   scripts/infra-self-test.sh            # Safe: RPC appears after the proposal
@@ -36,8 +36,11 @@ lines=$( { grep -a 'MUSTER-LP connectivity' "$D/A.log" | head -1;
 [ -n "$lines" ] || { echo "FAIL: no connectivity payload"; ok=0; }
 echo "── on join (before any proposal) ──"
 first=$(echo "$lines" | head -1); echo "$first"
-echo "$first" | python3 -c 'import sys,json; r=json.load(sys.stdin)["rows"]; assert [x["key"] for x in r]==["delivery"], r' \
-  || { echo "FAIL: a fresh room shows more than its delivery node"; ok=0; }
+# On logos.test the node's RLN membership is part of the baseline too: a node there
+# sends nothing without one (exo-eb6.3). Elsewhere it is no dependency, so not shown.
+BASE='["delivery"]'; [ "$MUSTER_FLEET" = logos.test ] && BASE='["delivery","rln"]'
+echo "$first" | BASE="$BASE" python3 -c 'import os,sys,json; r=json.load(sys.stdin)["rows"]; assert [x["key"] for x in r]==json.loads(os.environ["BASE"]), r' \
+  || { echo "FAIL: a fresh room shows more than its baseline $BASE"; ok=0; }
 echo "── after the $POLICY proposal ──"
 last=$(echo "$lines" | tail -1); echo "$last"
 if [ "$POLICY" = safe ]; then

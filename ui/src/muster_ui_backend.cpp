@@ -496,6 +496,15 @@ void MusterUiBackend::loadConnectivity()
     setConnectivityJson(modules().muster_module.connectivity());
 }
 
+void MusterUiBackend::loadRlnStatus()
+{
+    // rln_status → this node's RLN membership (exo-eb6.3): on logos.test the payer and
+    // what it holds, the membership's state, and what to send where; elsewhere "not
+    // needed". The module never blocks on it (its chain reads are async), so Settings
+    // polls it while open.
+    setRlnStatusJson(modules().muster_module.rln_status());
+}
+
 void MusterUiBackend::loadSecurityLevels()
 {
     // security_levels → the room's active null-ladder level on the three axes (exo-1ec.5),
