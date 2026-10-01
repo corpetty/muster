@@ -367,17 +367,49 @@ proc convertedAmount*(c: Cover, rates: seq[SettleRate], payChain, payAsset: stri
     tuple[ok: bool, amount, why: string] =
   ## What `c` is worth in the payment asset (§4.13): itself when it is the payment asset,
   ## else amount × rate ÷ per at its asset's rate, rounded down — the debtor keeps the
-  ## remainder, under one base unit. Nothing when there is no rate, or it converts to nothing.
+  ## remainder, under one base unit. Nothing when there is no rate, or it converts to nothing;
+  ## overflow refused, never wrapped.
   if not isCanonDec(c.amount): return (false, "", "a covered amount is a canonical decimal")
   if c.chain == payChain and c.asset == payAsset: return (true, c.amount, "")
   for r in rates:
     if r.chain != c.chain or r.asset != c.asset: continue
     if not isCanonDec(r.rate) or not isCanonDec(r.per) or r.per == "0":
       return (false, "", "a rate is two canonical decimals, per above zero")
-    let v = u256(c.amount) * u256(r.rate) div u256(r.per)
+    let (a, x) = (u256(c.amount), u256(r.rate))
+    let p = a * x
+    if a != 0.u256 and p div a != x:
+      return (false, "", "the conversion of " & c.amount & " " & c.asset & " at " & r.rate & "/" & r.per & " overflows")
+    let v = p div u256(r.per)
     if v == 0.u256: return (false, "", c.amount & " " & c.asset & " converts to nothing at " & r.rate & "/" & r.per)
     return (true, $v, "")
   (false, "", "no rate for " & c.asset & " on " & c.chain)
+
+proc settleRate*(chain, asset, rate: string, payDecimals, assetDecimals: int, source: string,
+                 at: int64): tuple[ok: bool, rate: SettleRate, why: string] =
+  ## A rate as a person gives it (§4.13): `rate` of the payment asset per ONE unit of `asset`
+  ## on `chain` ("21.4" ETH per BTC), in the payment asset's `payDecimals`, read from `source`
+  ## at `at`. Kept exact in base units on both sides: rate × 10^payDecimals per
+  ## 10^assetDecimals. A rate finer than the payment asset's smallest unit is refused.
+  if source.strip().len == 0 or source.strip().len > MaxQuoteSource:
+    return (false, SettleRate(), "a rate names its source, in at most " & $MaxQuoteSource & " bytes")
+  if assetDecimals < 0 or assetDecimals > 77:
+    return (false, SettleRate(), "no decimals known for " & asset & " on " & chain)
+  let u = toUnits(rate, payDecimals)
+  if not u.ok: return (false, SettleRate(), "the rate: " & u.why)
+  if u.units == "0":
+    return (false, SettleRate(), "the rate must be more than zero (in the payment asset's smallest unit)")
+  (true, SettleRate(chain: chain, asset: asset, rate: u.units, per: pow10(assetDecimals),
+                    source: source.strip(), at: $max(0'i64, at)), "")
+
+proc ratePerUnit*(r: SettleRate, assetDecimals: int): string =
+  ## A signed rate per ONE unit of its asset, in the payment asset's base units — what the
+  ## card shows: rate × 10^assetDecimals ÷ per, rounded down. "" when it cannot be read.
+  if assetDecimals < 0 or assetDecimals > 77 or not isCanonDec(r.rate) or not isCanonDec(r.per) or r.per == "0":
+    return ""
+  let (x, m) = (u256(r.rate), u256(pow10(assetDecimals)))
+  let p = x * m
+  if p div m != x: return ""
+  $(p div u256(r.per))
 
 proc settleRefusal(d: SplitDriver, su: SettleUp): string =
   ## Why `su` is not a settle-up this driver will sign or pay ("" = it is one).

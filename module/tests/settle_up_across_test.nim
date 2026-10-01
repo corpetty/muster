@@ -193,4 +193,43 @@ block:
   doAssert drv.signRefusal(effectFromJson($j)).len > 0, "in one asset, covers name no chain of their own"
   echo "5. a settle-up in one asset is byte for byte what it was OK"
 
+# ── 6. a conversion that overflows 256 bits is refused, never wrapped ─────────────────
+block:
+  let big = Cover(intent: S2, debtor: c, creditor: b, amount: "1" & repeat('0', 70), payTo: PayB,
+                  chain: Regtest, asset: "BTC")
+  let huge = SettleRate(chain: Regtest, asset: "BTC", rate: "1" & repeat('0', 10), per: "1",
+                        source: "test", at: "1790000000")
+  let conv = convertedAmount(big, @[huge], Evm, "ETH")
+  doAssert not conv.ok and "overflow" in conv.why,
+           "10^70 × 10^10 does not fit 256 bits: refused, never wrapped — got " & $conv
+  let fits = convertedAmount(Cover(intent: S2, debtor: c, creditor: b, amount: "1" & repeat('0', 60), payTo: PayB,
+                                   chain: Regtest, asset: "BTC"), @[huge], Evm, "ETH")
+  doAssert fits.ok and fits.amount == "1" & repeat('0', 70), "10^60 × 10^10 fits: " & $fits
+  echo "6. a conversion that overflows is refused, never wrapped OK"
+
+# ── 7. a rate as a person gives it: per ONE unit, kept exact in base units ─────────────
+block:
+  # "1 BTC = 21.4 ETH": 21.4 × 10^18 wei per 10^8 sat
+  let r = settleRate(Regtest, "BTC", "21.4", 18, 8, " CoinGecko ", 1790000000)
+  doAssert r.ok and r.rate.rate == "21400000000000000000" and r.rate.per == "100000000", $r
+  doAssert r.rate.source == "CoinGecko" and r.rate.at == "1790000000" and r.rate.chain == Regtest, $r
+  doAssert ratePerUnit(r.rate, 8) == "21400000000000000000", "the card reads back 21.4 ETH per BTC"
+  let five = convertedAmount(Cover(intent: S2, debtor: c, creditor: b, amount: "5000", payTo: PayB,
+                                   chain: Regtest, asset: "BTC"), @[r.rate], Evm, "ETH")
+  doAssert five.ok and five.amount == "1070000000000000", "5000 sat at 21.4 ETH/BTC = 0.00107 ETH: " & $five
+  # paid in a 6-decimal token: "1 ETH = 2500.5 USDC" — 2500500000 per 10^18 wei
+  let t = settleRate(Evm, "ETH", "2500.5", 6, 18, "my exchange", 1790000000)
+  doAssert t.ok and t.rate.rate == "2500500000" and t.rate.per == "1" & repeat('0', 18), $t
+  doAssert ratePerUnit(t.rate, 18) == "2500500000"
+  # refused: no source, too long a source, not a plain decimal, zero, finer than a base unit,
+  # unknown decimals
+  doAssert not settleRate(Regtest, "BTC", "21.4", 18, 8, "  ", 0).ok
+  doAssert not settleRate(Regtest, "BTC", "21.4", 18, 8, repeat('x', MaxQuoteSource + 1), 0).ok
+  for bad in ["", "-1", "1e3", "21.4.1", ".5", "0", "0.0", "0x10", "21,4"]:
+    doAssert not settleRate(Regtest, "BTC", bad, 18, 8, "s", 0).ok, "refused: " & bad
+  doAssert not settleRate(Evm, "ETH", "0.0000001", 6, 18, "s", 0).ok, "finer than one base unit of the payment asset"
+  doAssert not settleRate(Evm, Usdc, "1", 18, -1, "s", 0).ok, "a token whose decimals could not be read"
+  doAssert ratePerUnit(SettleRate(rate: "7", per: "0"), 8) == "" and ratePerUnit(r.rate, -1) == ""
+  echo "7. a rate as a person gives it is kept exact in base units, and read back per one unit OK"
+
 echo "settle_up_across_test: all OK"
