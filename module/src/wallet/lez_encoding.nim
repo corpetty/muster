@@ -83,3 +83,15 @@ proc pointWalletConfig*(configJson, sequencer: string): tuple[changed: bool, jso
     return
   c["sequencers"] = %*[{"sequencer_addr": sequencer}]
   result = (true, $c)
+
+const LezDefaultWalletConfig* = """{"sequencers":[{"sequencer_addr":"https://testnet.lez.logos.co/"}],"seq_poll_timeout":"12s","seq_tx_poll_max_blocks":5,"seq_poll_max_retries":5,"seq_block_poll_max_amount":100,"multi_sequencer_client_config":{"distribution_limit":1,"calibration_limit":100},"gas_limit":2000000}"""
+  ## The wallet config lez_core 0.5.0 (LEZ v0.3.0) writes when none exists: WalletConfig's
+  ## Default (lez/wallet/src/config.rs), as read back from a wallet it created.
+
+proc newWalletConfig*(sequencer: string): string =
+  ## The config a NEW wallet starts from on `sequencer`'s zone, written before lez_core
+  ## first reads it: lez_core opens a wallet once and has no close, so a config edited
+  ## after create_new never reaches the wallet in memory. "" when no zone is named or it
+  ## is the default zone: then lez_core writes its own default.
+  let (changed, json) = pointWalletConfig(LezDefaultWalletConfig, sequencer)
+  if changed: json else: ""

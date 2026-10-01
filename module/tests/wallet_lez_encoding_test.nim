@@ -42,4 +42,18 @@ block:
   doAssert not pointWalletConfig("not json", "http://x").changed, "an unreadable config is left alone"
   echo "3. the wallet config points at this instance's zone, and only when it differs OK"
 
+# ── a NEW wallet on another zone: its config is in place before lez_core reads it ──
+block:
+  # lez_core opens a wallet once and has no close, so a config edited after create_new
+  # never reaches the wallet in memory (seen on the local v0.3 zone: the balance read the
+  # testnet). A new wallet on another zone gets lez_core's own default, pointed, first.
+  doAssert newWalletConfig("") == "", "no zone named: lez_core writes its own default"
+  doAssert newWalletConfig("https://testnet.lez.logos.co/") == "", "the default zone: likewise"
+  let c = parseJson(newWalletConfig("http://127.0.0.1:3040"))
+  doAssert c["sequencers"][0]["sequencer_addr"].getStr() == "http://127.0.0.1:3040"
+  for k in ["seq_poll_timeout", "seq_tx_poll_max_blocks", "seq_poll_max_retries",
+            "seq_block_poll_max_amount", "multi_sequencer_client_config", "gas_limit"]:
+    doAssert c.hasKey(k), "lez_core 0.5.0's default keeps " & k
+  echo "4. a new wallet on another zone starts from lez_core's default, pointed there OK"
+
 echo "wallet_lez_encoding_test: all OK"

@@ -74,8 +74,8 @@ proc newLpLezCore*(instancePath: string, origin = "muster_module", sequencer = "
   ## host-provided instance path. Per the labbook: DON'T author the wallet config — pass
   ## a config path that does not exist and let the wallet write its own default (pointed
   ## at https://testnet.lez.logos.co). `sequencer` (this instance's LEZ zone, the
-  ## lez-rpc setting) then edits only its sequencer, when it differs (exo-eb6.4: a
-  ## local v0.3 chain). Raises if lez_core can't be reached.
+  ## lez-rpc setting) sets only its sequencer, when it differs (exo-eb6.4: a local v0.3
+  ## chain), always before lez_core reads it. Raises if lez_core can't be reached.
   let client = lp_client_create("lez_core", origin.cstring, nil, nil)
   if client == nil:
     raise newException(WalletError, "lez_core: lp_client_create returned null (module not loaded?)")
@@ -87,18 +87,23 @@ proc newLpLezCore*(instancePath: string, origin = "muster_module", sequencer = "
   let cfg = instancePath / "lez" / "config.json"      # absent → wallet writes the default
   let sto = instancePath / "lez" / "storage.json"
   let sta = instancePath / "lez" / "statistics.json"
+  # The zone is set before lez_core reads the config: it opens a wallet once and has no
+  # close, so an edit after that never reaches the wallet in memory. An existing wallet's
+  # config is pointed in place; a new wallet on another zone starts from lez_core's own
+  # default, pointed there.
+  if fileExists(cfg): discard pointConfigAt(cfg, sequencer)
+  else:
+    let fresh = newWalletConfig(sequencer)
+    if fresh.len > 0:
+      createDir(instancePath / "lez")
+      writeFile(cfg, fresh)
   # open() returns int 0 on success; if it fails (no wallet yet), create_new().
-  discard pointConfigAt(cfg, sequencer)               # an existing wallet: before it opens
   let opened = result.rawCall("open", args(%cfg, %sto, %sta), kReadMs)
   var openOk = false
   try: openOk = parseJson(opened).getInt(1) == 0
   except CatchableError: openOk = false
   if not openOk:
     discard result.rawCall("create_new", args(%cfg, %sto, %sta, %""), kReadMs)
-    # a new wallet wrote the default config: point it, save, and open it again on the zone
-    if pointConfigAt(cfg, sequencer):
-      discard result.rawCall("save", "[]", kReadMs)
-      discard result.rawCall("open", args(%cfg, %sto, %sta), kReadMs)
 
 proc save(c: LpLezCore) =
   ## Persist the wallet (its keys, accounts and scan position) — lez_core holds them in

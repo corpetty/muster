@@ -37,6 +37,8 @@
 #     nixpkgs#gcc is put first on PATH. Its wrapper stamps nix glibc's loader on the
 #     binaries, which does not search /lib64, so they would fail with "libstdc++.so.6:
 #     cannot open shared object file": the script adds nixpkgs#gcc.cc.lib to their rpath.
+#   - libpcsclite (v0.3): the wallet CLI links Keycard support. Without a system one
+#     (pkg-config libpcsclite), nixpkgs#pcsclite is used and added to the rpath too.
 # The v0.2.4 build was verified from scratch on a second machine 2026-09-25.
 set -euo pipefail
 VERSION="${MUSTER_LEZ_VERSION:-v0.3.0}"
@@ -51,10 +53,13 @@ WALLET="$DIR/target/release/wallet"
 GENESIS_BALANCE="${MUSTER_LEZ_GENESIS:-1000000000000000}"
 [ "$VERSION" = v0.2.4 ] && { RUN="$DIR/lez/sequencer/service"; PIDFILE="$DIR/.sequencer.pid"; LOG="$DIR/sequencer.log"; }
 
-rpc() {  # method [params-json] → the JSON-RPC result
-  curl -s -m 10 -X POST "$URL" -H 'content-type: application/json' \
-    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"$1\",\"params\":${2:-{\}}}" |
-    python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin).get("result")))'
+rpc() {  # method [params-json] → the JSON-RPC result, "null" when there is no answer
+  { curl -s -m 10 -X POST "$URL" -H 'content-type: application/json' \
+      -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"$1\",\"params\":${2:-{\}}}" || true; } |
+    python3 -c '
+import json, sys
+try: print(json.dumps(json.load(sys.stdin).get("result")))
+except Exception: print("null")'
 }
 running() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
 funder_wallet() { LEE_WALLET_HOME_DIR="$FUNDER" "$WALLET" "$@"; }
@@ -73,10 +78,17 @@ EOF
 
 toolchain() {
   if ! command -v g++ >/dev/null; then
-    export PATH="$(nix build --no-link --print-out-paths nixpkgs#gcc)/bin:$PATH"
-    GCCLIB="$(nix build --no-link --print-out-paths nixpkgs#gcc.cc.lib)/lib"
+    # one output each (^out): nixpkgs#gcc alone also prints its man page's path
+    export PATH="$(nix build --no-link --print-out-paths 'nixpkgs#gcc^out')/bin:$PATH"
+    GCCLIB="$(nix build --no-link --print-out-paths 'nixpkgs#gcc.cc^lib')/lib"
   fi
-  [ -n "${LIBCLANG_PATH:-}" ] || export LIBCLANG_PATH="$(nix build --no-link --print-out-paths nixpkgs#libclang.lib)/lib"
+  [ -n "${LIBCLANG_PATH:-}" ] || export LIBCLANG_PATH="$(nix build --no-link --print-out-paths 'nixpkgs#libclang^lib')/lib"
+  # v0.3's wallet CLI links Keycard support (pcsc-sys): libpcsclite, found by pkg-config
+  if [ "$VERSION" != v0.2.4 ] && ! pkg-config --exists libpcsclite 2>/dev/null; then
+    export PATH="$(nix build --no-link --print-out-paths 'nixpkgs#pkg-config^out')/bin:$PATH"
+    export PKG_CONFIG_PATH="$(nix build --no-link --print-out-paths 'nixpkgs#pcsclite^dev')/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+    PCSCLIB="$(nix build --no-link --print-out-paths 'nixpkgs#pcsclite^lib')/lib"
+  fi
 }
 r0vm_on_path() {
   command -v r0vm >/dev/null && return 0
@@ -94,24 +106,63 @@ build() {
     echo "building the $VERSION standalone sequencer$([ "$VERSION" = v0.2.4 ] || echo " and wallet CLI") (first run: ~15 min)…"
     toolchain
     (cd "$DIR" && cargo build --release --features standalone "${pkgs[@]}")
-    if [ -n "${GCCLIB:-}" ]; then
+    local rp="${GCCLIB:-}${PCSCLIB:+${GCCLIB:+:}$PCSCLIB}"
+    if [ -n "$rp" ]; then
       for b in "$SEQ" "$WALLET"; do
-        [ -x "$b" ] && nix shell nixpkgs#patchelf -c patchelf --add-rpath "$GCCLIB" "$b"
+        [ -x "$b" ] && nix shell nixpkgs#patchelf -c patchelf --add-rpath "$rp" "$b"
       done
     fi
   fi
 }
 
+# launch <config> <home> <log> <pidfile> — a sequencer in the background, from <home>;
+# returns once its RPC is up, non-zero if it never comes up
+launch() {
+  # the subshell BECOMES the sequencer (exec), its output in the log: nothing is left
+  # holding a caller's pipe open (a `$(…)` around this would otherwise never return)
+  ( cd "$2" && RISC0_DEV_MODE=1 RUST_LOG=info exec nohup "$SEQ" "$1" ) > "$3" 2>&1 < /dev/null &
+  echo $! > "$4"
+  for _ in $(seq 1 90); do
+    [ "$(rpc getLastBlockId)" != null ] && return 0     # the RPC answers: up (any version's log)
+    kill -0 "$(cat "$4")" 2>/dev/null || return 1
+    sleep 1
+  done
+  return 1
+}
+
+config_with() {  # <dst> <home> [<funder id> <balance>] — LEZ's debug config, re-homed;
+  # with a funder, ONE genesis supply account: the funder's
+  python3 - "$DIR/lez/sequencer/service/configs/debug/sequencer_config.json" "$@" <<'EOF'
+import json, sys
+src, dst, home = sys.argv[1:4]
+c = json.load(open(src))
+c["home"] = home
+if len(sys.argv) > 5:
+    c["genesis"] = [{"supply_account": {"account_id": sys.argv[4], "balance": int(sys.argv[5])}}]
+json.dump(c, open(dst, "w"), indent=2)
+EOF
+}
+
 funder_id() {  # the funder's public account (base58), made once per checkout
   [ -s "$FUNDER/funder.id" ] && { cat "$FUNDER/funder.id"; return; }
-  mkdir -p "$FUNDER"
+  # LEZ's CLI checks in with a sequencer before any command, even making an account, and
+  # the genesis that funds the account must name it first: so the account is made once,
+  # on a throwaway chain from LEZ's debug config, before the real one starts
+  echo "making the funder's account, once (on a throwaway chain: LEZ's CLI needs a sequencer)…" >&2
+  local boot="$DIR/.muster-boot"
+  rm -rf "$boot" "$FUNDER"; mkdir -p "$boot" "$FUNDER"
+  config_with "$boot/sequencer_config.json" "$boot"
+  launch "$boot/sequencer_config.json" "$boot" "$boot/sequencer.log" "$boot/pid" \
+    || { echo "the throwaway sequencer did not start; see $boot/sequencer.log" >&2; exit 1; }
   python3 - "$DIR/lez/wallet/configs/debug/wallet_config.json" "$FUNDER/wallet_config.json" "$URL" <<'EOF'
 import json, sys
 c = json.load(open(sys.argv[1])); c["sequencers"] = [{"sequencer_addr": sys.argv[3]}]
 json.dump(c, open(sys.argv[2], "w"), indent=2)
 EOF
   local out id
-  out=$(funder_wallet account new public 2>&1) || { echo "$out" >&2; exit 1; }
+  # the first command sets the wallet up: it asks for a password on stdin
+  out=$(printf 'muster-localnet\n' | funder_wallet account new public 2>&1) || true
+  kill "$(cat "$boot/pid")" 2>/dev/null; rm -rf "$boot"
   id=$(echo "$out" | grep -oE 'Public/[1-9A-HJ-NP-Za-km-z]{32,44}' | head -1 | sed 's|Public/||')
   [ -n "$id" ] || { echo "could not read the funder's account from: $out" >&2; exit 1; }
   echo "$id" > "$FUNDER/funder.id"
@@ -122,34 +173,19 @@ start() {
   r0vm_on_path
   build
   if running; then echo "already running (pid $(cat "$PIDFILE")); '$0 stop' first for a fresh chain"; exit 0; fi
-  local cfg
+  local cfg home
   if [ "$VERSION" = v0.2.4 ]; then
-    cd "$RUN"; rm -rf rocksdb; cfg=configs/debug/sequencer_config.json
+    home="$RUN"; rm -rf "$RUN/rocksdb"; cfg=configs/debug/sequencer_config.json
   else
     local fid; fid=$(funder_id)
-    rm -rf "$RUN"; mkdir -p "$RUN"; cfg="$RUN/sequencer_config.json"
-    # LEZ's debug config, with ONE genesis supply account: the funder's
-    python3 - "$DIR/lez/sequencer/service/configs/debug/sequencer_config.json" "$cfg" "$RUN" "$fid" "$GENESIS_BALANCE" <<'EOF'
-import json, sys
-src, dst, home, fid, bal = sys.argv[1:6]
-c = json.load(open(src))
-c["home"] = home
-c["genesis"] = [{"supply_account": {"account_id": fid, "balance": int(bal)}}]
-json.dump(c, open(dst, "w"), indent=2)
-EOF
-    cd "$RUN"
+    rm -rf "$RUN"; mkdir -p "$RUN"; home="$RUN"; cfg="$RUN/sequencer_config.json"
+    config_with "$cfg" "$RUN" "$fid" "$GENESIS_BALANCE"
   fi
-  RISC0_DEV_MODE=1 RUST_LOG=info nohup "$SEQ" "$cfg" > "$LOG" 2>&1 &
-  echo $! > "$PIDFILE"
-  for _ in $(seq 1 90); do
-    if grep -q "RPC server started" "$LOG" 2>/dev/null; then
-      echo "LEZ $VERSION sequencer on $URL (log: $LOG)"
-      [ "$VERSION" = v0.2.4 ] || echo "funder: Public/$(cat "$FUNDER/funder.id"), $GENESIS_BALANCE at genesis — '$0 fund <id> <amount>'"
-      exit 0
-    fi
-    kill -0 "$(cat "$PIDFILE")" 2>/dev/null || break
-    sleep 1
-  done
+  if launch "$cfg" "$home" "$LOG" "$PIDFILE"; then
+    echo "LEZ $VERSION sequencer on $URL (log: $LOG)"
+    [ "$VERSION" = v0.2.4 ] || echo "funder: Public/$(cat "$FUNDER/funder.id"), $GENESIS_BALANCE at genesis — '$0 fund <id> <amount>'"
+    exit 0
+  fi
   echo "the sequencer did not start; see $LOG" >&2
   exit 1
 }
@@ -162,7 +198,7 @@ case "${1:-up}" in
   status)
     running || { echo "not running"; exit 1; }
     echo "LEZ $VERSION on $URL, block $(rpc getLastBlockId)"
-    [ -s "$FUNDER/funder.id" ] && echo "funder Public/$(cat "$FUNDER/funder.id"): $(funder_wallet account get --account-id "Public/$(cat "$FUNDER/funder.id")" 2>/dev/null | tail -1)" ;;
+    [ -s "$FUNDER/funder.id" ] && echo "funder Public/$(cat "$FUNDER/funder.id"): $(funder_wallet account get --account-id "Public/$(cat "$FUNDER/funder.id")" 2>/dev/null | grep -m1 Balance)" ;;
   fund)
     [ "$VERSION" = v0.2.4 ] && { echo "v0.2.4 has no funder here: it has the pinata faucet" >&2; exit 2; }
     [ $# -eq 3 ] || { echo "usage: $0 fund <public account id, hex or base58> <amount>" >&2; exit 2; }
