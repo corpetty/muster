@@ -1,7 +1,9 @@
 # The LEZ multisig on v0.3's plan/apply ABI (exo-eb6.4 L4)
 
-Status: **design, 2026-10-01** (L4a, exo-6d9). The program comes next (L4b), then its
-deployment on the local v0.3 zone (L4c), then muster (L4d), then upstream (L4e).
+Status: **built and run on a local v0.3.0 chain, 2026-10-01.** L4a (this design, exo-6d9),
+L4b (the program, in a clone of `logos-co/lez-multisig` on branch `feat/lee-v0.3.0`) and
+L4c (deployed on `infra/lez/localnet.sh`'s zone, its own e2e green) are done. muster (L4d)
+and upstream (L4e) come next.
 
 ## 1. Why a redesign, not a port
 
@@ -38,7 +40,7 @@ seed). That is muster's `psLee02` scheme unchanged, and the seeds stay SPEL's, s
 
 | account | seed | shard used | holds |
 |---|---|---|---|
-| state | `create_key` | `(state, P)` | `MultisigState { create_key, threshold, members, member_count, next_proposal_index }` |
+| state | `create_key` | `(state, P)` | `MultisigState { create_key, threshold, member_count, members, transaction_index }`, v0.2.4's borsh layout; `transaction_index` is the last proposal's index (proposals count from 1) |
 | proposal #i | SHA-256(`"multisig_prop___"` ‖ create_key ‖ i LE) | `(proposal, P)` | `Proposal` (§3) |
 | vault | SHA-256(`"multisig_vault__"` ‖ create_key) | `(vault, 0)`, its native shard | native LEZ |
 | a member | (their own key) | passed for authorization only | — |
@@ -54,16 +56,20 @@ The target call becomes v0.3's shape:
 ```
 Proposal {
   index, proposer, multisig_create_key,
-  target: Option<TargetCall {
-    program_account_id: [u8; 32],
-    shard_selectors: Vec<(account_id, program_account_id)>,
-    instruction_data: Vec<u8>,            // borsh, as v0.3 carries it
-    pda_seeds: Vec<[u8; 32]>,             // the vault's seed, to authorize it to the callee
-  }>,
-  config_action: Option<ConfigAction>,    // exactly one of target / config_action
-  approved: Vec<[u8; 32]>, rejected: Vec<[u8; 32]>, status,
+  commitment: Commitment,                 // Call(TargetCall) | Config(ConfigAction)
+  approved: Vec<[u8; 32]>, rejected: Vec<[u8; 32]>, status: Active | Executed,
+}
+TargetCall {
+  program_account_id: [u8; 32],
+  shard_selectors: Vec<(account_id, program_account_id)>,
+  instruction_data: Vec<u8>,              // borsh, as v0.3 carries it
+  pda_seeds: Vec<[u8; 32]>,               // the vault's seed, to authorize it to the callee
 }
 ```
+
+Execute and ExecuteConfig carry the call or action they mean, and the proposal's apply
+checks it against the stored one by `Commitment::hash` = SHA-256(`"/lez-multisig/v0.3/Commitment/"`
+padded to 32 ‖ borsh(commitment)), a domain-separated hash.
 
 `target_account_count`, `target_account_ids` and `authorized_indices` disappear. The
 selectors name every account the call touches, so the recipient is committed by
@@ -75,16 +81,18 @@ transaction.
 
 Every instruction names the state and the proposal by their PDAs as rows. A signer appears
 as a row whose `AccountMeta.is_authorized` is true, from the transaction's witness. Each
-member pays their own fee (§6).
+member pays their own fee (§6). Execute's rows are the state, the proposal, **then the
+call's own rows in its order**: a chained call can select only rows its transaction
+carries, so plan checks that those rows are exactly the call's selectors.
 
 | instruction | plan asserts | effect on **state** (apply checks / changes) | effect on **proposal #i** (apply checks / changes) | chained call |
 |---|---|---|---|---|
 | `CreateMultisig { create_key, threshold, members }` | 1 ≤ threshold ≤ \|members\| ≤ 10, distinct | `Init(state)`: shard empty, then write it | — | — |
-| `Propose { create_key, index, target }` | proposer row authorized | `Member(proposer)` + `TakeIndex(index)`: proposer ∈ members; index == next, then next += 1 | `Open(proposal)`: shard empty, then write it, `approved = [proposer]` | — |
+| `Propose { create_key, index, target }` | proposer row authorized; the target's `pda_seeds` are at most this multisig's own vault seed | `Member(proposer)` + `TakeIndex(index)`: proposer ∈ members; index == next, then next += 1 | `Open(proposal)`: shard empty, then write it, `approved = [proposer]` | — |
 | `ProposeConfig { create_key, index, action }` | likewise | likewise | likewise, with `config_action` | — |
 | `Approve { create_key, index }` | voter authorized | `Member(voter)` (guard, keeps data) | `Vote(voter, yes)`: Active, then move voter into `approved` | — |
 | `Reject { create_key, index }` | voter authorized | `Member(voter)` | `Vote(voter, no)`: Active, then into `rejected` | — |
-| `Execute { create_key, index, approvers, call }` | — | `Quorum(approvers)`: distinct, each ∈ members, \|approvers\| ≥ threshold | `Close(approvers, hash(call))`: Active, each approver ∈ approved, stored target hashes to hash(call), then Executed | `call`, with the proposal's `pda_seeds` |
+| `Execute { create_key, index, approvers, call }` | rows after the first two are the call's selectors | `Quorum(approvers)`: distinct, each ∈ members, \|approvers\| ≥ threshold | `Close(approvers, hash(call))`: Active, each approver ∈ approved, stored target hashes to hash(call), then Executed | `call`, with the proposal's `pda_seeds` |
 | `ExecuteConfig { create_key, index, approvers, action }` | — | `QuorumThenApply(approvers, action)`: the quorum check above, then apply the action (the add, remove and threshold rules of v0.2.4) | `Close(approvers, hash(action))` | — |
 
 How Execute holds together:
@@ -139,12 +147,22 @@ and the vault pays nothing but the transfer. Create is paid by the creator.
   on the local v0.3 zone; a substituted call refused by the chain; a removed member's
   approval not counted.
 
-## 8. To check while building (L4b/L4c)
+## 8. What building it settled (L4b/L4c)
 
-- That a row with no effect (a signer passed only for authorization) is accepted, and which
-  program shard it should select.
-- That a chained call from plan to the native program, with the vault seed, is authorized
-  as §5 says.
-- How `program_loader` deployment picks the header account, and how the program's account
-  id is learned afterwards (the LEZ CLI, or `lez_core.send_program_deployment_transaction`).
-- Whether a v0.3 guest builds without the docker image the v0.2.4 build pinned.
+- **Rows.** A signer passed only for authorization is a row selecting the program's own
+  shard of that account, with no effect on it, and plan accepts it. A chained call can
+  select only the transaction's rows, so Execute lists the call's rows after its own (§4).
+- **The vault.** A chained call from plan to the native program, carrying the vault's
+  seed, moves the vault: the e2e pays R out of it. A seed that is not this multisig's own
+  vault seed is refused at Propose, so one multisig's quorum cannot move another's vault.
+  The published v0.2.4 program passes `pda_seeds` through unchecked (exo-325).
+- **Deployment.** `program_loader` writes the user ELF in 96 KiB segments, one fresh account
+  each, then a header naming them; the header's id is the program's account id
+  (`infra/lez/localnet.sh deploy`, through LEZ's CLI).
+- **The guest** builds with rzup's risc0 toolchain (`cargo build --release -p
+  multisig-methods`), no docker image.
+- **Inclusion is not success.** A refused call is included on v0.3, keeps its fee and burns
+  its signers' nonces, and the sequencer reports no outcome. muster must judge every step
+  by the state it reads back: a vote by the proposal's `approved`, Execute by the proposal
+  reading Executed (the settlement already does). See the labbook,
+  `docs/labbook/lez-v03-migration.md` trap 8.

@@ -99,7 +99,7 @@ make run                                        # launch the real UI standalone 
 make run-fleet PEER=alice                       # a peer on the live Logos fleet; PEER=bob in a second terminal (auto-seeded owners 0/1)
 make clean-peer PEER=alice                      # wipe one peer's identity + wallet (seeding applies only on a fresh identity)
 scripts/try-infra.sh up                         # every local chain the hands-on tour uses, own ports: anvil :8555 (the real Safe + the MTD token), bitcoind regtest :18453 (payers + 2-of-3 multisigs funded, a block every 10 s); addresses in .run/try/env; also status | env | down | btc … | eth …
-infra/lez/localnet.sh                           # a local LEZ v0.3.0 zone on :3040 with a genesis-funded funder (LEZ v0.3 has no faucet); fund <account> <amount> | status | stop; MUSTER_LEZ_VERSION=v0.2.4 for the multisig/FROST e2e tests (exo-eb6.4)
+infra/lez/localnet.sh                           # a local LEZ v0.3.0 zone on :3040 with a genesis-funded funder (LEZ v0.3 has no faucet); fund <account> <amount> | deploy <prog.bin> (a v0.3 program through program_loader) | status | stop; MUSTER_LEZ_VERSION=v0.2.4 for the multisig/FROST e2e tests (exo-eb6.4)
 scripts/lez-local-self-test.sh                  # a runner's real LEZ wallet on that zone, funded by the funder, reads its balance through lez_core
 scripts/try-peer.sh alice --fresh               # a peer seeded for that infra on the live fleet (bob/carol in more terminals; --lez for the real LEZ wallet) — the tour: docs/runbooks/client-tour.md
 make help                                       # every target
