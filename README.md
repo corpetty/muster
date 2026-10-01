@@ -142,4 +142,4 @@ Dual MIT / Apache-2.0, matching the Logos platform repos.
 
 This is an independent community project intended to demonstrate some of the capabilities and potential uses of the Logos technology stack. It has been developed independently by its contributor(s) and is not built for, on behalf of, or as part of the work of Logos or the Institute of Free Technology ("IFT"). It has not been reviewed, audited, approved, or endorsed by Logos or IFT. The project, including its code, documentation, views, and functionality, is the sole responsibility of its contributor(s) and should not be attributed to Logos or IFT.
 
-<!-- rot-check: current-phase=CLAUDE.md sha256=9f568008a6060a80d77f73c99c9b1d615def132f5255d88b70dd3a1242a05178 -->
+<!-- rot-check: current-phase=CLAUDE.md sha256=7b8bc1924d1fe594dc87e2f9bcce3a8d37f0feb2036fbad9fa7288f3625999d0 -->
