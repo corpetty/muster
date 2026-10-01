@@ -249,10 +249,12 @@ Rectangle {
         for (var i = 0; i < ts.length; ++i) if (ts[i].toMe && ts[i].vouched && !ts[i].payToMine) return true;
         return false;
     }
-    // whose quote the rates are: the signed proposer claim (exo-770), "you" when it is mine
-    readonly property string proposerName: {
+    // whose quote the rates are: the signed proposer claim (exo-770) — "your rate" when it is mine
+    readonly property string rateOwner: {
         var ps = (cardRoot.card && Array.isArray(cardRoot.card.proposedBy)) ? cardRoot.card.proposedBy : [];
-        return ps.length > 0 ? (String(ps[0].name || "") || String(ps[0].who || "").slice(0, 10) + "…") : qsTr("the proposer");
+        if (ps.length === 0) return qsTr("the proposer's rate");
+        if (ps[0].mine) return qsTr("your rate");
+        return qsTr("%1's rate").arg(String(ps[0].name || "") || String(ps[0].who || "").slice(0, 10) + "…");
     }
     // The next payment of mine to send: unsettled and not already on its way. A payer owing
     // two people may send the second while the first lands — the module skips what this host
@@ -696,13 +698,13 @@ Rectangle {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: String(modelData.perUnit || "").length > 0
-                              ? qsTr("1 %1 = %2 %3 — %4's rate, from “%5”, %6")
+                              ? qsTr("1 %1 = %2 %3 — %4, from “%5”, %6")
                                     .arg(String(modelData.symbol || modelData.asset)).arg(cardRoot.eth(modelData.perUnit))
-                                    .arg(cardRoot.unit).arg(cardRoot.proposerName).arg(String(modelData.source || ""))
-                                    .arg(new Date(Number(modelData.at) * 1000).toLocaleString())
-                              : qsTr("%1 %2 base units per %3 base units of %4 — %5's rate, from “%6” (this client could not read %4's decimals)")
+                                    .arg(cardRoot.unit).arg(cardRoot.rateOwner).arg(String(modelData.source || ""))
+                                    .arg(new Date(Number(modelData.at) * 1000).toLocaleString(Qt.locale(), Locale.ShortFormat))
+                              : qsTr("%1 %2 base units per %3 base units of %4 — %5, from “%6” (this client could not read %4's decimals)")
                                     .arg(String(modelData.rate)).arg(cardRoot.unit).arg(String(modelData.per))
-                                    .arg(String(modelData.symbol || modelData.asset)).arg(cardRoot.proposerName)
+                                    .arg(String(modelData.symbol || modelData.asset)).arg(cardRoot.rateOwner)
                                     .arg(String(modelData.source || ""))
                         color: Theme.palette.text
                         font.family: Theme.typography.mono
@@ -759,6 +761,9 @@ Rectangle {
                         text: modelData.toMe && !modelData.payToMine
                               ? qsTr("⚠ You would be paid at %1, which this client does not hold — so it will not agree for you.")
                                     .arg(String(modelData.payTo))
+                              : modelData.toMe
+                              ? qsTr("You are paid at %1 — the address you shared for this chain; your agreement vouches for it.")
+                                    .arg(String(modelData.payTo))
                               : qsTr("%1 is paid at %2 — an address %1 shared for this chain; their agreement vouches for it.")
                                     .arg(String(modelData.toName || "") || String(modelData.to).slice(0, 10) + "…")
                                     .arg(String(modelData.payTo))
@@ -786,7 +791,7 @@ Rectangle {
                           : cardRoot.settleUp.lapsed
                           ? qsTr("Expired before anyone paid. It no longer covers its shares: each can be paid directly again, or settled up anew.")
                           : qsTr("Expired before anyone paid. Its shares are released %1, in case a payment sent just before the expiry is still to be reported.")
-                                .arg(new Date(Number(cardRoot.settleUp.releasesAt) * 1000).toLocaleString())
+                                .arg(new Date(Number(cardRoot.settleUp.releasesAt) * 1000).toLocaleString(Qt.locale(), Locale.ShortFormat))
                     color: Theme.palette.warning
                     font.pixelSize: Theme.typography.badgeText
                 }
@@ -885,7 +890,7 @@ Rectangle {
                         var fiat = fd === 0 ? r : r.slice(0, r.length - fd) + "." + r.slice(r.length - fd);
                         var who = (cardRoot.card && Array.isArray(cardRoot.card.proposedBy) && cardRoot.card.proposedBy.length > 0)
                                   ? String(cardRoot.card.proposedBy[0].name || "") : "";
-                        var when = new Date(Number(q.at || 0) * 1000).toLocaleString();
+                        var when = new Date(Number(q.at || 0) * 1000).toLocaleString(Qt.locale(), Locale.ShortFormat);
                         return qsTr("A bill of %1 %2, converted at 1 %2 = %3 %4 — %5 quote, from “%6”, %7. Agreeing means trusting this rate: check it first.")
                                .arg(fiat).arg(String(q.currency)).arg(cardRoot.eth(String(q.rateAsset))).arg(cardRoot.unit)
                                .arg(who === "you" ? qsTr("your") : who.length > 0 ? who + qsTr("'s") : qsTr("the proposer's"))
