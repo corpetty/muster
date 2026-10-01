@@ -70,6 +70,13 @@ program) and L5 (live testnet runs) are not.
   wrong aggregate moves nothing (`lez_frost_v030_e2e`). The room path runs end to end with
   a `lez-call` v2 effect: ceremony, propose at a chain-read nonce, two rounds, one
   aggregate signature landed, a stale nonce refused at settle (`lez_frost_room_v030_e2e`).
+- **L5, its local half**: the private split end to end on a local v0.3.0 zone
+  (`LEZ_SPLIT_ZONE=local scripts/split-lez-testnet.sh`): B names its account, the funder
+  funds it, B shields it to its own key node (fee-exempt), agrees, and pays its share
+  shielded → shielded; A's own scan finds a note of exactly that share, final on both in
+  about 50 s with dev-mode receipts. The private rails, the scan and a received note's key
+  node and amount all hold on v0.3's 256-bit private ids. Real proving on v0.3 and the
+  live testnet remain (they need native LEZ from someone who holds it).
 
 Sources: logos-execution-zone v0.3.0 (`lee/state_machine/src/{public_transaction,fees.rs}`,
 `lee/state_machine/core/src/{account.rs,native_token.rs,program/mod.rs}`,
