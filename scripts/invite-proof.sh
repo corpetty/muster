@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Proof that a room invite crosses the Logos fleet — no GUI, no manual steps. A (seeded
+# Proof that a room invite crosses the Logos fleet (or, with MUSTER_FLEET=local, a
+# network of their own on this host) — no GUI, no manual steps. A (seeded
 # as Alice) joins a fresh room and invites the contact "Bob", exactly as the composer's
 # "Open the room with them" does; B (seeded as Bob, so his chat id is the one Alice's
 # contact names) sits on Home, where the inbox is polled. Passes when B's module can open
@@ -18,9 +19,9 @@ D=$(mktemp -d)
 echo "room: $TOPIC"
 ui_launch "$D/B" "$D/B.log" \
   MUSTER_LP_DEBUG=1 MUSTER_DEV_SECP_KEY=$KEY1 MUSTER_DELIVERY_CONFIG="$CFG" LOGOS_INSTANCE_ID=inviteB
-sleep 3
+CFG_A=$(ui_peer_config "$D/B.log") || exit 1
 ui_launch "$D/A" "$D/A.log" \
-  MUSTER_LP_DEBUG=1 MUSTER_DEV_SECP_KEY=$KEY0 MUSTER_DELIVERY_CONFIG="$CFG" MUSTER_AUTOJOIN_TOPIC="$ROOM" MUSTER_AUTOINVITE=Bob LOGOS_INSTANCE_ID=inviteA
+  MUSTER_LP_DEBUG=1 MUSTER_DEV_SECP_KEY=$KEY0 MUSTER_DELIVERY_CONFIG="$CFG_A" MUSTER_AUTOJOIN_TOPIC="$ROOM" MUSTER_AUTOINVITE=Bob LOGOS_INSTANCE_ID=inviteA
 echo "two instances launched; watching Bob's inbox for the invite (up to 90s)..."
 ok=0
 for i in $(seq 1 90); do
@@ -30,7 +31,7 @@ done
 ui_cleanup
 echo "B polled its inbox: $(grep -ac 'MUSTER-LP invites=' "$D/B.log") times · last: $(grep -a 'MUSTER-LP invites=' "$D/B.log" | tail -1)"
 if [ "$ok" = 1 ]; then
-  echo "SUCCESS: Bob's inbox opened the invite after ~${i}s — it crossed the fleet."
+  echo "SUCCESS: Bob's inbox opened the invite after ~${i}s — it crossed $MUSTER_FLEET."
   rm -rf "$D"
 else
   echo "FAIL: no invite in Bob's inbox in 90s; logs kept in $D"

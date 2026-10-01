@@ -33,18 +33,62 @@ case "$MUSTER_UI" in
   *) echo "MUSTER_UI must be cpp or nim, got '$MUSTER_UI'" >&2; exit 2 ;;
 esac
 
-# The delivery fleet a self-test's instances join, by its infra/fleets/<name>.json:
+# The delivery network a self-test's instances join:
 #   MUSTER_FLEET=logos.dev   (default) cluster 3, no RLN — a node starts with nothing more
 #   MUSTER_FLEET=logos.test  cluster 2, RLN on since Testnet v0.3: a delivery v0.3 node
-#                            starts there only with the RLN modules and an active,
-#                            funded membership (exo-eb6.3), so it is not the default yet
+#                            there sends nothing until it has the RLN modules and an
+#                            active, funded membership (exo-eb6.3), so not the default yet
+#   MUSTER_FLEET=local       no fleet (exo-eb6.7): the instances make their own network on
+#                            this host. The first one launched (the hub) listens on a
+#                            free 127.0.0.1 port; each later one dials it. Delivery's own
+#                            e2e shape: cluster 198, one shard, relay only. With no store
+#                            node, receipt is live only, and nothing off this host is
+#                            reached. It checks the code while the fleet is down; the
+#                            fleet runs stay the live check.
+# The fleets' configs are infra/fleets/<name>.json.
 MUSTER_FLEET="${MUSTER_FLEET:-logos.dev}"
 
-# ui_fleet_config — the selected fleet's createNode config, as one line of JSON.
+# ui_local_config [hub multiaddr] — a local node's createNode config on a free port,
+# dialing the hub when one is named.
+ui_local_config() {
+  python3 - "${1:-}" <<'EOF'
+import json, socket, sys
+s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+cfg = {"logLevel": "INFO", "listenAddress": "127.0.0.1", "tcpPort": port, "clusterId": 198,
+       "numShardsInNetwork": 1, "relay": True, "store": False, "filter": False,
+       "lightpush": False, "peerExchange": False, "discv5Discovery": False,
+       "reliabilityEnabled": True}
+if sys.argv[1]: cfg["staticnodes"] = [sys.argv[1]]
+print(json.dumps(cfg))
+EOF
+}
+
+# ui_fleet_config — the createNode config for the first instance a test launches, as one
+# line of JSON: the selected fleet's, or locally the hub's.
 ui_fleet_config() {
+  if [ "$MUSTER_FLEET" = local ]; then ui_local_config; return; fi
   local f="infra/fleets/$MUSTER_FLEET.json"
   [ -f "$f" ] || { echo "no fleet config $f (MUSTER_FLEET=$MUSTER_FLEET; infra/fleets/refresh.sh)" >&2; exit 2; }
   python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))["delivery_createNode_config"]))' "$f"
+}
+
+# ui_peer_config <hub log> — the config for each instance launched after the first, once
+# the first has had time to come up. On a fleet that is the fleet's config, after 3 s.
+# Locally it waits up to 30 s for the hub's node to start, reads its address from
+# delivery's "Started libp2p node" line, and dials it; exit 1 if the hub never started.
+ui_peer_config() {
+  local hublog="$1" addr="" i
+  if [ "$MUSTER_FLEET" != local ]; then sleep 3; ui_fleet_config; return; fi
+  for i in $(seq 1 60); do
+    addr=$(grep -a -m1 'Started libp2p node' "$hublog" 2>/dev/null | python3 -c '
+import re, sys
+m = re.search(r"peerId: (16U\w+), listenAddrs: \[(/ip4/[^/]+/tcp/\d+)", sys.stdin.read())
+print(m.group(2) + "/p2p/" + m.group(1) if m else "")')
+    [ -n "$addr" ] && break
+    sleep 0.5
+  done
+  [ -n "$addr" ] || { echo "the local hub's node never started (no 'Started libp2p node' in $hublog)" >&2; exit 1; }
+  ui_local_config "$addr"
 }
 
 # ui_require_runner — exit 1 (red) with the reason when the selected build is absent.

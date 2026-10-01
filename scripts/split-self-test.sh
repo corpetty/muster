@@ -63,16 +63,6 @@ launch() {  # name, extra env… — each runner in its own session, so cleanup 
   echo $! >"$D/$name.pid"
   disown $!
 }
-if [ -n "$ONBEHALF" ]; then
-  echo "on B's behalf: B shares its address, A proposes for B and pays; B agrees as creditor and confirms"
-  launch A MUSTER_DEV_SECP_KEY="$KEY0" MUSTER_AUTOADMIT=1 MUSTER_AUTOSPLIT="$TOTAL" MUSTER_AUTOSPLIT_FOR=1 MUSTER_AUTOPAYSPLIT=1
-  sleep 3
-  launch B MUSTER_DEV_SECP_KEY="$KEY1" MUSTER_AUTOSHARE=1 MUSTER_AUTOPAYSPLIT=1
-else
-  launch A MUSTER_DEV_SECP_KEY="$KEY0" MUSTER_AUTOADMIT=1 MUSTER_AUTOSPLIT="$TOTAL"
-  sleep 3
-  launch B MUSTER_DEV_SECP_KEY="$KEY1" MUSTER_AUTOPAYSPLIT=1
-fi
 
 cleanup() {
   for n in A B; do
@@ -85,6 +75,17 @@ cleanup() {
   kill "$APID" 2>/dev/null
 }
 trap cleanup EXIT
+
+if [ -n "$ONBEHALF" ]; then
+  echo "on B's behalf: B shares its address, A proposes for B and pays; B agrees as creditor and confirms"
+  launch A MUSTER_DEV_SECP_KEY="$KEY0" MUSTER_AUTOADMIT=1 MUSTER_AUTOSPLIT="$TOTAL" MUSTER_AUTOSPLIT_FOR=1 MUSTER_AUTOPAYSPLIT=1
+  CFG=$(ui_peer_config "$D/A.log") || exit 1
+  launch B MUSTER_DEV_SECP_KEY="$KEY1" MUSTER_AUTOSHARE=1 MUSTER_AUTOPAYSPLIT=1
+else
+  launch A MUSTER_DEV_SECP_KEY="$KEY0" MUSTER_AUTOADMIT=1 MUSTER_AUTOSPLIT="$TOTAL"
+  CFG=$(ui_peer_config "$D/A.log") || exit 1
+  launch B MUSTER_DEV_SECP_KEY="$KEY1" MUSTER_AUTOPAYSPLIT=1
+fi
 
 final() { grep -aqE 'MUSTER-LP split [0-9a-fx]+ state=final' "$D/$1.log" 2>/dev/null; }
 echo "watching for the split to reach final on both instances (up to 180s)..."

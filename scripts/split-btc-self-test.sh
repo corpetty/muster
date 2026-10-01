@@ -72,9 +72,6 @@ launch() {  # name, extra env… — each runner in its own session, so cleanup 
   echo $! >"$D/$name.pid"
   disown $!
 }
-launch A MUSTER_DEV_SECP_KEY="0x$KEY0" MUSTER_AUTOADMIT=1 MUSTER_AUTOSPLIT="$TOTAL" MUSTER_AUTOSPLIT_CHAIN="$CHAIN"
-sleep 3
-launch B MUSTER_DEV_SECP_KEY="0x$KEY1" MUSTER_AUTOPAYSPLIT=1
 
 cleanup() {
   for n in A B; do
@@ -87,6 +84,10 @@ cleanup() {
   infra/bitcoind/regtest.sh stop >/dev/null 2>&1
 }
 trap cleanup EXIT
+
+launch A MUSTER_DEV_SECP_KEY="0x$KEY0" MUSTER_AUTOADMIT=1 MUSTER_AUTOSPLIT="$TOTAL" MUSTER_AUTOSPLIT_CHAIN="$CHAIN"
+CFG=$(ui_peer_config "$D/A.log") || exit 1
+launch B MUSTER_DEV_SECP_KEY="0x$KEY1" MUSTER_AUTOPAYSPLIT=1
 
 final() { grep -aqE 'MUSTER-LP split [0-9a-fx]+ state=final' "$D/$1.log" 2>/dev/null; }
 echo "watching for the split to reach final on both instances (up to 240s), mining a block every 3s..."
