@@ -673,6 +673,27 @@ Item {
         }
         return out;
     }
+    // An address-request's answers (exo-8e2): the address-share cards posted after it (its
+    // position `index` in the thread) of the kind it asks for — BTC on its chain, or an
+    // Ethereum address — each with who shared it, as each member disclosed it (inv 9).
+    function addressAnswers(index, req) {
+        var out = [];
+        var asset = String((req && req.asset) || "ETH");
+        var chain = String((req && req.chain) || "");
+        for (var j = index + 1; j < room.messages.length; ++j) {
+            var m = room.messages[j];
+            if (!m) continue;
+            var o = null;
+            try { o = JSON.parse(m.body); } catch (e) { o = null; }
+            if (!o || String(o.kind || "") !== "address-share" || String(o.asset || "ETH") !== asset) continue;
+            if (chain.length > 0 && String(o.chain || "").length > 0 && String(o.chain) !== chain) continue;
+            var addr = String(o.address || "");
+            if (addr.length === 0) continue;
+            out.push({ who: String(m.author || "").toLowerCase().replace(/^0x/, ""), self: !!m.self,
+                       name: m.self ? qsTr("you") : room.memberLabel(String(m.author || "")), address: addr });
+        }
+        return out;
+    }
     function sharedBtcAddressOf(identity) {
         // the Bitcoin address a member last shared (the address-share card's asset BTC)
         var bare = function (s) { return String(s || "").toLowerCase().replace(/^0x/, ""); };
@@ -1563,6 +1584,13 @@ Item {
                             visible: msg.parsedCard !== null && !msg.isIntentRef
                             Layout.fillWidth: true
                             card: msg.parsedCard || ({})
+                            // an address-request knows who answered it, and whom it asked (exo-8e2)
+                            answers: (msg.parsedCard && String(msg.parsedCard.kind || "") === "address-request")
+                                     ? room.addressAnswers(msg.index, msg.parsedCard) : []
+                            readerIdentity: room.myIdentity
+                            askedByMe: !!(msg.modelData && msg.modelData.self)
+                            askedOfName: (msg.parsedCard && msg.parsedCard["for"])
+                                         ? room.memberLabel(String(msg.parsedCard["for"])) : ""
                             onShareAddress: {
                                 // a Bitcoin address is my own key's on that network: the module
                                 // knows it, not this view (exo-a90.17)
@@ -2279,7 +2307,7 @@ Item {
                                     Layout.preferredWidth: 0
                                     wrapMode: Text.Wrap
                                     text: qsTr("1 %1 on %2 (%3) =").arg(String(modelData.symbol || modelData.asset))
-                                          .arg(String(modelData.chain))
+                                          .arg(String(modelData.chainLabel || modelData.chain))
                                           .arg(Number(modelData.parts) === 1 ? qsTr("1 share") : qsTr("%1 shares").arg(modelData.parts))
                                     color: Theme.palette.text
                                     font.pixelSize: Theme.typography.secondaryText
@@ -2659,9 +2687,9 @@ Item {
                     if (String(r.error || "") === "no-address")
                         return room.noAddressAnswered
                                ? qsTr("✓ %1 has shared an address on %2 — propose the settle-up again.")
-                                     .arg(String(r.name || "")).arg(String(r.chain || ""))
+                                     .arg(String(r.name || "")).arg(String(r.chainLabel || r.chain || ""))
                                : qsTr("⚠ %1 — %2 has shared no address on %3 to be paid at. Ask them to share one, then propose again.")
-                                     .arg(what).arg(String(r.name || "")).arg(String(r.chain || ""));
+                                     .arg(what).arg(String(r.name || "")).arg(String(r.chainLabel || r.chain || ""));
                     if (String(r.error || "") === "expired-duplicate")
                         return qsTr("⚠ %1 — an identical split expired in this room. Change its note to propose it again, or renew the old one's unpaid shares from its card.").arg(what);
                     return qsTr("⚠ %1 — %2%3").arg(what).arg(String(r.error || ""))
@@ -2681,10 +2709,14 @@ Item {
                 onClicked: {
                     if (!room.backend) return;
                     var ch = String(room.splitResult.chain || "");
+                    var label = String(room.splitResult.chainLabel || ch);
+                    // asked of one member (exo-8e2): only they are offered "Share", and the
+                    // card says when they have answered
                     room.backend.postMessage(JSON.stringify({
                         kind: "address-request", intent: "settle-up",
-                        asset: ch.indexOf("bip122:") === 0 ? "BTC" : "ETH", chain: ch,
-                        purpose: qsTr("Settle up across chains: an address on %1").arg(ch)
+                        asset: ch.indexOf("bip122:") === 0 ? "BTC" : "ETH", chain: ch, chainLabel: label,
+                        "for": String(room.splitResult.who || ""),
+                        purpose: qsTr("Settle up across chains: an address on %1").arg(label)
                     }));
                 }
             }

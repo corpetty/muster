@@ -333,6 +333,29 @@ Rectangle {
         return agreed ? (cardRoot.ready ? qsTr("agreed — to pay") : qsTr("agreed")) : qsTr("to agree");
     }
     signal shareAddress()
+    // An address-request's answers and whom it asked (exo-8e2): Room.qml finds the
+    // address-share cards posted after it of the kind asked ([{who, self, name, address}]).
+    // A request naming a member ("for") is offered to them alone; one naming nobody, to
+    // whoever has not answered it yet.
+    property var answers: []
+    property string readerIdentity: ""
+    property string askedOfName: ""
+    property bool askedByMe: false        // this member posted the request: never theirs to answer
+    readonly property string askedOf: String((cardRoot.card && cardRoot.card["for"]) || "").toLowerCase().replace(/^0x/, "")
+    readonly property bool askedOfMe: !cardRoot.askedByMe
+                                      && (cardRoot.askedOf.length === 0
+                                          || cardRoot.askedOf === cardRoot.readerIdentity.toLowerCase().replace(/^0x/, ""))
+    readonly property bool answeredByMe: {
+        var a = cardRoot.answers || [];
+        for (var i = 0; i < a.length; ++i) if (a[i].self) return true;
+        return false;
+    }
+    readonly property bool answeredByAsked: {
+        if (cardRoot.askedOf.length === 0) return false;
+        var a = cardRoot.answers || [];
+        for (var i = 0; i < a.length; ++i) if (String(a[i].who) === cardRoot.askedOf) return true;
+        return false;
+    }
     // Use a disclosed public address as the recipient of a payment being composed —
     // closes the ask→disclose→use loop so the proposer never retypes what a peer just
     // shared into the room (the counterparty's address for the Safe txn).
@@ -447,15 +470,45 @@ Rectangle {
                 font.weight: Theme.typography.weightMedium
             }
             LogosText {
+                // the ask, while it is still yours to answer
+                visible: cardRoot.askedOfMe && !cardRoot.answeredByMe
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: String((cardRoot.card && cardRoot.card.asset) || "ETH") === "BTC"
                       ? qsTr("This room needs a Bitcoin address on %1 to pay you at. Sharing gives your own key's address there.")
-                            .arg(String((cardRoot.card && cardRoot.card.chain) || ""))
+                            .arg(String((cardRoot.card && (cardRoot.card.chainLabel || cardRoot.card.chain)) || ""))
                       : qsTr("This room needs somewhere to send funds. Share an address to continue.")
                 color: Theme.palette.textSecondary
                 font.family: Theme.typography.publicSans
                 font.pixelSize: Theme.typography.secondaryText
+            }
+            LogosText {
+                objectName: "cardAddressWaiting"
+                visible: !cardRoot.askedOfMe && (cardRoot.askedOf.length > 0 ? !cardRoot.answeredByAsked
+                                                                             : (cardRoot.answers || []).length === 0)
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: cardRoot.askedOf.length > 0 ? qsTr("Waiting for %1 to share an address.").arg(cardRoot.askedOfName || qsTr("them"))
+                                                  : qsTr("Waiting for someone in the room to share an address.")
+                color: Theme.palette.textSecondary
+                font.pixelSize: Theme.typography.secondaryText
+            }
+            Repeater {
+                model: cardRoot.answers || []
+                delegate: LogosText {
+                    required property var modelData
+                    objectName: "cardAddressAnswer"
+                    Layout.fillWidth: true
+                    wrapMode: Text.WrapAnywhere
+                    readonly property string shortAddr: {
+                        var a = String(modelData.address || "");
+                        return a.length > 18 ? a.slice(0, 10) + "…" + a.slice(-6) : a;
+                    }
+                    text: modelData.self ? qsTr("✓ You shared %1").arg(shortAddr)
+                                         : qsTr("✓ %1 shared %2").arg(String(modelData.name || "")).arg(shortAddr)
+                    color: Theme.palette.success
+                    font.pixelSize: Theme.typography.secondaryText
+                }
             }
         }
 
@@ -682,10 +735,11 @@ Rectangle {
                     text: {
                         if (!cardRoot.settleUp || !cardRoot.settleUp.across) return "";
                         var as = (cardRoot.settleUp.coverAssets || []).map(function (a) {
-                            return qsTr("%1 on %2").arg(String(a.symbol || a.asset)).arg(String(a.chain));
+                            return qsTr("%1 on %2").arg(String(a.symbol || a.asset)).arg(String(a.chainLabel || a.chain));
                         });
                         return qsTr("Covers shares in %1; every payment is %2 on %3.")
-                               .arg(as.join(", ")).arg(cardRoot.unit).arg(String(cardRoot.settleUp.chain || ""));
+                               .arg(as.join(", ")).arg(cardRoot.unit)
+                               .arg(String(cardRoot.settleUp.chainLabel || cardRoot.settleUp.chain || ""));
                     }
                     color: Theme.palette.textSecondary
                     font.pixelSize: Theme.typography.secondaryText
@@ -1852,7 +1906,8 @@ Rectangle {
         // address-request: the reader answers with an address.
         LogosButton {
             objectName: "cardShareAddress"
-            visible: cardRoot.kind === "address-request"
+            // only to someone asked, and only until they have answered (exo-8e2)
+            visible: cardRoot.kind === "address-request" && cardRoot.askedOfMe && !cardRoot.answeredByMe
             Layout.fillWidth: true
             text: String((cardRoot.card && cardRoot.card.asset) || "ETH") === "BTC" ? qsTr("Share my Bitcoin address")
                   : qsTr("Share an address")
