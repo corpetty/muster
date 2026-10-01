@@ -11,7 +11,9 @@ program) and L5 (live testnet runs) are not.
   over the bridge, or by a transfer from an account that holds some. `lez_core` 0.5.0
   drops `claim_pinata*`, `register_public_account` (a fresh public account is claimed by
   its first funded transfer) and the vault calls. muster dropped all of them (L1).
-- **Fees.** Every public transaction declares
+- **Fees.** Private transactions pay none: a privacy-preserving message has no fee field
+  ("fee-exempt under the interim policy", `lez/sequencer/core/src/fees.rs`). Every public
+  transaction declares
   `Option<FeeDeclaration { payer, gas_limit: u64, tip: u64, max_fee: u128 }>`, inside the
   signed message; the payer signs like any signer, and a co-signing payer's nonce goes
   after the others. The LEZ wallet's default is gas 2_000_000, tip 0, max_fee
@@ -48,9 +50,13 @@ program) and L5 (live testnet runs) are not.
    `libstdc++` on its rpath or `LD_LIBRARY_PATH` (`'nixpkgs#gcc.cc^lib'`).
 6. **The CLI links Keycard support** (`pcsc-sys`), so it needs `libpcsclite` and
    `pkg-config` to build and run.
-7. **muster's fee and funding assumptions were v0.2's.** The `MUSTER_AUTOLEZFUND` autopilot
-   shields the whole public balance, which leaves nothing for v0.3's fee, and muster's LEZ
-   fee estimate is still a v0.2 constant. Both are L5's (exo-357).
+7. **muster's fee estimate was v0.2's**: a flat 1_000_000 base units on every rail. On v0.3
+   a privacy-preserving transaction (a shield, a deshield, a private transfer) carries no
+   fee field and pays none — "fee-exempt under the interim policy", in the sequencer's
+   `fees.rs` — while a public one pays up to its declared cap. `LezAdapter.estimateFee` now
+   says so (L5). An earlier version of this entry, and the descriptions of #202 and #203,
+   said the funding autopilot's full-balance shield leaves nothing for the fee. It does
+   not: a shield is a privacy-preserving transaction, so it pays no fee.
 
 ## What is verified, and where
 
@@ -64,6 +70,13 @@ program) and L5 (live testnet runs) are not.
   wrong aggregate moves nothing (`lez_frost_v030_e2e`). The room path runs end to end with
   a `lez-call` v2 effect: ceremony, propose at a chain-read nonce, two rounds, one
   aggregate signature landed, a stale nonce refused at settle (`lez_frost_room_v030_e2e`).
+- **L5, its local half**: the private split end to end on a local v0.3.0 zone
+  (`LEZ_SPLIT_ZONE=local scripts/split-lez-testnet.sh`): B names its account, the funder
+  funds it, B shields it to its own key node (fee-exempt), agrees, and pays its share
+  shielded → shielded; A's own scan finds a note of exactly that share, final on both in
+  about 50 s with dev-mode receipts. The private rails, the scan and a received note's key
+  node and amount all hold on v0.3's 256-bit private ids. Real proving on v0.3 and the
+  live testnet remain (they need native LEZ from someone who holds it).
 
 Sources: logos-execution-zone v0.3.0 (`lee/state_machine/src/{public_transaction,fees.rs}`,
 `lee/state_machine/core/src/{account.rs,native_token.rs,program/mod.rs}`,

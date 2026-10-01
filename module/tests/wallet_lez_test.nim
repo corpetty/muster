@@ -63,7 +63,14 @@ block:
   let recipient = core.createAccount(lakPrivate)
   let dest = "priv:" & recipient.npk & ":" & recipient.vpk
   let amt = amount(a.assets()[0], "100000000")
-  doAssert a.estimateFee(pub, dest, amt).note.contains("proof"), "a shielded send pays a proof cost"
+  # LEZ v0.3: a privacy-preserving transaction (shield, deshield, private) carries no fee
+  # and pays none ("fee-exempt under the interim policy", the sequencer's fees.rs); its
+  # cost is the proof, minutes of the sender's own machine
+  let sf = a.estimateFee(pub, dest, amt)
+  doAssert sf.fee.raw == "0" and "fee-exempt" in sf.note and "proof" in sf.note, sf.note
+  # a public transfer pays a fee, declared up to the LEZ wallet's cap; the rest is refunded
+  let pf = a.estimateFee(pub, core.createAccount(lakPublic).id, amt)
+  doAssert pf.fee.raw == "134400000" and "at most" in pf.note, pf.note
 
   let tx = a.submit(a.prepareTransfer(pub, dest, amt), ks)
   doAssert a.balance(pub, a.assets()[0]).raw == "900000000", "sender debited immediately"

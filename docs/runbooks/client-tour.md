@@ -653,8 +653,10 @@ in all.
 
 > **Since 2026-09-30 the LEZ testnet runs v0.3.0, which has no faucet** (exo-eb6.4). Bob's
 > log shows `LEZFUND awaiting funds at <account>`: someone who holds native LEZ on the
-> testnet has to send to that account. muster's private rails are also unverified against
-> v0.3's 256-bit private ids (exo-357), so treat this section as last verified on v0.2.4.
+> testnet has to send to that account. The private rails hold on v0.3: the same split ran
+> end to end on a local v0.3 zone (`LEZ_SPLIT_ZONE=local scripts/split-lez-testnet.sh`,
+> exo-357), where a funder stands in for that person. On the testnet itself this section
+> was last run on v0.2.4.
 
 1. Close both windows, then relaunch, without `--fresh` (keep the identities and the
    room). Back in each window, open the room from **Home**: after a restart its row is
