@@ -66,6 +66,7 @@ FLAGS=(-d:release --threads:on --hints:off
   --passL:"$SODIUM/lib/libsodium.so" --passL:"-Wl,-rpath,$SODIUM/lib")
 
 # 2. Select.
+E2E+=(lez_frost_v030_e2e lez_frost_room_v030_e2e)    # on a local LEZ v0.3 zone (exo-eb6.4 L3)
 is_e2e() { local n; for n in "${E2E[@]}"; do [ "$n" = "$1" ] && return 0; done; return 1; }
 unit=(); probes=(); e2e=()
 for f in tests/*.nim; do

@@ -28,6 +28,7 @@ import stint
 import ../drivers/lez_multisig
 import ../lez/multisig
 import ../lez/multisig_chain
+import ../lez/tx as leztx       # the v0.3.0 line: settlement builds the transaction (exo-eb6.4 L3)
 import ../bitcoin/tx
 import ../crypto/secp256k1
 import ../crypto/keystore
@@ -273,6 +274,14 @@ method assemble*(s: LezFrostSettlement, drv: Driver, effect: Effect,
   try: sig = aggregateFrost(d.account.group, msgs, cs)[0]
   except CatchableError as e:
     return Assembled(ok: false, error: "not-settleable", have: have, need: need, detail: e.msg)
+  if call.v3:
+    # the v0.3.0 line (exo-eb6.4 L3): the transaction is built here, whole, from the
+    # agreed call and the one aggregate witness; the chain only carries it
+    let ws = @[LezWitness(signature: sig, xonly: d.account.group.xonly)]
+    let m = message3Of(call)
+    return Assembled(ok: true, have: have, need: need,
+      tx: PreparedTx(chain: d.account.chain, frm: s.relayer, to: d.account.address,
+                     payload: $(%*{"lez": "v0.3", "leeTx": zx(leeTxPublic(m, ws)), "hash": publicTxHash(m, ws)})))
   Assembled(ok: true, have: have, need: need,
     tx: PreparedTx(chain: d.account.chain, frm: s.relayer, to: d.account.address,
                    payload: $(%*{"program": zx(call.program), "accounts": call.accounts.mapIt(zx(it)),
@@ -284,6 +293,10 @@ method submit*(s: LezFrostSettlement, tx: PreparedTx, ks: Keystore): TxRef =
   proc unz(h: string): seq[byte] =
     for i in 0 ..< h.len div 2: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
   let p = parseJson(tx.payload)
+  if p{"lez"}.getStr() == "v0.3":
+    let r3 = LezMultisigChain(s.adapter).sendBuilt(unz(p["leeTx"].getStr()), p["hash"].getStr())
+    if not r3.ok: raise newException(WalletError, "the chain refused it: " & r3.error)
+    return TxRef(chain: tx.chain, id: r3.hash)
   let r = LezMultisigChain(s.adapter).sendWitnessed(unz(p["program"].getStr()),
     p["accounts"].getElems().mapIt(unz(it.getStr())), p["signers"].getElems().mapIt(unz(it.getStr())),
     p["words"].getElems().mapIt(uint32(it.getBiggestInt())), @[(unz(p["sig"].getStr()), unz(p["xonly"].getStr()))])

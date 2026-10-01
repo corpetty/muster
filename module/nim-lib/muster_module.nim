@@ -10,7 +10,7 @@
 
 include muster_gen
 
-import std/[json, tables, strutils, os, algorithm, times, sets, sequtils]
+import std/[json, tables, strutils, os, algorithm, times, sets, sequtils, options]
 import ../src/dcbor/dcbor
 import ../src/drivers/driver
 import ../src/drivers/safe
@@ -2935,8 +2935,16 @@ proc lezFrostTransfer(recipient, amount: string): string =
   var effectJson: string
   try:
     let rpc = newLezRpc(gLezRpc)
-    effectJson = lezFrostCallEffect(rpc.programId("token"), @[acct.accountId, to], words, acct.accountId,
-                                    rpc.getAccount(acct.accountId).nonce)
+    let now = rpc.getAccount(acct.accountId)
+    if now.v3:
+      # the zone runs LEZ v0.3.0 (exo-eb6.4 L3): a native transfer from the group's own
+      # account, which pays its own fee (the LEZ wallet's default declaration)
+      effectJson = lezFrostCallEffect3(NativeTokenProgram, @[nativeShard(acct.accountId), nativeShard(to)],
+                                       nativeTransfer(amt.stuint(128)), acct.accountId, @[now.nonce],
+                                       some defaultFee(acct.accountId))
+    else:
+      effectJson = lezFrostCallEffect(rpc.programId("token"), @[acct.accountId, to], words, acct.accountId,
+                                      now.nonce)
   except CatchableError as e:
     return $(%*{"error": "sequencer-unreachable", "detail": e.msg})
   let id = musterCoordinatePropose(effectJson)
