@@ -48,8 +48,8 @@ differs.
 
 Two terminals. Each boots already pointed at the fleet (`MUSTER_DELIVERY_CONFIG`, seeded
 from `infra/fleets/logos.dev.json`) **and** seeded as an anvil Safe owner. Since Testnet v0.3
-the default fleet is `logos.dev`: a node on `logos.test` starts only with an active RLN
-membership (exo-eb6.3); `FLEET=logos.test` picks it once you have one.
+the default fleet is `logos.dev`: a node on `logos.test` sends nothing until it has an
+active RLN membership (exo-eb6.3); `FLEET=logos.test` picks it once you have one.
 
 ```bash
 make run-fleet PEER=alice

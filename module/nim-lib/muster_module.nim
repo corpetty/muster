@@ -219,8 +219,8 @@ var gLezProgram = getEnv("MUSTER_LEZ_MULTISIG_PROGRAM", LezDeployedMultisig)
   ## node itself unlocks (anvil's dev accounts) via eth_sendTransaction.
 const DefaultFleet = "logos.dev"
   ## The fleet a fresh instance joins (exo-eb6.2). Since Testnet v0.3 (delivery
-  ## v0.3.0) a node on logos.test starts only with the RLN modules loaded and an
-  ## active, funded RLN membership (exo-eb6.3); logos.dev (cluster 3) runs no RLN.
+  ## v0.3.0) a node on logos.test needs the RLN modules loaded, and sends nothing until
+  ## it has an active, funded RLN membership (exo-eb6.3); logos.dev (cluster 3) runs no RLN.
 
 proc deliveryPreset(name: string): string =
   ## Embedded fleet createNode configs, so delivery WORKS out of the box (invariant 8

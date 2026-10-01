@@ -36,6 +36,10 @@ block awaitingFunding:
   doAssert r["payer"].getStr() == Payer and r["balance"].getStr() == "0"
   doAssert Payer in r["remedy"].getStr() and RegistryZone in r["remedy"].getStr() and
            FundingNative in r["remedy"].getStr(), $r
+  # delivery v0.3.0 runs the node without a membership and holds every send, retrying
+  # (seen live 2026-10-01: rlnState "Ready", "Failed to attach RLN proof"), so the row
+  # says the messages wait: a room that looks fine locally is sending nothing
+  doAssert "messages wait" in r["detail"].getStr(), $r
   # one short of the threshold is still short; at it, registration is under way
   let short = rlnRow(RlnInputs(preset: "logos.test", node: "Ready", wallet: readyWallet,
                                balance: %*{"balance": "199999999"}))
@@ -43,7 +47,8 @@ block awaitingFunding:
   let funded = rlnRow(RlnInputs(preset: "logos.test", node: "Ready", wallet: readyWallet,
                                 balance: %*{"balance": "1000000000"}))
   doAssert funded["level"].getStr() == "warn" and "under way" in funded["detail"].getStr(), $funded
-  echo "3. a payer short of the threshold: awaiting funding, with the payer, the zone and the amount OK"
+  doAssert "messages wait" in funded["detail"].getStr(), $funded
+  echo "3. a payer short of the threshold: awaiting funding, with the payer, the zone and the amount; messages wait OK"
 
 block membership:
   let active = rlnRow(RlnInputs(preset: "logos.test", node: "Ready", wallet: readyWallet,
@@ -51,6 +56,8 @@ block membership:
   doAssert active["level"].getStr() == "ok" and active["payer"].getStr() == Payer, $active
   let pending = rlnRow(RlnInputs(preset: "logos.test", node: "Ready", membership: %*{"state": "pending"}))
   doAssert pending["level"].getStr() == "warn" and "registering" in pending["detail"].getStr()
+  doAssert "messages wait" in pending["detail"].getStr(), $pending
+  doAssert "messages wait" notin active["detail"].getStr(), $active
   for st in ["expired", "erased", "slashed", "failed"]:
     doAssert rlnRow(RlnInputs(preset: "logos.test", membership: %*{"state": st}))["level"].getStr() == "down", st
   echo "4. the membership decides when known: active ok, pending and grace warn, gone down OK"

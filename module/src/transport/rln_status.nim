@@ -2,8 +2,9 @@
 ## the replies muster_module gathers from delivery and the two RLN modules, and says
 ## what stands and what to do next. Never a false green: an unread reply is "unknown".
 ##
-## Only the logos.test preset runs RLN (delivery v0.3.0). There a node needs an active
-## membership to send. The RLN modules provision the node's own wallet on the registry's
+## Only the logos.test preset runs RLN (delivery v0.3.0). There a node runs without a
+## membership, but it sends nothing until one is active: delivery holds each message
+## and retries. The RLN modules provision the node's own wallet on the registry's
 ## zone and register by themselves once its payer holds the price plus a fee reserve,
 ## so the one step left to a person is funding that payer. Design:
 ## docs/design/rln-membership.md §6.
@@ -22,6 +23,10 @@ const
   FundingNative* = "200000000"
     ## what delivery's guide asks a payer to hold: the price plus a fee reserve
     ## (about 1.8e8 at base fee 8, most of it refunded)
+  Held = "; this node's messages wait until it is active"
+    ## delivery v0.3.0 runs the node without a membership and holds every send,
+    ## retrying (rlnState reads "Ready" all the while), so a room that looks fine
+    ## locally sends nothing: the row says so
 
 type
   RlnInputs* = object
@@ -87,7 +92,7 @@ proc rlnRow*(i: RlnInputs): JsonNode =
     result = row("warn", "in its grace period: it expires soon",
                  "Register again before it expires (the RLN module does this once its payer is funded).")
   of "pending":
-    result = row("warn", "registering: usually 1–3 minutes once the funds land")
+    result = row("warn", "registering: usually 1–3 minutes once the funds land" & Held)
   of "expired", "erased", "slashed", "failed":
     result = row("down", "membership " & state & ": this node cannot send on " & RlnPreset,
                  "Fund the payer again; the RLN module registers a new membership by itself.")
@@ -112,10 +117,10 @@ proc rlnRow*(i: RlnInputs): JsonNode =
   if bal.len == 0:
     result = row("unknown", "checking what the payer holds")
   elif decLess(bal, FundingNative):
-    result = row("warn", "awaiting funding: the payer holds " & bal & " native LEZ",
+    result = row("warn", "awaiting funding: the payer holds " & bal & " native LEZ" & Held,
                  "Send at least " & FundingNative & " native LEZ to " & payer & " on the RLN registry's zone (" &
                  RegistryZone & "). Registration then runs by itself.")
   else:
-    result = row("warn", "funded (" & bal & " native LEZ): registration is under way")
+    result = row("warn", "funded (" & bal & " native LEZ): registration is under way" & Held)
   result["payer"] = %payer
   if bal.len > 0: result["balance"] = %bal

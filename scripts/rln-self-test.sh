@@ -6,11 +6,13 @@
 # its native balance, and found it short. The row names the payer (64 hex), the
 # zone, and the amount to send. No funds are needed; it is the step before them.
 #
-# It needs the RLN registry's zone (209.38.241.182:3240) to answer, not the fleet:
-# a v0.3 node on logos.test does not start until its membership is active, so the
-# delivery node stays "Initializing" here, and that is expected.
+# It needs the RLN registry's zone (209.38.241.182:3240) to answer more than the
+# fleet: a v0.3 node on logos.test runs without a membership (rlnState reads "Ready")
+# but holds every send, retrying ("Failed to attach RLN proof"), which is expected
+# here. The row says the node's messages wait.
 #   scripts/rln-self-test.sh                       # logos.test, up to 150 s
 #   RLN_WAIT_S=300 scripts/rln-self-test.sh
+#   KEEP_LOGS=1 scripts/rln-self-test.sh           # keep the runner's log on success too
 set -uo pipefail
 cd "$(dirname "$0")/.."
 export MUSTER_FLEET=logos.test
@@ -52,6 +54,7 @@ echo "$row" | python3 -c '
 import sys,json,re
 r=json.load(sys.stdin)
 assert r["level"]=="warn" and r["detail"].startswith("awaiting funding"), "not awaiting funding: %r" % r
+assert "messages wait" in r["detail"], "does not say the messages wait: %r" % r
 assert re.fullmatch(r"[0-9a-f]{64}", r.get("payer","")), "no payer: %r" % r
 assert r["payer"] in r["remedy"] and "209.38.241.182:3240" in r["remedy"] and "200000000" in r["remedy"], "remedy: %r" % r
 print("payer", r["payer"], "holds", r.get("balance"), "native LEZ")' \
@@ -62,5 +65,5 @@ echo "── QML load ──"
 if grep -aiE 'qrc:/.*(error|TypeError|ReferenceError)|QQmlApplicationEngine failed|is not a type' "$D/A.log"; then echo "QML ERRORS ABOVE"; ok=0; else echo "no QML errors"; fi
 [ "$ok" = 1 ] && echo "SUCCESS: on logos.test the node names its RLN payer, awaiting funding." || echo "FAILED — see $D/A.log"
 ui_cleanup
-[ "$ok" = 1 ] && rm -rf "$D"
+[ "$ok" = 1 ] && { [ -n "${KEEP_LOGS:-}" ] && echo "logs kept in $D" || rm -rf "$D"; }
 exit $((1-ok))

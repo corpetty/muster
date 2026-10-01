@@ -391,8 +391,8 @@ Item {
                         }
                     }
                     // one-click presets, no JSON to paste. logos.dev is the default; since
-                    // Testnet v0.3 a node on logos.test starts only with an active RLN
-                    // membership (exo-eb6.3), so the button says so.
+                    // Testnet v0.3 a node on logos.test sends nothing until it has an active
+                    // RLN membership (exo-eb6.3), so the button says so.
                     RowLayout {
                         spacing: Theme.spacing.small
                         LogosButton {
@@ -478,8 +478,8 @@ Item {
                     LogosText {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: qsTr("On logos.test every message carries an RLN proof, so a node starts only with an "
-                                 + "active membership, funded on the registry's own zone. logos.dev runs no RLN.")
+                        text: qsTr("On logos.test every message carries an RLN proof, so a node sends nothing until "
+                                 + "it has an active membership, funded on the registry's own zone. logos.dev runs no RLN.")
                         color: Theme.palette.textTertiary
                         font.pixelSize: Theme.typography.badgeText
                     }
