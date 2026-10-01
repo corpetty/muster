@@ -243,6 +243,14 @@ class MusterUi
     // A token a split may be paid in (exo-5ab), as it describes itself — the composer's "pay
     // in a token" field: lands on tokenInfoJson {asset, token, symbol, decimals} or {error}.
     SLOT(void lookupToken(const QString &chain, const QString &token))
+    // Settle up across assets and chains (exo-a90.17): the room's open shares on every public
+    // rail, by chain and asset — lands on openAssetsJson {assets: [{chain, asset, parts,
+    // symbol, decimals}], payChain}; propose one paid in one asset at a rate per ONE unit of
+    // each other (ratesJson [{chain, asset, rate, source}]) — lands on splitJson {op:
+    // "settle-up", …}; share MY address for a chain (a Bitcoin one: my own wpkh address).
+    SLOT(void loadOpenAssets())
+    SLOT(void proposeSettleUpAcross(const QString &chain, const QString &asset, const QString &ratesJson, const QString &memo))
+    SLOT(void shareAddress(const QString &chain))
     SLOT(void confirmPart(const QString &intentId, const QString &part, const QString &tx))
     // The LEZ multisig (exo-3c9). A LEZ step is SENT at once and completes on a later
     // intents tick once the chain includes it (the module's pump), so none of these waits
@@ -366,6 +374,7 @@ class MusterUi
     PROP(QString btcProposeJson="{}" READONLY)
     PROP(QString splitJson="{}" READONLY)
     PROP(QString tokenInfoJson="{}" READONLY)
+    PROP(QString openAssetsJson="{}" READONLY)
     PROP(QString lezProposeJson="{}" READONLY)
     PROP(QString lezMemberJson="{}" READONLY)
     PROP(QString lezCreateJson="{}" READONLY)
