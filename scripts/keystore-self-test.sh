@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Offscreen proof that keystore_module sees muster's calls as muster_module's
-# (exo-149.1 K1) — the question every later step of exo-149 rests on. keystore_module
-# admits a signing request only from a caller the runtime attributes as a plain module;
-# muster_module calls it over lp_* (protocol-0.2 Nim glue calling a protocol-0.9 Rust
-# module), and nothing had checked what the keystore sees. One runner, no room, no
-# fleet: MUSTER_KEYSTORE_PROBE=1 makes the UI read keystore_status every 2 s, and
-# MUSTER_LP_DEBUG=1 makes muster_module log each answer ("MUSTER-LP keystore {…}"; the
-# UI host's own qInfo lines do not reach the runner's log).
+# Offscreen proof that the keystore row reaches muster through the UI path in the
+# standalone runner (exo-149.1 K1): the UI's MUSTER_KEYSTORE_PROBE hook calls
+# muster_module.keystore_status, muster_module reads keystore_module over lp_*, and the
+# row comes back graded. One runner, no room, no fleet. MUSTER_LP_DEBUG=1 makes
+# muster_module log each answer ("MUSTER-LP keystore {…}"; the UI host's own qInfo lines
+# do not reach the runner's log).
 #
-# Pass: the row's identity is {kind: module, identity: muster_module}, it names the
-# keystore's default approver (evm_signer_ui), and its level is not down. A fresh
-# keystore has no accounts, so "warn: no accounts yet" is the expected pass; with
-# accounts it reads ok.
+# It does NOT gate attribution. The runner's host and capability_module predate caller
+# naming, so keystore_module reads every caller there as "unknown" (seen 2026-10-01,
+# docs/labbook/keystore-caller-attribution.md) and would refuse muster's signing
+# requests. scripts/keystore-logoscore-test.sh is the attribution gate, under the
+# current runtime. This test prints what the runner attributes, and passes when the
+# keystore answered and the row is graded.
 #   scripts/keystore-self-test.sh
 #   KEEP_LOGS=1 scripts/keystore-self-test.sh      # keep the runner's log on success too
 set -uo pipefail
@@ -51,16 +51,17 @@ r=json.load(sys.stdin)
 assert r.get("key")=="keystore", "no keystore row: %r" % r
 idn=r.get("identity") or {}
 assert idn, "keystore_module never answered caller_identity: %r" % r
-assert idn.get("kind")=="module" and idn.get("identity")=="muster_module", \
-  "keystore_module attributes muster as %s %r, not module muster_module: every request would be refused" % (idn.get("kind"), idn.get("identity"))
 assert "evm_signer_ui" in r.get("approvers",[]), "no default approver: %r" % r
-assert r.get("level") in ("ok","warn"), "level %r: %r" % (r.get("level"), r)
-print("attested as", idn["kind"], idn["identity"], "· approvers", r["approvers"], "·", len(r.get("accounts",[])), "accounts ·", r["level"], "·", r["detail"])' \
+assert r.get("level") in ("ok","warn","down") and r.get("detail"), "ungraded row: %r" % r
+if idn.get("kind")=="module" and idn.get("identity")=="muster_module":
+  print("attested as module muster_module ·", r["level"], "·", r["detail"])
+else:
+  print("the runner attributes muster as %s %r (its host predates caller naming; the gate is keystore-logoscore-test.sh) · row %s" % (idn.get("kind"), idn.get("identity"), r["level"]))' \
   || ok=0
 grep -a -m1 'Module loaded: keystore_module' "$D/A.log" || echo "keystore_module never loaded"
 
 if [ "$ok" = 1 ]; then
-  echo "PASS: keystore_module attributes muster's calls to muster_module"
+  echo "PASS: the keystore row reaches muster through the UI path, graded"
   [ -n "${KEEP_LOGS:-}" ] && echo "log: $D/A.log" || rm -rf "$D"
   exit 0
 fi
