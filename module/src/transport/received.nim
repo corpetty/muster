@@ -29,3 +29,10 @@ proc parseMessageReceived*(arr: JsonNode, ev: var ReceivedEvent): bool =
   ev.source = (if withSource: arr[3].getStr() else: "")
   ev.timestamp = ts.getBiggestInt().int64
   true
+
+proc storedPayload*(p: JsonNode, payload: var seq[byte]): bool =
+  ## A stored message's payload, as a store response carries it; false when unreadable.
+  payload = @[]
+  if p == nil or p.kind != JArray: return false
+  for b in p: payload.add byte(b.getInt() and 0xFF)
+  true

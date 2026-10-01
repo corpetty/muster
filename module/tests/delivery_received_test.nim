@@ -39,3 +39,15 @@ block refused:
   doAssert not parseMessageReceived(%*[1, "/t", wire, 5], ev)
   doAssert not parseMessageReceived(%*["0xabc", "/t", wire, "live", "soon"], ev)
   echo "3. too short, not an array, a non-string hash, a non-numeric timestamp: refused OK"
+
+block stored:
+  # a store response's message payload: v0.2.x sent an array of byte values; v0.3.0 sends a
+  # standard-base64 string (seen live: "BNo/Jeesy…", with no vResultPrivate wrapper)
+  var got: seq[byte]
+  doAssert storedPayload(%*[1, 2, 254], got) and got == @[byte 1, 2, 254]
+  doAssert storedPayload(%"AQL+", got) and got == @[byte 1, 2, 254], "v0.3 base64: " & $got
+  doAssert storedPayload(%"BNo/", got) and got == @[byte 0x04, 0xda, 0x3f]
+  doAssert not storedPayload(%"not base64 !!", got)
+  doAssert not storedPayload(%*{"_bytes": "AQL-"}, got)
+  doAssert not storedPayload(newJNull(), got)
+  echo "4. a stored payload: v0.2's byte array and v0.3's base64 string; anything else refused OK"

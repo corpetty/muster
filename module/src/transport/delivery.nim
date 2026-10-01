@@ -294,13 +294,12 @@ method poll*(t: DeliveryTransport) =
         if gLpDebug: stderr.writeLine("MUSTER-LP store message unread: " & ($m)[0 ..< min(($m).len, 400)])
         continue
       let topic = wm["contentTopic"].getStr()
-      if wm["payload"].kind != JArray:
+      var payload: seq[byte]
+      if not storedPayload(wm["payload"], payload):
         if gLpDebug: stderr.writeLine("MUSTER-LP store payload unread (" & $wm["payload"].kind & "): " &
                                       ($wm["payload"])[0 ..< min(($wm["payload"]).len, 200)])
         continue
       if not t.handlers.hasKey(topic): continue
-      var payload = newSeqOfCap[byte](wm["payload"].len)
-      for b in wm["payload"]: payload.add byte(b.getInt() and 0xFF)
       if payload.len == 0: continue
       let msg = IncomingMessage(contentTopic: topic, payload: payload,
                                 messageHash: messageHashOf(topic, payload), timestamp: 0)
