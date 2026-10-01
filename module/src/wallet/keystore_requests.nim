@@ -63,6 +63,9 @@ proc add*(r: var SignRequests, handle, receipt, intentId, account: string,
                                 legs: legs, deadline: deadline, state: ssWaiting)
   r.receipts[handle] = receipt
 
+proc handles*(r: SignRequests): seq[string] =
+  for h in r.items.keys: result.add h
+
 proc receiptOf*(r: SignRequests, handle: string): string = r.receipts.getOrDefault(handle)
 proc stateOf*(r: SignRequests, handle: string): SignState = r.items[handle].state
 proc reasonOf*(r: SignRequests, handle: string): string = r.items[handle].reason

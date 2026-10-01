@@ -88,6 +88,8 @@ import ../src/transport/rln_status     # the node's RLN membership as a connecti
 import ../src/transport/rln_probe      # …read from delivery and the two RLN modules
 import ../src/wallet/keystore_status   # the official EVM keystore as a status row (exo-149.1 K1)
 import ../src/wallet/keystore_probe    # …read from keystore_module over lp_*
+import ../src/wallet/keystore_requests # pending signing requests (exo-149.2 K2)
+import ../src/coordination/keystore_approval # an in-room approval keystore_module signs (K2)
 import ../src/coordination/covers       # whether a settle-up still covers a share, at this clock (exo-a90.16)
 import ../src/coordination/pending_parts  # payments in flight, never forgotten while they might land (exo-a90.23)
 import ../src/coordination/parts_btc    # …and in Bitcoin, from each debtor's own key, confirmed on the creditor's node (exo-d17)
@@ -255,6 +257,10 @@ proc settingsPath(): string =
   if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
   dir / "settings.json"
 
+var gKeystoreBackend = getEnv("MUSTER_KEYSTORE_BACKEND", "off")
+  ## exo-149.2: "interim" lets a key ref naming a keystore_module account approve in-room
+  ## through it, its attestation an opaque digest leg (docs/design/keystore-module-backend.md
+  ## §4). "off" (the default) keeps every approval on muster's own keystore.
 var gSettingsLoaded = false
 var gDeliverySaved = false          ## did the user persist a delivery choice? (else env/default)
 proc loadSettingsFile() =
@@ -270,6 +276,7 @@ proc loadSettingsFile() =
       if j.hasKey("lezRpc"): gLezRpc = j["lezRpc"].getStr()
       if j.hasKey("lezChain"): gLezChain = j["lezChain"].getStr()
       if j.hasKey("lezMultisigProgram"): gLezProgram = j["lezMultisigProgram"].getStr()
+      if j.hasKey("keystoreBackend"): gKeystoreBackend = j["keystoreBackend"].getStr("off")
       if j.hasKey("delivery"):
         gDeliveryConfig = deliveryConfigFor(j["delivery"].getStr())
         gDeliverySaved = true
@@ -290,7 +297,8 @@ proc saveSettingsFile() =
     # like a bitcoin.conf, and never shown back (settings() redacts them)
     writeFile(settingsPath(), $(%*{"rpc": gRpcUrl, "delivery": gDeliveryConfig, "relayer": gRelayer,
                                    "btcRpc": gBtcRpc, "lezRpc": gLezRpc, "lezChain": gLezChain,
-                                   "lezMultisigProgram": gLezProgram}))
+                                   "lezMultisigProgram": gLezProgram,
+                                   "keystoreBackend": gKeystoreBackend}))
   except CatchableError: discard
 
 proc toSig65(b: seq[byte]): Signature65 =
@@ -1762,6 +1770,44 @@ proc initialsOf(name: string): string =
   if words.len >= 2: return ($words[0][0] & $words[1][0]).toUpperAscii()
   n[0 ..< min(2, n.len)].toUpperAscii()
 
+# ── approvals signed by keystore_module (exo-149.2 K2) ───────────────────────────
+var gKeystoreProbe: KeystoreProbe = nil
+var gKsReq: SignRequests                        ## pending requests: receipts never leave
+var gKsPlans: Table[string, KeystoreApproval]   ## handle → what the human is approving
+var gKsOutcome: Table[string, string]           ## handle → what publishing it returned
+var gKsEndedAt: Table[string, float]            ## handle → when it reached a terminal state
+const KsDeadlineS = 600.0                       ## Basecamp's intent backstop is 10 min
+const KsKeepS = 120.0                           ## a finished request stays in view this long
+
+proc keystoreProbe(): KeystoreProbe =
+  if gKeystoreProbe == nil: gKeystoreProbe = newKeystoreProbe()
+  gKeystoreProbe
+
+proc isKeystoreAccount(keyRef: string): bool =
+  ## A key ref muster's own keystore does not hold, which keystore_module last listed.
+  gKeystoreBackend == "interim" and keyRef.len > 0 and
+    not moduleKeystore().hasKey(keyRef) and keyRef.toLowerAscii() in keystoreProbe().lastAccounts()
+
+proc keystoreContribute(intentId, account: string): string =
+  ## Ask keystore_module for a human's approval of `intentId` with `account`. Returns at
+  ## once ("awaiting-approval"); keystorePump publishes when the human has approved.
+  let req = planKeystoreApproval(gSession, driverFor, intentId, account, uint64(epochTime()))
+  if req.refusal.len > 0: return req.refusal
+  if not gKsReq.canRequest(): return "keystore-busy"
+  let ans = keystoreProbe().requestApproval($req.intent)
+  if ans == nil: return "keystore-unreachable"
+  if not ans{"ok"}.getBool(false): return "keystore-refused: " & ans{"error"}.getStr("refused")
+  let h = ans{"handle"}.getStr()
+  let rc = ans{"receipt"}.getStr()
+  try:
+    gKsReq.add(h, rc, intentId, account, req.legs, epochTime() + KsDeadlineS)
+  except SignRequestError:
+    keystoreProbe().fireAndForget("cancel_approval", h, rc)
+    return "keystore-busy"
+  gKsPlans[h] = req
+  if gLpDebug: stderr.writeLine("MUSTER-LP keystore-request " & $(%*{"intentId": intentId, "handle": h}))
+  "awaiting-approval"
+
 proc noteApproved(intentId, r: string): string =
   ## Remember an in-app approval that went through, for "approved by me" when the log
   ## alone cannot say (a FROST-group or LEZ-vote approval is named by a per-ceremony or
@@ -1772,6 +1818,57 @@ proc noteApproved(intentId, r: string): string =
      "\"error\"" notin r:
     gApprovedHere.incl intentId
   r
+
+proc keystorePump() =
+  ## On the intents tick: read where each keystore request stands; once a human approved,
+  ## fetch, check (each signature recovers to the account over muster's own hash) and
+  ## publish through the same gates as an in-app approval, then ack. Cancels what passed
+  ## its deadline; forgets what finished a while ago.
+  if gKeystoreProbe == nil or gSession == nil or gKsPlans.len == 0: return
+  let p = keystoreProbe()
+  let now = epochTime()
+  for rep in p.drainOps():
+    if rep.handle notin gKsPlans: continue
+    if rep.op == "status":
+      gKsReq.onStatus(rep.handle, rep.reply)
+    elif rep.op == "fetch" and rep.handle notin gKsOutcome:
+      let got = gKsReq.onFetched(rep.handle, rep.reply)
+      if got.ok:
+        let id = gKsReq.intentOf(rep.handle)
+        let r = noteApproved(id, publishKeystoreApproval(gSession, driverFor, id, gKsPlans[rep.handle],
+                                                         got.sigs, uint64(now)))
+        gKsOutcome[rep.handle] = r
+        p.fireAndForget("ack_result", rep.handle, gKsReq.receiptOf(rep.handle))
+        if gLpDebug: stderr.writeLine("MUSTER-LP keystore-published " &
+                                      $(%*{"intentId": id, "handle": rep.handle, "result": r}))
+  for h in gKsReq.overdue(now): p.fireAndForget("cancel_approval", h, gKsReq.receiptOf(h))
+  for h in gKsReq.due(now):
+    p.fireOp("status", h, gKsReq.receiptOf(h))
+    gKsReq.markPolled(h, now)
+  for h in gKsReq.handles():
+    let st = gKsReq.stateOf(h)
+    if st == ssApproved and h notin gKsOutcome: p.fireOp("fetch", h, gKsReq.receiptOf(h))
+    elif st != ssWaiting and st != ssShown and (st != ssApproved or h in gKsOutcome):
+      if h notin gKsEndedAt: gKsEndedAt[h] = now
+      elif now - gKsEndedAt[h] > KsKeepS:
+        gKsReq.remove(h)
+        gKsPlans.del h
+        gKsOutcome.del h
+        gKsEndedAt.del h
+        dropIo(h)
+
+proc musterKeystore_requests(): string =
+  ## The keystore_module signing requests this member has open or just finished: never
+  ## a receipt. The UI raises evm.signing.approve {handle} from here (K3).
+  keystorePump()
+  var rows = newJArray()
+  for r in gKsReq.view():
+    var row = r
+    let h = r["handle"].getStr()
+    if h in gKsOutcome: row["published"] = %gKsOutcome[h]
+    rows.add row
+  result = $(%*{"backend": gKeystoreBackend, "requests": rows})
+  if gLpDebug: stderr.writeLine("MUSTER-LP keystore-requests " & result)
 
 proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: string): string =
   ## Add a contribution (in-app signed when `signatureHex` is empty, else pasted). The
@@ -1796,6 +1893,11 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
       if r in ["collecting", "executable"] or r.startsWith("waiting") or r == "already-contributed":
         if intentId notin gFrostAuto: gFrostAuto.add intentId
       return noteApproved(intentId, r)
+  # exo-149.2: a key ref naming a keystore_module account is approved by a human there;
+  # nothing is published until they have (keystorePump). Not an approval yet, so it does
+  # not pass through noteApproved.
+  if signatureHex.len == 0 and isKeystoreAccount(keyRef):
+    return keystoreContribute(intentId, keyRef.toLowerAscii())
   let r = liveContribute(gSession, moduleKeystore(), driverFor, intentId, signatureHex, keyRef,
                          intentLinkContext(intentId), uint64(epochTime()))
   if signatureHex.len == 0: noteApproved(intentId, r) else: r
@@ -1811,6 +1913,7 @@ proc musterCoordinateIntents(): string =
   lezPump()                            # complete any LEZ step the chain has since included
   frostPump()                          # advance joined FROST ceremonies and round 2
   splitPump()                          # report my landed payments; confirm what paid me (exo-a90)
+  keystorePump()                       # publish what a human approved in keystore_module (exo-149.2)
   let events = gSession.roomEvents()
   let myEnc = moduleKeystore().encIdentity()
   let myEncHex = toHex(myEnc.toBytes()).toLowerAscii()
@@ -2379,7 +2482,6 @@ proc musterRln_status(): string =
   if gLpDebug: stderr.writeLine("MUSTER-LP rln " & result)
 
 # ── the official EVM keystore (exo-149.1 K1) ─────────────────────────────────────
-var gKeystoreProbe: KeystoreProbe = nil
 
 proc musterKeystore_status(): string =
   ## keystore_module as a status row: does it attribute our calls to muster_module, is
@@ -3477,6 +3579,7 @@ proc musterSettings(): string =
     "btcRpc": redactUserinfo(gBtcRpc),
     "lez": {"rpc": gLezRpc, "chain": gLezChain, "multisigProgram": gLezProgram},
     "delivery": gDeliveryConfig,
+    "keystoreBackend": gKeystoreBackend,
     "environment": "eip155:" & $gDevSafe.chainId.int,   # the wallet's dev chain (CAIP-2)
     "identity": {"address": toHex(ks.address()),
                  "ed25519": toHex(enc.ed), "x25519": toHex(enc.x),
@@ -3522,6 +3625,13 @@ proc musterSetSetting(key, value: string): string =
     if v.len != 64 or not v.allCharsInSet(HexDigits):
       return $(%*{"error": "lez-multisig-program is the program's image id: 64 hex characters"})
     gLezProgram = v
+  of "keystore-backend":
+    # exo-149.2: whether a keystore_module account may approve in-room. "interim" carries
+    # muster's attestation as an opaque digest leg the signer cannot read (the card says
+    # so) until typed forms land (exo-149.6).
+    if value notin ["off", "interim"]:
+      return $(%*{"error": "keystore-backend is \"off\" or \"interim\""})
+    gKeystoreBackend = value
   of "delivery":
     # Accept a fleet short-name ("logos.dev", "logos.test"), a full createNode JSON, or "{}"/"" to
     # fall back to the default fleet — and remember that the user chose, so it wins
