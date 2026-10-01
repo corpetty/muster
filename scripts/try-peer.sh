@@ -13,9 +13,10 @@
 #   --lez     use the real LEZ wallet (lez_core) on the public testnet, kept in
 #             .run/try/<peer>-lez. clean-peer and --fresh leave it alone, so a funded
 #             wallet survives. Without it, LEZ runs on the in-process fake chain.
-#   --lez-fund  --lez, and fund that wallet's private balance as a person would: one
-#             claim from the testnet faucet into its public account, then a shield of
-#             all of it to its own key node (a proof of minutes). Watch for
+#   --lez-fund  --lez, and fund that wallet's private balance as a person would: it logs
+#             "LEZFUND awaiting funds at <account>" and waits for native LEZ to arrive
+#             there from someone who holds some (LEZ v0.3 has no faucet, exo-eb6.4), then
+#             shields all of it to its own key node (a proof of minutes). Watch for
 #             "LEZFUND funded" in the log. Once per wallet is enough.
 #
 # Seeds: anvil key 0/1/2 as the peer's own key (a Safe owner; its Bitcoin key pays from

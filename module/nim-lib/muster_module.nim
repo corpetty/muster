@@ -3240,23 +3240,24 @@ proc moduleWallet(): Wallet =
       if getEnv("MUSTER_LEZ_REAL").len > 0:
         try:
           let dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
-          LezCore(newLpLezCore(dir))
+          # its wallet on this instance's zone (the lez-rpc setting), as the multisig and
+          # FROST paths are; lez_core's own default is the public testnet
+          LezCore(newLpLezCore(dir, sequencer = gLezRpc))
         except CatchableError as e:
           stderr.writeLine("MUSTER-LEZ: real lez_core unavailable, using fake — " & e.msg)
           LezCore(newFakeLezCore())
       else:
         LezCore(newFakeLezCore())
     gLez = newLezAdapter(lezCore)
-    # Fund the DEMO (fake) accounts eagerly so a send is demonstrable. For the REAL
-    # core, do NOT create/register/fund accounts here: those hit the network (and the
-    # pinata PoW) and would block this first wallet call on the module thread. The real
+    # Fund the DEMO (fake) accounts at its genesis so a send is demonstrable: the fake
+    # chain funds them as a zone's genesis would, never through a faucet (LEZ v0.3 has
+    # none, exo-eb6.4). For the REAL core, do NOT create accounts here: that hits the
+    # network and would block this first wallet call on the module thread. The real
     # accounts are created lazily on the first LEZ query (a bounded loading delay at
     # panel-open), and a proving transfer already runs async — so nothing freezes.
-    if getEnv("MUSTER_LEZ_REAL").len == 0:
+    if lezCore of FakeLezCore:
       for acc in gLez.accounts(ks):
-        if acc.form == afPublic:
-          try: gLez.claimFaucet("EfQhKQAkX2FJiwNii2WFQsGndjvF1Mzd7RuVe7QdPLw7", acc)
-          except CatchableError: discard
+        if acc.form == afPublic: FakeLezCore(lezCore).fund(acc.id, "1000000000")
     gWallet.register(gLez)
   gWallet
 
@@ -3380,16 +3381,16 @@ proc musterWalletSend(chain, fromId, to, assetSymbol, raw: string): string =
   result = musterWalletSendImpl(chain, fromId, to, assetSymbol, raw)
   if gLpDebug: stderr.writeLine("MUSTER-LP wallet_send " & chain & " " & raw & " " & result)
 
-proc musterWalletLezSetup(pinataId: string): string =
+proc musterWalletLezSetup(): string =
   ## Headless LEZ provisioning FALLBACK (exo-44b, the no-broker path): ensure a public
-  ## LEZ account exists and — with a pinata challenge id — fund it from the faucet,
-  ## directly over lez_core (core-to-core). Preferred path stays the LEZ Wallet App
-  ## hand-off when the broker is available; this is what keeps muster from being
-  ## hard-blocked when it is not. A faucet failure raises, never a false receipt.
+  ## LEZ account exists, directly over lez_core (core-to-core), and say whether it holds
+  ## native LEZ. It funds nothing: LEZ v0.3 has no faucet (exo-eb6.4). Preferred path
+  ## stays the LEZ Wallet App hand-off when the broker is available; this is what keeps
+  ## muster from being hard-blocked when it is not.
   discard moduleWallet()                 # ensures the wallet + gLez are initialized
   if gLez == nil: return $(%*{"error": "LEZ chain unavailable"})
   try:
-    let (account, state, detail) = gLez.provision(moduleKeystore(), pinataId)
+    let (account, state, detail) = gLez.provision(moduleKeystore())
     result = $(%*{"account": account, "state": state, "detail": detail})
   except CatchableError as e:
     result = $(%*{"error": e.msg})

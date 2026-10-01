@@ -33,8 +33,9 @@
     logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.3.0";
     # The LEZ wallet (P-L3): muster_module calls lez_core over lp_* to send assets on
     # the zone, so it must be in the standalone runner's module set for
-    # lp_client_create("lez_core") to resolve. Same repo/pin the demo consumes (549cf115).
-    lez_core.url = "github:logos-blockchain/logos-execution-zone-module/549cf1159f20fa0c3fe8e88a5ab71de68a5aa34b";
+    # lp_client_create("lez_core") to resolve. lez_core 0.5.0, LEZ 0.3.0 (b89e5d2,
+    # exo-eb6.4); the demo/ speed build keeps its own older pin.
+    lez_core.url = "github:logos-blockchain/logos-execution-zone-module/b89e5d24df5babc2490d2e5d47756fb1f33435dd";
     # The RLN modules a delivery v0.3 node on logos.test needs (exo-eb6.3 R1). The packages
     # are delivery v0.3.0's own re-exports, so their versions are the ones it was built
     # against; this pins only their LIDL contracts, at the same rev (logos-rln-modules

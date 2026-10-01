@@ -2,9 +2,10 @@
 # The private split, end to end on the LEZ testnet (exo-a90.9 / exo-14d) — no GUI, no
 # clicks. Two offscreen runners on the Logos fleet, each with its OWN real LEZ wallet
 # (MUSTER_LEZ_REAL, lez_core against testnet.lez.logos.co):
-#   B funds its private balance the way a person would: the pinata faucet into its public
-#     account, then a shield of what arrived to its OWN key node (MUSTER_AUTOLEZFUND) —
-#     a proof of minutes; the note lands at an account B's scan discovers;
+#   B funds its private balance the way a person would: native LEZ arrives at its public
+#     account from someone who holds some, then a shield of what arrived to its OWN key
+#     node (MUSTER_AUTOLEZFUND) — a proof of minutes; the note lands at an account B's
+#     scan discovers;
 #   A (the founder) admits B and proposes a private split of LEZ_SPLIT_TOTAL base units,
 #     paid at A's shielded key node (MUSTER_AUTOSPLIT + MUSTER_AUTOSPLIT_CHAIN);
 #   B agrees, then — once funded — pays its share shielded → shielded from the note that
@@ -12,22 +13,26 @@
 #   A's own scan finds a note of exactly B's share at its key node and confirms it.
 # Passes when both instances log the split final and A confirmed B's part by a note hash.
 #
+# NOT RUNNABLE AS IS on the v0.3 testnet (exo-eb6.4): LEZ v0.3.0 removed the faucet, so B
+# waits at "LEZFUND awaiting funds at <account>" until someone who holds native LEZ sends
+# to it, and muster's private rails are unverified against v0.3's 256-bit private ids
+# (exo-357). It last passed on the v0.2.4 testnet, 2026-09-28.
+#
 # What the chain learns: that private transfers happened — no payer, payee or amount. The
 # run prints B's payment transaction so it can be looked up on the explorer.
 #
 #   make build && scripts/split-lez-testnet.sh
-#     LEZ_SPLIT_TOTAL   the bill, base units (default 100 — B owes about half; the faucet
-#                       pays ~150 per claim)
+#     LEZ_SPLIT_TOTAL   the bill, base units (default 100 — B owes about half)
 #     LEZ_SPLIT_STATE   where the two LEZ wallets live between runs (default .run/lez-split):
 #                       kept, so a re-run skips the scan from block 0 and B's funding stays
-#     LEZ_SPLIT_TIMEOUT seconds to wait (default 2700: a faucet claim, two proofs, two scans)
+#     LEZ_SPLIT_TIMEOUT seconds to wait (default 2700: B's funding, two proofs, two scans)
 #     LEZ_SPLIT_FUND=0  skip B's funding: re-run over wallets a previous run funded (B pays
 #                       from the change its shielded note kept) — one proof, and the run
 #                       relaunches over wallets whose accounts are labelled (exo-884)
 #     KEEP_LOGS=1       keep the runners' logs on success too
 #
-# This spends testnet LEZ from the public pinata faucet and sends two private transfers on
-# the public testnet. Cleanup kills only this script's own processes (each runner's session).
+# This spends testnet LEZ that B was funded with and sends two private transfers on the
+# public testnet. Cleanup kills only this script's own processes (each runner's session).
 set -uo pipefail
 # One compound command: bash reads it whole before running any of it, so editing this file
 # while a run is under way cannot change the running copy (a run died that way, 2026-09-28).
