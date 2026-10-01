@@ -6,8 +6,8 @@
 ## Wire contract matched to what delivery expects (from the chat module's own
 ## delivery bridge): `send(contentTopic: tstr, payload: bstr)`,
 ## `subscribe(contentTopic: tstr)`, and the `messageReceived(messageHash,
-## contentTopic, payload, timestamp)` event; `bstr` rides the tagged
-## {"_bytes":"<base64url>"} form.
+## contentTopic, payload, [source,] timestamp)` event (v0.3.0 added `source`,
+## received.nim); `bstr` rides the tagged {"_bytes":"<base64url>"} form.
 ##
 ## NOT compiled by pure-Nim `nim r` — it needs logos-protocol linked (the plugin
 ## build provides it). Live two-instance verification, and hardening the event
@@ -20,6 +20,7 @@ import logos_sdk/ffi        # lp_* C-ABI bindings (was ./lp_ffi, now the shared 
 import logos_sdk/bytes      # {"_bytes":<b64url>} codec
 import ./inbound_queue
 import ./store_catchup    # which store query next: a topic's whole history, then the window (exo-aaf)
+import ./received         # a messageReceived event, v0.2 or v0.3 (exo-eb6.1)
 
 # Transport diagnostics — off unless MUSTER_LP_DEBUG is set. When the delivery
 # node boot or cross-host relay misbehaves, this surfaces the lp createNode/start
@@ -235,14 +236,14 @@ method poll*(t: DeliveryTransport) =
     var arr: JsonNode
     try: arr = parseJson(bytesToStr(raw))
     except CatchableError: continue
-    if arr.kind != JArray or arr.len < 4: continue
-    let topic = arr[1].getStr()
-    var payload: seq[byte]
-    if arr[2].kind == JObject and arr[2].hasKey("_bytes"):
-      payload = b64urlDecode(arr[2]["_bytes"].getStr())
+    var ev: ReceivedEvent                # delivery v0.2 or v0.3 (source before timestamp)
+    if not parseMessageReceived(arr, ev): continue
+    let topic = ev.contentTopic
+    let payload = ev.payload
+    if gLpDebug and ev.source.len > 0: stderr.writeLine("MUSTER-LP inbound source=" & ev.source)
     let msg = IncomingMessage(contentTopic: topic, payload: payload,
                               messageHash: messageHashOf(topic, payload),
-                              timestamp: arr[3].getBiggestInt().int64)
+                              timestamp: ev.timestamp)
     if t.handlers.hasKey(topic):
       for h in t.handlers[topic]:
         if h != nil: h(msg)
@@ -279,9 +280,14 @@ method poll*(t: DeliveryTransport) =
       var wm = m["message"]
       if wm.kind == JObject and wm.hasKey("vResultPrivate"): wm = wm["vResultPrivate"]
       if wm.kind != JObject or not wm.hasKey("contentTopic") or not wm.hasKey("payload"):
+        if gLpDebug: stderr.writeLine("MUSTER-LP store message unread: " & ($m)[0 ..< min(($m).len, 400)])
         continue
       let topic = wm["contentTopic"].getStr()
-      if wm["payload"].kind != JArray or not t.handlers.hasKey(topic): continue
+      if wm["payload"].kind != JArray:
+        if gLpDebug: stderr.writeLine("MUSTER-LP store payload unread (" & $wm["payload"].kind & "): " &
+                                      ($wm["payload"])[0 ..< min(($wm["payload"]).len, 200)])
+        continue
+      if not t.handlers.hasKey(topic): continue
       var payload = newSeqOfCap[byte](wm["payload"].len)
       for b in wm["payload"]: payload.add byte(b.getInt() and 0xFF)
       if payload.len == 0: continue
