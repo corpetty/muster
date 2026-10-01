@@ -34,7 +34,9 @@ import ../crypto/keystore
 import ../lez/multisig
 import ../lez/multisig_chain
 import ../lez/tx as leztx
+import ../lez/account_view
 import ./types
+export account_view
 
 # ── the sequencer ─────────────────────────────────────────────────────────────
 type LezRpc* = ref object
@@ -59,12 +61,6 @@ proc call(r: LezRpc, meth: string, params: JsonNode): JsonNode =
       r.client = nil
     raise newException(WalletError, "LEZ " & meth & " at " & r.url & ": " & e.msg)
 
-proc u128Of(n: JsonNode): UInt128 =
-  case n.kind
-  of JInt: u128(n.getBiggestInt())
-  of JString: parse(n.getStr(), UInt128)
-  else: raise newException(WalletError, "not a u128: " & $n)
-
 proc wordsToBytes(n: JsonNode): seq[byte] =
   ## A ProgramId as the chain sends it ([u32; 8]) → its little-endian bytes.
   for w in n.getElems():
@@ -73,21 +69,11 @@ proc wordsToBytes(n: JsonNode): seq[byte] =
 
 proc lastBlockId*(r: LezRpc): uint64 = uint64(r.call("getLastBlockId", newJArray()).getBiggestInt())
 
-type LezAccountState* = object
-  owner*: seq[byte]               ## the owning program ([] = none)
-  balance*: UInt128
-  data*: seq[byte]
-  nonce*: UInt128
-
 proc getAccount*(r: LezRpc, id: seq[byte]): LezAccountState =
+  ## Either line's account (lez/account_view.nim): v0.2.4's owner + data, v0.3.0's shards.
   let j = r.call("getAccount", %*[accountIdToBase58(id)])
-  let owner = wordsToBytes(j["program_owner"])
-  var any = false
-  for b in owner: any = any or b != 0
-  if any: result.owner = owner
-  result.balance = u128Of(j["balance"])
-  for b in j["data"].getElems(): result.data.add byte(b.getInt())
-  result.nonce = u128Of(j["nonce"])
+  try: accountStateOf(j)
+  except ValueError as e: raise newException(WalletError, "LEZ getAccount: " & e.msg)
 
 proc sendTransaction*(r: LezRpc, leeTx: seq[byte]): string =
   ## → the transaction hash (hex) the sequencer accepted into its mempool; not yet landed.

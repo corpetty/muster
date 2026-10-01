@@ -20,6 +20,7 @@ import stint
 import ../src/bitcoin/keys
 import ../src/bitcoin/tx             # toHex / hexToBytes
 import ../src/lez/tx as leztx
+import ../src/lez/account_view
 
 let v = parseJson(readFile(currentSourcePath.parentDir / "vectors" / "lez-tx-v030" / "vectors.json"))
 proc hb(s: string): seq[byte] = hexToBytes(s)
@@ -85,5 +86,25 @@ doAssert d.payer == ids[0] and d.tip == 0
 doAssert $d.gasLimit == v["default_gas_limit"].getStr() and $d.maxFee == v["default_max_fee"].getStr()
 doAssert $d.maxFee == "134400000", "what the LEZ CLI declared on the local v0.3 zone"
 echo "5. the default fee is the LEZ wallet's: gas 2_000_000, tip 0, max_fee 134_400_000 OK"
+
+# ── 6. an account as the v0.3 sequencer reports it ───────────────────────────
+block:
+  # getAccount on a local v0.3.0 zone (2026-10-01), the funder after sending 1000 and
+  # paying a 2_968 fee (well under its 134_400_000 cap): a nonce and the account's program
+  # shards; the native balance is the 16-byte LE shard of the native program (account 0,
+  # "1111…" in base58), and an account with no shards holds nothing
+  let v3 = parseJson("""{"nonce":1,"data":{"shards":{"11111111111111111111111111111111":[128,112,198,164,126,141,3,0,0,0,0,0,0,0,0,0]}}}""")
+  let a = accountStateOf(v3)
+  doAssert $a.nonce == "1" and $a.balance == "999999999996032"
+  doAssert a.shards.len == 1 and a.shards[0].program == NativeTokenProgram
+  doAssert a.owner.len == 0 and a.data.len == 0, "v0.3 has no single owner or data"
+  doAssert not a.fresh
+  let empty = accountStateOf(parseJson("""{"nonce":0,"data":{"shards":{}}}"""))
+  doAssert $empty.balance == "0" and empty.fresh
+  # the v0.2.4 shape still reads as before
+  let v2 = accountStateOf(parseJson("""{"program_owner":[1,0,0,0,0,0,0,0],"balance":5,"data":[7,8],"nonce":"3"}"""))
+  doAssert v2.owner.len == 32 and v2.owner[0] == 1 and $v2.balance == "5" and v2.data == @[7'u8, 8] and $v2.nonce == "3"
+  doAssert not v2.fresh
+echo "6. getAccount on v0.3: nonce + program shards, the native balance from the native shard; v0.2.4 still reads OK"
 
 echo "lez_tx_v030_test: LEZ v0.3.0 public transactions, byte for byte against LEZ's own types — all OK"
