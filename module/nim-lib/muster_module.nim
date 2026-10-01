@@ -215,6 +215,11 @@ var gLezProgram = getEnv("MUSTER_LEZ_MULTISIG_PROGRAM", LezDeployedMultisig)
   ## who sends a settling transaction and pays its fee (exo-a50.1.5): "self" = this
   ## instance's own key, signed locally and sent raw; "unlocked:<0x…>" = an account the
   ## node itself unlocks (anvil's dev accounts) via eth_sendTransaction.
+const DefaultFleet = "logos.dev"
+  ## The fleet a fresh instance joins (exo-eb6.2). Since Testnet v0.3 (delivery
+  ## v0.3.0) a node on logos.test starts only with the RLN modules loaded and an
+  ## active, funded RLN membership (exo-eb6.3); logos.dev (cluster 3) runs no RLN.
+
 proc deliveryPreset(name: string): string =
   ## Embedded fleet createNode configs, so delivery WORKS out of the box (invariant 8
   ## says the infra is user-configurable, not that it must start empty). Keep in sync
@@ -222,6 +227,8 @@ proc deliveryPreset(name: string): string =
   ## repaste here if the fleet's entry nodes rotate. A settings value may be one of
   ## these short names or a full createNode JSON.
   case name
+  of "logos.dev":
+    """{"mode":"Core","preset":"logos.dev","entryNodes":["/dns4/delivery-01.ac-cn-hongkong-c.logos.dev.status.im/tcp/30303/p2p/16Uiu2HAm8YokiNun9BkeA1ZRmhLbtNUvcwRr64F69tYj9fkGyuEP","/dns4/delivery-01.do-ams3.logos.dev.status.im/tcp/30303/p2p/16Uiu2HAmTUbnxLGT9JvV6mu9oPyDjqHK4Phs1VDJNUgESgNSkuby","/dns4/delivery-01.gc-us-central1-a.logos.dev.status.im/tcp/30303/p2p/16Uiu2HAm4S1JYkuzDKLKQvwgAhZKs9otxXqt8SCGtB4hoJP1S397","/dns4/delivery-02.ac-cn-hongkong-c.logos.dev.status.im/tcp/30303/p2p/16Uiu2HAkvwhGHKNry6LACrB8TmEFoCJKEX29XR5dDUzk3UT3UNSE","/dns4/delivery-02.do-ams3.logos.dev.status.im/tcp/30303/p2p/16Uiu2HAmMK7PYygBtKUQ8EHp7EfaD3bCEsJrkFooK8RQ2PVpJprH","/dns4/delivery-02.gc-us-central1-a.logos.dev.status.im/tcp/30303/p2p/16Uiu2HAm8Y9kgBNtjxvCnf1X6gnZJW5EGE4UwwCL3CCm55TwqBiH"]}"""
   of "logos.test":
     """{"mode":"Core","preset":"logos.test","entryNodes":["/dns4/node-01.ac-cn-hongkong-c.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmL3oU95jh1BZHozn3uNhx8HEneirgr8M1jEAapzXGDqRF","/dns4/node-01.do-ams3.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmQ9X2xDfPG3uL77V9piYDhjq14JhKCtcmNYsTMKNqrKCj","/dns4/node-01.gc-us-central1-a.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmF8WtwGPmeGHgYAX2277jHgy5cW9F7zsB8EqUjBZQAZQ3","/dns4/node-02.ac-cn-hongkong-c.logos.test.status.im/tcp/30303/p2p/16Uiu2HAm28CoBZjpyxsanC8tQpbvZ7bZJnVYuB1EgFzb571qpWsV","/dns4/node-02.do-ams3.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmB8NYprrfQrgWVzsJtYWkfjsXbmJEGNMG6othXsQ53BwG","/dns4/node-02.gc-us-central1-a.logos.test.status.im/tcp/30303/p2p/16Uiu2HAmUuXhUW9bdJpzN1kfDziFiUZo4bszTk66cvr7uuyCHXR7"]}"""
   else: ""
@@ -230,13 +237,12 @@ proc deliveryConfigFor(v: string): string =
   ## Resolve a delivery setting: a short fleet name → its embedded preset; empty or the
   ## inert "{}" → the default fleet (so a fresh instance connects instead of failing to
   ## autoshard); anything else → verbatim (a hand-written createNode JSON).
-  if v.len == 0 or v == "{}": return deliveryPreset("logos.test")
+  if v.len == 0 or v == "{}": return deliveryPreset(DefaultFleet)
   let p = deliveryPreset(v)
   if p.len > 0: return p
   v
 
-var gDeliveryConfig = deliveryPreset("logos.test")   ## default: the logos.test fleet, so
-                                                     ## the room works with no env/flags
+var gDeliveryConfig = deliveryPreset(DefaultFleet)   ## the room works with no env/flags
 
 # Persist the infra settings beside the keystore, so a user's chosen endpoints
 # survive a restart. Best-effort — a missing/malformed file leaves the defaults.
@@ -3473,7 +3479,7 @@ proc musterSetSetting(key, value: string): string =
       return $(%*{"error": "lez-multisig-program is the program's image id: 64 hex characters"})
     gLezProgram = v
   of "delivery":
-    # Accept a fleet short-name ("logos.test"), a full createNode JSON, or "{}"/"" to
+    # Accept a fleet short-name ("logos.dev", "logos.test"), a full createNode JSON, or "{}"/"" to
     # fall back to the default fleet — and remember that the user chose, so it wins
     # over the env on the next launch.
     gDeliveryConfig = deliveryConfigFor(value)

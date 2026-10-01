@@ -12,7 +12,7 @@ cd "$(dirname "$0")/.."
 . scripts/lib/ui-build.sh
 ui_require_runner
 trap ui_cleanup EXIT
-CFG=$(python3 -c 'import json;print(json.dumps(json.load(open("infra/fleets/logos.test.json"))["delivery_createNode_config"]))')
+CFG=$(ui_fleet_config)
 TOPIC="/muster/1/cardtest-$(date +%s)/proto"
 D=$(mktemp -d)
 EFFECT='{"to":"0x70997970C51812dc3A010C7d01b50e0d17dc79C8","value":1,"nonce":0}'

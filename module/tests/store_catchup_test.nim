@@ -146,4 +146,93 @@ block:
   doAssert d.caughtUp(Room), "an empty Opt ends the history"
   echo "9. the cursor as liblogosdelivery sends it (an Opt): followed, and an empty one ends it OK"
 
+# ── 10. a store peer that cannot be dialled is backed off (exo-eb6.1) ─────────────
+# Delivery v0.3.0 answers a dial failure as {"error": "…PEER_DIAL_FAILURE: <peer id>",
+# "success": false} — no requestId, so nothing above saw it. Seen live on Testnet v0.3's
+# first day, with five of a fleet's six nodes unreachable: the window spent five of every
+# six queries on dead peers, and a page in flight on one waited out the full timeout.
+block:
+  const B = "/dns4/b/tcp/30303/p2p/B"
+  var d = newStoreCatchup(Peers)
+  var t = 0'i64
+  let first = d.nextQuery(Room, t, Lookback)
+  d.onResponse(page(first.req, ""))            # read whole: windowed from here
+  t += 1000
+  d.onPeerFailure("B", t)
+  var seen: seq[string]
+  for i in 0 ..< 6:
+    t += 500
+    seen.add d.nextQuery(Room, t, Lookback).peer
+  doAssert B notin seen, "a peer that failed to dial is skipped while backed off: " & $seen
+  t += StoreBackoffCapMs
+  seen = @[]
+  var toB: JsonNode
+  for i in 0 ..< 3:
+    t += 500
+    let q = d.nextQuery(Room, t, Lookback)
+    seen.add q.peer
+    if q.peer == B: toB = q.req
+  doAssert B in seen, "after its backoff the peer is asked again: " & $seen
+  # its answer clears it: one more failure backs it off only the base time again
+  d.onResponse(page(toB, ""))
+  d.onPeerFailure("B", t)
+  t += StoreBackoffBaseMs + 1
+  seen = @[]
+  for i in 0 ..< 3:
+    t += 100
+    seen.add d.nextQuery(Room, t, Lookback).peer
+  doAssert B in seen, "an answer resets the backoff to its base: " & $seen
+  # every peer down: still asks one of them, never stalls
+  for id in ["A", "B", "C"]: d.onPeerFailure(id, t)
+  let anyQ = d.nextQuery(Room, t + 1, Lookback)
+  doAssert anyQ.fire and anyQ.peer in Peers, "all backed off: the soonest back is asked"
+  # a page in flight on a peer that fails to dial is asked again at once, of another peer
+  var e = newStoreCatchup(Peers)
+  let f1 = e.nextQuery(Other, 0, Lookback)
+  doAssert f1.deep
+  e.onPeerFailure(f1.peer.split("/p2p/")[1], 500)
+  let f2 = e.nextQuery(Other, 1000, Lookback)
+  doAssert f2.fire and f2.deep and f2.peer != f1.peer, "re-asked at once, not after " & $PageTimeoutMs & " ms"
+  # a peer id it never queried changes nothing
+  e.onPeerFailure("Z", 1500)
+  # the peer id, read from delivery v0.3.0's failure envelope; anything else names none
+  doAssert dialFailurePeer(%*{"error": "StoreRequest failed store query: storeQuery failed: PEER_DIAL_FAILURE: 16Uiu2HAmTUbnx", "success": false, "value": nil}) == "16Uiu2HAmTUbnx"
+  doAssert dialFailurePeer(%*{"error": "storeQuery failed: TIMEOUT", "success": false}) == ""
+  doAssert dialFailurePeer(%*{"error": nil, "success": true, "value": "{}"}) == ""
+  doAssert dialFailurePeer(newJNull()) == ""
+  echo "10. a store peer that cannot be dialled is backed off, skipped, and cleared by an answer OK"
+
+# ── 11. once a topic is read whole, its window is asked only every so often (exo-eb6.1) ─
+# On delivery v0.3.0 live receive works and the module backfills a restarted node itself,
+# so the window is a safety net, not the receive path it was on v0.2. Seen live: with five
+# of six store peers unreachable, a store query per topic per second held the delivery
+# module on dead dials, sends queued behind them, and the membership handshake failed one
+# run in three; with the window asked rarely, it passed four in four. History is still
+# paged as fast as answers come: a joiner rebuilds the room from it.
+block:
+  var d = newStoreCatchup(Peers)
+  var t = 0'i64
+  const Every = 15_000'i64
+  let h1 = d.nextQuery(Room, t, Lookback, windowEveryMs = Every)
+  doAssert h1.fire and h1.deep
+  d.onResponse(page(h1.req, "0xh"))
+  t += 1000
+  let h2 = d.nextQuery(Room, t, Lookback, windowEveryMs = Every)
+  doAssert h2.fire and h2.deep, "history pages are not held back by the window's pace"
+  d.onResponse(page(h2.req, ""))
+  t += 1000
+  let w1 = d.nextQuery(Room, t, Lookback, windowEveryMs = Every)
+  doAssert w1.fire and not w1.deep, "the first window right after the history"
+  var fired = 0
+  for i in 1 .. 14:
+    t += 1000
+    if d.nextQuery(Room, t, Lookback, windowEveryMs = Every).fire: inc fired
+  doAssert fired == 0, "no window before " & $Every & " ms: " & $fired
+  t += 1000
+  doAssert d.nextQuery(Room, t, Lookback, windowEveryMs = Every).fire, "the window again after " & $Every & " ms"
+  # each topic keeps its own pace
+  let o = d.nextQuery(Other, t, Lookback, windowEveryMs = Every)
+  doAssert o.fire and o.deep
+  echo "11. once read whole, a topic's window is asked only every windowEveryMs; history at full speed OK"
+
 echo "store_catchup_test: all OK"

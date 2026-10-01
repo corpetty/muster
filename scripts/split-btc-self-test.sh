@@ -59,7 +59,7 @@ MINER=$("${CLI[@]}" -rpcwallet=miner getnewaddress "" bech32)
 BEFORE=$(received "$ADDR_A")
 echo "regtest up · A is paid at $ADDR_A · B holds 0.01 BTC at $ADDR_B"
 
-CFG=$(python3 -c 'import json;print(json.dumps(json.load(open("infra/fleets/logos.test.json"))["delivery_createNode_config"]))')
+CFG=$(ui_fleet_config)
 TOPIC="/muster/1/split-btc-$(date +%s)/proto"
 D=$(mktemp -d)
 echo "topic: $TOPIC · logs: $D"

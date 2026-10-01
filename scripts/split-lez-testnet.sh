@@ -44,7 +44,7 @@ STATE="${LEZ_SPLIT_STATE:-.run/lez-split}"
 TIMEOUT="${LEZ_SPLIT_TIMEOUT:-2700}"
 mkdir -p "$STATE/A" "$STATE/B"
 STATE=$(cd "$STATE" && pwd)
-CFG=$(python3 -c 'import json;print(json.dumps(json.load(open("infra/fleets/logos.test.json"))["delivery_createNode_config"]))')
+CFG=$(ui_fleet_config)
 TOPIC="/muster/1/split-lez-$(date +%s)/proto"
 D=$(mktemp -d)
 echo "topic: $TOPIC · LEZ wallets: $STATE · logs: $D · total: $TOTAL"

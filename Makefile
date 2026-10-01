@@ -23,7 +23,7 @@ CACHE := --accept-flake-config \
   --extra-substituters https://cache.nix.logos.co/public \
   --extra-trusted-public-keys public:l4HrXgL4nw246+LBh2SOJyhz64BoGegOYLheT/iIAPU=
 
-FLEET     ?= logos.test
+FLEET     ?= logos.dev
 FLEET_CFG := infra/fleets/$(FLEET).json
 
 # dev/demo owner seeding (exo-001). These are the *well-known* anvil dev keys —
@@ -49,7 +49,7 @@ help:
 	@echo ""
 	@echo "First time: 'make build' (minutes), then 'make run'."
 	@echo "Two-instance over the fleet: 'make run-fleet PEER=alice' and 'make run-fleet PEER=bob'"
-	@echo "  in two terminals (FLEET=logos.test|logos.dev; refresh with infra/fleets/refresh.sh)."
+	@echo "  in two terminals (FLEET=logos.dev|logos.test — logos.test needs an RLN membership since Testnet v0.3; refresh with infra/fleets/refresh.sh)."
 	@echo "  alice/bob auto-seed as anvil Safe owners 0/1 so in-app Approve can settle on-chain."
 	@echo "Basecamp option: ui/tests/README.md."
 

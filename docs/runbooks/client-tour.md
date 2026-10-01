@@ -115,7 +115,9 @@ identity, saved Settings and contacts, because seeding applies only when an iden
 first minted, and a saved Setting beats the seeding.
 
 **✓ Expect**
-- Two windows, each on the public `logos.test` fleet.
+- Two windows, each on the public `logos.dev` fleet. Since Testnet v0.3 a node on
+  `logos.test` starts only with an active RLN membership (exo-eb6.3); `TRY_FLEET=logos.test`
+  picks it once you have one.
 - Alice is anvil account 0 and Bob account 1: each is a Safe owner, and each Bitcoin key
   pays from its funded payer address. Each already has the other, and Carol, as named
   contacts.

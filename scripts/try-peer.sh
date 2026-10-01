@@ -21,7 +21,8 @@
 # Seeds: anvil key 0/1/2 as the peer's own key (a Safe owner; its Bitcoin key pays from
 # the funded wpkh address; its chat id is deterministic, so Alice, Bob and Carol already
 # know each other), the RPC and Bitcoin node from .run/try/env, the live Logos fleet
-# (logos.test; TRY_FLEET=logos.dev for the other), the audit folder
+# (logos.dev, which runs no RLN; TRY_FLEET=logos.test needs an RLN membership since
+# Testnet v0.3, exo-eb6.3), the audit folder
 # .run/try/<peer>-audit, and invites only from the last ten minutes.
 # The module's MUSTER-LP lines and the UI's own log go to .run/try/<peer>.log.
 set -euo pipefail
@@ -37,7 +38,7 @@ case "$PEER" in
   alice) KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 ;;
   bob)   KEY=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d ;;
   carol) KEY=0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a ;;
-  *) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
 
 RUNNER=.run/runner/bin/muster-ui
@@ -55,7 +56,7 @@ elif compgen -G "$DIR/module_data/muster_module/*/settings.json" >/dev/null; the
 fi
 mkdir -p "$DIR" "$STATE/$PEER-audit"
 
-FLEET=infra/fleets/${TRY_FLEET:-logos.test}.json
+FLEET=infra/fleets/${TRY_FLEET:-logos.dev}.json
 [ -f "$FLEET" ] || { echo "no fleet config $FLEET (infra/fleets/refresh.sh)"; exit 1; }
 CFG=$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))["delivery_createNode_config"]))' "$FLEET")
 LEZ_ENV=()

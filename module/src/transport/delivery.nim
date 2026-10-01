@@ -6,8 +6,8 @@
 ## Wire contract matched to what delivery expects (from the chat module's own
 ## delivery bridge): `send(contentTopic: tstr, payload: bstr)`,
 ## `subscribe(contentTopic: tstr)`, and the `messageReceived(messageHash,
-## contentTopic, payload, timestamp)` event; `bstr` rides the tagged
-## {"_bytes":"<base64url>"} form.
+## contentTopic, payload, [source,] timestamp)` event (v0.3.0 added `source`,
+## received.nim); `bstr` rides the tagged {"_bytes":"<base64url>"} form.
 ##
 ## NOT compiled by pure-Nim `nim r` — it needs logos-protocol linked (the plugin
 ## build provides it). Live two-instance verification, and hardening the event
@@ -20,6 +20,8 @@ import logos_sdk/ffi        # lp_* C-ABI bindings (was ./lp_ffi, now the shared 
 import logos_sdk/bytes      # {"_bytes":<b64url>} codec
 import ./inbound_queue
 import ./store_catchup    # which store query next: a topic's whole history, then the window (exo-aaf)
+import ./received         # a messageReceived event, v0.2 or v0.3 (exo-eb6.1)
+import ./node_config      # what createNode gets, and the store peers (exo-eb6.1)
 
 # Transport diagnostics — off unless MUSTER_LP_DEBUG is set. When the delivery
 # node boot or cross-host relay misbehaves, this surfaces the lp createNode/start
@@ -39,9 +41,19 @@ proc envMs(name: string, default, floor: int64): int64 =
   if e.len == 0: return default
   try: max(floor, parseInt(e).int64) except CatchableError: default
 
+var gStoreFailed, gStoreAnswered = 0   ## store responses seen, under MUSTER_LP_DEBUG
+
 let gCatchupPeriodMs* = envMs("MUSTER_CATCHUP_MS", 1000, 200)
   ## re-query the store this often (ms). Default 1s ≈ chat cadence; floor 200ms.
-let gCatchupLookbackMs* = max(gCatchupPeriodMs, envMs("MUSTER_CATCHUP_LOOKBACK_MS", 60_000, 1000))
+let gCatchupWindowMs* = envMs("MUSTER_CATCHUP_WINDOW_MS", 15_000, 0)
+  ## once a topic's history is read, its sliding window is asked only this often (ms).
+  ## On delivery v0.3.0 live receive works and the module backfills on its own, so the
+  ## window is a safety net; a query per topic per second held the module on dead store
+  ## dials and stalled its sends (exo-eb6.1). 0 = every catch-up tick, as on v0.2.
+let gStoreTimeoutMs* = envMs("MUSTER_STORE_TIMEOUT_MS", 3000, 500)
+  ## how long delivery may spend on one store query; one to a dead peer holds it that long
+let gCatchupLookbackMs* = max(max(gCatchupPeriodMs, gCatchupWindowMs) * 2,
+                              envMs("MUSTER_CATCHUP_LOOKBACK_MS", 60_000, 1000))
   ## each steady-state query reaches back this far (ms). Wide enough to tolerate
   ## clock skew and a few missed polls (ingest dedups the overlap), small enough
   ## that a 1s cadence stays cheap. Never below the period.
@@ -129,16 +141,11 @@ proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000): DeliveryTra
   # Store service peers for mesh-independent catchup — ALL entryNodes of the delivery
   # config (the fleet's own nodes serve store). fireCatchup round-robins across them,
   # so a peer that's down or throttling stalls one tick, not the whole catchup. Empty
-  # if the config names none (catchup then disabled).
-  var peers: seq[string]
-  try:
-    let j = parseJson(nodeConfigJson)
-    if j.kind == JObject and j.hasKey("entryNodes") and j["entryNodes"].kind == JArray:
-      for n in j["entryNodes"]:
-        let s = n.getStr()
-        if s.len > 0: peers.add s
-  except CatchableError: discard
-  result.catchup = newStoreCatchup(peers)
+  # if the config names none (catchup then disabled). What createNode itself gets is
+  # node_config.nim's (exo-eb6.1): a preset's config without its entryNodes, QUIC off
+  # unless MUSTER_DELIVERY_QUIC=1.
+  let nc = nodeConfigFor(nodeConfigJson, quic = getEnv("MUSTER_DELIVERY_QUIC") == "1")
+  result.catchup = newStoreCatchup(nc.storePeers)
   if gLpDebug: stderr.writeLine("MUSTER-LP creating delivery client (mode=" & $lp_get_mode() & ")")
   result.client = lp_client_create("delivery_module", "muster_module", nil, nil)
   if result.client == nil:
@@ -149,7 +156,8 @@ proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000): DeliveryTra
   # synchronous createNode reaches delivery and succeeds; the async variant booted
   # the node but the receive path never surfaced messages, so we match the proven
   # sync ordering (the event handler is registered against a started node).
-  var args = newJArray(); args.add %nodeConfigJson
+  if gLpDebug: stderr.writeLine("MUSTER-LP createNode config=" & nc.createNode)
+  var args = newJArray(); args.add %nc.createNode
   let cn = result.invoke("createNode", $args)
   if gLpDebug: stderr.writeLine("MUSTER-LP createNode result=" & (if cn != nil: $cn else: "<nil>"))
   discard result.invoke("start", "[]")
@@ -211,12 +219,13 @@ proc fireCatchup(t: DeliveryTransport, contentTopic: string) =
   ## minute. Then each query reaches back `gCatchupLookbackMs`, a sliding window that stays
   ## cheap however long the room runs. Ingest dedups every overlap (R-2/R-4), and the log
   ## reduces order-independently (inv 4).
-  let q = t.catchup.nextQuery(contentTopic, int64(epochTime() * 1000), gCatchupLookbackMs)
+  let q = t.catchup.nextQuery(contentTopic, int64(epochTime() * 1000), gCatchupLookbackMs,
+                              windowEveryMs = gCatchupWindowMs)
   if not q.fire: return
   var args = newJArray()
   args.add %($q.req)               # jsonQuery (tstr)
   args.add %q.peer                 # peerAddr (tstr)
-  args.add %(t.timeoutMs.int)      # timeoutMs (int)
+  args.add %(gStoreTimeoutMs.int)   # timeoutMs (int): bounded, a dead peer holds delivery this long
   let argsStr = $args
   if gLpDebug: stderr.writeLine("MUSTER-LP storeQuery " & contentTopic &
                                 (if q.deep: " deep" & (if q.req.hasKey("paginationCursor"): " cursor" else: "")
@@ -235,14 +244,15 @@ method poll*(t: DeliveryTransport) =
     var arr: JsonNode
     try: arr = parseJson(bytesToStr(raw))
     except CatchableError: continue
-    if arr.kind != JArray or arr.len < 4: continue
-    let topic = arr[1].getStr()
-    var payload: seq[byte]
-    if arr[2].kind == JObject and arr[2].hasKey("_bytes"):
-      payload = b64urlDecode(arr[2]["_bytes"].getStr())
+    var ev: ReceivedEvent                # delivery v0.2 or v0.3 (source before timestamp)
+    if not parseMessageReceived(arr, ev): continue
+    let topic = ev.contentTopic
+    let payload = ev.payload
+    if gLpDebug: stderr.writeLine("MUSTER-LP inbound source=" & ev.source & " topic=" & ev.contentTopic &
+                                  " bytes=" & $ev.payload.len)
     let msg = IncomingMessage(contentTopic: topic, payload: payload,
                               messageHash: messageHashOf(topic, payload),
-                              timestamp: arr[3].getBiggestInt().int64)
+                              timestamp: ev.timestamp)
     if t.handlers.hasKey(topic):
       for h in t.handlers[topic]:
         if h != nil: h(msg)
@@ -264,9 +274,20 @@ method poll*(t: DeliveryTransport) =
     #   { "value": "<json string>" }                       # lp result envelope
     #   value -> { "messages": [ { "messageHash",
     #       "message": { "vResultPrivate": { "contentTopic", "payload": [byte,…] } } } ] }
+    if gLpDebug:                         # the first few of each kind whole: their shape is checked live
+      let r = bytesToStr(raw)
+      let failed = r.contains("\"success\":false")
+      if failed: inc gStoreFailed else: inc gStoreAnswered
+      if (failed and gStoreFailed <= 3) or (not failed and gStoreAnswered <= 4):
+        stderr.writeLine("MUSTER-LP store response (" & (if failed: "failed #" & $gStoreFailed
+                         else: "answered #" & $gStoreAnswered) & "): " & r[0 ..< min(r.len, 900)])
     var env: JsonNode
     try: env = parseJson(bytesToStr(raw))
     except CatchableError: continue
+    let down = dialFailurePeer(env)            # a peer we could not dial: back it off
+    if down.len > 0:
+      t.catchup.onPeerFailure(down, int64(epochTime() * 1000))
+      continue
     if env.kind != JObject or not env.hasKey("value"): continue
     var resp: JsonNode
     try: resp = parseJson(env["value"].getStr())
@@ -279,11 +300,15 @@ method poll*(t: DeliveryTransport) =
       var wm = m["message"]
       if wm.kind == JObject and wm.hasKey("vResultPrivate"): wm = wm["vResultPrivate"]
       if wm.kind != JObject or not wm.hasKey("contentTopic") or not wm.hasKey("payload"):
+        if gLpDebug: stderr.writeLine("MUSTER-LP store message unread: " & ($m)[0 ..< min(($m).len, 400)])
         continue
       let topic = wm["contentTopic"].getStr()
-      if wm["payload"].kind != JArray or not t.handlers.hasKey(topic): continue
-      var payload = newSeqOfCap[byte](wm["payload"].len)
-      for b in wm["payload"]: payload.add byte(b.getInt() and 0xFF)
+      var payload: seq[byte]
+      if not storedPayload(wm["payload"], payload):
+        if gLpDebug: stderr.writeLine("MUSTER-LP store payload unread (" & $wm["payload"].kind & "): " &
+                                      ($wm["payload"])[0 ..< min(($wm["payload"]).len, 200)])
+        continue
+      if not t.handlers.hasKey(topic): continue
       if payload.len == 0: continue
       let msg = IncomingMessage(contentTopic: topic, payload: payload,
                                 messageHash: messageHashOf(topic, payload), timestamp: 0)

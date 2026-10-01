@@ -47,7 +47,9 @@ differs.
 ## 2. Launch two peers on the fleet
 
 Two terminals. Each boots already pointed at the fleet (`MUSTER_DELIVERY_CONFIG`, seeded
-from `infra/fleets/logos.test.json`) **and** seeded as an anvil Safe owner:
+from `infra/fleets/logos.dev.json`) **and** seeded as an anvil Safe owner. Since Testnet v0.3
+the default fleet is `logos.dev`: a node on `logos.test` starts only with an active RLN
+membership (exo-eb6.3); `FLEET=logos.test` picks it once you have one.
 
 ```bash
 make run-fleet PEER=alice
@@ -193,14 +195,14 @@ make run RUN_DIR=$PWD/.run/alice
 make run RUN_DIR=$PWD/.run/bob
 ```
 
-In **each** window: open **Settings**, either click **"Use the logos.test fleet"** or paste the
+In **each** window: open **Settings**, either click **"Use the logos.dev fleet"** or paste the
 delivery config into the **delivery** field, then **Save**. (It persists to that peer's
 `settings.json`, so it's one-time per user-dir.) To paste the exact value — don't hand-copy it,
 peer ids rotate:
 
 ```bash
-python3 -c 'import json; print(json.dumps(json.load(open("infra/fleets/logos.test.json"))["delivery_createNode_config"]))'
+python3 -c 'import json; print(json.dumps(json.load(open("infra/fleets/logos.dev.json"))["delivery_createNode_config"]))'
 ```
 
-It looks like `{"mode":"Core","preset":"logos.test","entryNodes":["/dns4/node-01.…","…"]}` — the
-six `logos.test` fleet nodes. Re-pin with `infra/fleets/refresh.sh` if it's stale.
+It looks like `{"mode":"Core","preset":"logos.dev","entryNodes":["/dns4/delivery-01.…","…"]}` — the
+six `logos.dev` fleet nodes. Re-pin with `infra/fleets/refresh.sh` if it's stale.

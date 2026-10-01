@@ -45,10 +45,10 @@
     };
     # The real transport (P3): muster_module calls delivery_module over the lp_*
     # C ABI (src/transport/delivery.nim) — it boots delivery's embedded Waku node
-    # and carries the sealed coordination frames. Same repo the demo consumes
-    # (v0.2.0); mapped to the module name `delivery_module` below so
+    # and carries the sealed coordination frames. v0.3.0 is Testnet v0.3's
+    # (exo-eb6.1); mapped to the module name `delivery_module` below so
     # metadata.json#dependencies resolves it into the host module set.
-    logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.2.0";
+    logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.3.0";
     # The Logos Execution Zone wallet (P-L3): muster_module calls lez_core over lp_*
     # (src/wallet/lez_lp.nim) to send assets on the zone. Same repo/pin the demo
     # consumes (549cf115); mapped to the module name `lez_core` below so
@@ -61,12 +61,29 @@
       nixpkgs = logos-module-builder.inputs.nixpkgs;
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems f;
+      # delivery_module as this builder sees it (exo-eb6.1). The host module set gets
+      # the real module (its packages.<sys>.lgx, untouched). But this builder also
+      # generates a wrapper from every dependency's packages.<sys>.lidl, and delivery
+      # v0.3.0's contract declares `optional_depends [...]`, which its LIDL parser
+      # predates. muster calls delivery over raw lp_* (src/transport/delivery.nim),
+      # never through that wrapper, so the contract is handed over without that line.
+      deliveryForModule =
+        let d = inputs.logos-delivery-module;
+        in d // {
+          packages = builtins.mapAttrs (system: ps: ps // {
+            lidl = (import nixpkgs { inherit system; }).runCommand
+              "delivery_module-lidl-for-muster-module" { } ''
+                mkdir -p $out
+                sed '/^[[:space:]]*optional_depends[[:space:]]/d' ${ps.lidl}/delivery_module.lidl > $out/delivery_module.lidl
+              '';
+          }) d.packages;
+        };
     in {
       packages = forAllSystems (system:
         (logos-module-builder.lib.mkLogosModule {
           src = ./.;
           configFile = ./metadata.json;
-          flakeInputs = { delivery_module = inputs.logos-delivery-module; lez_core = inputs.lez_core; } // inputs;
+          flakeInputs = { delivery_module = deliveryForModule; lez_core = inputs.lez_core; } // inputs;
         }).packages.${system});
     };
 }

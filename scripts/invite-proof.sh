@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 . scripts/lib/ui-build.sh
 ui_require_runner
 trap ui_cleanup EXIT
-CFG=$(python3 -c 'import json;print(json.dumps(json.load(open("infra/fleets/logos.test.json"))["delivery_createNode_config"]))')
+CFG=$(ui_fleet_config)
 KEY0=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 KEY1=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
 ROOM="muster.room.invite$(date +%s)"

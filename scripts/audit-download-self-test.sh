@@ -48,7 +48,7 @@ if ! (cd module && nim c -d:release --hints:off --warnings:off --threads:on \
 fi
 
 # ── the runner: join → threshold → propose → approve in-app → downloadAudit ───
-CFG=$(python3 -c 'import json;print(json.dumps(json.load(open("infra/fleets/logos.test.json"))["delivery_createNode_config"]))')
+CFG=$(ui_fleet_config)
 TOPIC="/muster/1/audittest-$(date +%s)/proto"
 EFFECT='{"effect":"statement","text":"audit self-test"}'
 OUT="$D/out"
