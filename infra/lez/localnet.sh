@@ -5,6 +5,8 @@
 #   infra/lez/localnet.sh                   build if needed (first run: ~15 min), then start
 #   infra/lez/localnet.sh build             build only
 #   infra/lez/localnet.sh fund <id> <amt>   send native LEZ from the genesis funder (v0.3)
+#   infra/lez/localnet.sh deploy <prog.bin> deploy a program (risc0's .bin) through program_loader,
+#                                           the funder paying; prints its program account id (v0.3)
 #   infra/lez/localnet.sh status            the chain's height, the funder and its balance
 #   infra/lez/localnet.sh stop              stop it
 #
@@ -205,6 +207,33 @@ case "${1:-up}" in
     running || { echo "not running: '$0' first" >&2; exit 1; }
     to=$(b58 "$2")
     funder_wallet auth-transfer send --amount "$3" --from "Public/$(cat "$FUNDER/funder.id")" --to "Public/$to" ;;
+  deploy)
+    [ "$VERSION" = v0.2.4 ] && { echo "v0.2.4 deploys by transaction, not here" >&2; exit 2; }
+    [ $# -eq 2 ] && [ -f "$2" ] || { echo "usage: $0 deploy <program.bin (risc0's R0BF)>" >&2; exit 2; }
+    running || { echo "not running: '$0' first" >&2; exit 1; }
+    # program_loader writes the user ELF in 96 KiB segments, one fresh account each, then a
+    # header pointing at them; the header's id is the program's account id
+    n=$(python3 - "$2" <<'EOF'
+import struct, sys
+b = open(sys.argv[1], "rb").read()
+assert b[:4] == b"R0BF", "not a risc0 program binary (R0BF)"
+hlen = struct.unpack_from("<I", b, 8)[0]
+ulen = struct.unpack_from("<I", b, 12 + hlen)[0]
+print(-(-ulen // (96 * 1024)))
+EOF
+) || exit 1
+    newacct() { funder_wallet account new public 2>&1 | grep -oE 'Public/[1-9A-HJ-NP-Za-km-z]{32,44}' | head -1; }
+    header=$(newacct); segs=()
+    for _ in $(seq 1 "$n"); do segs+=("$(newacct)"); done
+    [ -n "$header" ] && [ ${#segs[@]} -eq "$n" ] || { echo "could not make the deploy accounts" >&2; exit 1; }
+    funder_wallet program-loader deploy --elf "$2" --header "$header" --segments "${segs[@]}" \
+      --payer "Public/$(cat "$FUNDER/funder.id")" >&2 || exit 1
+    id="${header#Public/}"
+    echo "program account: $id (hex $(python3 -c '
+import sys
+a = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; n = 0
+for c in sys.argv[1]: n = n * 58 + a.index(c)
+print(n.to_bytes(32, "big").hex())' "$id"))" ;;
   up) start ;;
-  *) echo "usage: $0 [up | build | fund <id> <amount> | status | stop]" >&2; exit 2 ;;
+  *) echo "usage: $0 [up | build | fund <id> <amount> | deploy <program.bin> | status | stop]" >&2; exit 2 ;;
 esac

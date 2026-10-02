@@ -2938,7 +2938,14 @@ proc lezFrostTransfer(recipient, amount: string): string =
     let now = rpc.getAccount(acct.accountId)
     if now.v3:
       # the zone runs LEZ v0.3.0 (exo-eb6.4 L3): a native transfer from the group's own
-      # account, which pays its own fee (the LEZ wallet's default declaration)
+      # account, which pays its own fee (the LEZ wallet's default declaration). Settlement
+      # sends it only when the account covers it and that fee's cap (exo-eb6.4.6): say so
+      # now, before the room runs two rounds for a transfer that cannot be sent
+      let cap = defaultFee(acct.accountId).maxFee
+      if now.balance < amt.stuint(128) + cap:
+        return $(%*{"error": "not-covered", "detail": "the group's account holds " & $now.balance &
+                    ", which does not cover " & $amt & " and its fee cap (" & $cap & "): on LEZ v0.3 a " &
+                    "transfer it cannot cover would be included, pay its gas and move nothing"})
       effectJson = lezFrostCallEffect3(NativeTokenProgram, @[nativeShard(acct.accountId), nativeShard(to)],
                                        nativeTransfer(amt.stuint(128)), acct.accountId, @[now.nonce],
                                        some defaultFee(acct.accountId))

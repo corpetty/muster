@@ -121,7 +121,8 @@ method height*(c: LezMultisigLive): uint64 = c.rpc.lastBlockId()
 method readAccount*(c: LezMultisigLive, id: seq[byte]): LezRead =
   let h = c.rpc.lastBlockId()
   let a = c.rpc.getAccount(id)
-  LezRead(found: a.owner.len > 0 or a.data.len > 0, data: a.data, owner: a.owner, height: h, nonce: a.nonce)
+  LezRead(found: a.owner.len > 0 or a.data.len > 0, data: a.data, owner: a.owner, height: h, nonce: a.nonce,
+          balance: a.balance)
 
 method txIncluded*(c: LezMultisigLive, hash: string): tuple[known: bool, height: uint64] =
   c.rpc.getTransaction(hash)

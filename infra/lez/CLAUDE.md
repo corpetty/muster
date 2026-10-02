@@ -13,6 +13,16 @@ person holding native LEZ would. `scripts/lez-local-self-test.sh` is the check: 
 real lez_core wallet on this zone (`MUSTER_LEZ_RPC`), funded by the funder, reads its
 balance back.
 
+`localnet.sh deploy <prog.bin>` deploys a v0.3 program (risc0's R0BF `.bin`) through LEZ's
+`program_loader`, the funder paying, and prints the program's account id: its header
+account, from which every PDA it owns is derived. The v0.3 multisig program (exo-eb6.4.4,
+`docs/design/lez-multisig-v03.md`) is deployed this way, and its own e2e (`e2e_v03` in the
+port's workspace) runs against this zone with `localnet.sh fund` as its funding command.
+
+On v0.3 a transaction whose program refuses it is still included, pays its fee and burns
+its signers' nonces; the RPC reports no outcome. Judge a step by the state it changes,
+never by inclusion (`docs/labbook/lez-v03-migration.md` trap 8).
+
 The v0.2.4 line is the chain for `module/tests/lez_multisig_live_e2e.nim` (exo-3c9) and the
 LEZ FROST e2e tests, until they move to v0.3 (exo-b87, exo-9ed). The multisig test deploys
 the program when `MUSTER_LEZ_MULTISIG_BIN` names the guest binary, built from

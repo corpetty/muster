@@ -57,6 +57,38 @@ program) and L5 (live testnet runs) are not.
    says so (L5). An earlier version of this entry, and the descriptions of #202 and #203,
    said the funding autopilot's full-balance shield leaves nothing for the fee. It does
    not: a shield is a privacy-preserving transaction, so it pays no fee.
+8. **A refused call is included, and pays.** On v0.2.4 the sequencer dropped a transaction
+   whose program refused it, so "included" meant "took effect". On v0.3 it is included: the
+   action reverts, the reserved fee is kept and the signers' nonces are burned
+   (`lez/chain_state/src/apply.rs`, `settle_charged_transaction`: "a failed action is
+   ordinary execution semantics"). The sequencer's RPC reports no outcome — `getTransaction`
+   returns the transaction and its block, nothing more; events live only in the separate
+   indexer, and a reverted call emits none. So a step is judged by the state it should have
+   changed, never by inclusion or a nonce. The v0.3 multisig e2e does this for every step.
+   A refusal is also dear: it is billed its whole gas limit (any failure but a clean
+   non-zero exit, `ValidatedStateDiff::from_public_transaction_metered`), so an outsider's
+   refused vote cost 16,003,672 base units where a member's approval cost 456,112.
+
+   muster's FROST `lez-call` settlement called inclusion final (exo-eb6.4.6). On the local
+   zone, a transfer of the group's whole balance was included at height 773, the
+   recipient's balance stayed 201, the group paid 16,002,968 in gas, and `watch` said
+   final. The fix makes inclusion mean effect: on v0.3 the group signs only a native
+   transfer out of its own account, and settlement sends one only when the account, read
+   at the signed nonce, covers the amount plus the fee CAP. The chain authenticates the
+   nonce before running anything (a stale one is never included), nothing but the group's
+   signature debits its account, and the reserve never exceeds the cap — so a covered
+   transfer, once included, took effect. The gate is the cap, not the reserve actually
+   held (gas limit × the block's base fee, about 16M at genesis' base fee against the
+   134.4M cap), because the base fee can rise before inclusion; so a group cannot send
+   its last cap's worth of LEZ in one transfer.
+9. **A program's chained call selects only the transaction's own rows.** A v0.3 program
+   that calls another (the multisig's Execute calling the native token program) must list
+   the callee's rows in its own transaction; a selector the transaction did not carry is
+   refused. So Execute's rows are the state, the proposal, then the call's rows in order.
+10. **A v0.3 program is deployed in pieces.** `program_loader` takes the guest's user ELF in
+   96 KiB segments, one fresh account each, then a header account that names them; the
+   header's id is the program's account id, and every PDA is derived from it, not from
+   the image id. `infra/lez/localnet.sh deploy <prog.bin>` does this through LEZ's CLI.
 
 ## What is verified, and where
 
@@ -69,7 +101,9 @@ program) and L5 (live testnet runs) are not.
   account and pays its own fee, a keystore member can co-sign as its fee payer, and a
   wrong aggregate moves nothing (`lez_frost_v030_e2e`). The room path runs end to end with
   a `lez-call` v2 effect: ceremony, propose at a chain-read nonce, two rounds, one
-  aggregate signature landed, a stale nonce refused at settle (`lez_frost_room_v030_e2e`).
+  aggregate signature landed, a stale nonce refused at settle, and a transfer of the whole
+  balance refused at settle, never sent (`lez_frost_room_v030_e2e`; the driver's half in
+  `lez_frost_v030_test` §5, exo-eb6.4.6).
 - **L5, its local half**: the private split end to end on a local v0.3.0 zone
   (`LEZ_SPLIT_ZONE=local scripts/split-lez-testnet.sh`): B names its account, the funder
   funds it, B shields it to its own key node (fee-exempt), agrees, and pays its share
@@ -77,6 +111,12 @@ program) and L5 (live testnet runs) are not.
   about 50 s with dev-mode receipts. The private rails, the scan and a received note's key
   node and amount all hold on v0.3's 256-bit private ids. Real proving on v0.3 and the
   live testnet remain (they need native LEZ from someone who holds it).
+- **L4c**: the lez-multisig program, rewritten for v0.3's `run_program(plan, apply)` (no
+  SPEL), deployed on a local v0.3.0 zone with `localnet.sh deploy`, runs its own e2e there
+  (`e2e_v03` in the port's workspace): create a 2-of-3, fund its vault by transfer,
+  propose a native transfer out of it, approve, execute — R holds the amount, the vault
+  that much less; refused, with nothing changed: an outsider's vote, a substituted
+  recipient, a second multisig naming this vault's seed, and a second Execute.
 
 Sources: logos-execution-zone v0.3.0 (`lee/state_machine/src/{public_transaction,fees.rs}`,
 `lee/state_machine/core/src/{account.rs,native_token.rs,program/mod.rs}`,
