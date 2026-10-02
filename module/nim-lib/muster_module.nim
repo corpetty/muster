@@ -115,6 +115,11 @@ proc toHex(b: openArray[byte]): string =
   result = "0x"
   for x in b: (result.add d[int(x shr 4)]; result.add d[int(x and 0x0F)])
 
+const SubmitWatchS = 4.0
+  ## how long a submit waits, inside the call, for the chain to say final; every RPC call
+  ## has its own budget too (wallet/rpc_budget.nim), so no hung endpoint holds the module
+  ## thread past this window plus one read (exo-14f)
+
 # ── anvil fixture: chainId 31337, a fixed Safe, owners = anvil accounts 0/1/2 ──
 const OWNER0 = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 const OWNER1 = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
@@ -602,11 +607,14 @@ proc musterSubmit(intentId: string): string =
   it.apply(gDevSafe, IntentEvent(kind: ieSubmit, now: gNow))    # executable -> submitted
   gIntents[intentId] = it
 
-  # Observe finality from the chain.
+  # Observe finality from the chain, within SubmitWatchS of wall clock (exo-14f: it was 51
+  # polls, each unbounded). A failed read stops the wait: the intent stays submitted.
   var status = -1
-  for _ in 0 .. 50:
-    status = watchReceiptStatus(gRpcUrl, txHash)
-    if status >= 0: break
+  let until = epochTime() + SubmitWatchS
+  while true:
+    try: status = watchReceiptStatus(gRpcUrl, txHash)
+    except CatchableError: break
+    if status >= 0 or epochTime() >= until: break
     sleep(200)
   if status == 1:
     inc gNow
@@ -1674,11 +1682,12 @@ proc bypassesOf(a: RoomAccount): JsonNode =
   if "eip155:" & $chain != a.chain:
     result["detail"] = %("the configured RPC serves eip155:" & $chain & ", the account is on " & a.chain)
     return
+  # stop at the first failed read: a node that did not answer one will not answer the next,
+  # and each costs a read budget on the module thread (exo-14f)
   let m = getModules(gRpcUrl, toAddress(a.address))
+  if not m.known: (result["detail"] = %m.detail; return)
   let g = getGuard(gRpcUrl, toAddress(a.address))
-  if not m.known or not g.known:
-    result["detail"] = %(if not m.known: m.detail else: g.detail)
-    return
+  if not g.known: (result["detail"] = %g.detail; return)
   var mods = newJArray()
   var list: seq[string]
   for x in m.modules:
@@ -3013,14 +3022,10 @@ proc musterCoordinateSubmit(intentId: string): string =
                           asm0.tx.frm.chain & "; fund it, or set Settings → relayer"})
   # Fold the room forward: submit event → every member converges on "submitted".
   gSession.publish(submitEvent(intentId, chainRef = txRef.id))
-  # Observe finality from the chain (never asserted). Bounded poll (~4s) so a slow or
-  # unreachable node reports "pending" rather than freezing the UI.
-  var fin = Finality(status: fsPending)
-  for _ in 0 .. 20:
-    try: fin = st.watch(txRef)
-    except CatchableError: discard
-    if fin.status != fsPending: break
-    sleep(200)
+  # Observe finality from the chain (never asserted), within SubmitWatchS of wall clock and
+  # one read's budget (exo-14f): a slow, unreachable or hung node reports "pending" rather
+  # than holding the module thread.
+  let fin = st.watchWithin(txRef, SubmitWatchS)
   if fin.status == fsFinal: gSession.publish(finalEvent(intentId, chainRef = txRef.id))
   elif fin.status == fsPending:
     # Not final within ~4s (a block to come: a LEZ Execute, a Bitcoin confirmation, a slow
