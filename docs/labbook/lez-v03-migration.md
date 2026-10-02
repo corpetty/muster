@@ -141,6 +141,12 @@ program) and L5 (live testnet runs) are not.
   and the private split (final in 55 s). The testnet funder's account exists
   (`Public/5fwr3Z2u73ZoXmasgac2pqot29fmn9AxvWQu4uQQUXGq`, made 2026-10-02); the live runs wait
   on someone funding it.
+- **L5b, what ran with no funds** (2026-10-02, `scripts/split-lez-testnet.sh` on the testnet,
+  delivery on `MUSTER_FLEET=local`): two real `lez_core` 0.5.0 wallets on
+  `testnet.lez.logos.co` (LEZ v0.3.0) scanned from block 0 to the tip (3141) and followed it
+  block by block (~33 s blocks), so the scan holds on v0.3's 256-bit private ids; A proposed
+  the private split at its own key node; B named the account it needs funded
+  (`e043cb2a…75b6`), and a relaunch reused it. The run stops there, naming the funder to fund.
 
 Sources: logos-execution-zone v0.3.0 (`lee/state_machine/src/{public_transaction,fees.rs}`,
 `lee/state_machine/core/src/{account.rs,native_token.rs,program/mod.rs}`,

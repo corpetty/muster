@@ -124,7 +124,7 @@ while [ $(( $(date +%s) - start )) -lt "$TIMEOUT" ]; do
       elif [ -z "${WARNED:-}" ]; then
         WARNED=1
         echo "[$(( $(date +%s) - start ))s] the zone's funder holds $held, not enough to fund B: fund it" \
-             "($(infra/lez/funder.sh --zone "$ZONE" account 2>/dev/null | sed 's/ holding.*//')), or send to B at $acct"
+             "($(infra/lez/funder.sh --zone "$ZONE" account 2>/dev/null | sed 's/, holding.*//')), or send to B at $acct"
       fi
     fi
   fi
