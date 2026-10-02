@@ -51,7 +51,7 @@ block:
 block:
   proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
   let ks = newInMemoryKeystore(seed(1), seed(2))
-  let cc = newEpochCrypto(ks)
+  let cc = newEpochCrypto(ks, "/muster/1/null-ladder/proto")
   doAssert cc.securityLevel().rungOf(axConfidentiality) == rungReal, "the epoch layer seals room data"
   doAssert cc.securityLevel().mechanismOf(axConfidentiality).contains("ECIES")
   # the base (no crypto configured) is the null at the same seam.
@@ -84,7 +84,7 @@ block:
   let logProv = securityLevel(axisLevel(rungNull, "-"), axisLevel(rungReal, "signed hash-linked log"),
                               axisLevel(rungNull, "-"))
   let seed2 = proc(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
-  let cc = newEpochCrypto(newInMemoryKeystore(seed2(3), seed2(4)))
+  let cc = newEpochCrypto(newInMemoryKeystore(seed2(3), seed2(4)), "/muster/1/null-ladder/proto")
   let drv = newStubDriver(rounds = 1, threshold = 1).describe().securityLevel()
   let active = combine(drv, cc.securityLevel(), logProv)
   doAssert active.rungOf(axAuthentication) == rungReal, "auth from the named driver"
@@ -101,7 +101,7 @@ block:
   let active = combine(
     newStubDriver(rounds = 1, threshold = 1).describe().securityLevel(),
     securityLevel(axisLevel(rungNull, "-"), axisLevel(rungReal, "signed hash-linked log"), axisLevel(rungNull, "-")),
-    newEpochCrypto(newInMemoryKeystore(seed3(5), seed3(6))).securityLevel())
+    newEpochCrypto(newInMemoryKeystore(seed3(5), seed3(6)), "/muster/1/null-ladder/proto").securityLevel())
   let j = active.toJson()
   doAssert j.hasKey("axes") and j["axes"].len == 3, "three axes, in order"
   let axisNames = block:

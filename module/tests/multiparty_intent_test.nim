@@ -50,10 +50,10 @@ const nonOwnerSig = "0x434ffc353ac48d485e94d1a03d03fdd8279204e9de49e73e0ab3023b3
 # Room: Alice and Bob share an epoch (their conversation identity is their Safe key).
 let net = newLocalNetwork()
 let bobMem = bobKs.encIdentity()
-let aliceCrypto = newEpochCrypto(aliceKs, @[bobMem])
+const topic = "/muster/1/safe-5FbD/proto"
+let aliceCrypto = newEpochCrypto(aliceKs, topic, @[bobMem])
 let bobCrypto = newEpochJoiner(bobKs)
 bobCrypto.ingestGrant(aliceCrypto.grantFor(0, bobMem))
-const topic = "/muster/1/safe-5FbD/proto"
 let alice = newCoordinationSession(newLocalTransport(net), aliceCrypto, topic)
 let bob = newCoordinationSession(newLocalTransport(net), bobCrypto, topic)
 
