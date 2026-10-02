@@ -91,6 +91,8 @@ import ../src/transport/rln_status     # the node's RLN membership as a connecti
 import ../src/transport/rln_probe      # …read from delivery and the two RLN modules
 import ../src/wallet/keystore_status   # the official EVM keystore as a status row (exo-149.1 K1)
 import ../src/wallet/keystore_probe    # …read from keystore_module over lp_*
+import ../src/wallet/chain_endpoint    # an EVM endpoint: a URL, or the platform's eth_rpc_module (exo-d4d.3)
+import ../src/wallet/eth_rpc_lp        # …eth_rpc_module over lp_*
 import ../src/wallet/keystore_requests # pending signing requests (exo-149.2 K2)
 import ../src/coordination/keystore_approval # an in-room approval keystore_module signs (K2)
 import ../src/wallet/keystore_identity  # a keystore_module account as this member's identity (K5)
@@ -221,6 +223,10 @@ var gNow: uint64 = 0
 # settings surface (settings / set_setting) points it at the user's own node/nodes.
 var gRpcUrl = getEnv("MUSTER_RPC", "http://127.0.0.1:8545")   ## a saved setting wins (settings.json)
 var gRelayer = "self"
+# Where EVM chains are read (exo-d4d.3): "platform" = the platform's eth_rpc_module, which
+# holds the person's chains and endpoints device-wide (Basecamp); "url" = gRpcUrl, muster's
+# own setting (the runner, anvil); "auto" = the platform when it offers a chain, else the URL.
+var gEvmChains = getEnv("MUSTER_EVM_CHAINS", "auto")
 var gBtcRpc = getEnv("MUSTER_BTC_RPC", "")   ## the user's Bitcoin node, "http://user:pass@host:port"; "" = none (exo-a50.2.6)
 # The LEZ multisig, live (exo-3c9): the user's sequencer (untrusted, invariant 8), the zone
 # it serves, and the multisig program. By default: the public testnet (the LEZ wallet's
@@ -296,6 +302,7 @@ proc loadSettingsFile() =
       let j = parseJson(readFile(p))
       if j.hasKey("rpc"): gRpcUrl = j["rpc"].getStr()
       if j.hasKey("relayer"): gRelayer = j["relayer"].getStr("self")
+      if j.hasKey("evmChains"): gEvmChains = j["evmChains"].getStr("auto")
       if j.hasKey("btcRpc"): gBtcRpc = j["btcRpc"].getStr()
       if j.hasKey("lezRpc"): gLezRpc = j["lezRpc"].getStr()
       if j.hasKey("lezChain"): gLezChain = j["lezChain"].getStr()
@@ -322,7 +329,7 @@ proc saveSettingsFile() =
     # the Bitcoin node URL may carry its RPC credentials — kept beside the keystore,
     # like a bitcoin.conf, and never shown back (settings() redacts them)
     writeFile(settingsPath(), $(%*{"rpc": gRpcUrl, "delivery": gDeliveryConfig, "relayer": gRelayer,
-                                   "btcRpc": gBtcRpc, "lezRpc": gLezRpc, "lezChain": gLezChain,
+                                   "evmChains": gEvmChains, "btcRpc": gBtcRpc, "lezRpc": gLezRpc, "lezChain": gLezChain,
                                    "lezMultisigProgram": gLezProgram,
                                    "keystoreBackend": gKeystoreBackend,
                                    "keystoreAccount": gKeystoreAccount,
@@ -1080,8 +1087,57 @@ proc frostPump() =
       if id in folded and not folded[id].collection.complete: auto.add id
   gFrostAuto = auto
 
+# ── where an EVM chain is read (exo-d4d.3) ────────────────────────────────────
+var gPlatformAt = -1e9        ## when the platform's chain registry was last read
+var gPlatformReg: tuple[ok: bool, scope: string, chains: seq[PlatformChain]]
+var gEthRpcInstalled = false
+
+proc platformRegistry(): tuple[ok: bool, scope: string, chains: seq[PlatformChain]] =
+  ## The person's chain registry from eth_rpc_module, re-read at most every 30 s (5 min
+  ## after it did not answer: a host without it, like the runner, should not pay a
+  ## registry read on every chain call). init_defaults goes first, once: the platform asks
+  ## every consumer to call it, and it writes only what is absent.
+  let now = epochTime()
+  if now - gPlatformAt < (if gPlatformReg.ok: 30.0 else: 300.0): return gPlatformReg
+  if not gEthRpcInstalled:
+    installEthRpc()
+    discard ethRpcInitDefaults()
+    gEthRpcInstalled = true
+  gPlatformReg = ethRpcChains()
+  gPlatformAt = now
+  gPlatformReg
+
+proc evmPlatform(): bool =
+  ## Whether EVM chains are read through the platform's eth_rpc_module.
+  case gEvmChains
+  of "url": false
+  of "platform": true
+  else:
+    let reg = platformRegistry()
+    reg.ok and reg.chains.anyIt(it.offered)
+
+proc evmEndpoint(chain: string): string =
+  ## Where THIS member reads `chain` (an eip155 CAIP-2 id): through eth_rpc_module, which
+  ## holds their endpoints (invariant 8: theirs, set once for the device), or their own
+  ## RPC URL. Every caller still checks the chain the endpoint serves before it trusts it.
+  if evmPlatform():
+    let (ok, cid) = evmChainId(chain)
+    if ok and cid > 0'u64: return platformEndpoint(int(cid))
+  gRpcUrl
+
+proc evmEndpointLabel(endpoint: string): string =
+  ## How an endpoint is named to the person: never a platform token, never credentials.
+  if endpoint.isPlatform: "eth_rpc_module (your chain settings)" else: redactUrl(endpoint)
+
 proc rpcChainCaip2(): tuple[ok: bool, chain, detail: string] =
-  ## The CAIP-2 chain THIS member's configured EVM RPC actually serves (parts_evm).
+  ## The CAIP-2 chain THIS member's configured EVM RPC actually serves (parts_evm) — what a
+  ## split settles on when the composer names none (exo-a90.6). On the platform, a chain the
+  ## person's settings offer (exo-d4d.3).
+  if evmPlatform():
+    # the first chain the person's settings offer (mainnets first, as eth_rpc_module lists)
+    for c in platformRegistry().chains:
+      if c.offered: return (true, "eip155:" & $c.chainId, "")
+    return (false, "", "no Ethereum chain is enabled in your chain settings")
   rpcChainCaip2(gRpcUrl)
 
 proc splitLezAdapter(): LezAdapter   ## forward — the module's LEZ wallet (moduleWallet, below)
@@ -1121,7 +1177,8 @@ proc splitSeam(chain: string): EvmPartSeam =
   ## does not serve.
   let (_, cid) = evmChainId(chain)
   let wchain = "evm:" & $cid
-  newEvmPartSeam(chain, gRpcUrl, newEvmAdapter(wchain, gRpcUrl, fromUnlocked = false), moduleKeystore(),
+  let ep = evmEndpoint(chain)
+  newEvmPartSeam(chain, ep, newEvmAdapter(wchain, ep, fromUnlocked = false), moduleKeystore(),
                  Account(chain: wchain, form: afPublic, id: addrHex(myAddress())))
 
 var gTokenInfo = initTable[string, tuple[symbol: string, decimals: int]]()
@@ -1135,9 +1192,10 @@ proc tokenInfo(chain, token: string): tuple[symbol: string, decimals: int] =
   if key in gTokenInfo: return gTokenInfo[key]
   result = ("", -1)
   try:
-    if "eip155:" & rpcChainId(gRpcUrl) == chain:
-      let sym = abiString(toHex(rpcCall(gRpcUrl, token, @[0x95'u8, 0xd8, 0x9b, 0x41], "latest")))
-      let dec = abiUint8(toHex(rpcCall(gRpcUrl, token, @[0x31'u8, 0x3c, 0xe5, 0x67], "latest")))
+    let ep = evmEndpoint(chain)
+    if "eip155:" & rpcChainId(ep) == chain:
+      let sym = abiString(toHex(rpcCall(ep, token, @[0x95'u8, 0xd8, 0x9b, 0x41], "latest")))
+      let dec = abiUint8(toHex(rpcCall(ep, token, @[0x31'u8, 0x3c, 0xe5, 0x67], "latest")))
       result = (sym, dec)
       if dec >= 0: gTokenInfo[key] = result
   except CatchableError: discard
@@ -1662,15 +1720,16 @@ proc chainViewOf(a: RoomAccount): ChainView =
   if a.family == LezMultisigFamily: return lezChainViewOf(a)
   if a.family != "evm.safe": return (known: false, signers: @[], threshold: 0,
                                      detail: "no chain read for a " & a.family & " account yet")
-  if gRpcUrl.len == 0: return (known: false, signers: @[], threshold: 0, detail: "no RPC configured")
-  let (ok, chain, pd) = probeRpc(gRpcUrl)
+  let ep = evmEndpoint(a.chain)
+  if ep.len == 0: return (known: false, signers: @[], threshold: 0, detail: "no RPC configured")
+  let (ok, chain, pd) = probeRpc(ep)
   if not ok: return (known: false, signers: @[], threshold: 0, detail: pd)   # unreachable, or cooling down
   if "eip155:" & $chain != a.chain:
     return (known: false, signers: @[], threshold: 0,
             detail: "the configured RPC serves eip155:" & $chain & ", the account is on " & a.chain)
-  let owners = getOwners(gRpcUrl, toAddress(a.address))
+  let owners = getOwners(ep, toAddress(a.address))
   if not owners.known: return (known: false, signers: @[], threshold: 0, detail: owners.detail)
-  let thr = getThreshold(gRpcUrl, toAddress(a.address))
+  let thr = getThreshold(ep, toAddress(a.address))
   if not thr.known: return (known: false, signers: @[], threshold: 0, detail: thr.detail)
   (known: true, signers: owners.owners.mapIt(toHex(it)), threshold: thr.threshold, detail: "read from chain")
 
@@ -1686,8 +1745,9 @@ proc bypassesOf(a: RoomAccount): JsonNode =
   ## can block a transaction the owners agreed to — both belong on the card.
   result = %*{"known": false, "modules": [], "guard": "", "detail": ""}
   if a.family != "evm.safe": (result["detail"] = %"no bypass read for this family yet"; return)
-  if gRpcUrl.len == 0: (result["detail"] = %"no RPC configured"; return)
-  let (ok, chain, pd) = probeRpc(gRpcUrl)
+  let ep = evmEndpoint(a.chain)
+  if ep.len == 0: (result["detail"] = %"no RPC configured"; return)
+  let (ok, chain, pd) = probeRpc(ep)
   if not ok: (result["detail"] = %pd; return)
   if "eip155:" & $chain != a.chain:
     result["detail"] = %("the configured RPC serves eip155:" & $chain & ", the account is on " & a.chain)
@@ -1695,9 +1755,9 @@ proc bypassesOf(a: RoomAccount): JsonNode =
   # stop at the first failed read: a node that did not answer one will not answer the next,
   # and each costs a read budget on the module thread (exo-14f; after a no-answer the
   # endpoint cools down, so the reads of the accounts after this one cost nothing, exo-14f.1)
-  let m = getModules(gRpcUrl, toAddress(a.address))
+  let m = getModules(ep, toAddress(a.address))
   if not m.known: (result["detail"] = %m.detail; return)
-  let g = getGuard(gRpcUrl, toAddress(a.address))
+  let g = getGuard(ep, toAddress(a.address))
   if not g.known: (result["detail"] = %g.detail; return)
   var mods = newJArray()
   var list: seq[string]
@@ -2636,6 +2696,7 @@ proc hostFacts(policy = ""): HostFacts =
     if found:
       let (_, cid) = evmChainId(a.chain)
       facts.expectedChainId = cid.int
+      facts.rpcUrl = evmEndpoint(a.chain)
       facts.safe = toAddress(a.address)
       facts.signers = a.signers.mapIt(toAddress(it))
       if a.family.startsWith("btc."): facts.btcSigners = a.signers   # exo-a50.2.6
@@ -2833,7 +2894,24 @@ proc musterConnectivity(): string =
       if r.kind == rqEnvironment:
         try: (let c = parseInt(r.name[7 .. ^1]); (if c notin chains: chains.add c))
         except ValueError: discard
-  if rpcWho.len > 0:
+  if rpcWho.len > 0 and evmPlatform():
+    # on the platform each chain has its own endpoint in eth_rpc_module: probe each one the
+    # proposals need; the row is as bad as its worst chain
+    var level = "ok"
+    var details: seq[string]
+    let reg = platformRegistry()
+    if not reg.ok: (level = "down"; details.add "eth_rpc_module did not answer")
+    for c in chains:
+      let (ok, served, d) = probeRpc(platformEndpoint(c))
+      if not ok: (level = "down"; details.add chainLabel("eip155:" & $c) & ": " & d)
+      elif served != c:
+        (if level == "ok": level = "warn"); details.add chainLabel("eip155:" & $c) & ": serves chain " & $served
+      else: details.add chainLabel("eip155:" & $c) & ": ok"
+    rows.add %*{"key": "rpc", "name": "Chains", "level": level, "detail": details.join("; "),
+                "endpoint": evmEndpointLabel(PlatformPrefix), "source": "proposal",
+                "remedy": (if level == "ok": "" else: "check that chain in your chain settings (eth_rpc_ui)"),
+                "introducedBy": introducersJson(rpcWho)}
+  elif rpcWho.len > 0:
     let row = rpcConnectivityRow(gRpcUrl, chains)   # the endpoint redacted (exo-14f.2)
     row["introducedBy"] = introducersJson(rpcWho)
     rows.add row
@@ -2909,7 +2987,7 @@ proc musterCoordinateAccount(): string =
     var assets = newJArray()
     var eth = %*{"symbol": "ETH", "decimals": 18}
     try:
-      let raw = hexToDec(getBalance(gRpcUrl, safeAddr))
+      let raw = hexToDec(getBalance(evmEndpoint(a.chain), safeAddr))
       eth["raw"] = %raw
       eth["display"] = %(formatUnits(raw, 18) & " ETH")
     except CatchableError as e:
@@ -2921,7 +2999,7 @@ proc musterCoordinateAccount(): string =
     # right nonce; without it every proposal used 0 and only the first could settle
     # (exo-275). Best-effort: a failed read omits it and the UI falls back to 0.
     try:
-      o["nonce"] = %(safeNonce(gRpcUrl, safeAddr).int)
+      o["nonce"] = %(safeNonce(evmEndpoint(a.chain), safeAddr).int)
     except CatchableError:
       discard
   $o
@@ -2960,7 +3038,7 @@ proc settlementFor(drv: Driver): Settlement =
   if not isEvm: return nil
   let unlocked = gRelayer.startsWith("unlocked:")
   let who = (if unlocked: gRelayer["unlocked:".len .. ^1] else: toHex(myAddress()))
-  let adapter = newEvmAdapter("evm:" & $cid, gRpcUrl, fromUnlocked = unlocked)
+  let adapter = newEvmAdapter("evm:" & $cid, evmEndpoint(p.chain), fromUnlocked = unlocked)
   settlementFor(drv, adapter, Account(chain: "evm:" & $cid, form: afPublic, id: who))
 
 proc musterCoordinateSubmit(intentId: string): string =
@@ -3894,6 +3972,8 @@ proc musterSettings(): string =
     # goes only to this user's own view, never to a room or a log.
     "rpc": gRpcUrl, "rpcMasked": redactUrl(gRpcUrl),
     "relayer": gRelayer,
+    "evmChains": gEvmChains,                 # where EVM chains are read (exo-d4d.3)
+    "evmPlatform": evmPlatform(),            # …and whether that is eth_rpc_module right now
     "btcRpc": gBtcRpc, "btcRpcMasked": redactUrl(gBtcRpc),
     "lez": {"rpc": gLezRpc, "rpcMasked": redactUrl(gLezRpc), "chain": gLezChain,
             "multisigProgram": gLezProgram},
@@ -3916,6 +3996,13 @@ proc musterSetSetting(key, value: string): string =
     gRpcUrl = value
     gWallet = nil            # re-init the EVM adapter against the new endpoint
     forgetCooldown(value)    # naming it again is "try it now" (wallet/rpc_budget.nim, exo-14f.1)
+  of "evm-chains":
+    # where EVM chains are read (exo-d4d.3): the platform's eth_rpc_module, or the rpc URL
+    if value notin ["auto", "platform", "url"]:
+      return $(%*{"error": "evm-chains is \"auto\", \"platform\" (eth_rpc_module) or \"url\" (the rpc setting)"})
+    gEvmChains = value
+    gPlatformAt = -1e9       # re-read the platform's registry on next use
+    gWallet = nil
   of "relayer":
     # who sends settling transactions: "self" or "unlocked:<0x…>" (exo-a50.1.5)
     if value != "self" and not (value.startsWith("unlocked:0x") and value.len == 51):
