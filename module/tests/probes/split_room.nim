@@ -63,7 +63,7 @@ proc newRoom4*(topic: string): Room4 =
   ## Alice founds the room for the other three: one epoch key, granted to each.
   let net = newLocalNetwork()
   let others = @[bobKs, carolKs, daveKs]
-  let aliceCrypto = newEpochCrypto(aliceKs, others.mapIt(it.encIdentity()))
+  let aliceCrypto = newEpochCrypto(aliceKs, topic, others.mapIt(it.encIdentity()))
   var sessions: seq[CoordinationSession]
   for ks in others:
     let c = newEpochJoiner(ks)

@@ -738,7 +738,9 @@ proc musterCoordinateJoin(topic: string): string =
   if ctopic in gSessions:
     gSession = gSessions[ctopic]          # re-activate an already-joined room
   else:
-    gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(ks), ctopic)
+    # Joining by name founds this member's own epoch 0 on the topic, under a key derived
+    # from the keystore and the room (exo-7b3): a relaunch's catch-up opens it again.
+    gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(ks, ctopic), ctopic)
     gSessions[ctopic] = gSession
   gTopic = ctopic
   # Remember the room beside the keystore, so a relaunch re-enters it (exo-ecbe).
@@ -802,7 +804,9 @@ proc restoreJoinedRooms(): seq[string] =
   let ks = moduleKeystore()
   for ctopic in loadJoinedRooms(joinedRoomsPath()):
     if ctopic in gSessions or ctopic in gInboxTopics: continue
-    let s = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(ks), ctopic)
+    # The same founding epoch coordinate_join made, derived again (exo-6dc.1): the room's
+    # pre-admit history opens on relaunch, not only the epochs granted since.
+    let s = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(ks, ctopic), ctopic)
     gSessions[ctopic] = s
     s.announceBeacon()
     result.add ctopic

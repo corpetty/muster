@@ -13,12 +13,18 @@
 ## persistence + removal; it binds the SAME ConversationCrypto interface and this
 ## file is deleted. Kept thin for exactly that reason.
 ##
+## Epoch 0 is the one key no grant carries: whoever joins a room by name founds it
+## (coordinate_join), and nobody hands it to anyone. So it is DERIVED from the founder's
+## keystore and the room (Keystore.foundingKey, exo-7b3), never drawn at random: a
+## restart rebuilds it, and the room stays reduce(log + keys) (invariant 4). Epochs 1+
+## come back from the grants sealed to the member, as before.
+##
 ## Envelope wire: secretbox(epochKey, plaintext) = nonce(24) ++ MAC(16) ++ ciphertext.
 ## No epoch number rides in the clear (exo-661.7): a reader tries the keys it holds,
 ## newest first, and the one whose MAC verifies is the envelope's epoch. A store node
 ## sees a random nonce and ciphertext, the same shape in every epoch.
 
-import std/[algorithm, tables]
+import std/[algorithm, sets, tables]
 import ./sodium
 import ./curve25519
 import ./conversation
@@ -43,6 +49,7 @@ type
     keys: Table[int, array[32, byte]]     ## the epochs I actually hold keys for
     memberSets: Table[int, seq[Member]]   ## members per epoch (for grants/queries)
     joinKeys: Table[int, EncKeys]         ## per epoch, the join keypair derived from its key (cache)
+    ownOnly: HashSet[int]                 ## epochs whose key I derived and have granted to no one (exo-7b3)
     cur: int
 
 # ── ECIES via libsodium sealed boxes (X25519) ─────────────────────────────────
@@ -72,17 +79,20 @@ method securityLevel*(cc: EpochCrypto): SecurityLevel =
     axisLevel(rungNull, "no attestation from the crypto seam"),
     axisLevel(rungReal, "ECIES epoch (sealed box over X25519), forward-secret across epochs (F-16)"))
 
-proc newEpochCrypto*(ks: Keystore, others: seq[Member] = @[]): EpochCrypto =
-  ## Found a conversation: epoch 0 with a fresh key I hold, members = me + others.
-  ## Identity comes from the keystore; our secret never enters this layer.
+proc newEpochCrypto*(ks: Keystore, room: string, others: seq[Member] = @[]): EpochCrypto =
+  ## Found a conversation on `room` (its content topic): epoch 0, members = me + others.
+  ## Its key is the keystore's founding key for the room — the same on every launch, so
+  ## a restart reads everything sealed under it again (invariant 4), and no one else can
+  ## derive it (F-16). Identity comes from the keystore; our secret never enters this layer.
   result = EpochCrypto(ks: ks, myEnc: ks.encIdentity(),
                        keys: initTable[int, array[32, byte]](),
                        memberSets: initTable[int, seq[Member]](), cur: 0)
   var members = @[result.myEnc]
   for m in others:
     if m != result.myEnc: members.add m
-  result.keys[0] = randomKey()
+  result.keys[0] = ks.foundingKey(room)
   result.memberSets[0] = members
+  if members.len == 1: result.ownOnly.incl 0
 
 proc newEpochJoiner*(ks: Keystore): EpochCrypto =
   ## A member who joins by ingesting grants; holds no key until they do.
@@ -99,6 +109,9 @@ proc grantFor*(cc: EpochCrypto, epoch: int, member: Member): EpochKeyGrant =
   ## works for epochs this instance holds a key for.
   if epoch notin cc.keys:
     raise newException(SodiumError, "no key to grant for epoch " & $epoch)
+  if member != cc.myEnc and epoch in cc.ownOnly:
+    cc.ownOnly.excl epoch               # shared now: its join key is the shared one
+    cc.joinKeys.del epoch
   EpochKeyGrant(epoch: epoch, members: cc.memberSets[epoch],
                 wrappedKey: eciesWrap(member, cc.keys[epoch]))
 
@@ -107,6 +120,8 @@ proc ingestGrant*(cc: EpochCrypto, grant: EpochKeyGrant) =
   ## envelopes — and only that epoch's (F-16), unless I was granted others.
   cc.keys[grant.epoch] = eciesUnwrapVia(cc.ks, grant.wrappedKey)
   cc.memberSets[grant.epoch] = grant.members
+  cc.ownOnly.excl grant.epoch           # a granted key is shared; its join key follows it
+  cc.joinKeys.del grant.epoch
   if grant.epoch > cc.cur: cc.cur = grant.epoch
 
 method addMember*(cc: EpochCrypto, member: Member) =
@@ -202,10 +217,19 @@ method ingestControl*(cc: EpochCrypto, frame: seq[byte]): bool =
 # the key holds the join secret, a later joiner cannot derive an earlier epoch's (F-16),
 # and nothing new is stored: it is rebuilt from the keys (invariant 4). The public half
 # is the beacon; it is random-looking and names no member.
+#
+# Except an epoch only I hold — the one I founded, before I admit anyone (exo-7b3). Its
+# key is my founding key, the same on every launch, so a join key derived from it would
+# make my beacon the same on every launch: a pseudonym a store node could follow across
+# my sessions, telling me apart from the room's other members. Its join keypair is drawn
+# fresh for this instance instead. That loses nothing: a join request is not room state,
+# and a requester reseals to the newest beacons until someone admits them.
 
 proc joinKeysFor(cc: EpochCrypto, epoch: int): EncKeys =
   if epoch notin cc.joinKeys:
-    let seed = digest(hashInput("muster.room.join-key.v1", @[("epoch-key", cbBytes(@(cc.keys[epoch])))]))
+    let seed =
+      if epoch in cc.ownOnly: randomKey()
+      else: digest(hashInput("muster.room.join-key.v1", @[("epoch-key", cbBytes(@(cc.keys[epoch])))]))
     cc.joinKeys[epoch] = encFromSeed(seed)
   cc.joinKeys[epoch]
 

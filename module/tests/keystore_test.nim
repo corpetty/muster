@@ -117,5 +117,25 @@ block:
   removeDir(d2)
   echo "9. FileKeystore keyfile SET: loadKeyfile adds a selectable key (K2b) OK"
 
+# 10. foundingKey (exo-7b3): a room's epoch-0 key, rebuilt from the keyfile alone on a
+#     restart, distinct per room and per identity, and never the identity secret.
+block:
+  const room = "/muster/1/founding/proto"
+  let d3 = getTempDir() / ("mks-founding-" & $epochTime().int)   # step 7 tampered `path`
+  let fpath = d3 / "founder.mks"
+  let fk = openFileKeystore(fpath, pass)
+  let k1 = fk.foundingKey(room)
+  doAssert openFileKeystore(fpath, pass).foundingKey(room) == k1, "a restart derives the same founding key"
+  doAssert fk.foundingKey("/muster/1/another/proto") != k1, "another room, another key"
+  doAssert openFileKeystore(d3 / "other.mks", pass).foundingKey(room) != k1,
+    "another member cannot derive this member's founding key (F-16)"
+  doAssert k1 != default(array[32, byte])
+  var refused = false
+  try: discard fk.foundingKey("")
+  except KeystoreError: refused = true
+  doAssert refused, "a founding key names its room"
+  removeDir(d3)
+  echo "10. foundingKey: per room and identity, the same after a restart (exo-7b3) OK"
+
 removeDir(dir)
 echo "keystore_test: all OK"

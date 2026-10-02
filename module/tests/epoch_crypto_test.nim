@@ -26,7 +26,7 @@ let bobMem = bobKs.encIdentity()
 let carolMem = carolKs.encIdentity()
 
 # Alice founds the conversation (epoch 0). Adding Bob opens epoch 1.
-let alice = newEpochCrypto(aliceKs)
+let alice = newEpochCrypto(aliceKs, "/muster/1/epoch-crypto/proto")
 alice.addMember(bobMem)
 let bob = newEpochJoiner(bobKs)
 bob.ingestGrant(alice.grantFor(1, bobMem))

@@ -33,10 +33,10 @@ let bobId   = toHex(bobKs.encIdentity().toBytes())
 # The room: Alice and Bob share one epoch (their room identity is their enc key).
 let net = newLocalNetwork()
 let bobMem = bobKs.encIdentity()
-let aliceCrypto = newEpochCrypto(aliceKs, @[bobMem])
+const topic = "/muster/1/room-chat/proto"
+let aliceCrypto = newEpochCrypto(aliceKs, topic, @[bobMem])
 let bobCrypto = newEpochJoiner(bobKs)
 bobCrypto.ingestGrant(aliceCrypto.grantFor(0, bobMem))
-const topic = "/muster/1/room-chat/proto"
 let alice = newCoordinationSession(newLocalTransport(net), aliceCrypto, topic)
 let bob = newCoordinationSession(newLocalTransport(net), bobCrypto, topic)
 

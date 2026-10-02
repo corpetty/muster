@@ -77,7 +77,7 @@ type Room* = object
 
 proc newRoom*(topic = "/muster/1/ef1-probe/proto"): Room =
   let net = newLocalNetwork()
-  let aliceCrypto = newEpochCrypto(aliceKs, @[bobKs.encIdentity()])
+  let aliceCrypto = newEpochCrypto(aliceKs, topic, @[bobKs.encIdentity()])
   let bobCrypto = newEpochJoiner(bobKs)
   bobCrypto.ingestGrant(aliceCrypto.grantFor(0, bobKs.encIdentity()))
   Room(topic: topic, net: net,
@@ -98,7 +98,7 @@ type Room3* = object
 proc newRoom3*(topic = "/muster/1/three/proto"): Room3 =
   ## Alice founds the room for Bob and Carol: one epoch key, granted to both.
   let net = newLocalNetwork()
-  let aliceCrypto = newEpochCrypto(aliceKs, @[bobKs.encIdentity(), room3CarolKs.encIdentity()])
+  let aliceCrypto = newEpochCrypto(aliceKs, topic, @[bobKs.encIdentity(), room3CarolKs.encIdentity()])
   let bobCrypto = newEpochJoiner(bobKs)
   bobCrypto.ingestGrant(aliceCrypto.grantFor(0, bobKs.encIdentity()))
   let carolCrypto = newEpochJoiner(room3CarolKs)
