@@ -1588,7 +1588,7 @@ Item {
                             answers: (msg.parsedCard && String(msg.parsedCard.kind || "") === "address-request")
                                      ? room.addressAnswers(msg.index, msg.parsedCard) : []
                             readerIdentity: room.myIdentity
-                            askedByMe: !!(msg.modelData && msg.modelData.self)
+                            postedByMe: !!(msg.modelData && msg.modelData.self)
                             askedOfName: (msg.parsedCard && msg.parsedCard["for"])
                                          ? room.memberLabel(String(msg.parsedCard["for"])) : ""
                             onShareAddress: {
