@@ -16,8 +16,9 @@ for layout, invariants and the current phase.
 **Everything from the split, settle-up, atlas and card work is merged to `main`.** That covers
 every PR up to #207, and the tracker's events for that work are committed.
 
-**Open on GitHub:** #208, `docs/atomic-swaps-lez-v03`. It is the LEZ v0.3 escrow session's
-note on the atomic-swaps HTLC (exo-f60d).
+**Merged after this was written:** #208, `docs/atomic-swaps-lez-v03` (2026-10-02). It is the
+LEZ v0.3 escrow session's note on the atomic-swaps HTLC (exo-f60d),
+`docs/upstream/atomic-swaps-htlc-on-lez-v03.md`. Nothing is open on GitHub.
 
 **Only on the old machine.** None of the items below is pushed; each belongs to another session.
 They were deliberately left as they are, so the new machine starts without them:
@@ -64,6 +65,7 @@ The table lists merged PRs on `corpetty/muster`.
 | #181, #186 | exo-607 T0–T4: the UI parity harness and the nim-seaqt toolchain. |
 | #193 | Rejoining a room reads its whole history (exo-aaf). |
 | #198, #200–#204, #206, #207 | **Testnet v0.3** (epic exo-eb6, the v0.3 session's): delivery v0.3.0 on `logos.dev`, RLN R1, `MUSTER_FLEET=local`, `lez_core` 0.5.0, a local v0.3 zone with a funder, v0.3 public transactions, the private split on a local v0.3 zone, and the LEZ multisig on v0.3. |
+| #208 | A shareable note for `logos-co/atomic-swaps-poc`: what LEZ v0.3 does to its HTLC escrow (exo-f60d). |
 
 **Upstream, still open:** [logos-co/lez-multisig#45](https://github.com/logos-co/lez-multisig/pull/45)
 (the v0.2.4 port plus the #40 fix) and
