@@ -51,6 +51,12 @@ official `keystore_module` as muster's EVM key backend, behind setting
   `main`'s first UI build on the new machine is that check. Build the UI plugin alone and
   capped: `cd ui && nice -n 19 nix build .#lgx --max-jobs 1 --cores 4 -L`.
 
+  **Checked on the new machine (2026-10-02):** the UI did not compile. `muster_ui.rep` took
+  `keystoreSelect`'s `QString` by value, which the backend's `const QString &` override
+  does not match. #215 fixed it, and the full runner builds. The unit suite after the merge
+  is 210/210, once #216's glibc fix is in. K5's Settings screen has not been looked at on a
+  display.
+
 **The v0.3 session's L5 work is pushed** as a WIP commit with no PR:
 `feat/lez-v03-live` at `024fea8`. It contains `infra/lez/funder.sh`, the three v0.3 e2e tests
 funding through `tests/probes/lez_funding.nim`, and their pebbles events. When this was
@@ -80,6 +86,7 @@ The table lists merged PRs on `corpetty/muster`.
 | #198, #200–#204, #206, #207 | **Testnet v0.3** (epic exo-eb6, the v0.3 session's): delivery v0.3.0 on `logos.dev`, RLN R1, `MUSTER_FLEET=local`, `lez_core` 0.5.0, a local v0.3 zone with a funder, v0.3 public transactions, the private split on a local v0.3 zone, and the LEZ multisig on v0.3. |
 | #208 | A shareable note for `logos-co/atomic-swaps-poc`: what LEZ v0.3 does to its HTLC escrow (exo-f60d). |
 | #213 | **`keystore_module` as muster's EVM key backend** (epic exo-149, K1, K2, K5): a person approves muster's Safe approvals in the official signer. Off by default (`keystore-backend`). The UI build is unverified (§1). |
+| #215–#219 | **The new machine's bring-up (2026-10-02).** #215: K5's UI compiles again. #216: the suite and the spec grader on a host glibc older than nixpkgs' (exo-844, exo-56a). #217: the address-share card copy (exo-4d4, exo-1d9). #219: a relaunched member re-enters its rooms (exo-ecbe). |
 
 **Upstream, still open:** [logos-co/lez-multisig#45](https://github.com/logos-co/lez-multisig/pull/45)
 (the v0.2.4 port plus the #40 fix) and
@@ -106,13 +113,31 @@ The table lists merged PRs on `corpetty/muster`.
    uv tool install "exophial @ git+https://github.com/AFDudley/exophial.git@dc69cd1"
    ```
 
-   **`pb`** is a standalone binary, `~/.local/bin/pb` on the old machine. Copy it across.
+   **`pb`** is a standalone binary, `~/.local/bin/pb` on the old machine. Copy it across, or
+   build it from AFDudley's fork (Go), as the new machine did on 2026-10-02:
+
+   ```bash
+   git clone https://github.com/AFDudley/pebbles && cd pebbles
+   nix shell nixpkgs#go -c go build -o ~/.local/bin/pb ./cmd/pb
+   ```
+
+   04 §2.1's `pre-commit install` needs `pre-commit` itself first: `uv tool install pre-commit`.
 
 3. **The Nim test closure is automatic.** `module/tests/run-suite.sh` clones the closure at
    `module/metadata.json`'s pins into `~/.cache/muster/nimpkgs` the first time it runs. The
    hand setup in 04 §2.3 is no longer needed. The suite is now 75 invariant probes plus the
    unit tests. Of the specs, `scripts/grade-specs.sh exo-a90.17` grades 6/6 and
    `exo-a90.20` grades 8/8.
+   - **A host glibc older than nixpkgs'** (Ubuntu 24.04's 2.39 against nixpkgs-unstable's
+     2.44) failed 140 of the 210 tests with `GLIBC_ABI_GNU2_TLS not found` until exo-844:
+     the suite now links nixpkgs' libsodium with nixpkgs' gcc.
+   - **Spec grading needs `nim` in `/usr/local/bin`, `/usr/bin` or `/bin`.** The oracle's
+     PATH allows only those, plus a fixed tool list. A choosenim install is under
+     `~/.choosenim`, so link the real binary there (not the `~/.nimble/bin` shim, which
+     needs the real HOME): `sudo ln -s ~/.choosenim/toolchains/nim-2.2.2/bin/nim
+     /usr/local/bin/nim`. The probes then link nixpkgs' libsodium with nixpkgs' gcc
+     (exo-56a). The new machine grades 72/80: exo-403 needs a runner in the worktree, and
+     exo-45e's probes were never written (exo-a2a).
 
 4. **Fleets.**
    - The default is `logos.dev`: cluster 3, no RLN.
@@ -163,17 +188,26 @@ The table lists merged PRs on `corpetty/muster`.
 
 - **exo-a90.21:** run a split across two machines, with each peer on its own host. This is
   the first thing a second machine makes possible.
+  - **The EVM half ran end to end on 2026-10-02.** Alice was on the compute server and Bob
+    on the workstation, reaching the server's anvil through an ssh tunnel. A 0.01 ETH split
+    went from proposed to agreed, paid and confirmed by Alice's own read: final, and
+    exactly 0.005 ETH on chain.
+  - **Still to do:** the R-4/R-6 kill mid-collection (the kill landed 3 s after final),
+    and the private split across the two machines.
+  - **What the relaunch found:** exo-ecbe, a relaunched member lost every room (fixed in
+    #219), and exo-273, a room's confirmations and payments pump only while it is the
+    open room.
 - **The multi-party runs from 04 §4** are still open:
   - exo-a50.8: the LEZ multisig, propose → vote → settle across two instances.
   - A two-instance FROST ceremony.
   - The cross-host Safe-txn settle over the live wire, plus R-4/R-6.
-- **Card copy.**
-  - exo-4d4: an Ethereum address-share card says "Anyone reading the zone…".
-  - exo-1d9: a member's own address-share card offers them "Use as recipient".
+- **Card copy:** exo-4d4 and exo-1d9 are fixed (#217, seen on a display).
 - **exo-3e8** (Bitcoin settle-up dust) is on an old-machine branch only (§1).
-- **exo-149** (`keystore_module` as the EVM key backend) is on `main` (#213, §1). Next: the UI
-  build check, then K3 (Basecamp hands the person to the signer), K4 (`tx_sender_module`)
-  and K6 (typed attestation and binding, an ADR).
+- **exo-149** (`keystore_module` as the EVM key backend) is on `main` (#213, §1). Its UI build
+  is fixed (#215). Next: K3 (Basecamp hands the person to the signer), K4
+  (`tx_sender_module`) and K6 (typed attestation and binding, an ADR).
+- **exo-a2a:** the spec `derived-exo-45e` names five probes that were never written, so it
+  grades 0/7.
 - **exo-eb6:** the v0.3 migration, owned by the v0.3 session.
   - Open: RLN Q1 and Q3.
   - LEZ v0.3: the live-testnet half of L5.
