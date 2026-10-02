@@ -13,12 +13,14 @@
 #   A's own scan finds a note of exactly B's share at its key node and confirms it.
 # Passes when both instances log the split final and A confirmed B's part by a note hash.
 #
-# On the v0.3 testnet (exo-eb6.4) there is no faucet: B waits at "LEZFUND awaiting funds
-# at <account>" until someone who holds native LEZ sends to it. It last passed there on
-# v0.2.4, 2026-09-28. LEZ_SPLIT_ZONE=local runs it on a local v0.3.0 zone instead
-# (infra/lez/localnet.sh, started if it is not up): its genesis funder sends B its funds
-# when B names its account, the wallets start fresh (a new local chain knows none of the
-# old ones), and proofs are dev-mode receipts the local sequencer accepts
+# v0.3 has no faucet (exo-eb6.4): when B's setup names the account it needs funded, the
+# zone's FUNDER sends to it (infra/lez/funder.sh). On the testnet that is the one account
+# someone holding native LEZ funded (`infra/lez/funder.sh --zone testnet account`); while it
+# cannot cover B's funding, B waits at "LEZFUND awaiting funds at <account>" for anyone to
+# send to it. The testnet run last passed on v0.2.4, 2026-09-28. LEZ_SPLIT_ZONE=local runs
+# it on a local v0.3.0 zone instead (infra/lez/localnet.sh, started if it is not up), whose
+# genesis funder is the zone's funder; the wallets start fresh (a new local chain knows none
+# of the old ones), and proofs are dev-mode receipts the local sequencer accepts
 # (LEZ_SPLIT_PROVE=1 proves for real). Private transactions are fee-exempt on v0.3.
 #
 # What the chain learns: that private transfers happened — no payer, payee or amount. The
@@ -33,7 +35,7 @@
 #                       from the change its shielded note kept) — one proof, and the run
 #                       relaunches over wallets whose accounts are labelled (exo-884)
 #     LEZ_SPLIT_ZONE    testnet (default) or local (a local v0.3.0 zone, funded by its funder)
-#     LEZ_SPLIT_FUND_AMOUNT  what the local funder sends B (default 1000 base units)
+#     LEZ_SPLIT_FUND_AMOUNT  what the zone's funder sends B (default 1000 base units)
 #     LEZ_SPLIT_PROVE=1 on the local zone, prove for real instead of dev-mode receipts
 #     KEEP_LOGS=1       keep the runners' logs on success too
 #   MUSTER_FLEET=local runs the two runners' delivery on a network of their own, too.
@@ -107,15 +109,23 @@ start=$(date +%s)
 while [ $(( $(date +%s) - start )) -lt "$TIMEOUT" ]; do
   sleep 5
   final A && final B && { ok=1; break; }
-  # the local zone has no faucet either: once B's own setup names the account it needs
-  # funded (its module's wallet_lez_setup line), the genesis funder sends to it, once
-  if [ "$ZONE" = local ] && [ "$FUNDED" = 0 ] && [ "${LEZ_SPLIT_FUND:-1}" != 0 ]; then
+  # no faucet on v0.3: once B's own setup names the account it needs funded (its module's
+  # wallet_lez_setup line), the zone's funder sends to it, once — when it can cover it
+  if [ "$FUNDED" = 0 ] && [ "${LEZ_SPLIT_FUND:-1}" != 0 ]; then
     acct=$(grep -ahoE 'MUSTER-LP wallet_lez_setup \{"account":"[0-9a-f]{64}","state":"missing"' "$D/B.log" 2>/dev/null \
            | head -1 | grep -oE '[0-9a-f]{64}')
     if [ -n "$acct" ]; then
-      echo "[$(( $(date +%s) - start ))s] the funder sends B ${LEZ_SPLIT_FUND_AMOUNT:-1000} at $acct"
-      infra/lez/localnet.sh fund "$acct" "${LEZ_SPLIT_FUND_AMOUNT:-1000}" >/dev/null 2>&1 \
-        && FUNDED=1 || echo "  the funder could not send (retrying)"
+      amount="${LEZ_SPLIT_FUND_AMOUNT:-1000}"
+      held=$(infra/lez/funder.sh --zone "$ZONE" balance 2>/dev/null || echo unknown)
+      if [[ "$held" =~ ^[0-9]+$ ]] && [ "$held" -ge $(( amount + 134400000 )) ]; then
+        echo "[$(( $(date +%s) - start ))s] the zone's funder sends B $amount at $acct"
+        infra/lez/funder.sh --zone "$ZONE" fund "$acct" "$amount" >/dev/null 2>&1 \
+          && FUNDED=1 || echo "  the funder could not send (retrying)"
+      elif [ -z "${WARNED:-}" ]; then
+        WARNED=1
+        echo "[$(( $(date +%s) - start ))s] the zone's funder holds $held, not enough to fund B: fund it" \
+             "($(infra/lez/funder.sh --zone "$ZONE" account 2>/dev/null | sed 's/, holding.*//')), or send to B at $acct"
+      fi
     fi
   fi
   if [ $(( ($(date +%s) - start) % 60 )) -lt 5 ]; then

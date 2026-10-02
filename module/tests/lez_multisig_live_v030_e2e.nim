@@ -1,7 +1,7 @@
 ## The LEZ multisig on a REAL LEZ v0.3.0 chain (exo-eb6.4.4 L4d): the room drives the v0.3
 ## port (run_program(plan, apply), docs/design/lez-multisig-v03.md), deployed on
 ## infra/lez/localnet.sh's zone, through wallet/lez_multisig_live.nim. No model stands in.
-##   1. the program is there (deployed first with `localnet.sh deploy` when
+##   1. the program is there (deployed first by the zone's funder, infra/lez/funder.sh, when
 ##      MUSTER_LEZ_MULTISIG_V03_BIN names the guest); three members derive LEZ accounts in
 ##      their own keystores, and the zone's funder sends each native LEZ — on v0.3 every
 ##      vote is a public transaction its member pays for;
@@ -20,7 +20,10 @@
 ##      includes them. R 350, the vault 650.
 ## Usage: lez_multisig_live_v030_e2e [sequencerUrl] [blockSeconds] [programAccount]
 ##   defaults http://127.0.0.1:3040, 15, and $MUSTER_LEZ_MULTISIG_V03_PROGRAM (hex or base58).
-## Env: MUSTER_LEZ_MULTISIG_V03_BIN — deploy this guest (the port's multisig.bin) first.
+## Env: MUSTER_LEZ_MULTISIG_V03_BIN — deploy this guest (the port's multisig.bin) first, the
+##   zone's funder paying; MUSTER_LEZ_E2E_FUND — what each member is sent (default 1 LEZ).
+## Funding is infra/lez/funder.sh's on the zone the URL names: the local zone's genesis funder,
+## or on the testnet the one account someone holding native LEZ funded.
 ## Needs the web3 closure (chronos, json-rpc, bearssl) + libsodium, and the local zone up.
 
 import std/[os, osproc, json, strutils, sequtils, random, times]
@@ -39,11 +42,11 @@ import ../src/wallet/lez_multisig_live
 import ../src/settlement/settlement
 import ../src/coordination/[session, intent_events, intents, live, vote, accounts]
 import ./probes/live_room
+import ./probes/lez_funding
 
 let url = (if paramCount() >= 1: paramStr(1) else: "http://127.0.0.1:3040")
 let blockSec = (if paramCount() >= 2: parseInt(paramStr(2)) else: 15)
 const Chain = "lez:local"
-let localnet = currentSourcePath.parentDir.parentDir.parentDir / "infra" / "lez" / "localnet.sh"
 
 proc idOf(s: string): seq[byte] =
   let h = s.strip()
@@ -51,19 +54,13 @@ proc idOf(s: string): seq[byte] =
 
 var programText = (if paramCount() >= 3: paramStr(3) else: getEnv("MUSTER_LEZ_MULTISIG_V03_PROGRAM"))
 let bin = getEnv("MUSTER_LEZ_MULTISIG_V03_BIN")
-if bin.len > 0:
-  let (o, code) = execCmdEx(localnet & " deploy " & quoteShell(bin))
-  doAssert code == 0, "the deploy failed: " & o
-  let at = o.find("(hex ")
-  doAssert at >= 0 and o.len >= at + 5 + 64, "the deploy names no program account: " & o
-  programText = o[at + 5 ..< at + 5 + 64]
+if bin.len > 0: programText = deployFrom(url, bin)
 doAssert programText.len > 0, "name the deployed program: arg 3, MUSTER_LEZ_MULTISIG_V03_PROGRAM, or MUSTER_LEZ_MULTISIG_V03_BIN"
 let program = idOf(programText)
 
 proc fund(id: seq[byte], amount: string) =
-  ## The genesis funder sends, as anyone holding native LEZ would (LEZ's own CLI).
-  let (o, code) = execCmdEx(localnet & " fund " & toHex(id) & " " & amount)
-  doAssert code == 0, "the funder could not send: " & o
+  ## The zone's funder sends, as anyone holding native LEZ would (infra/lez/funder.sh).
+  fundFrom(url, id, amount)
 
 proc seed32(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
 
@@ -85,8 +82,9 @@ doAssert ca.rpc.getAccount(program).v3, "the zone runs LEZ v0.3"
 let m1 = ca.addMember("e2e3/" & run & "/alice")
 let m2 = cb.addMember("e2e3/" & run & "/bob")
 let m3 = cc.addMember("e2e3/" & run & "/carol")
-for m in [m1, m2, m3]: fund(m, "1000000000")
-waitUntil("the members' funding", proc(): bool = [m1, m2, m3].allIt(native(it) == 1_000_000_000.stuint(128)))
+let each = e2eFund()              # on the testnet MUSTER_LEZ_E2E_FUND=50000000 covers a run's fees
+for m in [m1, m2, m3]: fund(m, each)
+waitUntil("the members' funding", proc(): bool = [m1, m2, m3].allIt(native(it) == parse(each, UInt128)))
 echo "1. ", url, " (LEZ v0.3) at height ", ca.height(), "; program ", toHex(program)[0 .. 11],
      "…; three members, each funded for its own fees OK"
 

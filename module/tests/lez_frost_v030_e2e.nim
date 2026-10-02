@@ -13,7 +13,8 @@
 ##   4. an aggregate over the wrong message is refused by the chain and nothing moves.
 ## Usage: lez_frost_v030_e2e [sequencerUrl] [blockSeconds] (default http://127.0.0.1:3040 15)
 ## Needs the web3 closure (chronos, json-rpc, bearssl) + the secp closure + libsodium, and
-## the local zone up (infra/lez/localnet.sh).
+## the local zone up (infra/lez/localnet.sh), or any v0.3 zone whose funder holds LEZ:
+## accounts are funded by infra/lez/funder.sh on the zone the URL names (MUSTER_LEZ_E2E_FUND each).
 
 import std/[os, osproc, strutils, sequtils, options, random, times]
 import stint
@@ -23,9 +24,9 @@ import ../src/lez/tx as leztx
 import ../src/bitcoin/tx                 # toHex
 import ../src/wallet/lez_multisig_live
 
+import ./probes/lez_funding
 let url = (if paramCount() >= 1: paramStr(1) else: "http://127.0.0.1:3040")
 let blockSec = (if paramCount() >= 2: parseInt(paramStr(2)) else: 15)
-let localnet = currentSourcePath.parentDir.parentDir.parentDir / "infra" / "lez" / "localnet.sh"
 proc seed(b: byte): array[32, byte] =
   for i in 0 ..< 32: result[i] = b
 
@@ -34,9 +35,8 @@ let run = $getTime().toUnix() & "-" & $rand(1_000_000)
 let rpc = newLezRpc(url)
 
 proc fund(id: seq[byte], amount: string) =
-  ## The genesis funder sends, as anyone holding native LEZ would (LEZ's own CLI).
-  let (o, code) = execCmdEx(localnet & " fund " & toHex(id) & " " & amount)
-  doAssert code == 0, "the funder could not send: " & o
+  ## The zone's funder sends, as anyone holding native LEZ would (infra/lez/funder.sh).
+  fundFrom(url, id, amount)
 
 proc waitUntil(what: string, cond: proc(): bool) =
   for _ in 0 ..< blockSec * 4:
@@ -74,7 +74,7 @@ doAssert rpc.getAccount(frostId).fresh, "a fresh account"
 echo "1. a 2-of-3 ceremony's key owns LEZ v0.3 account ", accountIdToBase58(frostId), " (no tweak) OK"
 
 # ── 2. funded by transfer, the FROST account alone sends and pays its fee ──────
-const Funded = "1000000000"                       # well above the 134_400_000 fee cap
+let Funded = e2eFund()       # above the 134_400_000 fee cap: on the testnet MUSTER_LEZ_E2E_FUND=200000000
 fund(frostId, Funded)
 waitUntil("the funding lands", proc(): bool = $rpc.getAccount(frostId).balance == Funded)
 let to = publicAccountId(kss[1].lezMemberKey("to/" & run))
