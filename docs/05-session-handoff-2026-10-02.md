@@ -26,7 +26,6 @@ They were deliberately left as they are, so the new machine starts without them:
 | Branch | Last commit | Ahead of `main` | What |
 | --- | --- | --- | --- |
 | `claude/zealous-franklin-8adb24` | 2026-10-01 | 2 | exo-3e8: a Bitcoin settle-up never nets to a payment below dust (red test + fix) |
-| `feat/keystore-module` | 2026-10-01 | 8 | exo-149.2: an approval signed by `keystore_module`, end to end under logoscore. Its worktree also has staged but uncommitted work: `keystore_identity.nim` and its test, plus lidl and surface changes. |
 | `docs/seaqt-ui-scope` | 2026-09-28 | 1 | exo-607 scoping note |
 | `docs/figures-truth-2026-09-25` | 2026-09-25 | 1 | diagram truth pass |
 | `fix/demo-peer-appimage`, `fix/demo-peer-tmpdir` | 2026-09-18 | 1 each | `demo-peer.sh` AppImage fixes |
@@ -34,9 +33,19 @@ They were deliberately left as they are, so the new machine starts without them:
 
 Two stashes are also local: `pre-ff-store-catchup`, and `WIP on main: 26df8de` (exo-6bc).
 
-**Two issue ids exist only in those branches' event logs:** exo-3e8 and exo-149.2. Each was
-filed on its own branch, so `pb show` on `main` does not know them. They reach `main` with
-their branch or not at all.
+**exo-3e8 exists only in its branch's event log.** It was filed on that branch, so `pb show`
+on `main` does not know it; it reaches `main` with its branch or not at all. The same holds
+for exo-149 and its children, whose events are on the pushed `feat/keystore-module` (below).
+
+**`feat/keystore-module` is pushed** too, with no PR: `e63069d` (2026-10-02), 10 commits
+ahead of `main`. It is epic exo-149, the official `keystore_module` as muster's EVM key
+backend; the design note is `docs/design/keystore-module-backend.md`.
+- **Closed:** K1, K2 and K5, each verified headless under logoscore 0.3.1:
+  `scripts/keystore-logoscore-test.sh` and `scripts/keystore-approval-logoscore-test.sh`
+  (anvil, the real Safe, `evm_keystore_cli`, `evm_signer_cli`).
+- **Not verified:** K5's UI build (Settings, the `.rep`, the backend). An uncapped `make build`
+  exhausted the old machine. Build the UI plugin alone and capped:
+  `cd ui && nice -n 19 nix build .#lgx --max-jobs 1 --cores 4 -L`.
 
 **The v0.3 session's L5 work is pushed** as a WIP commit with no PR:
 `feat/lez-v03-live` at `024fea8`. It contains `infra/lez/funder.sh`, the three v0.3 e2e tests
@@ -156,8 +165,10 @@ The table lists merged PRs on `corpetty/muster`.
 - **Card copy.**
   - exo-4d4: an Ethereum address-share card says "Anyone reading the zone…".
   - exo-1d9: a member's own address-share card offers them "Use as recipient".
-- **exo-3e8** (Bitcoin settle-up dust) and **exo-149.2** (`keystore_module` approvals). Both
-  are on old-machine branches only (§1).
+- **exo-3e8** (Bitcoin settle-up dust) is on an old-machine branch only (§1).
+- **exo-149** (`keystore_module` as the EVM key backend) is on the pushed `feat/keystore-module`
+  (§1). Next: K5's UI build check, then K3 (Basecamp hands the person to the signer), K4
+  (`tx_sender_module`) and K6 (typed attestation and binding, an ADR).
 - **exo-eb6:** the v0.3 migration, owned by the v0.3 session.
   - Open: RLN Q1 and Q3.
   - LEZ v0.3: the live-testnet half of L5.
