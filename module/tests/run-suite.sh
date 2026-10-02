@@ -50,7 +50,7 @@ if [ -n "${MUSTER_SODIUM:-}" ]; then
   SODIUM="$MUSTER_SODIUM"
 else
   { read -r SODIUM; read -r NIXGCC; } < <(nix build nixpkgs#libsodium.out nixpkgs#gcc.out --no-link --print-out-paths 2>/dev/null)
-  [ -x "${NIXGCC:-}/bin/gcc" ] || { echo "nixpkgs#gcc not found (set MUSTER_SODIUM to use the host's compiler)"; exit 1; }
+  [ -n "${NIXGCC:-}" ] && [ -x "$NIXGCC/bin/gcc" ] || { echo "nixpkgs#gcc not found (set MUSTER_SODIUM to use the host's compiler)"; exit 1; }
   export PATH="$NIXGCC/bin:$PATH"
 fi
 [ -f "$SODIUM/lib/libsodium.so" ] || { echo "libsodium not found (set MUSTER_SODIUM)"; exit 1; }
