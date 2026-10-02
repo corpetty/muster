@@ -22,3 +22,12 @@ let sodium = env / "sodium"
 if fileExists(sodium / "libsodium.so"):
   switch("passL", sodium / "libsodium.so")
   switch("passL", "-Wl,-rpath," & sodium)
+# ...and the gcc from the same nixpkgs (exo-56a): a probe the host's gcc links loads the
+# host's glibc, which may be older than the one that libsodium needs. Only under the grader
+# (no MUSTER_NIMPKGS, as closurePaths reads it); run-suite.sh puts its own on PATH.
+let cc = env / "cc"
+if getEnv("MUSTER_NIMPKGS").len == 0 and fileExists(cc / "gcc"):
+  switch("gcc.exe", cc / "gcc")
+  switch("gcc.linkerexe", cc / "gcc")
+  switch("gcc.cpp.exe", cc / "g++")
+  switch("gcc.cpp.linkerexe", cc / "g++")
