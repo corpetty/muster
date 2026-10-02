@@ -18,7 +18,8 @@
 ##      and report no outcome, so "included" read as final (exo-eb6.4.6).
 ## Usage: lez_frost_room_v030_e2e [sequencerUrl] [blockSeconds] (default http://127.0.0.1:3040 15)
 ## Needs the web3 closure (chronos, json-rpc, bearssl) + the secp closure + libsodium, and
-## the local zone up (infra/lez/localnet.sh).
+## the local zone up (infra/lez/localnet.sh), or any v0.3 zone whose funder holds LEZ:
+## accounts are funded by infra/lez/funder.sh on the zone the URL names (MUSTER_LEZ_E2E_FUND each).
 
 import std/[os, osproc, json, strutils, sequtils, options, random, times]
 import stint
@@ -33,17 +34,16 @@ import ../src/wallet/[types, lez_multisig_live]
 import ../src/settlement/settlement
 import ../src/coordination/[session, intent_events, intents, live, accounts, aggregate, attest]
 import ./probes/live_room
+import ./probes/lez_funding
 
 let url = (if paramCount() >= 1: paramStr(1) else: "http://127.0.0.1:3040")
 let blockSec = (if paramCount() >= 2: parseInt(paramStr(2)) else: 15)
-let localnet = currentSourcePath.parentDir.parentDir.parentDir / "infra" / "lez" / "localnet.sh"
 randomize()
 let cid = "lez-vault-v030-" & $getTime().toUnix() & "-" & $rand(1_000_000)
 
 proc fund(id: seq[byte], amount: string) =
-  ## The genesis funder sends, as anyone holding native LEZ would (LEZ's own CLI).
-  let (o, code) = execCmdEx(localnet & " fund " & toHex(id) & " " & amount)
-  doAssert code == 0, "the funder could not send: " & o
+  ## The zone's funder sends, as anyone holding native LEZ would (infra/lez/funder.sh).
+  fundFrom(url, id, amount)
 
 proc waitUntil(what: string, cond: proc(): bool) =
   for _ in 0 ..< blockSec * 4:
@@ -96,7 +96,7 @@ proc groupSign(h: array[32, byte]): LezWitness =
   let ctx = SessionContext(n: 3, t: 2, ids: signers, pubshares: some(signers.mapIt(acct.group.pubshares[it])),
                            threshPk: acct.group.threshPk, aggnonce: nonceAgg(pubnonces.mapIt(it[0])), msg: @h)
   LezWitness(signature: partialSigAgg(partials.mapIt(it[0]), ctx), xonly: acct.group.xonly)
-const Funded = "1000000000"                       # well above the 134_400_000 fee cap
+let Funded = e2eFund()       # above the 134_400_000 fee cap: on the testnet MUSTER_LEZ_E2E_FUND=200000000
 fund(acct.accountId, Funded)
 waitUntil("the funding lands", proc(): bool = $c.rpc.getAccount(acct.accountId).balance == Funded)
 let to = publicAccountId(aliceKs.lezMemberKey("to/" & cid))
