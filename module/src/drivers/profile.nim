@@ -21,6 +21,7 @@
 
 import std/[json, strutils]
 import ./driver
+import ../bitcoin/network
 
 type
   Locus* = enum
@@ -117,6 +118,34 @@ proc isCaip10*(s, chain: string): bool =
 
 proc caip2Evm*(chainId: uint64): string = "eip155:" & $chainId
 proc caip10*(chain, address: string): string = chain & ":" & address
+
+proc chainLabel*(chain: string): string =
+  ## A chain as a person reads it (exo-e71): "Ethereum", "Bitcoin regtest", "LEZ testnet",
+  ## "local chain 31337". No article, so it reads inside a sentence ("A contract on Base
+  ## checks…"). The Bitcoin names are bitcoin/network's own; anything this table does not
+  ## know keeps its id, an unknown Ethereum chain its number. Copy only: nothing signed
+  ## or checked ever reads a label, and a detail line still shows the id.
+  if chain.startsWith("eip155:"):
+    let id = chain["eip155:".len .. ^1]
+    case id
+    of "1": "Ethereum"
+    of "11155111": "Sepolia"
+    of "17000": "Holesky"
+    of "560048": "Hoodi"
+    of "10": "Optimism"
+    of "8453": "Base"
+    of "42161": "Arbitrum One"
+    of "137": "Polygon"
+    of "31337": "local chain 31337"      # anvil's and hardhat's own chain id
+    else: "EVM chain " & id
+  elif chain.startsWith("bip122:"):
+    try:
+      let n = networkByCaip2(chain)
+      if n.name == "mainnet": "Bitcoin" else: "Bitcoin " & n.name
+    except CatchableError: chain
+  elif chain.startsWith("lez:") and chain.len > "lez:".len:
+    "LEZ " & chain["lez:".len .. ^1]
+  else: chain
 
 # ── the rules a profile must satisfy to be believed ──────────────────────────
 proc profileFailures*(p: FamilyProfile, desc: DriverDescriptor): seq[string] =

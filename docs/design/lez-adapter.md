@@ -1,5 +1,10 @@
 # Sending assets via Logos — the LEZ adapter, for real
 
+> **2026-10-01, LEZ v0.3 (exo-eb6.4):** the testnet's faucet (`claim_pinata`) and
+> account registration (`register_public_account`) are gone; lez_core 0.5.0 has neither,
+> and muster dropped both. Native LEZ reaches an account at genesis, over the bridge, or by
+> transfer. Read the faucet mentions below as v0.2.x history.
+
 **Status:** design note / plan (2026-09-14). Reintroduces the Logos Execution Zone
 (LEZ) into muster as a real `ChainAdapter`, and as a *coordinated* transfer — a room
 deciding to move a shielded asset together. Grounds the earlier mock in the actual

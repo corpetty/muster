@@ -94,8 +94,11 @@ block:
   doAssert $cardRowsJson(rowsA) == $cardRowsJson(cardRows(drvA.profile())), "pure"
   let textA = rowsA.mapIt(it.text).join(" | ")
   let textB = rowsB.mapIt(it.text).join(" | ")
-  doAssert "eip155:31337" in textA and "eip155:8453" notin textA, textA
-  doAssert "eip155:8453" in textB and "eip155:31337" notin textB, textB
+  # each room's rows name its own chain and not the other's — by its label, never the
+  # CAIP-2 id (exo-e71): "local chain 31337" and "Base"
+  doAssert chainLabel("eip155:31337") in textA and chainLabel("eip155:8453") notin textA, textA
+  doAssert chainLabel("eip155:8453") in textB and chainLabel("eip155:31337") notin textB, textB
+  doAssert "eip155:" notin textA and "eip155:" notin textB, "no raw chain id in the rows"
   doAssert "2 of 3" in textA
   # rows differ exactly where the profiles differ: two Safes differ only by chain/account
   for i in 0 ..< rowKeys.len:

@@ -62,11 +62,20 @@ proc args(parts: varargs[JsonNode]): string =
   for p in parts: a.add p
   $a
 
-proc newLpLezCore*(instancePath: string, origin = "muster_module"): LpLezCore =
+proc pointConfigAt(cfg, sequencer: string): bool =
+  ## Point the wallet config lez_core wrote at this instance's zone; true if it changed.
+  if sequencer.len == 0 or not fileExists(cfg): return false
+  let (changed, json) = pointWalletConfig(readFile(cfg), sequencer)
+  if changed: writeFile(cfg, json)
+  changed
+
+proc newLpLezCore*(instancePath: string, origin = "muster_module", sequencer = ""): LpLezCore =
   ## Create the lp client for lez_core and open (or create) the wallet under the
   ## host-provided instance path. Per the labbook: DON'T author the wallet config — pass
-  ## a config path that does not exist and let the wallet write its own default (already
-  ## pointed at https://testnet.lez.logos.co). Raises if lez_core can't be reached.
+  ## a config path that does not exist and let the wallet write its own default (pointed
+  ## at https://testnet.lez.logos.co). `sequencer` (this instance's LEZ zone, the
+  ## lez-rpc setting) sets only its sequencer, when it differs (exo-eb6.4: a local v0.3
+  ## chain), always before lez_core reads it. Raises if lez_core can't be reached.
   let client = lp_client_create("lez_core", origin.cstring, nil, nil)
   if client == nil:
     raise newException(WalletError, "lez_core: lp_client_create returned null (module not loaded?)")
@@ -78,6 +87,16 @@ proc newLpLezCore*(instancePath: string, origin = "muster_module"): LpLezCore =
   let cfg = instancePath / "lez" / "config.json"      # absent → wallet writes the default
   let sto = instancePath / "lez" / "storage.json"
   let sta = instancePath / "lez" / "statistics.json"
+  # The zone is set before lez_core reads the config: it opens a wallet once and has no
+  # close, so an edit after that never reaches the wallet in memory. An existing wallet's
+  # config is pointed in place; a new wallet on another zone starts from lez_core's own
+  # default, pointed there.
+  if fileExists(cfg): discard pointConfigAt(cfg, sequencer)
+  else:
+    let fresh = newWalletConfig(sequencer)
+    if fresh.len > 0:
+      createDir(instancePath / "lez")
+      writeFile(cfg, fresh)
   # open() returns int 0 on success; if it fails (no wallet yet), create_new().
   let opened = result.rawCall("open", args(%cfg, %sto, %sta), kReadMs)
   var openOk = false
@@ -99,9 +118,8 @@ method createAccount*(c: LpLezCore, kind: LezAccountKind): LezAccount =
   if kind == lakPublic:
     let id = c.rawCall("create_account_public", "[]", kReadMs)
     if id.len == 0: raise newException(WalletError, "lez_core create_account_public failed")
-    # ACTIVATE a fresh public account on-chain, or the sequencer silently drops txns
-    # to it (labbook §9 / the atomic-swap POC). Registering is safe for public accounts.
-    discard c.rawCall("register_public_account", args(%id), kReadMs)
+    # No registration: on LEZ v0.3 a fresh public account is claimed by its first funded
+    # transfer (lez_core 0.5.0 dropped register_public_account, exo-eb6.4).
     c.save()
     LezAccount(id: id, kind: lakPublic)
   else:
@@ -233,27 +251,3 @@ method sync*(c: LpLezCore): int =
   (c.synced, c.tip) = (reached, tip)
   if code == LezSyncOk and reached > last: c.save()
   code
-
-method claimPinata*(c: LpLezCore, pinataId, account: string): LezResult =
-  ## Faucet: read the pinata challenge (its 33-byte data = [difficulty, seed[0..32]]),
-  ## solve the PoW ourselves (the module takes a pre-solved solution), and claim. The
-  ## claim is accepted on send; the credit lands only when a block commits (minutes).
-  let acct = c.rawCall("get_account_public", args(%pinataId), kReadMs)
-  if acct.len == 0: return LezResult(success: false, error: "pinata account unreadable")
-  # `data` as hex text, or — the sequencer's own shape, which the demo read — an array of
-  # byte values; either way 33 bytes
-  var dataHex = ""
-  try:
-    let d = parseJson(acct){"data"}
-    if d != nil and d.kind == JString: dataHex = d.getStr()
-    elif d != nil and d.kind == JArray:
-      for b in d: dataHex.add toHex(b.getInt(), 2).toLowerAscii()
-  except CatchableError: discard
-  if dataHex.len < 2: return LezResult(success: false, error: "pinata challenge missing")
-  let difficulty = parseHexInt(dataHex[0 .. 1])          # first byte = difficulty
-  let seedHex = dataHex[2 .. ^1]                          # remaining bytes = seed
-  var solution = ""
-  try: solution = pinataSolve(seedHex, difficulty)
-  except CatchableError as e: return LezResult(success: false, error: "PoW: " & e.msg)
-  result = parseEnvelope(c.rawCall("claim_pinata", args(%pinataId, %account, %solution), kReadMs))
-  if result.success: c.save()

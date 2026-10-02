@@ -33,7 +33,8 @@ mkdir -p "$OUT"
 # Tests that need a live chain (see tests/README.md): never in the default run.
 E2E=(safe_anvil_e2e safe_real_anvil_e2e coordinate_submit_anvil btc_regtest_e2e split_btc_regtest_e2e
      phase_d_exit_test lez_multisig_live_e2e lez_frost_account_e2e lez_frost_room_e2e
-     split_anvil_e2e split_erc20_anvil_e2e settle_up_btc_regtest_e2e settle_up_erc20_anvil_e2e)
+     split_anvil_e2e split_erc20_anvil_e2e settle_up_btc_regtest_e2e settle_up_erc20_anvil_e2e
+     settle_up_across_anvil_e2e)
 
 # 1. The closure, at the pinned revs (fetched on a miss).
 NIMPKGS="$(tools/nim-closure.sh)" || exit 1
@@ -65,6 +66,8 @@ FLAGS=(-d:release --threads:on --hints:off
   --passL:"$SODIUM/lib/libsodium.so" --passL:"-Wl,-rpath,$SODIUM/lib")
 
 # 2. Select.
+E2E+=(lez_frost_v030_e2e lez_frost_room_v030_e2e)    # on a local LEZ v0.3 zone (exo-eb6.4 L3)
+E2E+=(lez_multisig_live_v030_e2e)                    # the v0.3 multisig port, deployed on that zone (exo-eb6.4.4)
 is_e2e() { local n; for n in "${E2E[@]}"; do [ "$n" = "$1" ] && return 0; done; return 1; }
 unit=(); probes=(); e2e=()
 for f in tests/*.nim; do

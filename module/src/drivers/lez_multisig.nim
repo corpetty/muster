@@ -23,6 +23,13 @@
 ## target accounts its call takes, not which, so whoever executes chooses them — an
 ## approved transfer can be executed to another recipient. Muster's own settlement
 ## passes the accounts the room reviewed; the chain does not hold anyone else to them.
+##
+## On the v0.3 port (layout v0.3, exo-eb6.4.4) the effect is schema v2: the call as the
+## proposal commits to it — every row as an (account, program shard) pair and the
+## instruction's borsh bytes — so the recipient is committed by construction (no #40), and
+## S5 compares that commitment. Every vote is a public transaction its member PAYS for: a
+## member's account must hold native LEZ. A refused vote is included and pays too, which is
+## why the room confirms a vote by reading it back, never by its inclusion.
 
 import std/[json, strutils, sequtils]
 import ../dcbor/dcbor
@@ -35,6 +42,7 @@ import ../lez/multisig
 
 const LezMultisigFamily* = "lez.multisig-program"
 const PointerDomain = "lez.multisig.pointer.v1"
+const PointerDomainV03 = "lez.multisig.pointer.v2"    ## the v0.3 port's commitment (exo-eb6.4.4)
 const ReceiptDomain = "lez.multisig.vote.v1"
 
 type
@@ -92,20 +100,55 @@ proc lezMultisigAccountFromParts*(chain, address, config: string, members: seq[s
 proc newLezMultisigDriver*(a: LezMultisigAccount): LezMultisigDriver = LezMultisigDriver(account: a)
 
 # ── the pointer effect ─────────────────────────────────────────────────────────
-proc lezProposalEffect*(index: uint64, a: LezAction): string =
-  ## The room's effect for on-chain proposal #index with the content it reviews.
+proc lezProposalEffect*(index: uint64, a: LezAction, layout = plCountOnly): string =
+  ## The room's effect for on-chain proposal #index with the content it reviews. On the
+  ## v0.3 layout, the call as the proposal commits to it (schema v2).
+  if layout == plV03:
+    return $(%*{"effect": "lez-multisig-proposal", "lez": "v0.3", "index": index, "target": hx(a.target),
+                "shards": a.shards.mapIt(%*{"account": hx(it.account), "program": hx(it.program)}),
+                "data": hx(a.data), "pdaSeeds": a.pdaSeeds.mapIt(hx(it))})
   $(%*{"effect": "lez-multisig-proposal", "index": index, "target": hx(a.target),
        "instruction": a.instruction.mapIt(int64(it)), "accounts": a.accounts.mapIt(hx(it)),
        "pdaSeeds": a.pdaSeeds.mapIt(hx(it)), "authorized": a.authorized.mapIt(int(it))})
+
+proc mapGetField(m: CborValue, key: string): CborValue =
+  if m.kind != ckMap: return cbNull()
+  for (k, v) in m.pairs:
+    if k.kind == ckText and k.t == key: return v
+  cbNull()
 
 proc fieldOf(e: Effect, name: string): CborValue =
   for (k, v) in e.fields:
     if k == name: return v
   cbNull()
 
+proc lezActionOfV03(e: Effect): tuple[index: uint64, action: LezAction] =
+  let idx = e.fieldOf("index")
+  let target = e.fieldOf("target")
+  let data = e.fieldOf("data")
+  if idx.kind != ckUint or idx.u == 0: raise newException(ValueError, "a proposal index is 1 or more")
+  if target.kind != ckBytes or target.b.len != 32: raise newException(ValueError, "a target program is 32 bytes")
+  if data.kind != ckBytes or data.b.len == 0: raise newException(ValueError, "the call carries no instruction")
+  var shards: seq[tuple[account, program: seq[byte]]]
+  let sh = e.fieldOf("shards")
+  if sh.kind != ckArray or sh.arr.len == 0: raise newException(ValueError, "the call names no rows")
+  for x in sh.arr:
+    let (acct, prog) = (x.mapGetField("account"), x.mapGetField("program"))
+    if acct.kind != ckBytes or acct.b.len != 32 or prog.kind != ckBytes or prog.b.len != 32:
+      raise newException(ValueError, "a row is a 32-byte account and a 32-byte program")
+    shards.add (acct.b, prog.b)
+  var seeds: seq[seq[byte]]
+  let ps = e.fieldOf("pdaSeeds")
+  if ps.kind == ckArray:
+    for x in ps.arr:
+      if x.kind != ckBytes or x.b.len != 32: raise newException(ValueError, "pdaSeeds are 32 bytes each")
+      seeds.add x.b
+  (idx.u, lezCallV03(target.b, shards, data.b, seeds))
+
 proc lezActionOf*(e: Effect): tuple[index: uint64, action: LezAction] =
   ## The pointer and content a lez-multisig-proposal effect carries; raises ValueError
   ## on anything malformed.
+  if e.schemaId == "muster.effect.lez-multisig-proposal.v2": return lezActionOfV03(e)
   if e.schemaId != "muster.effect.lez-multisig-proposal.v1": raise newException(ValueError, "not a LEZ multisig proposal")
   let idx = e.fieldOf("index")
   let target = e.fieldOf("target")
@@ -132,8 +175,8 @@ proc lezActionOf*(e: Effect): tuple[index: uint64, action: LezAction] =
   result.action.accountCount = result.action.accounts.len
 
 method describe*(d: LezMultisigDriver): DriverDescriptor =
-  DriverDescriptor(rounds: 1, serializationDomain: PointerDomain, finality: finExternal,
-                   threshold: d.account.threshold)
+  DriverDescriptor(rounds: 1, serializationDomain: (if d.account.layout == plV03: PointerDomainV03 else: PointerDomain),
+                   finality: finExternal, threshold: d.account.threshold)
 
 method environment*(d: LezMultisigDriver): string = d.account.chain
 
@@ -145,6 +188,15 @@ method canonicalize*(d: LezMultisigDriver, e: Effect): Materialization =
   try: (idx, a) = lezActionOf(e)
   except ValueError as err:
     return Materialization(bytes: encode(cbArray(@[cbText(PointerDomain), cbText("invalid: " & err.msg)])))
+  if e.schemaId == "muster.effect.lez-multisig-proposal.v2":
+    if d.account.layout != plV03:
+      return Materialization(bytes: encode(cbArray(@[cbText(PointerDomainV03), cbText("invalid: a v0.3 call for a " &
+                                                     $d.account.layout & " account")])))
+    return Materialization(bytes: encode(cbArray(@[
+      cbText(PointerDomainV03), cbText(d.account.chain), cbText($d.account.scheme),
+      cbBytes(d.account.program), cbBytes(d.account.createKey), cbUint(idx),
+      cbBytes(a.target), cbArray(a.shards.mapIt(cbArray(@[cbBytes(it.account), cbBytes(it.program)]))),
+      cbBytes(a.data), cbArray(a.pdaSeeds.mapIt(cbBytes(it)))])))
   Materialization(bytes: encode(cbArray(@[
     cbText(PointerDomain), cbText(d.account.chain), cbText($d.account.scheme),
     cbBytes(d.account.program), cbBytes(d.account.createKey), cbUint(idx),
@@ -192,6 +244,8 @@ method identifyContributor*(d: LezMultisigDriver, m: Materialization, c: Contrib
 method signRefusal*(d: LezMultisigDriver, e: Effect): string =
   try:
     discard lezActionOf(e)
+    if (e.schemaId == "muster.effect.lez-multisig-proposal.v2") != (d.account.layout == plV03):
+      return "the proposal is for another build of the program than this account's (" & $d.account.layout & ")"
     ""
   except ValueError as err: "not a LEZ multisig proposal: " & err.msg
 
@@ -211,6 +265,13 @@ method checkRead*(d: LezMultisigDriver, e: Effect, name: string, value: seq[byte
   if p.createKey != d.account.createKey: return "the on-chain proposal belongs to another multisig"
   if p.hasConfig: return "the on-chain proposal is a config change, not the call the room reviewed"
   if p.action.target != a.target: return "the on-chain proposal calls another target program"
+  if d.account.layout == plV03:
+    # the v0.3 port commits the whole call: every row, the instruction bytes, the seeds
+    if p.action.shards != a.shards: return "the on-chain proposal's call touches different accounts"
+    if p.action.data != a.data: return "the on-chain proposal carries a different instruction"
+    if p.action.pdaSeeds != a.pdaSeeds: return "the on-chain proposal proves different PDA seeds"
+    if p.status != psActive: return "the on-chain proposal is " & $p.status & " — no longer open to votes"
+    return ""
   if p.action.instruction != a.instruction: return "the on-chain proposal carries a different instruction"
   if p.action.accountCount != a.targetAccountCount:
     return "the on-chain proposal expects " & $p.action.accountCount & " target accounts; the room reviewed " &
@@ -233,7 +294,7 @@ method profile*(d: LezMultisigDriver): FamilyProfile =
     approverCost: acPerVote, rounds: 1, secretState: false, maturity: maDemo,
     chain: d.account.chain, account: d.account.accountId, k: d.account.threshold,
     n: d.account.members.len, bypassesKnown: true,
-    bypasses: (if d.account.layout == plAccountIds: @[]      # #41: the accounts are committed and bound
+    bypasses: (if d.account.layout in {plAccountIds, plV03}: @[]   # #41 / v0.3: the accounts are committed and bound
                else: @["the executor chooses the target accounts at execute — a proposal records only how many " &
                        "(logos-co/lez-multisig#40)"]))
 
@@ -241,7 +302,8 @@ method manifest*(d: LezMultisigDriver, effect: Effect): ActionManifest =
   ## Needs the user's LEZ sequencer (JSON-RPC, the `lez-rpc` setting — the live path,
   ## wallet/lez_multisig_live.nim; it does not go through lez_core) and a member key of the
   ## multisig, derived per membership in the keystore. LEZ v0.2.4 charges no fee, so no
-  ## funded account is needed. Every approval is a public transaction the chain (and the
+  ## funded account is needed; on the v0.3 port every vote pays its own, so the member's
+  ## account must hold native LEZ (exo-eb6.4.4). Every approval is a public transaction the chain (and the
   ## sequencer first) sees — who voted, on what, when. When the proposal executes, the
   ## program it targets runs over the accounts it passes: each may be written, and which
   ## ones are is the program's business, so every one is named (exo-ec8). Chains are
@@ -259,7 +321,8 @@ method manifest*(d: LezMultisigDriver, effect: Effect): ActionManifest =
   except ValueError: discard
   ActionManifest(declared: true, agreement: d.describe(),
     requirements: @[req(rqEnvironment, chain), req(rqInfra, "lez-rpc"),
-                    req(rqAuthority, "lez-multisig-member", rpContributor)],
+                    req(rqAuthority, "lez-multisig-member", rpContributor)] &
+                  (if d.account.layout == plV03: @[req(rqInfra, "lez-member-funded", rpContributor)] else: @[]),
     discloses: @[row("approvals", obChainObserver), row("effect", obChainObserver),
                  row("policy", obChainObserver), row("signed-tx", obRpcProvider)],
     touches: touches)

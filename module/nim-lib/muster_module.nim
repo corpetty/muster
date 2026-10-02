@@ -10,7 +10,7 @@
 
 include muster_gen
 
-import std/[json, tables, strutils, os, algorithm, times, sets, sequtils]
+import std/[json, tables, strutils, os, algorithm, times, sets, sequtils, options]
 import ../src/dcbor/dcbor
 import ../src/drivers/driver
 import ../src/drivers/safe
@@ -1177,36 +1177,18 @@ proc splitPump() =
   let ks = moduleKeystore()
   loadSplitBook()
   let now = epochTime()
-  let due = gSplitBook.due(now)
+  let seamOf = proc (pp: PendingPart): PartSeam = seamOfPending(gSession, pp)
+  var note: proc (msg: string) = nil
+  if gLpDebug: note = proc (msg: string) = stderr.writeLine("MUSTER-LP split pending " & msg)
   var changed = false
-  for k in countdown(due.high, 0):     # highest index first: a settled entry leaves the book
-    let i = due[k]
-    let e = gSplitBook.entries[i]
-    if e.topic != gTopic: continue     # a payment completes only in its own room
-    var res = crPending
-    var said = ""
-    try:
-      let seam = seamOfPending(gSession, e.pp)
-      let r = liveSettlePartComplete(gSession, ks, driverFor, seam, e.pp)
-      if gLpDebug and r.startsWith("unconfirmed"):
-        stderr.writeLine("MUSTER-LP split pending " & e.pp.intentId & " " & e.pp.tx & ": " & r)
-      if not r.startsWith("unconfirmed"): (res = crLanded; said = r)
-      elif "failed on" in r: (res = crFailed; said = r)
-      elif e.unresolved or now - e.startedS > e.deadlineS:
-        # past its deadline it is not dropped: only the chain's word releases it
-        let g = seam.partGone(e.pp.transfer, e.pp)
-        if g.gone: (res = crGone; said = g.detail)
-    except CatchableError as ex:       # an unreachable RPC or node: ask again later
-      if gLpDebug: stderr.writeLine("MUSTER-LP split pending " & e.pp.intentId & " not checked: " & ex.msg)
-    let outcome = gSplitBook.record(i, res, now)
-    if outcome.len == 0: continue
+  for (pp, outcome, said) in gSplitBook.pumpBook(gTopic, gSession, ks, driverFor, seamOf, now, note):
     changed = true
-    let seam = gSplitSeams.getOrDefault(e.pp.intentId, PartSeam())
+    let seam = gSplitSeams.getOrDefault(pp.intentId, PartSeam())
     let full = (if said.len > 0: said & " — " & outcome else: outcome)
-    if gLpDebug: stderr.writeLine("MUSTER-LP split reported " & e.pp.intentId & " " & full &
-                                  " tx=" & seam.landedRef(e.pp.transfer, e.pp.tx))
-    gSplitRecent.add %*{"intentId": e.pp.intentId, "part": e.pp.part,
-                        "tx": seam.landedRef(e.pp.transfer, e.pp.tx),
+    if gLpDebug: stderr.writeLine("MUSTER-LP split reported " & pp.intentId & " " & full &
+                                  " tx=" & seam.landedRef(pp.transfer, pp.tx))
+    gSplitRecent.add %*{"intentId": pp.intentId, "part": pp.part,
+                        "tx": seam.landedRef(pp.transfer, pp.tx),
                         "outcome": full, "at": int64(now)}
     if gSplitRecent.len > 20: gSplitRecent.delete(0)
   if changed: saveSplitBook()
@@ -1487,6 +1469,130 @@ proc musterCoordinateProposeSettleUp(chain, asset, memo: string): string =
   try: result = musterCoordinateProposeSettleUpImpl(chain, asset, memo)
   except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
   if gLpDebug: stderr.writeLine("MUSTER-LP settle-up propose " & result)
+
+# ── settling up across assets and chains (exo-a90.17, split-the-bill.md §4.13) ─────────
+proc assetDecimals(chain, asset: string): int =
+  ## An asset's decimals: ETH 18, BTC 8, a token's own decimals() through my RPC (-1 when
+  ## unreadable) — for the composer's "1 BTC = 21.4 ETH" and the card, never a check.
+  if asset == "ETH": 18
+  elif asset == "BTC": 8
+  elif isErc20Asset(asset): tokenInfo(chain, asset[6 .. ^1]).decimals
+  else: -1
+
+proc assetSymbol(chain, asset: string): string =
+  if isErc20Asset(asset):
+    let t = tokenInfo(chain, asset[6 .. ^1])
+    if t.symbol.len > 0: t.symbol else: "units"
+  else: asset
+
+proc musterCoordinateOpenAssets(): string =
+  ## What a settle-up across assets could cover: the open shares on every public rail,
+  ## grouped by chain and asset (openPartsAll).
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  var groups: seq[(string, string)]
+  var counts = initTable[(string, string), int]()
+  for c in openPartsAll(gSession.roomEvents(), driverFor, uint64(epochTime())):
+    let k = (c.chain, c.asset)
+    if k notin counts: groups.add k
+    counts[k] = counts.getOrDefault(k) + 1
+  var arr = newJArray()
+  for k in groups:
+    arr.add %*{"chain": k[0], "chainLabel": chainLabel(k[0]), "asset": k[1], "parts": counts[k],
+               "symbol": assetSymbol(k[0], k[1]),
+               "decimals": assetDecimals(k[0], k[1])}
+  # the chain a settle-up proposed with chain "" pays on: the compose policy's, else my RPC's
+  var payChain = splitPolicy(gCoordKind).account
+  if payChain.len == 0:
+    let (ok, c, _) = splitChainFor("evm-split")
+    if ok: payChain = c
+  $(%*{"assets": arr, "payChain": payChain, "payChainLabel": chainLabel(payChain)})
+
+proc musterCoordinateProposeSettleUpAcrossImpl(chain, asset, ratesJson, memo: string): string =
+  ## Settle up across assets and chains: paid on `chain` in `asset`, covering every open
+  ## share in it or in an asset `ratesJson` prices ({chain, asset, rate per ONE unit, source}).
+  ## The rates go into base units on both sides (settleRate) and are proposed as MY recorded
+  ## read (invariant 10).
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  var chain = chain.strip()
+  if chain.len == 0: chain = splitPolicy(gCoordKind).account
+  if chain.len == 0:
+    let (ok, c, detail) = splitChainFor("evm-split")
+    if not ok: return $(%*{"error": "no-rpc", "detail": detail})
+    chain = c
+  if chain.startsWith("lez:"):
+    return $(%*{"error": "not-netted", "detail": "the private split is never netted: its shares are told apart by amount"})
+  let kind = (if chain.startsWith("bip122:"): "btc-split" else: "evm-split")
+  if kind notin roomKinds(): return $(%*{"error": "not-admitted", "kind": kind})
+  proc assetOf(chain, a: string): string =
+    let x = a.strip().toLowerAscii()
+    if x.len == 0 or x == "eth" or x == "btc": (if chain.startsWith("bip122:"): "BTC" else: "ETH")
+    elif x.startsWith("erc20:"): x
+    else: "erc20:" & x
+  let payAsset = assetOf(chain, asset)
+  let payDec = assetDecimals(chain, payAsset)
+  if payDec < 0: return $(%*{"error": "unknown-decimals", "chain": chain, "asset": payAsset})
+  var rates: seq[SettleRate]
+  let now = uint64(epochTime())
+  var rj: JsonNode
+  try: rj = parseJson(if ratesJson.strip().len == 0: "[]" else: ratesJson)
+  except CatchableError: return $(%*{"error": "bad-rates", "detail": "rates is a JSON array"})
+  for r in rj.getElems():
+    let rc = r{"chain"}.getStr().strip()
+    let ra = assetOf(rc, r{"asset"}.getStr())
+    let dec = assetDecimals(rc, ra)
+    if dec < 0: return $(%*{"error": "unknown-decimals", "chain": rc, "asset": ra})
+    let sr = settleRate(rc, ra, r{"rate"}.getStr(), payDec, dec, r{"source"}.getStr(), int64(now))
+    if not sr.ok: return $(%*{"error": "bad-rate", "asset": ra, "detail": sr.why})
+    rates.add sr.rate
+  gSession.poll()
+  let events = gSession.roomEvents()
+  let composed = settleUpAcross(events, driverFor, chain, payAsset, rates, memo, now)
+  if composed.why.startsWith("no-address:"):
+    let who = composed.why["no-address:".len .. ^1]
+    return $(%*{"error": "no-address", "who": who, "name": memberName(who, myIds()), "chain": chain,
+                "chainLabel": chainLabel(chain),
+                "detail": memberName(who, myIds()) & " has shared no address on " & chainLabel(chain) & " to be paid at"})
+  if composed.why.len > 0: return $(%*{"error": composed.why})
+  # my own agreement is made by proposing: never for an address this client does not hold
+  let family = (if kind == "btc-split": BtcSplitFamily else: EvmSplitFamily)
+  let mine = settleAgreeRefusal(effectFromJson(composed.effectJson),
+                                toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii(), myPayTos(family))
+  if mine.len > 0: return $(%*{"error": mine, "detail": "you would be paid at an address this client does not hold"})
+  var ttl = DefaultIntentTtl
+  try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
+  except ValueError: discard
+  inc gMsgSeq
+  let reads = (if rates.len > 0: @[(field: "rates", source: "rates:proposer")] else: @[])
+  let id = liveProposeIntent(gSession, moduleKeystore(), driverFor, kind & "@" & chain, composed.effectJson,
+                             int64(now), gMsgSeq, account = chain, ttlSec = ttl, reads = reads)
+  if id.startsWith("0x"): id else: $(%*{"error": id})
+
+proc musterCoordinateProposeSettleUpAcross(chain, asset, rates, memo: string): string =
+  try: result = musterCoordinateProposeSettleUpAcrossImpl(chain, asset, rates, memo)
+  except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
+  if gLpDebug: stderr.writeLine("MUSTER-LP settle-up across propose " & result)
+
+proc musterCoordinateShareAddress(chain: string): string =
+  ## Post MY address for `chain` as an author-signed address-share card: my Ethereum
+  ## address, or the Bitcoin address of my own key on that network.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let c = chain.strip()
+  var body: JsonNode
+  if c.startsWith("bip122:"):
+    var hrp = ""
+    try: hrp = networkByCaip2(c).hrp
+    except CatchableError: return $(%*{"error": "unknown-network", "chain": c})
+    body = %*{"kind": "address-share", "asset": "BTC", "chain": c,
+              "address": p2wpkhAddress(hrp, moduleKeystore().btcPubKey()), "form": 1}
+  elif c.len == 0 or c.startsWith("eip155:"):
+    body = %*{"kind": "address-share", "asset": "ETH", "address": addrHex(myAddress()).toLowerAscii(), "form": 1}
+  else: return $(%*{"error": "no-shared-address", "detail": "nothing is paid to a shared address on " & c})
+  let author = toHex(moduleKeystore().encIdentity().toBytes())
+  inc gMsgSeq
+  let (_, ev) = newMessageEvent(author, int64(epochTime()), $body, gMsgSeq)
+  gSession.publishAuthored(moduleKeystore(), ev)
+  $(%*{"address": body["address"].getStr()})
 
 proc musterCoordinateConfirmPart(intentId, part, tx: string): string =
   try: result = musterCoordinateConfirmPartImpl(intentId, part, tx)
@@ -1975,6 +2081,11 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
                                      toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii(),
                                      myPayTos(drv.profile().family))
       if why.len > 0: return why
+      # a settle-up across chains paying me at an address I vouch for: only one I hold (§4.13)
+      let whySettle = settleAgreeRefusal(effectFromJson(effectJsonOf(gSession.roomEvents(), intentId)),
+                                         toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii(),
+                                         myPayTos(drv.profile().family))
+      if whySettle.len > 0: return whySettle
     if drv of LezMultisigDriver: return noteApproved(intentId, musterCoordinateVote(intentId))
     if drv.frostGroupOf().ok:
       # a FROST approval (Bitcoin or LEZ) is two rounds: this member's nonces now, its partial signature
@@ -2122,11 +2233,16 @@ proc musterCoordinateIntents(): string =
           var st = PartView()
           for pv in v.parts:
             if pv.part == part: st = pv
+          # across chains (§4.13): a recipient owed only elsewhere, paid at an address they vouch for
+          let vouched = su.rates.len > 0 and
+                        not su.covers.anyIt(it.creditor == t.to and it.chain == su.chain and it.payTo == t.payTo)
           ts.add %*{"part": part, "from": t.frm, "fromName": memberName(t.frm, mine), "to": t.to,
                     "toName": memberName(t.to, mine), "amount": t.amount, "payTo": t.payTo,
                     "mine": t.frm == myEncHex, "toMe": t.to == myEncHex, "settled": st.settled,
                     "confirmed": st.confirmed, "tx": st.tx, "paying": splitPayingFor(v.id, part),
-                    "unresolved": splitUnresolvedFor(v.id, part)}
+                    "unresolved": splitUnresolvedFor(v.id, part), "vouched": vouched,
+                    "payToMine": t.to == myEncHex and
+                                 settleAgreeRefusal(effectFromJson(v.effectJson), myEncHex, myPayTos(prof.family)).len == 0}
         var splits: seq[string]
         for c in su.covers:
           if c.intent notin splits: splits.add c.intent
@@ -2136,7 +2252,24 @@ proc musterCoordinateIntents(): string =
         let ctx = intentContext(events, v.id)
         let expiredUnpaid = not ctx.isPlaceholder and ctx.expired(nowS) and not beganSettling(v) and
                             su.transfers.len > 0
+        # across assets (§4.13): each rate as signed and per ONE unit of its asset (in the
+        # payment asset's base units, for the card to format), and the assets the covers are in
+        var rs = newJArray()
+        for r in su.rates:
+          let dec = assetDecimals(r.chain, r.asset)
+          rs.add %*{"chain": r.chain, "asset": r.asset, "symbol": assetSymbol(r.chain, r.asset), "decimals": dec,
+                    "rate": r.rate, "per": r.per, "perUnit": ratePerUnit(r, dec), "source": r.source, "at": r.at}
+        var inAssets = newJArray()
+        var seenAssets: seq[string]
+        for c in su.covers:
+          if (c.chain & "|" & c.asset) in seenAssets: continue
+          seenAssets.add c.chain & "|" & c.asset
+          inAssets.add %*{"chain": c.chain, "chainLabel": chainLabel(c.chain), "asset": c.asset,
+                          "symbol": assetSymbol(c.chain, c.asset),
+                          "shares": su.covers.countIt(it.chain == c.chain and it.asset == c.asset)}
         o["settleUp"] = %*{"asset": su.asset, "memo": su.memo, "covers": su.covers.len, "splits": splits.len,
+                           "chain": su.chain, "chainLabel": chainLabel(su.chain), "across": su.rates.len > 0,
+                           "rates": rs, "coverAssets": inAssets,
                            "expired": expiredUnpaid, "lapsed": coverLapsed(events, driverFor, v, nowS),
                            "releasesAt": (if expiredUnpaid: $(ctx.expiry + CoverReleaseGraceS) else: ""),
                            "transfers": ts, "iAmParty": myEncHex in settleParties(su),
@@ -2983,6 +3116,16 @@ proc musterCoordinateProposeLez(actionJson: string): string =
   var action: LezAction
   try:
     let j = parseJson(actionJson)
+    if j.hasKey("shards"):
+      # a v0.3 call (exo-eb6.4.4): {target, shards: [{account, program}], data (hex), pdaSeeds}
+      var shards: seq[tuple[account, program: seq[byte]]]
+      for x in j["shards"]: shards.add (lezIdOf(x["account"].getStr()), lezIdOf(x["program"].getStr()))
+      var data: seq[byte]
+      var h = j["data"].getStr()
+      if h.startsWith("0x"): h = h[2 .. ^1]
+      for i in 0 ..< h.len div 2: data.add byte(parseHexInt(h[2*i .. 2*i+1]))
+      return lezProposeAction(lezCallV03(lezIdOf(j["target"].getStr()), shards, data,
+                                         j{"pdaSeeds"}.getElems().mapIt(lezIdOf(it.getStr()))))
     action.target = lezIdOf(j["target"].getStr())
     for w in j["instruction"]: action.instruction.add uint32(w.getBiggestInt())
     for x in j["accounts"]: action.accounts.add lezIdOf(x.getStr())
@@ -3024,8 +3167,23 @@ proc lezFrostTransfer(recipient, amount: string): string =
   var effectJson: string
   try:
     let rpc = newLezRpc(gLezRpc)
-    effectJson = lezFrostCallEffect(rpc.programId("token"), @[acct.accountId, to], words, acct.accountId,
-                                    rpc.getAccount(acct.accountId).nonce)
+    let now = rpc.getAccount(acct.accountId)
+    if now.v3:
+      # the zone runs LEZ v0.3.0 (exo-eb6.4 L3): a native transfer from the group's own
+      # account, which pays its own fee (the LEZ wallet's default declaration). Settlement
+      # sends it only when the account covers it and that fee's cap (exo-eb6.4.6): say so
+      # now, before the room runs two rounds for a transfer that cannot be sent
+      let cap = defaultFee(acct.accountId).maxFee
+      if now.balance < amt.stuint(128) + cap:
+        return $(%*{"error": "not-covered", "detail": "the group's account holds " & $now.balance &
+                    ", which does not cover " & $amt & " and its fee cap (" & $cap & "): on LEZ v0.3 a " &
+                    "transfer it cannot cover would be included, pay its gas and move nothing"})
+      effectJson = lezFrostCallEffect3(NativeTokenProgram, @[nativeShard(acct.accountId), nativeShard(to)],
+                                       nativeTransfer(amt.stuint(128)), acct.accountId, @[now.nonce],
+                                       some defaultFee(acct.accountId))
+    else:
+      effectJson = lezFrostCallEffect(rpc.programId("token"), @[acct.accountId, to], words, acct.accountId,
+                                      now.nonce)
   except CatchableError as e:
     return $(%*{"error": "sequencer-unreachable", "detail": e.msg})
   let id = musterCoordinatePropose(effectJson)
@@ -3049,8 +3207,14 @@ proc musterCoordinateProposeLezTransfer(recipient, amount: string): string =
     amt = uint64(parseBiggestUInt(amount.strip()))
   except CatchableError as e:
     return $(%*{"error": "not-an-action", "detail": "a recipient account (hex or base58) and a whole amount: " & e.msg})
-  let words = @[0'u32, uint32(amt and 0xffff_ffff'u64), uint32(amt shr 32), 0'u32, 0'u32]
   let vault = vaultPda(acct.scheme, acct.program, acct.createKey)
+  if acct.layout == plV03:
+    # the v0.3 port (exo-eb6.4.4): the vault holds native LEZ; a native transfer out of it,
+    # the vault authorized to the native program by its seed
+    let zero = newSeq[byte](32)
+    return lezProposeAction(lezCallV03(NativeTokenProgram, @[(vault, zero), (to, zero)],
+                                       nativeTransfer(amt.stuint(128)), @[vaultSeed(acct.createKey)]))
+  let words = @[0'u32, uint32(amt and 0xffff_ffff'u64), uint32(amt shr 32), 0'u32, 0'u32]
   let (tok, action, terr) = lezTokenAction(@[vault, to], words, 0)
   if not tok: return terr
   lezProposeAction(action)
@@ -3061,6 +3225,9 @@ proc musterCoordinateProposeLezVaultInit(definition: string): string =
   if gSession == nil: return $(%*{"error": "not-joined"})
   let (ok, acct, err) = lezComposeAccount()
   if not ok: return err
+  if acct.layout == plV03:
+    return $(%*{"error": "not-an-action", "detail": "on LEZ v0.3 the vault holds native LEZ and needs no setup: " &
+                "fund it by sending to " & lezHx(vaultPda(acct.scheme, acct.program, acct.createKey))})
   var def: seq[byte]
   try: def = lezIdOf(definition)
   except CatchableError as e: return $(%*{"error": "not-an-action", "detail": "a token definition account: " & e.msg})
@@ -3173,11 +3340,22 @@ proc musterLezMultisigCreate(threshold, members: string): string =
   var program: seq[byte]
   for i in 0 ..< 32: program.add byte(parseHexInt(gLezProgram[2*i .. 2*i+1]))
   try:
-    let c = lezLiveFor(gLezChain, psLee02, program, plAccountIds)
+    # which line the zone runs, from how it answers (account_view): on v0.3 the program is
+    # the port (exo-eb6.4.4), whose create is the creator's own transaction, and fee
+    let v3 = newLezRpc(gLezRpc).getAccount(program).v3
+    let layout = if v3: plV03 else: plAccountIds
+    let c = lezLiveFor(gLezChain, psLee02, program, layout)
     c.waitForInclusion = false         # never wait on a block inside a hosted call
-    let t = c.submit(@[], createOp(ck, k, ms))
+    var creator: seq[byte]
+    if v3:
+      let (mine, me) = c.lezOurMember(ms)
+      if not mine:
+        return $(%*{"error": "refused", "detail": "on LEZ v0.3 the create is a member's own transaction, and pays " &
+                    "its fee: name one of your LEZ member accounts among the members"})
+      creator = me
+    let t = c.submit(creator, createOp(ck, k, ms))
     if not t.ok: return $(%*{"error": "refused", "detail": t.error})
-    let config = %*{"program": gLezProgram, "createKey": lezHx(ck), "pda": "lee-v0.2", "layout": "account-ids"}
+    let config = %*{"program": gLezProgram, "createKey": lezHx(ck), "pda": "lee-v0.2", "layout": $layout}
     let created = %*{"family": LezMultisigFamily, "chain": gLezChain, "address": lezHx(statePda(psLee02, program, ck)),
                      "config": $config, "threshold": k, "members": ms.mapIt(lezHx(it)), "tx": t.hash,
                      "label": "LEZ " & $k & "-of-" & $ms.len}
@@ -3458,23 +3636,24 @@ proc moduleWallet(): Wallet =
       if getEnv("MUSTER_LEZ_REAL").len > 0:
         try:
           let dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
-          LezCore(newLpLezCore(dir))
+          # its wallet on this instance's zone (the lez-rpc setting), as the multisig and
+          # FROST paths are; lez_core's own default is the public testnet
+          LezCore(newLpLezCore(dir, sequencer = gLezRpc))
         except CatchableError as e:
           stderr.writeLine("MUSTER-LEZ: real lez_core unavailable, using fake — " & e.msg)
           LezCore(newFakeLezCore())
       else:
         LezCore(newFakeLezCore())
     gLez = newLezAdapter(lezCore)
-    # Fund the DEMO (fake) accounts eagerly so a send is demonstrable. For the REAL
-    # core, do NOT create/register/fund accounts here: those hit the network (and the
-    # pinata PoW) and would block this first wallet call on the module thread. The real
+    # Fund the DEMO (fake) accounts at its genesis so a send is demonstrable: the fake
+    # chain funds them as a zone's genesis would, never through a faucet (LEZ v0.3 has
+    # none, exo-eb6.4). For the REAL core, do NOT create accounts here: that hits the
+    # network and would block this first wallet call on the module thread. The real
     # accounts are created lazily on the first LEZ query (a bounded loading delay at
     # panel-open), and a proving transfer already runs async — so nothing freezes.
-    if getEnv("MUSTER_LEZ_REAL").len == 0:
+    if lezCore of FakeLezCore:
       for acc in gLez.accounts(ks):
-        if acc.form == afPublic:
-          try: gLez.claimFaucet("EfQhKQAkX2FJiwNii2WFQsGndjvF1Mzd7RuVe7QdPLw7", acc)
-          except CatchableError: discard
+        if acc.form == afPublic: FakeLezCore(lezCore).fund(acc.id, "1000000000")
     gWallet.register(gLez)
   gWallet
 
@@ -3598,16 +3777,16 @@ proc musterWalletSend(chain, fromId, to, assetSymbol, raw: string): string =
   result = musterWalletSendImpl(chain, fromId, to, assetSymbol, raw)
   if gLpDebug: stderr.writeLine("MUSTER-LP wallet_send " & chain & " " & raw & " " & result)
 
-proc musterWalletLezSetup(pinataId: string): string =
+proc musterWalletLezSetup(): string =
   ## Headless LEZ provisioning FALLBACK (exo-44b, the no-broker path): ensure a public
-  ## LEZ account exists and — with a pinata challenge id — fund it from the faucet,
-  ## directly over lez_core (core-to-core). Preferred path stays the LEZ Wallet App
-  ## hand-off when the broker is available; this is what keeps muster from being
-  ## hard-blocked when it is not. A faucet failure raises, never a false receipt.
+  ## LEZ account exists, directly over lez_core (core-to-core), and say whether it holds
+  ## native LEZ. It funds nothing: LEZ v0.3 has no faucet (exo-eb6.4). Preferred path
+  ## stays the LEZ Wallet App hand-off when the broker is available; this is what keeps
+  ## muster from being hard-blocked when it is not.
   discard moduleWallet()                 # ensures the wallet + gLez are initialized
   if gLez == nil: return $(%*{"error": "LEZ chain unavailable"})
   try:
-    let (account, state, detail) = gLez.provision(moduleKeystore(), pinataId)
+    let (account, state, detail) = gLez.provision(moduleKeystore())
     result = $(%*{"account": account, "state": state, "detail": detail})
   except CatchableError as e:
     result = $(%*{"error": e.msg})

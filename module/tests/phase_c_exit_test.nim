@@ -157,7 +157,9 @@ proc rowOf(rows: seq[CardRow], key: string): CardRow =
   for x in rows:
     if x.key == key: return x
 let rows = cardRows(drv.profile())
-doAssert "Each approval is its own public transaction on " & Chain in rowOf(rows, "where").text
+# named for the reader, never by its CAIP-2 id (exo-e71)
+doAssert "Each approval is its own public transaction on " & chainLabel(Chain) in rowOf(rows, "where").text
+doAssert Chain notin rowOf(rows, "where").text
 doAssert rowOf(rows, "cost").text == "A transaction you pay for."
 doAssert rowOf(rows, "sign").credibility == "motivational", "a pointer is only as good as the read"
 doAssert rowOf(rows, "binding").credibility == "exposed", "the chain binds no network; muster binds it in the room"

@@ -15,6 +15,13 @@ side.
   *provider*, but only the shell can *dispatch*; without it `provides: coordinate.request`
   is inert. Blocks `exo-44b` L4 and the `coordinate.request` handler.
 
+Notes offered (not asks):
+
+- [`atomic-swaps-htlc-on-lez-v03.md`](atomic-swaps-htlc-on-lez-v03.md) — for whoever
+  moves **`logos-co/atomic-swaps-poc`** (the ETH ↔ LEZ swap) off LEZ v0.2.2: what LEZ
+  v0.3's fees, included-and-billed refusals and `plan`/`apply` ABI do to its HTLC
+  escrow, from muster's own v0.3 port of the LEZ multisig.
+
 Related, in-repo proposal (not an external ask, but reads with the broker one):
 [`../design/host-effect-policy.md`](../design/host-effect-policy.md) — the *effect
 authorization* host hook (M7, `exo-002.7`): consulting Muster's room-agreement grant

@@ -91,6 +91,19 @@ proc effectFromJson*(effectJson: string): Effect =
           for i in 0 ..< h.len div 2:
             try: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
             except ValueError: discard
+        if j{"lez"}.getStr() == "v0.3":
+          # The v0.3 port (exo-eb6.4.4): the call as its proposal commits to it — the
+          # program by account id, every row's (account, program shard), the instruction's
+          # borsh bytes, the PDA seeds.
+          var shards, seeds3: seq[CborValue]
+          for x in j{"shards"}.getElems():
+            shards.add cbMap(@[(cbText("account"), cbBytes(lhex(x{"account"}.getStr()))),
+                               (cbText("program"), cbBytes(lhex(x{"program"}.getStr())))])
+          for x in j{"pdaSeeds"}.getElems(): seeds3.add cbBytes(lhex(x.getStr()))
+          return Effect(schemaId: "muster.effect.lez-multisig-proposal.v2", fields: @[
+            ("index", cbUint(uint64(j{"index"}.getBiggestInt(0)))), ("target", cbBytes(lhex(j{"target"}.getStr()))),
+            ("shards", cbArray(shards)), ("data", cbBytes(lhex(j{"data"}.getStr()))),
+            ("pdaSeeds", cbArray(seeds3))])
         var fields = @[("index", cbUint(uint64(j{"index"}.getBiggestInt(0)))),
                        ("target", cbBytes(lhex(j{"target"}.getStr())))]
         var ins, accts, seeds, auth: seq[CborValue]
@@ -113,6 +126,26 @@ proc effectFromJson*(effectJson: string): Effect =
           for i in 0 ..< h.len div 2:
             try: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
             except ValueError: discard
+        if j{"lez"}.getStr() == "v0.3":
+          # The v0.3.0 line (exo-eb6.4 L3): the program by account id, each row's program
+          # shard, the instruction as borsh bytes, the signer's nonce, and the fee
+          # declaration — exactly what a v0.3 public message commits to.
+          var shards, signers3, nonces3: seq[CborValue]
+          for s in j{"shards"}.getElems():
+            shards.add cbMap(@[(cbText("account"), cbBytes(zhex(s{"account"}.getStr()))),
+                               (cbText("program"), cbBytes(zhex(s{"program"}.getStr())))])
+          for sgn in j{"signers"}.getElems(): signers3.add cbBytes(zhex(sgn.getStr()))
+          for n in j{"nonces"}.getElems(): nonces3.add cbText(n.getStr())
+          var fields = @[("programAccount", cbBytes(zhex(j{"programAccount"}.getStr()))),
+                         ("shards", cbArray(shards)), ("instruction", cbBytes(zhex(j{"instruction"}.getStr()))),
+                         ("signers", cbArray(signers3)), ("nonces", cbArray(nonces3))]
+          let f = j{"fee"}
+          if f != nil and f.kind == JObject:
+            fields.add ("fee", cbMap(@[(cbText("payer"), cbBytes(zhex(f{"payer"}.getStr()))),
+                                       (cbText("gasLimit"), cbText(f{"gasLimit"}.getStr())),
+                                       (cbText("tip"), cbText(f{"tip"}.getStr())),
+                                       (cbText("maxFee"), cbText(f{"maxFee"}.getStr()))]))
+          return Effect(schemaId: "muster.effect.lez-call.v2", fields: fields)
         var accts, signers, nonces, ins: seq[CborValue]
         for a in j{"accounts"}.getElems(): accts.add cbBytes(zhex(a.getStr()))
         for sgn in j{"signers"}.getElems(): signers.add cbBytes(zhex(sgn.getStr()))
@@ -175,10 +208,17 @@ proc effectFromJson*(effectJson: string): Effect =
         # split says — and the net transfers that settle them instead. Carried as proposed;
         # the split driver refuses anything not in its one spelling, and the core checks each
         # cover against its split (coordination/covers) before anyone agrees.
-        var cs, ts: seq[CborValue]
+        # Across assets (§4.13) a cover also names its own chain and asset, and the rates ride
+        # beside them; the driver requires both or neither.
+        var cs, ts, rs: seq[CborValue]
         for c in j{"covers"}.getElems():
-          cs.add cbArray(@[cbText(c{"intent"}.getStr()), cbText(c{"debtor"}.getStr()), cbText(c{"creditor"}.getStr()),
-                           cbText(c{"amount"}.getStr()), cbText(c{"payTo"}.getStr())])
+          var cv = @[cbText(c{"intent"}.getStr()), cbText(c{"debtor"}.getStr()), cbText(c{"creditor"}.getStr()),
+                     cbText(c{"amount"}.getStr()), cbText(c{"payTo"}.getStr())]
+          if c.hasKey("chain") or c.hasKey("asset"): cv.add @[cbText(c{"chain"}.getStr()), cbText(c{"asset"}.getStr())]
+          cs.add cbArray(cv)
+        for r in j{"rates"}.getElems():
+          rs.add cbArray(@[cbText(r{"chain"}.getStr()), cbText(r{"asset"}.getStr()), cbText(r{"rate"}.getStr()),
+                           cbText(r{"per"}.getStr()), cbText(r{"source"}.getStr()), cbText(r{"at"}.getStr())])
         for t in j{"transfers"}.getElems():
           ts.add cbArray(@[cbText(t{"from"}.getStr()), cbText(t{"to"}.getStr()), cbText(t{"payTo"}.getStr()),
                            cbText(t{"amount"}.getStr())])
@@ -187,6 +227,7 @@ proc effectFromJson*(effectJson: string): Effect =
         fields.add ("covers", cbArray(cs))
         fields.add ("transfers", cbArray(ts))
         fields.add ("memo", cbText(j{"memo"}.getStr()))
+        if j.hasKey("rates"): fields.add ("rates", cbArray(rs))
         return Effect(schemaId: "muster.effect.settle-up.v1", fields: fields)
       of "safe-tx":
         # A full Safe transaction (exo-a50.1.4): a transfer's to / value / nonce plus
@@ -226,8 +267,12 @@ proc effectSchema*(effectJson: string): tuple[id: string, known: bool] =
     of "transfer": return ("muster.effect.transfer.v1", true)
     of "safe-tx": return ("muster.effect.safe-tx.v1", true)
     of "btc-spend": return ("muster.effect.btc-spend.v1", true)
-    of "lez-multisig-proposal": return ("muster.effect.lez-multisig-proposal.v1", true)
-    of "lez-call": return ("muster.effect.lez-call.v1", true)   # a LEZ FROST group's call (exo-55e)
+    of "lez-multisig-proposal":                              # v2: the LEZ v0.3 port (exo-eb6.4.4)
+      return ((if j{"lez"}.getStr() == "v0.3": "muster.effect.lez-multisig-proposal.v2"
+               else: "muster.effect.lez-multisig-proposal.v1"), true)
+    of "lez-call":                                           # a LEZ FROST group's call (exo-55e)
+      # v2 is the LEZ v0.3.0 line (exo-eb6.4 L3); v1 the v0.2.4 one
+      return ((if j{"lez"}.getStr() == "v0.3": "muster.effect.lez-call.v2" else: "muster.effect.lez-call.v1"), true)
     of "statement": return ("muster.effect.statement.v1", true)
     of "split": return ("muster.effect.split.v1", true)      # who owes the creditor what (exo-a90.3)
     of "settle-up": return ("muster.effect.settle-up.v1", true)   # net several splits (exo-3c6)

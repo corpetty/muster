@@ -58,6 +58,11 @@ method confirmVote*(v: VoteSeam, d: Driver, e: Effect): tuple[ok: bool, detail: 
   (false, "this seam confirms nothing")
 method receiptFor*(v: VoteSeam, d: Driver, e: Effect, tx: string): Contribution {.base.} =
   Contribution()
+method landed*(v: VoteSeam, tx: string): bool {.base.} =
+  ## Whether the chain included transaction `tx`. Included and not visible in the state
+  ## it should have changed is a refusal: on LEZ v0.3 a refused transaction is included,
+  ## and pays (exo-eb6.4.4).
+  false
 
 proc hx(b: openArray[byte]): string =
   for x in b: result.add toLowerAscii(toHex(x, 2))
@@ -129,8 +134,13 @@ proc liveVoteComplete*(s: CoordinationSession, ks: Keystore, driverFor: DriverFo
   s.poll()
   let drv = driverFor(intentPolicyOf(s.roomEvents(), pv.intentId))
   let effect = effectFromJson(pv.effectJson)
+  let landed = seam.landed(pv.tx)      # asked first: a vote included by now shows in the read below
   let conf = seam.confirmVote(drv, effect)
-  if not conf.ok: return "unconfirmed: " & conf.detail
+  if not conf.ok:
+    if landed:
+      return "refused: the chain included your vote and does not show it (" & conf.detail &
+             "): on LEZ v0.3 a refused transaction is included, and pays"
+    return "unconfirmed: " & conf.detail
   for e in pv.recorded: s.publish(e)
   if publishVote(s, ks, driverFor, pv.intentId, pv.effectJson, seam.receiptFor(drv, effect, pv.tx), pv.p).len == 0:
     return "rejected"
@@ -199,6 +209,10 @@ method confirmVote*(v: LezVoteSeam, d: Driver, e: Effect): tuple[ok: bool, detai
 method receiptFor*(v: LezVoteSeam, d: Driver, e: Effect, tx: string): Contribution =
   voteReceipt(v.voter, lezActionOf(e).index, tx, canonicalize(d, e))
 
+method landed*(v: LezVoteSeam, tx: string): bool =
+  try: v.chain.txIncluded(tx).known
+  except CatchableError: false
+
 type PendingPropose* = object
   ## A Propose sent and not yet on chain: what completing it publishes.
   policy*: string
@@ -236,8 +250,14 @@ proc liveProposeOnChainComplete*(s: CoordinationSession, ks: Keystore, driverFor
   let drv = driverFor(pp.policy)
   if not drv.supported() or not (drv of LezMultisigDriver): return "unsupported-driver"
   let a = LezMultisigDriver(drv).account
-  if not seam.confirmOnChain(drv, pp.index).ok: return "pending"
-  let effectJson = lezProposalEffect(pp.index, pp.action)
+  let landed = seam.landed(pp.tx)      # asked first: a Propose included by now shows in the read below
+  let conf = seam.confirmOnChain(drv, pp.index)
+  if not conf.ok:
+    if landed:
+      return "refused: the chain included the Propose and holds no proposal #" & $pp.index & " from it (" &
+             conf.detail & "): on LEZ v0.3 a refused transaction is included, and pays"
+    return "pending"
+  let effectJson = lezProposalEffect(pp.index, pp.action, a.layout)
   let id = liveProposeIntent(s, ks, driverFor, pp.policy, effectJson, pp.nowSec, pp.msgSeq,
                              account = hx(a.statePda), ttlSec = pp.ttlSec)
   if not id.startsWith("0x"): return id   # a refusal, not an intent id

@@ -712,6 +712,35 @@ void MusterUiBackend::renewSplit(const QString &intentId)
     loadMessages();
 }
 
+void MusterUiBackend::loadOpenAssets()
+{
+    // coordinate_open_assets: what a settle-up across assets could cover (exo-a90.17)
+    const QString r = modules().muster_module.coordinate_open_assets();
+    qInfo() << "[muster_ui] coordinate_open_assets ->" << r;
+    setOpenAssetsJson(r);
+}
+
+void MusterUiBackend::proposeSettleUpAcross(const QString &chain, const QString &asset, const QString &ratesJson,
+                                            const QString &memo)
+{
+    // coordinate_propose_settle_up_across: paid in one asset, every other priced at my rate —
+    // a recorded read; every party agrees before anything is paid (exo-a90.17).
+    const QString r = modules().muster_module.coordinate_propose_settle_up_across(chain.trimmed(), asset.trimmed(),
+                                                                                   ratesJson, memo);
+    qInfo() << "[muster_ui] coordinate_propose_settle_up_across" << chain << asset << ratesJson << "->" << r;
+    setSplitJson(splitOutcome("settle-up", "", r));
+    loadIntents();
+    loadMessages();
+}
+
+void MusterUiBackend::shareAddress(const QString &chain)
+{
+    // coordinate_share_address: MY address for a chain, as an author-signed address-share card
+    const QString r = modules().muster_module.coordinate_share_address(chain.trimmed());
+    qInfo() << "[muster_ui] coordinate_share_address" << chain << "->" << r;
+    loadMessages();
+}
+
 void MusterUiBackend::lookupToken(const QString &chain, const QString &token)
 {
     // coordinate_token_info: what the token says about itself, through your own RPC —
@@ -1152,41 +1181,31 @@ void MusterUiBackend::onContextReady()
     }
 
     // LEZ testnet self-test (exo-14d): MUSTER_AUTOLEZFUND funds THIS instance's
-    // private balance the way a person would on testnet, through the module's own
-    // wallet path — claim the pinata faucet into the public account
-    // (wallet_lez_setup; MUSTER_LEZ_PINATA, hex, defaults to the testnet pinata),
-    // then shield all that arrived to MY OWN key node (wallet_send takes the shield
-    // rail) and wait for that proof to land. The note lands at an account the scan
-    // discovers — which is what a debtor then pays from. Needs MUSTER_LEZ_REAL.
-    // Runs on its own, not only inside an autojoin run, so a person trying the tour can
-    // fund a wallet the same way (scripts/try-peer.sh --lez-fund).
+    // private balance the way a person would, through the module's own wallet path:
+    // make sure the public account exists (wallet_lez_setup) and log it, so whoever
+    // holds native LEZ can send to it (LEZ v0.3 has no faucet, exo-eb6.4: a script's
+    // funder, or a person); wait for those funds to land; then shield all that arrived
+    // to MY OWN key node (wallet_send takes the shield rail) and wait for that proof.
+    // The note lands at an account the scan discovers, which is what a debtor then pays
+    // from. Needs MUSTER_LEZ_REAL. Runs on its own, not only inside an autojoin run, so
+    // a person trying the tour can fund a wallet the same way (scripts/try-peer.sh
+    // --lez-fund).
     QTimer::singleShot(5000, this, [this]() {
         if (!qgetenv("MUSTER_AUTOLEZFUND").isEmpty()) {
             s_lezFunding = true;
-            const QByteArray p = qgetenv("MUSTER_LEZ_PINATA");
-            const QString pinata = p.isEmpty()
-                ? QStringLiteral("cafecafecafecafecafecafecafecafecafecafecafecafecafecafecafecafe")
-                : QString::fromUtf8(p);
             auto *ft = new QTimer(this);
             ft->setInterval(5000);
-            connect(ft, &QTimer::timeout, this, [this, ft, pinata]() {
+            connect(ft, &QTimer::timeout, this, [this, ft]() {
                 static int stage = 0;
                 static QString pub, keyNode;
-                static qint64 retryAt = 0, claimedAt = 0;
+                static qint64 retryAt = 0, awaitingSince = 0;
                 const qint64 now = QDateTime::currentSecsSinceEpoch();
                 if (now < retryAt) return;
                 const QString lez = QStringLiteral("lez:testnet");
-                if (stage == 0) {                   // the accounts, and one faucet claim
-                    // The claim solves the faucet's proof of work on the module thread
-                    // (seconds, sometimes more than this call waits): an EMPTY answer is a
-                    // claim still in flight, not a refusal — only an error is retried.
-                    QString r;
-                    if (claimedAt == 0) {
-                        r = modules().muster_module.wallet_lez_setup(pinata);
-                        qInfo() << "[muster_ui] LEZFUND setup ->" << r;
-                        if (r.contains("\"error\"")) { retryAt = now + 30; return; }
-                        claimedAt = now;
-                    }
+                if (stage == 0) {                   // the accounts, and the one to fund
+                    const QString r = modules().muster_module.wallet_lez_setup();
+                    qInfo() << "[muster_ui] LEZFUND setup ->" << r;
+                    if (r.contains("\"error\"")) { retryAt = now + 30; return; }
                     for (const auto &v : QJsonDocument::fromJson(
                              modules().muster_module.wallet_accounts().toUtf8()).array()) {
                         const QJsonObject a = v.toObject();
@@ -1196,8 +1215,10 @@ void MusterUiBackend::onContextReady()
                     }
                     qInfo() << "[muster_ui] LEZFUND public" << pub << "key node" << keyNode.left(24);
                     if (pub.isEmpty() || keyNode.isEmpty()) return;
+                    qInfo() << "[muster_ui] LEZFUND awaiting funds at" << pub;
+                    awaitingSince = now;
                     stage = 1;
-                } else if (stage == 1) {            // the claim lands when a block commits
+                } else if (stage == 1) {            // someone who holds native LEZ sends it
                     QString raw;
                     for (const auto &v : QJsonDocument::fromJson(
                              modules().muster_module.wallet_balances().toUtf8()).array()) {
@@ -1207,8 +1228,11 @@ void MusterUiBackend::onContextReady()
                     }
                     qInfo() << "[muster_ui] LEZFUND public balance" << raw;
                     if (raw.isEmpty() || raw == "0") {
-                        // a claim lands when a block commits; ten minutes of nothing is a lost one
-                        if (now - claimedAt > 600) { claimedAt = 0; stage = 0; }
+                        // nothing yet: say so now and then, so a funder can find the account
+                        if (now - awaitingSince >= 60) {
+                            qInfo() << "[muster_ui] LEZFUND awaiting funds at" << pub;
+                            awaitingSince = now;
+                        }
                         return;
                     }
                     const QString r = modules().muster_module.wallet_send(lez, pub, keyNode, QStringLiteral("LEZ"), raw);

@@ -112,13 +112,26 @@ method balance*(a: LezAdapter, account: Account, asset: AssetId): Amount =
     raise newException(WalletError, "LEZ balance unavailable for " & account.id)
   amount(asset, raw)
 
+const LezPublicFeeCap = "134400000"
+  ## What lez_core declares as a public transaction's max_fee on LEZ v0.3: the LEZ wallet's
+  ## max_fee_for(DEFAULT_GAS_LIMIT) = (2_000_000 + 100_000) × 64 (lez/wallet/src/lib.rs @
+  ## v0.3.0; the same value lez/tx.nim's defaultFee declares, held to LEZ's own vectors)
+
 method estimateFee*(a: LezAdapter, frm: Account, to: string, amt: Amount): FeeEstimate =
-  ## A shielded transfer pays a PROOF cost, not gas — and the proof takes minutes, so
-  ## the note says so honestly (this is a job, not an interaction; see the labbook).
+  ## LEZ v0.3 (exo-eb6.4): a privacy-preserving transaction — a shield, a deshield, a
+  ## private transfer — carries no fee field and pays none ("fee-exempt under the interim
+  ## policy", the sequencer's fees.rs). Its cost is the proof, minutes of the sender's own
+  ## machine, so the note says so (a job, not an interaction; see the labbook). A public
+  ## transfer pays a fee, declared up to the cap and the rest refunded: a plain transfer
+  ## paid 2_968 base units on a local v0.3 zone.
   let shielded = frm.form == afShielded or to.startsWith("priv:")
-  FeeEstimate(fee: amount(a.native, "1000000"),
-              note: (if shielded: "shielded proof cost — proving takes minutes"
-                     else: "public transfer fee"))
+  if shielded:
+    FeeEstimate(fee: amount(a.native, "0"),
+                note: "fee-exempt on LEZ v0.3; the cost is the proof — proving takes minutes")
+  else:
+    FeeEstimate(fee: amount(a.native, LezPublicFeeCap),
+                note: "public transfer fee: at most " & LezPublicFeeCap &
+                      " base units, the unused part refunded (a plain transfer pays a few thousand)")
 
 # The `to` convention: a public destination is a plain account id; a SHIELDED
 # destination is "priv:<npk>:<vpk>" — the recipient's key node, since a shielded send
@@ -231,13 +244,6 @@ proc resolvedTx*(a: LezAdapter, txId: string): string =
 
 # ── funding + discovery, beyond the ChainAdapter seam ──────────────────────────
 
-proc claimFaucet*(a: LezAdapter, pinataId: string, account: Account) =
-  ## Fund an account from the pinata faucet. Raises on a `success:false` envelope. The
-  ## real core solves the PoW inside claimPinata; the fake just credits.
-  let res = a.core.claimPinata(pinataId, account.id)
-  if not res.success:
-    raise newException(WalletError, "pinata claim failed: " & res.error)
-
 proc receiveAddresses*(a: LezAdapter, ks: Keystore): seq[tuple[form, address: string]] =
   ## The addresses this instance can SHARE to be paid (the recipient half of Mode A's
   ## request→share→send). A public account shares its id; a shielded account shares its
@@ -304,19 +310,23 @@ proc lezStatusOf*(a: LezAdapter, minRaw = "0"): tuple[state, detail: string] {.g
   ## this into a Grade closure. Detects only — provisioning is the LEZ Wallet App.
   lezAccountStatus(a.core, minRaw)
 
-proc provision*(a: LezAdapter, ks: Keystore, pinataId = ""): tuple[account, state, detail: string] =
+proc provision*(a: LezAdapter, ks: Keystore): tuple[account, state, detail: string] =
   ## Headless LEZ provisioning FALLBACK (exo-44b, the no-broker path). Ensure this
-  ## instance has a public LEZ account (create + activate via createAccount), and — when
-  ## a pinata challenge id is given — claim the faucet to fund it. The account keys stay
-  ## in lez_core; muster drives lez_core directly (the sanctioned core-to-core pattern),
-  ## so this needs neither the app-to-app broker nor the LEZ Wallet App. It is the
-  ## FALLBACK, not the default: delegating to the LEZ Wallet App stays preferred for UX
-  ## and for keeping keys in one home. Raises (never a false receipt) on a faucet failure.
+  ## instance has a public LEZ account, and say whether it holds native LEZ yet. The
+  ## account keys stay in lez_core; muster drives lez_core directly (the sanctioned
+  ## core-to-core pattern), so this needs neither the app-to-app broker nor the LEZ Wallet
+  ## App. It is the FALLBACK, not the default: delegating to the LEZ Wallet App stays
+  ## preferred for UX and for keeping keys in one home.
+  ##
+  ## It funds nothing. LEZ v0.3 has no faucet (exo-eb6.4), and a fresh public account is
+  ## claimed on chain only by its first funded transfer, so "met" means it holds native
+  ## LEZ, and "missing" names the account someone who holds some must send to.
   let accs = a.accounts(ks)                 # creates public + shielded on first call
   var pub: Account
   for acc in accs:
     if acc.form == afPublic: pub = acc
-  if pinataId.len > 0:
-    a.claimFaucet(pinataId, pub)            # raises on a success:false envelope
-  let (s, d) = a.lezStatusOf(if pinataId.len > 0: "1" else: "0")
+  let (s, d) = a.lezStatusOf("1")
+  if s == "missing":
+    return (pub.id, s, "no native LEZ yet: send some to " & pub.id &
+            " from an account that holds it (LEZ v0.3 has no faucet)")
   (pub.id, s, d)

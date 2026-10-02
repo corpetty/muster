@@ -23,6 +23,15 @@
 ## chooses them); the rebuild for the live testnet line (SPEL v0.7.0 / LEZ v0.2.4) carries
 ## #41's fix and commits `target_account_ids` right after the count (`plAccountIds`), which
 ## execute then binds. An account's config names its layout; count-only is the default.
+##
+## `plV03` is the port to LEZ v0.3.0's program ABI, run_program(plan, apply), without SPEL
+## (exo-eb6.4.4, docs/design/lez-multisig-v03.md): a proposal commits to ONE commitment, a
+## call (the program by its account id, every row it touches as an (account, program shard)
+## pair, the instruction's borsh bytes, the PDA seeds) or a config action; its status is
+## Active or Executed; the instructions are borsh, and Execute names the approvers it counts.
+## The state's layout, the seeds and the PDA formula are v0.2.4's, over the program's
+## ACCOUNT id (its deployment header). Held to vectors from the port's own crate
+## (tests/vectors/lez-multisig-v030).
 
 import std/[strutils, sequtils]
 import ../hashing/sha256
@@ -33,6 +42,7 @@ type
   ProposalLayout* = enum
     plCountOnly = "count-only"    ## lez-multisig c45100b: target_account_count only (#40)
     plAccountIds = "account-ids"  ## the rebuild with #41: + target_account_ids, bound at execute
+    plV03 = "v0.3"                ## LEZ v0.3.0's plan/apply port: one commitment, rows committed
 
   PdaScheme* = enum
     psNssa02 = "nssa-v0.2"    ## nssa v0.2.0-rc3: the program the repo publishes today
@@ -57,6 +67,8 @@ type
     accountCount*: int
     pdaSeeds*: seq[seq[byte]]   ## PDA seeds the multisig proves in the chained call
     authorized*: seq[uint8]     ## which target accounts are authorized in the call
+    shards*: seq[tuple[account, program: seq[byte]]]  ## v0.3: every row, its program shard
+    data*: seq[byte]            ## v0.3: the instruction, as the target's borsh bytes
 
   Proposal* = object
     index*: uint64
@@ -153,7 +165,85 @@ proc parseProposalLayout*(s: string): ProposalLayout =
     if $x == s: return x
   raise newException(LezDecodeError, "unknown proposal layout: " & s)
 
+proc putBytes(b: var seq[byte], x: seq[byte]) =
+  b.putU32(uint32(x.len))
+  b.add x
+
+proc lezCallV03*(target: seq[byte], shards: seq[tuple[account, program: seq[byte]]], data: seq[byte],
+                 pdaSeeds: seq[seq[byte]]): LezAction =
+  ## A v0.3 call: `accounts` lists the rows' accounts, for what reads them (the manifest).
+  LezAction(target: target, shards: shards, data: data, pdaSeeds: pdaSeeds,
+            accounts: shards.mapIt(it.account), accountCount: shards.len)
+
+proc encodeTargetCall*(a: LezAction): seq[byte] =
+  ## multisig_core::TargetCall: program account, shard selectors, instruction bytes, seeds.
+  result.put32(a.target)
+  result.putU32(uint32(a.shards.len))
+  for (acct, prog) in a.shards:
+    result.put32(acct)
+    result.put32(prog)
+  result.putBytes(a.data)
+  result.putVec32(a.pdaSeeds)
+
+proc encodeConfigAction*(c: ConfigAction): seq[byte] =
+  result.add byte(ord(c.kind))
+  case c.kind
+  of caAddMember, caRemoveMember: result.put32(c.member)
+  of caChangeThreshold: result.add byte(c.threshold)
+
+proc readTargetCall(r: var Reader): LezAction =
+  let target = r.fixed(32)
+  var shards: seq[tuple[account, program: seq[byte]]]
+  for _ in 0 ..< r.len32(64): shards.add (r.fixed(32), r.fixed(32))
+  let data = r.fixed(r.len32(1))
+  lezCallV03(target, shards, data, r.vec32())
+
+proc readConfigAction(r: var Reader): ConfigAction =
+  case r.u8()
+  of 0: ConfigAction(kind: caAddMember, member: r.fixed(32))
+  of 1: ConfigAction(kind: caRemoveMember, member: r.fixed(32))
+  of 2: ConfigAction(kind: caChangeThreshold, threshold: int(r.u8()))
+  else: bad("unknown config action")
+
+proc encodeProposalV03(p: Proposal): seq[byte] =
+  result.putU64(p.index)
+  result.put32(p.proposer)
+  result.put32(p.createKey)
+  if p.hasConfig:
+    result.add 1'u8
+    result.add encodeConfigAction(p.config)
+  else:
+    result.add 0'u8
+    result.add encodeTargetCall(p.action)
+  result.putVec32(p.approved)
+  result.putVec32(p.rejected)
+  case p.status
+  of psActive: result.add 0'u8
+  of psExecuted: result.add 1'u8
+  else: bad("a v0.3 proposal is active or executed, not " & $p.status)
+
+proc decodeProposalV03(b: openArray[byte]): Proposal =
+  var r = Reader(b: @b)
+  result.index = r.u64()
+  result.proposer = r.fixed(32)
+  result.createKey = r.fixed(32)
+  case r.u8()
+  of 0: result.action = r.readTargetCall()
+  of 1:
+    result.hasConfig = true
+    result.action = LezAction(target: newSeq[byte](32))
+    result.config = r.readConfigAction()
+  else: bad("unknown commitment")
+  result.approved = r.vec32()
+  result.rejected = r.vec32()
+  case r.u8()
+  of 0: result.status = psActive
+  of 1: result.status = psExecuted
+  else: bad("unknown v0.3 proposal status")
+  r.done()
+
 proc encodeProposal*(p: Proposal, layout = plCountOnly): seq[byte] =
+  if layout == plV03: return encodeProposalV03(p)
   result.putU64(p.index)
   result.put32(p.proposer)
   result.put32(p.createKey)
@@ -177,6 +267,7 @@ proc encodeProposal*(p: Proposal, layout = plCountOnly): seq[byte] =
     of caChangeThreshold: result.add byte(p.config.threshold)
 
 proc decodeProposal*(b: openArray[byte], layout = plCountOnly): Proposal =
+  if layout == plV03: return decodeProposalV03(b)
   var r = Reader(b: @b)
   result.index = r.u64()
   result.proposer = r.fixed(32)

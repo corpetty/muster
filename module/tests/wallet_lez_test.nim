@@ -41,8 +41,8 @@ block:
   let a = newLezAdapter(core)
   let accs = a.accounts(ks)
   let pub = accs[0]
-  a.claimFaucet("pinata-1", pub)
-  doAssert a.balance(pub, a.assets()[0]).raw == "1000000000", "faucet funded the public account"
+  core.fund(pub.id, "1000000000")   # genesis funds it (LEZ v0.3 has no faucet)
+  doAssert a.balance(pub, a.assets()[0]).raw == "1000000000", "genesis funded the public account"
 
   # a second public account to receive
   let other = core.createAccount(lakPublic)
@@ -57,13 +57,20 @@ block:
   let core = newFakeLezCore()
   let a = newLezAdapter(core)
   let pub = a.accounts(ks)[0]
-  a.claimFaucet("pinata-1", pub)
+  core.fund(pub.id, "1000000000")   # genesis funds it (LEZ v0.3 has no faucet)
 
   # the recipient publishes a key node (npk/vpk); the sender addresses THAT, not an id.
   let recipient = core.createAccount(lakPrivate)
   let dest = "priv:" & recipient.npk & ":" & recipient.vpk
   let amt = amount(a.assets()[0], "100000000")
-  doAssert a.estimateFee(pub, dest, amt).note.contains("proof"), "a shielded send pays a proof cost"
+  # LEZ v0.3: a privacy-preserving transaction (shield, deshield, private) carries no fee
+  # and pays none ("fee-exempt under the interim policy", the sequencer's fees.rs); its
+  # cost is the proof, minutes of the sender's own machine
+  let sf = a.estimateFee(pub, dest, amt)
+  doAssert sf.fee.raw == "0" and "fee-exempt" in sf.note and "proof" in sf.note, sf.note
+  # a public transfer pays a fee, declared up to the LEZ wallet's cap; the rest is refunded
+  let pf = a.estimateFee(pub, core.createAccount(lakPublic).id, amt)
+  doAssert pf.fee.raw == "134400000" and "at most" in pf.note, pf.note
 
   let tx = a.submit(a.prepareTransfer(pub, dest, amt), ks)
   doAssert a.balance(pub, a.assets()[0]).raw == "900000000", "sender debited immediately"
@@ -87,7 +94,7 @@ block:
   let core = newFakeLezCore()
   let a = newLezAdapter(core)
   let pub = a.accounts(ks)[0]
-  a.claimFaucet("pinata-1", pub)
+  core.fund(pub.id, "1000000000")   # genesis funds it (LEZ v0.3 has no faucet)
 
   # unanswerable balance read ("" sentinel) → raise, not a zero
   var raised = false
@@ -143,7 +150,7 @@ block:
   doAssert parseJson(shieldTx.payload)["discloses"]["payee"].getBool() == false, "the payee is hidden"
 
   # fund the shielded account, then DESHIELD (private→public) and PRIVATE (private→private).
-  a.claimFaucet("pinata-1", shielded)
+  core.fund(shielded.id, "1000000000")   # genesis funds it (LEZ v0.3 has no faucet)
   let deTx = a.submit(a.prepareTransfer(shielded, core.createAccount(lakPublic).id,
                                         amount(a.assets()[0], "100000000")), ks)
   doAssert a.finality(deTx).status == fsFinal, "deshield lands public — final at once"

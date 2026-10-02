@@ -3,8 +3,10 @@
 ## later an `LpLezCore` that calls the real `lez_core` module over `lp_*` (P-L3).
 ##
 ## The seam is muster-shaped, not a 1:1 mirror of `lez_core`'s C surface — the real
-## client maps these onto `create_account_*` / `get_balance` / `transfer_*` / `sync_*`
-## / `claim_pinata`. What the seam DOES preserve is the LEZ's shape, because it's the
+## client maps these onto `create_account_*` / `get_balance` / `transfer_*` / `sync_*`.
+## There is no faucet: LEZ v0.3.0 removed the testnet's pinata program (exo-eb6.4), so
+## native LEZ reaches an account only at genesis, over the bridge, or by a transfer from
+## an account that holds some. What the seam DOES preserve is the LEZ's shape, because it's the
 ## part the adapter's correctness depends on (see docs/design/lez-adapter.md and
 ## docs/labbook/lez-core-error-conventions.md):
 ##
@@ -126,12 +128,6 @@ method labelAccount*(c: LezCore, label: string, account: LezAccount): bool {.bas
   ## Name one of this wallet's accounts, persistently; true once the label resolves to it.
   false
 
-method claimPinata*(c: LezCore, pinataId, account: string): LezResult {.base, gcsafe.} =
-  ## The faucet. The real module takes a pre-solved 16-byte-LE PoW `solution` — the
-  ## concrete impl reads the pinata challenge (difficulty+seed), solves it (pinataSolve),
-  ## and calls claim_pinata; the seam hides that. Fast (<20s); stays sync.
-  raise newException(WalletError, "LezCore.claimPinata is abstract")
-
 method pollTransfer*(c: LezCore): tuple[done: bool, result: LezResult] {.base, gcsafe.} =
   ## For an ASYNC core (LpLezCore): has the in-flight proving transfer settled yet, and
   ## its result? A proving transfer takes minutes, so the real core fires it in the
@@ -213,7 +209,9 @@ proc newFakeLezCore*(chain: FakeLezChain): FakeLezCore =
   FakeLezCore(chain: chain, shared: true)
 
 proc fund*(chain: FakeLezChain, accountId, raw: string) =
-  ## Test/demo funding: credit any account on the chain directly.
+  ## Genesis funding, for tests and the demo: credit any account on the chain directly,
+  ## the way a zone's genesis does. Not a faucet: LEZ v0.3 has none, and the fake keeps
+  ## no kindness the zone lacks.
   let cur = if accountId in chain.balances: chain.balances[accountId] else: "0"
   chain.balances[accountId] = $(parseBiggestUInt(cur) + parseBiggestUInt(raw))
 
@@ -257,6 +255,10 @@ method getBalanceRaw*(c: FakeLezCore, accountId: string, isPublic: bool): string
   if accountId in c.chain.balances: c.chain.balances[accountId] else: ""
 
 proc credit(c: FakeLezCore, id, amountRaw: string) = c.chain.fund(id, amountRaw)
+
+proc fund*(c: FakeLezCore, accountId, raw: string) =
+  ## Genesis funding on this wallet's chain (tests, the demo): see FakeLezChain.fund.
+  c.credit(accountId, raw)
 
 proc debitOrRaise(c: FakeLezCore, id, amountRaw: string) =
   let cur = if id in c.chain.balances: c.chain.balances[id] else: ""
@@ -328,7 +330,3 @@ method sync*(c: FakeLezCore): int =
   c.chain.pending = keep
   (c.synced, c.tip) = (29083, 29083)
   LezSyncOk
-
-method claimPinata*(c: FakeLezCore, pinataId, account: string): LezResult =
-  c.credit(account, "1000000000")   # fund with 1e9 base units
-  LezResult(success: true, txHash: c.nextId("tx"))

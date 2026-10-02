@@ -1,0 +1,222 @@
+{
+  "id": "derived-exo-a90.17",
+  "original_statement": "exo-a90.17.6: Spec: the settle-up guarantees across assets and chains. derived-exo-a90.20 s3 says a recipient is paid only at an address a split owing them named; across chains that is relaxed to their own vouched address. Amend or extend the spec through discuss-issue. (Scope, operator-confirmed 2026-10-01: every guarantee of docs/design/split-the-bill.md \u00a74.13 \u2014 a new spec beside derived-exo-a90.20, which stays untouched; catastrophic. Candidate guarantee noted on the issue: a conversion whose product overflows 256 bits is refused, never wrapped, exo-df6.)",
+  "restatement": "A settle-up may now cover shares in several assets on several chains and pay them in one asset on one chain, at rates the proposer gives. Whatever the input, the client keeps six guarantees: (s1) Each conversion is exact. Every covered share in another asset converts on its own at that asset's signed rate: amount \u00d7 rate \u00f7 per, rounded down. The debtor keeps a remainder of less than one base unit of the payment asset per share. A share that converts to nothing is refused, and so is one whose product overflows 256 bits; it is never wrapped. A rate typed per ONE unit (\"1 BTC = 21.4 ETH\") is kept exactly in base units on both sides. A rate finer than the payment asset's smallest unit, zero, or not a plain decimal is refused. (s2) Balances are conserved in the payment asset. Every member's balance across the converted shares equals their balance across the net payments; anything else is refused, naming whose balance breaks. Each covered share still states exactly what its own split says, in its own asset on its own chain. Its split must be agreed, unpaid and not already covered, and every client checks it against that split before agreeing. (s3) The rates are the proposer's recorded quote. There is exactly one rate for each chain and asset the covered shares use, other than the payment one: none for the payment asset, none unused, each once, in one order. Each names its source and time. The rates are in the signed bytes, so changing a rate, its source or its time changes them. They reach the signed bytes only as an external read the proposer recorded before anyone agreed; without that read no agreement counts (invariant 10). (s4) Where a recipient is paid. A recipient owed by a covered split on the payment chain is paid only at that split's payTo, exactly as in a90.20 s3. One owed only on other chains is paid at an address on the payment chain they vouch for: the last one they shared into the room for that chain. If they shared none, the proposal is refused and names them. Their own client agrees only to an address it holds (payto-not-mine). An address a split agreed on one chain is never taken as that recipient's address on another. (s5) Finishing across chains. Each net payment is paid and confirmed on the payment chain, as in a settle-up in one asset. While the settle-up covers a share, on any chain, that share is paid only through it. Once it is final, and not before, each creditor marks the shares it covered received on whatever chain they were: by their word, with no transaction on that chain. (s6) What does not change. The private split is never netted: no share of it is covered, and its zone gets no rate. A settle-up on one chain in one asset is byte for byte what it was (the same effect and the same signed bytes) and keeps every rule of a90.20.",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "Each conversion is exact. Every covered share in another asset converts on its own at that asset's signed rate: amount \u00d7 rate \u00f7 per, rounded down. The debtor keeps a remainder of less than one base unit of the payment asset per share. A share that converts to nothing is refused, and so is one whose product overflows 256 bits; it is never wrapped. A rate typed per ONE unit (\"1 BTC = 21.4 ETH\") is kept exactly in base units on both sides. A rate finer than the payment asset's smallest unit, zero, or not a plain decimal is refused."
+    },
+    {
+      "id": "s2",
+      "text": "Balances are conserved in the payment asset. Every member's balance across the converted shares equals their balance across the net payments; anything else is refused, naming whose balance breaks. Each covered share still states exactly what its own split says, in its own asset on its own chain. Its split must be agreed, unpaid and not already covered, and every client checks it against that split before agreeing."
+    },
+    {
+      "id": "s3",
+      "text": "The rates are the proposer's recorded quote. There is exactly one rate for each chain and asset the covered shares use, other than the payment one: none for the payment asset, none unused, each once, in one order. Each names its source and time. The rates are in the signed bytes, so changing a rate, its source or its time changes them. They reach the signed bytes only as an external read the proposer recorded before anyone agreed; without that read no agreement counts (invariant 10)."
+    },
+    {
+      "id": "s4",
+      "text": "Where a recipient is paid. A recipient owed by a covered split on the payment chain is paid only at that split's payTo, exactly as in a90.20 s3. One owed only on other chains is paid at an address on the payment chain they vouch for: the last one they shared into the room for that chain. If they shared none, the proposal is refused and names them. Their own client agrees only to an address it holds (payto-not-mine). An address a split agreed on one chain is never taken as that recipient's address on another."
+    },
+    {
+      "id": "s5",
+      "text": "Finishing across chains. Each net payment is paid and confirmed on the payment chain, as in a settle-up in one asset. While the settle-up covers a share, on any chain, that share is paid only through it. Once it is final, and not before, each creditor marks the shares it covered received on whatever chain they were: by their word, with no transaction on that chain."
+    },
+    {
+      "id": "s6",
+      "text": "What does not change. The private split is never netted: no share of it is covered, and its zone gets no rate. A settle-up on one chain in one asset is byte for byte what it was (the same effect and the same signed bytes) and keeps every rule of a90.20."
+    }
+  ],
+  "goal": "A typed spec, derived-exo-a90.17, with one top-strength acceptance oracle per guarantee of a settle-up across assets and chains, graded against the live code by scripts/grade-specs.sh: none of the six can regress without a spec going red.",
+  "acceptance_criteria": [
+    "Each conversion is exact. Every covered share in another asset converts on its own at that asset's signed rate: amount \u00d7 rate \u00f7 per, rounded down. The debtor keeps a remainder of less than one base unit of the payment asset per share. A share that converts to nothing is refused, and so is one whose product overflows 256 bits; it is never wrapped. A rate typed per ONE unit (\"1 BTC = 21.4 ETH\") is kept exactly in base units on both sides. A rate finer than the payment asset's smallest unit, zero, or not a plain decimal is refused.",
+    "Balances are conserved in the payment asset. Every member's balance across the converted shares equals their balance across the net payments; anything else is refused, naming whose balance breaks. Each covered share still states exactly what its own split says, in its own asset on its own chain. Its split must be agreed, unpaid and not already covered, and every client checks it against that split before agreeing.",
+    "The rates are the proposer's recorded quote. There is exactly one rate for each chain and asset the covered shares use, other than the payment one: none for the payment asset, none unused, each once, in one order. Each names its source and time. The rates are in the signed bytes, so changing a rate, its source or its time changes them. They reach the signed bytes only as an external read the proposer recorded before anyone agreed; without that read no agreement counts (invariant 10).",
+    "Where a recipient is paid. A recipient owed by a covered split on the payment chain is paid only at that split's payTo, exactly as in a90.20 s3. One owed only on other chains is paid at an address on the payment chain they vouch for: the last one they shared into the room for that chain. If they shared none, the proposal is refused and names them. Their own client agrees only to an address it holds (payto-not-mine). An address a split agreed on one chain is never taken as that recipient's address on another.",
+    "Finishing across chains. Each net payment is paid and confirmed on the payment chain, as in a settle-up in one asset. While the settle-up covers a share, on any chain, that share is paid only through it. Once it is final, and not before, each creditor marks the shares it covered received on whatever chain they were: by their word, with no transaction on that chain.",
+    "What does not change. The private split is never netted: no share of it is covered, and its zone gets no rate. A settle-up on one chain in one asset is byte for byte what it was (the same effect and the same signed bytes) and keeps every rule of a90.20."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Each conversion is exact. Every covered share in another asset converts on its own at that asset's signed rate: amount \u00d7 rate \u00f7 per, rounded down. The debtor keeps a remainder of less than one base unit of the payment asset per share. A share that converts to nothing is refused, and so is one whose product overflows 256 bits; it is never wrapped. A rate typed per ONE unit (\"1 BTC = 21.4 ETH\") is kept exactly in base units on both sides. A rate finer than the payment asset's smallest unit, zero, or not a plain decimal is refused."
+    },
+    {
+      "id": "c2",
+      "text": "Balances are conserved in the payment asset. Every member's balance across the converted shares equals their balance across the net payments; anything else is refused, naming whose balance breaks. Each covered share still states exactly what its own split says, in its own asset on its own chain. Its split must be agreed, unpaid and not already covered, and every client checks it against that split before agreeing."
+    },
+    {
+      "id": "c3",
+      "text": "The rates are the proposer's recorded quote. There is exactly one rate for each chain and asset the covered shares use, other than the payment one: none for the payment asset, none unused, each once, in one order. Each names its source and time. The rates are in the signed bytes, so changing a rate, its source or its time changes them. They reach the signed bytes only as an external read the proposer recorded before anyone agreed; without that read no agreement counts (invariant 10)."
+    },
+    {
+      "id": "c4",
+      "text": "Where a recipient is paid. A recipient owed by a covered split on the payment chain is paid only at that split's payTo, exactly as in a90.20 s3. One owed only on other chains is paid at an address on the payment chain they vouch for: the last one they shared into the room for that chain. If they shared none, the proposal is refused and names them. Their own client agrees only to an address it holds (payto-not-mine). An address a split agreed on one chain is never taken as that recipient's address on another."
+    },
+    {
+      "id": "c5",
+      "text": "Finishing across chains. Each net payment is paid and confirmed on the payment chain, as in a settle-up in one asset. While the settle-up covers a share, on any chain, that share is paid only through it. Once it is final, and not before, each creditor marks the shares it covered received on whatever chain they were: by their word, with no transaction on that chain."
+    },
+    {
+      "id": "c6",
+      "text": "What does not change. The private split is never netted: no share of it is covered, and its zone gets no rate. A settle-up on one chain in one asset is byte for byte what it was (the same effect and the same signed bytes) and keeps every rule of a90.20."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s1",
+      "proves": "A grid of 192 cases: payment asset (ETH at 18 decimals, a 6-decimal token, BTC at 8) x covered asset (the other two) x typed rate (21.4, 2500.5, 1, one finer than any base unit, 0, 1e3, 21.4.1, a 70-digit integer) x share (1, 5000, 10^60, 10^70); a grader state is one row of four shares, 48 rows. The probe does its OWN arithmetic (its own decimal parse, a 512-bit product): settleRate keeps exactly rate x 10^payDecimals per 10^decimals or refuses exactly when that is not representable, and ratePerUnit reads it back; convertedAmount equals the probe's floor, or refuses exactly when the product passes 256 bits (named as an overflow) or the result is zero; the driver accepts a settle-up paying exactly that conversion and refuses one unit more or less. Catches rounding up or to nearest, a wrapped overflow, a zero conversion accepted, a rate finer than a base unit accepted, decimals misapplied.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_settle_up_rate_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "row": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 50,
+      "description": "Each conversion is exact. Every covered share in another asset converts on its own at that asset's signed rate: amount \u00d7 rate \u00f7 per, rounded down. The debtor keeps a remainder of less than one base unit of the payment asset per share. A share that converts to nothing is refused, and so is one whose product overflows 256 bits; it is never wrapped. A rate typed per ONE unit (\"1 BTC = 21.4 ETH\") is kept exactly in base units on both sides. A rate finer than the payment asset's smallest unit, zero, or not a plain decimal is refused.",
+      "clause_id": "c1"
+    },
+    {
+      "type": "metamorphic",
+      "restatement_clause_id": "s2",
+      "relation_class": "conservation",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_settle_up_across_conservation.nim"
+      ],
+      "cwd": "module",
+      "proves": "Eight seeded rooms of four over the live path: splits in ETH and a 6-decimal token on eip155:31337 and in BTC on regtest, every party agreed, one split a debtor never agreed to, some ETH shares paid over a fake ledger, a slice already covered by an agreed settle-up, one agreed private split; paid in ETH or the token at a rate per one unit for every other asset. The settle-up is composed with the REAL settleUpAcross; mutated ones (a BTC cover one sat higher, netted consistently; a net payment one unit higher; a rate changed after netting; a cover of a paid, already-covered, unagreed or private share) are put to a covered party's agreement with the rates recorded. Every flow is non-negative: per member, 1 if the balance over the covers, converted by the probe's OWN 512-bit arithmetic at the signed rates, differs from the balance over the transfers; per cover, 1 if it misstates its split (read independently from the log) or covers what it may not; per transfer, 1 if it pays nothing or pays anywhere but the agreed or shared address; per mutation, 1 if accepted; per trial, 1 if the honest one is not composed or its agreement refused; per mutation kind, 1 if it never ran. Catches balances drifting at a rate, a misstated cover on another chain, netting a share that is not open.",
+      "description": "Balances are conserved in the payment asset. Every member's balance across the converted shares equals their balance across the net payments; anything else is refused, naming whose balance breaks. Each covered share still states exactly what its own split says, in its own asset on its own chain. Its split must be agreed, unpaid and not already covered, and every client checks it against that split before agreeing.",
+      "clause_id": "c2"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s3",
+      "proves": "21 cases over a base of a dinner in ETH, a hotel in BTC and a taxi in a token, settled in ETH at 21.4 ETH/BTC and 0.0004 ETH/token: the driver accepts the base and refuses each malformed rate set (a rate missing, a rate no cover uses, a rate for the payment asset, a rate twice, out of order, an empty source, a source over MaxQuoteSource, a non-canonical rate, a zero per, a zero rate, a time that is not unix seconds, a rate and cover on the private zone); changing a rate (re-netted), doubling rate and per (the same conversion), the source or the time each gives other signed bytes, and changing nothing the same bytes with eight elements, the rates the eighth; over the live path a party's agreement counts when the proposer recorded the rates as a read, is refused unaccountable-input when not, and a settle-up in one asset needs no read. Catches unsigned or partly signed rates, rates of unknown origin counted, an incomplete rate set.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_settle_up_rates_signed_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 25,
+      "description": "The rates are the proposer's recorded quote. There is exactly one rate for each chain and asset the covered shares use, other than the payment one: none for the payment asset, none unused, each once, in one order. Each names its source and time. The rates are in the signed bytes, so changing a rate, its source or its time changes them. They reach the signed bytes only as an external read the proposer recorded before anyone agreed; without that read no agreement counts (invariant 10).",
+      "clause_id": "c3"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s4",
+      "proves": "48 cases over the live path: payment chain (eip155:31337 in ETH, Bitcoin regtest) x how Bob is owed (by a covered split on the payment chain at an address neither of his shares; only on the other rail; only on eip155:1 by a split naming his own Ethereum address) x what he shared for the payment chain (nothing, one address, two with the later his, only one of the other kind) x whether his client holds the address paid; every case also nets Alice's share on the payment chain and Dave's on the other rail. The REAL settleUpAcross pays an on-chain creditor at his split's payTo whatever he shared, and the driver refuses a settle-up paying him anywhere else; one owed only elsewhere is refused no-address:<Bob> when he shared nothing usable (never his eip155:1 split's payTo), else paid at the last address he shared, and his client's settleAgreeRefusal passes iff it holds that address, else payto-not-mine; Carol's agreement counts, and Bob's when his check passes. Catches a guessed or stale address, an address borrowed from another chain, agreeing to an address the client does not hold.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_settle_up_payto_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 50,
+      "description": "Where a recipient is paid. A recipient owed by a covered split on the payment chain is paid only at that split's payTo, exactly as in a90.20 s3. One owed only on other chains is paid at an address on the payment chain they vouch for: the last one they shared into the room for that chain. If they shared none, the proposal is refused and names them. Their own client agrees only to an address it holds (payto-not-mine). An address a split agreed on one chain is never taken as that recipient's address on another.",
+      "clause_id": "c4"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s5",
+      "proves": "A dinner in ETH (Alice owed 300 wei by Bob and Carol) and a hotel in BTC on regtest (Bob owed 5000 sat by Carol), settled up in ETH at 7 wei per 3 sat; Carol pays Alice 600 and Bob 11366 at the Ethereum address he shared. The state is a bitmask over six settle-up events (Bob agrees, Carol agrees, each payment reported, each confirmed), all 64 built over the live path. The settle-up is agreed iff both agreed and its state then follows its parts; Carol's direct payment of her BTC hotel share is refused covered-by-settle-up, sending nothing, iff agreed; each covered share (the hotel and both dinner shares) is marked received with no payment reference iff the settle-up is final and only by its own creditor, Carol's own mark never counting; the hotel and dinner are final iff it is; and every member's settleCovered, run over one fake ledger, sends nothing on any chain. Catches a covered BTC share paid twice, shares closed before the money moved, a Bitcoin payment for a share an ETH payment settled, a debtor closing their own share.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_settle_up_across_finish_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "events": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 70,
+      "description": "Finishing across chains. Each net payment is paid and confirmed on the payment chain, as in a settle-up in one asset. While the settle-up covers a share, on any chain, that share is paid only through it. Once it is final, and not before, each creditor marks the shares it covered received on whatever chain they were: by their word, with no transaction on that chain.",
+      "clause_id": "c5"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s6",
+      "proves": "Twelve settle-ups in one asset (ETH and a token on eip155:31337, BTC on regtest, four seeds each) were computed once on main at 0b19891, before exo-a90.17 landed, by a throwaway generator in a separate worktree, and frozen as the sha256 of the effect JSON and of the signed bytes; today's code rebuilds each with its covers bare and naming their own chain and asset, and both must reproduce both digests and still be accepted. The private split: a settle-up covering its share with a rate for its zone, or a rate for the zone alone, is refused; its own driver refuses any settle-up; and in a room holding it agreed, openPartsAll never lists its share and a rate for its zone composes nothing. Catches any byte drift in the one-asset encoding and netting the private split. The rest of derived-exo-a90.20's one-asset rules stay held by that spec, graded in the same run.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_settle_up_unchanged_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 20,
+      "description": "What does not change. The private split is never netted: no share of it is covered, and its zone gets no rate. A settle-up on one chain in one asset is byte for byte what it was (the same effect and the same signed bytes) and keeps every rule of a90.20.",
+      "clause_id": "c6"
+    }
+  ],
+  "criticality": "catastrophic",
+  "declared_new_entrypoints": [
+    "tests/probes/probe_settle_up_rate_stepper.nim",
+    "tests/probes/probe_settle_up_across_conservation.nim",
+    "tests/probes/probe_settle_up_rates_signed_stepper.nim",
+    "tests/probes/probe_settle_up_payto_stepper.nim",
+    "tests/probes/probe_settle_up_across_finish_stepper.nim",
+    "tests/probes/probe_settle_up_unchanged_stepper.nim"
+  ]
+}

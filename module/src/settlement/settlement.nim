@@ -15,7 +15,7 @@
 ## (exo-a50.2.5) and Phase C's LEZ multisig settlement (exo-0c9, the vote locus: count the
 ## votes on chain, then Execute) sit beside it.
 
-import std/[json, algorithm, strutils, sequtils]
+import std/[json, algorithm, strutils, sequtils, options]
 import ../intents/materialization
 import ../drivers/driver
 import ../drivers/profile
@@ -28,6 +28,7 @@ import stint
 import ../drivers/lez_multisig
 import ../lez/multisig
 import ../lez/multisig_chain
+import ../lez/tx as leztx       # the v0.3.0 line: settlement builds the transaction (exo-eb6.4 L3)
 import ../bitcoin/tx
 import ../crypto/secp256k1
 import ../crypto/keystore
@@ -208,6 +209,21 @@ method assemble*(s: LezMultisigSettlement, drv: Driver, effect: Effect,
   if have < need:
     return Assembled(ok: false, error: "insufficient-approvals", have: have, need: need,
                      detail: $have & " of the " & $need & " approvals are on chain (height " & $prop.height & ")")
+  if a.layout == plV03:
+    # the v0.3 port: Execute names the approvals it counts — those the chain holds from
+    # current members — and carries the call the proposal commits to, which S5 just
+    # matched to what the room reviewed (exo-eb6.4.4)
+    let state = decodeState(chain.readAccount(a.statePda).data)
+    let approvers = decodeProposal(prop.data, a.layout).approved.filterIt(it in state.members)
+    return Assembled(ok: true, have: have, need: need,
+      tx: PreparedTx(chain: a.chain, frm: s.relayer, to: lhx(a.statePda),
+                     payload: $(%*{"op": "execute", "lez": "v0.3", "createKey": lhx(a.createKey), "index": idx,
+                                   "approvers": approvers.mapIt(lhx(it)),
+                                   "call": {"target": lhx(action.target),
+                                            "shards": action.shards.mapIt(%*{"account": lhx(it.account),
+                                                                              "program": lhx(it.program)}),
+                                            "data": lhx(action.data), "pdaSeeds": action.pdaSeeds.mapIt(lhx(it))},
+                                   "proposal": lhx(proposalPda(a.scheme, a.program, a.createKey, idx))})))
   Assembled(ok: true, have: have, need: need,
     tx: PreparedTx(chain: a.chain, frm: s.relayer, to: lhx(a.statePda),
                    payload: $(%*{"op": "execute", "createKey": lhx(a.createKey), "index": idx,
@@ -226,13 +242,16 @@ method submit*(s: LezMultisigSettlement, tx: PreparedTx, ks: Keystore): TxRef =
 
 method watch*(s: LezMultisigSettlement, txRef: TxRef): Finality =
   ## Final only when the transaction landed AND the chain says the proposal is Executed.
+  ## Landed and not Executed is a refusal: on LEZ v0.3 a refused transaction is included
+  ## (and pays); on v0.2.4 one that landed always took (exo-eb6.4.4).
   let f = s.adapter.finality(txRef)
   if f.status != fsFinal or s.watching.len == 0 or not (s.adapter of LezMultisigChain): return f
   try:
     let r = LezMultisigChain(s.adapter).readAccount(s.watching)
     if r.found and decodeProposal(r.data, LezMultisigChain(s.adapter).layout).status == psExecuted:
       Finality(status: fsFinal, detail: "Executed on chain (height " & $r.height & ")")
-    else: Finality(status: fsPending, detail: "included, but the chain does not show the proposal Executed")
+    else: Finality(status: fsFailed, detail: "the Execute was included and the chain refused it: the proposal " &
+                                             "is not Executed (on LEZ v0.3 a refused transaction is included, and pays)")
   except CatchableError as e: Finality(status: fsPending, detail: "could not read the proposal: " & e.msg)
 
 # ── a FROST group acting on LEZ (exo-55e) ──────────────────────────────────────
@@ -244,8 +263,14 @@ proc zx(b: seq[byte]): string =
 method assemble*(s: LezFrostSettlement, drv: Driver, effect: Effect,
                  contributions: seq[SettleContribution]): Assembled =
   ## Re-read the account's nonce (S5): a signature for a nonce the chain moved past can
-  ## never land, so it is refused and the room proposes again. Then one aggregate BIP-340
-  ## signature from a complete signer set, verified under x(Q) before anything is sent.
+  ## never land, so it is refused and the room proposes again. On v0.3, a transfer the
+  ## account cannot cover with its fee cap at that nonce is refused too: the chain would
+  ## include it, charge its gas and move nothing, and report no outcome (exo-eb6.4.6). One
+  ## it covers can only take effect once included: the chain authenticates the nonce
+  ## before it runs anything, so no other transaction of the group's lands in between,
+  ## nothing but the group's own signature debits its account, and the fee it reserves is
+  ## at most the declared cap. Then one aggregate BIP-340 signature from a complete signer
+  ## set, verified under x(Q) before anything is sent.
   if not (drv of LezFrostDriver):
     return Assembled(ok: false, error: "not-settleable", detail: "a LEZ FROST settlement needs a LEZ FROST driver")
   if not (s.adapter of LezMultisigChain):
@@ -260,6 +285,16 @@ method assemble*(s: LezFrostSettlement, drv: Driver, effect: Effect,
       return Assembled(ok: false, error: "not-settleable",
         detail: "the account's nonce moved (" & $call.nonces[0] & " signed, " & $now.nonce &
                 " on chain): this signature can never land — propose again")
+    if call.v3:
+      let amount = nativeTransferOut(call, d.account.accountId)
+      if amount.isNone:
+        return Assembled(ok: false, error: "not-settleable", detail: d.signRefusal(effect))
+      let need = amount.get + call.fee.get.maxFee
+      if now.balance < need:
+        return Assembled(ok: false, error: "not-settleable",
+          detail: "the account holds " & $now.balance & ", which does not cover the transfer (" & $amount.get &
+                  ") and its fee cap (" & $call.fee.get.maxFee & "): sent, it would be included, pay its " &
+                  "gas and move nothing")
   except CatchableError as e:
     return Assembled(ok: false, error: "not-settleable", detail: "could not read the account's nonce: " & e.msg)
   let cs = contributions.mapIt(Contribution(bytes: it.bytes))
@@ -273,6 +308,14 @@ method assemble*(s: LezFrostSettlement, drv: Driver, effect: Effect,
   try: sig = aggregateFrost(d.account.group, msgs, cs)[0]
   except CatchableError as e:
     return Assembled(ok: false, error: "not-settleable", have: have, need: need, detail: e.msg)
+  if call.v3:
+    # the v0.3.0 line (exo-eb6.4 L3): the transaction is built here, whole, from the
+    # agreed call and the one aggregate witness; the chain only carries it
+    let ws = @[LezWitness(signature: sig, xonly: d.account.group.xonly)]
+    let m = message3Of(call)
+    return Assembled(ok: true, have: have, need: need,
+      tx: PreparedTx(chain: d.account.chain, frm: s.relayer, to: d.account.address,
+                     payload: $(%*{"lez": "v0.3", "leeTx": zx(leeTxPublic(m, ws)), "hash": publicTxHash(m, ws)})))
   Assembled(ok: true, have: have, need: need,
     tx: PreparedTx(chain: d.account.chain, frm: s.relayer, to: d.account.address,
                    payload: $(%*{"program": zx(call.program), "accounts": call.accounts.mapIt(zx(it)),
@@ -284,13 +327,21 @@ method submit*(s: LezFrostSettlement, tx: PreparedTx, ks: Keystore): TxRef =
   proc unz(h: string): seq[byte] =
     for i in 0 ..< h.len div 2: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
   let p = parseJson(tx.payload)
+  if p{"lez"}.getStr() == "v0.3":
+    let r3 = LezMultisigChain(s.adapter).sendBuilt(unz(p["leeTx"].getStr()), p["hash"].getStr())
+    if not r3.ok: raise newException(WalletError, "the chain refused it: " & r3.error)
+    return TxRef(chain: tx.chain, id: r3.hash)
   let r = LezMultisigChain(s.adapter).sendWitnessed(unz(p["program"].getStr()),
     p["accounts"].getElems().mapIt(unz(it.getStr())), p["signers"].getElems().mapIt(unz(it.getStr())),
     p["words"].getElems().mapIt(uint32(it.getBiggestInt())), @[(unz(p["sig"].getStr()), unz(p["xonly"].getStr()))])
   if not r.ok: raise newException(WalletError, "the chain refused it: " & r.error)
   TxRef(chain: tx.chain, id: r.hash)
 
-method watch*(s: LezFrostSettlement, txRef: TxRef): Finality = s.adapter.finality(txRef)
+method watch*(s: LezFrostSettlement, txRef: TxRef): Finality =
+  ## Final once included. On v0.2.4 a refused call was dropped; on v0.3 one is included
+  ## too, so assemble sends only a native transfer the account covers at its signed nonce,
+  ## which can only take effect (exo-eb6.4.6).
+  s.adapter.finality(txRef)
 
 proc settlementFor*(drv: Driver, adapter: ChainAdapter, relayer: Account): Settlement =
   ## The settlement a driver's family needs — read from its PROFILE. nil when the

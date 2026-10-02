@@ -23,7 +23,8 @@ coordination — is built and tested; two `muster-ui` instances converge over th
 public fleet (join → ask → admit → both at two members, ~1s cross-host receive).
 The room coordinates and settles multisigs of four kinds: Safe v1.4.1 (the real
 contract on anvil, at the live nonce), Bitcoin P2WSH / tapscript through PSBT
-(regtest), the LEZ multisig program (on the public LEZ testnet), and FROST
+(regtest), the LEZ multisig program (on the public LEZ testnet at v0.2.4; its v0.3 port
+driven from the room on a local v0.3 zone), and FROST
 (one BIP-340 signature on Bitcoin, or from an untweaked LEZ account). What remains
 is the multi-party runs across two machines. Author-bearing log events (chat,
 declines, material shares, account disclosures, FROST joins) are signed by their author,
@@ -124,4 +125,4 @@ tests/          unit tests · run-suite.sh (all of them, one command) · vectors
 - Invariant tests are append-only. Extend, don't weaken.
 - The module imports nothing from `../ui/`; it reaches other modules only through logos-core.
 
-<!-- rot-check: current-phase=CLAUDE.md sha256=7b8bc1924d1fe594dc87e2f9bcce3a8d37f0feb2036fbad9fa7288f3625999d0 -->
+<!-- rot-check: current-phase=CLAUDE.md sha256=d4bdc15119bde5e85d5d679f06732a2ff9b51cf4339984f79504baee7de47947 -->

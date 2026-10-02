@@ -5,9 +5,13 @@
 ## rounds are btc.frost-bip445's (drivers/frost_group.nim, coordination/aggregate.nim);
 ## what is signed here is the LEZ public message hash.
 ##
-##   EFFECT        lez-call: {program, accounts, instruction (u32 words), signers: [the
-##                 account], nonces: [its nonce]}. The nonce is read from the chain when
-##                 proposing, and recorded in the log (invariant 10).
+##   EFFECT        lez-call v1 (the v0.2.4 line): {program, accounts, instruction (u32
+##                 words), signers: [the account], nonces: [its nonce]}.
+##                 lez-call v2 (the v0.3.0 line, exo-eb6.4 L3): {programAccount, shards
+##                 (each row's program shard), instruction (borsh bytes), signers, nonces,
+##                 fee {payer: the account, gasLimit, tip, maxFee}}: the group pays its own
+##                 fee. Either way the nonce is read from the chain when proposing, and
+##                 recorded in the log (invariant 10).
 ##   MATERIAL.     the LEZ message hash (lez/tx.nim) of exactly that call and nonce.
 ##   SETTLEMENT    the nonce re-read (refused if the chain moved past it, since a signature
 ##                 for an old nonce can never land), one aggregate signature, sent through
@@ -17,7 +21,7 @@
 ## to this zone is the account's nonce and the program. Muster binds the environment in
 ## the room (invariant 2); the chain does not (the registry's exposure).
 
-import std/[json, strutils, sequtils]
+import std/[json, strutils, sequtils, options]
 import stint
 import ../dcbor/dcbor
 import ../intents/materialization
@@ -73,20 +77,70 @@ proc lezFrostCallEffect*(program: seq[byte], accounts: seq[seq[byte]], words: se
        "instruction": words.mapIt(int64(it)), "signers": [toHex(signer)], "nonces": [$nonce],
        "sources": {"nonces": "read"}})
 
+proc lezFrostCallEffect3*(programAccount: seq[byte], shards: seq[LezShard], instruction: seq[byte],
+                          signer: seq[byte], nonces: seq[UInt128], fee: Option[LezFee]): string =
+  ## A lez-call effect on the LEZ v0.3.0 line, signed by `signer` at `nonces` (read from
+  ## the chain: a recorded read), with its fee declaration.
+  var j = %*{"effect": "lez-call", "lez": "v0.3", "programAccount": toHex(programAccount),
+             "shards": shards.mapIt(%*{"account": toHex(it.account), "program": toHex(it.program)}),
+             "instruction": toHex(instruction), "signers": [toHex(signer)], "nonces": nonces.mapIt($it),
+             "sources": {"nonces": "read"}}
+  if fee.isSome:
+    let f = fee.get
+    j["fee"] = %*{"payer": toHex(f.payer), "gasLimit": $f.gasLimit, "tip": $f.tip, "maxFee": $f.maxFee}
+  $j
+
 proc fieldOf(e: Effect, name: string): CborValue =
   for (k, v) in e.fields:
     if k == name: return v
   cbNull()
 
 type LezCall* = object
-  program*: seq[byte]
-  accounts*: seq[seq[byte]]
+  v3*: bool                       ## the v0.3.0 line (lez-call v2)
+  program*: seq[byte]             ## v1: the program id
+  accounts*: seq[seq[byte]]       ## v1: the accounts
   signers*: seq[seq[byte]]
   nonces*: seq[UInt128]
-  words*: seq[uint32]
+  words*: seq[uint32]             ## v1: the instruction words
+  programAccount*: seq[byte]      ## v2: the program, by account id
+  shards*: seq[LezShard]          ## v2: each row's program shard
+  instruction*: seq[byte]         ## v2: the instruction, borsh
+  fee*: Option[LezFee]            ## v2: the fee declaration
+
+proc mapGet(v: CborValue, key: string): CborValue =
+  if v.kind == ckMap:
+    for (k, x) in v.pairs:
+      if k.kind == ckText and k.t == key: return x
+  cbNull()
+
+proc bytes32(v: CborValue, what: string): seq[byte] =
+  if v.kind != ckBytes or v.b.len != 32: raise newException(ValueError, what & " is 32 bytes")
+  v.b
 
 proc callOf*(e: Effect): LezCall =
   ## The call a lez-call effect names; raises ValueError on anything malformed.
+  if e.schemaId == "muster.effect.lez-call.v2":
+    result.v3 = true
+    result.programAccount = bytes32(e.fieldOf("programAccount"), "a program account")
+    for s in e.fieldOf("shards").arr:
+      result.shards.add LezShard(account: bytes32(s.mapGet("account"), "a shard's account"),
+                                 program: bytes32(s.mapGet("program"), "a shard's program"))
+    let ins = e.fieldOf("instruction")
+    if ins.kind != ckBytes: raise newException(ValueError, "an instruction is bytes")
+    result.instruction = ins.b
+    for sgn in e.fieldOf("signers").arr: result.signers.add bytes32(sgn, "a signer")
+    for n in e.fieldOf("nonces").arr:
+      if n.kind != ckText: raise newException(ValueError, "a nonce is a decimal")
+      result.nonces.add parse(n.t, UInt128)
+    let f = e.fieldOf("fee")
+    if f.kind == ckMap:
+      let (g, t, m) = (f.mapGet("gasLimit"), f.mapGet("tip"), f.mapGet("maxFee"))
+      if g.kind != ckText or t.kind != ckText or m.kind != ckText:
+        raise newException(ValueError, "a fee's gas limit, tip and cap are decimals")
+      result.fee = some LezFee(payer: bytes32(f.mapGet("payer"), "a fee payer"),
+                               gasLimit: parseBiggestUInt(g.t).uint64, tip: parseBiggestUInt(t.t).uint64,
+                               maxFee: parse(m.t, UInt128))
+    return
   if e.schemaId != "muster.effect.lez-call.v1": raise newException(ValueError, "not a lez-call effect")
   let p = e.fieldOf("program")
   if p.kind != ckBytes or p.b.len != 32: raise newException(ValueError, "a program id is 32 bytes")
@@ -105,11 +159,21 @@ proc callOf*(e: Effect): LezCall =
     result.words.add uint32(w.u)
 
 proc messageOf*(c: LezCall): LezMessage =
+  ## The v0.2.4 message of a v1 call.
   LezMessage(program: c.program, accounts: c.accounts, nonces: c.nonces, words: c.words)
+
+proc message3Of*(c: LezCall): LezMessage3 =
+  ## The v0.3.0 message of a v2 call.
+  LezMessage3(programAccount: c.programAccount, shards: c.shards, nonces: c.nonces,
+              instruction: c.instruction, fee: c.fee)
+
+proc hashOf*(c: LezCall): array[32, byte] =
+  ## What the group signs: the message hash of the call's own line.
+  if c.v3: messageHash(message3Of(c)) else: messageHash(messageOf(c))
 
 method frostGroupOf*(d: LezFrostDriver): tuple[ok: bool, group: FrostGroup] = (true, d.account.group)
 method frostMessages*(d: LezFrostDriver, e: Effect): seq[seq[byte]] =
-  try: @[@(messageHash(messageOf(callOf(e))))] except CatchableError: @[]
+  try: @[@(hashOf(callOf(e)))] except CatchableError: @[]
 
 method describe*(d: LezFrostDriver): DriverDescriptor =
   DriverDescriptor(rounds: 2, serializationDomain: LezFrostDomain, finality: finExternal,
@@ -140,14 +204,37 @@ method verifyContribution*(d: LezFrostDriver, c: Contribution, round: int): bool
 method identifyContributor*(d: LezFrostDriver, m: Materialization, c: Contribution): string =
   verifyFrost(d.account.group, hashesIn(m), c)
 
+proc nativeTransferOut*(c: LezCall, account: seq[byte]): Option[UInt128] =
+  ## The amount, when `c` is a v0.3 native transfer out of `account`: the native token
+  ## program, two rows (`account`'s native shard, then the recipient's), and borsh
+  ## Transfer { amount } (variant 0, a u128). Anything else: none.
+  if not c.v3 or c.programAccount != NativeTokenProgram or c.shards.len != 2: return
+  if c.shards[0] != nativeShard(account) or c.shards[1].program != NativeTokenProgram: return
+  if c.instruction.len != 17 or c.instruction[0] != 0: return
+  var le: array[16, byte]
+  for i in 0 ..< 16: le[i] = c.instruction[1 + i]
+  some UInt128.fromBytesLE(le)
+
 method signRefusal*(d: LezFrostDriver, e: Effect): string =
   ## Before anyone signs: a well-formed call whose one signer is this account, at one nonce.
+  ## On v0.3, also one whose outcome muster can tell: a refused call is still included,
+  ## pays its fee and burns the nonce, and the chain reports no outcome (exo-eb6.4.6). A
+  ## native transfer out of the group's own account is one: settlement sends it only when
+  ## the account covers it at the signed nonce, and then inclusion means it took effect.
   var c: LezCall
   try: c = callOf(e)
   except CatchableError as err: return "not a LEZ call: " & err.msg
   if c.signers != @[d.account.accountId]: return "the call's signer is not this account"
   if c.nonces.len != 1: return "the call names one nonce, the account's"
-  if c.words.len == 0: return "the call has no instruction"
+  if c.v3:
+    if c.instruction.len == 0: return "the call has no instruction"
+    if c.fee.isNone: return "the call declares no fee: on LEZ v0.3 every transaction pays one"
+    if c.fee.get.payer != d.account.accountId:
+      return "the call's fee is paid by another account: the group pays its own fee here"
+    if nativeTransferOut(c, d.account.accountId).isNone:
+      return "on LEZ v0.3 a refused call is still included and the chain reports no outcome, so the " &
+             "group signs only a call whose outcome muster can tell: a native transfer out of its own account"
+  elif c.words.len == 0: return "the call has no instruction"
   ""
 
 method profile*(d: LezFrostDriver): FamilyProfile =
@@ -163,19 +250,24 @@ method profile*(d: LezFrostDriver): FamilyProfile =
 
 method manifest*(d: LezFrostDriver, effect: Effect): ActionManifest =
   ## Needs the user's LEZ sequencer (JSON-RPC, the `lez-rpc` setting: settlement sends the
-  ## aggregate through it) and a share of the ceremony. LEZ v0.2.4 charges no fee, so no
-  ## funded account is needed. Touches the group's account (its nonce), the program the
-  ## call runs (read) and every account the call passes (each may be written) — each once,
-  ## a chain in CAIP-2 and an account in CAIP-10 (exo-ec8). At settle the zone sees one
-  ## signature by the account: the call, never the policy or who signed.
+  ## aggregate through it) and a share of the ceremony. On v0.2.4 no fee is charged; on
+  ## v0.3 the group's account pays its own, so it must hold native LEZ (up to the declared
+  ## cap; the unused part is refunded). Touches the group's account (its nonce), the
+  ## program the call runs (read) and every account the call passes (each may be written)
+  ## — each once, a chain in CAIP-2 and an account in CAIP-10 (exo-ec8). At settle the
+  ## zone sees one signature by the account: the call, never the policy or who signed.
   let chain = d.account.chain
   var touches = @[touch(chain, tmWrite), touch(chain & ":" & d.account.address, tmWrite)]
   proc add(t: Touch) =
     if not touches.anyIt(it.target == t.target): touches.add t
   try:
     let c = callOf(effect)
-    add touch(chain & ":" & toHex(c.program), tmRead)       # the program it calls
-    for a in c.accounts: add touch(chain & ":" & toHex(a), tmWrite)
+    if c.v3:
+      add touch(chain & ":" & toHex(c.programAccount), tmRead)   # the program it calls
+      for s in c.shards: add touch(chain & ":" & toHex(s.account), tmWrite)
+    else:
+      add touch(chain & ":" & toHex(c.program), tmRead)       # the program it calls
+      for a in c.accounts: add touch(chain & ":" & toHex(a), tmWrite)
   except CatchableError: discard
   ActionManifest(declared: true, agreement: d.describe(),
     requirements: @[req(rqEnvironment, chain), req(rqInfra, "lez-rpc"),
