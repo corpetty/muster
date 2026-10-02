@@ -15,7 +15,7 @@
 ## (exo-a50.2.5) and Phase C's LEZ multisig settlement (exo-0c9, the vote locus: count the
 ## votes on chain, then Execute) sit beside it.
 
-import std/[json, algorithm, strutils, sequtils, options]
+import std/[json, algorithm, strutils, sequtils, options, times, os]
 import ../intents/materialization
 import ../drivers/driver
 import ../drivers/profile
@@ -61,6 +61,20 @@ method submit*(s: Settlement, tx: PreparedTx, ks: Keystore): TxRef {.base.} =
 
 method watch*(s: Settlement, txRef: TxRef): Finality {.base.} =
   s.adapter.finality(txRef)
+
+proc watchWithin*(s: Settlement, txRef: TxRef, windowS: float, pollMs = 200): Finality =
+  ## Finality, waited for within a wall-clock window: what a hosted call may spend on it
+  ## on the module thread, never more (exo-14f). Pending past the window. A read that
+  ## fails ends the wait at once, as pending: a node that did not answer will not answer
+  ## in the next poll either, and the caller's pump keeps watching. Each read has its own
+  ## budget (wallet/rpc_budget.nim), so the whole wait is at most the window plus one read.
+  let until = epochTime() + windowS
+  while true:
+    try: result = s.watch(txRef)
+    except CatchableError as e:
+      return Finality(status: fsPending, detail: "could not read the chain: " & e.msg)
+    if result.status != fsPending or epochTime() + float(pollMs) / 1000.0 >= until: return
+    sleep(pollMs)
 
 # ── the Safe ─────────────────────────────────────────────────────────────────
 type SafeSettlement* = ref object of Settlement

@@ -155,9 +155,11 @@ Which group a test needs:
   holdings-catalogue probe `probes/probe_catalogue_no_leak.nim` (spec `derived-exo-45e`).
 - **`$W3`** — nim-eth and the web3 stack: `wallet_verify_test` (the reused nim-eth
   proof primitive), `wallet_sign_test` (EIP-155 signing vs the canonical vector),
-  `wallet_rpc_test`, and anything importing `evm_adapter` (`wallet_evm_test`,
-  `coordinate_submit_anvil`) or a LEZ chain seam (`lez_multisig_live_e2e`,
-  `lez_frost_*_e2e`). websock is deliberately not needed: the code imports
+  `wallet_rpc_test`, `rpc_budget_test`, and anything importing `evm_adapter` (`wallet_evm_test`,
+  `coordinate_submit_anvil`), a LEZ chain seam (`lez_multisig_live_e2e`,
+  `lez_frost_*_e2e`), or `drivers/safe_rpc.nim` — whose calls run on chronos under
+  `wallet/rpc_budget.nim` since exo-14f — directly or through `readiness` / `settlement`
+  (`safe_owners_test`, `safe_fidelity_test`, `settlement_test`, `readiness_test`). websock is deliberately not needed: the code imports
   `web3/eth_api` + `json_rpc/clients/httpclient`, not top-level `web3`.
 
 ### The host-return probe
