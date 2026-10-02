@@ -7,6 +7,7 @@
 import std/[json, strutils]
 import ../hashing/keccak256
 import ../wallet/rpc_budget
+import ../wallet/chain_endpoint
 import ./safe
 
 proc strBytes(s: string): seq[byte] =
@@ -57,8 +58,9 @@ proc assembleExecTransaction*(tx: SafeTx, signatures: seq[byte]): seq[byte] =
 # ── minimal JSON-RPC over the user's endpoint ─────────────────────────────────
 proc rpc(url, meth: string, params: JsonNode, budget = readBudget()): JsonNode =
   ## The call's `result` (JNull when the endpoint answered null). A transport failure, an
-  ## RPC error, or no answer within the budget raises RpcError.
-  jsonRpc(url, meth, params, budget)
+  ## RPC error, or no answer within the budget raises RpcError. `url` may name the
+  ## platform's eth_rpc_module instead (wallet/chain_endpoint.nim, exo-d4d.3).
+  chainRpc(url, meth, params, budget).result
 
 proc hexResult(r: JsonNode, meth: string): string =
   ## A result that must be a hex string. Null, or anything else, is a failed read and
@@ -69,7 +71,9 @@ proc hexResult(r: JsonNode, meth: string): string =
 
 proc submitExecTransaction*(url: string, fromAddr, safe: Address, calldata: seq[byte]): string =
   ## Submit via the user's RPC (anvil unlocks `fromAddr`). Returns the tx hash; raises
-  ## when the node answers none.
+  ## when the node answers none. Refused on the platform: nothing there signs for muster.
+  if url.isPlatform:
+    raise newException(RpcError, "eth_sendTransaction: an unlocked-account send is for a local test chain")
   rpc(url, "eth_sendTransaction", %*[{
     "from": toHex0x(fromAddr), "to": toHex0x(safe),
     "data": toHex0x(calldata), "gas": "0x100000"}], sendBudget()).hexResult("eth_sendTransaction")
