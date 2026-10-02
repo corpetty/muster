@@ -101,6 +101,85 @@ proc liveProposeIntent*(s: CoordinationSession, ks: Keystore, driverFor: DriverF
   s.publishAuthored(ks, ev)
   id
 
+type
+  ApprovalPlan* = object
+    ## What an approval of one intent would be made over, once every check that comes
+    ## before a signature has passed. `refusal` is "" then; otherwise it is the refusal
+    ## word and nothing else is set.
+    refusal*: string
+    drv*: Driver
+    effectJson*: string
+    p*: seq[byte]               ## the attestation payload P (in-app approvals only)
+    mat*: Materialization       ## what the driver signs (in-app approvals only)
+
+proc planApproval*(s: CoordinationSession, driverFor: DriverFor, intentId: string,
+                   inApp: bool, nowSec: uint64): ApprovalPlan =
+  ## Every check an approval passes before anything is signed, in this order: the intent
+  ## exists; this client has a driver for its kind; for an in-app approval, the driver's
+  ## own refusal and any cover check; the intent has not expired; for an in-app
+  ## approval, a real context and every input accounted for, then P and the
+  ## materialization. Shared by liveContribute (signing now, through the Keystore seam)
+  ## and the keystore_module path (signing later, after a human approves), so both are
+  ## held by exactly the same gates.
+  s.poll()
+  let events = s.roomEvents()
+  let drv = driverFor(intentPolicyOf(events, intentId))   # THIS intent's own policy
+  let effectJson = effectJsonOf(events, intentId)
+  if effectJson.len == 0: return ApprovalPlan(refusal: "unknown-intent")
+  # Under a kind this client has no driver for, nothing is signed or published: which
+  # key, which bytes, what would count — none of it is known (exo-a50.1.2).
+  if not drv.supported(): return ApprovalPlan(refusal: "unsupported-driver")
+  # The driver's own gate on THIS client's signature (exo-a50.1.4): an in-app approval
+  # of, e.g., a Safe delegatecall to an unallowlisted target is refused, publishing
+  # nothing. A pasted signature was made elsewhere; it is folded (and graded) as usual.
+  if inApp:
+    let refusal = drv.signRefusal(effectFromJson(effectJson))
+    if refusal.len > 0: return ApprovalPlan(refusal: "refused: " & refusal)
+    # an effect settling parts of OTHER intents (a settle-up): each part exactly as its own
+    # intent says, still unpaid — checked against the log, never taken on the proposer's word
+    let cover = coverRefusal(events, driverFor, drv, effectFromJson(effectJson), intentId, nowSec)
+    if cover.len > 0: return ApprovalPlan(refusal: "refused: " & cover)
+  let ctx = intentContext(events, intentId)
+  if not ctx.isPlaceholder and ctx.expired(nowSec): return ApprovalPlan(refusal: "expired")
+  result = ApprovalPlan(drv: drv, effectJson: effectJson)
+  if inApp:
+    if ctx.isPlaceholder: return ApprovalPlan(refusal: "no-context")
+    if not intentInputs(events, driverFor, intentId).allAccountable: return ApprovalPlan(refusal: "unaccountable-input")
+    result.p = attestationPayload(events, driverFor, intentId)
+    if result.p.len == 0: return ApprovalPlan(refusal: "unaccountable-input")
+    result.mat = canonicalize(drv, effectFromJson(effectJson))
+
+proc publishApproval*(s: CoordinationSession, driverFor: DriverFor, plan: ApprovalPlan,
+                      intentId, sig, attestHex: string, inApp: bool,
+                      binding: proc(): string = nil): string =
+  ## Publish an approval made over `plan`: the contribution, and for an in-app approval
+  ## the muster attestation over P (refused here unless it verifies as the recovered
+  ## contributor) and, when `binding` is given, the signing key's F-14 binding — made
+  ## only once every check has passed. Returns the intent's state, or a refusal word.
+  let events = s.roomEvents()
+  # The intent's policy verifies the contribution — "" iff it isn't a valid one.
+  let who = contributorOf(plan.drv, plan.effectJson, sig)
+  if who.len == 0: return "rejected"
+  # Tag the contribution with the round this intent is currently collecting, so a
+  # multi-round driver (FROST) can have the same member contribute once per round.
+  let folded = reduceIntents(events, driverFor)
+  let curRound = (if intentId in folded: folded[intentId].collection.round else: 1)
+  # A muster attestation that doesn't verify as the recovered contributor would be
+  # rejected by every member's fold — refuse it here rather than publish it.
+  if inApp and not verifyAttestation(who, plan.p, attestHex): return "attestation-mismatch"
+  # Link the approval to the proposal and to every approval its signer has seen
+  # (exo-403): a member who later reads this approval but not those can tell its
+  # history reaches events it cannot read, instead of mistaking a partial view for
+  # the whole one. Approvals only, never any other sig event (exo-96d). Content-
+  # addressed, so the fold still dedups by (who, round).
+  let parents = approvalParents(events, driverFor, intentId)
+  let sigEv = contributeEvent(intentId, who, sig, round = curRound, parents = parents)
+  s.publish(sigEv)
+  if inApp: s.publish(attestEvent(intentId, who, curRound, attestHex, parents = @[eventId(sigEv)]))
+  if binding != nil:
+    s.publish(keyBindingEvent(intentId, who, binding()))
+  intentState(s.roomEvents(), driverFor, intentId)
+
 proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
                      intentId, signatureHex, keyRef: string,
                      bindingCtx: LinkContext, nowSec: uint64 = 0): string =
@@ -114,48 +193,26 @@ proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
   ## Invariants 2 + 10 on the live path (exo-ef1): nothing is published after the
   ## intent's declared expiry, and an IN-APP approval is refused outright — nothing
   ## published — unless the intent has a real context and every input that reached
-  ## its bytes can be accounted for. Every in-app approval then carries a muster
-  ## attestation from the SAME key over P (attest.nim). A pasted signature was made
-  ## outside muster: it is published as-is and graded unattested, never shown as
+  ## its bytes can be accounted for (planApproval). Every in-app approval then carries
+  ## a muster attestation from the SAME key over P (attest.nim). A pasted signature was
+  ## made outside muster: it is published as-is and graded unattested, never shown as
   ## committed.
-  s.poll()
-  let events = s.roomEvents()
-  let drv = driverFor(intentPolicyOf(events, intentId))   # THIS intent's own policy
-  let effectJson = effectJsonOf(events, intentId)
-  if effectJson.len == 0: return "unknown-intent"
-  # Under a kind this client has no driver for, nothing is signed or published: which
-  # key, which bytes, what would count — none of it is known (exo-a50.1.2).
-  if not drv.supported(): return "unsupported-driver"
-  # The driver's own gate on THIS client's signature (exo-a50.1.4): an in-app approval
-  # of, e.g., a Safe delegatecall to an unallowlisted target is refused, publishing
-  # nothing. A pasted signature was made elsewhere; it is folded (and graded) as usual.
-  if signatureHex.len == 0:
-    let refusal = drv.signRefusal(effectFromJson(effectJson))
-    if refusal.len > 0: return "refused: " & refusal
-    # an effect settling parts of OTHER intents (a settle-up): each part exactly as its own
-    # intent says, still unpaid — checked against the log, never taken on the proposer's word
-    let cover = coverRefusal(events, driverFor, drv, effectFromJson(effectJson), intentId, nowSec)
-    if cover.len > 0: return "refused: " & cover
-  let ctx = intentContext(events, intentId)
-  if not ctx.isPlaceholder and ctx.expired(nowSec): return "expired"
   let inApp = signatureHex.len == 0
-  var p: seq[byte]
-  if inApp:
-    if ctx.isPlaceholder: return "no-context"
-    if not intentInputs(events, driverFor, intentId).allAccountable: return "unaccountable-input"
-    p = attestationPayload(events, driverFor, intentId)
-    if p.len == 0: return "unaccountable-input"
+  let plan = planApproval(s, driverFor, intentId, inApp, nowSec)
+  if plan.refusal.len > 0: return plan.refusal
+  let drv = plan.drv
   var sig = signatureHex
   var inAppSecpRef = ""   # nonempty iff we secp-signed IN-APP: publish that key's F-14 binding
   var attestHex = ""      # the muster attestation over P, made with the same key (in-app only)
-  if sig.len == 0:
-    let mat = canonicalize(drv, effectFromJson(effectJson))
+  if inApp:
+    let mat = plan.mat
+    let p = plan.p
     # An unknown ref is refused — never a silent fall-through to a different key than
     # the caller chose (K2b). An empty ref means the primary key.
     if keyRef.len > 0 and not ks.hasKey(keyRef): return "unknown-key"
     # A driver that signs in-app itself (a Bitcoin multisig: DER / Schnorr per input,
     # exo-a50.2.4) does so through the keystore seam; the rest are signed below.
-    let hook = drv.signInApp(effectFromJson(effectJson), ks, attestationDigest(p))
+    let hook = drv.signInApp(effectFromJson(plan.effectJson), ks, attestationDigest(p))
     if hook.handled:
       # the hook signs with the key it names; a caller who chose another is refused
       if keyRef.len > 0 and keyRef != hook.keyRef: return "unknown-key"
@@ -172,32 +229,14 @@ proc liveContribute*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
     else:
       sig = hex0x(if keyRef.len > 0: ks.edSignWith(keyRef, mat.bytes) else: ks.edSign(mat.bytes))
       attestHex = hex0x(if keyRef.len > 0: ks.edSignWith(keyRef, p) else: ks.edSign(p))
-  # The intent's policy verifies the contribution — "" iff it isn't a valid one.
-  let who = contributorOf(drv, effectJson, sig)
-  if who.len == 0: return "rejected"
-  # Tag the contribution with the round this intent is currently collecting, so a
-  # multi-round driver (FROST) can have the same member contribute once per round.
-  let folded = reduceIntents(events, driverFor)
-  let curRound = (if intentId in folded: folded[intentId].collection.round else: 1)
-  # A muster attestation that doesn't verify as the recovered contributor would be
-  # rejected by every member's fold — refuse it here rather than publish it.
-  if inApp and not verifyAttestation(who, p, attestHex): return "attestation-mismatch"
-  # Link the approval to the proposal and to every approval its signer has seen
-  # (exo-403): a member who later reads this approval but not those can tell its
-  # history reaches events it cannot read, instead of mistaking a partial view for
-  # the whole one. Approvals only, never any other sig event (exo-96d). Content-
-  # addressed, so the fold still dedups by (who, round).
-  let parents = approvalParents(events, driverFor, intentId)
-  let sigEv = contributeEvent(intentId, who, sig, round = curRound, parents = parents)
-  s.publish(sigEv)
-  if inApp: s.publish(attestEvent(intentId, who, curRound, attestHex, parents = @[eventId(sigEv)]))
   # F-14/K5: when we secp-signed IN-APP with a chosen owner key, publish that key's
   # binding so the room can check the approval came from an admitted member. A PASTED
   # signature gets none: we do not hold that key, so we cannot vouch for it.
-  if inAppSecpRef.len > 0:
-    let st = ks.bindingForKey(inAppSecpRef, bindingCtx)
-    s.publish(keyBindingEvent(intentId, who, hex0x(encodeLink(st))))
-  intentState(s.roomEvents(), driverFor, intentId)
+  let secpRef = inAppSecpRef
+  let binding: proc(): string =
+    if secpRef.len > 0: (proc(): string = hex0x(encodeLink(ks.bindingForKey(secpRef, bindingCtx))))
+    else: nil
+  publishApproval(s, driverFor, plan, intentId, sig, attestHex, inApp, binding)
 
 # ── signers outside muster (exo-a50.2.6; seam S8) ────────────────────────────
 type

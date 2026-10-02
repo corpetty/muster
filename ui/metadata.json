@@ -13,6 +13,7 @@
     "muster_module",
     "delivery_module",
     "lez_core",
+    "keystore_module",
     "liblogos_lez_rln_module",
     "liblogos_rln_module"
   ],

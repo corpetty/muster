@@ -36,6 +36,10 @@
     # lp_client_create("lez_core") to resolve. lez_core 0.5.0, LEZ 0.3.0 (b89e5d2,
     # exo-eb6.4); the demo/ speed build keeps its own older pin.
     lez_core.url = "github:logos-blockchain/logos-execution-zone-module/b89e5d24df5babc2490d2e5d47756fb1f33435dd";
+    # The official EVM keystore (exo-149): muster_module calls keystore_module over lp_*,
+    # so it must be in the standalone runner's module set. Same pin as module/flake.nix
+    # (Basecamp 0.3.1's catalog release, keystore_module 0.1.0). muster_ui does not call it.
+    logos-evm-keystore-module.url = "github:logos-co/logos-evm-keystore-module/2318c679e2b7176967bd45052f3d64b2a8b06931";
     # The RLN modules a delivery v0.3 node on logos.test needs (exo-eb6.3 R1). The packages
     # are delivery v0.3.0's own re-exports, so their versions are the ones it was built
     # against; this pins only their LIDL contracts, at the same rev (logos-rln-modules
@@ -88,6 +92,7 @@
         flakeInputs = {
           delivery_module = deliveryForUi;
           lez_core = inputs.lez_core;
+          keystore_module = inputs.logos-evm-keystore-module;
           liblogos_rln_module = rlnModule "liblogos_rln_module" "logos-rln-module/rust-lib/liblogos_rln_module.lidl";
           liblogos_lez_rln_module = rlnModule "liblogos_lez_rln_module" "logos-lez-rln-module/rust-lib/liblogos_lez_rln_module.lidl";
         } // inputs;

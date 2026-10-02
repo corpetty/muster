@@ -440,4 +440,13 @@ class MusterUi
     // it says RLN is not needed. Settings renders it, with the payer to copy and fund.
     SLOT(void loadRlnStatus())
     PROP(QString rlnStatusJson="{}" READONLY)
+    // The official EVM keystore (keystore_status, exo-149.1 K1): one row {key:"keystore",
+    // level, detail, remedy?, identity?:{kind, identity}, approvers, accounts:[{address,
+    // label, wallet}]}. ok only when keystore_module attributes muster's calls to
+    // muster_module. Settings renders it, polled while open.
+    SLOT(void loadKeystoreStatus())
+    PROP(QString keystoreStatusJson="{}" READONLY)
+    // Approve Safe intents with this keystore_module account ("" stops), exo-149.5 K5:
+    // keystore_select, which asks once for the account's binding; then re-reads the row.
+    SLOT(void keystoreSelect(QString address))
 }
