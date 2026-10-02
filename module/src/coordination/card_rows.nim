@@ -42,7 +42,7 @@ proc cardRows*(p: FamilyProfile): seq[CardRow] =
       result.add row(i, "Not declared: this client has no driver for this kind, so nothing here is known.")
     return
   let room = p.locus == loRoom
-  let chain = (if room: "this room" else: p.chain)
+  let chain = (if room: "this room" else: chainLabel(p.chain))   # named, never the CAIP-2 id (exo-e71)
   let kn = kOfN(p)
 
   # 1. where the rule lives — enforced unless something gets around it
