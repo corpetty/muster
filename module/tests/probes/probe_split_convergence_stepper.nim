@@ -23,7 +23,10 @@ let drv = newSplitDriver(EvmSplitFamily, EvmChain)
 let dfor: DriverFor = proc(p: string): Driver = drv
 let effect = splitEffectJson(EvmChain, "ETH", "900", alice, AlicePayTo,
                              evenShares("900", alice, @[bob, carol]), "convergence")
-let id = intentIdFor(effect, EvmPolicy)
+# The eight events carry no policy declaration, so the id is the effect's alone: an id
+# counts only as the content address of what is filed under it (exo-dbd), and `dfor`
+# folds every kind under the split driver anyway.
+let id = intentIdFor(effect)
 let mat = canonicalize(drv, effectFromJson(effect))
 proc hx(b: openArray[byte]): string =
   const d = "0123456789abcdef"

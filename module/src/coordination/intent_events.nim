@@ -316,12 +316,69 @@ proc intentIdFor*(effectJson: string, policyKind = ""): string =
     for c in policyKind: b.add byte(c)
   bytesHex(keccak256(b)[0 ..< 8])
 
+# ── an intent's proposal: the pair its id is the content address of (exo-dbd) ──
+# Any epoch-key holder can publish an "intent/<id>/propose" or "/policy" under any id.
+# Since the id IS the hash of (effect, policy), a propose and a policy count only as the
+# pair that hashes to the id they are filed under; anything else under the id is nobody's
+# proposal, whoever published it and wherever it sorts. Every reader of either key goes
+# through proposalOf, so the card, the fold, what an approval signs and the provenance
+# all read the same pair, on every member, whatever order the events arrived in.
+
+type IntentProposal* = object
+  found*: bool          ## false: no pair under the id hashes to it — not proposed here
+  effectJson*: string   ## the effect the id commits to
+  policy*: string       ## the policy it commits to; "" = none recorded (a legacy propose)
+
+proc isJson(s: string): bool =
+  try: (discard parseJson(s); true)
+  except CatchableError: false
+
+proc proposalOf*(events: seq[Event], intentId: string): IntentProposal =
+  ## The (effect, policy) pair `intentId` is the content address of, from the id's own
+  ## propose and policy events — a pure function of the event set. A propose with no
+  ## policy counts when its effect alone hashes to the id (a legacy propose). The effect
+  ## must parse as JSON: a "|" after a complete JSON value is never JSON, so
+  ## effect ++ "|" ++ policy is then injective, and no second pair hashes to the id (the
+  ## honest effect and policy joined by "|", proposed with no policy, would). Two valid
+  ## pairs take a keccak collision on the 8-byte id; then the first in canonical order
+  ## counts, the same on every member.
+  let pk = "intent/" & intentId & "/propose"
+  let lk = "intent/" & intentId & "/policy"
+  var own: seq[Event]
+  for e in events:
+    if e.key == pk or e.key == lk: own.add e
+  proc firstValid(evs: seq[Event], atMost: int): seq[IntentProposal] =
+    var effects, policies: seq[string]
+    for e in evs:
+      if e.key == pk:
+        if e.value notin effects: effects.add e.value
+      elif e.value notin policies: policies.add e.value
+    if "" notin policies: policies.add ""
+    for eff in effects:
+      for pol in policies:
+        # the hash first: an effect is parsed only when it is the id's content address
+        if intentIdFor(eff, pol) == intentId and isJson(eff):
+          result.add IntentProposal(found: true, effectJson: eff, policy: pol)
+          if result.len == atMost: return
+  let valid = firstValid(own, 2)
+  if valid.len == 1: return valid[0]
+  if valid.len > 1: return firstValid(canonicalOrder(own), 1)[0]
+
+proc policyOr*(p: IntentProposal, default: string): string =
+  ## The policy the proposal runs under; `default` for a legacy propose or none at all.
+  if p.found and p.policy.len > 0: p.policy else: default
+
+proc isProposalEvent*(p: IntentProposal, intentId: string, e: Event): bool =
+  ## Whether `e` is one of the proposal's own events: its propose or its policy declaration.
+  ## A substitute under the id is neither.
+  p.found and ((e.key == "intent/" & intentId & "/propose" and e.value == p.effectJson) or
+               (p.policy.len > 0 and e.key == "intent/" & intentId & "/policy" and e.value == p.policy))
+
 proc effectJsonOf*(events: seq[Event], intentId: string): string =
   ## The effect a proposal carried, recovered from the log — a contributor needs it
   ## to recompute the safeTxHash their signature must cover. "" if not proposed here.
-  for e in events:
-    if e.key == "intent/" & intentId & "/propose": return e.value
-  ""
+  ## Only the effect the id commits to (proposalOf): never a substitute under it.
+  proposalOf(events, intentId).effectJson
 
 proc contributorOf*(driver: Driver, effectJson, signatureHex: string): string =
   ## The id of whoever produced this contribution (for Safe: the owner address that
@@ -498,10 +555,9 @@ proc policyDeclEvent*(intentId, kind: string): Event =
 
 proc intentPolicyOf*(events: seq[Event], intentId: string, default = "safe"): string =
   ## The policy an intent was proposed under, recovered from the log — the driver that
-  ## governs THIS decision. `default` if none recorded (a legacy propose).
-  for e in events:
-    if e.key == "intent/" & intentId & "/policy": return e.value
-  default
+  ## governs THIS decision. Only the policy the id commits to (proposalOf); `default` if
+  ## none recorded (a legacy propose) or the intent is not proposed here.
+  proposalOf(events, intentId).policyOr(default)
 
 # ── messages: authored chat events folded from the SAME log ───────────────────
 # A message is an authored event on the coordination log — plain chat text or a

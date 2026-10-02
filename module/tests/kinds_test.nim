@@ -104,7 +104,7 @@ block:
     let eff = """{"effect":"add-driver","kind":"""" & kind & """"}"""
     let id = intentIdFor(eff, "threshold")
     let (s1, s2) = (sign(1, id, eff), sign(2, id, eff))   # each under its signer's name (exo-a5a)
-    let ev = @[proposeEvent(id, eff), contributeEvent(id, contributorOf(thr, eff, s1), s1),
+    let ev = @[policyDeclEvent(id, "threshold"), proposeEvent(id, eff), contributeEvent(id, contributorOf(thr, eff, s1), s1),
                contributeEvent(id, contributorOf(thr, eff, s2), s2)]
     doAssert intentState(ev, foldDrv, id) == "executable"
     doAssert (kind in roomDriverKinds(ev, foldDrv)) == admitted,
