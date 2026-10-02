@@ -93,6 +93,14 @@ program) and L5 (live testnet runs) are not.
    `data` field; muster's live seam read the multisig's state there and found nothing after
    a create that took. It now returns the program's own shard of the account.
 
+12. **No faucet means one funder per zone.** Every live run needs native LEZ, and deploying a
+   program needs it too (the multisig port: 3 459 264 base units at the genesis base fee, 8,
+   which the testnet still had on 2026-10-02; a public transfer 2 968). `infra/lez/funder.sh`
+   keeps a CLI wallet per zone, so on the testnet the ask is ONE account to fund once, and
+   each run draws from it. A test's own keys are dropped with what they hold, so on the
+   testnet the tests send far less than the local zone's 1 LEZ per account
+   (`MUSTER_LEZ_E2E_FUND`).
+
 ## What is verified, and where
 
 - **L1**, live on the v0.3 testnet: `lez_core` 0.5.0 creates a wallet's accounts and reads a
@@ -128,6 +136,11 @@ program) and L5 (live testnet runs) are not.
   218,040); propose, Bob's vote (456,112) after the S5 re-read, settle — the vault pays R;
   a substituted Execute included and refused, Bob paying 16,006,496 and nothing moving;
   and the asynchronous path the hosted surface uses.
+- **L5a**: the zone's funder (`infra/lez/funder.sh`) funds every live run on the local zone:
+  the three v0.3 e2e tests (the multisig one deploying a fresh copy of the port through it)
+  and the private split (final in 55 s). The testnet funder's account exists
+  (`Public/5fwr3Z2u73ZoXmasgac2pqot29fmn9AxvWQu4uQQUXGq`, made 2026-10-02); the live runs wait
+  on someone funding it.
 
 Sources: logos-execution-zone v0.3.0 (`lee/state_machine/src/{public_transaction,fees.rs}`,
 `lee/state_machine/core/src/{account.rs,native_token.rs,program/mod.rs}`,

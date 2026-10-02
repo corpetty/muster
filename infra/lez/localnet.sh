@@ -7,6 +7,7 @@
 #   infra/lez/localnet.sh fund <id> <amt>   send native LEZ from the genesis funder (v0.3)
 #   infra/lez/localnet.sh deploy <prog.bin> deploy a program (risc0's .bin) through program_loader,
 #                                           the funder paying; prints its program account id (v0.3)
+#   (fund and deploy are infra/lez/funder.sh's, which does the same on any zone's funder)
 #   infra/lez/localnet.sh status            the chain's height, the funder and its balance
 #   infra/lez/localnet.sh stop              stop it
 #

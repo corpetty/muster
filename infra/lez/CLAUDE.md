@@ -13,6 +13,16 @@ person holding native LEZ would. `scripts/lez-local-self-test.sh` is the check: 
 real lez_core wallet on this zone (`MUSTER_LEZ_RPC`), funded by the funder, reads its
 balance back.
 
+`funder.sh` is the zone's funder for ANY zone (exo-eb6.4.5): one wallet of LEZ's CLI per zone
+— the local zone's is the genesis funder above, the testnet's lives in
+`~/.cache/muster/lez-funder-testnet` — whose single public account is what someone holding
+native LEZ funds once; `funder.sh --zone testnet account` prints it. `account | balance |
+fund <id> <amount> | deploy <prog.bin>`; `localnet.sh fund` and `deploy` delegate to it. The
+v0.3 e2e tests and `scripts/split-lez-testnet.sh` fund their accounts through it on the zone
+their URL names (`tests/probes/lez_funding.nim`, `MUSTER_LEZ_E2E_FUND` per account). The
+funder's key is in its wallet home on THIS machine: another machine needs that directory
+copied, or its own funder funded.
+
 `localnet.sh deploy <prog.bin>` deploys a v0.3 program (risc0's R0BF `.bin`) through LEZ's
 `program_loader`, the funder paying, and prints the program's account id: its header
 account, from which every PDA it owns is derived. The v0.3 multisig program (exo-eb6.4.4,
