@@ -1,9 +1,9 @@
 # The LEZ multisig on v0.3's plan/apply ABI (exo-eb6.4 L4)
 
 Status: **built and run on a local v0.3.0 chain, 2026-10-01.** L4a (this design, exo-6d9),
-L4b (the program, in a clone of `logos-co/lez-multisig` on branch `feat/lee-v0.3.0`) and
-L4c (deployed on `infra/lez/localnet.sh`'s zone, its own e2e green) are done. muster (L4d)
-and upstream (L4e) come next.
+L4b (the program, in a clone of `logos-co/lez-multisig` on branch `feat/lee-v0.3.0`), L4c
+(deployed on `infra/lez/localnet.sh`'s zone, its own e2e green) and L4d (muster drives it
+from the room, `lez_multisig_live_v030_e2e`) are done. Upstream (L4e) comes next.
 
 ## 1. Why a redesign, not a port
 
@@ -131,7 +131,17 @@ member is its own fee payer, as muster's member keys already sign their own tran
 Execute is paid by whoever sends it. muster sends it from the settling member's own account,
 and the vault pays nothing but the transfer. Create is paid by the creator.
 
-## 7. What muster changes (L4d)
+## 7. What muster changes (L4d, done)
+
+As built: layout `v0.3` (`lez/multisig.nim`, `ProposalLayout.plV03`) names the port; an
+account's config carries `"layout": "v0.3"`, and everything downstream follows it. The
+pointer effect is schema v2 (`muster.effect.lez-multisig-proposal.v2`), the call as the
+proposal commits to it. Two things building it showed: an account's data on v0.3 is its
+shards, so the live seam reads the program's own shard; and a refused vote or Propose is
+included, so completion reports "included and not on chain" as refused rather than waiting
+out the pump's deadline, and a refused Execute is failed rather than pending.
+
+The plan, as written before building:
 
 - **`lez/multisig.nim`**: the proposal's target becomes the v0.3 `TargetCall`; borsh for the
   new `Proposal` and the instructions (borsh now, not risc0 words); `P` is the configured

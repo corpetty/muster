@@ -152,4 +152,21 @@ block:
     "a binding counts only when its own signer is the approver it is filed under"
   echo "5. approved-by-me: my own names, or a binding to my identity in the log OK"
 
+# ── 6. LEZ v0.3: a multisig proposal and a FROST call read in words (exo-eb6.4.4) ──
+block:
+  let z = repeat("00", 32)
+  let (vault, r, seed) = (repeat("11", 32), repeat("0e", 32), repeat("22", 32))
+  # borsh Transfer { amount: 100 }: variant 0, then the u128 little-endian
+  let transfer100 = "00" & "64" & repeat("00", 15)
+  let ms = effectSummary($(%*{"effect": "lez-multisig-proposal", "lez": "v0.3", "index": 1, "target": z,
+    "shards": [{"account": vault, "program": z}, {"account": r, "program": z}], "data": transfer100, "pdaSeeds": [seed]}))
+  doAssert ms.kind == "lez-proposal" and ms.amount == "100" and ms.unit == "LEZ base units" and ms.to == r, $ms
+  doAssert "on-chain proposal #1: transfer 0.0000001 LEZ from the vault to " in ms.text, ms.text
+  let fc = effectSummary($(%*{"effect": "lez-call", "lez": "v0.3", "programAccount": z,
+    "shards": [{"account": vault, "program": z}, {"account": r, "program": z}], "instruction": transfer100,
+    "signers": [vault], "nonces": ["0"], "fee": {"payer": vault, "gasLimit": "2000000", "tip": "0", "maxFee": "134400000"}}))
+  doAssert fc.kind == "lez-transfer" and fc.amount == "100" and fc.unit == "LEZ base units" and fc.to == r, $fc
+  doAssert "a LEZ transfer: 0.0000001 LEZ → " in fc.text, fc.text
+  echo "6. LEZ v0.3: a multisig proposal and a FROST call read in LEZ, by string arithmetic OK"
+
 echo "card_words_test: all OK"

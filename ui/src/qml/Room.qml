@@ -305,7 +305,13 @@ Item {
     // A LEZ multisig proposal in words: the effect carries the target program, the
     // instruction words and the accounts. A token Transfer is [0, amount (u128, 4 words)],
     // InitializeAccount is [3]; anything else is shown as the raw call.
-    function lezSummary(eff) {
+    function lezSummary(eff, it) {
+        // the LEZ v0.3 port (exo-eb6.4.4): the module reads the call in words, by exact
+        // string arithmetic (effect_summary.nim); use its line
+        if (String(eff.lez || "") === "v0.3" && it && it.summary && it.summary.text) {
+            var t = String(it.summary.text);
+            return t.charAt(0).toUpperCase() + t.slice(1);
+        }
         var ins = eff.instruction || [];
         var acc = eff.accounts || [];
         var idx = String(eff.index || "?");
@@ -460,7 +466,7 @@ Item {
             // the text instead of amount → destination.
             statement: isGovernance
                      ? qsTr("Grant the room the “%1” policy").arg(String(eff.kind || ""))
-                     : isLez ? room.lezSummary(eff)
+                     : isLez ? room.lezSummary(eff, it)
                      : isStatement ? String(eff.text || "") : "",
             // a LEZ step the chain has not included yet: "vote" | "settle" (exo-3c9)
             chainPending: (it && it.chainPending) ? String(it.chainPending) : "",

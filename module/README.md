@@ -24,7 +24,7 @@ public fleet (join → ask → admit → both at two members, ~1s cross-host rec
 The room coordinates and settles multisigs of four kinds: Safe v1.4.1 (the real
 contract on anvil, at the live nonce), Bitcoin P2WSH / tapscript through PSBT
 (regtest), the LEZ multisig program (on the public LEZ testnet at v0.2.4; its v0.3 port
-runs on a local v0.3 zone, muster's side in progress), and FROST
+driven from the room on a local v0.3 zone), and FROST
 (one BIP-340 signature on Bitcoin, or from an untweaked LEZ account). What remains
 is the multi-party runs across two machines. Author-bearing log events (chat,
 declines, material shares, account disclosures, FROST joins) are signed by their author,
@@ -125,4 +125,4 @@ tests/          unit tests · run-suite.sh (all of them, one command) · vectors
 - Invariant tests are append-only. Extend, don't weaken.
 - The module imports nothing from `../ui/`; it reaches other modules only through logos-core.
 
-<!-- rot-check: current-phase=CLAUDE.md sha256=12aaab39cfdd0368c7c453ba754f22a5adda46a6b8a858aba7787eb0b77debec -->
+<!-- rot-check: current-phase=CLAUDE.md sha256=b2a312b6b84adc6ce584641eb1e9c6a8588a060564d71e7f75a646e0b0baf5d1 -->

@@ -23,10 +23,17 @@
 ## a transaction it sent as pending until it lands, and as failed once 4 blocks pass
 ## without it. The callers complete on later ticks (coordination/vote.nim).
 ##
+## On LEZ v0.3.0 (layout v0.3, exo-eb6.4.4) the program is the v0.3 port, and three things
+## differ: every op, a create included, is its sender's own transaction (a LezMessage3 whose
+## rows each select the program's shard, with a borsh instruction), and the sender pays its
+## own fee; an account's data is its shards, so readAccount returns the program's own shard;
+## and a refused transaction is INCLUDED and pays — so inclusion says nothing about the
+## outcome, and every caller judges a step by the state it reads back.
+##
 ## Transport: nim-json-rpc over chronos (TLS by bearssl), like wallet/evm_rpc.nim; a
 ## call runs to completion with waitFor.
 
-import std/[json, tables, strutils, base64, times, os, sequtils]
+import std/[json, tables, strutils, base64, times, os, sequtils, options]
 import chronos
 import stint
 import json_rpc/clients/httpclient
@@ -119,8 +126,15 @@ proc signs*(c: LezMultisigLive, account: seq[byte]): bool = hx(account) in c.lab
 method height*(c: LezMultisigLive): uint64 = c.rpc.lastBlockId()
 
 method readAccount*(c: LezMultisigLive, id: seq[byte]): LezRead =
+  ## On v0.3 an account is its program shards: what the multisig reads is ITS shard of the
+  ## account (state, proposal), present once the program wrote it (exo-eb6.4.4).
   let h = c.rpc.lastBlockId()
   let a = c.rpc.getAccount(id)
+  if a.v3:
+    for (prog, data) in a.shards:
+      if prog == c.program and data.len > 0:
+        return LezRead(found: true, data: data, owner: c.program, height: h, nonce: a.nonce, balance: a.balance)
+    return LezRead(found: false, height: h, nonce: a.nonce, balance: a.balance)
   LezRead(found: a.owner.len > 0 or a.data.len > 0, data: a.data, owner: a.owner, height: h, nonce: a.nonce,
           balance: a.balance)
 
@@ -210,9 +224,28 @@ proc sendSigned*(c: LezMultisigLive, program: seq[byte], accounts: seq[seq[byte]
       let label = labels[hx(s)]
       result.add LezWitness(signature: ks.lezMemberSign(label, h), xonly: ks.lezMemberKey(label)))
 
+proc submitV03(c: LezMultisigLive, signer: seq[byte], op: MultisigOp): LezTx =
+  ## The v0.3 port (exo-eb6.4.4): every op, a create included, is the sender's own
+  ## transaction — its rows each select the program's shard, its instruction is borsh, and
+  ## the sender pays its own fee (the LEZ wallet's default declaration). A refusal is
+  ## INCLUDED on v0.3 and pays: inclusion says nothing of the outcome, so callers read the
+  ## state back (vote.nim; the settlement's watch).
+  if not c.signs(signer): return LezTx(ok: false, error: "this keystore holds no key for account " & hx(signer))
+  let label = c.labels[hx(signer)]
+  var m: LezMessage3
+  try:
+    m = LezMessage3(programAccount: c.program, shards: opShards(c.scheme, c.program, op, signer),
+                    nonces: @[c.rpc.getAccount(signer).nonce], instruction: instructionBorsh(op),
+                    fee: some defaultFee(signer))
+  except ValueError as e: return LezTx(ok: false, error: "not a v0.3 multisig op: " & e.msg)
+  let ws = @[LezWitness(signature: c.ks.lezMemberSign(label, messageHash(m)), xonly: c.ks.lezMemberKey(label))]
+  c.sendBuilt(leeTxPublic(m, ws), publicTxHash(m, ws))
+
 method submit*(c: LezMultisigLive, signer: seq[byte], op: MultisigOp, payer: seq[byte] = @[]): LezTx =
   ## The member's own multisig transaction. A create is signed by nobody (it claims fresh
-  ## member accounts); every other op by `signer`, whose key this keystore must hold.
+  ## member accounts); every other op by `signer`, whose key this keystore must hold. On
+  ## the v0.3 layout every op is signed, by its sender, who pays (submitV03).
+  if c.layout == plV03: return c.submitV03(signer, op)
   let accounts = opAccounts(c.scheme, c.program, op, signer)
   let words = instructionWords(op, c.layout)
   c.sendSigned(c.program, accounts, (if opSigned(op): @[signer] else: @[]), words)

@@ -2894,6 +2894,16 @@ proc musterCoordinateProposeLez(actionJson: string): string =
   var action: LezAction
   try:
     let j = parseJson(actionJson)
+    if j.hasKey("shards"):
+      # a v0.3 call (exo-eb6.4.4): {target, shards: [{account, program}], data (hex), pdaSeeds}
+      var shards: seq[tuple[account, program: seq[byte]]]
+      for x in j["shards"]: shards.add (lezIdOf(x["account"].getStr()), lezIdOf(x["program"].getStr()))
+      var data: seq[byte]
+      var h = j["data"].getStr()
+      if h.startsWith("0x"): h = h[2 .. ^1]
+      for i in 0 ..< h.len div 2: data.add byte(parseHexInt(h[2*i .. 2*i+1]))
+      return lezProposeAction(lezCallV03(lezIdOf(j["target"].getStr()), shards, data,
+                                         j{"pdaSeeds"}.getElems().mapIt(lezIdOf(it.getStr()))))
     action.target = lezIdOf(j["target"].getStr())
     for w in j["instruction"]: action.instruction.add uint32(w.getBiggestInt())
     for x in j["accounts"]: action.accounts.add lezIdOf(x.getStr())
@@ -2975,8 +2985,14 @@ proc musterCoordinateProposeLezTransfer(recipient, amount: string): string =
     amt = uint64(parseBiggestUInt(amount.strip()))
   except CatchableError as e:
     return $(%*{"error": "not-an-action", "detail": "a recipient account (hex or base58) and a whole amount: " & e.msg})
-  let words = @[0'u32, uint32(amt and 0xffff_ffff'u64), uint32(amt shr 32), 0'u32, 0'u32]
   let vault = vaultPda(acct.scheme, acct.program, acct.createKey)
+  if acct.layout == plV03:
+    # the v0.3 port (exo-eb6.4.4): the vault holds native LEZ; a native transfer out of it,
+    # the vault authorized to the native program by its seed
+    let zero = newSeq[byte](32)
+    return lezProposeAction(lezCallV03(NativeTokenProgram, @[(vault, zero), (to, zero)],
+                                       nativeTransfer(amt.stuint(128)), @[vaultSeed(acct.createKey)]))
+  let words = @[0'u32, uint32(amt and 0xffff_ffff'u64), uint32(amt shr 32), 0'u32, 0'u32]
   let (tok, action, terr) = lezTokenAction(@[vault, to], words, 0)
   if not tok: return terr
   lezProposeAction(action)
@@ -2987,6 +3003,9 @@ proc musterCoordinateProposeLezVaultInit(definition: string): string =
   if gSession == nil: return $(%*{"error": "not-joined"})
   let (ok, acct, err) = lezComposeAccount()
   if not ok: return err
+  if acct.layout == plV03:
+    return $(%*{"error": "not-an-action", "detail": "on LEZ v0.3 the vault holds native LEZ and needs no setup: " &
+                "fund it by sending to " & lezHx(vaultPda(acct.scheme, acct.program, acct.createKey))})
   var def: seq[byte]
   try: def = lezIdOf(definition)
   except CatchableError as e: return $(%*{"error": "not-an-action", "detail": "a token definition account: " & e.msg})
@@ -3099,11 +3118,22 @@ proc musterLezMultisigCreate(threshold, members: string): string =
   var program: seq[byte]
   for i in 0 ..< 32: program.add byte(parseHexInt(gLezProgram[2*i .. 2*i+1]))
   try:
-    let c = lezLiveFor(gLezChain, psLee02, program, plAccountIds)
+    # which line the zone runs, from how it answers (account_view): on v0.3 the program is
+    # the port (exo-eb6.4.4), whose create is the creator's own transaction, and fee
+    let v3 = newLezRpc(gLezRpc).getAccount(program).v3
+    let layout = if v3: plV03 else: plAccountIds
+    let c = lezLiveFor(gLezChain, psLee02, program, layout)
     c.waitForInclusion = false         # never wait on a block inside a hosted call
-    let t = c.submit(@[], createOp(ck, k, ms))
+    var creator: seq[byte]
+    if v3:
+      let (mine, me) = c.lezOurMember(ms)
+      if not mine:
+        return $(%*{"error": "refused", "detail": "on LEZ v0.3 the create is a member's own transaction, and pays " &
+                    "its fee: name one of your LEZ member accounts among the members"})
+      creator = me
+    let t = c.submit(creator, createOp(ck, k, ms))
     if not t.ok: return $(%*{"error": "refused", "detail": t.error})
-    let config = %*{"program": gLezProgram, "createKey": lezHx(ck), "pda": "lee-v0.2", "layout": "account-ids"}
+    let config = %*{"program": gLezProgram, "createKey": lezHx(ck), "pda": "lee-v0.2", "layout": $layout}
     let created = %*{"family": LezMultisigFamily, "chain": gLezChain, "address": lezHx(statePda(psLee02, program, ck)),
                      "config": $config, "threshold": k, "members": ms.mapIt(lezHx(it)), "tx": t.hash,
                      "label": "LEZ " & $k & "-of-" & $ms.len}

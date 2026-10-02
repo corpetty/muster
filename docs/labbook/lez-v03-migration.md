@@ -89,6 +89,9 @@ program) and L5 (live testnet runs) are not.
    96 KiB segments, one fresh account each, then a header account that names them; the
    header's id is the program's account id, and every PDA is derived from it, not from
    the image id. `infra/lez/localnet.sh deploy <prog.bin>` does this through LEZ's CLI.
+11. **On v0.3 an account's data is its program shards.** `getAccount` returns no single
+   `data` field; muster's live seam read the multisig's state there and found nothing after
+   a create that took. It now returns the program's own shard of the account.
 
 ## What is verified, and where
 
@@ -117,6 +120,14 @@ program) and L5 (live testnet runs) are not.
   propose a native transfer out of it, approve, execute — R holds the amount, the vault
   that much less; refused, with nothing changed: an outsider's vote, a substituted
   recipient, a second multisig naming this vault's seed, and a second Execute.
+- **L4d**: muster on the port. The model is held to vectors from the port's own crate
+  (`tests/vectors/lez-multisig-v030`, `lez_multisig_v030_test` §1). The in-process model
+  reproduces the port's rules and v0.3's rule for a refusal — included, paid, nothing else
+  changed (§2) — including that Execute counts only CURRENT members. The room drives it on
+  the local zone (`lez_multisig_live_v030_e2e`): create as a member's own transaction (fee
+  218,040); propose, Bob's vote (456,112) after the S5 re-read, settle — the vault pays R;
+  a substituted Execute included and refused, Bob paying 16,006,496 and nothing moving;
+  and the asynchronous path the hosted surface uses.
 
 Sources: logos-execution-zone v0.3.0 (`lee/state_machine/src/{public_transaction,fees.rs}`,
 `lee/state_machine/core/src/{account.rs,native_token.rs,program/mod.rs}`,

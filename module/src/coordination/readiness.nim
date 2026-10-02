@@ -69,6 +69,7 @@ proc remedyFor*(r: Requirement): string =
   of rqInfra:
     if r.name == "lez-account": "set up a funded LEZ account in the LEZ Wallet App"
     elif r.name == "lez-rpc": "point Settings → LEZ sequencer at your own (set_setting lez-rpc)"
+    elif r.name == "lez-member-funded": "send native LEZ to your member account: on LEZ v0.3 every vote pays its own fee"
     elif r.name == "bitcoind-rpc": "point Settings → Bitcoin node at your own node (set_setting btc-rpc)"
     else: "configure " & r.name & " (set_setting " & r.name & ")"
   of rqCapability:  "grant the " & r.name & " capability in the host"
@@ -178,6 +179,10 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
       # lez_core); PROVISIONED in the LEZ Wallet App (exo-44b) — the remedy names it.
       if facts.lezReady != nil: facts.lezReady()
       else: (rdUnknown, "cannot check the LEZ account — no zone probe")
+    elif name == "lez-member-funded":
+      # the v0.3 port: every vote pays its own fee (exo-eb6.4.4). Which member account
+      # votes is chosen at the vote, so this host does not read its balance here.
+      (rdUnknown, "your member account must hold native LEZ for its fee; it is read when you vote")
     else: (rdUnknown, "unrecognized infra requirement: " & name)
   result.environmentReachable = proc(name: string): Grade =
     if name.startsWith("bip122:"):
