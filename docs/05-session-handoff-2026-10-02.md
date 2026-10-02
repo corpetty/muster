@@ -106,13 +106,29 @@ The table lists merged PRs on `corpetty/muster`.
    uv tool install "exophial @ git+https://github.com/AFDudley/exophial.git@dc69cd1"
    ```
 
-   **`pb`** is a standalone binary, `~/.local/bin/pb` on the old machine. Copy it across.
+   **`pb`** is a standalone binary, `~/.local/bin/pb` on the old machine. Copy it across, or
+   build it from AFDudley's fork (Go), as the new machine did on 2026-10-02:
+
+   ```bash
+   git clone https://github.com/AFDudley/pebbles && cd pebbles
+   nix shell nixpkgs#go -c go build -o ~/.local/bin/pb ./cmd/pb
+   ```
+
+   04 §2.1's `pre-commit install` needs `pre-commit` itself first: `uv tool install pre-commit`.
 
 3. **The Nim test closure is automatic.** `module/tests/run-suite.sh` clones the closure at
    `module/metadata.json`'s pins into `~/.cache/muster/nimpkgs` the first time it runs. The
    hand setup in 04 §2.3 is no longer needed. The suite is now 75 invariant probes plus the
    unit tests. Of the specs, `scripts/grade-specs.sh exo-a90.17` grades 6/6 and
    `exo-a90.20` grades 8/8.
+   - **A host glibc older than nixpkgs'** (Ubuntu 24.04's 2.39 against nixpkgs-unstable's
+     2.44) failed 140 of the 210 tests with `GLIBC_ABI_GNU2_TLS not found` until exo-844:
+     the suite now links nixpkgs' libsodium with nixpkgs' gcc.
+   - **Spec grading needs `nim` in `/usr/local/bin`, `/usr/bin` or `/bin`.** The oracle's
+     PATH allows only those, plus a fixed tool list. A choosenim install is under
+     `~/.choosenim`, so link the real binary there (not the `~/.nimble/bin` shim, which
+     needs the real HOME): `sudo ln -s ~/.choosenim/toolchains/nim-2.2.2/bin/nim
+     /usr/local/bin/nim`. The probes' own libsodium/gcc mix is still open: exo-56a.
 
 4. **Fleets.**
    - The default is `logos.dev`: cluster 3, no RLN.
