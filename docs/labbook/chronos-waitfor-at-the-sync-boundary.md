@@ -54,3 +54,42 @@ Two smaller consequences, both handled:
   next reconnects (a dropped keep-alive heals itself).
 - **A failed `waitFor` is a `WalletError`, never a sentinel.** Same rule as
   everywhere on the read path: a chain error must not read as a zero balance.
+
+## The third way it goes wrong: a `waitFor` with no budget (exo-14f, 2026-10-02)
+
+"Fine for the module" above assumed every call comes back. The endpoint is the user's
+own, untrusted infrastructure (invariant 8), and one that accepts the connection and
+never answers holds `waitFor` — the module thread, and every UI call queued behind it —
+for as long as it likes. A lidl call cannot return early on its own; only a deadline
+can end it. So **no chain call waits without a budget**: `wallet/rpc_budget.nim`'s
+`bounded(fut, budget)` is `waitFor fut.wait(budget)`, ONE deadline over connect,
+request, headers and body, and past it the future is cancelled and `RpcTimeoutError`
+raised. Reads get 5 s, broadcasts 30 s, the liveness probe 1.5 s.
+
+Three details that each looked fine and were not:
+
+- **std/httpclient's `timeout` is not a deadline.** It bounds each `recv`; its connect
+  (`net.dial`) has none, so an address that drops SYNs hangs it for the kernel's TCP
+  timeout (~2 min). `probeRpc` had a 1.5 s "timeout" with exactly that hole.
+  `drivers/safe_rpc.nim` moved to the chronos client for this reason.
+- **A poll loop counted in iterations multiplies the budget.** `coordinate_submit`
+  polled finality 21 times; with a 5 s read budget that is ~105 s. A wait is a
+  wall-clock window that also stops at the first failed read
+  (`settlement.watchWithin`): at most the window plus one read.
+- **Null is a value only where the protocol says so.** A null receipt is "not mined
+  yet"; a null nonce, balance, height or transaction hash is a failed read and raises.
+- **Making a read raise can crash its caller (Nim 2.2.10).** `rpcReceiptStatus` used to
+  swallow every error; once it raised, `EvmAdapter.finality` segfaulted intermittently.
+  Its body was `case rpcReceiptStatus(…)` with every branch assigning `result`, and
+  the compiler's `allPathsAsgnResult` does not ask whether a `case` *selector* can
+  raise, so it skipped zero-initializing `result`. When the call raised, the proc
+  returned an unbuilt `Finality`, and ORC destroys a call's return value even on the
+  raise path, so the caller freed garbage. The fix: bind the call first
+  (`let status = …; case status`). The C shows it: no `nimZeroMem(&result)` in the
+  callee, and `if (*nimErr_) { eqdestroy(&T_) …}` in the caller. ASan
+  (`-d:useMalloc --passC:-fsanitize=address`) turns the one-in-two crash into a
+  deterministic one. Check this whenever a call that never raised starts to.
+
+Not bounded: resolving a hostname (the OS resolver runs synchronously before the first
+byte). `tests/rpc_budget_test.nim` holds every call to its budget against a local
+socket that accepts and never replies.

@@ -1,0 +1,220 @@
+## A hung endpoint costs one budget, never the module thread (exo-14f).
+##
+## muster_module dispatches every call on one thread, and every RPC endpoint is the user's
+## own, untrusted infrastructure (invariant 8). This test stands up, in process, an endpoint
+## that ACCEPTS every connection and never replies — what a hung node looks like from the
+## client — and holds each chain call of these seams to an error within its budget: the
+## Safe reads and broadcast (drivers/safe_rpc.nim), the EVM wallet's (wallet/evm_rpc.nim),
+## the LEZ sequencer's (wallet/lez_multisig_live.nim), the finality wait a submit makes
+## inside the call (settlement.watchWithin), and a payer's landed check (parts_evm). The
+## Bitcoin node's client (wallet/btc_adapter.nim) is not on the seam yet. A second endpoint answers
+## every call with `null`: a read that comes back null raises, never reads as a value (a
+## nonce of 0, a balance of "", a height of 0, an empty tx hash) — except where null IS the
+## chain's answer (no receipt yet: pending; an unknown transaction: not known).
+##
+## Budgets are shrunk so the suite stays fast; the mechanism is the one the defaults use.
+
+import std/[json, net, nativesockets, strutils]
+import chronos
+import stint
+import ../src/wallet/rpc_budget
+import ../src/wallet/evm_rpc
+import ../src/wallet/types
+import ../src/wallet/evm_adapter
+import ../src/wallet/lez_multisig_live
+import ../src/drivers/safe
+import ../src/drivers/safe_rpc
+import ../src/settlement/settlement
+import ../src/intents/materialization     # PartTransfer
+import ../src/coordination/parts_evm
+
+# ── the endpoints ─────────────────────────────────────────────────────────────
+proc holdSilently(fd: SocketHandle) {.thread.} =
+  ## Accept every connection; never read, never write, never close.
+  var held: seq[SocketHandle]
+  while true:
+    let (c, _) = fd.accept()
+    if c != osInvalidSocket: held.add c
+
+proc answerNull(fd: SocketHandle) {.thread.} =
+  ## Read each HTTP request and answer its JSON-RPC id with `"result": null`.
+  while true:
+    let (h, _) = fd.accept()
+    if h == osInvalidSocket: continue
+    let c = newSocket(h)
+    try:
+      var length = 0
+      while true:
+        let line = c.recvLine(timeout = 5000)
+        if line.len == 0 or line == "\r\n": break
+        if line.toLowerAscii().startsWith("content-length:"): length = parseInt(line.split(':')[1].strip())
+      let id = parseJson(c.recv(length, timeout = 5000)){"id"}
+      let body = $(%*{"jsonrpc": "2.0", "id": id, "result": newJNull()})
+      c.send("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " & $body.len &
+             "\r\nConnection: close\r\n\r\n" & body)
+    except CatchableError: discard
+    c.close()
+
+var listeners: seq[Socket]
+var servers: array[2, Thread[SocketHandle]]
+
+proc serve(i: int, server: proc(fd: SocketHandle) {.thread, nimcall.}): string =
+  let s = newSocket()
+  s.setSockOpt(OptReuseAddr, true)
+  s.bindAddr(Port(0), "127.0.0.1")
+  s.listen()
+  listeners.add s
+  createThread(servers[i], server, s.getFd())
+  "http://127.0.0.1:" & $int(s.getLocalAddr()[1])
+
+let silent = serve(0, holdSilently)
+let nulls = serve(1, answerNull)
+
+# ── the budgets, shrunk ───────────────────────────────────────────────────────
+const ReadMs = 400
+const SendMs = 800
+const ProbeMs = 300
+const SlackMs = 1500        # scheduling and teardown on a busy machine; the hang it guards is unbounded
+setRpcBudgets(read = ReadMs.milliseconds, send = SendMs.milliseconds, probe = ProbeMs.milliseconds)
+
+doAssert ReadBudget <= 10.seconds and SendBudget <= 30.seconds and ProbeBudget <= 2.seconds,
+  "the defaults stay within what a UI call can wait"
+
+var checked = 0
+var worstOverMs = 0         # the most any call ran past its budget
+proc timed(label: string, budgetMs: int, f: proc(): string) =
+  ## `f` runs against the silent endpoint and returns the failure it observed ("" if none):
+  ## a timeout, named as one, within the budget plus slack — and not before it.
+  let t0 = Moment.now()
+  let failure = f()
+  let ms = int((Moment.now() - t0).milliseconds)
+  doAssert failure.len > 0, label & ": returned a value from an endpoint that never answers"
+  doAssert "no answer within" in failure, label & ": failed for another reason: " & failure
+  doAssert ms >= budgetMs - 50, label & ": failed after " & $ms & " ms, before its " & $budgetMs & " ms budget"
+  doAssert ms <= budgetMs + SlackMs, label & ": took " & $ms & " ms against a " & $budgetMs & " ms budget"
+  inc checked
+  worstOverMs = max(worstOverMs, ms - budgetMs)
+
+template raisesOn(body: untyped): string =
+  ## The message `body` raised with, or "" when it returned.
+  var m = ""
+  try: discard body
+  except CatchableError as e: m.add e.msg   # a copy: `m = e.msg` aliased the message past the
+                                            # except block, where ORC frees the exception (ASan)
+  m
+
+let safeAddr = Address(default(array[20, byte]))
+let zero = "0x0000000000000000000000000000000000000000"
+let txh = "0x" & repeat("ab", 32)
+
+# ── 1. the Safe reads and broadcast (drivers/safe_rpc.nim) ─────────────────────
+timed("probeRpc", ProbeMs, proc(): string =
+  let p = probeRpc(silent)
+  doAssert not p.ok
+  p.detail)
+timed("getOwners", ReadMs, proc(): string =
+  let r = getOwners(silent, safeAddr)
+  doAssert not r.known and r.owners.len == 0, "an unread owner set is unknown, never empty-and-known"
+  r.detail)
+timed("getThreshold", ReadMs, proc(): string =
+  let r = getThreshold(silent, safeAddr)
+  doAssert not r.known
+  r.detail)
+timed("getModules", ReadMs, proc(): string =
+  let r = getModules(silent, safeAddr)
+  doAssert not r.known
+  r.detail)
+timed("getGuard", ReadMs, proc(): string =
+  let r = getGuard(silent, safeAddr)
+  doAssert not r.known
+  r.detail)
+timed("safe getBalance", ReadMs, proc(): string = raisesOn(getBalance(silent, safeAddr)))
+timed("safeNonce", ReadMs, proc(): string = raisesOn(safeNonce(silent, safeAddr)))
+timed("ethCall", ReadMs, proc(): string = raisesOn(ethCall(silent, safeAddr, @[0x01'u8])))
+timed("watchReceiptStatus", ReadMs, proc(): string = raisesOn(watchReceiptStatus(silent, txh)))
+timed("submitExecTransaction", SendMs, proc(): string =
+  raisesOn(submitExecTransaction(silent, safeAddr, safeAddr, @[0x01'u8])))
+echo "1. every Safe read and the broadcast fail within their budget on a silent endpoint OK"
+
+# ── 2. the EVM wallet (wallet/evm_rpc.nim) ────────────────────────────────────
+timed("rpcBalance", ReadMs, proc(): string = raisesOn(rpcBalance(silent, zero, "latest")))
+timed("rpcCall", ReadMs, proc(): string = raisesOn(rpcCall(silent, zero, @[0x01'u8], "latest")))
+timed("rpcGasPrice", ReadMs, proc(): string = raisesOn(rpcGasPrice(silent)))
+timed("rpcChainId", ReadMs, proc(): string = raisesOn(rpcChainId(silent)))
+timed("rpcNonce", ReadMs, proc(): string = raisesOn(rpcNonce(silent, zero)))
+timed("rpcNonceMined", ReadMs, proc(): string = raisesOn(rpcNonceMined(silent, zero)))
+timed("rpcReceiptStatus", ReadMs, proc(): string = raisesOn(rpcReceiptStatus(silent, txh)))
+timed("rpcTransferOf", ReadMs, proc(): string = raisesOn(rpcTransferOf(silent, txh)))
+timed("rpcReceiptLogs", ReadMs, proc(): string = raisesOn(rpcReceiptLogs(silent, txh)))
+timed("rpcGetProof", ReadMs, proc(): string = raisesOn(rpcGetProof(silent, zero, "latest")))
+timed("rpcSendRaw", SendMs, proc(): string = raisesOn(rpcSendRaw(silent, @[0x01'u8])))
+timed("rpcSendTransaction", SendMs, proc(): string =
+  raisesOn(rpcSendTransaction(silent, zero, zero, 1.u256, @[], 21_000)))
+echo "2. every EVM wallet call fails within its budget on a silent endpoint OK"
+
+# ── 3. the LEZ sequencer (wallet/lez_multisig_live.nim) ───────────────────────
+let lezSilent = newLezRpc(silent)
+timed("lez lastBlockId", ReadMs, proc(): string = raisesOn(lezSilent.lastBlockId()))
+timed("lez getAccount", ReadMs, proc(): string = raisesOn(lezSilent.getAccount(newSeq[byte](32))))
+timed("lez programId", ReadMs, proc(): string = raisesOn(lezSilent.programId("token")))
+timed("lez getTransaction", ReadMs, proc(): string = raisesOn(lezSilent.getTransaction("ab")))
+timed("lez sendTransaction", SendMs, proc(): string = raisesOn(lezSilent.sendTransaction(@[0x01'u8])))
+echo "3. every LEZ sequencer call fails within its budget on a silent endpoint OK"
+
+# ── 4. a submit's finality wait: the window plus one read, at most ─────────────
+block:
+  let st = SafeSettlement(family: "evm.safe", adapter: newEvmAdapter("evm:31337", silent))
+  let t0 = Moment.now()
+  let f = st.watchWithin(TxRef(chain: "evm:31337", id: txh), windowS = 3.0)
+  let ms = int((Moment.now() - t0).milliseconds)
+  doAssert f.status == fsPending and "no answer within" in f.detail, $f
+  doAssert ms <= ReadMs + SlackMs, "a failed read ends the wait at once (took " & $ms & " ms)"
+block:
+  # a node that answers "no receipt yet" every time: pending, after the window and no longer
+  let st = SafeSettlement(family: "evm.safe", adapter: newEvmAdapter("evm:31337", nulls))
+  let t0 = Moment.now()
+  let f = st.watchWithin(TxRef(chain: "evm:31337", id: txh), windowS = 1.0)
+  let ms = int((Moment.now() - t0).milliseconds)
+  doAssert f.status == fsPending, $f
+  doAssert ms >= 700 and ms <= 1000 + ReadMs + SlackMs, "the wait spans its window (took " & $ms & " ms)"
+block:
+  # the payer's own check that its share landed (the pending-parts pump): an error, not a
+  # crash — the receipt read raises now, and a `case` on it left the result unbuilt
+  let seam = newEvmPartSeam("eip155:31337", silent, newEvmAdapter("evm:31337", silent), nil,
+                            Account(chain: "eip155:31337", id: zero))
+  timed("partLanded", ReadMs, proc(): string = raisesOn(seam.partLanded(PartTransfer(), txh)))
+echo "4. a submit's finality wait ends within its window plus one read; a payer's landed check raises OK"
+
+# ── 5. a null read raises, never reads as a value ─────────────────────────────
+proc nullRaises(label: string, m: string) =
+  doAssert m.len > 0, label & ": a null answer read as a value"
+  doAssert "no answer within" notin m, label & ": the null endpoint timed out instead: " & m
+doAssert probeRpc(nulls).detail == "no result"
+nullRaises("safeNonce", raisesOn(safeNonce(nulls, safeAddr)))
+nullRaises("safe getBalance", raisesOn(getBalance(nulls, safeAddr)))
+nullRaises("ethCall", raisesOn(ethCall(nulls, safeAddr, @[0x01'u8])))
+nullRaises("submitExecTransaction", raisesOn(submitExecTransaction(nulls, safeAddr, safeAddr, @[0x01'u8])))
+doAssert not getOwners(nulls, safeAddr).known
+doAssert watchReceiptStatus(nulls, txh) == -1, "a null receipt is the chain's answer: not yet mined"
+nullRaises("rpcBalance", raisesOn(rpcBalance(nulls, zero, "latest")))
+nullRaises("rpcChainId", raisesOn(rpcChainId(nulls)))
+nullRaises("rpcGasPrice", raisesOn(rpcGasPrice(nulls)))
+nullRaises("rpcNonce", raisesOn(rpcNonce(nulls, zero)))
+doAssert rpcReceiptStatus(nulls, txh) == -1, "a null receipt is the chain's answer: not yet mined"
+doAssert not rpcTransferOf(nulls, txh).found, "a null transaction is the chain's answer: not known"
+let lezNulls = newLezRpc(nulls)
+nullRaises("lez lastBlockId", raisesOn(lezNulls.lastBlockId()))
+nullRaises("lez sendTransaction", raisesOn(lezNulls.sendTransaction(@[0x01'u8])))
+nullRaises("lez programId", raisesOn(lezNulls.programId("token")))
+nullRaises("lez getAccount", raisesOn(lezNulls.getAccount(newSeq[byte](32))))
+doAssert not lezNulls.getTransaction("ab").known, "a null transaction is the chain's answer: not known"
+echo "5. a null read raises (nonce, balance, call, tx hash, height); null receipt / tx stay the chain's answer OK"
+
+# ── 6. the budgets restore ────────────────────────────────────────────────────
+setRpcBudgets()
+doAssert readBudget() == ReadBudget and sendBudget() == SendBudget and probeBudget() == ProbeBudget
+echo "6. defaults: read " & $ReadBudget & ", send " & $SendBudget & ", probe " & $ProbeBudget & " OK"
+
+echo "rpc_budget_test: all OK (" & $checked & " calls held to their budget; worst overrun " &
+     $worstOverMs & " ms)"
+quit(0)

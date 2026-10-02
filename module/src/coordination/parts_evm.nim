@@ -81,7 +81,10 @@ method partGone*(s: EvmPartSeam, t: PartTransfer, pp: PendingPart): tuple[gone: 
     (false, "could not read your RPC: " & e.msg)
 
 method partLanded*(s: EvmPartSeam, t: PartTransfer, tx: string): tuple[ok: bool, detail: string] =
-  case rpcReceiptStatus(s.url, tx)
+  # bound before the case, never its selector: the read raises on failure (exo-14f), and a
+  # raising selector leaves `result` unbuilt (see EvmAdapter.finality)
+  let status = rpcReceiptStatus(s.url, tx)
+  case status
   of 1: (true, "")
   of 0: (false, tx & " failed on " & s.chain)
   else: (false, tx & " is not in a block yet")

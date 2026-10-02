@@ -153,7 +153,11 @@ proc verifiedBalance*(a: EvmAdapter, account: Account, stateRootHex: string): Am
   amount(a.native, v.balanceRaw)
 
 method finality*(a: EvmAdapter, txRef: TxRef): Finality =
-  case rpcReceiptStatus(a.rpcUrl, txRef.id)
+  ## A failed read raises (exo-14f). The status is bound before the `case`: with the call as
+  ## the selector, Nim 2.2 skips initializing `result` (every branch assigns it), so a raise
+  ## returned an unbuilt Finality that the caller then destroyed — a SIGSEGV.
+  let status = rpcReceiptStatus(a.rpcUrl, txRef.id)
+  case status
   of 1: Finality(status: fsFinal, detail: "receipt status 1")
   of 0: Finality(status: fsFailed, detail: "receipt status 0")
   else: Finality(status: fsPending, detail: "no receipt yet")
