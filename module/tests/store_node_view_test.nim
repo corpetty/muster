@@ -49,8 +49,8 @@ let ctx = LinkContext(account: topic, slot: "0", expiry: high(uint64))
 let net = newLocalNetwork()
 # Both Alice and Bob joined the room by name, so each founded its own epoch (the app's
 # coordinate_join does exactly this). Carol starts with no key at all.
-let alice = newCoordinationSession(newLocalTransport(net), newEpochCrypto(aliceKs), topic)
-let bob   = newCoordinationSession(newLocalTransport(net), newEpochCrypto(bobKs), topic)
+let alice = newCoordinationSession(newLocalTransport(net), newEpochCrypto(aliceKs, topic), topic)
+let bob   = newCoordinationSession(newLocalTransport(net), newEpochCrypto(bobKs, topic), topic)
 let carol = newCoordinationSession(newLocalTransport(net), newEpochJoiner(carolKs), topic)
 
 alice.publish(Event(key: "msg/a0", value: "alice alone"))

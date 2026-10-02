@@ -33,7 +33,7 @@ const topic = "/muster/1/handshake/proto"
 let net = newLocalNetwork()
 
 # Alice founds the room (epoch 0, just her). Bob starts outside it entirely.
-let alice = newCoordinationSession(newLocalTransport(net), newEpochCrypto(aliceKs), topic)
+let alice = newCoordinationSession(newLocalTransport(net), newEpochCrypto(aliceKs, topic), topic)
 let bob = newCoordinationSession(newLocalTransport(net), newEpochJoiner(bobKs), topic)
 
 # Alice says something before Bob is admitted — this is the pre-seam history.

@@ -27,6 +27,8 @@ import nimcrypto/[hmac, sha2]      # HMAC-SHA256: derived LEZ member keys (exo-3
 import std/options
 import ../frost/chilldkg            # FROST (Phase D, S7): the ceremony + signing secrets, held
 import ../frost/keystore_ops
+import ../dcbor/dcbor               # foundingKey's record (exo-7b3)
+import ../hashing/hash_input
 
 type
   KeystoreError* = object of CatchableError
@@ -76,6 +78,22 @@ method bindingFor*(ks: Keystore, ctx: LinkContext): LinkStatement {.base.} =
   ## Issue the secp256k1-signed binding vouching that our encryption identity is
   ## ours — the authenticated join F-9 verifies.
   raise newException(KeystoreError, "Keystore.bindingFor is abstract")
+
+method foundingKey*(ks: Keystore, room: string): array[32, byte] {.base.} =
+  ## The key of the epoch this member founds on `room` (the room's content topic) —
+  ## epoch 0 of every room it joins by name (exo-7b3). No grant ever carries that key,
+  ## so it is derived, not drawn: a restart rebuilds it from the keystore alone, and
+  ## the room stays reduce(log + keys) (invariant 4). It is a one-way derivation from
+  ## the ENCRYPTION identity's secret (F-14) over a domain-separated record naming the
+  ## room, so no other member can compute it (a later joiner still cannot open epoch 0,
+  ## F-16), and it reveals nothing about that secret or any other room's key. It is an
+  ## epoch key, never an identity secret: the epoch layer holds its epoch keys to seal
+  ## and open, as it holds the keys grants deliver.
+  raise newException(KeystoreError, "Keystore.foundingKey is abstract")
+
+proc foundingInfo(room: string): seq[byte] =
+  if room.len == 0: raise newException(KeystoreError, "a founding key needs a room")
+  encodeHashInput(hashInput("muster.room.founding-key.v1", @[("room", cbText(room))]))
 
 # ── keyed operations (exo-45e K2b) ─────────────────────────────────────────────
 # The keystore custodies a SET of authorization keys; a caller selects one by ref. The
@@ -363,6 +381,8 @@ method sealOpen*(fk: FileKeystore, sealed: seq[byte]): seq[byte] =
   curve25519.sealOpen(fk.enc, sealed)
 method bindingFor*(fk: FileKeystore, ctx: LinkContext): LinkStatement =
   makeBinding(fk, ctx)
+method foundingKey*(fk: FileKeystore, room: string): array[32, byte] =
+  fk.enc.derivedSecret(foundingInfo(room))
 
 proc loadKeyfile*(fk: FileKeystore, path, passphrase: string) =
   ## Add another Argon2id keyfile to the set (K2b, keyfile-set-first, open Q1). Its key
@@ -445,6 +465,8 @@ method sealOpen*(ik: InMemoryKeystore, sealed: seq[byte]): seq[byte] =
   curve25519.sealOpen(ik.enc, sealed)
 method bindingFor*(ik: InMemoryKeystore, ctx: LinkContext): LinkStatement =
   makeBinding(ik, ctx)
+method foundingKey*(ik: InMemoryKeystore, room: string): array[32, byte] =
+  ik.enc.derivedSecret(foundingInfo(room))
 
 method keyRefs*(ik: InMemoryKeystore): seq[KeyRef] =
   result = @[refOf(ik.addr0)]

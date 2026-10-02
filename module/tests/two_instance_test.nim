@@ -53,7 +53,7 @@ const topic = "/muster/1/two-instance/proto"
 let net = newLocalNetwork()
 
 # 1. Alice founds the room (epoch 0). Bob starts outside it — no key, no read.
-let alice = newCoordinationSession(newLocalTransport(net), newEpochCrypto(aliceKs), topic)
+let alice = newCoordinationSession(newLocalTransport(net), newEpochCrypto(aliceKs, topic), topic)
 let bob = newCoordinationSession(newLocalTransport(net), newEpochJoiner(bobKs), topic)
 doAssert bob.log.allEvents().len == 0, "Bob holds no key — the outsider cannot read the room"
 echo "1. Alice founds the room; Bob is outside OK"

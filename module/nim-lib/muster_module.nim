@@ -848,7 +848,9 @@ proc musterCoordinateJoin(topic: string): string =
   if ctopic in gSessions:
     gSession = gSessions[ctopic]          # re-activate an already-joined room
   else:
-    gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig, mix = gMix), newEpochCrypto(ks), ctopic)
+    # Joining by name founds this member's own epoch 0 on the topic, under a key derived
+    # from the keystore and the room (exo-7b3): a relaunch's catch-up opens it again.
+    gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig, mix = gMix), newEpochCrypto(ks, ctopic), ctopic)
     gSessions[ctopic] = gSession
   gTopic = ctopic
   # Remember the room beside the keystore, so a relaunch re-enters it (exo-ecbe).
