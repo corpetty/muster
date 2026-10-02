@@ -128,7 +128,9 @@ The table lists merged PRs on `corpetty/muster`.
      PATH allows only those, plus a fixed tool list. A choosenim install is under
      `~/.choosenim`, so link the real binary there (not the `~/.nimble/bin` shim, which
      needs the real HOME): `sudo ln -s ~/.choosenim/toolchains/nim-2.2.2/bin/nim
-     /usr/local/bin/nim`. The probes' own libsodium/gcc mix is still open: exo-56a.
+     /usr/local/bin/nim`. The probes then link nixpkgs' libsodium with nixpkgs' gcc
+     (exo-56a). The new machine grades 72/80: exo-403 needs a runner in the worktree, and
+     exo-45e's probes were never written (exo-a2a).
 
 4. **Fleets.**
    - The default is `logos.dev`: cluster 3, no RLN.
