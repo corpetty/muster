@@ -514,6 +514,16 @@ void MusterUiBackend::loadKeystoreStatus()
     setKeystoreStatusJson(modules().muster_module.keystore_status());
 }
 
+void MusterUiBackend::keystoreSelect(const QString &address)
+{
+    // keystore_select (exo-149.5 K5): from now on this member's Safe approvals go through
+    // that keystore_module account; selecting asks keystore_module, once, for the
+    // account's binding, which a person approves in the signer. Then re-read the row.
+    const QString r = modules().muster_module.keystore_select(address);
+    qInfo().noquote() << "[muster_ui] KEYSTORE-SELECT" << r;
+    loadKeystoreStatus();
+}
+
 void MusterUiBackend::loadSecurityLevels()
 {
     // security_levels → the room's active null-ladder level on the three axes (exo-1ec.5),

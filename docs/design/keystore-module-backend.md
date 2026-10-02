@@ -155,3 +155,39 @@ Leg 2 is the interim cost of §4, stated in the signer's own words; exo-149.6 re
 **Seen here, for K5:** the intents view marks the approval `mine: false`. muster's "is
 this me" check knows only its own keystore's keys, not the `keystore_module` account
 the member chose.
+
+## 8. K5: the member's keystore_module account (2026-10-02)
+
+- **Selecting.** `keystore_select(address)` makes a `keystore_module` account the one
+  that approves this member's Safe intents. It is persisted (`keystoreAccount`), and it
+  needs `keystore-backend = interim`.
+- **The binding, signed once.** Selecting asks, once, for the account's F-14 binding:
+  one digest leg over `linkDigest(enc identity, {account, slot "keystore_module",
+  30 days})` (`wallet/keystore_identity.nim`). It is kept only if it recovers to the
+  account, and is stored as `keystoreBinding`. `keystore_status` reports it as
+  none / valid / expiring / expired / invalid.
+- **Routing.** A Safe approval with no key ref goes through the selected account, and
+  publishes the stored binding beside it. Readers check what a binding names
+  (`approvedByMe`), not its context or expiry, so the one binding serves every room.
+  Every member's view then counts the approval as this member's
+  (`keystore_approval_test` §4).
+- **"Mine" locally.** `myNames()` adds the selected account to the names this member's
+  approvals carry. That covers `mine` and `approvedByMe`, readiness's authority check,
+  and home's needs-you.
+- **Settings.** Settings shows "Use for approvals" on each account, and the selected
+  account's binding state.
+
+**Verified end to end** by `scripts/keystore-approval-logoscore-test.sh` (logoscore
+0.3.1, anvil, the real Safe):
+1. Muster selects owner 0, and a person approves the binding in the signer
+   (`binding: valid`).
+2. A contribution with no key ref → `awaiting-approval`.
+3. The person approves in the signer.
+4. Muster publishes it as `collecting`. The approval reads `name: you, mine: true`.
+
+**Found on the way:**
+- `set_setting` before anything has loaded the module's settings saves the defaults
+  over them. This is existing behaviour. The test now reads `settings` first, and
+  `keystore_select` loads them before it saves.
+- A self-call I had introduced in `myNames()` blew the stack. A SIGSEGV with no Nim
+  traceback came from logos_host; `coredumpctl` showed the recursing frame.

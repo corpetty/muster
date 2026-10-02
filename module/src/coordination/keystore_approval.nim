@@ -70,12 +70,18 @@ proc planKeystoreApproval*(s: CoordinationSession, driverFor: DriverFor, intentI
   result.p = plan.p
 
 proc publishKeystoreApproval*(s: CoordinationSession, driverFor: DriverFor, intentId: string,
-                              approved: KeystoreApproval, sigs: seq[string], nowSec: uint64): string =
+                              approved: KeystoreApproval, sigs: seq[string], nowSec: uint64,
+                              bindingHex = ""): string =
   ## Publish the signatures a human approved (already checked to recover to the account
   ## over muster's own hashes, keystore_requests.onFetched). The gates run again; P must
-  ## be exactly what was approved. Returns the intent's state, or a refusal word.
+  ## be exactly what was approved. `bindingHex` is the account's F-14 binding, signed once
+  ## at selection (K5, keystore_identity): published beside the approval, it lets every
+  ## member's view tell the approval is this member's. Returns the intent's state, or a
+  ## refusal word.
   if sigs.len != 2: return "rejected"
   let plan = planApproval(s, driverFor, intentId, inApp = true, nowSec)
   if plan.refusal.len > 0: return plan.refusal
   if plan.p != approved.p: return "inputs-changed"
-  publishApproval(s, driverFor, plan, intentId, sigs[0], sigs[1], inApp = true)
+  let binding: proc(): string =
+    if bindingHex.len > 0: (proc(): string = bindingHex) else: nil
+  publishApproval(s, driverFor, plan, intentId, sigs[0], sigs[1], inApp = true, binding)

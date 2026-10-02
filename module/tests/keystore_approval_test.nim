@@ -13,6 +13,7 @@ import ../src/crypto/secp256k1
 import ../src/wallet/keystore_legs
 import ../src/wallet/keystore_requests
 import ../src/coordination/keystore_approval
+import ../src/wallet/keystore_identity
 import ./probes/live_room
 
 proc hexSig(s: Signature65): string =
@@ -73,5 +74,25 @@ block refusals:
   let thr = r.propose("threshold", effectFor("threshold", 44))
   doAssert planKeystoreApproval(r.alice, liveDriverFor, thr, alice, Now).refusal == "keystore-unsupported-kind"
   echo "3. not a signer, legs swapped, expired, P moved, another kind: each refused, nothing published OK"
+
+block bindingMakesItMine:
+  # K5: the account's binding, signed once at selection, published beside the approval.
+  # Every member's view then counts the approval as alice's even though her names (her own
+  # keystore's keys) do not include the keystore_module account — and only with it.
+  let aliceEnc = aliceKs.encIdentity()
+  let ctx = keystoreBindingContext(alice, Now)
+  let st = bindingFromSignature(aliceEnc, ctx, hexSig(aliceKs.sign(linkDigest(aliceEnc, ctx))), alice, Now)
+  var bindingHex = "0x"
+  for b in encodeLink(st): bindingHex.add toHex(b).toLowerAscii()
+  for withBinding in [false, true]:
+    var r = newRoom("/muster/1/ks-approval-4-" & $withBinding & "/proto")
+    let id = r.propose("safe", effectFor("safe", 45))
+    let req = planKeystoreApproval(r.alice, liveDriverFor, id, alice, Now)
+    doAssert publishKeystoreApproval(r.alice, liveDriverFor, id, req, keystoreSigns(req), Now,
+                                     bindingHex = (if withBinding: bindingHex else: "")) == "collecting"
+    r.bob.poll()
+    let mine = approvedByMe(r.bob.roomEvents(), id, @[alice], aliceEnc, myNames = @[])
+    doAssert mine == withBinding, "with binding " & $withBinding & " → mine " & $mine
+  echo "4. with the account's binding published, the approval counts as alice's in bob's view; without it, not OK"
 
 echo "keystore_approval_test: all passed"

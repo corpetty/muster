@@ -544,17 +544,47 @@ Item {
                     }
                     Repeater {
                         model: settings.keystore.accounts || []
-                        delegate: LogosText {
+                        delegate: RowLayout {
                             required property var modelData
+                            readonly property bool chosen: String(settings.keystore.selected || "")
+                                                           === String(modelData.address).toLowerCase()
                             Layout.fillWidth: true
-                            elide: Text.ElideMiddle
-                            text: (modelData.label ? modelData.label + "  " : "")
-                                  + (modelData.wallet ? "(" + modelData.wallet + ")  " : "")
-                                  + modelData.address
-                            color: Theme.palette.textSecondary
-                            font.family: Theme.typography.mono
-                            font.pixelSize: Theme.typography.badgeText
+                            spacing: Theme.spacing.small
+                            LogosText {
+                                Layout.fillWidth: true
+                                elide: Text.ElideMiddle
+                                text: (parent.chosen ? "● " : "")
+                                      + (modelData.label ? modelData.label + "  " : "")
+                                      + (modelData.wallet ? "(" + modelData.wallet + ")  " : "")
+                                      + modelData.address
+                                color: parent.chosen ? Theme.palette.textPrimary : Theme.palette.textSecondary
+                                font.family: Theme.typography.mono
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+                            LogosButton {
+                                objectName: "keystoreUse"
+                                visible: !parent.chosen && settings.keystore.backend === "interim"
+                                text: qsTr("Use for approvals")
+                                variant: LogosButton.Variant.Secondary
+                                onClicked: if (settings.backend) settings.backend.keystoreSelect(modelData.address)
+                            }
                         }
+                    }
+                    // the selected account's binding: what lets the room tell its approvals are yours
+                    LogosText {
+                        objectName: "settingsKeystoreBinding"
+                        Layout.fillWidth: true
+                        visible: !!settings.keystore.selected
+                        wrapMode: Text.WordWrap
+                        text: {
+                            const b = String(settings.keystore.binding || "none")
+                            if (b === "valid") return qsTr("Approvals go through the selected account, linked to your Muster identity.")
+                            if (b === "expiring") return qsTr("The account's link to your identity expires within a day: select it again to renew.")
+                            if (b === "expired" || b === "invalid") return qsTr("The account's link to your identity is no longer valid: select it again.")
+                            return qsTr("Waiting for you to approve the account's link to your identity in the signer.")
+                        }
+                        color: settings.keystore.binding === "valid" ? Theme.palette.textTertiary : Theme.palette.warning
+                        font.pixelSize: Theme.typography.badgeText
                     }
 
                     LogosText {

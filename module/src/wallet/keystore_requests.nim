@@ -70,6 +70,7 @@ proc receiptOf*(r: SignRequests, handle: string): string = r.receipts.getOrDefau
 proc stateOf*(r: SignRequests, handle: string): SignState = r.items[handle].state
 proc reasonOf*(r: SignRequests, handle: string): string = r.items[handle].reason
 proc intentOf*(r: SignRequests, handle: string): string = r.items[handle].intentId
+proc accountOf*(r: SignRequests, handle: string): string = r.items[handle].account
 
 proc remove*(r: var SignRequests, handle: string) =
   r.items.del handle

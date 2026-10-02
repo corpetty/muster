@@ -90,6 +90,9 @@ import ../src/wallet/keystore_status   # the official EVM keystore as a status r
 import ../src/wallet/keystore_probe    # …read from keystore_module over lp_*
 import ../src/wallet/keystore_requests # pending signing requests (exo-149.2 K2)
 import ../src/coordination/keystore_approval # an in-room approval keystore_module signs (K2)
+import ../src/wallet/keystore_identity  # a keystore_module account as this member's identity (K5)
+import ../src/wallet/keystore_legs      # KeystoreLegError: a binding that does not check
+import ../src/crypto/binding            # its F-14 binding, stored and published
 import ../src/coordination/covers       # whether a settle-up still covers a share, at this clock (exo-a90.16)
 import ../src/coordination/pending_parts  # payments in flight, never forgotten while they might land (exo-a90.23)
 import ../src/coordination/parts_btc    # …and in Bitcoin, from each debtor's own key, confirmed on the creditor's node (exo-d17)
@@ -261,6 +264,11 @@ var gKeystoreBackend = getEnv("MUSTER_KEYSTORE_BACKEND", "off")
   ## exo-149.2: "interim" lets a key ref naming a keystore_module account approve in-room
   ## through it, its attestation an opaque digest leg (docs/design/keystore-module-backend.md
   ## §4). "off" (the default) keeps every approval on muster's own keystore.
+var gKeystoreAccount = ""
+  ## exo-149.5: the keystore_module account this member approves Safe intents with ("" = none)
+var gKeystoreBinding = ""
+  ## …and its F-14 binding (encodeLink hex), signed once at selection; public, so it is
+  ## saved beside the other settings and published beside each approval
 var gSettingsLoaded = false
 var gDeliverySaved = false          ## did the user persist a delivery choice? (else env/default)
 proc loadSettingsFile() =
@@ -277,6 +285,8 @@ proc loadSettingsFile() =
       if j.hasKey("lezChain"): gLezChain = j["lezChain"].getStr()
       if j.hasKey("lezMultisigProgram"): gLezProgram = j["lezMultisigProgram"].getStr()
       if j.hasKey("keystoreBackend"): gKeystoreBackend = j["keystoreBackend"].getStr("off")
+      if j.hasKey("keystoreAccount"): gKeystoreAccount = j["keystoreAccount"].getStr()
+      if j.hasKey("keystoreBinding"): gKeystoreBinding = j["keystoreBinding"].getStr()
       if j.hasKey("delivery"):
         gDeliveryConfig = deliveryConfigFor(j["delivery"].getStr())
         gDeliverySaved = true
@@ -298,7 +308,9 @@ proc saveSettingsFile() =
     writeFile(settingsPath(), $(%*{"rpc": gRpcUrl, "delivery": gDeliveryConfig, "relayer": gRelayer,
                                    "btcRpc": gBtcRpc, "lezRpc": gLezRpc, "lezChain": gLezChain,
                                    "lezMultisigProgram": gLezProgram,
-                                   "keystoreBackend": gKeystoreBackend}))
+                                   "keystoreBackend": gKeystoreBackend,
+                                   "keystoreAccount": gKeystoreAccount,
+                                   "keystoreBinding": gKeystoreBinding}))
   except CatchableError: discard
 
 proc toSig65(b: seq[byte]): Signature65 =
@@ -434,11 +446,19 @@ proc contactBook(): ContactBook =
   gContacts
 
 
+proc myNames(): seq[string] =
+  ## The names this member's approvals carry: its own keystore's keys, plus the
+  ## keystore_module account it selected (exo-149.5), so its approvals read as its own
+  ## here (approvedByMe), in readiness and in home's needs-you.
+  result = myContributorNames(moduleKeystore())
+  if gKeystoreBackend == "interim" and gKeystoreAccount.len > 0 and gKeystoreAccount notin result:
+    result.add gKeystoreAccount
+
 proc myIds(): seq[string] =
   ## Every form under which a surface may name THIS member: the 64-byte identity and the
   ## names its keys give its approvals (addresses, the Bitcoin key, "ed:" / "frost:").
   let ks = moduleKeystore()
-  @[toHex(ks.encIdentity().toBytes()).toLowerAscii()] & myContributorNames(ks)
+  @[toHex(ks.encIdentity().toBytes()).toLowerAscii()] & myNames()
 
 proc memberName(who: string, mine: seq[string]): string =
   ## The one name for a member on every surface (exo-221): "you", the contact alias, or
@@ -1776,6 +1796,7 @@ var gKsReq: SignRequests                        ## pending requests: receipts ne
 var gKsPlans: Table[string, KeystoreApproval]   ## handle → what the human is approving
 var gKsOutcome: Table[string, string]           ## handle → what publishing it returned
 var gKsEndedAt: Table[string, float]            ## handle → when it reached a terminal state
+var gKsBindingCtx: Table[string, LinkContext]   ## handle → a K5 binding request's context
 const KsDeadlineS = 600.0                       ## Basecamp's intent backstop is 10 min
 const KsKeepS = 120.0                           ## a finished request stays in view this long
 
@@ -1808,6 +1829,49 @@ proc keystoreContribute(intentId, account: string): string =
   if gLpDebug: stderr.writeLine("MUSTER-LP keystore-request " & $(%*{"intentId": intentId, "handle": h}))
   "awaiting-approval"
 
+proc keystoreBindingNow(): string =
+  ## The selected account's binding, if it still stands (valid or expiring); else "".
+  if gKeystoreAccount.len == 0: return ""
+  let st = bindingState(gKeystoreBinding, gKeystoreAccount, moduleKeystore().encIdentity(),
+                        uint64(epochTime()))
+  if st in ["valid", "expiring"]: gKeystoreBinding else: ""
+
+proc musterKeystore_select(address: string): string =
+  ## exo-149.5: approve Safe intents with this keystore_module account ("" stops). Selecting
+  ## asks keystore_module, once, for the account's F-14 binding (a human approves it in
+  ## the signer); until it comes back, approvals publish without one.
+  discard moduleKeystore()      # settings are loaded with the identity: never save before they are
+  if address.strip().len == 0:
+    gKeystoreAccount = ""
+    gKeystoreBinding = ""
+    saveSettingsFile()
+    return $(%*{"ok": true, "account": ""})
+  if gKeystoreBackend != "interim":
+    return $(%*{"ok": false, "error": "keystore-backend is off: set it to interim first"})
+  let a = address.strip().toLowerAscii()
+  if a notin keystoreProbe().lastAccounts():
+    return $(%*{"ok": false, "error": "keystore_module does not list " & a})
+  if not gKsReq.canRequest(): return $(%*{"ok": false, "error": "keystore-busy"})
+  let ctx = keystoreBindingContext(a, uint64(epochTime()))
+  let req = bindingApproval(moduleKeystore().encIdentity(), ctx, a)
+  let ans = keystoreProbe().requestApproval($req.intent)
+  if ans == nil: return $(%*{"ok": false, "error": "keystore-unreachable"})
+  if not ans{"ok"}.getBool(false):
+    return $(%*{"ok": false, "error": "keystore-refused: " & ans{"error"}.getStr("refused")})
+  let h = ans{"handle"}.getStr()
+  let rc = ans{"receipt"}.getStr()
+  try:
+    gKsReq.add(h, rc, "", a, req.legs, epochTime() + KsDeadlineS)
+  except SignRequestError:
+    keystoreProbe().fireAndForget("cancel_approval", h, rc)
+    return $(%*{"ok": false, "error": "keystore-busy"})
+  gKsBindingCtx[h] = ctx
+  gKeystoreAccount = a
+  gKeystoreBinding = ""
+  saveSettingsFile()
+  if gLpDebug: stderr.writeLine("MUSTER-LP keystore-select " & $(%*{"account": a, "handle": h}))
+  $(%*{"ok": true, "account": a, "handle": h, "state": "awaiting-approval"})
+
 proc noteApproved(intentId, r: string): string =
   ## Remember an in-app approval that went through, for "approved by me" when the log
   ## alone cannot say (a FROST-group or LEZ-vote approval is named by a per-ceremony or
@@ -1824,20 +1888,44 @@ proc keystorePump() =
   ## fetch, check (each signature recovers to the account over muster's own hash) and
   ## publish through the same gates as an in-app approval, then ack. Cancels what passed
   ## its deadline; forgets what finished a while ago.
-  if gKeystoreProbe == nil or gSession == nil or gKsPlans.len == 0: return
+  if gKeystoreProbe == nil or gKsReq.handles().len == 0: return
   let p = keystoreProbe()
   let now = epochTime()
   for rep in p.drainOps():
-    if rep.handle notin gKsPlans: continue
+    if rep.handle notin gKsPlans and rep.handle notin gKsBindingCtx: continue
     if rep.op == "status":
       gKsReq.onStatus(rep.handle, rep.reply)
-    elif rep.op == "fetch" and rep.handle notin gKsOutcome:
+    elif rep.op == "fetch" and rep.handle notin gKsOutcome and rep.handle in gKsBindingCtx:
+      # K5: the account's binding came back — keep it only if it binds THIS identity to it
+      let got = gKsReq.onFetched(rep.handle, rep.reply)
+      if got.ok:
+        let account = gKsReq.accountOf(rep.handle)
+        try:
+          let st = bindingFromSignature(moduleKeystore().encIdentity(), gKsBindingCtx[rep.handle],
+                                        got.sigs[0], account, uint64(now))
+          if account == gKeystoreAccount:
+            var hex = "0x"
+            for b in encodeLink(st): hex.add toHex(b).toLowerAscii()
+            gKeystoreBinding = hex
+            saveSettingsFile()
+          gKsOutcome[rep.handle] = "bound"
+        except KeystoreLegError as e:
+          gKsOutcome[rep.handle] = "binding refused: " & e.msg
+        p.fireAndForget("ack_result", rep.handle, gKsReq.receiptOf(rep.handle))
+        if gLpDebug: stderr.writeLine("MUSTER-LP keystore-bound " &
+                                      $(%*{"account": account, "result": gKsOutcome[rep.handle]}))
+    elif rep.op == "fetch" and rep.handle notin gKsOutcome and gSession != nil:
       let got = gKsReq.onFetched(rep.handle, rep.reply)
       if got.ok:
         let id = gKsReq.intentOf(rep.handle)
+        let account = gKsReq.accountOf(rep.handle)
+        let bindingHex = (if account == gKeystoreAccount: keystoreBindingNow() else: "")
+        if gLpDebug: stderr.writeLine("MUSTER-LP keystore-publishing " &
+                                      $(%*{"intentId": id, "handle": rep.handle, "binding": bindingHex.len}))
         let r = noteApproved(id, publishKeystoreApproval(gSession, driverFor, id, gKsPlans[rep.handle],
-                                                         got.sigs, uint64(now)))
+                                                         got.sigs, uint64(now), bindingHex))
         gKsOutcome[rep.handle] = r
+        if gLpDebug: stderr.writeLine("MUSTER-LP keystore-acking " & rep.handle)
         p.fireAndForget("ack_result", rep.handle, gKsReq.receiptOf(rep.handle))
         if gLpDebug: stderr.writeLine("MUSTER-LP keystore-published " &
                                       $(%*{"intentId": id, "handle": rep.handle, "result": r}))
@@ -1853,6 +1941,7 @@ proc keystorePump() =
       elif now - gKsEndedAt[h] > KsKeepS:
         gKsReq.remove(h)
         gKsPlans.del h
+        gKsBindingCtx.del h
         gKsOutcome.del h
         gKsEndedAt.del h
         dropIo(h)
@@ -1866,8 +1955,9 @@ proc musterKeystore_requests(): string =
     var row = r
     let h = r["handle"].getStr()
     if h in gKsOutcome: row["published"] = %gKsOutcome[h]
+    row["kind"] = %(if h in gKsBindingCtx: "binding" else: "approval")
     rows.add row
-  result = $(%*{"backend": gKeystoreBackend, "requests": rows})
+  result = $(%*{"backend": gKeystoreBackend, "selected": gKeystoreAccount, "requests": rows})
   if gLpDebug: stderr.writeLine("MUSTER-LP keystore-requests " & result)
 
 proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: string): string =
@@ -1896,6 +1986,11 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
   # exo-149.2: a key ref naming a keystore_module account is approved by a human there;
   # nothing is published until they have (keystorePump). Not an approval yet, so it does
   # not pass through noteApproved.
+  var keyRef = keyRef
+  if signatureHex.len == 0 and keyRef.len == 0 and gKeystoreBackend == "interim" and
+     gKeystoreAccount.len > 0 and
+     driverFor(intentPolicyOf(gSession.roomEvents(), intentId)) of SafeDriver:
+    keyRef = gKeystoreAccount       # exo-149.5: the member's selected account approves its Safe intents
   if signatureHex.len == 0 and isKeystoreAccount(keyRef):
     return keystoreContribute(intentId, keyRef.toLowerAscii())
   let r = liveContribute(gSession, moduleKeystore(), driverFor, intentId, signatureHex, keyRef,
@@ -1917,7 +2012,7 @@ proc musterCoordinateIntents(): string =
   let events = gSession.roomEvents()
   let myEnc = moduleKeystore().encIdentity()
   let myEncHex = toHex(myEnc.toBytes()).toLowerAscii()
-  let myNames = myContributorNames(moduleKeystore())
+  let myNames = myNames()
   let mine = @[myEncHex] & myNames
   let nowS = uint64(epochTime())
   let views = reduceIntentViews(events, driverFor)
@@ -2163,7 +2258,7 @@ proc musterCoordinateOffers(intentId: string): string =
   let effect = effectFromJson(effectJson)
   let m = drv.manifest(effect)
   # a share is offered only to a member who settles a part (exo-272): never the creditor
-  let pays = drv.settlesAPart(effect, myContributorNames(moduleKeystore()))
+  let pays = drv.settlesAPart(effect, myNames())
   var o = offersPayload(recipientOffers(m.requirements, moduleCatalogue(), m, pays))
   o["intentId"] = %intentId
   result = $o
@@ -2403,8 +2498,8 @@ proc musterCoordinateReadiness(intentId: string): string =
   var facts = hostFacts(policy)
   # whether YOUR contribution to THIS intent would count, in the driver's own words — how a
   # split's parties (named in the effect) are graded (exo-272)
-  facts.contributes = drv.mayContribute(effect, myContributorNames(moduleKeystore()))
-  facts.pays = drv.settlesAPart(effect, myContributorNames(moduleKeystore()))   # is a share mine to pay
+  facts.contributes = drv.mayContribute(effect, myNames())
+  facts.pays = drv.settlesAPart(effect, myNames())   # is a share mine to pay
   let r = assessReadiness(m, probeFromFacts(facts))
   var o = r.toJson()
   o["intentId"] = %intentId
@@ -2430,7 +2525,7 @@ proc musterCoordinateActivity(): string =
   var arr = newJArray()
   let events = gSession.roomEvents()
   let myEnc = moduleKeystore().encIdentity()
-  let myNames = myContributorNames(moduleKeystore())
+  let myNames = myNames()
   let mine = @[toHex(myEnc.toBytes()).toLowerAscii()] & myNames
   for a in reduceActivity(events, driverFor):
     # every line with a person in it — an approval, a decline, a part paid or confirmed —
@@ -2489,7 +2584,13 @@ proc musterKeystore_status(): string =
   ## are async, so this never waits on keystore_module (it may be busy in an approve).
   try:
     if gKeystoreProbe == nil: gKeystoreProbe = newKeystoreProbe()
-    result = $keystoreRow(gKeystoreProbe.read())
+    var row = keystoreRow(gKeystoreProbe.read())
+    row["backend"] = %gKeystoreBackend
+    row["selected"] = %gKeystoreAccount
+    row["binding"] = %(if gKeystoreAccount.len == 0: "none"
+                      else: bindingState(gKeystoreBinding, gKeystoreAccount,
+                                         moduleKeystore().encIdentity(), uint64(epochTime())))
+    result = $row
   except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
   if gLpDebug: stderr.writeLine("MUSTER-LP keystore " & result)
 
@@ -3274,7 +3375,7 @@ proc musterCoordinateConversations(): string =
   let ks = moduleKeystore()
   let myAddr = toHex(ks.address())
   let myEnc = ks.encIdentity()
-  let myNames = myContributorNames(ks)
+  let myNames = myNames()
   let myEncHex = toHex(myEnc.toBytes()).toLowerAscii().replace("0x", "")
   let myPart = partName(myEncHex)
   let mine = @[myEncHex] & myNames

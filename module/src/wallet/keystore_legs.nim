@@ -30,7 +30,7 @@ proc hexOf(b: openArray[byte]): string =
   result = "0x"
   for x in b: (result.add d[int(x shr 4)]; result.add d[int(x and 0x0f)])
 
-proc bytesOfHex(s: string): seq[byte] =
+proc bytesOfHex*(s: string): seq[byte] =
   var h = s.strip()
   if h.startsWith("0x") or h.startsWith("0X"): h = h[2 .. ^1]
   if h.len mod 2 != 0: fail("odd-length hex")

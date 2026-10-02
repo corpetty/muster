@@ -8,11 +8,14 @@
 #     evm_keystore_cli (custodian) and evm_signer_cli (approver) — roles named by the
 #     test with keystore_module.configure, an operator step muster never takes
 #   evm_keystore_cli imports anvil owner 0's key; muster's own keystore never holds it
+#   muster selects owner 0 (keystore_select, K5): one binding request, approved in the
+#     signer, comes back as the account's F-14 binding ("valid")
 #   muster: join a one-member room on a local node, disclose the Safe, propose a transfer,
-#     contribute with key ref = owner 0 → "awaiting-approval" (nothing published yet)
+#     contribute with NO key ref → routed through the selected account → "awaiting-approval"
 #   evm_signer_cli: show the request (the SafeTx rendered by the keystore), approve
 #   muster's intents tick: fetch, check each signature recovers to owner 0 over muster's
-#     own hashes, publish through the same gates as an in-app approval → "collecting"
+#     own hashes, publish through the same gates as an in-app approval, with the binding
+#     → "collecting", and the approval reads as this member's (mine)
 #
 #   scripts/keystore-approval-logoscore-test.sh        # needs `make build` (the deps' modules)
 #   KEEP_LOGS=1 ANVIL_PORT=18575 scripts/keystore-approval-logoscore-test.sh
@@ -74,9 +77,34 @@ step "load"; for m in muster_module evm_keystore_cli evm_signer_cli; do lc load-
 step "roles (operator)"; lc call keystore_module configure \
   '{"approvers":["evm_signer_ui","evm_signer_cli"],"custodians":["evm_keystore_ui","evm_keystore_cli"]}' | res
 step "custodian imports owner 0"; lc call evm_keystore_cli import_private_key "$OWNER0_KEY" "$PW" | res
+lc call muster_module settings >/dev/null    # loads the module's settings first: a set_setting before that saves defaults
 lc call muster_module set_setting rpc "http://127.0.0.1:$PORT" >/dev/null
 for _ in 1 2 3; do lc call muster_module keystore_status >/dev/null; sleep 2; done       # the probe sees the account
 step "keystore_status"; lc call muster_module keystore_status | res
+
+approve_in_signer() {   # $1 = handle: what a person does in the signer
+  lc call evm_signer_cli refresh >/dev/null
+  local show bid
+  show=$(lc call evm_signer_cli show "$1" | res)
+  echo "$show" | python3 -c 'import sys,json
+s=json.load(sys.stdin); print("\n".join((s.get("text") or json.dumps(s))[:2400].splitlines()[:44]))' 2>/dev/null
+  bid=$(echo "$show" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("bundle_id",""))')
+  lc call evm_signer_cli approve "$1" "$bid" "$PW" | res | cut -c1-200
+}
+
+step "select owner 0 for approvals (K5)"
+SEL=$(lc call muster_module keystore_select "$OWNER0" | res); echo "$SEL"
+BH=$(echo "$SEL" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("handle",""))')
+[ -n "$BH" ] || { echo "FAIL: no binding request"; ok=0; }
+approve_in_signer "$BH"
+bstate=""
+for _ in $(seq 1 30); do
+  lc call muster_module keystore_requests >/dev/null           # the pump runs on this read too
+  bstate=$(lc call muster_module keystore_status | res | python3 -c 'import sys,json; print(json.load(sys.stdin).get("binding",""))')
+  [ "$bstate" = "valid" ] && break; sleep 2
+done
+echo "binding: $bstate"
+[ "$bstate" = "valid" ] || { echo "FAIL: the account's binding never became valid"; ok=0; }
 
 step "room"; lc call muster_module coordinate_join "/muster/1/k2-$(date +%s)/proto" | res | cut -c1-120
 ACCT=$(lc call muster_module describe | res | python3 -c 'import sys,json
@@ -87,38 +115,37 @@ lc call muster_module coordinate_set_policy safe | res | cut -c1-120
 ID=$(lc call muster_module coordinate_propose '{"to":"0x70997970C51812dc3A010C7d01b50e0d17dc79C8","value":1,"nonce":0}' | res)
 echo "intent: $ID"
 
-step "contribute with keystore_module's owner 0"
-r=$(lc call muster_module coordinate_contribute "$ID" "" "$OWNER0" | res); echo "$r"
+step "contribute with no key ref: routed through the selected account"
+r=$(lc call muster_module coordinate_contribute "$ID" "" "" | res); echo "$r"
 [ "$r" = "awaiting-approval" ] || { echo "FAIL: expected awaiting-approval"; ok=0; }
 H=$(lc call muster_module keystore_requests | res | python3 -c 'import sys,json
-rs=json.load(sys.stdin)["requests"]; print(rs[-1]["handle"] if rs else "")')
+rs=[r for r in json.load(sys.stdin)["requests"] if r.get("kind")=="approval"]; print(rs[-1]["handle"] if rs else "")')
 echo "handle: $H"
 
 step "the human, in evm_signer_cli"
-lc call evm_signer_cli refresh | res | cut -c1-160
-SHOW=$(lc call evm_signer_cli show "$H" | res)
-echo "$SHOW" | python3 -c 'import sys,json
-s=json.load(sys.stdin); print("\n".join((s.get("text") or s.get("prompt") or json.dumps(s))[:1800].splitlines()[:40]))' 2>/dev/null || echo "$SHOW" | cut -c1-600
-BID=$(echo "$SHOW" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("bundle_id",""))')
-lc call evm_signer_cli approve "$H" "$BID" "$PW" | res | cut -c1-200
+approve_in_signer "$H"
 
 step "muster's tick publishes"
 pub=""
 for _ in $(seq 1 30); do
   lc call muster_module coordinate_intents >/dev/null
   pub=$(lc call muster_module keystore_requests | res | python3 -c 'import sys,json
-rs=json.load(sys.stdin)["requests"]; print(next((r.get("published","") for r in rs if r.get("published")), ""))')
+rs=json.load(sys.stdin)["requests"]; print(next((r.get("published","") for r in rs if r.get("kind")=="approval" and r.get("published")), ""))')
   [ -n "$pub" ] && break; sleep 2
 done
 lc call muster_module keystore_requests | res
 echo "published: $pub"
 [ "$pub" = "collecting" ] || { echo "FAIL: expected the approval to publish as collecting"; ok=0; }
-lc call muster_module coordinate_intents | res | python3 -c 'import sys,json
+MINE=$(lc call muster_module coordinate_intents | res | python3 -c 'import sys,json
 for i in json.load(sys.stdin):
-  print("intent", i.get("id","")[:12], i.get("state"), "approvals", i.get("approvals"), i.get("approvers") or "")' 2>/dev/null
+  print("intent", i.get("id","")[:12], i.get("state"), "approvals", i.get("approvals"), i.get("approvers") or "", file=sys.stderr)
+  print("yes" if i.get("approvedByMe") else "no")' | tail -1)
+echo "approved by me: $MINE"
+[ "$MINE" = "yes" ] || { echo "FAIL: the approval does not read as this member's"; ok=0; }
+grep -a -q 'intent/.*/binding/' "$D/daemon.log" 2>/dev/null || true
 
 if [ "$ok" = 1 ]; then
-  echo "PASS: keystore_module signed a muster approval a human approved; it published as collecting"
+  echo "PASS: selected owner 0 (binding valid); its human-approved signature published as collecting, read as mine"
   [ -n "${KEEP_LOGS:-}" ] && echo "logs: $D" || rm -rf "$D"
   exit 0
 fi
