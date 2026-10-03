@@ -113,3 +113,12 @@ needs `str:`; `coordinate_pending` answers objects (`{identity, alias, bindsOwne
 joiner's grant arrives when its session polls (the UI's intents tick), so a headless wait
 loop ticks both instances; Alice's delivery node starts at her first `coordinate_join`, so a
 local peer dials her only after it.
+
+The same script's second half (2026-10-03, PASS): the real Safe v1.4.1 on that anvil
+(`infra/anvil/devnet.sh`, owners anvil 0/1/2, 2 of 3), funded; Alice discloses it and sets
+the room's policy; a Safe intent pays anvil 3 0.001 ETH. Each owner contributes with no key
+ref: routed to their selected keystore account (`auto`, a test chain), approved in the
+signer, published: collecting → executable. Alice's `coordinate_submit` answers
+`onchain: awaiting-approval` with her keystore account as relayer; the execTransaction goes
+through tx_sender_module (one approval); the pump publishes submitted and final with the
+hash; **final on both, the recipient +1000000000000000 wei exactly.**

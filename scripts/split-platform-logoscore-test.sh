@@ -44,8 +44,11 @@ D=$(mktemp -d)
 
 ANVIL=$(nix build nixpkgs#foundry --no-link --print-out-paths 2>/dev/null | tail -1)/bin/anvil
 CAST=$(dirname "$ANVIL")/cast
-setsid "$ANVIL" --port "$PORT" --chain-id 31337 --block-time 1 >"$D/anvil.log" 2>&1 &
-for _ in $(seq 1 30); do "$CAST" chain-id --rpc-url "http://127.0.0.1:$PORT" >/dev/null 2>&1 && break; sleep 1; done
+# anvil with the real Safe v1.4.1 (owners anvil 0/1/2, 2 of 3) for the second half
+ANVIL_PORT=$PORT setsid nix shell nixpkgs#foundry nixpkgs#jq -c infra/anvil/devnet.sh >"$D/devnet.log" 2>&1 &
+for _ in $(seq 1 120); do grep -q 'SAFE_ADDR=' "$D/devnet.log" && break; sleep 2; done
+grep -q 'SAFE_ADDR=' "$D/devnet.log" || { echo "devnet did not come up"; tail -5 "$D/devnet.log"; exit 1; }
+SAFE=$(grep -o 'SAFE_ADDR=0x[0-9a-fA-F]*' "$D/devnet.log" | head -1 | cut -d= -f2)
 
 PIDS=()
 start() {   # $1 = name, $2 = delivery config
@@ -71,7 +74,7 @@ print($1)"; }
 cleanup() {
   for n in a b; do c "$n" stop >/dev/null; done
   for p in "${PIDS[@]}"; do kill -9 -"$p" 2>/dev/null; kill -9 "$p" 2>/dev/null; done
-  pkill -f "anvil --port $PORT" 2>/dev/null
+  pkill -f "anvil .*--port $PORT" 2>/dev/null
   [ -n "${KEEP_LOGS:-}" ] && echo "logs: $D" || rm -rf "$D"
 }
 trap cleanup EXIT
@@ -193,7 +196,64 @@ echo "   Alice received $GOT wei"
 SENT=$(c b call tx_sender_module history "$ADDR_B" 31337 | res | j "[(t.get('hash','')[:12], t.get('origin',''), (t.get('meta') or {}).get('muster',{}).get('intent','')[:12]) for t in d.get('transactions',[])][:3]")
 echo "   tx_sender history (Bob): $SENT"
 
-if [ $ok = 1 ]; then echo "PASS split-platform-logoscore-test"; exit 0; fi
+# ── the Safe: two owners approve with their keystore accounts; Alice settles it ──
+RCPT=0x90f79bf6eb2c4f870365e785982e1f101e93b906    # anvil 3, a recipient nobody here holds
+step "the Safe: fund it, disclose it, set the room's policy"
+"$CAST" send "$SAFE" --value 0.01ether --private-key 0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6 --rpc-url "http://127.0.0.1:$PORT" >/dev/null
+ACCT=$(c a call muster_module describe | res | python3 -c 'import sys,json
+s=json.load(sys.stdin); print(json.dumps({"family":s.get("family","evm.safe"),"chain":s["chain"],"address":s["safe"],
+  "label":"the anvil Safe","signers":s["owners"],"threshold":s["threshold"]}))')
+c a call muster_module coordinate_disclose_account "$ACCT" | res | cut -c1-120
+c a call muster_module coordinate_set_policy safe | res | cut -c1-120
+SID=$(c a call muster_module coordinate_propose "{\"to\":\"$RCPT\",\"value\":1000000000000000,\"nonce\":0}" | res)
+echo "   Safe intent: $SID"
+for _ in $(seq 1 30); do
+  sb=$(c b call muster_module coordinate_intents | res | j "next((i.get('state') for i in d if i.get('id')=='$SID'), '')")
+  [ -n "$sb" ] && break; sleep 2
+done
+owner_approves() {   # $1 = instance: approve with the selected keystore account, in the signer
+  local r h pub
+  r=$(c $1 call muster_module coordinate_contribute "$SID" "" "" | res); echo "   $1: $r"
+  [ "$r" = awaiting-approval ] || { fail "$1: the approval did not go to the keystore"; return; }
+  h=$(c $1 call muster_module keystore_requests | res | j "next((r['handle'] for r in reversed(d.get('requests',[])) if r.get('kind')=='approval'), '')")
+  approve $1 "$h" >/dev/null
+  for _ in $(seq 1 30); do
+    c $1 call muster_module coordinate_intents >/dev/null
+    pub=$(c $1 call muster_module keystore_requests | res | j "next((r.get('published','') for r in d.get('requests',[]) if r.get('handle')=='$h'), '')")
+    [ -n "$pub" ] && break; sleep 2
+  done
+  echo "   $1 published: $pub"
+}
+owner_approves a
+owner_approves b
+for _ in $(seq 1 30); do
+  sa=$(c a call muster_module coordinate_intents | res | j "next((i.get('state') for i in d if i.get('id')=='$SID'), '')")
+  [ "$sa" = executable ] && break; sleep 2
+done
+echo "   state (Alice): $sa"; [ "$sa" = executable ] || fail "the Safe intent never reached executable"
+R0=$("$CAST" balance "$RCPT" --rpc-url "http://127.0.0.1:$PORT")
+step "Alice settles: execTransaction through tx_sender_module, one approval"
+S=$(c a call muster_module coordinate_submit "$SID" | res); echo "   $S" | cut -c1-200
+echo "$S" | grep -q awaiting-approval || fail "the settle did not go through tx_sender_module"
+SH=""
+for _ in $(seq 1 15); do
+  SH=$(c a call muster_module keystore_requests | res | j "next((r['handle'] for r in d.get('requests',[]) if r.get('kind')=='send' and r.get('state')=='waiting'), '')")
+  [ -n "$SH" ] && break; sleep 1
+done
+[ -n "$SH" ] || fail "no settle waiting in the signer"
+approve a "$SH" | tail -1
+for _ in $(seq 1 60); do
+  sa=$(c a call muster_module coordinate_intents | res | j "next((i.get('state') for i in d if i.get('id')=='$SID'), '')")
+  sb=$(c b call muster_module coordinate_intents | res | j "next((i.get('state') for i in d if i.get('id')=='$SID'), '')")
+  [ "$sa" = final ] && [ "$sb" = final ] && break; sleep 2
+done
+echo "   Alice: $sa   Bob: $sb"
+[ "$sa" = final ] && [ "$sb" = final ] || fail "the Safe settle did not go final on both"
+R1=$("$CAST" balance "$RCPT" --rpc-url "http://127.0.0.1:$PORT")
+echo "   the recipient received $(python3 -c "print($R1 - $R0)") wei"
+[ "$(python3 -c "print($R1 - $R0)")" = 1000000000000000 ] || fail "the Safe did not pay exactly the agreed value"
+
+if [ $ok = 1 ]; then echo "PASS split-platform-logoscore-test (split + Safe)"; exit 0; fi
 echo "FAIL split-platform-logoscore-test"
 grep -a -h "MUSTER-LP split\|MUSTER-LP keystore-requests" "$D"/b.log 2>/dev/null | tail -6 | cut -c1-300
 KEEP_LOGS=1; exit 1
