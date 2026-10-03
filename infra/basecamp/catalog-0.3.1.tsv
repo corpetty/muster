@@ -1,0 +1,15 @@
+# The Basecamp 0.3.1 default-catalog packages a muster profile installs (exo-d4d.1).
+# name<TAB>url<TAB>sha256 — from the catalog index of 2026-10-03 (logos-module-atlas 82593d5).
+keystore_module	https://github.com/logos-co/logos-modules-release/releases/download/keystore_module-v0.1.0/keystore_module-0.1.0.lgx	25e657ed66b495ef027b97f7d4e5e8d0e2e5f0f3cdd481ff47ddeb0905064a24
+evm_signer_ui	https://github.com/logos-co/logos-modules-release/releases/download/evm_signer_ui-v0.1.0/evm_signer_ui-0.1.0.lgx	efb40b786cf41c492e9398c1f24f07a66cd877836dce11055fddee256e07affa
+evm_keystore_ui	https://github.com/logos-co/logos-modules-release/releases/download/evm_keystore_ui-v0.1.0/evm_keystore_ui-0.1.0.lgx	5fffc54187dcb11c108a8a6fc39589c8243ce2f668e4457d0ebf442ee2461f2a
+eth_rpc_module	https://github.com/logos-co/logos-modules-release/releases/download/eth_rpc_module-v0.1.0/eth_rpc_module-0.1.0.lgx	0d6300f5b314d8e09861513bb157f544f736a3dd91fd62c884facd646b2f58e9
+eth_rpc_ui	https://github.com/logos-co/logos-modules-release/releases/download/eth_rpc_ui-v0.1.0/eth_rpc_ui-0.1.0.lgx	aaad7c8e2971e5d6a7c76d2dc76fad71f516ec2d6ae2c44361f7bcf3ca5bb2c3
+tx_sender_module	https://github.com/logos-co/logos-modules-release/releases/download/tx_sender_module-v0.1.0/tx_sender_module-0.1.0.lgx	30715396a84df0eeddd9ab79fa61e4a30c6e1e1beea2073c51b44dc924315598
+fee_module	https://github.com/logos-co/logos-modules-release/releases/download/fee_module-v0.1.0/fee_module-0.1.0.lgx	f921dc481e65f630faacf786923ac3005144a396609a3c5d6ce7f8f13c7890dd
+delivery_module	https://github.com/logos-co/logos-modules-release/releases/download/delivery_module-v0.3.0/delivery_module-0.3.0.lgx	f744f0f9ef84438b6da3985561cb8d2eedf36c9340d29d839353cf8d728aa088
+lez_core	https://github.com/logos-co/logos-modules-release/releases/download/lez_core-v0.5.0/lez_core-0.5.0.lgx	5cb561e273424c9a2d477a2bbae0f015a71154e8916e78b9097eb921be554be3
+liblogos_rln_module	https://github.com/logos-co/logos-modules-release/releases/download/liblogos_rln_module-v0.10.0/liblogos_rln_module-0.10.0.lgx	5dd755bc1b0977f115f1f73f00bb59c38392e3d42ab2dce197039202466eb8c3
+liblogos_lez_rln_module	https://github.com/logos-co/logos-modules-release/releases/download/liblogos_lez_rln_module-v4.2.1/liblogos_lez_rln_module-4.2.1.lgx	4d61669f73374007c455047359d9c1e71bd118f82538c6d554def850548324b6
+verified_proxy_module	https://github.com/logos-co/logos-modules-release/releases/download/verified_proxy_module-v0.1.3/verified_proxy_module-0.1.3.lgx	e61b50a0bdbf6dd8b723ff40ddea99a604d906764c937b2581e5470ee042e633
+token_list_module	https://github.com/logos-co/logos-modules-release/releases/download/token_list_module-v0.1.0/token_list_module-0.1.0.lgx	8a6bf6458e66c8657d7c77d146eedf7c086935ed84b2b99670c6023898dfee07
