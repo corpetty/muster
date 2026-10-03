@@ -1013,6 +1013,7 @@ type
     intentId: string
     created: JsonNode              ## a create's disclosure, published once the state is on chain
     started: float
+    submitted: bool                ## a settle through the platform: "submitted" published (with the hash)
 
 const LezPendingDeadlineS = 600.0
 var gLezPending: seq[LezPending]
@@ -1030,7 +1031,8 @@ proc lezPump() =
   if gLezPending.len == 0 or epochTime() - gLezPumpAt < 2.0: return
   gLezPumpAt = epochTime()
   var keep: seq[LezPending]
-  for p in gLezPending:
+  for p0 in gLezPending:
+    var p = p0                         # a settle through the platform notes "submitted" on it
     if p.session != gSession:          # it completes in its own room, when that is joined
       keep.add p
       continue
@@ -1050,13 +1052,20 @@ proc lezPump() =
         if not r.startsWith("unconfirmed"): outcome = r
       of lpSettle:
         let f = p.settle.watch(p.txRef)
+        # through the platform the room hears of it only once the sender broadcast: the
+        # hash, never the marker (exo-d4d.5)
+        let chainRef = resolvedRef(p.txRef)
+        if not p.submitted and chainRef.len > 0:
+          p.session.publish(submitEvent(p.intentId, chainRef = chainRef))
+          p.submitted = true
         if f.status == fsFinal:
-          p.session.publish(finalEvent(p.intentId, chainRef = p.txRef.id))
+          p.session.publish(finalEvent(p.intentId, chainRef = chainRef))
           outcome = "final"
         elif f.status == fsFailed: outcome = "failed: " & f.detail
     except CatchableError:
       discard                          # an unreachable sequencer: try again next tick
-    if outcome.len == 0 and epochTime() - p.started > LezPendingDeadlineS:
+    if outcome.len == 0 and epochTime() - p.started >
+       (if requestOfMarker(p.txRef.id).len > 0: 3600.0 else: LezPendingDeadlineS):   # a person approves first
       outcome = "timed out: the chain did not include it"
     if outcome.len == 0: keep.add p
     else: lezRecord(p, outcome)
@@ -3094,7 +3103,7 @@ proc settlementFor(drv: Driver): Settlement =
   let (isEvm, cid) = evmChainId(p.chain)
   if not isEvm: return nil
   let unlocked = gRelayer.startsWith("unlocked:")
-  let who = (if unlocked: gRelayer["unlocked:".len .. ^1] else: toHex(myAddress()))
+  let who = (if unlocked: gRelayer["unlocked:".len .. ^1] else: myEvmPayAddress())
   let adapter = newEvmAdapter("evm:" & $cid, evmEndpoint(p.chain), fromUnlocked = unlocked)
   settlementFor(drv, adapter, Account(chain: "evm:" & $cid, form: afPublic, id: who))
 
@@ -3145,8 +3154,20 @@ proc musterCoordinateSubmit(intentId: string): string =
     return $(%*{"id": intentId, "error": asm0.error, "detail": asm0.detail,
                 "have": asm0.have, "need": asm0.need})
   var txRef: TxRef
+  var tx = asm0.tx
   try:
-    txRef = st.submit(asm0.tx, moduleKeystore())
+    # what the person approving in the platform's signer reads, and what joins the sender's
+    # history back to this intent (exo-d4d.5); a payload that is not JSON is sent as it is
+    let pj = parseJson(tx.payload)
+    if pj.kind == JObject:
+      let memo = (try: parseJson(effectJson){"memo"}.getStr("") except CatchableError: "")
+      pj["purpose"] = %("Settle " & (if memo.len > 0: "'" & memo & "'" else: "an intent") &
+                        ", agreed in a Muster room")
+      pj["meta"] = %*{"muster": {"intent": intentId}}
+      tx.payload = $pj
+  except CatchableError: discard
+  try:
+    txRef = st.submit(tx, moduleKeystore())
   except CatchableError as e:
     if isBtc:
       return $(%*{"id": intentId, "error": "rpc-unreachable",
@@ -3154,7 +3175,15 @@ proc musterCoordinateSubmit(intentId: string): string =
     return $(%*{"id": intentId, "error": "rpc-unreachable", "relayer": gRelayer,
                 "detail": e.msg & " — the relayer (" & asm0.tx.frm.id & ") must be able to pay gas on " &
                           asm0.tx.frm.chain & "; fund it, or set Settings → relayer"})
-  # Fold the room forward: submit event → every member converges on "submitted".
+  # Fold the room forward: submit event → every member converges on "submitted". Through
+  # the platform there is no hash yet (a person approves first): the pump publishes it.
+  let throughPlatform = requestOfMarker(txRef.id).len > 0
+  if throughPlatform:
+    gLezPending.add LezPending(kind: lpSettle, session: gSession, settle: st, txRef: txRef,
+                               intentId: intentId, started: epochTime())
+    return $(%*{"id": intentId, "state": intentState(gSession.roomEvents(), driverFor, intentId),
+                "onchain": "awaiting-approval", "relayer": tx.frm.id,
+                "detail": "approve it in the Logos Signer"})
   gSession.publish(submitEvent(intentId, chainRef = txRef.id))
   # Observe finality from the chain (never asserted), within SubmitWatchS of wall clock and
   # one read's budget (exo-14f): a slow, unreachable or hung node reports "pending" rather

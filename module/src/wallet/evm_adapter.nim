@@ -15,6 +15,8 @@ import ./adapter
 import ./verify
 import ./evm_sign
 import ./evm_rpc
+import ./chain_endpoint   # a platform endpoint: eth_rpc_module (exo-d4d.3)
+import ./tx_sender        # …and its one sender, tx_sender_module (exo-d4d.5)
 import ../crypto/secp256k1
 import ../crypto/keystore
 
@@ -116,12 +118,42 @@ proc parsePayload(p: JsonNode): tuple[toHex: string, value: UInt256, data: seq[b
   let data = if p.hasKey("data"): verify.hexBytes(p["data"].getStr()) else: @[]
   (p{"to"}.getStr(), value, data)
 
+proc submitThroughPlatform(a: EvmAdapter, tx: PreparedTx, pj: JsonNode, value: UInt256): TxRef =
+  ## On a platform endpoint (Basecamp): the payload's one call goes to tx_sender_module —
+  ## prepare, check its legs are exactly that call, send. A person approves in the signer;
+  ## the TxRef is a marker until the sender broadcasts (finality polls it). Muster signs
+  ## nothing and holds no nonce here: the device's one sender does.
+  if not hasTxSender(): raise newException(WalletError, "no tx_sender_module on this host: install it from Basecamp")
+  let call = TxCall(to: pj{"to"}.getStr().toLowerAscii(), value: $value,
+                    data: (let d = pj{"data"}.getStr(""); if d == "0x": "" else: d.toLowerAscii()))
+  let purpose = pj{"purpose"}.getStr("A transaction agreed in a Muster room")
+  let req = requestJson(int(a.chainNum), tx.frm.id, call, purpose,
+                        (if pj{"meta"} != nil: pj["meta"] else: newJObject()))
+  let mismatch = legsMismatch(senderCall("prepare", %*[$req]), call)
+  if mismatch.len > 0: raise newException(WalletError, mismatch)
+  let sent = senderCall("send", %*[$req])
+  if sent == nil: raise newException(WalletError, "tx_sender_module did not answer send")
+  if not sent{"ok"}.getBool(false):
+    raise newException(WalletError, sent{"error"}.getStr("tx_sender_module refused the send"))
+  let rid = sent{"requestId"}.getStr()
+  if rid.len == 0: raise newException(WalletError, "tx_sender_module answered no request id")
+  sendBook.add(rid, sent{"handle"}.getStr(), pj{"meta"}{"muster"}{"intent"}.getStr(""), "", purpose)
+  TxRef(chain: a.chainId, id: markerOf(rid))
+
+proc resolvedRef*(r: TxRef): string =
+  ## The chain's own reference for a TxRef: itself, or for a send through the platform the
+  ## hash the sender broadcast ("" until it has).
+  let rid = requestOfMarker(r.id)
+  if rid.len == 0: r.id else: sendBook.hashOf(rid)
+
 method submit*(a: EvmAdapter, tx: PreparedTx, ks: Keystore): TxRef =
   ## Anvil unlocks `from`, so eth_sendTransaction needs no client-side signing. For
   ## any other node, sign the EIP-155 transaction with nim-eth + the keystore seam
-  ## (the key never leaves the keystore) and broadcast the raw bytes.
+  ## (the key never leaves the keystore) and broadcast the raw bytes. On a platform
+  ## endpoint, tx_sender_module sends it instead (submitThroughPlatform).
   let pj = parseJson(tx.payload)
   let (toHex, value, data) = parsePayload(pj)
+  if a.rpcUrl.isPlatform and not a.fromUnlocked: return a.submitThroughPlatform(tx, pj, value)
   if a.fromUnlocked:
     let gas = payloadGas(pj, if data.len == 0: 100_000'u64 else: 120_000'u64)
     return TxRef(chain: a.chainId,
@@ -156,7 +188,21 @@ method finality*(a: EvmAdapter, txRef: TxRef): Finality =
   ## A failed read raises (exo-14f). The status is bound before the `case`: with the call as
   ## the selector, Nim 2.2 skips initializing `result` (every branch assigns it), so a raise
   ## returned an unbuilt Finality that the caller then destroyed — a SIGSEGV.
-  let status = rpcReceiptStatus(a.rpcUrl, txRef.id)
+  var hash = txRef.id
+  let rid = requestOfMarker(txRef.id)
+  if rid.len > 0:
+    # through the platform: the poll IS the broadcast; then the hash's receipt
+    let st = pollSend(rid)
+    if st.state == ssAwaiting:
+      return Finality(status: fsPending, detail: (if st.blocked: "held until verified reads work again"
+                                                  else: "waiting for you to approve it in the Logos Signer"))
+    if st.state == ssBroadcasting: return Finality(status: fsPending, detail: "being broadcast")
+    hash = sendBook.hashOf(rid)
+    if hash.len == 0:
+      if st.final: return Finality(status: fsFailed, detail: "the send was " & st.status &
+                                     (if st.reason.len > 0: ": " & st.reason else: ""))
+      return Finality(status: fsPending, detail: "the sender has not named a hash yet")
+  let status = rpcReceiptStatus(a.rpcUrl, hash)
   case status
   of 1: Finality(status: fsFinal, detail: "receipt status 1")
   of 0: Finality(status: fsFailed, detail: "receipt status 0")
