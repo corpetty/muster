@@ -624,7 +624,9 @@ Item {
         }
 
         // ── propose composer ──────────────────────────────────────────────────
+        // The direct path drives the local test Safe; hidden where it cannot work (exo-d4d.6).
         Rectangle {
+            visible: !root.account || root.account.available !== false
             Layout.fillWidth: true
             implicitHeight: composeCol.implicitHeight + 2 * Theme.spacing.medium
             radius: Theme.spacing.radiusMedium

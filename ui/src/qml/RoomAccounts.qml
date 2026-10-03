@@ -24,7 +24,7 @@ Item {
     property var lezCreate: ({})          // the last LEZ multisig create ({address, tx, pending} or {error, detail})
     signal discloseRequested(string accountJson)
     signal discloseSuggested()
-    property bool suggestionAvailable: true   ## describe()'s test Safe can work here (exo-d4d.6)
+    property bool suggestionAvailable: true   // describe()'s test Safe can work here (exo-d4d.6)
     signal lezMemberRequested()
     signal lezCreateRequested(string threshold, string members)
     property var frostCeremonies: []      // the room's FROST key ceremonies (Phase D)
