@@ -274,7 +274,8 @@ proc settingsPath(): string =
   if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
   dir / "settings.json"
 
-var gKeystoreBackend = getEnv("MUSTER_KEYSTORE_BACKEND", "auto")   ## "off" | "interim" | "auto" (exo-d4d.2)
+var gKeystoreBackend = getEnv("MUSTER_KEYSTORE_BACKEND", "auto")
+var gWalletStale = false   ## rebuild the wallet on next use: its EVM account changed (exo-d4d)   ## "off" | "interim" | "auto" (exo-d4d.2)
   ## exo-149.2: "interim" lets a key ref naming a keystore_module account approve in-room
   ## through it, its attestation an opaque digest leg (docs/design/keystore-module-backend.md
   ## §4). "off" (the default) keeps every approval on muster's own keystore.
@@ -2129,6 +2130,7 @@ proc musterKeystore_select(address: string): string =
   gKsBindingCtx[h] = ctx
   gKeystoreAccount = a
   gKeystoreBinding = ""
+  gWalletStale = true         # the wallet's EVM accounts are this account now (exo-d4d)
   saveSettingsFile()
   if gLpDebug: stderr.writeLine("MUSTER-LP keystore-select " & $(%*{"account": a, "handle": h}))
   $(%*{"ok": true, "account": a, "handle": h, "state": "awaiting-approval"})
@@ -3812,11 +3814,26 @@ var gEvm: EvmAdapter = nil          ## typed handle for the EVM-specific verifie
 # gLez is declared before musterCoordinateReadiness (exo-44b L2); set lazily below.
 
 proc moduleWallet(): Wallet =
+  if gWalletStale:
+    gWallet = nil
+    gWalletStale = false
   if gWallet == nil:
     let ks = moduleKeystore()
     gWallet = newWallet(ks)
-    gEvm = newEvmAdapter("evm:31337", gRpcUrl)
-    gWallet.register(gEvm)
+    gEvm = nil
+    if evmPlatform():
+      # under the platform (exo-d4d): one adapter per chain the person's registry enables
+      # (test chains only while muster is pre-release), each read through eth_rpc_module,
+      # holding the keystore account they chose, sending through tx_sender_module
+      let owner = myEvmPayAddress()
+      for c in platformRegistry().chains:
+        if c.enabled and (if PreferTestnets: c.testnet else: c.offered):
+          let a = newEvmAdapter("evm:" & $c.chainId, platformEndpoint(c.chainId), fromUnlocked = false, owner = owner)
+          if gEvm == nil: gEvm = a
+          gWallet.register(a)
+    if gEvm == nil:
+      gEvm = newEvmAdapter("evm:31337", gRpcUrl)
+      gWallet.register(gEvm)
     gMock = newMockChain()
     gWallet.register(gMock)
     for acc in gMock.accounts(ks):        # seed the mock so its balances are demonstrable

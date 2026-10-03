@@ -50,13 +50,16 @@ type
     native: AssetId
     tokens: seq[AssetId]         ## reference = the token contract address (0x…)
     fromUnlocked: bool           ## anvil unlocks accounts → eth_sendTransaction needs no client-side signing
+    owner: string                ## the account this wallet holds, when not the keystore's own:
+                                 ## under the platform, the person's keystore_module account (exo-d4d)
 
 proc newEvmAdapter*(chainId, rpcUrl: string, tokens: seq[AssetId] = @[],
-                    fromUnlocked = true): EvmAdapter =
+                    fromUnlocked = true, owner = ""): EvmAdapter =
   let native = AssetId(chain: chainId, symbol: "ETH", kind: akNative, decimals: 18)
   let digits = chainId.split(':')[^1]        # "evm:31337" -> 31337
   EvmAdapter(chainId: chainId, chainNum: uint64(parseBiggestUInt(digits)),
-             rpcUrl: rpcUrl, native: native, tokens: tokens, fromUnlocked: fromUnlocked)
+             rpcUrl: rpcUrl, native: native, tokens: tokens, fromUnlocked: fromUnlocked,
+             owner: owner.toLowerAscii())
 
 proc toAddress(id: string): Address =
   var h = id
@@ -77,7 +80,7 @@ method describe*(a: EvmAdapter): ChainDescriptor =
                   finality: finImmediate)   # anvil fixture; a public network is finProbabilistic
 
 method accounts*(a: EvmAdapter, ks: Keystore): seq[Account] =
-  @[Account(chain: a.chainId, form: afPublic, id: addrHex(ks.address()))]
+  @[Account(chain: a.chainId, form: afPublic, id: (if a.owner.len > 0: a.owner else: addrHex(ks.address())))]
 
 method assets*(a: EvmAdapter): seq[AssetId] = a.native & a.tokens
 
