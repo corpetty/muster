@@ -449,4 +449,10 @@ class MusterUi
     // Approve Safe intents with this keystore_module account ("" stops), exo-149.5 K5:
     // keystore_select, which asks once for the account's binding; then re-reads the row.
     SLOT(void keystoreSelect(const QString &address))
+    // The approvals this member asked keystore_module for (keystore_requests, exo-149.2):
+    // {backend, selected, requests:[{handle, intentId, account, state, reason, legs}]}. The
+    // view raises evm.signing.approve {handle} for each new waiting one (exo-d4d.2 R1);
+    // reading it also advances them (the module's keystore pump).
+    SLOT(void loadKeystoreRequests())
+    PROP(QString keystoreRequestsJson="{}" READONLY)
 }

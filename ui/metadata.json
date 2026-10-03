@@ -56,5 +56,12 @@
       ]
     }
   ],
-  "uses": []
+  "uses": [
+    {
+      "intent": "evm.signing.approve"
+    },
+    {
+      "intent": "evm.accounts.manage"
+    }
+  ]
 }

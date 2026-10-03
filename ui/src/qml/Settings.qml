@@ -23,6 +23,7 @@ Item {
     id: settings
 
     property var backend
+    property string manageNote: ""   // what the keystore app hand-off answered (exo-d4d.2)
 
     readonly property var s: {
         try { return JSON.parse(backend ? backend.settingsJson : "{}"); }
@@ -590,6 +591,37 @@ Item {
                         color: Theme.palette.warning
                         font.pixelSize: Theme.typography.badgeText
                     }
+                    // exo-d4d.2: muster never makes keys. Creating, importing and backing up an
+                    // account is the platform keystore app's (evm_keystore_ui), reached by
+                    // the evm.accounts.manage intent; Settings re-reads the row when it returns.
+                    RowLayout {
+                        visible: (settings.keystore.identity || {}).kind === "module"
+                        spacing: Theme.spacing.small
+                        LogosButton {
+                            objectName: "keystoreManage"
+                            text: (settings.keystore.accounts || []).length === 0
+                                  ? qsTr("Create or import an account") : qsTr("Manage accounts")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: {
+                                if (typeof logos === "undefined" || typeof logos.request !== "function") {
+                                    settings.manageNote = qsTr("Open the Logos keystore app from Basecamp.");
+                                    return;
+                                }
+                                settings.manageNote = "";
+                                logos.request("evm.accounts.manage", {}, function (res) {
+                                    if (res && res.error === "unavailable")
+                                        settings.manageNote = qsTr("No keystore app answered: install or open it from Basecamp.");
+                                    if (settings.backend) settings.backend.loadKeystoreStatus();
+                                });
+                            }
+                        }
+                        LogosText {
+                            visible: settings.manageNote.length > 0
+                            text: settings.manageNote
+                            color: Theme.palette.warning
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                    }
                     Repeater {
                         model: settings.keystore.accounts || []
                         delegate: RowLayout {
@@ -611,7 +643,7 @@ Item {
                             }
                             LogosButton {
                                 objectName: "keystoreUse"
-                                visible: !parent.chosen && settings.keystore.backend === "interim"
+                                visible: !parent.chosen && settings.keystore.on === true
                                 text: qsTr("Use for approvals")
                                 variant: LogosButton.Variant.Secondary
                                 onClicked: if (settings.backend) settings.backend.keystoreSelect(modelData.address)
