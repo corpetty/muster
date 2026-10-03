@@ -91,6 +91,8 @@ import ../src/wallet/keystore_status   # the official EVM keystore as a status r
 import ../src/wallet/keystore_probe    # …read from keystore_module over lp_*
 import ../src/wallet/chain_endpoint    # an EVM endpoint: a URL, or the platform's eth_rpc_module (exo-d4d.3)
 import ../src/wallet/eth_rpc_lp        # …eth_rpc_module over lp_*
+import ../src/wallet/tx_sender         # payments through the platform's one sender (exo-d4d.5)
+import ../src/wallet/tx_sender_lp      # …tx_sender_module over lp_*
 import ../src/wallet/keystore_requests # pending signing requests (exo-149.2 K2)
 import ../src/coordination/keystore_approval # an in-room approval keystore_module signs (K2)
 import ../src/wallet/keystore_identity  # a keystore_module account as this member's identity (K5)
@@ -1111,6 +1113,7 @@ proc platformRegistry(): tuple[ok: bool, scope: string, chains: seq[PlatformChai
   if now - gPlatformAt < (if gPlatformReg.ok: 30.0 else: 300.0): return gPlatformReg
   if not gEthRpcInstalled:
     installEthRpc()
+    installTxSender()
     discard ethRpcInitDefaults()
     gEthRpcInstalled = true
   gPlatformReg = ethRpcChains()
@@ -1146,6 +1149,13 @@ proc isTestChain(chainId: int): bool =
 proc evmEndpointLabel(endpoint: string): string =
   ## How an endpoint is named to the person: never a platform token, never credentials.
   if endpoint.isPlatform: "eth_rpc_module (your chain settings)" else: redactUserinfo(endpoint)
+
+proc myEvmPayAddress(): string =
+  ## The Ethereum address this member pays from and is paid at (exo-d4d.5): under the
+  ## platform, the keystore_module account they chose for approvals, whose key the platform
+  ## holds; otherwise muster's own key's address (the runner, tests).
+  if evmPlatform() and keystoreOn() and gKeystoreAccount.len > 0: gKeystoreAccount.toLowerAscii()
+  else: addrHex(myAddress())
 
 proc rpcChainCaip2(): tuple[ok: bool, chain, detail: string] =
   ## The CAIP-2 chain THIS member's configured EVM RPC actually serves — what a split
@@ -1207,7 +1217,7 @@ proc splitSeam(chain: string): EvmPartSeam =
   let wchain = "evm:" & $cid
   let ep = evmEndpoint(chain)
   newEvmPartSeam(chain, ep, newEvmAdapter(wchain, ep, fromUnlocked = false), moduleKeystore(),
-                 Account(chain: wchain, form: afPublic, id: addrHex(myAddress())))
+                 Account(chain: wchain, form: afPublic, id: myEvmPayAddress()))
 
 var gTokenInfo = initTable[string, tuple[symbol: string, decimals: int]]()
 
@@ -1247,7 +1257,7 @@ proc myPayTos(family: string): seq[string] =
     # every Bitcoin network this key could be paid on: its wpkh address per network
     for n in Networks: result.add p2wpkhAddress(n.hrp, moduleKeystore().btcPubKey())
     return
-  if family != LezSplitFamily: return @[addrHex(myAddress())]
+  if family != LezSplitFamily: return @[myEvmPayAddress()]
   if epochTime() - gMyLezPayTosAt > 30:
     gMyLezPayTosAt = epochTime()
     try:
@@ -1453,7 +1463,7 @@ proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): s
   # payTo: my own address on the rail — the private split's is my shielded key node. On
   # someone's behalf, the address THEY last shared (their signed address-share), never one
   # typed here; their own client checks it before agreeing (creditorAgreeRefusal).
-  var payTo = addrHex(myAddress())
+  var payTo = myEvmPayAddress()
   if creditor != me:
     if lez: return $(%*{"error": "on-behalf-private", "detail":
                         "a private split is proposed by whoever fronted it: their shielded address is not shared in the room"})
@@ -1718,7 +1728,7 @@ proc musterCoordinateShareAddress(chain: string): string =
     body = %*{"kind": "address-share", "asset": "BTC", "chain": c,
               "address": p2wpkhAddress(hrp, moduleKeystore().btcPubKey()), "form": 1}
   elif c.len == 0 or c.startsWith("eip155:"):
-    body = %*{"kind": "address-share", "asset": "ETH", "address": addrHex(myAddress()).toLowerAscii(), "form": 1}
+    body = %*{"kind": "address-share", "asset": "ETH", "address": myEvmPayAddress().toLowerAscii(), "form": 1}
   else: return $(%*{"error": "no-shared-address", "detail": "nothing is paid to a shared address on " & c})
   let author = toHex(moduleKeystore().encIdentity().toBytes())
   inc gMsgSeq
@@ -2199,6 +2209,9 @@ proc musterKeystore_requests(): string =
     if h in gKsOutcome: row["published"] = %gKsOutcome[h]
     row["kind"] = %(if h in gKsBindingCtx: "binding" else: "approval")
     rows.add row
+  # payments through tx_sender_module wait on the same person in the same signer (exo-d4d.5):
+  # listed alike, so the view escorts their handles too
+  for r in sendBook.view(): rows.add r
   result = $(%*{"backend": gKeystoreBackend, "selected": gKeystoreAccount, "requests": rows})
   if gLpDebug: stderr.writeLine("MUSTER-LP keystore-requests " & result)
 
