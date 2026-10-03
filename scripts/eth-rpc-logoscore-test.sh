@@ -20,7 +20,9 @@ PROFILE=.run/basecamp/${1:-alice}
 [ -d "$PROFILE/modules/muster_module" ] || { echo "install a profile first: scripts/basecamp-profile.sh ${1:-alice} --no-launch"; exit 1; }
 CACHE=(--accept-flake-config --extra-substituters https://cache.nix.logos.co/public
        --extra-trusted-public-keys public:l4HrXgL4nw246+LBh2SOJyhz64BoGegOYLheT/iIAPU=)
-L="$(nix build "github:logos-co/logos-logoscore-cli/${LOGOSCORE_REV:-0.3.1}" --no-link --print-out-paths "${CACHE[@]}" 2>/dev/null | tail -1)/bin/logoscore"
+# the PORTABLE bundle: a plain `cli` build is a dev host, which refuses the catalog's
+# linux-amd64 packages ("installed for variant 'linux-amd64' which is not supported")
+L="$(nix build "github:logos-co/logos-logoscore-cli/${LOGOSCORE_REV:-0.3.1}#cli-bundle-dir" --no-link --print-out-paths "${CACHE[@]}" 2>/dev/null | tail -1)/bin/logoscore"
 [ -x "$L" ] || { echo "logoscore did not build"; exit 1; }
 
 D=$(mktemp -d); mkdir -p "$D/cfg" "$D/data"
