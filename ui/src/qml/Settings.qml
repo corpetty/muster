@@ -624,29 +624,33 @@ Item {
                     }
                     Repeater {
                         model: settings.keystore.accounts || []
-                        delegate: RowLayout {
+                        // one account per block: its address, then (on its own line) the button.
+                        // In one RowLayout beside a fill-width elided address, the button never
+                        // drew inside Basecamp 0.3.1 (exo-d4d.2, seen on display).
+                        delegate: ColumnLayout {
+                            id: acctRow
                             required property var modelData
                             readonly property bool chosen: String(settings.keystore.selected || "")
                                                            === String(modelData.address).toLowerCase()
                             Layout.fillWidth: true
-                            spacing: Theme.spacing.small
+                            spacing: 2
                             LogosText {
                                 Layout.fillWidth: true
                                 elide: Text.ElideMiddle
-                                text: (parent.chosen ? "● " : "")
-                                      + (modelData.label ? modelData.label + "  " : "")
-                                      + (modelData.wallet ? "(" + modelData.wallet + ")  " : "")
-                                      + modelData.address
-                                color: parent.chosen ? Theme.palette.textPrimary : Theme.palette.textSecondary
+                                text: (acctRow.chosen ? "● " : "")
+                                      + (acctRow.modelData.label ? acctRow.modelData.label + "  " : "")
+                                      + (acctRow.modelData.wallet ? "(" + acctRow.modelData.wallet + ")  " : "")
+                                      + acctRow.modelData.address
+                                color: acctRow.chosen ? Theme.palette.textPrimary : Theme.palette.textSecondary
                                 font.family: Theme.typography.mono
                                 font.pixelSize: Theme.typography.badgeText
                             }
                             LogosButton {
                                 objectName: "keystoreUse"
-                                visible: !parent.chosen && settings.keystore.on === true
+                                visible: !acctRow.chosen && settings.keystore.on === true
                                 text: qsTr("Use for approvals")
                                 variant: LogosButton.Variant.Secondary
-                                onClicked: if (settings.backend) settings.backend.keystoreSelect(modelData.address)
+                                onClicked: if (settings.backend) settings.backend.keystoreSelect(acctRow.modelData.address)
                             }
                         }
                     }
