@@ -107,4 +107,15 @@ block:
   except CatchableError: discard
   doAssert calls.len == 0
 
+# ── 5. the wallet's account on the platform is the person's keystore account ──
+block:
+  reset()
+  let a = newEvmAdapter("evm:11155111", Ep, fromUnlocked = false, owner = Owner)
+  let accts = a.accounts(ks())
+  doAssert accts.len == 1 and accts[0].id == Owner, "not muster's own key's address"
+  rpcAnswers["eth_getBalance"] = %*{"ok": true, "result": "0x2386f26fc10000", "route": "verified"}
+  doAssert a.balance(accts[0], a.describe().nativeAsset).raw == "10000000000000000"
+  # without an owner, the adapter names the keystore's own address, as before
+  doAssert newEvmAdapter("evm:31337", "http://127.0.0.1:1").accounts(ks())[0].id != Owner
+
 echo "evm_adapter_platform_test: ok"

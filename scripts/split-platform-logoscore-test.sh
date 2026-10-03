@@ -253,7 +253,31 @@ R1=$("$CAST" balance "$RCPT" --rpc-url "http://127.0.0.1:$PORT")
 echo "   the recipient received $(python3 -c "print($R1 - $R0)") wei"
 [ "$(python3 -c "print($R1 - $R0)")" = 1000000000000000 ] || fail "the Safe did not pay exactly the agreed value"
 
-if [ $ok = 1 ]; then echo "PASS split-platform-logoscore-test (split + Safe)"; exit 0; fi
+# ── the wallet tab: Bob's account on chain 31337, a send through tx_sender_module ──
+step "wallet: Bob's accounts are his keystore account; a send goes through the signer"
+WA=$(c b call muster_module wallet_accounts | res)
+echo "$WA" | j "[(a.get('chain'), a.get('id')) for a in d if a.get('chain','').startswith('evm:')]"
+echo "$WA" | grep -qi "\"evm:31337\".*$ADDR_B\|$ADDR_B.*evm:31337" || echo "$WA" | python3 -c "import sys,json; d=json.load(sys.stdin); sys.exit(0 if any(a.get('chain')=='evm:31337' and a.get('id','').lower()=='$ADDR_B' for a in d) else 1)" || fail "the wallet does not hold Bob's keystore account on evm:31337"
+W0=$("$CAST" balance "$RCPT" --rpc-url "http://127.0.0.1:$PORT")
+WS=$(c b call muster_module wallet_send evm:31337 "$ADDR_B" "$RCPT" ETH str:7000); echo "   $(echo "$WS" | res)"
+TX=$(echo "$WS" | res | j 'd.get("txId","")')
+case "$TX" in txs:*) ;; *) fail "wallet_send did not go through tx_sender_module" ;; esac
+SH=""
+for _ in $(seq 1 15); do
+  SH=$(c b call muster_module keystore_requests | res | j "next((r['handle'] for r in d.get('requests',[]) if r.get('kind')=='send' and r.get('state')=='waiting'), '')")
+  [ -n "$SH" ] && break; sleep 1
+done
+approve b "$SH" | tail -1
+fin=""
+for _ in $(seq 1 30); do
+  fin=$(c b call muster_module wallet_finality evm:31337 "$TX" | res | j 'd.get("status","")')
+  [ "$fin" = final ] && break; sleep 2
+done
+echo "   wallet_finality: $fin"; [ "$fin" = final ] || fail "the wallet send never went final"
+W1=$("$CAST" balance "$RCPT" --rpc-url "http://127.0.0.1:$PORT")
+[ "$(python3 -c "print($W1 - $W0)")" = 7000 ] || fail "the wallet send did not move exactly 7000 wei"
+
+if [ $ok = 1 ]; then echo "PASS split-platform-logoscore-test (split + Safe + wallet)"; exit 0; fi
 echo "FAIL split-platform-logoscore-test"
 grep -a -h "MUSTER-LP split\|MUSTER-LP keystore-requests" "$D"/b.log 2>/dev/null | tail -6 | cut -c1-300
 KEEP_LOGS=1; exit 1
