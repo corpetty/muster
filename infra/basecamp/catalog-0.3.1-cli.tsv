@@ -1,0 +1,6 @@
+# Headless stand-ins for the person (tests only, exo-d4d): the catalog's keystore custodian
+# and signer CLIs. name<TAB>url<TAB>sha256, catalog index of 2026-10-03.
+evm_keystore_cli	https://github.com/logos-co/logos-modules-release/releases/download/evm_keystore_cli-v0.1.0/evm_keystore_cli-0.1.0.lgx	14dfa6b9b66db31a8a06d2a7e99ed8165acf69311c226e73fd88abc06fabfa1b
+#  deps: [{"name": "keystore_module", "version": "~0.1.0"}]
+evm_signer_cli	https://github.com/logos-co/logos-modules-release/releases/download/evm_signer_cli-v0.1.0/evm_signer_cli-0.1.0.lgx	57046c5764c5132792e46d24d8537cddd40d81ec91e31f3463c42e81d913b55d
+#  deps: [{"name": "keystore_module", "version": "~0.1.0"}]
