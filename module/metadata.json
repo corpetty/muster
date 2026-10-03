@@ -12,7 +12,8 @@
     "delivery_module",
     "lez_core",
     "keystore_module",
-    "eth_rpc_module"
+    "eth_rpc_module",
+    "tx_sender_module"
   ],
   "include": [],
   "capabilities": [],

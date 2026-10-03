@@ -84,6 +84,11 @@ method partGone*(s: PartSeam, t: PartTransfer, pp: PendingPart): tuple[gone: boo
   ## in flight until it lands or fails.
   (false, "this rail cannot tell whether " & pp.tx & " may still land")
 
+method notePayment*(s: PartSeam, intentId, part, memo: string) {.base.} =
+  ## What the next sendPart pays for, before it is sent: a seam that asks someone else to
+  ## send (tx_sender_module, exo-d4d.5) names it to the person approving. Default: nothing.
+  discard
+
 method payDeadlineS*(s: PartSeam): float {.base.} =
   ## How long an in-flight payment may take to land before the host stops waiting for it.
   ## A seam that proves (minutes) overrides it with more than its proving budget.
@@ -116,6 +121,10 @@ proc confirmedRefs(events: seq[Event], driverFor: DriverFor): HashSet[string] =
       if p.confirmed and p.tx.len > 0: result.incl normRef(p.tx)
 
 # ── paying my part ─────────────────────────────────────────────────────────────
+proc effectMemo(effectJson: string): string =
+  ## The memo a proposal carries ("dinner"), for naming a payment to the person approving it.
+  try: parseJson(effectJson){"memo"}.getStr("") except CatchableError: ""
+
 proc liveSettlePartSend*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, intentId: string,
                          seam: PartSeam, nowSec: uint64,
                          inFlight: seq[PendingPart] = @[]): tuple[outcome: string, pending: PendingPart] =
@@ -170,6 +179,7 @@ proc liveSettlePartSend*(s: CoordinationSession, ks: Keystore, driverFor: Driver
   # invariant 1: the payment is the driver's reading of the AGREED effect — never supplied
   let t = drv.partTransfer(effect, me)
   if not t.ok: return ("refused: " & t.error, PendingPart())
+  seam.notePayment(intentId, me, effectMemo(effectJson))
   let sent = seam.sendPart(t)
   # the wallet refused to send (a rail it will not take, no note that covers it, a scan
   # still catching up) or the chain did: either way nothing was sent, and the detail says why

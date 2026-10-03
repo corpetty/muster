@@ -5,11 +5,19 @@
 ## it is: what that endpoint reported (F-10, attested). ETH, or an ERC-20 token named in the
 ## split (exo-5ab): a token share is a transfer() call on the token, read back from its
 ## Transfer log.
+##
+## When this member's endpoint is the platform's (`logos:eth_rpc_module/<id>`, Basecamp), the
+## payment goes through tx_sender_module instead (exo-d4d.5): muster derives the one call,
+## checks that the legs the sender prepared are exactly it, and asks it to send; a person
+## approves in the platform's signer; "landed" polls send_status, which is the broadcast,
+## then reads the hash's receipt through eth_rpc_module. Muster signs nothing there and holds
+## no nonce: the device's one sender does.
 
 import std/strutils
 import ../crypto/keystore
 import ../intents/materialization   # PartTransfer
-import ../wallet/[types, adapter, evm_adapter, evm_rpc, erc20_logs, redact]
+import std/json
+import ../wallet/[types, adapter, evm_adapter, evm_rpc, erc20_logs, redact, chain_endpoint, tx_sender]
 import ../drivers/split   # isErc20Asset
 import ./parts
 
@@ -20,6 +28,7 @@ type EvmPartSeam* = ref object of PartSeam
   ks*: Keystore
   frm*: Account             ## the account this member pays from
   spent: seq[string]        ## the last payment's nonce, "nonce:<n>" (lastSpends)
+  noteIntent, notePart, noteMemo: string   ## what the next payment pays for (notePayment)
 
 proc newEvmPartSeam*(chain, url: string, adapter: EvmAdapter, ks: Keystore, frm: Account): EvmPartSeam =
   EvmPartSeam(chain: chain, url: url, adapter: adapter, ks: ks, frm: frm)
@@ -44,9 +53,39 @@ proc refuse(s: EvmPartSeam, t: PartTransfer): string =
     return "could not reach your RPC: " & e.msg
   ""
 
+method notePayment*(s: EvmPartSeam, intentId, part, memo: string) =
+  (s.noteIntent, s.notePart, s.noteMemo) = (intentId, part, memo)
+
+proc chainNumber(chain: string): int =
+  try: parseInt(chain["eip155:".len .. ^1]) except ValueError: 0
+
+proc sendThroughPlatform(s: EvmPartSeam, t: PartTransfer): tuple[ok: bool, tx, detail: string] =
+  ## prepare → check the legs are the agreed call → send. The tx is a marker until the
+  ## sender broadcasts (partLanded polls it); a person approves in between.
+  if not hasTxSender(): return (false, "", "no tx_sender_module on this host: install it from Basecamp")
+  var call: TxCall
+  try: call = callFor(t)
+  except TxSenderError as e: return (false, "", e.msg)
+  let purpose = "Pay my share" & (if s.noteMemo.len > 0: " of '" & s.noteMemo & "'" else: "") &
+                ", agreed in a Muster room"
+  let req = requestJson(chainNumber(s.chain), s.frm.id, call, purpose,
+                        %*{"muster": {"intent": s.noteIntent, "part": s.notePart}})
+  let prepared = senderCall("prepare", %*[$req])
+  let mismatch = legsMismatch(prepared, call)
+  if mismatch.len > 0: return (false, "", mismatch)
+  let sent = senderCall("send", %*[$req])
+  if sent == nil: return (false, "", "tx_sender_module did not answer send")
+  if not sent{"ok"}.getBool(false): return (false, "", sent{"error"}.getStr("tx_sender_module refused the send"))
+  let rid = sent{"requestId"}.getStr()
+  if rid.len == 0: return (false, "", "tx_sender_module answered no request id")
+  sendBook.add(rid, sent{"handle"}.getStr(), s.noteIntent, s.notePart, purpose)
+  s.spent = @[]
+  (true, markerOf(rid), "")
+
 method sendPart*(s: EvmPartSeam, t: PartTransfer): tuple[ok: bool, tx, detail: string] =
   let why = s.refuse(t)
   if why.len > 0: return (false, "", why)
+  if s.url.isPlatform: return s.sendThroughPlatform(t)
   try:
     # ETH, or the split's token: the adapter's ERC-20 path builds transfer(payTo, share) on it
     let amt =
@@ -65,12 +104,29 @@ method sendPart*(s: EvmPartSeam, t: PartTransfer): tuple[ok: bool, tx, detail: s
 
 method lastSpends*(s: EvmPartSeam): seq[string] = s.spent
 
+method landedRef*(s: EvmPartSeam, t: PartTransfer, tx: string): string =
+  ## A send through the platform reports the hash it took, never its marker.
+  let rid = requestOfMarker(tx)
+  if rid.len == 0: tx else: sendBook.hashOf(rid)
+
+method payDeadlineS*(s: EvmPartSeam): float =
+  ## Through the platform a person approves in the signer first: give them time.
+  if s.url.isPlatform: 3600.0 else: 600.0
+
 method partGone*(s: EvmPartSeam, t: PartTransfer, pp: PendingPart): tuple[gone: bool, detail: string] =
   ## An Ethereum payment can never land once your RPC no longer knows it AND its nonce is
   ## settled one way or the other: used by another mined transaction, or free again — then a
   ## new payment takes that same nonce, and at most one of the two can ever be mined. A
   ## payment your RPC still knows (pending or mined) is never gone; nor is one whose nonce is
   ## unknown, or when the RPC cannot be read.
+  let rid = requestOfMarker(pp.tx)
+  if rid.len > 0:
+    # through the platform: gone only when the sender says nothing was, or ever will be, sent
+    # a send this host's book does not hold (a restart) is asked, never assumed lost
+    let st = (if sendBook.has(rid) and sendBook.statusOf(rid).final: sendBook.statusOf(rid)
+              else: pollSend(rid))
+    if st.neverSent: return (true, "the send was " & st.status & (if st.reason.len > 0: ": " & st.reason else: ""))
+    return (false, "the send is " & (if st.status.len > 0: st.status else: "waiting"))
   var nonce = -1'i64
   for sp in pp.spends:
     if sp.startsWith("nonce:"):
@@ -89,6 +145,23 @@ method partGone*(s: EvmPartSeam, t: PartTransfer, pp: PendingPart): tuple[gone: 
     (false, "could not read your RPC: " & e.msg)
 
 method partLanded*(s: EvmPartSeam, t: PartTransfer, tx: string): tuple[ok: bool, detail: string] =
+  let rid = requestOfMarker(tx)
+  if rid.len > 0:
+    # the poll IS the broadcast; then the hash's receipt, through this member's endpoint
+    let st = pollSend(rid)
+    case st.state
+    of ssAwaiting:
+      return (false, (if st.blocked: "held until verified reads work again"
+                      else: "waiting for you to approve it in the Logos Signer"))
+    of ssBroadcasting: return (false, "being broadcast")
+    of ssEnded, ssUnknown:
+      if st.hash.len == 0:
+        return (false, "the send was " & (if st.status.len > 0: st.status else: "lost") &
+                       (if st.reason.len > 0: ": " & st.reason else: ""))
+    of ssBroadcast, ssStuck: discard
+    let h = sendBook.hashOf(rid)
+    if h.len == 0: return (false, "the sender has not named a hash yet")
+    return s.partLanded(t, h)
   # bound before the case, never its selector: the read raises on failure (exo-14f), and a
   # raising selector leaves `result` unbuilt (see EvmAdapter.finality)
   let status = rpcReceiptStatus(s.url, tx)
