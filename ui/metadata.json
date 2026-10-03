@@ -64,6 +64,9 @@
     },
     {
       "intent": "evm.accounts.manage"
+    },
+    {
+      "intent": "evm.rpc.configure"
     }
   ]
 }

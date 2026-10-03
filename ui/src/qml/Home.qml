@@ -39,6 +39,11 @@ Item {
     signal activated(string topic)
     // "Start something" pressed → begin a new coordination.
     signal newActivity()
+    // First run under the platform (exo-d4d.6): what is missing before money can move,
+    // {show, title, detail, action: "accounts" | "settings"}. Empty = nothing to set up.
+    property var setup: ({})
+    signal manageAccounts()
+    signal openSettings()
     // A received invite's Join was clicked → open (and ask to join) that room.
     signal joinInvite(string topic)
     // A received invite's Dismiss was clicked → clear it so it stops showing.
@@ -81,6 +86,45 @@ Item {
             font.pixelSize: Theme.typography.subtitleText
             font.weight: Theme.typography.weightBold
             elide: Text.ElideRight
+        }
+
+        // ── getting set up (a fresh install, exo-d4d.6) ─────────────────────
+        // Muster never makes keys or chains: each step hands off to the app that owns it.
+        Rectangle {
+            objectName: "homeSetup"
+            visible: !!home.setup.show
+            Layout.fillWidth: true
+            implicitHeight: setupCol.implicitHeight + 2 * Theme.spacing.medium
+            radius: Theme.spacing.radiusMedium
+            color: Theme.palette.surface
+            border.width: 1
+            border.color: Theme.palette.warning
+            ColumnLayout {
+                id: setupCol
+                anchors.fill: parent
+                anchors.margins: Theme.spacing.medium
+                spacing: Theme.spacing.small
+                LogosText {
+                    text: String(home.setup.title || "")
+                    color: Theme.palette.text
+                    font.weight: Theme.typography.weightBold
+                }
+                LogosText {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: String(home.setup.detail || "")
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: Theme.typography.secondaryText
+                }
+                RowLayout {
+                    LogosButton {
+                        objectName: "homeSetupAction"
+                        text: home.setup.action === "accounts" ? qsTr("Create or import an account")
+                                                               : qsTr("Open Settings")
+                        onClicked: home.setup.action === "accounts" ? home.manageAccounts() : home.openSettings()
+                    }
+                }
+            }
         }
 
         LogosButton {

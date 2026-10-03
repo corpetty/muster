@@ -536,7 +536,15 @@ proc musterDescribe(): string =
   ## suggestion disclosable as-is.
   var owners = newJArray()
   for o in gDevSafe.owners: owners.add %toHex(o)
+  # offered only where it can work (exo-d4d.6): a chain 31337 this member actually reads —
+  # their own RPC URL when it is not the platform's, or one in their platform registry.
+  # A fresh Basecamp install has neither, and is not shown a Safe that is not there.
+  var available = not evmPlatform()
+  if not available:
+    for c in platformRegistry().chains:
+      if c.chainId == int(gDevSafe.chainId) and c.enabled: available = true
   $(%*{
+    "available": available,
     "chainId": gDevSafe.chainId.int,
     "safe": SAFE_ADDR,
     "threshold": gDevSafe.threshold,

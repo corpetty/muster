@@ -23,6 +23,7 @@ Item {
 
     property var backend
     property string manageNote: ""   // what the keystore app hand-off answered (exo-d4d.2)
+    property string chainNote: ""    // what the chain settings hand-off answered (exo-d4d.6)
 
     readonly property var s: {
         try { return JSON.parse(backend ? backend.settingsJson : "{}"); }
@@ -278,8 +279,49 @@ Item {
                         font.pixelSize: Theme.typography.badgeText
                     }
 
-                    // ── RPC endpoint ──
+                    // ── Ethereum chains ──
+                    // Under the platform (exo-d4d) the person's chains and endpoints are set once
+                    // for the device, in the Ethereum RPC app; muster reads them and never writes.
+                    // muster's own RPC URL is for a host without that (the runner, a test chain).
+                    ColumnLayout {
+                        visible: !!(settings.s && settings.s.evmPlatform)
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.tiny
+                        LogosText {
+                            text: qsTr("Ethereum chains  ·  from your device's chain settings (eth_rpc_module)")
+                            color: Theme.palette.textSecondary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        RowLayout {
+                            spacing: Theme.spacing.small
+                            LogosButton {
+                                objectName: "chainSettings"
+                                text: qsTr("Open chain settings")
+                                variant: LogosButton.Variant.Secondary
+                                onClicked: {
+                                    if (typeof logos === "undefined" || typeof logos.request !== "function") {
+                                        settings.chainNote = qsTr("Open the Ethereum RPC app from Basecamp.");
+                                        return;
+                                    }
+                                    settings.chainNote = "";
+                                    logos.request("evm.rpc.configure", {}, function (res) {
+                                        if (res && res.error === "unavailable")
+                                            settings.chainNote = qsTr("No chain settings app answered: install Ethereum RPC from Basecamp.");
+                                    });
+                                }
+                            }
+                            LogosText {
+                                visible: settings.chainNote.length > 0
+                                text: settings.chainNote
+                                color: Theme.palette.warning
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+                        }
+                    }
+                    // ── RPC endpoint (muster's own, when not on the platform) ──
                     LogosText {
+                        visible: !(settings.s && settings.s.evmPlatform)
                         text: qsTr("RPC endpoint  ·  now: %1")
                               .arg(String((settings.s && settings.s.rpc) || "(unset)"))
                         color: Theme.palette.textSecondary
@@ -287,6 +329,7 @@ Item {
                         font.pixelSize: Theme.typography.badgeText
                     }
                     RowLayout {
+                        visible: !(settings.s && settings.s.evmPlatform)
                         Layout.fillWidth: true
                         Layout.maximumWidth: 460       // keep the input a tidy width, not full-bleed
                         Layout.alignment: Qt.AlignLeft
