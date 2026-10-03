@@ -11,7 +11,8 @@
   "dependencies": [
     "delivery_module",
     "lez_core",
-    "keystore_module"
+    "keystore_module",
+    "eth_rpc_module"
   ],
   "include": [],
   "capabilities": [],
