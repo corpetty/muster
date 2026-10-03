@@ -55,3 +55,16 @@ is not running. Under `--access-policy enforce` it would also be denied.
 - `Main.qml:771 Unable to assign [undefined] to QColor` and `Room.qml:2106 … to int`: theme
   tokens the release's `Logos.Theme` does not define. They are worth a pass, but every
   surface still draws.
+
+## Headless against the same packages: use logoscore's portable bundle
+
+`scripts/eth-rpc-logoscore-test.sh` runs a logoscore daemon over a profile's installed
+modules. A plain `logos-logoscore-cli#cli` build is a **dev** host: it refused every
+catalog package ("installed for variant 'linux-amd64' which is not supported on this
+platform … supported variants [linux-x86_64-dev, …]"), so nothing but the bundled
+modules loaded and every muster call answered empty. `#cli-bundle-dir` is the portable
+build and loads them. Same rule as the AppImage: portable packages need a portable host.
+
+Result (2026-10-03): muster seeds eth_rpc_module's registry, a USDC read on Ethereum
+through muster's own URL fails with "your RPC does not serve eip155:1", and the same read
+through eth_rpc_module answers `USDC`, 6 decimals; `settings()` reports the platform.
