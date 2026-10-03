@@ -163,6 +163,8 @@ proc roomIdentities(): seq[string]       ## forward — every member's room iden
 proc myAddress(): Address                ## forward — this instance's secp account, defined below
 
 proc roomAccounts(): seq[RoomAccount]   ## forward — the room's disclosed accounts, folded from the log
+proc evmPlatform(): bool               ## forward — EVM chains read through eth_rpc_module (exo-d4d.3)
+proc platformRegistry(): tuple[ok: bool, scope: string, chains: seq[PlatformChain]]   ## forward — its registry
 
 var gDelegatecallAllow: seq[Address] = @[]
 var gDelegatecallAllowLoaded = false
