@@ -3848,12 +3848,15 @@ proc moduleWallet(): Wallet =
     if gEvm == nil:
       gEvm = newEvmAdapter("evm:31337", gRpcUrl)
       gWallet.register(gEvm)
-    gMock = newMockChain()
-    gWallet.register(gMock)
-    for acc in gMock.accounts(ks):        # seed the mock so its balances are demonstrable
-      if acc.form == afPublic:
-        gMock.credit(acc.id, "MOCK", "5000000000")
-        gMock.credit(acc.id, "MTK", "1230000")
+    # the mock shielded chain and its seeded demo balances: the runner's demonstration only,
+    # never beside a person's real chains (exo-d4d.6)
+    if not evmPlatform():
+      gMock = newMockChain()
+      gWallet.register(gMock)
+      for acc in gMock.accounts(ks):        # seed the mock so its balances are demonstrable
+        if acc.form == afPublic:
+          gMock.credit(acc.id, "MOCK", "5000000000")
+          gMock.credit(acc.id, "MTK", "1230000")
     # The Logos Execution Zone — send assets via Logos, public + shielded. Real
     # (LpLezCore over lez_core, against testnet.lez.logos.co) when MUSTER_LEZ_REAL is
     # set AND lez_core is loaded; otherwise the deterministic fake, so a runner without
