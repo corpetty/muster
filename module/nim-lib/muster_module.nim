@@ -1094,6 +1094,10 @@ proc frostPump() =
   gFrostAuto = auto
 
 # ── where an EVM chain is read (exo-d4d.3) ────────────────────────────────────
+const PreferTestnets = true
+  ## While muster is pre-release, a split or payment with no chain named settles on a test
+  ## chain. Decided 2026-10-03: testnets until Logos and the LEZ are verified, then mainnets
+  ## become the default (turn this off; the device's own scope then decides).
 var gPlatformAt = -1e9        ## when the platform's chain registry was last read
 var gPlatformReg: tuple[ok: bool, scope: string, chains: seq[PlatformChain]]
 var gEthRpcInstalled = false
@@ -1148,8 +1152,17 @@ proc rpcChainCaip2(): tuple[ok: bool, chain, detail: string] =
   ## settles on when the composer names none (exo-a90.6). Read, never assumed: an RPC that
   ## does not answer is an error, not a default chain.
   if evmPlatform():
+    let reg = platformRegistry()
+    if PreferTestnets:
+      # pre-release: a test chain the person has enabled, Sepolia first, whatever the
+      # device-wide scope shows (that scope is theirs and every wallet's; muster never sets it)
+      for id in [11155111, 560048]:
+        for c in reg.chains:
+          if c.chainId == id and c.enabled: return (true, "eip155:" & $id, "")
+      for c in reg.chains:
+        if c.testnet and c.enabled: return (true, "eip155:" & $c.chainId, "")
     # the first chain the person's settings offer (mainnets first, as eth_rpc_module lists)
-    for c in platformRegistry().chains:
+    for c in reg.chains:
       if c.offered: return (true, "eip155:" & $c.chainId, "")
     return (false, "", "no Ethereum chain is enabled in your chain settings")
   try: (true, "eip155:" & rpcChainId(gRpcUrl), "")

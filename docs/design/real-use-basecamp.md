@@ -146,6 +146,11 @@ H1–H4 are the first slice. H5 is real but not on the critical path.
 - **The chain comes from the account, not a global.** A CAIP-2 `eip155:<id>` selects the
   endpoint per call. A room can hold a Safe on Sepolia and a split on mainnet at once. The
   `rpc` setting stays only for the direct backend.
+- **Testnets first, for now (decided 2026-10-03).** While muster is pre-release, a payment
+  with no chain named settles on a test chain the person has enabled, Sepolia first
+  (`PreferTestnets`). Mainnets become the default once Logos and the LEZ are verified. This is
+  muster's own preference: it never writes eth_rpc_module's device-wide scope, which is the
+  person's and every other wallet's.
 - **Which chains exist** is `eth_rpc_module.list_chain_configs()` filtered by its network
   scope. The composer offers those, named by `chainLabel` (exo-e71). Muster calls
   `init_defaults()` at start (idempotent; the platform's own rule) and nothing else that
