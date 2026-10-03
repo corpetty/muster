@@ -513,8 +513,10 @@ Item {
         }
 
         LogosText {
-            text: qsTr("The Safe you coordinate against — inspect it, act on it directly, "
-                     + "and settle on-chain. To coordinate with people, open a Room.")
+            text: (root.account && root.account.available === false)
+                  ? qsTr("Your balances on the chains you have set up. To coordinate with people, open a Room.")
+                  : qsTr("The Safe you coordinate against — inspect it, act on it directly, "
+                         + "and settle on-chain. To coordinate with people, open a Room.")
             color: Theme.palette.textTertiary
             font.pixelSize: Theme.typography.secondaryText
             wrapMode: Text.WordWrap
