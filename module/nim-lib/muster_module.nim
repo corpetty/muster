@@ -272,7 +272,7 @@ proc settingsPath(): string =
   if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
   dir / "settings.json"
 
-var gKeystoreBackend = getEnv("MUSTER_KEYSTORE_BACKEND", "off")
+var gKeystoreBackend = getEnv("MUSTER_KEYSTORE_BACKEND", "auto")   ## "off" | "interim" | "auto" (exo-d4d.2)
   ## exo-149.2: "interim" lets a key ref naming a keystore_module account approve in-room
   ## through it, its attestation an opaque digest leg (docs/design/keystore-module-backend.md
   ## §4). "off" (the default) keeps every approval on muster's own keystore.
@@ -297,7 +297,7 @@ proc loadSettingsFile() =
       if j.hasKey("lezRpc"): gLezRpc = j["lezRpc"].getStr()
       if j.hasKey("lezChain"): gLezChain = j["lezChain"].getStr()
       if j.hasKey("lezMultisigProgram"): gLezProgram = j["lezMultisigProgram"].getStr()
-      if j.hasKey("keystoreBackend"): gKeystoreBackend = j["keystoreBackend"].getStr("off")
+      if j.hasKey("keystoreBackend"): gKeystoreBackend = j["keystoreBackend"].getStr("auto")
       if j.hasKey("keystoreAccount"): gKeystoreAccount = j["keystoreAccount"].getStr()
       if j.hasKey("keystoreBinding"): gKeystoreBinding = j["keystoreBinding"].getStr()
       if j.hasKey("delivery"):
@@ -459,12 +459,31 @@ proc contactBook(): ContactBook =
   gContacts
 
 
+proc keystoreProbe(): KeystoreProbe   ## forward — keystore_module, read over lp_* (below)
+
+proc keystoreAttested(): bool =
+  ## keystore_module answers and attributes our calls to muster_module: under Basecamp or
+  ## logoscore 0.3.x, never in the standalone runner (labbook keystore-caller-attribution).
+  try:
+    let id = keystoreRow(keystoreProbe().read()){"identity"}
+    id != nil and id{"kind"}.getStr() == "module" and id{"identity"}.getStr() == "muster_module"
+  except CatchableError: false
+
+proc keystoreOn(): bool =
+  ## Whether a keystore_module account may approve in-room (exo-149.2, exo-d4d.2):
+  ## "interim" always; "auto" (the default) when keystore_module attests muster, i.e. muster
+  ## runs where the platform holds the person's keys; "off" never.
+  case gKeystoreBackend
+  of "interim": true
+  of "auto": keystoreAttested()
+  else: false
+
 proc myNames(): seq[string] =
   ## The names this member's approvals carry: its own keystore's keys, plus the
   ## keystore_module account it selected (exo-149.5), so its approvals read as its own
   ## here (approvedByMe), in readiness and in home's needs-you.
   result = myContributorNames(moduleKeystore())
-  if gKeystoreBackend == "interim" and gKeystoreAccount.len > 0 and gKeystoreAccount notin result:
+  if keystoreOn() and gKeystoreAccount.len > 0 and gKeystoreAccount notin result:
     result.add gKeystoreAccount
 
 proc myIds(): seq[string] =
@@ -1111,6 +1130,14 @@ proc evmEndpoint(chain: string): string =
     let (ok, cid) = evmChainId(chain)
     if ok and cid > 0'u64: return platformEndpoint(int(cid))
   gRpcUrl
+
+proc isTestChain(chainId: int): bool =
+  ## A chain that holds no real value: a local devnet, or one the person's chain registry
+  ## marks as a testnet. Unknown is not a testnet.
+  if chainId in [31337, 1337]: return true
+  for c in platformRegistry().chains:
+    if c.chainId == chainId: return c.testnet
+  chainId in [11155111, 560048, 17000]     # Sepolia, Hoodi, Holesky
 
 proc evmEndpointLabel(endpoint: string): string =
   ## How an endpoint is named to the person: never a platform token, never credentials.
@@ -2007,7 +2034,7 @@ proc keystoreProbe(): KeystoreProbe =
 
 proc isKeystoreAccount(keyRef: string): bool =
   ## A key ref muster's own keystore does not hold, which keystore_module last listed.
-  gKeystoreBackend == "interim" and keyRef.len > 0 and
+  keystoreOn() and keyRef.len > 0 and
     not moduleKeystore().hasKey(keyRef) and keyRef.toLowerAscii() in keystoreProbe().lastAccounts()
 
 proc keystoreContribute(intentId, account: string): string =
@@ -2047,8 +2074,9 @@ proc musterKeystore_select(address: string): string =
     gKeystoreBinding = ""
     saveSettingsFile()
     return $(%*{"ok": true, "account": ""})
-  if gKeystoreBackend != "interim":
-    return $(%*{"ok": false, "error": "keystore-backend is off: set it to interim first"})
+  if not keystoreOn():
+    return $(%*{"ok": false, "error": (if gKeystoreBackend == "off": "keystore-backend is off"
+                                        else: "keystore_module does not attest muster here")})
   let a = address.strip().toLowerAscii()
   if a notin keystoreProbe().lastAccounts():
     return $(%*{"ok": false, "error": "keystore_module does not list " & a})
@@ -2193,10 +2221,13 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
   # nothing is published until they have (keystorePump). Not an approval yet, so it does
   # not pass through noteApproved.
   var keyRef = keyRef
-  if signatureHex.len == 0 and keyRef.len == 0 and gKeystoreBackend == "interim" and
-     gKeystoreAccount.len > 0 and
-     driverFor(intentPolicyOf(gSession.roomEvents(), intentId)) of SafeDriver:
-    keyRef = gKeystoreAccount       # exo-149.5: the member's selected account approves its Safe intents
+  if signatureHex.len == 0 and keyRef.len == 0 and keystoreOn() and gKeystoreAccount.len > 0:
+    let drv = driverFor(intentPolicyOf(gSession.roomEvents(), intentId))
+    # exo-149.5: the member's selected account approves its Safe intents. Under "auto" only on
+    # a test chain: the attestation still reaches the signer as an opaque digest until its
+    # typed form lands (exo-149.6), and that must not be what a mainnet approval rests on.
+    if drv of SafeDriver and (gKeystoreBackend == "interim" or isTestChain(int(SafeDriver(drv).chainId))):
+      keyRef = gKeystoreAccount
   if signatureHex.len == 0 and isKeystoreAccount(keyRef):
     return keystoreContribute(intentId, keyRef.toLowerAscii())
   let r = liveContribute(gSession, moduleKeystore(), driverFor, intentId, signatureHex, keyRef,
@@ -2815,6 +2846,7 @@ proc musterKeystore_status(): string =
     if gKeystoreProbe == nil: gKeystoreProbe = newKeystoreProbe()
     var row = keystoreRow(gKeystoreProbe.read())
     row["backend"] = %gKeystoreBackend
+    row["on"] = %keystoreOn()
     row["selected"] = %gKeystoreAccount
     row["binding"] = %(if gKeystoreAccount.len == 0: "none"
                       else: bindingState(gKeystoreBinding, gKeystoreAccount,
@@ -4027,8 +4059,8 @@ proc musterSetSetting(key, value: string): string =
     # exo-149.2: whether a keystore_module account may approve in-room. "interim" carries
     # muster's attestation as an opaque digest leg the signer cannot read (the card says
     # so) until typed forms land (exo-149.6).
-    if value notin ["off", "interim"]:
-      return $(%*{"error": "keystore-backend is \"off\" or \"interim\""})
+    if value notin ["off", "interim", "auto"]:
+      return $(%*{"error": "keystore-backend is \"off\", \"interim\" or \"auto\" (when keystore_module attests muster)"})
     gKeystoreBackend = value
   of "delivery":
     # Accept a fleet short-name ("logos.dev", "logos.test"), a full createNode JSON, or "{}"/"" to
