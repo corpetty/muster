@@ -40,6 +40,9 @@
     # so it must be in the standalone runner's module set. Same pin as module/flake.nix
     # (Basecamp 0.3.1's catalog release, keystore_module 0.1.0). muster_ui does not call it.
     logos-evm-keystore-module.url = "github:logos-co/logos-evm-keystore-module/2318c679e2b7176967bd45052f3d64b2a8b06931";
+    # The platform's EVM RPC (exo-d4d.3): muster_module reads chains through it over lp_*, so
+    # it rides the runner's module set. Same pin as module/flake.nix (eth_rpc_module 0.1.0).
+    logos-evm-eth-rpc-module.url = "github:logos-co/logos-evm-eth-rpc-module/42cc465e0cbd748117a0af0cf983404348683335";
     # The RLN modules a delivery v0.3 node on logos.test needs (exo-eb6.3 R1). The packages
     # are delivery v0.3.0's own re-exports, so their versions are the ones it was built
     # against; this pins only their LIDL contracts, at the same rev (logos-rln-modules
@@ -93,6 +96,7 @@
           delivery_module = deliveryForUi;
           lez_core = inputs.lez_core;
           keystore_module = inputs.logos-evm-keystore-module;
+          eth_rpc_module = inputs.logos-evm-eth-rpc-module;
           liblogos_rln_module = rlnModule "liblogos_rln_module" "logos-rln-module/rust-lib/liblogos_rln_module.lidl";
           liblogos_lez_rln_module = rlnModule "liblogos_lez_rln_module" "logos-lez-rln-module/rust-lib/liblogos_lez_rln_module.lidl";
         } // inputs;
