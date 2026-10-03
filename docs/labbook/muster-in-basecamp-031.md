@@ -92,3 +92,24 @@ and the "Use for approvals" button. Inside Basecamp the button (and anything els
 address in that row) never drew, with no QML warning. Each account is now a `ColumnLayout`:
 the address, then the button on its own line. Also: Basecamp's sidebar order of installed apps
 changes between launches; find an app by its tab title, not a fixed slot.
+
+## R4 headless: a split paid through tx_sender_module (2026-10-03)
+
+`scripts/split-platform-logoscore-test.sh`: two muster instances, each in its own logoscore
+0.3.1 daemon (portable bundle) over a Basecamp profile's modules plus the catalog's
+`evm_keystore_cli` / `evm_signer_cli` (the person, headless), peered on a local delivery pair,
+against anvil. Each person's eth_rpc_module names the anvil as chain 31337 (a testnet), each
+person's key is imported into their own keystore_module, selected in muster, and linked.
+Alice proposes 0.002 ETH on eip155:31337; Bob agrees, then pays: muster derives the call,
+tx_sender prepares it, the legs match, send; the signer shows "Requested by:
+tx_sender_module … Pay my share of 'anvil dinner', agreed in a Muster room [asked by
+muster_module]" and one transaction on chain 31337; one approval; Bob's pump polls
+send_status (the broadcast), his report names the hash, Alice's own eth_rpc_module read
+confirms, **final on both, Alice +1000000000000000 wei exactly**, and tx_sender's history
+row carries origin muster_module and the intent in its meta. PASS.
+
+Harness lessons: `logoscore call` turns a decimal argument into a number, so a `tstr` total
+needs `str:`; `coordinate_pending` answers objects (`{identity, alias, bindsOwner}`); a
+joiner's grant arrives when its session polls (the UI's intents tick), so a headless wait
+loop ticks both instances; Alice's delivery node starts at her first `coordinate_join`, so a
+local peer dials her only after it.
