@@ -358,6 +358,13 @@ Item {
         anchors.bottom: parent.bottom
         visible: root.view === "home"
         actions: root.homeActions
+        setup: root.homeSetup
+        onManageAccounts: {
+            if (typeof logos !== "undefined" && typeof logos.request === "function")
+                logos.request("evm.accounts.manage", {}, function (res) {});
+            else root.view = "settings";
+        }
+        onOpenSettings: root.view = "settings"
         invites: {
             try { return JSON.parse(root.backend ? root.backend.invitesJson : "[]"); }
             catch (e) { return []; }
@@ -518,8 +525,10 @@ Item {
         // ── the local test Safe (a suggestion) ─────────────────────────────────
         // Shown from describe(): the anvil fixture a member MAY disclose into a room.
         // It is not a room's account — accounts live in the room, disclosed by members
-        // (exo-a50.1.3). A null account renders as "not loaded", never fabricated.
+        // (exo-a50.1.3). A null account renders as "not loaded", never fabricated. Hidden
+        // where no chain 31337 is read (a fresh Basecamp install, exo-d4d.6).
         Rectangle {
+            visible: !root.account || root.account.available !== false
             Layout.fillWidth: true
             implicitHeight: acctCol.implicitHeight + 2 * Theme.spacing.medium
             radius: Theme.spacing.radiusMedium
@@ -1124,6 +1133,34 @@ Item {
     // module's poll (keystore_requests), which also advances it. `unavailable` means no
     // signer is installed (or access was denied): the person can still open it by hand, so
     // nothing is cancelled. In the standalone runner there is no intent broker at all.
+    // What a fresh install still needs before money can move (exo-d4d.6): only where the
+    // platform holds the keys (keystore_module attests muster); the runner shows nothing.
+    readonly property var homeKeystore: {
+        try { return JSON.parse(backend ? backend.keystoreStatusJson : "{}") || ({}); }
+        catch (e) { return ({}); }
+    }
+    readonly property var homeSetup: {
+        var k = root.homeKeystore;
+        if (!k.identity || k.identity.kind !== "module") return ({});
+        if ((k.accounts || []).length === 0)
+            return { show: true, action: "accounts", title: qsTr("Set up an Ethereum account"),
+                     detail: qsTr("Your keys live in the Logos keystore, not in Muster. Create or import an account there; Muster asks it to sign, and you approve each signature in the Signer.") };
+        if (!k.selected)
+            return { show: true, action: "settings", title: qsTr("Choose the account Muster approves with"),
+                     detail: qsTr("In Settings, pick one of your keystore accounts: it is what you pay from, what you are paid at, and what approves for you.") };
+        if (k.binding !== "valid" && k.binding !== "expiring")
+            return { show: true, action: "settings", title: qsTr("Link your account to your room identity"),
+                     detail: qsTr("Approve the link in the Signer (Settings → Use for approvals), so the people in your rooms can tell your approvals are yours.") };
+        return ({});
+    }
+    Timer {
+        interval: 5000
+        repeat: true
+        triggeredOnStart: true
+        running: root.ready && root.backend !== null && root.view === "home"
+        onTriggered: root.backend.loadKeystoreStatus()
+    }
+
     readonly property var keystoreRequests: {
         try { return JSON.parse(backend ? backend.keystoreRequestsJson : "{}") || ({}); }
         catch (e) { return ({}); }
