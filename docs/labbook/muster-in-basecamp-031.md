@@ -68,3 +68,27 @@ build and loads them. Same rule as the AppImage: portable packages need a portab
 Result (2026-10-03): muster seeds eth_rpc_module's registry, a USDC read on Ethereum
 through muster's own URL fails with "your RPC does not serve eip155:1", and the same read
 through eth_rpc_module answers `USDC`, 6 decimals; `settings()` reports the platform.
+
+## R1 on display: account, link, signer (2026-10-03)
+
+The whole hand-off loop, on the release, nothing seeded:
+
+1. Settings' keystore row: "attested as muster_module; no accounts yet". **Create or import an
+   account** raises `evm.accounts.manage`; Basecamp asks "Muster wants to evm.accounts.manage"
+   and opens `evm_keystore_ui` (the custodian). A hand-off: the shell stays there.
+2. In the keystore app: Create → a 12-word phrase, words 1/5/12 confirmed, a vault password.
+3. Back in Muster: "attested as muster_module; 1 account; approvals by evm_signer_ui".
+   **Use for approvals** → `keystore_select` asks keystore_module for the F-14 binding.
+4. The view's escort sees the new waiting request and raises `evm.signing.approve {handle}`;
+   Basecamp asks, then opens `evm_signer_ui`, which shows "Requested by: muster_module",
+   the purpose as the requester's claim, and the opaque digest with "This signer cannot show
+   you what this authorises" (the interim cost exo-149.6 removes).
+5. Vault password → Approve. The shell returns to Muster by itself; muster's pump fetches the
+   signature, checks it recovers to the account over muster's own hash, and stores the
+   binding: "Approvals go through the selected account, linked to your Muster identity."
+
+**Found on the way:** the account row was one `RowLayout` holding a fill-width, elided address
+and the "Use for approvals" button. Inside Basecamp the button (and anything else after the
+address in that row) never drew, with no QML warning. Each account is now a `ColumnLayout`:
+the address, then the button on its own line. Also: Basecamp's sidebar order of installed apps
+changes between launches; find an app by its tab title, not a fixed slot.

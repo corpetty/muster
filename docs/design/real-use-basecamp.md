@@ -112,9 +112,13 @@ H1–H4 are the first slice. H5 is real but not on the critical path.
 - **No account yet.** Readiness reports the authority requirement as missing, with the remedy
   "Create or import an account" → `logos.request("evm.accounts.manage")` (the custodian UI).
   Muster never creates or imports keys.
-- **Under Basecamp, `keystore-backend` defaults to the platform.** `FileKeystore`'s secp key
-  stays for the runner and tests. The rename: `off` → `file`, `interim` → `platform`, with the
-  interim digest leg (keystore-module-backend.md §4) still flagged on the card until K6.
+- **Under Basecamp, `keystore-backend` defaults to the platform.** The setting gains `auto`,
+  now the default: a keystore_module account approves whenever keystore_module attests muster
+  (Basecamp, logoscore 0.3.x; never the standalone runner, where `FileKeystore`'s secp key
+  stays). `off` and `interim` keep their meaning. Until K6, `auto` routes a Safe approval to
+  the platform only on a test chain (a local devnet, or one the person's chain registry marks
+  as a testnet): the attestation still reaches the signer as an opaque digest leg, and a
+  mainnet approval must not rest on that. `interim` lifts the limit explicitly.
 - **Every EVM signature goes through a human.** That is the platform's rule and the right
   one for real money. It changes the feel: approving a Safe intent, paying a split share and
   settling a Safe each open the signer once.
