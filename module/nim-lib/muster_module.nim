@@ -3881,10 +3881,14 @@ proc moduleWallet(): Wallet =
     # network and would block this first wallet call on the module thread. The real
     # accounts are created lazily on the first LEZ query (a bounded loading delay at
     # panel-open), and a proving transfer already runs async — so nothing freezes.
-    if lezCore of FakeLezCore:
+    # Under the platform a fake chain's funded balance would sit beside the person's real
+    # chains as though it were theirs (exo-d4d.6): there the fake is neither funded nor shown,
+    # and only the real core (MUSTER_LEZ_REAL; real by default is exo-d4d.10) joins the wallet.
+    let fakeHidden = lezCore of FakeLezCore and evmPlatform()
+    if lezCore of FakeLezCore and not fakeHidden:
       for acc in gLez.accounts(ks):
         if acc.form == afPublic: FakeLezCore(lezCore).fund(acc.id, "1000000000")
-    gWallet.register(gLez)
+    if not fakeHidden: gWallet.register(gLez)
   gWallet
 
 proc splitLezAdapter(): LezAdapter =

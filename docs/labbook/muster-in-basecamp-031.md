@@ -122,3 +122,17 @@ signer, published: collecting → executable. Alice's `coordinate_submit` answer
 `onchain: awaiting-approval` with her keystore account as relayer; the execTransaction goes
 through tx_sender_module (one approval); the pump publishes submitted and final with the
 hash; **final on both, the recipient +1000000000000000 wei exactly.**
+
+## R5 on display: a fresh install shows nothing seeded (2026-10-03)
+
+`scripts/basecamp-profile.sh fresh --fresh --xvfb :95`, nothing set: Home reads **Set up an
+Ethereum account** ("Your keys live in the Logos keystore, not in Muster…") with the hand-off
+button; Settings shows **Ethereum chains · from your device's chain settings** with **Open
+chain settings** (`evm.rpc.configure` → `eth_rpc_ui`) in place of muster's own RPC field; the
+Account view lists only Hoodi and Sepolia, read through eth_rpc_module, and says "Your
+balances on the chains you have set up". Gone under the platform: the local test Safe card,
+the direct propose composer, the mock shielded chain and its seeded MOCK/MTK, and the fake
+LEZ chain's funded 1 LEZ (real lez_core by default is exo-d4d.10).
+
+Found on the way: a `##` comment (Nim's) in a QML file left the whole view uncompiled in
+Basecamp ("Expected token `;'"), and nix build said nothing. Every QML change gets a launch.
