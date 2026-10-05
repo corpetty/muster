@@ -69,6 +69,7 @@ wants (below), which the runner supplies.
 - `provenance_all_test`
 - `flow_test`
 - `room_infra_test` (exo-428 — the room's infrastructure is dictated by its drivers; also needs `$SECP` for the real Safe driver)
+- `rpc_url_redaction_test` (exo-14f.2 — a configured RPC URL never reaches text whole: `wallet/redact.nim` shows scheme, host and port, `***` for userinfo and for any path, query or fragment; the split composer's "your RPC did not answer", the room's RPC connectivity row (which the MUSTER-LP debug log prints) and the readiness card's details carry neither `user:pass@` nor a `/v3/<key>` path, against an endpoint that refuses and one that answers; web3 + `$SECP` + `$SODIUM`)
 - `materialshare_test` (exo-45e K5)
 - `schema_unknown_test` (exo-1ec.3 — the schema-driven rendering gate)
 - `action_corpus_test` (exo-661 A2 — the action atlas's generated half: `contracts/actions/generated.json` must equal what `tools/action_corpus.nim` reads off the running drivers — describe / environment / profile / manifest / signRefusal for each fixed (kind, variant) — byte for byte; regenerate with `TEST_ARGS=--write tests/run-suite.sh action_corpus`; `$SECP` + `$STINT` + web3 + `$SODIUM`)

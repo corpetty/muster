@@ -50,8 +50,9 @@ proc splitCredentials*(url: string): tuple[url, user, pass: string] =
   u.password = ""
   result.url = ($u).strip(chars = {'/'}, leading = false)
 
-proc redactUserinfo*(url: string): string =
-  ## the URL as it may be shown: credentials never are
+proc redactUserinfo*(url: string): string {.deprecated: "use redact.redactUrl: it hides a key in the path too".} =
+  ## the URL with its password masked; nothing shows it any more (wallet/redact.nim,
+  ## exo-14f.2), kept until exo-496's test stops naming it
   let (bare, user, _) = splitCredentials(url)
   if user.len == 0: bare else: bare.replace("://", "://" & user & ":***@")
 
