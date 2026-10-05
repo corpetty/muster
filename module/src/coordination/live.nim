@@ -351,10 +351,10 @@ proc liveReannounce*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
   let author = hex0x(ks.encIdentity().toBytes())
   for id, it in folded:
     if $it.state in ["final", "submitted", "settling"]: continue
-    let effect = effectJsonOf(events, id)
-    if effect.len == 0: continue
-    s.publish(policyDeclEvent(id, intentPolicyOf(events, id)))
-    s.publish(proposeEvent(id, effect))
+    let proposal = proposalOf(events, id)     # exactly the pair the id commits to (exo-dbd)
+    if not proposal.found: continue
+    if proposal.policy.len > 0: s.publish(policyDeclEvent(id, proposal.policy))
+    s.publish(proposeEvent(id, proposal.effectJson))
     for e in events:
       if e.key == "intent/" & id & "/context" or e.key.startsWith("intent/" & id & "/read/"):
         s.publish(e)
