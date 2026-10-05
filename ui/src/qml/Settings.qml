@@ -14,7 +14,8 @@ import Logos.Controls
 // don't rebuild). Full identity/wallet/plugin *management* is that platform's job.
 //
 // PURE-RENDER: reads settingsJson from the backend, and the only things that leave
-// are setSetting(key, value) calls. It holds no state of its own.
+// are setSetting(key, value) calls. Its only state is which endpoint URLs are shown
+// whole (the show* flags below), and that never leaves the view.
 //
 // NB (ADR-011): nix build does not evaluate QML; a bad type here blanks the view.
 // Restricted to Theme keys + the Logos.Controls types Main.qml already proves.
@@ -28,6 +29,14 @@ Item {
         catch (e) { return ({}); }
     }
     readonly property var identity: (settings.s && settings.s.identity) ? settings.s.identity : ({})
+
+    // A hosted endpoint's URL may carry its key (a /v3/<key> path) or user:pass@. Each one
+    // shows masked (scheme://host:port, *** for the rest, as the module's redactUrl gives
+    // it) until its Show is pressed, so a glance or a shared screen does not carry it
+    // (exo-14f.2). View state only: it resets when the view does.
+    property bool showRpc: false
+    property bool showBtcRpc: false
+    property bool showLezRpc: false
 
     // This node's RLN membership row (rln_status, exo-eb6.3): {level, detail, remedy?,
     // payer?, balance?}; {} until the first read lands, which renders as "checking…".
@@ -278,12 +287,24 @@ Item {
                     }
 
                     // ── RPC endpoint ──
-                    LogosText {
-                        text: qsTr("RPC endpoint  ·  now: %1")
-                              .arg(String((settings.s && settings.s.rpc) || "(unset)"))
-                        color: Theme.palette.textSecondary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                    RowLayout {
+                        spacing: Theme.spacing.small
+                        LogosText {
+                            objectName: "settingsRpcNow"
+                            text: qsTr("RPC endpoint  ·  now: %1")
+                                  .arg(String((settings.s && (settings.showRpc ? settings.s.rpc
+                                                                               : settings.s.rpcMasked)) || "(unset)"))
+                            color: Theme.palette.textSecondary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        LogosButton {
+                            objectName: "settingsRpcShow"
+                            visible: !!(settings.s && settings.s.rpc && settings.s.rpc !== settings.s.rpcMasked)
+                            text: settings.showRpc ? qsTr("Hide") : qsTr("Show")
+                            variant: LogosButton.Variant.Tertiary
+                            onClicked: settings.showRpc = !settings.showRpc
+                        }
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -309,13 +330,26 @@ Item {
                     }
 
                     // ── the user's Bitcoin node (exo-a50.2.6) ──
-                    LogosText {
+                    RowLayout {
                         Layout.topMargin: Theme.spacing.small
-                        text: qsTr("Bitcoin node  ·  now: %1")
-                              .arg(String((settings.s && settings.s.btcRpc) || "(none — a Bitcoin payment needs one)"))
-                        color: Theme.palette.textSecondary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        spacing: Theme.spacing.small
+                        LogosText {
+                            objectName: "settingsBtcRpcNow"
+                            text: qsTr("Bitcoin node  ·  now: %1")
+                                  .arg(String((settings.s && (settings.showBtcRpc ? settings.s.btcRpc
+                                                                                  : settings.s.btcRpcMasked))
+                                              || "(none — a Bitcoin payment needs one)"))
+                            color: Theme.palette.textSecondary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        LogosButton {
+                            objectName: "settingsBtcRpcShow"
+                            visible: !!(settings.s && settings.s.btcRpc && settings.s.btcRpc !== settings.s.btcRpcMasked)
+                            text: settings.showBtcRpc ? qsTr("Hide") : qsTr("Show")
+                            variant: LogosButton.Variant.Tertiary
+                            onClicked: settings.showBtcRpc = !settings.showBtcRpc
+                        }
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -326,7 +360,7 @@ Item {
                             id: btcRpcField
                             objectName: "settingsBtcRpc"
                             Layout.fillWidth: true
-                            // the credentials travel as Basic auth and are never shown back
+                            // the credentials travel as Basic auth, and show above only behind Show
                             placeholderText: qsTr("your node, e.g. http://user:pass@127.0.0.1:8332")
                             font.family: Theme.typography.mono
                         }
@@ -342,14 +376,28 @@ Item {
                     }
 
                     // ── the user's LEZ sequencer (exo-3c9) ──
-                    LogosText {
+                    RowLayout {
                         Layout.topMargin: Theme.spacing.small
-                        text: qsTr("LEZ sequencer  ·  now: %1  (%2)")
-                              .arg(String((settings.s && settings.s.lez && settings.s.lez.rpc) || "https://testnet.lez.logos.co"))
-                              .arg(String((settings.s && settings.s.lez && settings.s.lez.chain) || "lez:testnet"))
-                        color: Theme.palette.textSecondary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        spacing: Theme.spacing.small
+                        LogosText {
+                            objectName: "settingsLezRpcNow"
+                            text: qsTr("LEZ sequencer  ·  now: %1  (%2)")
+                                  .arg(String((settings.s && settings.s.lez && (settings.showLezRpc ? settings.s.lez.rpc
+                                                                                                    : settings.s.lez.rpcMasked))
+                                              || "https://testnet.lez.logos.co"))
+                                  .arg(String((settings.s && settings.s.lez && settings.s.lez.chain) || "lez:testnet"))
+                            color: Theme.palette.textSecondary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        LogosButton {
+                            objectName: "settingsLezRpcShow"
+                            visible: !!(settings.s && settings.s.lez && settings.s.lez.rpc
+                                        && settings.s.lez.rpc !== settings.s.lez.rpcMasked)
+                            text: settings.showLezRpc ? qsTr("Hide") : qsTr("Show")
+                            variant: LogosButton.Variant.Tertiary
+                            onClicked: settings.showLezRpc = !settings.showLezRpc
+                        }
                     }
                     RowLayout {
                         Layout.fillWidth: true

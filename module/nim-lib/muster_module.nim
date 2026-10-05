@@ -3873,12 +3873,14 @@ proc musterSettings(): string =
   let ks = moduleKeystore()
   let enc = ks.encIdentity()
   $(%*{
-    # each endpoint as redactUrl shows it: a hosted URL may carry its key, and this reply
-    # reaches the UI and any host that prints it; settings.json keeps it whole (exo-14f.2)
-    "rpc": redactUrl(gRpcUrl),
+    # each endpoint whole and as redactUrl shows it: a hosted URL may carry its key, so
+    # Settings shows the masked form until its user presses Show (exo-14f.2). This reply
+    # goes only to this user's own view, never to a room or a log.
+    "rpc": gRpcUrl, "rpcMasked": redactUrl(gRpcUrl),
     "relayer": gRelayer,
-    "btcRpc": redactUrl(gBtcRpc),
-    "lez": {"rpc": redactUrl(gLezRpc), "chain": gLezChain, "multisigProgram": gLezProgram},
+    "btcRpc": gBtcRpc, "btcRpcMasked": redactUrl(gBtcRpc),
+    "lez": {"rpc": gLezRpc, "rpcMasked": redactUrl(gLezRpc), "chain": gLezChain,
+            "multisigProgram": gLezProgram},
     "delivery": gDeliveryConfig,
     "keystoreBackend": gKeystoreBackend,
     "environment": "eip155:" & $gDevSafe.chainId.int,   # the wallet's dev chain (CAIP-2)
