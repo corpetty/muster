@@ -1,6 +1,6 @@
 # Side-modules: what leaves muster_module, and what never does (epic exo-ff5)
 
-**Status:** proposal, 2026-10-02. The survey behind it read the code at `e75ec71` (after #213, the keystore_module backend). Plan: epic `exo-ff5`, slices S1–S8 (§7).
+**Status:** proposal, 2026-10-02. The survey behind it read the code at `e75ec71` (after #213, the keystore_module backend). Line references re-pointed to `ba53951` on 2026-10-05, after exo-dbd, exo-ecbe and exo-273 landed or were filed. Plan: epic `exo-ff5`, slices S1–S8 (§7).
 **Reads with:** [basecamp-capability-alignment.md](basecamp-capability-alignment.md) (core-to-core calls versus app-to-app intents), [keystore-module-backend.md](keystore-module-backend.md) (exo-149: the first key holder outside muster), [driver-derivation.md](driver-derivation.md) (muster calling other modules), [lez-wallet-delegation.md](lez-wallet-delegation.md). Platform side: the Logos Module Atlas at Basecamp 0.3.1: `stacks/key-custody.md`, `stacks/evm-wallet.md`, `guides/calling-official-modules.md` (github.com/corpetty/logos-module-atlas).
 **Paths:** short paths are under `module/src/`. `muster_module.nim` and `muster_gen.nim` are in `module/nim-lib/`. QML files are in `ui/src/qml/`.
 
@@ -57,18 +57,18 @@ Grouped by what each part touches:
 | `Keystore` | kernel ↔ keys | operations only, never a key getter; async via keystore_module | **good** |
 | `Transport` | kernel ↔ delivery_module | sealed bytes; already out of process | **good**, apart from the per-session node (§10) |
 | `ChainAdapter`, `PartSeam`, `Settlement`, `VoteSeam` | kernel ↔ chains | serializable values, but each takes a `Keystore` ref, and signing and broadcasting happen in one call | **mixed** (S6) |
-| `driverFor` | folds ↔ room context | reads `gSession` behind the fold's back (`muster_module.nim:191-202`, `:654-659`) | **impure** (S1) |
+| `driverFor` | folds ↔ room context | reads `gSession` behind the fold's back (`muster_module.nim:192-201`, `:655-660`) | **impure** (S1) |
 | `muster.lidl` | module ↔ UI | pull-only, whole state every call, implicit active room, no events | **poor** (S1–S3) |
 | `muster_ui.rep` | backend ↔ QML | 74 slots, 53 JSON-string properties, 0 signals | **poor** (S3) |
 
 Four structural problems sit under the last rows. Each one blocks an offload.
 
-**1. The module has no clock.** Dispatch is synchronous on the host's module thread, and muster runs no loop, timer or thread of its own. Every pump runs inside `coordinate_intents`, and only for the active room (`muster_module.nim:2117-2122`: `gSession.poll`, `lezPump`, `frostPump`, `splitPump`, `keystorePump`). So the UI's one-second Room timer is the module's heartbeat.
-- A split payment in a room that is not open is neither reported nor confirmed (`splitPump` reads `gSession` only).
+**1. The module has no clock.** Dispatch is synchronous on the host's module thread, and muster runs no loop, timer or thread of its own. Every pump runs inside `coordinate_intents`, and only for the active room (`muster_module.nim:2146-2150`: `gSession.poll`, `lezPump`, `frostPump`, `splitPump`, `keystorePump`). So the UI's one-second Room timer is the module's heartbeat.
+- A split payment in a room that is not open is neither reported nor confirmed (`splitPump` reads `gSession` only). This symptom was filed independently as exo-273. The rooms exo-ecbe now re-enters at startup inherit it, because none of them is made active.
 - Headless `logoscore` advances nothing.
 - Reads have side effects: `gSession.poll()` fires store queries.
 
-**2. One implicit room.** Room methods take no topic. They act on `gSession` / `gTopic` (`muster_module.nim:632-634`), which `coordinate_join` sets. `driverFor` resolves account-bound policies against `roomAccounts()`, which is `reduceAccounts(gSession.roomEvents())`. Room-kind drivers (threshold, unanimous, frost, invoke) take their roster from `gSession.members()`, which comes from the crypto layer's grants rather than the log. To make `driverFor` resolve correctly, `coordinate_conversations` swaps `gSession` for each room (`:3566-3575`).
+**2. One implicit room.** Room methods take no topic. They act on `gSession` / `gTopic` (`muster_module.nim:633-635`), which `coordinate_join` sets. `driverFor` resolves account-bound policies against `roomAccounts()`, which is `reduceAccounts(gSession.roomEvents())`. Room-kind drivers (threshold, unanimous, frost, invoke) take their roster from `gSession.members()`, which comes from the crypto layer's grants rather than the log. To make `driverFor` resolve correctly, `coordinate_conversations` swaps `gSession` for each room (`:3598-3603`).
 
 **3. Pull-only whole state, recomputed on every call.**
 - **Call rate.** With a room open, the UI makes about 7.7 module calls a second:
@@ -148,7 +148,7 @@ module muster_chain_watcher {
 **What moves into it:**
 - the IO halves of `splitPump`: Bitcoin and EVM part landed/gone checks, and the creditor's confirmation reads;
 - `lezPump`'s inclusion polling;
-- the ~4 s finality wait inside `coordinate_submit` (`muster_module.nim:2991-2995`);
+- the ~4 s finality wait inside `coordinate_submit` (`muster_module.nim:3017-3023`);
 - `BitcoindAdapter` reads and broadcast.
 
 **What stays in the kernel:** `frostPump` (no IO), `keystorePump`, `Settlement.assemble`, `checkRead`, and every read record.
@@ -160,7 +160,7 @@ module muster_chain_watcher {
 | Slice | What | Depends on |
 |---|---|---|
 | `exo-ff5.1` S1 | Room context explicit: a `RoomCtx {session, accounts, roster}`; `DriverFor(kind, ctx)`; topic-scoped room methods | — |
-| `exo-ff5.2` S2 | Kernel clock: `coordinate_tick` advances every joined room; reads become side-effect free | S1 |
+| `exo-ff5.2` S2 | Kernel clock: `coordinate_tick` advances every joined room; reads become side-effect free. Fixes exo-273 structurally; a `gSession`-swap interim for exo-273 can land first, and S2 replaces the swap with `RoomCtx` | S1 |
 | `exo-ff5.3` S3 | Plaintext-free events (`room_changed(topic, head)`, `intent_changed`, …), emitted from the tick on the module thread; the UI subscribes and keeps a slow poll | S2 |
 | `exo-ff5.4` S4 | Fold cache keyed by (log heads, roster epoch, accounts); `canonicalOrder` in O(N log N) with cached ids | S1 |
 | `exo-ff5.5` S5 | Domain rules out of QML: effect builders from typed parameters, split preview, propose gate, admission, CSPRNG topics | — |
@@ -188,24 +188,21 @@ Once S1–S2 land, the kernel/effector boundary should become an ADR (the next f
 1. **A clock for a Nim core module.** S2 makes the tick explicit, but someone still has to call it (the UI timer or a headless script). Can a Nim module own a timer that safely schedules work on its own module thread? Options: a self `lp_invoke_async`; a thread that only enqueues, drained like `InboundQueue`. Rust modules spawn threads; muster has no precedent.
 2. **Caller identity for muster's own surface.** Any co-resident module can call `coordinate_messages` today. Closing that is upstream work: export `logos_module_set_call_caller` to Nim (logos-nim-sdk), then gate by caller, and run with the access policy on (`infra/access-policy.json`). Whatever the answer, it applies to the kernel, not just to side-modules.
 3. **Does the watcher generalize?** No official Bitcoin module exists in Basecamp 0.3.1 (atlas `gaps.md`). A key-less Bitcoin node client could serve other apps; muster's needs (scantxoutset, gettxout, sendrawtransaction, confirmations, mempool spends) are a reasonable first contract.
-4. **In-flight LEZ steps.** `gLezPending` is in memory only (`muster_module.nim:954`), so a vote or Execute already sent is forgotten on restart. Decide whether S8 persists the watch list or the kernel persists its pending steps the way `split-pending.json` does. The kernel is the likelier owner.
+4. **In-flight LEZ steps.** `gLezPending` is in memory only (`muster_module.nim:982`), so a vote or Execute already sent is forgotten on restart. Decide whether S8 persists the watch list or the kernel persists its pending steps the way `split-pending.json` does. The kernel is the likelier owner.
 
 ## 10. Found along the way
 
 Not part of the plan; recorded here so they are not lost. Each was confirmed by reading the code, not by a test.
 
-- **Intent ids are not re-derived in folds.** A member can publish a second `intent/<id>/propose` (or `/policy`) under an existing id, and the two code paths pick different copies:
-  - approval signing takes the first match in arrival order (`effectJsonOf`, `intent_events.nim:319`, used by `live.nim:126-127`);
-  - the fold takes the first in canonical order (`intents.nim:151-161`).
-  Only the audit verifier checks `intentIdFor(effect, policy) == id` (`audit.nim:409`). This is invariant 1 / 4 territory.
-- **Epoch-0 history after a restart.** `coordinate_join` always founds a fresh epoch-0 key (`muster_module.nim:735`, `epoch_crypto.nim:84`). A founder appears unable to read anything posted before the first admit after a relaunch, which would break "rebuilt from log + keys".
+- **Intent ids were not re-derived in folds. Fixed in exo-dbd (`bc90342`).** A member could publish a second `intent/<id>/propose` (or `/policy`) under an existing id, and approval signing and the fold picked different copies. Now `proposalOf` (`intent_events.nim`) counts a propose/policy only as the pair the id is the hash of. The same gap for `intent/<id>/context`, which the id hash does not cover, is filed as exo-f12.
+- **Epoch-0 history after a restart.** `coordinate_join` always founds a fresh epoch-0 key (`muster_module.nim:741`, `epoch_crypto.nim:84`). A founder appears unable to read anything posted before the first admit after a relaunch, which would break "rebuilt from log + keys".
 - **Untimed RPC on the dispatch thread.**
   - `safe_rpc.nim:56-62` uses `newHttpClient()` with no timeout;
   - `evm_rpc.nim` and `lez_multisig_live.nim` run `waitFor` with none set;
   - `safeNonce` reads a null result as 0.
-- **The flow view never subtracts admitted members from its founders.** `musterCoordinateFlow` compares a `0x`-prefixed hex string to the bare hex in admit keys (`muster_module.nim:2519-2521`).
+- **The flow view never subtracts admitted members from its founders.** `musterCoordinateFlow` compares a `0x`-prefixed hex string to the bare hex in admit keys (`muster_module.nim:2547-2549`).
 - **One delivery node per session.**
-  - `newDeliveryTransport` runs `createNode` + `start` for every room and every inbox (`muster_module.nim:735`, `:781`), contrary to the comment at `:774`.
+  - `newDeliveryTransport` runs `createNode` + `start` for every room and every inbox (`muster_module.nim:741`, `:789`), contrary to the comment at `:782`.
   - Inbox sessions made for invites are never polled again.
   - Whether delivery dedupes repeated `createNode` calls is upstream behaviour to check.
 - **The invariant-3 comments contradict `LezMultisigLive`.**
