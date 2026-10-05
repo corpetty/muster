@@ -9,7 +9,7 @@
 import std/strutils
 import ../crypto/keystore
 import ../intents/materialization   # PartTransfer
-import ../wallet/[types, adapter, evm_adapter, evm_rpc, erc20_logs]
+import ../wallet/[types, adapter, evm_adapter, evm_rpc, erc20_logs, redact]
 import ../drivers/split   # isErc20Asset
 import ./parts
 
@@ -23,6 +23,14 @@ type EvmPartSeam* = ref object of PartSeam
 
 proc newEvmPartSeam*(chain, url: string, adapter: EvmAdapter, ks: Keystore, frm: Account): EvmPartSeam =
   EvmPartSeam(chain: chain, url: url, adapter: adapter, ks: ks, frm: frm)
+
+proc rpcChainCaip2*(url: string): tuple[ok: bool, chain, detail: string] =
+  ## The CAIP-2 chain the EVM RPC at `url` actually serves — what a split settles on when
+  ## the composer names none (exo-a90.6). Read, never assumed: an RPC that does not answer
+  ## is an error, not a default chain. The error names the endpoint only as redactUrl shows
+  ## it: a hosted RPC's URL may carry its key (exo-14f.2).
+  try: (true, "eip155:" & rpcChainId(url), "")
+  except CatchableError as e: (false, "", "your RPC (" & redactUrl(url) & ") did not answer: " & e.msg)
 
 proc refuse(s: EvmPartSeam, t: PartTransfer): string =
   if t.chain != s.chain: return "this wallet pays on " & s.chain & ", the part settles on " & t.chain

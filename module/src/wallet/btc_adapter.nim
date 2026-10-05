@@ -59,11 +59,6 @@ proc splitCredentials*(url: string): tuple[url, user, pass: string] =
   u.password = ""
   result.url = ($u).strip(chars = {'/'}, leading = false)
 
-proc redactUserinfo*(url: string): string =
-  ## the URL as it may be shown: credentials never are
-  let (bare, user, _) = splitCredentials(url)
-  if user.len == 0: bare else: bare.replace("://", "://" & user & ":***@")
-
 proc newBitcoindAdapterFromUrl*(networkName, url: string): BitcoindAdapter =
   let (bare, user, pass) = splitCredentials(url)
   newBitcoindAdapter(networkName, bare, user, pass)

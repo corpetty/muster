@@ -80,6 +80,7 @@ import ../src/wallet/lez_core          # the LEZ wallet seam + FakeLezCore (P-L3
 import ../src/wallet/lez_adapter       # the Logos Execution Zone chain (send assets via Logos)
 import ../src/wallet/lez_lp            # LpLezCore — the real lez_core over lp_* (P-L3)
 import ../src/wallet/btc_adapter       # the user's Bitcoin node (exo-a50.2.5/.6)
+import ../src/wallet/redact            # a configured endpoint, as text may show it (exo-14f.2)
 import ../src/coordination/attest      # readEvent: the external read a Bitcoin spend's coins cite (inv 10)
 import ../src/drivers/split as splitdrv   # a split: each pays their own share (exo-a90)
 import ../src/coordination/parts        # paying and confirming a part (exo-a90.4)
@@ -1068,11 +1069,8 @@ proc frostPump() =
   gFrostAuto = auto
 
 proc rpcChainCaip2(): tuple[ok: bool, chain, detail: string] =
-  ## The CAIP-2 chain THIS member's configured EVM RPC actually serves — what a split
-  ## settles on when the composer names none (exo-a90.6). Read, never assumed: an RPC that
-  ## does not answer is an error, not a default chain.
-  try: (true, "eip155:" & rpcChainId(gRpcUrl), "")
-  except CatchableError as e: (false, "", "your RPC (" & gRpcUrl & ") did not answer: " & e.msg)
+  ## The CAIP-2 chain THIS member's configured EVM RPC actually serves (parts_evm).
+  rpcChainCaip2(gRpcUrl)
 
 proc splitLezAdapter(): LezAdapter   ## forward — the module's LEZ wallet (moduleWallet, below)
 
@@ -2823,21 +2821,9 @@ proc musterConnectivity(): string =
         try: (let c = parseInt(r.name[7 .. ^1]); (if c notin chains: chains.add c))
         except ValueError: discard
   if rpcWho.len > 0:
-    var level, detail: string
-    if gRpcUrl.len == 0:
-      level = "down"; detail = "no RPC endpoint configured"
-    else:
-      let (ok, chain, d) = probeRpc(gRpcUrl)
-      if not ok: (level = "down"; detail = d)
-      elif chains.len == 0 or chain in chains: (level = "ok"; detail = d)
-      else:
-        level = "warn"
-        detail = d & " (the proposal needs chain " & chains.mapIt($it).join(" / ") & ")"
-    rows.add %*{"key": "rpc", "name": "RPC", "level": level, "detail": detail,
-                "endpoint": gRpcUrl, "source": "proposal",
-                "remedy": (if level == "ok": "" else: "point the RPC setting at a node for chain " &
-                            chains.mapIt($it).join(" / ") & " (Settings)"),
-                "introducedBy": introducersJson(rpcWho)}
+    let row = rpcConnectivityRow(gRpcUrl, chains)   # the endpoint redacted (exo-14f.2)
+    row["introducedBy"] = introducersJson(rpcWho)
+    rows.add row
   # ── every other declared need, graded by the SAME readiness probe the card uses ──
   var probe: ReadinessProbe
   var probed = false
@@ -3016,7 +3002,7 @@ proc musterCoordinateSubmit(intentId: string): string =
   except CatchableError as e:
     if isBtc:
       return $(%*{"id": intentId, "error": "rpc-unreachable",
-                  "detail": e.msg & " — the Bitcoin node (" & redactUserinfo(gBtcRpc) & ") refused or could not be reached"})
+                  "detail": e.msg & " — the Bitcoin node (" & redactUrl(gBtcRpc) & ") refused or could not be reached"})
     return $(%*{"id": intentId, "error": "rpc-unreachable", "relayer": gRelayer,
                 "detail": e.msg & " — the relayer (" & asm0.tx.frm.id & ") must be able to pay gas on " &
                           asm0.tx.frm.chain & "; fund it, or set Settings → relayer"})
@@ -3887,10 +3873,14 @@ proc musterSettings(): string =
   let ks = moduleKeystore()
   let enc = ks.encIdentity()
   $(%*{
-    "rpc": gRpcUrl,
+    # each endpoint whole and as redactUrl shows it: a hosted URL may carry its key, so
+    # Settings shows the masked form until its user presses Show (exo-14f.2). This reply
+    # goes only to this user's own view, never to a room or a log.
+    "rpc": gRpcUrl, "rpcMasked": redactUrl(gRpcUrl),
     "relayer": gRelayer,
-    "btcRpc": redactUserinfo(gBtcRpc),
-    "lez": {"rpc": gLezRpc, "chain": gLezChain, "multisigProgram": gLezProgram},
+    "btcRpc": gBtcRpc, "btcRpcMasked": redactUrl(gBtcRpc),
+    "lez": {"rpc": gLezRpc, "rpcMasked": redactUrl(gLezRpc), "chain": gLezChain,
+            "multisigProgram": gLezProgram},
     "delivery": gDeliveryConfig,
     "keystoreBackend": gKeystoreBackend,
     "environment": "eip155:" & $gDevSafe.chainId.int,   # the wallet's dev chain (CAIP-2)

@@ -23,6 +23,7 @@ import chronos
 import stint
 import ../src/wallet/rpc_budget
 import ../src/wallet/btc_adapter
+import ../src/wallet/redact
 import ../src/wallet/evm_rpc
 import ../src/wallet/types
 import ../src/wallet/evm_adapter
@@ -344,7 +345,7 @@ block:
   doAssert a == "bitcoind getblockcount: HTTP 401 Unauthorized", a
   let p = probeBitcoind(wrong)
   doAssert not p.ok and "401" in p.detail and "wrong" notin p.detail, p.detail
-  doAssert redactUserinfo(wrong) == coreNode.replace("://", "://muster:***@")
+  doAssert redactUrl(wrong) == coreNode.replace("://", "://***@")      # the user too (wallet/redact.nim, exo-14f.2)
   for msg in [m, nf, u, a, p.detail]: doAssert "s3cret" notin msg and "wrong" notin msg, msg
 echo "7. bitcoind's HTTP 500 carries the node's message; a 401 names the status, never the credentials OK"
 

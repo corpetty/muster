@@ -22,6 +22,7 @@ import ../crypto/curve25519    # Ed25519Pub
 import ../drivers/safe_rpc     # probeRpc
 import ./invoker               # Invoker.methodsOf (is the module loaded?)
 import ../wallet/btc_adapter   # probeBitcoind (exo-a50.2.6)
+import ../wallet/redact        # an endpoint as it may be shown (exo-14f.2)
 export manifest, driver
 
 type
@@ -163,16 +164,16 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
   result.pays = facts.pays
   result.infraConfigured = proc(name: string): Grade =
     if name == "rpc":
-      if facts.rpcUrl.len > 0: (rdMet, "rpc = " & facts.rpcUrl)
+      if facts.rpcUrl.len > 0: (rdMet, "rpc = " & redactUrl(facts.rpcUrl))
       else: (rdMissing, "no RPC endpoint configured")
     elif name == "bitcoind-rpc":
       # a Bitcoin proposal INTRODUCES its node (exo-a50.2.6): read UTXOs, broadcast
-      if facts.btcRpcUrl.len > 0: (rdMet, "bitcoind = " & redactUserinfo(facts.btcRpcUrl))
+      if facts.btcRpcUrl.len > 0: (rdMet, "bitcoind = " & redactUrl(facts.btcRpcUrl))
       else: (rdMissing, "no Bitcoin node configured")
     elif name == "lez-rpc":
       # the user's LEZ sequencer, which the live LEZ multisig and LEZ-FROST paths submit
       # through (JSON-RPC). Configured is what this grades; reachability is the zone's.
-      if facts.lezRpcUrl.len > 0: (rdMet, "lez-rpc = " & facts.lezRpcUrl)
+      if facts.lezRpcUrl.len > 0: (rdMet, "lez-rpc = " & redactUrl(facts.lezRpcUrl))
       else: (rdMissing, "no LEZ sequencer configured")
     elif name == "lez-account":
       # A set-up, funded LEZ account. DETECTED here (via the host's lezReady closure over
@@ -245,6 +246,30 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
     if methods.kind == JArray and methods.len > 0: (rdMet, name & " is loaded (" & $methods.len & " methods)")
     else: (rdMissing, name & " is not loaded")
   result.capabilityGranted = nil   # the host broker does not exist yet (exo-002.7) → unknown
+
+proc rpcConnectivityRow*(url: string, chains: seq[int],
+                         probe: proc(url: string): tuple[ok: bool, chainId: int, detail: string] {.gcsafe.} = nil): JsonNode =
+  ## The room's RPC row (musterConnectivity, exo-428): the ONE endpoint that serves every
+  ## `infra:rpc` and `environment: eip155:<id>` need, probed once (eth_chainId, `probe` or
+  ## probeRpc) against `chains`, the chains the introducing proposals need (none = any).
+  ## "down", "ok", or "warn" (it answers, for another chain). The endpoint is shown as
+  ## redactUrl shows it: the row reaches the UI and the MUSTER-LP debug log, and a hosted
+  ## RPC's URL may carry its key (exo-14f.2). The caller adds `introducedBy`.
+  var level, detail: string
+  if url.len == 0:
+    level = "down"; detail = "no RPC endpoint configured"
+  else:
+    let p = if probe != nil: probe else: probeRpc
+    let (ok, chain, d) = p(url)
+    if not ok: (level = "down"; detail = d)
+    elif chains.len == 0 or chain in chains: (level = "ok"; detail = d)
+    else:
+      level = "warn"
+      detail = d & " (the proposal needs chain " & chains.mapIt($it).join(" / ") & ")"
+  %*{"key": "rpc", "name": "RPC", "level": level, "detail": detail,
+     "endpoint": redactUrl(url), "source": "proposal",
+     "remedy": (if level == "ok": "" else: "point the RPC setting at a node for chain " &
+                 chains.mapIt($it).join(" / ") & " (Settings)")}
 
 # ── JSON, for the hosted surface and the card ─────────────────────────────────
 proc toJson*(r: Requirement): JsonNode =
