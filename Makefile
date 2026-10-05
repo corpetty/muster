@@ -24,12 +24,23 @@ CACHE := --accept-flake-config \
   --extra-trusted-public-keys public:l4HrXgL4nw246+LBh2SOJyhz64BoGegOYLheT/iIAPU=
 
 # A runner build's flake evaluation alone took 7.4 GB on 2026-10-05 and OOM-froze the
-# workstation (.claude/doctrine/codebase.md § Runner builds). `build` runs its nix calls
-# in a user cgroup scope capped at BUILD_MEM, so only the build dies if it runs over. The
-# scope holds the evaluating nix client; derivations still build under nix-daemon,
-# outside it. BUILD_MEM= (empty) builds uncapped.
-BUILD_MEM ?= 10G
-CAPPED     = $(if $(BUILD_MEM),systemd-run --user --scope --quiet -p MemoryMax=$(BUILD_MEM) -p MemorySwapMax=0 nice -n 19)
+# workstation (.claude/doctrine/codebase.md § Runner builds). `build`, `build-lgx` and
+# `appimage` run their nix calls in a user cgroup scope capped at BUILD_MEM, so only the
+# build dies if it runs over. The scope holds the evaluating nix client; derivations
+# still build under nix-daemon, outside it. The hosts in UNCAPPED_HOSTS (short hostnames)
+# have memory to spare and build uncapped; any other host defaults to 10G. On any host,
+# BUILD_MEM=<size> sets the cap and BUILD_MEM= (empty) builds uncapped.
+UNCAPPED_HOSTS := bugger
+BUILD_HOST     := $(firstword $(subst ., ,$(shell uname -n)))
+BUILD_MEM      ?= $(if $(filter $(UNCAPPED_HOSTS),$(BUILD_HOST)),,10G)
+CAPPED          = $(if $(BUILD_MEM),systemd-run --user --scope --quiet -p MemoryMax=$(BUILD_MEM) -p MemorySwapMax=0 nice -n 19)
+# A capped recipe opens with CAP_CHECK, which refuses to start when the cap can't be
+# applied (never a silent fallback to uncapped), and its build line ends `|| $(CAP_KILLED)`,
+# which says so when the cap killed it (137) and keeps the exit status either way.
+CAP_CHECK       = [ -z "$(BUILD_MEM)" ] || $(CAPPED) true \
+  || { echo "make $@: cannot cap memory at BUILD_MEM=$(BUILD_MEM) with systemd-run --user; BUILD_MEM= builds uncapped"; exit 1; }
+CAP_KILLED      = { s=$$?; [ $$s -ne 137 ] || echo "make $@: killed at the BUILD_MEM=$(BUILD_MEM) cap. Free memory, or build when the host is quieter; raise BUILD_MEM only if the host can spare it"; exit $$s; }
+CAP_NOTE        = $(if $(BUILD_MEM),memory-capped at BUILD_MEM=$(BUILD_MEM),uncapped on $(BUILD_HOST))
 
 FLEET     ?= logos.dev
 FLEET_CFG := infra/fleets/$(FLEET).json
@@ -49,9 +60,9 @@ SEED      ?=
 help:
 	@echo "make run                 launch the standalone muster app (dashboard + walkthrough)"
 	@echo "make run-fleet PEER=x     launch a peer on the Logos delivery fleet (two-instance)"
-	@echo "make build               pre-build the runner — the slow first build; do this once (memory-capped: BUILD_MEM=10G)"
-	@echo "make build-lgx           build muster-ui.lgx (to load into logos-basecamp instead)"
-	@echo "make appimage            build the download-and-run AppImage (see RELEASING.md)"
+	@echo "make build               pre-build the runner — the slow first build; do this once ($(CAP_NOTE))"
+	@echo "make build-lgx           build muster-ui.lgx (to load into logos-basecamp instead; $(CAP_NOTE))"
+	@echo "make appimage            build the download-and-run AppImage (see RELEASING.md; $(CAP_NOTE))"
 	@echo "make clean               remove local run state (.run/)"
 	@echo "make clean-peer PEER=x   wipe one peer's identity+wallet (to re-seed owner keys)"
 	@echo ""
@@ -66,8 +77,7 @@ help:
 # under .run/ so 'make clean' keeps it (delete .run/runner to release it).
 build:
 	@mkdir -p $(CURDIR)/.run
-	@[ -z "$(BUILD_MEM)" ] || $(CAPPED) true \
-	  || { echo "make build: cannot cap memory at BUILD_MEM=$(BUILD_MEM) with systemd-run --user; BUILD_MEM= builds uncapped"; exit 1; }
+	@$(CAP_CHECK)
 	@# ui/flake.lock is machine-local + gitignored. muster_module is pinned in ui/flake.nix
 	@# by a RELATIVE ref (git+file:../?dir=module, portable across clones, exo-1ec.2/#116) —
 	@# but nix re-fetches a relative git input at eval time ("file:../ not supported"), and
@@ -84,7 +94,7 @@ build:
 	cd $(UI) && $(CAPPED) nix build 'path:.#runner' $(CACHE) --no-eval-cache \
 	  --override-input muster_module "git+file://$(CURDIR)?dir=module" \
 	  --out-link $(CURDIR)/.run/runner \
-	  || { s=$$?; [ $$s -ne 137 ] || echo "make build: killed at the BUILD_MEM=$(BUILD_MEM) cap. Free memory, or build when the host is quieter; raise BUILD_MEM only if the host can spare it"; exit $$s; }
+	  || $(CAP_KILLED)
 
 # nix run resolves apps.default (the standalone runner), NOT packages.default
 # (the .lgx). Each --user-dir is one identity + wallet, so two dirs are two peers.
@@ -126,12 +136,14 @@ run-fleet:
 	  nix run 'path:.' $(CACHE) -- --user-dir $(CURDIR)/.run/$(PEER)
 
 build-lgx:
-	cd $(UI) && nix build 'path:.#lgx' $(CACHE)
+	@$(CAP_CHECK)
+	cd $(UI) && $(CAPPED) nix build 'path:.#lgx' $(CACHE) || $(CAP_KILLED)
 
 # The download-and-run release artifact: a logos-basecamp AppImage with muster
 # baked in. Needs the local basecamp bake-in (ui/tests/README.md); see RELEASING.md.
 appimage:
-	nix build '$(BASECAMP)#bin-appimage' $(CACHE) --out-link $(CURDIR)/result-appimage
+	@$(CAP_CHECK)
+	$(CAPPED) nix build '$(BASECAMP)#bin-appimage' $(CACHE) --out-link $(CURDIR)/result-appimage || $(CAP_KILLED)
 	@echo "AppImage: $(CURDIR)/result-appimage/logos-basecamp.AppImage"
 	@echo "Run: APPIMAGE_EXTRACT_AND_RUN=1 $(CURDIR)/result-appimage/logos-basecamp.AppImage  (then click Muster)"
 
