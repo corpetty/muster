@@ -120,3 +120,39 @@ The test's fourth endpoint is an address that drops SYNs: a listener that never
 accepts, its accept queue (backlog 0) filled by one connection. Linux drops every
 later SYN, so the client's connect hangs exactly as it does against a firewalled
 host. The test checks that premise before it relies on it.
+
+## A budget per call is not a budget per poll (exo-14f.1, 2026-10-05)
+
+The budgets bound ONE call, and the UI polls. `coordinate_accounts` runs every 10 s and
+reads each disclosed Safe twice (`chainViewOf`, then `bypassesOf`), each a probe and one
+or two reads. Against a node that answers `eth_chainId` and holds `eth_call`, two Safe
+accounts cost about 20 s in one call, which is the UI call's own timeout. `connectivity`
+probes every 5 s, and the pumps on the intents tick read receipts every 2 s. Each read
+costs its full budget, so the module thread is busy most of every window, and every UI
+call waits behind it.
+
+So an endpoint that gives no answer **cools down** (`wallet/rpc_budget.nim`). For a
+short time a read or a probe to it is not sent: it raises `RpcCoolingError`, an
+`RpcTimeoutError`, at once. The message names the call that went unanswered, when it
+went unanswered, and the next try, for example `not sent: the endpoint did not answer
+eth_call within 5s at 14:02:11; next try at 14:02:26`. The first call after the
+cooldown is sent. Any successful answer ends the cooldown. The decisions:
+
+- **15 s, doubled per no-answer in a row, up to 60 s.** 15 s skips at least one
+  accounts poll. A fixed cooldown still costs one budget per cooldown for as long as the
+  node is down: about 5 s of every 20 s with the pumps reading. The cap keeps that to
+  one budget a minute and still uses a recovered node within a minute. Naming the
+  endpoint again in Settings ends its cooldown at once.
+- **A broadcast is always sent.** It is the user's own action, never a poll, and muster
+  does not refuse it because an earlier read went unanswered. Its no-answer still starts
+  a cooldown for the reads. The reads that come before a send (nonce, gas price) do
+  respect the cooldown, so a payment made inside one fails at once and says when to
+  try again.
+- **A status line says "not asked", never "unreachable".** `probeRpc` and the Safe's
+  owner, module, guard and threshold reads frame the detail themselves:
+  `RPC not asked: it did not answer …; next try at …`. The connectivity row, an
+  account's "unknown" check and readiness show it as it is.
+- **Keyed by URL, never written into a message.** A hosted RPC takes its key in the
+  path. The LEZ client wrote the sequencer URL into every error; it no longer does.
+- **Not yet: the Bitcoin node.** `btc_adapter.call` drives chronos's HTTP client itself
+  (exo-496, above), not `jsonRpc`, so its calls have budgets but no cooldown.

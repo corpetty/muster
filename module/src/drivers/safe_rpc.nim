@@ -2,7 +2,7 @@
 ## and watch the receipt. No indexer or Safe service — just the user's RPC endpoint
 ## (invariant 8: untrusted, user-configurable infrastructure). Hand-built JSON-RPC, no
 ## web3 dependency; every call is bounded by wallet/rpc_budget.nim (exo-14f), so a hung
-## endpoint costs one budget, never the module thread.
+## endpoint costs one budget, never the module thread, and then cools down (exo-14f.1).
 
 import std/[json, strutils]
 import ../hashing/keccak256
@@ -55,10 +55,18 @@ proc assembleExecTransaction*(tx: SafeTx, signatures: seq[byte]): seq[byte] =
   result.add enc256(uint64(signatures.len)); result.add pad32(signatures)
 
 # ── minimal JSON-RPC over the user's endpoint ─────────────────────────────────
-proc rpc(url, meth: string, params: JsonNode, budget = readBudget()): JsonNode =
+proc rpc(url, meth: string, params: JsonNode, budget = readBudget(), send = false): JsonNode =
   ## The call's `result` (JNull when the endpoint answered null). A transport failure, an
-  ## RPC error, or no answer within the budget raises RpcError.
-  jsonRpc(url, meth, params, budget)
+  ## RPC error, or no answer within the budget raises RpcError; a read while the endpoint
+  ## cools down raises RpcCoolingError and sends nothing (`send`: always sent).
+  jsonRpc(url, meth, params, budget, send)
+
+proc unread(e: ref CatchableError): string =
+  ## A failed read as a status line gives it. An endpoint that muster did not ask, because it
+  ## gave no answer a moment ago, is not called unreachable: the line says which call went
+  ## unanswered, when, and when it is tried again. Any other failure is unreachable.
+  if e of RpcCoolingError: "RPC not asked: it " & (ref RpcCoolingError)(e).reason
+  else: "RPC unreachable: " & e.msg
 
 proc hexResult(r: JsonNode, meth: string): string =
   ## A result that must be a hex string. Null, or anything else, is a failed read and
@@ -72,7 +80,7 @@ proc submitExecTransaction*(url: string, fromAddr, safe: Address, calldata: seq[
   ## when the node answers none.
   rpc(url, "eth_sendTransaction", %*[{
     "from": toHex0x(fromAddr), "to": toHex0x(safe),
-    "data": toHex0x(calldata), "gas": "0x100000"}], sendBudget()).hexResult("eth_sendTransaction")
+    "data": toHex0x(calldata), "gas": "0x100000"}], sendBudget(), send = true).hexResult("eth_sendTransaction")
 
 proc watchReceiptStatus*(url, txHash: string): int =
   ## Poll for the receipt; returns 1 on success, 0 on revert, -1 if not yet mined (a null
@@ -145,7 +153,7 @@ proc getOwners*(url: string, safe: Address): tuple[known: bool, owners: seq[Addr
       return (false, @[], "getOwners() returned no data")
     (true, decodeAddressArray(r.getStr()), "read from chain")
   except CatchableError as e:
-    (false, @[], "RPC unreachable: " & e.msg)
+    (false, @[], unread(e))
 
 proc ethCall*(url: string, to: Address, data: seq[byte]): string =
   ## A raw `eth_call` at latest; the hex result ("0x" when the call returns no data). A
@@ -194,7 +202,7 @@ proc getModules*(url: string, safe: Address): tuple[known: bool, modules: seq[Ad
     if h.len <= 2: return (false, @[], "getModulesPaginated() returned no data")
     (true, decodeModulesPage(h), "read from chain")
   except CatchableError as e:
-    (false, @[], "RPC unreachable: " & e.msg)
+    (false, @[], unread(e))
 
 proc getGuard*(url: string, safe: Address): tuple[known: bool, guard: string, detail: string] =
   ## The Safe's transaction guard, read from its storage slot ("" when none is set).
@@ -204,7 +212,7 @@ proc getGuard*(url: string, safe: Address): tuple[known: bool, guard: string, de
     if h.len <= 2: return (false, "", "guard slot returned no data")
     (true, guardFromSlot(h), "read from chain")
   except CatchableError as e:
-    (false, "", "RPC unreachable: " & e.msg)
+    (false, "", unread(e))
 
 proc getThreshold*(url: string, safe: Address): tuple[known: bool, threshold: int, detail: string] =
   ## The Safe's threshold, read from the chain via `eth_call getThreshold()` — with
@@ -218,17 +226,18 @@ proc getThreshold*(url: string, safe: Address): tuple[known: bool, threshold: in
     if h.len <= 2: return (false, 0, "getThreshold() returned no data")
     (true, parseHexInt(h[max(2, h.len - 16) .. ^1]), "read from chain")
   except CatchableError as e:
-    (false, 0, "RPC unreachable: " & e.msg)
+    (false, 0, unread(e))
 
 proc probeRpc*(url: string): tuple[ok: bool, chainId: int, detail: string] =
   ## A cheap liveness probe of the user's RPC endpoint (invariant 8: untrusted,
   ## user-chosen infra, so its reachability must be *visible*, never assumed).
   ## eth_chainId within the probe budget, connect included — reachable + the chain it
-  ## reports, or the error. Never raises: a failed probe is a real answer (down).
+  ## reports, or why not, as a status line says it (unread). Never raises: a failed probe
+  ## is a real answer (down). While the endpoint cools down it is not asked, and says so.
   try:
     let r = rpc(url, "eth_chainId", newJArray(), probeBudget())
-    if r.kind != JString or r.getStr().len <= 2: return (false, -1, "no result")
+    if r.kind != JString or r.getStr().len <= 2: return (false, -1, "RPC answered no chain id")
     let cid = parseHexInt(r.getStr())
     (true, cid, "chain " & $cid)
   except CatchableError as e:
-    (false, -1, e.msg)
+    (false, -1, unread(e))
