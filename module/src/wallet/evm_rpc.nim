@@ -3,7 +3,9 @@
 ## each call is driven synchronously with `waitFor`; this module is the seam that
 ## isolates chronos, web3, and the eth types from the rest of the wallet, exposing
 ## plain sync procs over strings/bytes. A transport or JSON-RPC error becomes a
-## raised WalletError — a failed call never returns a value a caller could trust.
+## raised WalletError — a failed call never returns a value a caller could trust. Every
+## call runs within a budget (wallet/rpc_budget.nim, exo-14f): a read within the read
+## budget, a broadcast within the send budget, so a hung endpoint never holds the module.
 ##
 ## We import `web3/eth_api` + `json_rpc/clients/httpclient` directly (not top-level
 ## `web3`), which keeps websock off the dependency closure.
@@ -16,6 +18,7 @@ import web3/[eth_api, eth_api_types]
 import eth/common/[addresses, hashes]
 import ./types
 import ./erc20_logs
+import ./rpc_budget
 
 proc q(x: Quantity): uint64 = uint64(distinctBase(x))
 
@@ -27,8 +30,9 @@ var gClients: Table[string, RpcHttpClient]
 proc getClient(url: string): RpcHttpClient =
   if url notin gClients:
     let c = newRpcHttpClient()
-    try: waitFor c.connect(url)
+    try: bounded(c.connect(url), readBudget())
     except CatchableError as e:
+      closeQuietly(c)
       raise newException(WalletError, "web3 connect failed: " & e.msg)
     gClients[url] = c
   gClients[url]
@@ -37,8 +41,7 @@ proc evict(url: string) =
   if url in gClients:
     let c = gClients[url]
     gClients.del(url)
-    try: waitFor c.close()
-    except CatchableError: discard
+    closeQuietly(c)
 
 template rpcTry(url, label: string, body: untyped): untyped =
   ## Run a web3 call on the cached client; on any failure, evict the client and
@@ -52,49 +55,47 @@ template rpcTry(url, label: string, body: untyped): untyped =
 proc rpcBalance*(url, addrHex, tag: string): string =
   ## Native balance, decimal base units (wei) — typed UInt256, no hex parsing.
   rpcTry(url, "eth_getBalance"):
-    $(waitFor c.eth_getBalance(Address.fromHex(addrHex), tag))
+    $bounded(c.eth_getBalance(Address.fromHex(addrHex), tag), readBudget())
 
 proc rpcCall*(url, toHex: string, data: seq[byte], tag: string): seq[byte] =
   ## eth_call (e.g. ERC-20 balanceOf) → the ABI-encoded return bytes.
   rpcTry(url, "eth_call"):
-    waitFor c.eth_call(TransactionArgs(to: Opt.some(Address.fromHex(toHex)),
-                                       data: Opt.some(data)), tag)
+    bounded(c.eth_call(TransactionArgs(to: Opt.some(Address.fromHex(toHex)),
+                                       data: Opt.some(data)), tag), readBudget())
 
 proc rpcGasPrice*(url: string): uint64 =
   rpcTry(url, "eth_gasPrice"):
-    q(waitFor c.eth_gasPrice())
+    q(bounded(c.eth_gasPrice(), readBudget()))
 
 proc rpcChainId*(url: string): string =
   ## The chain id this endpoint serves, decimal — so a payment is never sent, nor a
   ## payment confirmed, through an RPC serving another chain than the one agreed (exo-a90.5).
   rpcTry(url, "eth_chainId"):
-    $(waitFor c.eth_chainId())
+    $bounded(c.eth_chainId(), readBudget())
 
 proc rpcNonce*(url, addrHex: string): uint64 =
   rpcTry(url, "eth_getTransactionCount"):
-    q(waitFor c.eth_getTransactionCount(Address.fromHex(addrHex), "pending"))
+    q(bounded(c.eth_getTransactionCount(Address.fromHex(addrHex), "pending"), readBudget()))
 
 proc rpcNonceMined*(url, addrHex: string): uint64 =
   ## The account's nonce counted over mined transactions only ("latest").
   rpcTry(url, "eth_getTransactionCount"):
-    q(waitFor c.eth_getTransactionCount(Address.fromHex(addrHex), "latest"))
+    q(bounded(c.eth_getTransactionCount(Address.fromHex(addrHex), "latest"), readBudget()))
 
 proc rpcSendRaw*(url: string, raw: seq[byte]): string =
   rpcTry(url, "eth_sendRawTransaction"):
-    (waitFor c.eth_sendRawTransaction(raw)).to0xHex
+    bounded(c.eth_sendRawTransaction(raw), sendBudget()).to0xHex
 
 proc rpcReceiptStatus*(url, txHashHex: string): int =
   ## 1 = success, 0 = failed, -1 = no receipt yet (pending). A pending tx has no
-  ## receipt; that is reported, not raised.
-  let cl = getClient(url)
-  try:
-    let r = waitFor cl.eth_getTransactionReceipt(Hash32.fromHex(txHashHex))
-    # no receipt yet comes back as nil — pending, not a crash (exo-a50.1.5: this was a
-    # SIGSEGV the first time finality was watched through the adapter)
-    if r.isNil: return -1
-    if r.status.isSome: (if q(r.status.get) == 1: 1 else: 0) else: -1
-  except CatchableError:
-    evict(url); -1
+  ## receipt; that is reported, not raised. A failed read raises WalletError: it is not
+  ## the chain saying "pending", and a caller that would take it as one decides so itself.
+  let r = rpcTry(url, "eth_getTransactionReceipt"):
+    bounded(c.eth_getTransactionReceipt(Hash32.fromHex(txHashHex)), readBudget())
+  # no receipt yet comes back as nil — pending, not a crash (exo-a50.1.5: this was a
+  # SIGSEGV the first time finality was watched through the adapter)
+  if r.isNil: return -1
+  if r.status.isSome: (if q(r.status.get) == 1: 1 else: 0) else: -1
 
 proc rpcTransferOf*(url, txHashHex: string):
     tuple[found: bool, fromHex, toHex, valueDec: string, status: int, blockNumber: uint64] =
@@ -103,7 +104,7 @@ proc rpcTransferOf*(url, txHashHex: string):
   ## and its receipt status (1 success, 0 failed, -1 no receipt yet). found = false when the
   ## node knows no such transaction. A transport error raises — never reads as "not found".
   let tx = rpcTry(url, "eth_getTransactionByHash"):
-    waitFor c.eth_getTransactionByHash(Hash32.fromHex(txHashHex))
+    bounded(c.eth_getTransactionByHash(Hash32.fromHex(txHashHex)), readBudget())
   if tx.isNil: return (false, "", "", "0", -1, 0'u64)
   let status = rpcReceiptStatus(url, txHashHex)
   (true, tx.`from`.to0xHex, (if tx.to.isSome: tx.to.get.to0xHex else: ""), $tx.value, status,
@@ -119,7 +120,7 @@ proc rpcReceiptLogs*(url, txHashHex: string): tuple[found: bool, status: int, lo
   ## and its logs as hex (exo-5ab: a token payment is read from its Transfer log). found =
   ## false while there is no receipt; a transport error raises — never "no logs".
   let r = rpcTry(url, "eth_getTransactionReceipt"):
-    waitFor c.eth_getTransactionReceipt(Hash32.fromHex(txHashHex))
+    bounded(c.eth_getTransactionReceipt(Hash32.fromHex(txHashHex)), readBudget())
   if r.isNil: return (false, -1, @[])
   let status = (if r.status.isSome: (if q(r.status.get) == 1: 1 else: 0) else: -1)
   var logs: seq[RawLog]
@@ -133,16 +134,16 @@ proc rpcSendTransaction*(url, fromHex, toHex: string, value: UInt256,
                          data: seq[byte], gas: uint64): string =
   ## anvil-unlocked path: the node signs for an unlocked `from`. Returns the tx hash.
   rpcTry(url, "eth_sendTransaction"):
-    waitFor(c.eth_sendTransaction(TransactionArgs(
+    bounded(c.eth_sendTransaction(TransactionArgs(
       `from`: Opt.some(Address.fromHex(fromHex)), to: Opt.some(Address.fromHex(toHex)),
-      value: Opt.some(value), data: Opt.some(data), gas: Opt.some(Quantity(gas))))).to0xHex
+      value: Opt.some(value), data: Opt.some(data), gas: Opt.some(Quantity(gas)))), sendBudget()).to0xHex
 
 proc rpcGetProof*(url, addrHex, tag: string):
     tuple[nonce: uint64, balanceDec, storageHashHex, codeHashHex: string, proof: seq[seq[byte]]] =
   ## eth_getProof — typed ProofResponse. The account fields + the accountProof
   ## nodes, for verifying against a trusted state root (verify.nim).
   rpcTry(url, "eth_getProof"):
-    let pr = waitFor c.eth_getProof(Address.fromHex(addrHex), newSeq[UInt256](0), tag)
+    let pr = bounded(c.eth_getProof(Address.fromHex(addrHex), newSeq[UInt256](0), tag), readBudget())
     var nodes: seq[seq[byte]]
     for n in pr.accountProof: nodes.add distinctBase(n)
     (q(pr.nonce), $pr.balance, pr.storageHash.to0xHex, pr.codeHash.to0xHex, nodes)

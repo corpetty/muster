@@ -31,7 +31,8 @@
 ## outcome, and every caller judges a step by the state it reads back.
 ##
 ## Transport: nim-json-rpc over chronos (TLS by bearssl), like wallet/evm_rpc.nim; a
-## call runs to completion with waitFor.
+## call runs to completion with waitFor, within its budget (wallet/rpc_budget.nim, exo-14f):
+## a hung sequencer costs one budget, never the module thread.
 
 import std/[json, tables, strutils, base64, times, os, sequtils, options]
 import chronos
@@ -43,6 +44,7 @@ import ../lez/multisig_chain
 import ../lez/tx as leztx
 import ../lez/account_view
 import ./types
+import ./rpc_budget
 export account_view
 
 # ── the sequencer ─────────────────────────────────────────────────────────────
@@ -52,20 +54,18 @@ type LezRpc* = ref object
 
 proc newLezRpc*(url: string): LezRpc = LezRpc(url: url)
 
-proc call(r: LezRpc, meth: string, params: JsonNode): JsonNode =
-  ## One JSON-RPC call → its `result`. Any failure raises WalletError, and the client is
-  ## dropped so the next call reconnects.
+proc call(r: LezRpc, meth: string, params: JsonNode, budget = readBudget()): JsonNode =
+  ## One JSON-RPC call → its `result` (JNull when the sequencer answered null), within
+  ## `budget`. Any failure raises WalletError, no answer in time included, and the client
+  ## is dropped so the next call reconnects.
   try:
     if r.client == nil:
-      let c = newRpcHttpClient()
-      waitFor c.connect(r.url)
-      r.client = c
-    parseJson(string(waitFor r.client.call(meth, params)))
+      r.client = newRpcHttpClient()
+      bounded(r.client.connect(r.url), budget)
+    parseJson(string(bounded(r.client.call(meth, params), budget)))
   except CatchableError as e:
-    if r.client != nil:
-      try: waitFor r.client.close()
-      except CatchableError: discard
-      r.client = nil
+    closeQuietly(r.client)
+    r.client = nil
     raise newException(WalletError, "LEZ " & meth & " at " & r.url & ": " & e.msg)
 
 proc wordsToBytes(n: JsonNode): seq[byte] =
@@ -74,7 +74,12 @@ proc wordsToBytes(n: JsonNode): seq[byte] =
     let x = uint32(w.getBiggestInt())
     for i in 0 ..< 4: result.add byte((x shr (8*i)) and 0xff)
 
-proc lastBlockId*(r: LezRpc): uint64 = uint64(r.call("getLastBlockId", newJArray()).getBiggestInt())
+proc lastBlockId*(r: LezRpc): uint64 =
+  ## The chain's height. A null or non-number answer raises: it is never height 0.
+  let j = r.call("getLastBlockId", newJArray())
+  if j.kind != JInt or j.getBiggestInt() < 0:
+    raise newException(WalletError, "LEZ getLastBlockId at " & r.url & " returned no height (" & $j & ")")
+  uint64(j.getBiggestInt())
 
 proc getAccount*(r: LezRpc, id: seq[byte]): LezAccountState =
   ## Either line's account (lez/account_view.nim): v0.2.4's owner + data, v0.3.0's shards.
@@ -84,11 +89,17 @@ proc getAccount*(r: LezRpc, id: seq[byte]): LezAccountState =
 
 proc sendTransaction*(r: LezRpc, leeTx: seq[byte]): string =
   ## → the transaction hash (hex) the sequencer accepted into its mempool; not yet landed.
-  r.call("sendTransaction", %*[encode(leeTx)]).getStr()
+  ## Raises when it answers no hash: an empty hash would read as sent.
+  let j = r.call("sendTransaction", %*[encode(leeTx)], sendBudget())
+  if j.kind != JString or j.getStr().len == 0:
+    raise newException(WalletError, "LEZ sendTransaction at " & r.url & " returned no hash (" & $j & ")")
+  j.getStr()
 
 proc programId*(r: LezRpc, name: string): seq[byte] =
   ## A built-in program's id by name (getProgramIds, e.g. "token"), as its LE bytes.
   let j = r.call("getProgramIds", newJArray())
+  if j.kind != JObject:
+    raise newException(WalletError, "LEZ getProgramIds at " & r.url & " returned no programs (" & $j & ")")
   if not j.hasKey(name): raise newException(WalletError, "the sequencer names no program " & name)
   wordsToBytes(j[name])
 

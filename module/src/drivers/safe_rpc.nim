@@ -1,10 +1,12 @@
 ## Safe on-chain leg (P2): assemble execTransaction calldata, submit it over JSON-RPC,
 ## and watch the receipt. No indexer or Safe service — just the user's RPC endpoint
-## (invariant 8: untrusted, user-configurable infrastructure). std/httpclient only,
-## no external web3 dependency.
+## (invariant 8: untrusted, user-configurable infrastructure). Hand-built JSON-RPC, no
+## web3 dependency; every call is bounded by wallet/rpc_budget.nim (exo-14f), so a hung
+## endpoint costs one budget, never the module thread.
 
-import std/[httpclient, json, strutils]
+import std/[json, strutils]
 import ../hashing/keccak256
+import ../wallet/rpc_budget
 import ./safe
 
 proc strBytes(s: string): seq[byte] =
@@ -53,29 +55,37 @@ proc assembleExecTransaction*(tx: SafeTx, signatures: seq[byte]): seq[byte] =
   result.add enc256(uint64(signatures.len)); result.add pad32(signatures)
 
 # ── minimal JSON-RPC over the user's endpoint ─────────────────────────────────
-proc rpc(url, meth: string, params: JsonNode): JsonNode =
-  let client = newHttpClient()
-  defer: client.close()
-  let body = %*{"jsonrpc": "2.0", "id": 1, "method": meth, "params": params}
-  let resp = client.request(url, httpMethod = HttpPost, body = $body,
-                            headers = newHttpHeaders({"Content-Type": "application/json"}))
-  parseJson(resp.body){"result"}
+proc rpc(url, meth: string, params: JsonNode, budget = readBudget()): JsonNode =
+  ## The call's `result` (JNull when the endpoint answered null). A transport failure, an
+  ## RPC error, or no answer within the budget raises RpcError.
+  jsonRpc(url, meth, params, budget)
+
+proc hexResult(r: JsonNode, meth: string): string =
+  ## A result that must be a hex string. Null, or anything else, is a failed read and
+  ## raises: it never reads as a zero (the wallet's rule: failure is always a raise).
+  if r.kind != JString or r.getStr().len < 2:
+    raise newException(RpcError, meth & " returned no value (" & $r & ")")
+  r.getStr()
 
 proc submitExecTransaction*(url: string, fromAddr, safe: Address, calldata: seq[byte]): string =
-  ## Submit via the user's RPC (anvil unlocks `fromAddr`). Returns the tx hash.
+  ## Submit via the user's RPC (anvil unlocks `fromAddr`). Returns the tx hash; raises
+  ## when the node answers none.
   rpc(url, "eth_sendTransaction", %*[{
     "from": toHex0x(fromAddr), "to": toHex0x(safe),
-    "data": toHex0x(calldata), "gas": "0x100000"}]).getStr()
+    "data": toHex0x(calldata), "gas": "0x100000"}], sendBudget()).hexResult("eth_sendTransaction")
 
 proc watchReceiptStatus*(url, txHash: string): int =
-  ## Poll for the receipt; returns 1 on success, 0 on revert, -1 if not yet mined.
+  ## Poll for the receipt; returns 1 on success, 0 on revert, -1 if not yet mined (a null
+  ## receipt is the chain's answer for a pending transaction). A failed read raises.
   ## (invariant: finality is observed from the chain, never asserted by a service.)
   let r = rpc(url, "eth_getTransactionReceipt", %*[txHash])
-  if r.isNil or r.kind == JNull: return -1
+  if r.kind == JNull: return -1
+  if r.kind != JObject: raise newException(RpcError, "eth_getTransactionReceipt returned " & $r)
   if parseHexInt(r{"status"}.getStr("0x0")) == 1: 1 else: 0
 
 proc getBalance*(url: string, a: Address): string =
-  rpc(url, "eth_getBalance", %*[toHex0x(a), "latest"]).getStr()
+  ## The native balance as the node's hex quantity; raises when it answers none.
+  rpc(url, "eth_getBalance", %*[toHex0x(a), "latest"]).hexResult("eth_getBalance")
 
 proc hexToU64(h: string): uint64 =
   ## Parse a 0x-prefixed big-endian hex word as uint64. Leading zeros (a 32-byte
@@ -95,12 +105,14 @@ proc safeNonce*(url: string, safe: Address): uint64 =
   ## and which the safeTxHash commits to (invariant 2). Read via `eth_call nonce()`;
   ## a fresh Safe returns 0, and it increments by one per settled execTransaction, so
   ## reading it at propose time lets sequential settles each use the right nonce
-  ## instead of a hardcoded 0 (only the first of which the Safe would accept).
+  ## instead of a hardcoded 0 (only the first of which the Safe would accept). A failed
+  ## read raises, null and an empty return included: a nonce it could not read is never 0.
   let sel = keccak256(strBytes("nonce()"))
   let data = @[sel[0], sel[1], sel[2], sel[3]]
   let r = rpc(url, "eth_call", %*[{"to": toHex0x(safe), "data": toHex0x(data)}, "latest"])
-  if r.isNil or r.kind == JNull: return 0
-  hexToU64(r.getStr("0x0"))
+  let h = r.hexResult("nonce()")
+  if h.len <= 2: raise newException(RpcError, "nonce() returned no data: is " & toHex0x(safe) & " a Safe?")
+  hexToU64(h)
 
 proc decodeAddressArray*(hex: string): seq[Address] =
   ## Decode an ABI `address[]` return: [offset:32][len:32][word:32]*len, each word a
@@ -136,10 +148,9 @@ proc getOwners*(url: string, safe: Address): tuple[known: bool, owners: seq[Addr
     (false, @[], "RPC unreachable: " & e.msg)
 
 proc ethCall*(url: string, to: Address, data: seq[byte]): string =
-  ## A raw `eth_call` at latest; the hex result ("" on no data). Raises on transport
-  ## failure — callers that must report unknown wrap it.
-  let r = rpc(url, "eth_call", %*[{"to": toHex0x(to), "data": toHex0x(data)}, "latest"])
-  if r.isNil or r.kind == JNull: "" else: r.getStr("")
+  ## A raw `eth_call` at latest; the hex result ("0x" when the call returns no data). A
+  ## failed read raises, a null result included — callers that must report unknown wrap it.
+  rpc(url, "eth_call", %*[{"to": toHex0x(to), "data": toHex0x(data)}, "latest"]).hexResult("eth_call")
 
 const GuardSlot* = "0x4a204f620c8c5ccdca3fd54d003badd85ba500436a431f0cbda4f558c93c34c8"
   ## keccak256("guard_manager.guard.address") — where a Safe stores its transaction guard
@@ -212,20 +223,12 @@ proc getThreshold*(url: string, safe: Address): tuple[known: bool, threshold: in
 proc probeRpc*(url: string): tuple[ok: bool, chainId: int, detail: string] =
   ## A cheap liveness probe of the user's RPC endpoint (invariant 8: untrusted,
   ## user-chosen infra, so its reachability must be *visible*, never assumed).
-  ## eth_chainId with a short timeout — reachable + the chain it reports, or the
-  ## error. Never raises: a failed probe is a real answer (down), not an exception.
+  ## eth_chainId within the probe budget, connect included — reachable + the chain it
+  ## reports, or the error. Never raises: a failed probe is a real answer (down).
   try:
-    let client = newHttpClient(timeout = 1500)
-    defer: client.close()
-    let body = %*{"jsonrpc": "2.0", "id": 1, "method": "eth_chainId", "params": []}
-    let resp = client.request(url, httpMethod = HttpPost, body = $body,
-                              headers = newHttpHeaders({"Content-Type": "application/json"}))
-    let j = parseJson(resp.body)
-    if j.kind == JObject and j.hasKey("result"):
-      let cid = parseHexInt(j["result"].getStr("0x0"))
-      return (true, cid, "chain " & $cid)
-    if j.kind == JObject and j.hasKey("error"):
-      return (false, -1, j["error"]{"message"}.getStr("rpc error"))
-    return (false, -1, "no result")
+    let r = rpc(url, "eth_chainId", newJArray(), probeBudget())
+    if r.kind != JString or r.getStr().len <= 2: return (false, -1, "no result")
+    let cid = parseHexInt(r.getStr())
+    (true, cid, "chain " & $cid)
   except CatchableError as e:
-    return (false, -1, e.msg)
+    (false, -1, e.msg)
