@@ -157,10 +157,13 @@ Which group a test needs:
   proof primitive), `wallet_sign_test` (EIP-155 signing vs the canonical vector),
   `wallet_rpc_test`, `rpc_budget_test`, and anything importing `evm_adapter` (`wallet_evm_test`,
   `coordinate_submit_anvil`), a LEZ chain seam (`lez_multisig_live_e2e`,
-  `lez_frost_*_e2e`), or `drivers/safe_rpc.nim` — whose calls run on chronos under
+  `lez_frost_*_e2e`), `drivers/safe_rpc.nim` — whose calls run on chronos under
   `wallet/rpc_budget.nim` since exo-14f — directly or through `readiness` / `settlement`
-  (`safe_owners_test`, `safe_fidelity_test`, `settlement_test`, `readiness_test`). websock is deliberately not needed: the code imports
-  `web3/eth_api` + `json_rpc/clients/httpclient`, not top-level `web3`.
+  (`safe_owners_test`, `safe_fidelity_test`, `settlement_test`, `readiness_test`), or
+  `wallet/btc_adapter.nim`, whose node calls run on chronos's HTTP client since exo-496
+  (the `btc_*` and Bitcoin split tests, the regtest e2e tests, the btc probes). websock is
+  deliberately not needed: the code imports `web3/eth_api` + `json_rpc/clients/httpclient`
+  (and `chronos/apps/http/httpclient`), not top-level `web3`.
 
 ### The host-return probe
 

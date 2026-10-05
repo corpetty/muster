@@ -28,18 +28,24 @@ const
   ReadBudget* = 5.seconds            ## a read: a balance, an owner set, a nonce, a receipt
   SendBudget* = 30.seconds           ## a broadcast, as btc_adapter's: a node may validate before it answers
   ProbeBudget* = 1500.milliseconds   ## a liveness probe (eth_chainId): reachable quickly, or down
+  ScanBudget* = 5.minutes            ## bitcoind's scantxoutset: one pass over every coin in the node's
+                                     ## UTXO set, over 10^8 on mainnet (Core gives it a "status" action
+                                     ## that reports progress); a regtest node answers at once. Its
+                                     ## connect still gets a read's budget (btc_adapter.call),
+                                     ## so only a node that took the request holds the thread this long.
   CloseBudget = 2.seconds            ## dropping a client must not hang either
 
-var budgets = (read: ReadBudget, send: SendBudget, probe: ProbeBudget)
+var budgets = (read: ReadBudget, send: SendBudget, probe: ProbeBudget, scan: ScanBudget)
 
 proc readBudget*(): Duration = budgets.read
 proc sendBudget*(): Duration = budgets.send
 proc probeBudget*(): Duration = budgets.probe
+proc scanBudget*(): Duration = budgets.scan
 
-proc setRpcBudgets*(read = ReadBudget, send = SendBudget, probe = ProbeBudget) =
+proc setRpcBudgets*(read = ReadBudget, send = SendBudget, probe = ProbeBudget, scan = ScanBudget) =
   ## Only tests shrink these, to prove a hung endpoint fails within one. With no
   ## arguments, the defaults again.
-  budgets = (read: read, send: send, probe: probe)
+  budgets = (read: read, send: send, probe: probe, scan: scan)
 
 template bounded*(fut: untyped, budget: Duration): untyped =
   ## `waitFor fut`, within `budget`: past it `fut` is cancelled and RpcTimeoutError raised.
