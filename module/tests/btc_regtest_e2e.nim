@@ -30,6 +30,7 @@ import ../src/crypto/keystore
 import ../src/wallet/types
 import ../src/wallet/adapter
 import ../src/wallet/btc_adapter
+import ../src/wallet/rpc_budget   # the admin helper's budget
 import ../src/settlement/settlement
 import ../src/coordination/accounts
 import ../src/coordination/card_rows
@@ -72,7 +73,9 @@ doAssert aliceKs.btcPubKey() == A, "the member's keystore key is the account key
 
 let node = newBitcoindAdapter("regtest", url, user, pass)
 proc rpc(meth: string, params: JsonNode = newJArray(), wallet = ""): JsonNode =
-  node.call(meth, params, wallet)
+  ## the test's own node administration (its wallets, mining), not muster's: a generous
+  ## budget, not a read's — 101 blocks into a wallet takes seconds (exo-496)
+  node.call(meth, params, wallet, budget = 120.seconds)
 
 # a miner wallet (funds + mines) and Carol's wallet (the outside signer)
 for w in ["miner", "carol"]:

@@ -50,22 +50,29 @@ const
   ReadBudget* = 5.seconds            ## a read: a balance, an owner set, a nonce, a receipt
   SendBudget* = 30.seconds           ## a broadcast, as btc_adapter's: a node may validate before it answers
   ProbeBudget* = 1500.milliseconds   ## a liveness probe (eth_chainId): reachable quickly, or down
+  ScanBudget* = 5.minutes            ## bitcoind's scantxoutset: one pass over every coin in the node's
+                                     ## UTXO set, over 10^8 on mainnet (Core gives it a "status" action
+                                     ## that reports progress); a regtest node answers at once. Its
+                                     ## connect still gets a read's budget (btc_adapter.call),
+                                     ## so only a node that took the request holds the thread this long.
   Cooldown* = 15.seconds             ## after a no-answer: more than one accounts poll (10 s) is skipped
   CooldownCap* = 60.seconds          ## the longest cooldown, so a recovered node is used within a minute
   CloseBudget = 2.seconds            ## dropping a client must not hang either
 
-var budgets = (read: ReadBudget, send: SendBudget, probe: ProbeBudget,
+var budgets = (read: ReadBudget, send: SendBudget, probe: ProbeBudget, scan: ScanBudget,
                cooldown: Cooldown, cooldownCap: CooldownCap)
 
 proc readBudget*(): Duration = budgets.read
 proc sendBudget*(): Duration = budgets.send
 proc probeBudget*(): Duration = budgets.probe
+proc scanBudget*(): Duration = budgets.scan
 
-proc setRpcBudgets*(read = ReadBudget, send = SendBudget, probe = ProbeBudget,
+proc setRpcBudgets*(read = ReadBudget, send = SendBudget, probe = ProbeBudget, scan = ScanBudget,
                     cooldown = Cooldown, cooldownCap = CooldownCap) =
   ## Only tests shrink these, to prove a hung endpoint fails within one. With no
   ## arguments, the defaults again. A zero cooldown turns the cooldown off.
-  budgets = (read: read, send: send, probe: probe, cooldown: cooldown, cooldownCap: cooldownCap)
+  budgets = (read: read, send: send, probe: probe, scan: scan,
+             cooldown: cooldown, cooldownCap: cooldownCap)
 
 proc timeoutError(msg: string, budget: Duration): ref RpcTimeoutError =
   result = newException(RpcTimeoutError, msg)

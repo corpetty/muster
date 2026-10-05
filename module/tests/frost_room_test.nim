@@ -69,11 +69,13 @@ echo "3. reduceIntentViews exposes rounds=2 for a FROST intent OK"
 # ── a single member cannot complete it — at most one contribution per (member, round),
 #    so w1 alone gives 2 of the 4 signer-contributions a k=2 / 2-round intent needs.
 block:
-  let solo = @[policyDeclEvent("x", "frost"), proposeEvent("x", effectJson),
-               contributeEvent("x", w1, s1, round = 1),
-               contributeEvent("x", w1, s1, round = 1),   # same (member, round) → folds once
-               contributeEvent("x", w1, s1, round = 2)]
-  doAssert intentState(solo, foldDrv, "x") != "executable",
+  let solo = @[policyDeclEvent(id, "frost"), proposeEvent(id, effectJson),
+               contributeEvent(id, w1, s1, round = 1),
+               contributeEvent(id, w1, s1, round = 1),   # same (member, round) → folds once
+               contributeEvent(id, w1, s1, round = 2)]
+  doAssert intentState(solo, foldDrv, id) == "collecting",
+           "the intent is folded, w1's round-1 contribution counted"
+  doAssert intentState(solo, foldDrv, id) != "executable",
            "one member cannot complete a k=2, 2-round FROST intent"
 echo "4. a single member cannot complete it (k distinct signers required) OK"
 

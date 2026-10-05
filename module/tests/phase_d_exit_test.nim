@@ -24,7 +24,7 @@
 import std/[os, json, strutils, sequtils]
 import ../src/drivers/[driver, kinds, btc_frost, btc_multisig]
 import ../src/bitcoin/[tx, keys]
-import ../src/wallet/[types, btc_adapter]
+import ../src/wallet/[types, btc_adapter, rpc_budget]
 import ../src/settlement/settlement
 import ../src/coordination/[session, intent_events, intents, live, accounts, aggregate, attest]
 import ./probes/live_room
@@ -33,7 +33,10 @@ let url = (if paramCount() >= 1: paramStr(1) else: "http://127.0.0.1:18443")
 let user = (if paramCount() >= 2: paramStr(2) else: "muster")
 let pass = (if paramCount() >= 3: paramStr(3) else: "muster")
 let node = newBitcoindAdapter("regtest", url, user, pass)
-proc rpc(meth: string, params: JsonNode = newJArray(), wallet = ""): JsonNode = node.call(meth, params, wallet)
+proc rpc(meth: string, params: JsonNode = newJArray(), wallet = ""): JsonNode =
+  ## the test's own node administration (its wallets, mining), not muster's: a generous
+  ## budget, not a read's — 101 blocks into a wallet takes seconds (exo-496)
+  node.call(meth, params, wallet, budget = 120.seconds)
 
 try: discard rpc("createwallet", %*["miner", false, false, "", false, true])
 except CatchableError as e:

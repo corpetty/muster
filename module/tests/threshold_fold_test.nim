@@ -89,11 +89,15 @@ block:
            "two distinct endorsers in the lineage"
 echo "2b. render path generic (views + provenance) with the threshold driver OK"
 
-# A non-roster endorsement never counts toward the threshold.
-var ev2 = @[proposeEvent("2", effectJson),
-            contributeEvent("2", named(a), endorse(a)),
-            contributeEvent("2", "mallory", endorse(mal))]
-doAssert intentState(ev2, foldDrv, "2") != "executable",
+# A non-roster endorsement never counts toward the threshold. The same effect under a
+# declared policy is a second intent: its id commits to the policy (exo-dbd).
+let id2 = intentIdFor(effectJson, "threshold")
+var ev2 = @[policyDeclEvent(id2, "threshold"), proposeEvent(id2, effectJson),
+            contributeEvent(id2, named(a), endorse(a)),
+            contributeEvent(id2, "mallory", endorse(mal))]
+doAssert intentState(ev2, foldDrv, id2) == "collecting",
+         "the roster endorsement counts; the intent is folded"
+doAssert intentState(ev2, foldDrv, id2) != "executable",
          "a non-member endorsement must not reach the threshold"
 echo "3. non-member endorsement refused OK"
 
@@ -134,18 +138,22 @@ block:
   let solo = newThresholdDriver(@[a.identity().ed, b.identity().ed, c.identity().ed], k = 1)
   let resolve: DriverFor = proc(kind: string): Driver =
     if kind == "solo": solo else: drv
-  # intentPolicyOf: default safe, then each intent's own declaration wins for THAT id.
-  var pe: seq[Event]
-  doAssert intentPolicyOf(pe, "x") == "safe", "no declaration -> default safe"
-  pe.add policyDeclEvent("x", "threshold")
-  pe.add policyDeclEvent("y", "solo")
-  doAssert intentPolicyOf(pe, "x") == "threshold", "each intent's own policy"
-  doAssert intentPolicyOf(pe, "y") == "solo", "a different intent, a different policy"
-  doAssert intentPolicyOf(pe, "z") == "safe", "an undeclared intent stays default"
   # The id commits to the policy, so the SAME effect under two policies is two intents.
   let idX = intentIdFor(effectJson, "threshold")
   let idY = intentIdFor(effectJson, "solo")
   doAssert idX != idY, "same effect + different policy = distinct intents"
+  # intentPolicyOf: default safe, then each intent's own declaration wins for THAT id —
+  # the declaration its id commits to (exo-dbd).
+  var pe: seq[Event]
+  doAssert intentPolicyOf(pe, idX) == "safe", "no declaration -> default safe"
+  pe.add @[policyDeclEvent(idX, "threshold"), proposeEvent(idX, effectJson)]
+  pe.add @[policyDeclEvent(idY, "solo"), proposeEvent(idY, effectJson)]
+  doAssert intentPolicyOf(pe, idX) == "threshold", "each intent's own policy"
+  doAssert intentPolicyOf(pe, idY) == "solo", "a different intent, a different policy"
+  doAssert intentPolicyOf(pe, intentIdFor(effectJson, "z")) == "safe", "an undeclared intent stays default"
+  pe.add policyDeclEvent(idX, "solo")
+  doAssert intentPolicyOf(pe, idX) == "threshold",
+           "a second declaration under an id is not the one the id commits to (exo-dbd)"
   # And the fold honours it: one log, two intents, ONE endorsement each — the solo
   # intent (k=1) reaches executable while the threshold intent (k=2) is still collecting.
   var ev: seq[Event]

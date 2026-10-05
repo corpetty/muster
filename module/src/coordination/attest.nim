@@ -132,10 +132,13 @@ proc intentInputs*(events: seq[Event], driverFor: DriverFor,
   ## message; a recorded external read is an external read. A field the proposal
   ## declares as sourced (`"sources": {field: "read"|"material"}`) whose source record
   ## is absent from the log yields an UNACCOUNTABLE input — and nothing is signed.
+  ## Only the proposal's own propose and policy are inputs (proposalOf, exo-dbd): a
+  ## substitute under the id never reached the signed bytes.
   let ordered = canonicalOrder(events)
+  let proposal = proposalOf(events, intentId)
   var effect = newJObject()
   for i, e in ordered:
-    if e.key == "intent/" & intentId & "/propose":
+    if e.key == "intent/" & intentId & "/propose" and proposal.isProposalEvent(intentId, e):
       try: effect = parseJson(e.value)
       except CatchableError: discard
       result.add SignedInput(class: icPeerMessage, logPos: i, logRef: eventId(e),
@@ -147,6 +150,7 @@ proc intentInputs*(events: seq[Event], driverFor: DriverFor,
     if p.len < 3 or p[0] != "intent" or p[1] != intentId: continue
     case p[2]
     of "policy", "context":
+      if p[2] == "policy" and not proposal.isProposalEvent(intentId, e): continue
       result.add SignedInput(class: icPeerMessage, logPos: i, logRef: eventId(e),
                              accountable: true, valueBytes: bytesOf(e.value))
     else: discard
@@ -427,9 +431,12 @@ proc approvalParents*(events: seq[Event], driverFor: DriverFor, intentId: string
   ## tell its history reaches events it cannot read, and the audit file, which carries
   ## exactly those, stays parent-closed. Never any other sig event (exo-96d): junk under a
   ## name, a non-member's signature, a key the collection never reached is no approval, and
-  ## a link to it would leave the file a parent it does not carry.
+  ## a link to it would leave the file a parent it does not carry. Nor a substitute
+  ## propose under the id (exo-dbd): only the proposal's own.
+  let proposal = proposalOf(events, intentId)
   for e in events:
-    if e.key == "intent/" & intentId & "/propose": result.add eventId(e)
+    if e.key == "intent/" & intentId & "/propose" and proposal.isProposalEvent(intentId, e):
+      result.add eventId(e)
   for g in approvalGrades(events, driverFor, intentId): result.add eventId(g.sig)
 
 proc gradeOf*(grades: seq[ApprovalGrade], who: string, round: int): AttestGrade =

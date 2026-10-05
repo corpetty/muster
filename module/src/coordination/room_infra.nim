@@ -32,10 +32,12 @@ proc needKey(n: InfraNeed): string =
   if not n.declared: "undeclared" else: $n.requirement.kind & ":" & n.requirement.name
 
 proc proposedIntents(events: seq[Event]): seq[string] =
-  ## Every proposed intent id, once, in canonical log order.
+  ## Every proposed intent id, once, in canonical log order — only where the propose is
+  ## the pair its id commits to (proposalOf, exo-dbd): a substitute brings nothing in.
   for e in canonicalOrder(events):
     let p = e.key.split('/')
-    if p.len >= 3 and p[0] == "intent" and p[2] == "propose" and p[1] notin result:
+    if p.len >= 3 and p[0] == "intent" and p[2] == "propose" and p[1] notin result and
+       proposalOf(events, p[1]).isProposalEvent(p[1], e):
       result.add p[1]
 
 proc roomInfraNeeds*(events: seq[Event], driverFor: DriverFor): seq[InfraNeed] =
