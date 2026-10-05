@@ -12,9 +12,19 @@
 ## nonce of 0, a balance of "", a height of 0, an empty tx hash) — except where null IS the
 ## chain's answer (no receipt yet: pending; an unknown transaction: not known).
 ##
+## After a no-answer the endpoint cools down (exo-14f.1), so the budgets do not stack across
+## calls. A third endpoint holds every connection until it is told to answer, then answers
+## every call with chain 31337 — a node that hangs and recovers. Against it: a read inside
+## the cooldown raises at once and sends nothing, with a message that names the unanswered
+## call, when, and the next try, and never the URL; a broadcast is still sent; another
+## endpoint is not affected; each no-answer in a row doubles the cooldown, up to the cap;
+## the first call after the cooldown is sent; a recovered endpoint is used again, and its
+## answer ends the cooldown.
+##
 ## Budgets are shrunk so the suite stays fast; the mechanism is the one the defaults use.
 
-import std/[json, net, nativesockets, strutils]
+import std/[json, net, nativesockets, strutils, atomics, os]
+from std/times import nil
 import chronos
 import stint
 import ../src/wallet/rpc_budget
@@ -36,27 +46,46 @@ proc holdSilently(fd: SocketHandle) {.thread.} =
     let (c, _) = fd.accept()
     if c != osInvalidSocket: held.add c
 
+proc reply(h: SocketHandle, answer: proc(meth: string): JsonNode {.nimcall, gcsafe.}) =
+  ## Read one HTTP request and answer its JSON-RPC id with `"result": answer(method)`.
+  let c = newSocket(h)
+  try:
+    var length = 0
+    while true:
+      let line = c.recvLine(timeout = 5000)
+      if line.len == 0 or line == "\r\n": break
+      if line.toLowerAscii().startsWith("content-length:"): length = parseInt(line.split(':')[1].strip())
+    let req = parseJson(c.recv(length, timeout = 5000))
+    let body = $(%*{"jsonrpc": "2.0", "id": req{"id"}, "result": answer(req{"method"}.getStr())})
+    c.send("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " & $body.len &
+           "\r\nConnection: close\r\n\r\n" & body)
+  except CatchableError: discard
+  c.close()
+
+proc null(meth: string): JsonNode = newJNull()
+proc chain31337(meth: string): JsonNode =
+  ## chain 31337 (eth_chainId), and a LEZ height (getLastBlockId) of the same number
+  if meth == "getLastBlockId": %31337 else: %"0x7a69"
+
 proc answerNull(fd: SocketHandle) {.thread.} =
-  ## Read each HTTP request and answer its JSON-RPC id with `"result": null`.
+  ## Answer every call with `"result": null`.
+  while true:
+    let (h, _) = fd.accept()
+    if h != osInvalidSocket: reply(h, null)
+
+var answering: Atomic[bool]
+proc holdThenAnswer(fd: SocketHandle) {.thread.} =
+  ## Hold every connection, as `holdSilently` does, until `answering`; from then on answer
+  ## every call as chain 31337: a node that hangs, then recovers.
+  var held: seq[SocketHandle]
   while true:
     let (h, _) = fd.accept()
     if h == osInvalidSocket: continue
-    let c = newSocket(h)
-    try:
-      var length = 0
-      while true:
-        let line = c.recvLine(timeout = 5000)
-        if line.len == 0 or line == "\r\n": break
-        if line.toLowerAscii().startsWith("content-length:"): length = parseInt(line.split(':')[1].strip())
-      let id = parseJson(c.recv(length, timeout = 5000)){"id"}
-      let body = $(%*{"jsonrpc": "2.0", "id": id, "result": newJNull()})
-      c.send("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " & $body.len &
-             "\r\nConnection: close\r\n\r\n" & body)
-    except CatchableError: discard
-    c.close()
+    if answering.load: reply(h, chain31337)
+    else: held.add h
 
 var listeners: seq[Socket]
-var servers: array[2, Thread[SocketHandle]]
+var servers: array[3, Thread[SocketHandle]]
 
 proc serve(i: int, server: proc(fd: SocketHandle) {.thread, nimcall.}): string =
   let s = newSocket()
@@ -69,16 +98,22 @@ proc serve(i: int, server: proc(fd: SocketHandle) {.thread, nimcall.}): string =
 
 let silent = serve(0, holdSilently)
 let nulls = serve(1, answerNull)
+let flaky = serve(2, holdThenAnswer) & "/v3/s3cr3t-api-key"   # a key in the path, as hosted RPCs take one
 
 # ── the budgets, shrunk ───────────────────────────────────────────────────────
 const ReadMs = 400
 const SendMs = 800
 const ProbeMs = 300
 const SlackMs = 1500        # scheduling and teardown on a busy machine; the hang it guards is unbounded
-setRpcBudgets(read = ReadMs.milliseconds, send = SendMs.milliseconds, probe = ProbeMs.milliseconds)
+# Sections 1–5 hold each call to its OWN budget, so they run with the cooldown off (zero);
+# section 6 turns it on.
+setRpcBudgets(read = ReadMs.milliseconds, send = SendMs.milliseconds, probe = ProbeMs.milliseconds,
+              cooldown = ZeroDuration)
 
 doAssert ReadBudget <= 10.seconds and SendBudget <= 30.seconds and ProbeBudget <= 2.seconds,
   "the defaults stay within what a UI call can wait"
+doAssert Cooldown > 10.seconds and Cooldown <= 30.seconds and CooldownCap <= 60.seconds,
+  "a cooldown skips at least one accounts poll (10 s), and a recovered node is used within a minute"
 
 var checked = 0
 var worstOverMs = 0         # the most any call ran past its budget
@@ -189,7 +224,7 @@ echo "4. a submit's finality wait ends within its window plus one read; a payer'
 proc nullRaises(label: string, m: string) =
   doAssert m.len > 0, label & ": a null answer read as a value"
   doAssert "no answer within" notin m, label & ": the null endpoint timed out instead: " & m
-doAssert probeRpc(nulls).detail == "no result"
+doAssert probeRpc(nulls).detail == "RPC answered no chain id"
 nullRaises("safeNonce", raisesOn(safeNonce(nulls, safeAddr)))
 nullRaises("safe getBalance", raisesOn(getBalance(nulls, safeAddr)))
 nullRaises("ethCall", raisesOn(ethCall(nulls, safeAddr, @[0x01'u8])))
@@ -210,10 +245,144 @@ nullRaises("lez getAccount", raisesOn(lezNulls.getAccount(newSeq[byte](32))))
 doAssert not lezNulls.getTransaction("ab").known, "a null transaction is the chain's answer: not known"
 echo "5. a null read raises (nonce, balance, call, tx hash, height); null receipt / tx stay the chain's answer OK"
 
-# ── 6. the budgets restore ────────────────────────────────────────────────────
+# ── 6. after a no-answer, the endpoint cools down (exo-14f.1) ──────────────────
+const CoolMs = 1000         # the first cooldown
+const CapMs = 2000          # ...doubled per no-answer in a row, up to this
+const FastMs = 100          # "at once": a refusal sends nothing; the budgets are 400–800 ms
+setRpcBudgets(read = ReadMs.milliseconds, send = SendMs.milliseconds, probe = ProbeMs.milliseconds,
+              cooldown = CoolMs.milliseconds, cooldownCap = CapMs.milliseconds)
+forgetCooldowns()
+
+proc clockAt(t: float): string = times.format(times.local(times.fromUnixFloat(t)), "HH:mm:ss")
+proc sinceMs(t0: Moment): int = int((Moment.now() - t0).milliseconds)
+var worstRefusalMs = 0
+proc refusedAtOnce(label, failure: string, t0: Moment) =
+  ## `failure` is a cooldown refusal, raised at once, that says what and when, and no URL.
+  let ms = sinceMs(t0)
+  worstRefusalMs = max(worstRefusalMs, ms)
+  doAssert ms <= FastMs, label & ": took " & $ms & " ms inside the cooldown; nothing should be sent"
+  doAssert "not sent: the endpoint did not answer eth_chainId within " & $ReadMs.milliseconds in failure,
+    label & ": " & failure
+  doAssert "; next try at " in failure, label & ": no next try in " & failure
+  doAssert "s3cr3t" notin failure and "127.0.0.1" notin failure, label & ": the URL leaked: " & failure
+proc waitCooldownOut(url: string): int =
+  ## Poll until `url` is no longer cooling down → how long that took (ms).
+  let t0 = Moment.now()
+  while coolingReason(url).len > 0:
+    doAssert sinceMs(t0) < CapMs + SlackMs, "a cooldown outlasted its cap"
+    sleep(10)
+  sinceMs(t0)
+
+answering.store(false)
+block:
+  # a. the first no-answer costs its budget, and starts the cooldown
+  let t0 = Moment.now()
+  let m = raisesOn(rpcChainId(flaky))
+  let failedAt = times.epochTime()
+  doAssert "no answer within" in m and sinceMs(t0) >= ReadMs - 50, m
+  let reason = coolingReason(flaky)
+  doAssert reason.startsWith("did not answer eth_chainId within " & $ReadMs.milliseconds & " at "), reason
+  doAssert ("at " & clockAt(failedAt)) in reason or ("at " & clockAt(failedAt - 1.0)) in reason,
+    "the reason names when it went unanswered: " & reason
+  doAssert "times in a row" notin reason, reason
+
+  # b. inside the cooldown, every read and probe raises at once, through every seam
+  var t = Moment.now()
+  refusedAtOnce("rpcBalance", raisesOn(rpcBalance(flaky, zero, "latest")), t)
+  t = Moment.now()
+  refusedAtOnce("rpcReceiptStatus", raisesOn(rpcReceiptStatus(flaky, txh)), t)
+  t = Moment.now()
+  refusedAtOnce("safeNonce", raisesOn(safeNonce(flaky, safeAddr)), t)
+  t = Moment.now()
+  refusedAtOnce("lez lastBlockId", raisesOn(newLezRpc(flaky).lastBlockId()), t)
+  t = Moment.now()
+  var typed = false
+  try: discard jsonRpc(flaky, "eth_blockNumber", newJArray(), readBudget())
+  except RpcCoolingError as e:
+    typed = e of RpcTimeoutError and e.reason == coolingReason(flaky)
+  doAssert typed, "a refusal is an RpcTimeoutError (an RpcCoolingError) carrying its reason"
+  refusedAtOnce("jsonRpc", "not sent: the endpoint " & coolingReason(flaky), t)
+
+  # ...and what a status line shows says "not asked", with the times, never "unreachable"
+  t = Moment.now()
+  let p = probeRpc(flaky)
+  doAssert not p.ok and p.detail == "RPC not asked: it " & coolingReason(flaky), p.detail
+  refusedAtOnce("probeRpc", "not sent: the endpoint " & p.detail["RPC not asked: it ".len .. ^1], t)
+  let o = getOwners(flaky, safeAddr)
+  doAssert not o.known and o.detail.startsWith("RPC not asked: it did not answer eth_chainId"), o.detail
+
+  # c. another endpoint is not affected: `nulls` still answers, at once
+  t = Moment.now()
+  doAssert probeRpc(nulls).detail == "RPC answered no chain id" and sinceMs(t) <= ReadMs
+  doAssert coolingReason(nulls) == ""
+echo "6a–c. one no-answer costs one budget; inside the cooldown every read raises in " &
+     $worstRefusalMs & " ms, naming the call, when and the next try, no URL; another endpoint answers OK"
+
+block:
+  # d. a broadcast is always sent (it is the user's own action); its no-answer counts too
+  let t0 = Moment.now()
+  let m = raisesOn(rpcSendRaw(flaky, @[0x01'u8]))
+  doAssert "no answer within" in m and "not sent" notin m, "a send inside the cooldown was not sent: " & m
+  doAssert sinceMs(t0) >= SendMs - 50, "the send was held to its own budget, so it was sent"
+  let r = coolingReason(flaky)
+  doAssert r.startsWith("did not answer eth_sendRawTransaction within " & $SendMs.milliseconds) and
+           ", 2 times in a row; next try at " in r, r
+
+  # e. the second no-answer in a row doubled the cooldown; the first call after it is sent
+  let waited = waitCooldownOut(flaky)
+  doAssert waited >= 2 * CoolMs - 100, "the second cooldown is twice the first (waited " & $waited & " ms)"
+  let t1 = Moment.now()
+  let m2 = raisesOn(rpcChainId(flaky))
+  doAssert "no answer within" in m2 and sinceMs(t1) >= ReadMs - 50,
+    "the first call after the cooldown is sent, and costs its budget: " & m2
+  doAssert ", 3 times in a row" in coolingReason(flaky)
+  let waited3 = waitCooldownOut(flaky)
+  doAssert waited3 >= CapMs - 100 and waited3 <= CapMs + SlackMs,
+    "a third cooldown is capped at " & $CapMs & " ms (waited " & $waited3 & " ms)"
+echo "6d–e. a broadcast is sent inside the cooldown; each no-answer in a row doubles it, up to the cap; " &
+     "the first call after it is sent OK"
+
+block:
+  # f. the node recovers: once the cooldown is out it is used again, and its answer ends it
+  answering.store(true)
+  doAssert coolingReason(flaky) == "", "6e waited the cooldown out"
+  doAssert rpcChainId(flaky) == "31337", "a recovered endpoint is used again"
+  doAssert coolingReason(flaky) == ""
+  let p = probeRpc(flaky)
+  doAssert p.ok and p.chainId == 31337, p.detail
+  doAssert newLezRpc(flaky).lastBlockId() == 31337'u64, "every seam uses it again"
+  # an answer reset the count: the next no-answer starts from the first cooldown again
+  answering.store(false)
+  discard raisesOn(rpcChainId(flaky))
+  let r = coolingReason(flaky)
+  doAssert r.len > 0 and "times in a row" notin r, r
+  let waited = waitCooldownOut(flaky)
+  doAssert waited < 2 * CoolMs - 200, "after an answer the cooldown starts over at " & $CoolMs &
+    " ms (waited " & $waited & " ms)"
+
+  # g. naming an endpoint again (Settings) tries it at once
+  discard raisesOn(rpcChainId(flaky))
+  doAssert coolingReason(flaky).len > 0
+  answering.store(true)
+  forgetCooldown(flaky)
+  let t = Moment.now()
+  doAssert rpcChainId(flaky) == "31337" and sinceMs(t) <= ReadMs, "a forgotten cooldown is sent at once"
+
+  # h. a zero cooldown turns it off: every call is sent
+  setRpcBudgets(read = ReadMs.milliseconds, send = SendMs.milliseconds, probe = ProbeMs.milliseconds,
+                cooldown = ZeroDuration)
+  answering.store(false)
+  discard raisesOn(rpcChainId(flaky))
+  doAssert coolingReason(flaky) == ""
+echo "6f–h. a recovered endpoint is used again and its answer ends the cooldown; Settings tries it now; " &
+     "zero turns it off OK"
+
+# ── 7. the budgets restore ────────────────────────────────────────────────────
 setRpcBudgets()
+forgetCooldowns()
 doAssert readBudget() == ReadBudget and sendBudget() == SendBudget and probeBudget() == ProbeBudget
-echo "6. defaults: read " & $ReadBudget & ", send " & $SendBudget & ", probe " & $ProbeBudget & " OK"
+echo "7. defaults: read " & $ReadBudget & ", send " & $SendBudget & ", probe " & $ProbeBudget &
+     ", cooldown " & $Cooldown & " up to " & $CooldownCap & " OK"
 
 echo "rpc_budget_test: all OK (" & $checked & " calls held to their budget; worst overrun " &
      $worstOverMs & " ms)"

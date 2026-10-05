@@ -202,7 +202,7 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
       return (rdUnknown, "no RPC configured to probe " & name & " through")
     let probe = if facts.rpcProbe != nil: facts.rpcProbe else: probeRpc
     let (ok, chain, detail) = probe(facts.rpcUrl)
-    if not ok: (rdMissing, "RPC unreachable: " & detail)
+    if not ok: (rdMissing, detail)       # the probe says why: unreachable, or cooling down
     elif name == "eip155:" & $chain: (rdMet, detail)
     else: (rdMissing, "RPC serves chain " & $chain & ", the action needs " & name)
   result.authorityHeld = proc(name: string): Grade =

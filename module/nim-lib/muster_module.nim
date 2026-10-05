@@ -73,6 +73,7 @@ import ../src/wallet/types             # chain-agnostic wallet types
 import ../src/wallet/adapter           # ChainAdapter seam + Wallet aggregate
 import ../src/wallet/evm_adapter       # the EVM/Safe chain
 import ../src/wallet/evm_rpc           # rpcChainId: the chain the configured RPC serves (a split's)
+from ../src/wallet/rpc_budget import forgetCooldown   # Settings naming an endpoint tries it now (exo-14f.1)
 import ../src/wallet/erc20_logs        # a token's symbol()/decimals(), display only (exo-5ab)
 import ../src/wallet/mock_chain        # a second, non-EVM chain (proves agnosticism)
 import ../src/wallet/lez_core          # the LEZ wallet seam + FakeLezCore (P-L3 swaps in real)
@@ -1626,7 +1627,7 @@ proc chainViewOf(a: RoomAccount): ChainView =
                                      detail: "no chain read for a " & a.family & " account yet")
   if gRpcUrl.len == 0: return (known: false, signers: @[], threshold: 0, detail: "no RPC configured")
   let (ok, chain, pd) = probeRpc(gRpcUrl)
-  if not ok: return (known: false, signers: @[], threshold: 0, detail: "RPC unreachable: " & pd)
+  if not ok: return (known: false, signers: @[], threshold: 0, detail: pd)   # unreachable, or cooling down
   if "eip155:" & $chain != a.chain:
     return (known: false, signers: @[], threshold: 0,
             detail: "the configured RPC serves eip155:" & $chain & ", the account is on " & a.chain)
@@ -1650,12 +1651,13 @@ proc bypassesOf(a: RoomAccount): JsonNode =
   if a.family != "evm.safe": (result["detail"] = %"no bypass read for this family yet"; return)
   if gRpcUrl.len == 0: (result["detail"] = %"no RPC configured"; return)
   let (ok, chain, pd) = probeRpc(gRpcUrl)
-  if not ok: (result["detail"] = %("RPC unreachable: " & pd); return)
+  if not ok: (result["detail"] = %pd; return)
   if "eip155:" & $chain != a.chain:
     result["detail"] = %("the configured RPC serves eip155:" & $chain & ", the account is on " & a.chain)
     return
   # stop at the first failed read: a node that did not answer one will not answer the next,
-  # and each costs a read budget on the module thread (exo-14f)
+  # and each costs a read budget on the module thread (exo-14f; after a no-answer the
+  # endpoint cools down, so the reads of the accounts after this one cost nothing, exo-14f.1)
   let m = getModules(gRpcUrl, toAddress(a.address))
   if not m.known: (result["detail"] = %m.detail; return)
   let g = getGuard(gRpcUrl, toAddress(a.address))
@@ -3881,6 +3883,7 @@ proc musterSetSetting(key, value: string): string =
   of "rpc":
     gRpcUrl = value
     gWallet = nil            # re-init the EVM adapter against the new endpoint
+    forgetCooldown(value)    # naming it again is "try it now" (wallet/rpc_budget.nim, exo-14f.1)
   of "relayer":
     # who sends settling transactions: "self" or "unlocked:<0x…>" (exo-a50.1.5)
     if value != "self" and not (value.startsWith("unlocked:0x") and value.len == 51):
@@ -3898,6 +3901,7 @@ proc musterSetSetting(key, value: string): string =
     if v.len > 0 and not (v.startsWith("http://") or v.startsWith("https://")):
       return $(%*{"error": "lez-rpc must be an http(s) URL, e.g. https://testnet.lez.logos.co"})
     gLezRpc = (if v.len == 0: "https://testnet.lez.logos.co" else: v)
+    forgetCooldown(gLezRpc)
   of "lez-chain":
     let v = value.strip()
     if not v.startsWith("lez:") or v.len < 5:
