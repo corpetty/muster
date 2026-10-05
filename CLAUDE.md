@@ -43,6 +43,7 @@ Re-validate the stack decisions table in `docs/02-implementation-plan.md` agains
 - Each phase's accept criteria become an integration test (Nim headless, or a logos-qt-mcp script for UI phases) before implementation.
 - The module imports nothing from `ui/`. The UI reaches the module only through the logos API under capability policy. Inter-module calls go through logos-core.
 - The educational layer explains what the code already guarantees — it never adds a code path the invariants don't cover. If a lifecycle step can't be shown truthfully, that's a product bug, not a copy problem.
+- A runner build (`make build`) takes more than 7 GB just to evaluate the flake, and on 2026-10-05 it froze the operator's workstation. Ask before starting one, run it under a memory cap, and reuse an existing runner when the change touches nothing compiled into it. See `.claude/doctrine/codebase.md` § Runner builds.
 
 ## Layout
 
