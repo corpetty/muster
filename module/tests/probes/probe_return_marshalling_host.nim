@@ -72,7 +72,14 @@ proc libTokens(envVar, pcName, lib: string): seq[string] =
   @["-l" & lib]
 
 proc secpTokens(): seq[string] = libTokens("MUSTER_SECP256K1_LIB", "libsecp256k1", "secp256k1")
-proc sodiumTokens(): seq[string] = libTokens("MUSTER_SODIUM_LIB", "libsodium", "sodium")
+proc sodiumTokens(): seq[string] =
+  # under the grader (no MUSTER_* reaches it), the libsodium grade-specs.sh linked beside
+  # the g++ it built with (exo-56a), not whichever the store walk meets first
+  let linked = moduleRoot / ".probe-env" / "sodium"
+  if getEnv("MUSTER_SODIUM_LIB").len == 0 and getEnv("MUSTER_NIMPKGS").len == 0 and
+      fileExists(linked / "libsodium.so"):
+    return @["-L" & linked, "-Wl,-rpath," & linked, "-lsodium"]
+  libTokens("MUSTER_SODIUM_LIB", "libsodium", "sodium")
 
 # ── the module's Nim closure (logos_sdk, nim-secp256k1, stint, the web3 stack). The
 #    staticlib compiles nim-lib/muster_module.nim, which imports all of it, but this
@@ -125,9 +132,13 @@ block buildHarness:
   var args = @[harnessCpp, staticLib, "-O2", "-o", harnessBin]
   args.add secpTokens()
   args.add sodiumTokens()
-  # the grader's allowlisted PATH may hold no g++: grade-specs.sh links one here (exo-a7b)
-  let cxx = (if findExe("g++").len == 0 and fileExists(moduleRoot / ".probe-env" / "g++"):
-               moduleRoot / ".probe-env" / "g++" else: "g++")
+  # the grader's allowlisted PATH may hold no g++, or only the host's, which links the host's
+  # glibc against nixpkgs' libsodium: grade-specs.sh links the matching one here (exo-a7b,
+  # exo-56a). run-suite.sh (MUSTER_NIMPKGS set) puts its own on PATH.
+  let linkedCxx = moduleRoot / ".probe-env" / "g++"
+  let cxx = (if fileExists(linkedCxx) and
+                 (getEnv("MUSTER_NIMPKGS").len == 0 or findExe("g++").len == 0): linkedCxx
+             else: "g++")
   let (o, c) = run(cxx, args)
   if c != 0 or not fileExists(harnessBin):
     fail("g++ harness link failed:\n" & o)

@@ -37,12 +37,25 @@ export SPEC_ORACLE_RTAMT_PYTHON="$VENV/bin/python"
 PROBE_ENV="$REPO/module/.probe-env"
 mkdir -p "$PROBE_ENV"
 ln -sfn "$("$REPO/module/tools/nim-closure.sh")" "$PROBE_ENV/nimpkgs"
-SODIUM="${MUSTER_SODIUM:-$(nix build nixpkgs#libsodium --no-link --print-out-paths 2>/dev/null | tail -1)}"
+# libsodium, and the gcc that links against it, from one nixpkgs (exo-56a; run-suite.sh does
+# the same, exo-844). The oracle's PATH holds the host's gcc, and a probe it links loads the
+# host's glibc, which may be older than the one nixpkgs' libsodium needs ("GLIBC_ABI_GNU2_TLS
+# not found"), so that gcc is linked as .probe-env/cc, where config.nims compiles with it.
+# MUSTER_SODIUM (a host libsodium) keeps the host's compiler.
+NIXGCC=""
+if [ -n "${MUSTER_SODIUM:-}" ]; then
+  SODIUM="$MUSTER_SODIUM"
+else
+  { read -r SODIUM; read -r NIXGCC; } < <(nix build nixpkgs#libsodium.out nixpkgs#gcc.out --no-link --print-out-paths 2>/dev/null) || true
+fi
 [ -f "$SODIUM/lib/libsodium.so" ] && ln -sfn "$SODIUM/lib" "$PROBE_ENV/sodium" \
   || echo "warning: libsodium not found (set MUSTER_SODIUM); probes that need it will not build" >&2
-# exo-526's probe compiles a C++ host harness; like run-suite.sh, borrow nixpkgs' g++ when
-# the host has none, linked where the probe looks for it.
-CXX="$(command -v g++ || true)"
+if [ -n "$NIXGCC" ] && [ -x "$NIXGCC/bin/gcc" ]; then ln -sfn "$NIXGCC/bin" "$PROBE_ENV/cc"; else rm -f "$PROBE_ENV/cc"; fi
+# exo-526's probe compiles a C++ host harness, linked where the probe looks for it: the g++
+# beside that gcc, else the host's, else nixpkgs'.
+CXX=""
+[ -n "$NIXGCC" ] && [ -x "$NIXGCC/bin/g++" ] && CXX="$NIXGCC/bin/g++"
+[ -z "$CXX" ] && CXX="$(command -v g++ || true)"
 if [ -z "$CXX" ]; then
   GCC="$(nix build nixpkgs#gcc --no-link --print-out-paths 2>/dev/null | tail -1)"
   [ -x "$GCC/bin/g++" ] && CXX="$GCC/bin/g++"

@@ -448,5 +448,5 @@ class MusterUi
     PROP(QString keystoreStatusJson="{}" READONLY)
     // Approve Safe intents with this keystore_module account ("" stops), exo-149.5 K5:
     // keystore_select, which asks once for the account's binding; then re-reads the row.
-    SLOT(void keystoreSelect(QString address))
+    SLOT(void keystoreSelect(const QString &address))
 }
