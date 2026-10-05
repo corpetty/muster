@@ -1962,3 +1962,6 @@
 {"type":"dep_add","timestamp":"2026-10-05T12:47:08.865941749Z","issue_id":"exo-f12","payload":{"dep_type":"blocks","depends_on":"exo-dbd"}}
 {"type":"rename","timestamp":"2026-10-05T13:39:40.851237859Z","issue_id":"exo-273","payload":{"new_id":"exo-ff5.9"}}
 {"type":"dep_add","timestamp":"2026-10-05T13:39:40.851237859Z","issue_id":"exo-ff5.9","payload":{"dep_type":"parent-child","depends_on":"exo-ff5"}}
+{"type":"create","timestamp":"2026-10-05T14:54:58.592026194Z","issue_id":"exo-c50","payload":{"description":"exo-14f (#223) left CLAUDE.md's layout line for module/src/wallet/rpc_budget.nim out, to avoid a conflict with main's exo-ecbe edit; both #223 and #224 (exo-496) are merged now. Add it to the src/wallet/ line, between verify and btc_adapter, with the scan budget exo-496 added.","priority":"3","title":"CLAUDE.md layout: the wallet/rpc_budget line","type":"task"}}
+{"type":"dep_add","timestamp":"2026-10-05T14:54:59.253944052Z","issue_id":"exo-c50","payload":{"dep_type":"blocks","depends_on":"exo-496"}}
+{"type":"close","timestamp":"2026-10-05T14:55:14.044660955Z","issue_id":"exo-c50","payload":{}}
