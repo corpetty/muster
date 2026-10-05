@@ -23,6 +23,14 @@ CACHE := --accept-flake-config \
   --extra-substituters https://cache.nix.logos.co/public \
   --extra-trusted-public-keys public:l4HrXgL4nw246+LBh2SOJyhz64BoGegOYLheT/iIAPU=
 
+# A runner build's flake evaluation alone took 7.4 GB on 2026-10-05 and OOM-froze the
+# workstation (.claude/doctrine/codebase.md § Runner builds). `build` runs its nix calls
+# in a user cgroup scope capped at BUILD_MEM, so only the build dies if it runs over. The
+# scope holds the evaluating nix client; derivations still build under nix-daemon,
+# outside it. BUILD_MEM= (empty) builds uncapped.
+BUILD_MEM ?= 10G
+CAPPED     = $(if $(BUILD_MEM),systemd-run --user --scope --quiet -p MemoryMax=$(BUILD_MEM) -p MemorySwapMax=0 nice -n 19)
+
 FLEET     ?= logos.dev
 FLEET_CFG := infra/fleets/$(FLEET).json
 
@@ -41,7 +49,7 @@ SEED      ?=
 help:
 	@echo "make run                 launch the standalone muster app (dashboard + walkthrough)"
 	@echo "make run-fleet PEER=x     launch a peer on the Logos delivery fleet (two-instance)"
-	@echo "make build               pre-build the runner — the slow first build; do this once"
+	@echo "make build               pre-build the runner — the slow first build; do this once (memory-capped: BUILD_MEM=10G)"
 	@echo "make build-lgx           build muster-ui.lgx (to load into logos-basecamp instead)"
 	@echo "make appimage            build the download-and-run AppImage (see RELEASING.md)"
 	@echo "make clean               remove local run state (.run/)"
@@ -58,6 +66,8 @@ help:
 # under .run/ so 'make clean' keeps it (delete .run/runner to release it).
 build:
 	@mkdir -p $(CURDIR)/.run
+	@[ -z "$(BUILD_MEM)" ] || $(CAPPED) true \
+	  || { echo "make build: cannot cap memory at BUILD_MEM=$(BUILD_MEM) with systemd-run --user; BUILD_MEM= builds uncapped"; exit 1; }
 	@# ui/flake.lock is machine-local + gitignored. muster_module is pinned in ui/flake.nix
 	@# by a RELATIVE ref (git+file:../?dir=module, portable across clones, exo-1ec.2/#116) —
 	@# but nix re-fetches a relative git input at eval time ("file:../ not supported"), and
@@ -69,11 +79,12 @@ build:
 	@# The relock still runs first to keep ui/flake.lock current for a direct `nix build`, and
 	@# to surface the dirty-tree WARN (a git+file input cannot lock from uncommitted state —
 	@# commit first, or the build uses the last COMMITTED tree).
-	@cd $(UI) && nix flake update muster_module $(CACHE) 2>&1 | grep -q "not writing lock file" \
+	@cd $(UI) && $(CAPPED) nix flake update muster_module $(CACHE) 2>&1 | grep -q "not writing lock file" \
 	  && echo "WARN: muster_module NOT relocked (uncommitted changes in the git tree) — the runner builds the last COMMITTED module rev; commit first to pick up module edits" || true
-	cd $(UI) && nix build 'path:.#runner' $(CACHE) --no-eval-cache \
+	cd $(UI) && $(CAPPED) nix build 'path:.#runner' $(CACHE) --no-eval-cache \
 	  --override-input muster_module "git+file://$(CURDIR)?dir=module" \
-	  --out-link $(CURDIR)/.run/runner
+	  --out-link $(CURDIR)/.run/runner \
+	  || { s=$$?; [ $$s -ne 137 ] || echo "make build: killed at the BUILD_MEM=$(BUILD_MEM) cap. Free memory, or build when the host is quieter; raise BUILD_MEM only if the host can spare it"; exit $$s; }
 
 # nix run resolves apps.default (the standalone runner), NOT packages.default
 # (the .lgx). Each --user-dir is one identity + wallet, so two dirs are two peers.

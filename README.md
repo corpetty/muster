@@ -40,7 +40,7 @@ Needs [Nix](https://nixos.org/download) with flakes. There are three ways in; al
 **Standalone app — the easy path.** `logos-standalone-app` hosts the muster UI and `muster_module` directly; no basecamp, no package manager.
 
 ```bash
-make build   # the slow first build — pre-builds the runner (minutes); do this once
+make build   # the slow first build — pre-builds the runner (minutes); do this once. Memory-capped at BUILD_MEM=10G
 make run     # launch: the lifecycle dashboard (propose → approve → submit) + the walkthrough
 ```
 

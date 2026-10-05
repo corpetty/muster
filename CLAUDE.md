@@ -43,6 +43,7 @@ Re-validate the stack decisions table in `docs/02-implementation-plan.md` agains
 - Each phase's accept criteria become an integration test (Nim headless, or a logos-qt-mcp script for UI phases) before implementation.
 - The module imports nothing from `ui/`. The UI reaches the module only through the logos API under capability policy. Inter-module calls go through logos-core.
 - The educational layer explains what the code already guarantees — it never adds a code path the invariants don't cover. If a lifecycle step can't be shown truthfully, that's a product bug, not a copy problem.
+- A runner build (`make build`) takes more than 7 GB just to evaluate the flake, and on 2026-10-05 it froze the operator's workstation. Ask before starting one. `make build` caps itself (`BUILD_MEM`, default 10G); wrap any other evaluation of the runner flake in the same cap. Reuse an existing runner when the change touches nothing compiled into it. See `.claude/doctrine/codebase.md` § Runner builds.
 
 ## Layout
 
@@ -94,7 +95,7 @@ ADRs are **not** in `docs/adr/`; they are a section of `docs/02-implementation-p
 **These run today.** The root `Makefile` drives the real client (`module/` + `ui/`); `demo/` keeps its own `Makefile` for the speed build.
 
 ```
-make build                                      # build the standalone runner into .run/runner (the slow first build)
+make build                                      # build the standalone runner into .run/runner (the slow first build; memory-capped, BUILD_MEM=10G)
 make run                                        # launch the real UI standalone (logos-standalone-app), seeded as anvil Safe owner 0
 make run-fleet PEER=alice                       # a peer on the live Logos fleet; PEER=bob in a second terminal (auto-seeded owners 0/1)
 make clean-peer PEER=alice                      # wipe one peer's identity + wallet (seeding applies only on a fresh identity)
