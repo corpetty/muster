@@ -78,16 +78,22 @@ reaches.
 - **Ask before starting one.** The timing of a runner build on the operator's
   workstation is the operator's call. Never start one unannounced in the
   background.
-- **Run it under a hard memory cap**, so that only the build dies if it runs
-  over, not the session:
+- **Keep it under a hard memory cap**, so that only the build dies if it runs
+  over, not the session. `make build` applies the cap itself: its nix calls
+  run in a `systemd-run --user --scope` capped at `BUILD_MEM` (default
+  `10G`). It refuses to start if the cap can't be applied, and it says so
+  when the build is killed at the cap. `BUILD_MEM=` builds uncapped; that is
+  a deliberate choice, never a workaround for a refused cap. A runner flake
+  evaluated any other way (`nix build`/`nix run` by hand, `make run`,
+  `make build-lgx`) is not capped, so wrap it yourself:
 
   ```bash
-  systemd-run --user --scope -p MemoryMax=10G -p MemorySwapMax=0 nice -n 19 make build
+  systemd-run --user --scope -p MemoryMax=10G -p MemorySwapMax=0 nice -n 19 <command>
   ```
 
-  The scope holds the evaluating `nix` process. Size `MemoryMax` to what the
-  host can spare with everything else running. If the build dies at the cap,
-  it needs a quieter host or a quieter hour, not a higher cap on a busy one.
+  The scope holds the evaluating `nix` process. Size the cap to what the host
+  can spare with everything else running. If the build dies at the cap, it
+  needs a quieter host or a quieter hour, not a higher cap on a busy one.
 - **Reuse an existing runner when the change touches nothing compiled into
   it.** That means no change under `module/src`, `module/nim-lib`,
   `module/metadata.json`, `ui/src`, or any `flake.nix`/`flake.lock`. A check
