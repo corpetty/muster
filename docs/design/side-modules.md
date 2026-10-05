@@ -64,7 +64,7 @@ Grouped by what each part touches:
 Four structural problems sit under the last rows. Each one blocks an offload.
 
 **1. The module has no clock.** Dispatch is synchronous on the host's module thread, and muster runs no loop, timer or thread of its own. Every pump runs inside `coordinate_intents`, and only for the active room (`muster_module.nim:2146-2150`: `gSession.poll`, `lezPump`, `frostPump`, `splitPump`, `keystorePump`). So the UI's one-second Room timer is the module's heartbeat.
-- A split payment in a room that is not open is neither reported nor confirmed (`splitPump` reads `gSession` only). This symptom was filed independently as exo-273. The rooms exo-ecbe now re-enters at startup inherit it, because none of them is made active.
+- A split payment in a room that is not open is neither reported nor confirmed (`splitPump` reads `gSession` only). This symptom was filed independently as exo-273, now `exo-ff5.9` in this epic. The rooms exo-ecbe now re-enters at startup inherit it, because none of them is made active.
 - Headless `logoscore` advances nothing.
 - Reads have side effects: `gSession.poll()` fires store queries.
 
@@ -160,15 +160,16 @@ module muster_chain_watcher {
 | Slice | What | Depends on |
 |---|---|---|
 | `exo-ff5.1` S1 | Room context explicit: a `RoomCtx {session, accounts, roster}`; `DriverFor(kind, ctx)`; topic-scoped room methods | — |
-| `exo-ff5.2` S2 | Kernel clock: `coordinate_tick` advances every joined room; reads become side-effect free. Fixes exo-273 structurally; a `gSession`-swap interim for exo-273 can land first, and S2 replaces the swap with `RoomCtx` | S1 |
+| `exo-ff5.2` S2 | Kernel clock: `coordinate_tick` advances every joined room; reads become side-effect free. Fixes `exo-ff5.9` structurally; that interim can land first, and S2 replaces its swap with `RoomCtx` | S1 |
 | `exo-ff5.3` S3 | Plaintext-free events (`room_changed(topic, head)`, `intent_changed`, …), emitted from the tick on the module thread; the UI subscribes and keeps a slow poll | S2 |
 | `exo-ff5.4` S4 | Fold cache keyed by (log heads, roster epoch, accounts); `canonicalOrder` in O(N log N) with cached ids | S1 |
 | `exo-ff5.5` S5 | Domain rules out of QML: effect builders from typed parameters, split preview, propose gate, admission, CSPRNG topics | — |
 | `exo-ff5.6` S6 | Signing separate from broadcasting at the chain seams; reads return `{value, source, height}` | — |
 | `exo-ff5.7` S7 | EVM reads via `eth_rpc_module`, part payments and `wallet_send` via `tx_sender_module`, fees via `fee_module` | S6, exo-149.4 |
 | `exo-ff5.8` S8 | The key-less chain watcher (§6) | S2, S6 |
+| `exo-ff5.9` (filed as exo-273) | The interim for the symptom: every joined room pumps, whichever is open — each session's pumps run with that room swapped into `gSession`, as `coordinate_conversations` already does | — |
 
-S1, S5 and S6 can start in parallel. **S1–S4 are worth doing even if nothing ever leaves the process:**
+S1, S5, S6 and the `exo-ff5.9` interim can start in parallel. **S1–S4 are worth doing even if nothing ever leaves the process:**
 - they give headless runs and closed rooms a clock;
 - they cut the per-second cost by an order of magnitude;
 - they give the seaqt port (exo-607) a contract it can bind without copying logic.
