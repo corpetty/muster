@@ -28,6 +28,7 @@ let foldDrv: DriverFor = proc(kind: string): drivercore.Driver = drv
 # A governance proposal: admit the "unanimous" driver kind into the room.
 const addDriverJson = """{"effect":"add-driver","kind":"unanimous"}"""
 let id = intentIdFor(addDriverJson, "threshold")
+let decl = policyDeclEvent(id, "threshold")   # the policy the id commits to, published with it (exo-dbd)
 let m = canonicalize(drv, effectFromJson(addDriverJson))
 proc endorse(k: EncKeys): string = hex(edSign(k, m.bytes))
 # Published as the hosted path does: under the name its signer is identified by (exo-a5a).
@@ -43,7 +44,7 @@ echo "1. add-driver is schema-bound governance OK"
 
 # 2. Before the room approves it, only the FOUNDING kinds are admitted.
 block:
-  let ev = @[proposeEvent(id, addDriverJson), contributeEvent(id, named(a), endorse(a))]
+  let ev = @[decl, proposeEvent(id, addDriverJson), contributeEvent(id, named(a), endorse(a))]
   let kinds = roomDriverKinds(ev, foldDrv)
   doAssert "safe" in kinds and "threshold" in kinds, "the founding set is always present"
   doAssert "unanimous" notin kinds,
@@ -52,7 +53,7 @@ echo "2. a collecting add-driver admits no new capability OK"
 
 # 3. The group APPROVES it (threshold met) → "unanimous" is admitted to the room.
 block:
-  let ev = @[proposeEvent(id, addDriverJson),
+  let ev = @[decl, proposeEvent(id, addDriverJson),
              contributeEvent(id, named(a), endorse(a)),
              contributeEvent(id, named(b), endorse(b))]
   doAssert intentState(ev, foldDrv, id) == "executable",
@@ -71,9 +72,11 @@ echo "3. an approved add-driver grows the room's driver set OK"
 block:
   let mal = encFromSeed(seed(9))
   proc endorseMal(): string = hex(edSign(mal, m.bytes))
-  let ev = @[proposeEvent(id, addDriverJson),
+  let ev = @[decl, proposeEvent(id, addDriverJson),
              contributeEvent(id, named(a), endorse(a)),
              contributeEvent(id, "mallory", endorseMal())]
+  doAssert intentState(ev, foldDrv, id) == "collecting",
+           "the proposal is folded, the member's endorsement counted"
   doAssert intentState(ev, foldDrv, id) != "executable",
            "a non-member cannot push the proposal to approved"
   doAssert "unanimous" notin roomDriverKinds(ev, foldDrv),

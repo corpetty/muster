@@ -57,22 +57,24 @@ const topic = "/muster/1/safe-5FbD/proto"
 let alice = newCoordinationSession(newLocalTransport(net), aliceCrypto, topic)
 let bob = newCoordinationSession(newLocalTransport(net), bobCrypto, topic)
 
-# Alice proposes intent-1.
-alice.publish(proposeEvent("1", effectJson))
-doAssert intentState(bob.log.allEvents(), foldDrv, "1") == "proposed",
+# Alice proposes intent-1. Its id is the content address of its effect (exo-dbd): a propose
+# under any other id is nobody's proposal.
+let id1 = intentIdFor(effectJson)
+alice.publish(proposeEvent(id1, effectJson))
+doAssert intentState(bob.log.allEvents(), foldDrv, id1) == "proposed",
          "Bob sees the proposal after it propagates"
 echo "1. propose propagates OK"
 
 # Alice contributes her owner signature — collecting (1 of 2).
-alice.publish(contributeEvent("1", contributorOf(driver, effectJson, sig0), sig0))   # under its signer (exo-a5a)
-doAssert intentState(alice.log.allEvents(), foldDrv, "1") == "collecting",
+alice.publish(contributeEvent(id1, contributorOf(driver, effectJson, sig0), sig0))   # under its signer (exo-a5a)
+doAssert intentState(alice.log.allEvents(), foldDrv, id1) == "collecting",
          "one valid owner signature -> collecting"
 echo "2. first signature -> collecting OK"
 
 # Bob contributes his — threshold met, both fold to executable and converge.
-bob.publish(contributeEvent("1", contributorOf(driver, effectJson, sig1), sig1))
-let aState = intentState(alice.log.allEvents(), foldDrv, "1")
-let bState = intentState(bob.log.allEvents(), foldDrv, "1")
+bob.publish(contributeEvent(id1, contributorOf(driver, effectJson, sig1), sig1))
+let aState = intentState(alice.log.allEvents(), foldDrv, id1)
+let bState = intentState(bob.log.allEvents(), foldDrv, id1)
 doAssert aState == "executable", "two owner signatures -> executable (Alice): " & aState
 doAssert bState == "executable", "two owner signatures -> executable (Bob): " & bState
 doAssert aState == bState and alice.digest() == bob.digest(),
@@ -80,9 +82,14 @@ doAssert aState == bState and alice.digest() == bob.digest(),
 echo "3. threshold met -> executable + convergence OK"
 
 # A non-owner signature does not count: it never advances the intent to executable.
-alice.publish(proposeEvent("2", effectJson))
-alice.publish(contributeEvent("2", "intruder", nonOwnerSig))
-doAssert intentState(alice.log.allEvents(), foldDrv, "2") != "executable",
+# The same effect under a declared policy is a second intent (the id commits to it).
+let id2 = intentIdFor(effectJson, "safe")
+alice.publish(policyDeclEvent(id2, "safe"))
+alice.publish(proposeEvent(id2, effectJson))
+alice.publish(contributeEvent(id2, "intruder", nonOwnerSig))
+doAssert intentState(alice.log.allEvents(), foldDrv, id2) == "proposed",
+         "the second intent is folded, and the non-owner signature left it uncollected"
+doAssert intentState(alice.log.allEvents(), foldDrv, id2) != "executable",
          "a non-owner signature must not reach the threshold"
 echo "4. non-owner signature does not count OK"
 

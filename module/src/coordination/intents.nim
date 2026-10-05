@@ -12,6 +12,8 @@
 ##   propose : "intent/<id>/propose"                   value = effect JSON {to,value,nonce}
 ##   sign    : "intent/<id>/sig/<contributor>/<round>" value = signature hex
 ##   submit  : "intent/<id>/submit"                    value = "1"
+## A propose and its policy count only as the pair the id is the content address of
+## (proposalOf, exo-dbd): anything else filed under an id is nobody's proposal.
 ## A contribution is keyed by contributor AND round, so a duplicate signature from the
 ## same contributor in the same round folds once, while a multi-round driver (FROST)
 ## can have the same member contribute in each round. Single-round drivers pass round
@@ -146,11 +148,18 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
       (p[1], p[2], (if p.len >= 4: p[3] else: ""), (if p.len >= 5: p[4] else: "1"))
     else: ("", "", "", "")
 
-  proc driverOf(id: string): Driver = driverFor(intentPolicyOf(events, id))
+  var proposals = initTable[string, IntentProposal]()
+  proc proposalFor(id: string): IntentProposal =
+    if id notin proposals: proposals[id] = proposalOf(events, id)
+    proposals[id]
+  proc driverOf(id: string): Driver = driverFor(proposalFor(id).policyOr("safe"))
 
   for e in ordered:                                    # pass 1 — proposes
     let (id, op, _, _) = opOf(e)
     if op != "propose" or id.len == 0 or id in result: continue
+    # only the effect the id commits to: a substitute under it, however early it sorts,
+    # is nobody's proposal, and an id no pair hashes to is no intent (exo-dbd)
+    if not proposalFor(id).isProposalEvent(id, e): continue
     inc now
     let effect = effectFromJson(e.value)
     let driver = driverOf(id)
@@ -341,7 +350,8 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
     if p.len >= 4 and p[0] == "intent" and p[2] == "decline":
       declined.mgetOrPut(p[1], initHashSet[string]()).incl(p[3])
   for id, it in intents:
-    let pol = intentPolicyOf(events, id)
+    let proposal = proposalOf(events, id)                         # its effect and policy, read once
+    let pol = proposal.policyOr("safe")
     let drv = driverFor(pol)
     let desc = describeFor(drv, it.effect)                       # THIS proposal's policy (exo-a90.2)
     let curRound = it.collection.round
@@ -359,7 +369,7 @@ proc reduceIntentViews*(events: seq[Event], driverFor: DriverFor): seq[IntentVie
       if e.key.startsWith(pre):
         let who = e.key[pre.len .. ^1]
         if who.len > 0 and who notin proposers: proposers.add who
-    let ej = effectJsonOf(events, id)
+    let ej = proposal.effectJson
     let sch = effectSchema(ej)
     # Approvals come from the grades, so a rejected (mis-attested) approval never
     # inflates the "M of N" — the card counts what the fold counts.
@@ -563,6 +573,8 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
                 else: driverFor(intentPolicyOf(events, id)).describe())
     case op
     of "propose":
+      # the proposal, once: never a substitute under its id (exo-dbd)
+      if id in proposeSeq or not proposalOf(events, id).isProposalEvent(id, ordered[i]): continue
       proposeSeq[id] = i
       result.add ActivityEntry(seq: i, order: 0, kind: "propose", intentId: id,
         account: "", title: "Proposed " & activityEffectLabel(events, id),
@@ -707,11 +719,16 @@ proc intentProvenance*(events: seq[Event], driverFor: DriverFor, intentId: strin
   ## would never appear. A duplicate owner signature folds once, exactly as it counts.
   let ordered = canonicalOrder(events)
   let gradeOf = gradeLookup(events, driverFor)
+  let proposal = proposalOf(events, intentId)
   var seenSig = initHashSet[string]()
+  var seenPropose = false
   for i in 0 ..< ordered.len:
     let p = ordered[i].key.split('/')
     if p.len < 3 or p[0] != "intent" or p[1] != intentId: continue
     if p[2] == "propose":
+      # the proposal, once: a substitute under its id never reached it (exo-dbd)
+      if seenPropose or not proposal.isProposalEvent(intentId, ordered[i]): continue
+      seenPropose = true
       result.add ProvItem(cls: icPeerMessage, logPos: i, account: "",
                           accountable: true, what: "the proposal",
                           detail: summarizeEffect(ordered[i].value),
@@ -765,6 +782,11 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
   var epoch = 0
   var seenSig = initHashSet[string]()
   var seenDecline = initHashSet[string]()
+  var proposals = initTable[string, IntentProposal]()
+  proc ownProposal(id: string, e: Event): bool =
+    ## a propose or policy is the intent's only as the pair its id commits to (exo-dbd)
+    if id notin proposals: proposals[id] = proposalOf(events, id)
+    proposals[id].isProposalEvent(id, e)
   for i in 0 ..< ordered.len:
     let e = ordered[i]
     let p = e.key.split('/')
@@ -793,11 +815,13 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
     let id = p[1]
     case p[2]
     of "propose":
+      if not ownProposal(id, e): continue   # a substitute under the id is no one's proposal
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "propose", intentId: id,
         accountable: true, what: "a proposal", detail: summarizeEffect(e.value),
         guarantee: "sealed to the room's epoch — only a member could have placed it; the materialization is re-derived by every client (F-4)",
         epoch: epoch)
     of "policy":
+      if not ownProposal(id, e): continue
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "policy", intentId: id,
         accountable: true, what: "the policy this intent runs under", detail: e.value,
         guarantee: "sealed to the room's epoch; every member folds the identical driver (invariant 6)",

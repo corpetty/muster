@@ -340,9 +340,11 @@ Rectangle {
     property var answers: []
     property string readerIdentity: ""
     property string askedOfName: ""
-    property bool askedByMe: false        // this member posted the request: never theirs to answer
+    // this member posted this card: their own request is never theirs to answer, nor their
+    // own shared address theirs to pay (exo-1d9)
+    property bool postedByMe: false
     readonly property string askedOf: String((cardRoot.card && cardRoot.card["for"]) || "").toLowerCase().replace(/^0x/, "")
-    readonly property bool askedOfMe: !cardRoot.askedByMe
+    readonly property bool askedOfMe: !cardRoot.postedByMe
                                       && (cardRoot.askedOf.length === 0
                                           || cardRoot.askedOf === cardRoot.readerIdentity.toLowerCase().replace(/^0x/, ""))
     readonly property bool answeredByMe: {
@@ -552,23 +554,28 @@ Rectangle {
             }
 
             // A public account is worth a word: the payer should know the
-            // destination is readable before choosing how to pay.
+            // destination is readable before choosing how to pay. "Zone" is the
+            // LEZ's word; on Ethereum or Bitcoin it is the chain (exo-4d4).
             LogosText {
                 Layout.fillWidth: true
                 visible: cardRoot.card && cardRoot.card.form !== undefined
                     && Number(cardRoot.card.form) === 1
                 wrapMode: Text.WordWrap
-                text: qsTr("Anyone reading the zone can see what lands here.")
+                text: (String((cardRoot.card && cardRoot.card.chain) || "").indexOf("lez:") === 0
+                       || String((cardRoot.card && cardRoot.card.asset) || "") === "LEZ")
+                      ? qsTr("Anyone reading the zone can see what lands here.")
+                      : qsTr("Anyone reading the chain can see what lands here.")
                 color: Theme.palette.textTertiary
                 font.pixelSize: Theme.typography.badgeText
             }
 
             // Close the loop: use the address the counterparty just disclosed as the
             // recipient of the payment being composed, instead of retyping it. Only for
-            // a public account (form 1) that carries an address.
+            // a public account (form 1) that carries an address, and never on the
+            // reader's own card: that would pay themselves (exo-1d9).
             LogosButton {
                 objectName: "cardUseAddress"
-                visible: cardRoot.card && Number(cardRoot.card.form || 0) === 1
+                visible: cardRoot.card && !cardRoot.postedByMe && Number(cardRoot.card.form || 0) === 1
                     && String((cardRoot.card && cardRoot.card.address) || "").replace(/\s+/g, "").length > 0
                 Layout.fillWidth: true
                 text: qsTr("Use as recipient")

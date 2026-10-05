@@ -13,7 +13,8 @@
 #   module/tests/run-suite.sh all dcbor frost # any group, filtered by substring
 #
 # Env: MUSTER_NIMPKGS (closure dir, default ~/.cache/muster/nimpkgs; tools/nim-closure.sh
-# fills it on first run), MUSTER_SODIUM (libsodium prefix, default nixpkgs#libsodium), JOBS (default 8),
+# fills it on first run), MUSTER_SODIUM (libsodium prefix; unset: nixpkgs' libsodium, built
+# with nixpkgs' gcc), JOBS (default 8),
 # TEST_TIMEOUT (seconds per test, default 900), OUT (log dir, default a fresh mktemp).
 # TEST_ARGS (appended to each selected test's command line — an e2e test's own
 # arguments, e.g. TEST_ARGS="$SAFE" for coordinate_submit_anvil; see tests/README.md).
@@ -39,7 +40,19 @@ E2E=(safe_anvil_e2e safe_real_anvil_e2e coordinate_submit_anvil btc_regtest_e2e 
 # 1. The closure, at the pinned revs (fetched on a miss).
 NIMPKGS="$(tools/nim-closure.sh)" || exit 1
 
-SODIUM="${MUSTER_SODIUM:-$(nix build nixpkgs#libsodium --no-link --print-out-paths 2>/dev/null | tail -1)}"
+# libsodium from nixpkgs, and the gcc that links against it from the same nixpkgs (one
+# build, one resolution). A nix-built library needs the glibc it was built against, and
+# nixpkgs-unstable's is newer than many hosts' — 2.44 against Ubuntu 24.04's 2.39 fails
+# every test at run time ("GLIBC_ABI_GNU2_TLS not found") — so a run that borrows
+# nixpkgs' libsodium compiles with nixpkgs' gcc, whose wrapper links its own glibc.
+# MUSTER_SODIUM (a host libsodium) keeps the host's compiler.
+if [ -n "${MUSTER_SODIUM:-}" ]; then
+  SODIUM="$MUSTER_SODIUM"
+else
+  { read -r SODIUM; read -r NIXGCC; } < <(nix build nixpkgs#libsodium.out nixpkgs#gcc.out --no-link --print-out-paths 2>/dev/null)
+  [ -n "${NIXGCC:-}" ] && [ -x "$NIXGCC/bin/gcc" ] || { echo "nixpkgs#gcc not found (set MUSTER_SODIUM to use the host's compiler)"; exit 1; }
+  export PATH="$NIXGCC/bin:$PATH"
+fi
 [ -f "$SODIUM/lib/libsodium.so" ] || { echo "libsodium not found (set MUSTER_SODIUM)"; exit 1; }
 # probe_return_marshalling_host links the module into a C++ harness against a system
 # libsecp256k1; supply nixpkgs' unless the caller already pointed it somewhere.
@@ -48,7 +61,8 @@ if [ -z "${MUSTER_SECP256K1_LIB:-}" ] && ! pkg-config --exists libsecp256k1 2>/d
   [ -d "$SECPLIB/lib" ] && export MUSTER_SECP256K1_LIB="-L$SECPLIB/lib -lsecp256k1 -Wl,-rpath,$SECPLIB/lib"
 fi
 export MUSTER_SODIUM_LIB="${MUSTER_SODIUM_LIB:--L$SODIUM/lib -lsodium -Wl,-rpath,$SODIUM/lib}"
-# ...and compiles that harness with g++; borrow nixpkgs' when the host has none.
+# ...and compiles that harness with g++: nixpkgs' (on PATH above) or the host's; borrow
+# nixpkgs' when MUSTER_SODIUM kept the host's compiler and the host has none.
 if ! command -v g++ >/dev/null; then
   GCC="$(nix build nixpkgs#gcc --no-link --print-out-paths 2>/dev/null | tail -1)"
   [ -x "$GCC/bin/g++" ] && export PATH="$GCC/bin:$PATH"

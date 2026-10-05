@@ -67,6 +67,7 @@ import ../src/intents/authorization    # muster-issued authorizations for the ho
 import ../src/coordination/lp_invoker  # LpInvoker — call the target module over lp_*
 import ../src/coordination/discovery   # discover coordinatable module actions (P-D3)
 import ../src/coordination/contacts    # the address book (aliases for member ids)
+import ../src/coordination/joined_rooms  # the rooms this member joined, re-entered on relaunch (exo-ecbe)
 import ../src/coordination/home        # the home surface: what waits on THIS member (F-18, exo-ed5)
 import ../src/coordination/effect_summary  # what an effect moves, in its family's words (exo-59c)
 import ../src/wallet/types             # chain-agnostic wallet types
@@ -731,6 +732,11 @@ proc clearInvite(ctopic: string) =
     writeFile(p, $arr)
   except CatchableError: discard
 
+proc joinedRoomsPath(): string =
+  var dir = context().instancePersistencePath
+  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  dir / "joined_rooms.json"
+
 proc musterCoordinateJoin(topic: string): string =
   let ks = moduleKeystore()
   # Normalize to a valid Waku content topic so the room actually shards + routes over
@@ -743,6 +749,8 @@ proc musterCoordinateJoin(topic: string): string =
     gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(ks), ctopic)
     gSessions[ctopic] = gSession
   gTopic = ctopic
+  # Remember the room beside the keystore, so a relaunch re-enters it (exo-ecbe).
+  discard rememberJoinedRoom(joinedRoomsPath(), ctopic)
   # Announce the room's join key (exo-661.7), so someone who knows only the topic can
   # ask to join without naming themselves on it. Rate-limited in the session.
   gSession.announceBeacon()
@@ -790,16 +798,36 @@ proc inboxSessionFor(ctopic: string): CoordinationSession =
   gSessions[ctopic] = s
   s
 
+var gRoomsRestored = false
+
+proc restoreJoinedRooms(): seq[string] =
+  ## Re-enter every room this member joined before a relaunch (exo-ecbe), once per run:
+  ## a session per remembered topic, as coordinate_join makes one, so Home lists the room
+  ## and its state folds back from the store and the keystore. None is made active — the
+  ## member opens one from Home, which re-activates it. Returns the topics re-entered.
+  if gRoomsRestored: return
+  gRoomsRestored = true
+  let ks = moduleKeystore()
+  for ctopic in loadJoinedRooms(joinedRoomsPath()):
+    if ctopic in gSessions or ctopic in gInboxTopics: continue
+    let s = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(ks), ctopic)
+    gSessions[ctopic] = s
+    s.announceBeacon()
+    result.add ctopic
+  if gLpDebug: stderr.writeLine("MUSTER-LP rooms restored=" & $result.len & " topics=" & $result)
+
 proc musterCoordinateStartInbox(): string =
   ## Begin listening on THIS identity's inbox so invites arrive even before any room is
-  ## joined. Idempotent; the UI calls it once at startup. Pulls any invites left while away.
+  ## joined, and re-enter every room it joined before a relaunch (exo-ecbe). Idempotent;
+  ## the UI calls it once at startup. Pulls any invites left while away.
   let ks = moduleKeystore()
   let myChat = toHex(ks.encIdentity().toBytes())
   let ctopic = inboxTopicFor(myChat)
   gInbox = inboxSessionFor(ctopic)
   try: gInbox.catchUp()
   except CatchableError: discard
-  $(%*{"inbox": ctopic})
+  let rooms = restoreJoinedRooms()
+  $(%*{"inbox": ctopic, "rooms": rooms})
 
 proc musterCoordinateInvite(peerChatIdHex, roomTopic, note: string): string =
   ## Invite a peer (by their 64-byte chat id) to a room: seal {topic, from, note, ts} to
