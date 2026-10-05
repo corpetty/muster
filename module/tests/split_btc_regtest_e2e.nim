@@ -25,7 +25,7 @@ import ../src/coordination/live
 import ../src/coordination/authorship
 import ../src/coordination/parts
 import ../src/coordination/parts_btc
-import ../src/wallet/[types, btc_adapter]
+import ../src/wallet/[types, btc_adapter, rpc_budget]
 import ../src/bitcoin/[tx, script, network]
 import ./probes/live_room
 
@@ -43,7 +43,10 @@ let carol = idHex(room3CarolKs)
 let splitFor: DriverFor = proc(policy: string): Driver =
   if policy == Policy: newSplitDriver(BtcSplitFamily, Chain, @[alice, bob, carol]) else: newUnsupportedDriver(policy)
 
-proc rpc(meth: string, params: JsonNode = newJArray(), wallet = ""): JsonNode = node.call(meth, params, wallet)
+proc rpc(meth: string, params: JsonNode = newJArray(), wallet = ""): JsonNode =
+  ## the test's own node administration (its wallets, mining), not muster's: a generous
+  ## budget, not a read's — 101 blocks into a wallet takes seconds (exo-496)
+  node.call(meth, params, wallet, budget = 120.seconds)
 
 try: discard rpc("getblockcount")
 except CatchableError as e: quit("no regtest node at " & url & " (" & e.msg & ") — run infra/bitcoind/regtest.sh", 2)

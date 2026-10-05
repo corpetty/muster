@@ -21,10 +21,19 @@
 ## WalletError; a failed read is never a zero balance. RPC amounts are BTC decimals;
 ## they become satoshis by rounding ×1e8, exact for every amount Bitcoin can hold
 ## (< 2^53 sat), and nothing on a signing path ever sees a float (invariant 5).
+##
+## Every call runs on the module dispatch thread under a budget (wallet/rpc_budget.nim,
+## exo-14f, exo-496): a read readBudget(), the broadcast sendBudget(), the scan
+## scanBudget(), the chain probe probeBudget(). A node that does not answer in time is an
+## error, never a wait for the kernel's TCP timeout.
 
-import std/[httpclient, json, base64, strutils, math, uri]
+import std/[json, base64, strutils, math, uri]
+import chronos
+import chronos/apps/http/httpclient
+import stew/byteutils
 import ./types
 import ./adapter
+import ./rpc_budget
 import ../crypto/keystore
 import ../bitcoin/[tx, network]
 
@@ -63,27 +72,66 @@ proc newBitcoindAdapterFromUrl*(networkName, url: string): BitcoindAdapter =
 proc nativeAsset(a: BitcoindAdapter): AssetId =
   AssetId(chain: a.network.caip2, symbol: "BTC", kind: akNative, decimals: 8)
 
-proc call*(a: BitcoindAdapter, meth: string, params: JsonNode = newJArray(), wallet = ""): JsonNode =
-  ## One JSON-RPC call; `wallet` routes it to /wallet/<name>. A transport failure or an
-  ## RPC error raises WalletError naming the method and the node's message.
-  let client = newHttpClient(timeout = 30_000)
-  defer: client.close()
-  let body = %*{"jsonrpc": "1.0", "id": "muster", "method": meth, "params": params}
-  let headers = newHttpHeaders({"Content-Type": "application/json",
-                                "Authorization": "Basic " & encode(a.user & ":" & a.pass)})
-  let url = (if wallet.len > 0: a.url & "/wallet/" & wallet else: a.url)
-  var resp: Response
-  try: resp = client.request(url, httpMethod = HttpPost, body = $body, headers = headers)
+type NodeAnswer = tuple[status: int, reason, body: string]
+
+proc exchange(address: HttpAddress, headers: seq[HttpHeaderTuple], body: string,
+              connectBy, headersBy: Duration): Future[NodeAnswer] {.
+              async: (raises: [CancelledError, HttpError]).} =
+  ## One POST and its whole answer, whatever the status: bitcoind answers an RPC error
+  ## with HTTP 500 (404 for an unknown method) and the error object in the body. Not
+  ## nim-json-rpc's client, which raises on a non-2xx status before it reads the body.
+  let session = HttpSessionRef.new(connectTimeout = connectBy, headersTimeout = headersBy)
+  var req: HttpClientRequestRef
+  var resp: HttpClientResponseRef
+  try:
+    req = HttpClientRequestRef.new(session, address, MethodPost, headers = headers,
+                                   body = body.toBytes())
+    resp = await req.send()
+    let bytes = await resp.getBodyBytes()
+    (resp.status, resp.reason, string.fromBytes(bytes))
+  finally:
+    if resp != nil: await resp.closeWait()
+    if req != nil: await req.closeWait()
+    await session.closeWait()
+
+proc httpFailure(meth: string, ans: NodeAnswer): ref WalletError =
+  ## an answer that is not JSON-RPC, or a failure status with no error object
+  var m = "bitcoind " & meth & ": HTTP " & $ans.status
+  if ans.reason.len > 0: m.add " " & ans.reason
+  if ans.body.len > 0: m.add " " & ans.body
+  newException(WalletError, m)
+
+proc call*(a: BitcoindAdapter, meth: string, params: JsonNode = newJArray(), wallet = "",
+           budget = readBudget()): JsonNode =
+  ## One JSON-RPC call; `wallet` routes it to /wallet/<name>. `budget` is one deadline
+  ## over connect, request, headers and body; the connect alone gets at most a read's
+  ## budget, so a node that cannot be reached fails as fast as a read whatever the call,
+  ## and only the node's own work (a scan, a broadcast's validation) is given longer.
+  ## A transport failure, no answer within the budget, or an RPC error raises
+  ## WalletError naming the method and the node's message — never the URL, which may
+  ## carry credentials.
+  let body = $(%*{"jsonrpc": "1.0", "id": "muster", "method": meth, "params": params})
+  let headers: seq[HttpHeaderTuple] = @[(key: "Content-Type", value: "application/json"),
+    (key: "Authorization", value: "Basic " & encode(a.user & ":" & a.pass))]
+  let address = getHttpAddress(if wallet.len > 0: a.url & "/wallet/" & wallet else: a.url).valueOr:
+    raise newException(WalletError, "bitcoind " & meth & ": not a node URL (" & $error & ")")
+  # chronos's own timers: the connect's as above; the headers' past the budget, so its
+  # 120 s default never ends a scan the budget allows
+  let connectBy = (if budget > readBudget(): readBudget() else: budget + 1.seconds)
+  var ans: NodeAnswer
+  try: ans = bounded(exchange(address, headers, body, connectBy, budget + 1.seconds), budget)
+  except RpcTimeoutError:
+    raise newException(WalletError, "bitcoind " & meth & ": no answer within " & $budget)
   except CatchableError as e:
     raise newException(WalletError, "bitcoind " & meth & ": unreachable: " & e.msg)
   var j: JsonNode
-  try: j = parseJson(resp.body)
-  except CatchableError:
-    raise newException(WalletError, "bitcoind " & meth & ": HTTP " & resp.status & " " & resp.body)
+  try: j = parseJson(ans.body)
+  except CatchableError: raise httpFailure(meth, ans)
   let err = j{"error"}
   if err != nil and err.kind != JNull:
     raise newException(WalletError, "bitcoind " & meth & ": " & err{"message"}.getStr($err) &
                                      " (" & $err{"code"}.getInt() & ")")
+  if ans.status div 100 != 2: raise httpFailure(meth, ans)   # a failure with no error object is still one
   j{"result"}
 
 proc toSat(btc: JsonNode): uint64 =
@@ -96,7 +144,10 @@ proc utxosOf*(a: BitcoindAdapter, address: string): seq[BtcUtxo] =
   ## The address's confirmed coins, from the node's UTXO set (scantxoutset).
   if hrpOfAddress(address) != a.network.hrp:
     raise newException(WalletError, address & " is not a " & a.network.name & " address")
-  let r = a.call("scantxoutset", %*["start", ["addr(" & address & ")"]])
+  # under scanBudget() (rpc_budget.nim says why). Past it the node's scan runs on and a
+  # retry meanwhile is refused by the node ("Scan already in progress"); muster never
+  # sends "abort", which stops whatever scan the node is running, another client's too
+  let r = a.call("scantxoutset", %*["start", ["addr(" & address & ")"]], budget = scanBudget())
   if r == nil or r.kind != JObject or not r{"success"}.getBool(false):
     raise newException(WalletError, "scantxoutset did not complete for " & address)
   for u in r{"unspents"}:
@@ -154,7 +205,7 @@ method submit*(a: BitcoindAdapter, tx: PreparedTx, ks: Keystore): TxRef =
     want = p{"txid"}.getStr()
   except CatchableError: raise newException(WalletError, "not a Bitcoin payload")
   if raw.len == 0: raise newException(WalletError, "no raw transaction to broadcast")
-  let got = a.call("sendrawtransaction", %*[raw]).getStr()
+  let got = a.call("sendrawtransaction", %*[raw], budget = sendBudget()).getStr()
   if want.len > 0 and got != want:
     raise newException(WalletError, "the node accepted " & got & ", not the assembled " & want)
   TxRef(chain: a.network.caip2, id: got)
@@ -167,12 +218,13 @@ method finality*(a: BitcoindAdapter, txRef: TxRef): Finality =
 
 proc probeBitcoind*(url: string): tuple[ok: bool, chain: string, detail: string] {.gcsafe.} =
   ## Which chain the node at `url` serves, as CAIP-2 (bip122:<first 32 hex of the
-  ## genesis block hash>) — asked of the node, never assumed from a setting.
+  ## genesis block hash>) — asked of the node, never assumed from a setting. A liveness
+  ## probe, as safe_rpc's probeRpc: within probeBudget(), reachable quickly or down.
   try:
     {.cast(gcsafe).}:
       let (bare, user, pass) = splitCredentials(url)
       let a = BitcoindAdapter(url: bare, user: user, pass: pass, finalDepth: 1)
-      let genesis = a.call("getblockhash", %*[0]).getStr()
+      let genesis = a.call("getblockhash", %*[0], budget = probeBudget()).getStr()
       if genesis.len != 64: return (false, "", "not a block hash: " & genesis)
       let chain = "bip122:" & genesis[0 ..< 32]
       var name = chain

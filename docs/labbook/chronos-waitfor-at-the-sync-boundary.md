@@ -93,3 +93,30 @@ Three details that each looked fine and were not:
 Not bounded: resolving a hostname (the OS resolver runs synchronously before the first
 byte). `tests/rpc_budget_test.nim` holds every call to its budget against a local
 socket that accepts and never replies.
+
+### The Bitcoin node (exo-496, 2026-10-05)
+
+`wallet/btc_adapter.nim` was left on std/httpclient by exo-14f, with the same unbounded
+connect. It moved to the budget too, with two differences from the EVM seams:
+
+- **Not nim-json-rpc's client.** `RpcHttpClient` raises on a non-2xx status before it
+  reads the body. bitcoind answers a JSON-RPC 1.0 error with HTTP 500 (404 for an
+  unknown method) and the error object in the body, so that client would turn "min
+  relay fee not met (-26)" into "Internal Server Error". The adapter drives chronos's
+  `HttpSessionRef` / `HttpClientRequestRef` itself and reads the body whatever the
+  status.
+- **One call can legitimately run for minutes.** `scantxoutset` reads every coin in
+  the node's UTXO set, over 10^8 on mainnet; Core gives it a `status` action that
+  reports progress. A regtest node answers at once. It gets `ScanBudget`
+  (5 min, a judgment, not a measurement), and two of chronos's own timers had to move with it: the
+  session's headers timeout (120 s by default) is set past the budget, or chronos
+  would end the scan first; the connect stays within a read's budget, or an address
+  that drops SYNs would hold the module thread for the whole scan budget, longer than
+  the kernel's timeout this fixes. Past the budget the node's scan keeps running, and
+  the node refuses a retry until it ends ("Scan already in progress"). Muster does not
+  send `abort`: it stops the node's one running scan, whichever client started it.
+
+The test's fourth endpoint is an address that drops SYNs: a listener that never
+accepts, its accept queue (backlog 0) filled by one connection. Linux drops every
+later SYN, so the client's connect hangs exactly as it does against a firewalled
+host. The test checks that premise before it relies on it.
