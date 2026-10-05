@@ -17,7 +17,8 @@ const Stages = ["proposed", "collecting", "executable", "submitted", "final", "d
 const Kinds = ["in-app", "pasted"]
 
 proc stageCorrect(stage, kind: string): bool =
-  for policy in LivePolicies:
+  for p in LivePolicies:
+    let policy = p   # a copy: `approve` captures it, and Nim 2.2.12 refuses to capture a lent loop variable
     if stage in ["submitted", "final"] and policy != "safe": continue
     var r = newRoom("/muster/1/audit-s6-" & policy & "-" & stage & "-" & kind & "/proto")
     let id = r.propose(policy, effectFor(policy, 61))
