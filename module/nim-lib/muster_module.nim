@@ -237,6 +237,14 @@ const DefaultFleet = "logos.dev"
   ## v0.3.0) a node on logos.test needs the RLN modules loaded, and sends nothing until
   ## it has an active, funded RLN membership (exo-eb6.3); logos.dev (cluster 3) runs no RLN.
 
+var gLpLastLine = initTable[string, string]()
+proc lpDebugOnChange(key, line: string) =
+  ## A debug line that a poll repeats (a status row, a request list) is written only when
+  ## it changed since the last one for its key (exo-9eed): the UI asks every second or two.
+  if not gLpDebug or gLpLastLine.getOrDefault(key, "\x00") == line: return
+  gLpLastLine[key] = line
+  stderr.writeLine("MUSTER-LP " & key & " " & line)
+
 proc deliveryPreset(name: string): string =
   ## Embedded fleet createNode configs, so delivery WORKS out of the box (invariant 8
   ## says the infra is user-configurable, not that it must start empty). Keep in sync
@@ -899,9 +907,12 @@ proc musterCoordinateInvites(): string =
   items.reverse()                        # newest first
   var arr = newJArray()
   for n in items: arr.add n
-  if gLpDebug:
-    stderr.writeLine("MUSTER-LP invites=" & $arr.len & " frames=" & $gInbox.receivedInvites().len &
-                     " topics=" & $(arr.getElems().mapIt(it{"topic"}.getStr())))
+  if gLpDebug:   # the same line as ever ("invites=N frames=M topics=…"), now on change (exo-9eed)
+    let line = "invites=" & $arr.len & " frames=" & $gInbox.receivedInvites().len &
+               " topics=" & $(arr.getElems().mapIt(it{"topic"}.getStr()))
+    if gLpLastLine.getOrDefault("invites", "") != line:
+      gLpLastLine["invites"] = line
+      stderr.writeLine("MUSTER-LP " & line)
   $arr
 
 proc musterCoordinateDismissInvite(roomTopic: string): string =
@@ -2101,7 +2112,7 @@ proc musterKeystore_requests(): string =
     row["kind"] = %(if h in gKsBindingCtx: "binding" else: "approval")
     rows.add row
   result = $(%*{"backend": gKeystoreBackend, "selected": gKeystoreAccount, "requests": rows})
-  if gLpDebug: stderr.writeLine("MUSTER-LP keystore-requests " & result)
+  lpDebugOnChange("keystore-requests", result)
 
 proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: string): string =
   ## Add a contribution (in-app signed when `signatureHex` is empty, else pasted). The
@@ -2762,7 +2773,7 @@ proc musterKeystore_status(): string =
                                          moduleKeystore().encIdentity(), uint64(epochTime())))
     result = $row
   except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
-  if gLpDebug: stderr.writeLine("MUSTER-LP keystore " & result)
+  lpDebugOnChange("keystore", result)
 
 proc musterConnectivity(): string =
   ## Liveness of the infrastructure the room relies on (invariant 8: store nodes and
@@ -2804,7 +2815,7 @@ proc musterConnectivity(): string =
   if presetOf(gDeliveryConfig) == RlnPreset: rows.add rlnRowNow()
   if gSession == nil:
     result = $(%*{"rows": rows})
-    if gLpDebug: stderr.writeLine("MUSTER-LP connectivity " & result)
+    lpDebugOnChange("connectivity", result)
     return
   gSession.poll()
   let needs = roomInfraNeeds(gSession.roomEvents(), driverFor)
@@ -2852,7 +2863,7 @@ proc musterConnectivity(): string =
                 "source": "proposal", "remedy": (if g.status == rdMet: "" else: remedyFor(r)),
                 "introducedBy": introducersJson(n.introducedBy)}
   result = $(%*{"rows": rows})
-  if gLpDebug: stderr.writeLine("MUSTER-LP connectivity " & result)
+  lpDebugOnChange("connectivity", result)
 
 proc musterCoordinateAccount(): string =
   ## The room's sending context for the composer — WHAT an intent proposed here would
@@ -3502,9 +3513,12 @@ proc musterCoordinatePending(): string =
                "alias": contactBook().aliasOf(idHex),
                "bindsOwner": bindingBinds(st, allSigners(roomAccounts()), nowSec)}
   if gLpDebug:
-    stderr.writeLine("MUSTER-LP pending=" & $arr.len & " members=" &
-                     $gSession.members().len & " msgs=" &
-                     $reduceMessages(gSession.roomEvents()).len)
+    # the same line as ever ("pending=N members=M msgs=K": scripts grep it), now on change
+    let line = "pending=" & $arr.len & " members=" & $gSession.members().len &
+               " msgs=" & $reduceMessages(gSession.roomEvents()).len
+    if gLpLastLine.getOrDefault("pending", "") != line:
+      gLpLastLine["pending"] = line
+      stderr.writeLine("MUSTER-LP " & line)
   $arr
 
 # ── chat/room surface (messages · roster · conversations) ──────────────────────

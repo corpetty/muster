@@ -144,7 +144,10 @@ proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000): DeliveryTra
   # if the config names none (catchup then disabled). What createNode itself gets is
   # node_config.nim's (exo-eb6.1): a preset's config without its entryNodes, QUIC off
   # unless MUSTER_DELIVERY_QUIC=1.
-  let nc = nodeConfigFor(nodeConfigJson, quic = getEnv("MUSTER_DELIVERY_QUIC") == "1")
+  # the node logs at INFO unless MUSTER_DELIVERY_LOG names a level (exo-9eed): DEBUG is
+  # many lines a second, into the host's uncapped log
+  let nc = nodeConfigFor(nodeConfigJson, quic = getEnv("MUSTER_DELIVERY_QUIC") == "1",
+                         logLevel = getEnv("MUSTER_DELIVERY_LOG", "INFO"))
   result.catchup = newStoreCatchup(nc.storePeers)
   if gLpDebug: stderr.writeLine("MUSTER-LP creating delivery client (mode=" & $lp_get_mode() & ")")
   result.client = lp_client_create("delivery_module", "muster_module", nil, nil)
@@ -233,6 +236,23 @@ proc fireCatchup(t: DeliveryTransport, contentTopic: string) =
   discard lp_invoke_async(t.client, cstring"storeQuery", argsStr.cstring,
                           t.timeoutMs, onStoreResult, cast[pointer](t))
 
+# The debug log names each inbound message once (exo-9eed): the store catch-up re-reads a
+# room's last minute every second, so logging every delivery logged each message ~60 times.
+var gLoggedInbound: HashSet[string]
+var gLoggedOrder: seq[string]
+const LoggedInboundCap = 4096
+
+proc firstSighting(hash: string): bool {.gcsafe.} =
+  ## poll runs on the module's own thread (inbound_queue's seam), the only one that logs
+  {.cast(gcsafe).}:
+    if hash in gLoggedInbound: return false
+    gLoggedInbound.incl hash
+    gLoggedOrder.add hash
+    if gLoggedOrder.len > LoggedInboundCap:
+      gLoggedInbound.excl gLoggedOrder[0]
+      gLoggedOrder.delete(0)
+    true
+
 method poll*(t: DeliveryTransport) =
   ## Drain the foreign-thread queue and dispatch each `messageReceived` event to
   ## the topic's handlers — parsing, base64-decode, and handler work all run here,
@@ -240,7 +260,6 @@ method poll*(t: DeliveryTransport) =
   ## its loop. Our content address is recomputed so ingest dedups identically to
   ## LocalTransport (R-2/R-4), independent of delivery's own hash.
   for raw in t.queue.drain():
-    if gLpDebug: stderr.writeLine("MUSTER-LP inbound frame received")
     var arr: JsonNode
     try: arr = parseJson(bytesToStr(raw))
     except CatchableError: continue
@@ -248,11 +267,12 @@ method poll*(t: DeliveryTransport) =
     if not parseMessageReceived(arr, ev): continue
     let topic = ev.contentTopic
     let payload = ev.payload
-    if gLpDebug: stderr.writeLine("MUSTER-LP inbound source=" & ev.source & " topic=" & ev.contentTopic &
-                                  " bytes=" & $ev.payload.len)
     let msg = IncomingMessage(contentTopic: topic, payload: payload,
                               messageHash: messageHashOf(topic, payload),
                               timestamp: ev.timestamp)
+    if gLpDebug and firstSighting(msg.messageHash):
+      stderr.writeLine("MUSTER-LP inbound source=" & ev.source & " topic=" & ev.contentTopic &
+                       " bytes=" & $ev.payload.len)
     if t.handlers.hasKey(topic):
       for h in t.handlers[topic]:
         if h != nil: h(msg)
@@ -312,8 +332,8 @@ method poll*(t: DeliveryTransport) =
       if payload.len == 0: continue
       let msg = IncomingMessage(contentTopic: topic, payload: payload,
                                 messageHash: messageHashOf(topic, payload), timestamp: 0)
-      if gLpDebug: stderr.writeLine("MUSTER-LP store message topic=" & topic &
-                                    " bytes=" & $payload.len)
+      if gLpDebug and firstSighting(msg.messageHash):   # once per message, as inbound (exo-9eed)
+        stderr.writeLine("MUSTER-LP store message topic=" & topic & " bytes=" & $payload.len)
       for h in t.handlers[topic]:
         if h != nil: h(msg)
 
