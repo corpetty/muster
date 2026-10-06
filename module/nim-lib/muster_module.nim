@@ -286,8 +286,7 @@ proc settingsPath(): string =
   if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
   dir / "settings.json"
 
-var gKeystoreBackend = getEnv("MUSTER_KEYSTORE_BACKEND", "auto")
-var gWalletStale = false   ## rebuild the wallet on next use: its EVM account changed (exo-d4d)   ## "off" | "interim" | "auto" (exo-d4d.2)
+var gKeystoreBackend = getEnv("MUSTER_KEYSTORE_BACKEND", "auto")   ## "off" | "interim" | "auto" (exo-d4d.2)
   ## exo-149.2: "interim" lets a key ref naming a keystore_module account approve in-room
   ## through it, its attestation an opaque digest leg (docs/design/keystore-module-backend.md
   ## §4). "off" (the default) keeps every approval on muster's own keystore.
@@ -1153,14 +1152,25 @@ proc platformRegistry(): tuple[ok: bool, scope: string, chains: seq[PlatformChai
   gPlatformAt = now
   gPlatformReg
 
+var gWalletStale = false   ## rebuild the wallet on next use: its EVM account or chains changed (exo-d4d)
+var gLastPlatform = false  ## what evmPlatform last answered
+
 proc evmPlatform(): bool =
-  ## Whether EVM chains are read through the platform's eth_rpc_module.
-  case gEvmChains
-  of "url": false
-  of "platform": true
-  else:
-    let reg = platformRegistry()
-    reg.ok and reg.chains.anyIt(it.offered)
+  ## Whether EVM chains are read through the platform's eth_rpc_module. "auto" means: where
+  ## the platform holds the person's keys (keystore_module attests muster: Basecamp,
+  ## logoscore), and offers a chain. The standalone runner carries eth_rpc_module too, but
+  ## keystore_module never attests muster there, so it keeps its own RPC URL (MUSTER_RPC,
+  ## a test chain): seen 2026-10-06, a runner split's payment went to tx_sender_module.
+  result = case gEvmChains
+    of "url": false
+    of "platform": true
+    else:
+      keystoreAttested() and (let reg = platformRegistry(); reg.ok and reg.chains.anyIt(it.offered))
+  if result != gLastPlatform:
+    # the attestation read is asynchronous: when the answer flips after the wallet was
+    # built, rebuild it on its next use
+    gLastPlatform = result
+    gWalletStale = true
 
 proc evmEndpoint(chain: string): string =
   ## Where THIS member reads `chain` (an eip155 CAIP-2 id): through eth_rpc_module, which
