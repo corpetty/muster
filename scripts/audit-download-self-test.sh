@@ -38,11 +38,17 @@ if [ -d "$PE/nimpkgs" ]; then P=$(readlink -f "$PE/nimpkgs")
 else P=$(module/tools/nim-closure.sh) || { say "could not materialize the Nim closure"; obs+=(0); emit; exit 1; }
 fi
 if [ -f "$PE/sodium/libsodium.so" ]; then SODIUM=$(readlink -f "$PE/sodium")/..
-else SODIUM=$(nix build nixpkgs#libsodium --no-link --print-out-paths 2>/dev/null | head -1)
+else
+  # nixpkgs' libsodium is linked against nixpkgs' glibc, so the verifier is built with
+  # nixpkgs' gcc and finds the library by rpath, as run-suite.sh does (exo-844): with the
+  # host's compiler it failed to load ("GLIBC_ABI_GNU2_TLS not found", libsodium.so.26)
+  { read -r SODIUM; read -r NIXGCC; } < <(nix build nixpkgs#libsodium.out nixpkgs#gcc.out --no-link --print-out-paths 2>/dev/null)
+  [ -n "${NIXGCC:-}" ] && [ -x "$NIXGCC/bin/gcc" ] && export PATH="$NIXGCC/bin:$PATH"
 fi
 if ! (cd module && nim c -d:release --hints:off --warnings:off --threads:on \
       --path:$P/nim-secp256k1 --path:$P/nim-stew --path:$P/nim-results --path:$P/nimcrypto \
       --path:$P/nim-stint --path:$P/nim-intops/src --passL:"$SODIUM/lib/libsodium.so" \
+      --passL:"-Wl,-rpath,$SODIUM/lib" \
       -o:"$D/muster-audit-verify" tools/muster_audit_verify.nim >"$D/verify-build.log" 2>&1); then
   say "could not build the verifier — see $D/verify-build.log"; obs+=(0); emit; exit 1
 fi
