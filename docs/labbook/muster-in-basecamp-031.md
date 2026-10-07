@@ -136,3 +136,60 @@ LEZ chain's funded 1 LEZ (real lez_core by default is exo-d4d.10).
 
 Found on the way: a `##` comment (Nim's) in a QML file left the whole view uncompiled in
 Basecamp ("Expected token `;'"), and nix build said nothing. Every QML change gets a launch.
+
+## R6 on display: two fresh installs, Sepolia, a split and a Safe (2026-10-07)
+
+The epic's exit test (exo-d4d.7). Two Basecamp 0.3.1 profiles on Xvfb
+(`scripts/basecamp-profile.sh r6-alice --fresh --xvfb :91`, `r6-bob --xvfb :92`), no
+`MUSTER_*` variable, the `logos.dev` fleet, each person's own keystore_module account:
+Alice's created through the hand-off and never funded (a creditor only agrees and reads),
+Bob's funded with Sepolia ETH by a person. Both select their account for approvals and
+approve the F-14 link in the Signer.
+
+**A split.** Alice starts "Split a bill" with Bob's chat id; Bob's Home shows the
+invitation and he joins (members = 2, re-keyed to epoch 1). Alice proposes 0.002 ETH with
+herself in it: `evm-split@eip155:11155111` (the composer names no chain; Sepolia is the
+first test chain, `PreferTestnets`), paid to her keystore account. Bob agrees with his
+room key, no prompt, then **Pay my share**: the escort raises `evm.signing.approve`, and
+the Signer shows "Requested by: tx_sender_module · Pay my share of 'R6 Sepolia dinner',
+agreed in a Muster room [asked by muster_module]", one transaction on chain 11155111 to
+Alice's account, 0.001 ETH, no data. One approval. **Final on both**, "Settled — every
+share confirmed by who it was owed to"; Alice's account holds exactly 1000000000000000 wei
+(tx `0x75c88dba…cb8a4`, block 11863612).
+
+**A Safe the members already own.** A 2-of-2 Safe v1.4.1 (Alice, Bob) made outside
+muster, with Bob's account through Safe's own `SafeProxyFactory` on Sepolia
+(`0x21b6E7328D4B2CBaeC21d2504Dc41FDFffcb86EF`), funded with 0.002 ETH. Alice discloses it
+in the room: "evm.safe · eip155:11155111 · the chain agrees: 2 of 2". She proposes
+0.001 ETH from it to Bob; each owner approves in their Signer (the SafeTx shown as EIP-712
+for that Safe on chain 11155111, plus muster's attestation digest); 2 of 2 → ready. Bob
+settles (Alice's account has no gas): one Signer approval of `execTransaction` through
+tx_sender_module; **final on both**, the Safe at exactly 0.001 ETH (tx `0xd85b31b4…b34a`,
+`ExecutionSuccess`).
+
+A plain transfer to Alice's new account used 204,600 gas, not 21,000: creating an account
+costs more on Sepolia now. tx_sender's estimate covered it; nothing for muster to do.
+
+**Found, and fixed in the same branch:**
+
+- **A first registry read before eth_rpc_module answers held muster on the URL path for
+  5 min** (exo-9c8). Bob's Settings showed `RPC endpoint · now: http://127.0.0.1:8545`, and
+  switched by itself exactly five minutes after launch. Now a miss is read again after
+  2, 4, 8 … s (`registryRecheckS`); after the fix Bob switched ~40 s after muster loaded.
+- **The same race in the view:** `describe()` is read once at start, so Alice's room still
+  offered "Disclose the local test Safe" (Bob's did not: he had opened Account, which
+  re-reads it). The view re-reads it on entering a room; the Safe form starts on
+  `describe().defaultChainId` (the split chain under the platform), not 31337.
+- **The composer said "⚠ not a Safe owner"** to an owner: `coordinate_account` named the
+  module's own key while contribute routed the approval to the selected keystore account.
+  One rule now decides both (`keystore_approval.safeApprover`).
+- **Approve on a Safe card raised no Signer.** The escort followed only `waiting`
+  requests; once the Signer has been opened it keeps running and renders a new request at
+  once (`shown`) while the person is still in Muster. The escort now follows both.
+
+**Seen, not yet fixed:** the Account view labels chains `evm:11155111` rather than by name;
+a Safe card shows the amount in wei; a split card says "Sent 0.001 ETH… (txs:snd_…)"
+before the person has approved anything; the composer reads "1 people can read this"; the
+`execTransaction` purpose says only "Settle an intent"; the Bitcoin multisig form starts on
+regtest; tx_sender's history still says `pending` for both mined transactions (its own
+poll, not muster's); a long delivery config overflows Settings.

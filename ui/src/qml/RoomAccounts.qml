@@ -25,6 +25,7 @@ Item {
     signal discloseRequested(string accountJson)
     signal discloseSuggested()
     property bool suggestionAvailable: true   // describe()'s test Safe can work here (exo-d4d.6)
+    property string defaultChainId: "31337"   // where a Safe disclosure starts: describe()'s defaultChainId
     signal lezMemberRequested()
     signal lezCreateRequested(string threshold, string members)
     property var frostCeremonies: []      // the room's FROST key ceremonies (Phase D)
@@ -194,7 +195,7 @@ Item {
                 objectName: "discloseChain"
                 Layout.preferredWidth: 80
                 placeholderText: qsTr("chain id")
-                text: "31337"
+                text: acc.defaultChainId
             }
             LogosTextField {
                 id: addrField

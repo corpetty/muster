@@ -2917,6 +2917,10 @@ Item {
                     try { return JSON.parse(room.backend ? room.backend.accountJson : "{}").available !== false; }
                     catch (e) { return true; }
                 }
+                defaultChainId: {
+                    try { return String(JSON.parse(room.backend ? room.backend.accountJson : "{}").defaultChainId || "31337"); }
+                    catch (e) { return "31337"; }
+                }
                 lezMember: room.lezMember
                 lezCreate: room.lezCreate
                 frostCeremonies: room.frostCeremonies
