@@ -2913,6 +2913,10 @@ Item {
                 Layout.fillWidth: true
                 accounts: room.roomAccounts
                 discloseResult: room.discloseResult
+                suggestionAvailable: {
+                    try { return JSON.parse(room.backend ? room.backend.accountJson : "{}").available !== false; }
+                    catch (e) { return true; }
+                }
                 lezMember: room.lezMember
                 lezCreate: room.lezCreate
                 frostCeremonies: room.frostCeremonies

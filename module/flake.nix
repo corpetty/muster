@@ -61,6 +61,13 @@
     # keystore_module-v0.1.0 in logos-co/logos-modules-release); mapped to the module
     # name `keystore_module` below.
     logos-evm-keystore-module.url = "github:logos-co/logos-evm-keystore-module/2318c679e2b7176967bd45052f3d64b2a8b06931";
+    # The platform's EVM RPC (exo-d4d.3): muster_module reads the person's chains through it
+    # over lp_* (src/wallet/eth_rpc_lp.nim). Pinned to the commit Basecamp 0.3.1's default
+    # catalog released as eth_rpc_module 0.1.0; mapped to the module name `eth_rpc_module`.
+    logos-evm-eth-rpc-module.url = "github:logos-co/logos-evm-eth-rpc-module/42cc465e0cbd748117a0af0cf983404348683335";
+    # The platform's one EVM sender (exo-d4d.5): muster pays a share through it over lp_*
+    # (src/wallet/tx_sender_lp.nim). The catalog's tx_sender_module 0.1.0.
+    logos-evm-tx-sender-module.url = "github:logos-co/logos-evm-tx-sender-module/7cd2fead60a78ac9ac8a4337fd9f01e1ab5515e2";
   };
 
   outputs = inputs@{ self, logos-module-builder, ... }:
@@ -91,7 +98,9 @@
           src = ./.;
           configFile = ./metadata.json;
           flakeInputs = { delivery_module = deliveryForModule; lez_core = inputs.lez_core;
-                         keystore_module = inputs.logos-evm-keystore-module; } // inputs;
+                         keystore_module = inputs.logos-evm-keystore-module;
+                         eth_rpc_module = inputs.logos-evm-eth-rpc-module;
+                         tx_sender_module = inputs.logos-evm-tx-sender-module; } // inputs;
         }).packages.${system});
     };
 }

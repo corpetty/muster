@@ -404,7 +404,8 @@ void MusterUiBackend::contributeInRoom(const QString &intentId, const QString &s
     const bool ok = (st != "rejected" && st != "not-joined" && st != "unknown-intent" && st != "unknown-key"
                      && !st.startsWith("refused") && st != "not-a-vote-locus" && st != "expired"
                      && st != "unsupported-driver" && st != "no-context" && st != "unaccountable-input"
-                     && st != "attestation-mismatch" && !st.startsWith("unconfirmed"));
+                     && st != "attestation-mismatch" && !st.startsWith("unconfirmed")
+                     && !st.startsWith("keystore-"));   // keystore-busy / -unreachable / -refused: …
     QJsonObject r;
     r.insert("intentId", intentId);
     r.insert("state", st);
@@ -413,6 +414,9 @@ void MusterUiBackend::contributeInRoom(const QString &intentId, const QString &s
     setContributeJson(QString::fromUtf8(QJsonDocument(r).toJson(QJsonDocument::Compact)));
     loadIntents();
     loadDrivers();   // an approval may have admitted a new driver kind (governance)
+    // a keystore_module account approves in the platform's signer (exo-d4d.2): read the new
+    // request now, so the view raises evm.signing.approve without waiting for its next poll
+    if (st == "awaiting-approval") loadKeystoreRequests();
 }
 
 void MusterUiBackend::loadIntents()
@@ -522,6 +526,15 @@ void MusterUiBackend::keystoreSelect(const QString &address)
     const QString r = modules().muster_module.keystore_select(address);
     qInfo().noquote() << "[muster_ui] KEYSTORE-SELECT" << r;
     loadKeystoreStatus();
+    loadKeystoreRequests();
+}
+
+void MusterUiBackend::loadKeystoreRequests()
+{
+    // keystore_requests (exo-149.2 K2): the approvals waiting on a person in the signer, and
+    // the ones that just finished. Reading it also advances them (keystorePump), so the view
+    // polls it while any is open; the view raises evm.signing.approve for each new one.
+    setKeystoreRequestsJson(modules().muster_module.keystore_requests());
 }
 
 void MusterUiBackend::loadSecurityLevels()

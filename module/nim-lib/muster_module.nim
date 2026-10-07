@@ -91,6 +91,10 @@ import ../src/transport/rln_status     # the node's RLN membership as a connecti
 import ../src/transport/rln_probe      # …read from delivery and the two RLN modules
 import ../src/wallet/keystore_status   # the official EVM keystore as a status row (exo-149.1 K1)
 import ../src/wallet/keystore_probe    # …read from keystore_module over lp_*
+import ../src/wallet/chain_endpoint    # an EVM endpoint: a URL, or the platform's eth_rpc_module (exo-d4d.3)
+import ../src/wallet/eth_rpc_lp        # …eth_rpc_module over lp_*
+import ../src/wallet/tx_sender         # payments through the platform's one sender (exo-d4d.5)
+import ../src/wallet/tx_sender_lp      # …tx_sender_module over lp_*
 import ../src/wallet/keystore_requests # pending signing requests (exo-149.2 K2)
 import ../src/coordination/keystore_approval # an in-room approval keystore_module signs (K2)
 import ../src/wallet/keystore_identity  # a keystore_module account as this member's identity (K5)
@@ -161,6 +165,8 @@ proc roomIdentities(): seq[string]       ## forward — every member's room iden
 proc myAddress(): Address                ## forward — this instance's secp account, defined below
 
 proc roomAccounts(): seq[RoomAccount]   ## forward — the room's disclosed accounts, folded from the log
+proc evmPlatform(): bool               ## forward — EVM chains read through eth_rpc_module (exo-d4d.3)
+proc platformRegistry(): tuple[ok: bool, scope: string, chains: seq[PlatformChain]]   ## forward — its registry
 
 var gDelegatecallAllow: seq[Address] = @[]
 var gDelegatecallAllowLoaded = false
@@ -221,6 +227,10 @@ var gNow: uint64 = 0
 # settings surface (settings / set_setting) points it at the user's own node/nodes.
 var gRpcUrl = getEnv("MUSTER_RPC", "http://127.0.0.1:8545")   ## a saved setting wins (settings.json)
 var gRelayer = "self"
+# Where EVM chains are read (exo-d4d.3): "platform" = the platform's eth_rpc_module, which
+# holds the person's chains and endpoints device-wide (Basecamp); "url" = gRpcUrl, muster's
+# own setting (the runner, anvil); "auto" = the platform when it offers a chain, else the URL.
+var gEvmChains = getEnv("MUSTER_EVM_CHAINS", "auto")
 var gBtcRpc = getEnv("MUSTER_BTC_RPC", "")   ## the user's Bitcoin node, "http://user:pass@host:port"; "" = none (exo-a50.2.6)
 # The LEZ multisig, live (exo-3c9): the user's sequencer (untrusted, invariant 8), the zone
 # it serves, and the multisig program. By default: the public testnet (the LEZ wallet's
@@ -276,7 +286,7 @@ proc settingsPath(): string =
   if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
   dir / "settings.json"
 
-var gKeystoreBackend = getEnv("MUSTER_KEYSTORE_BACKEND", "off")
+var gKeystoreBackend = getEnv("MUSTER_KEYSTORE_BACKEND", "auto")   ## "off" | "interim" | "auto" (exo-d4d.2)
   ## exo-149.2: "interim" lets a key ref naming a keystore_module account approve in-room
   ## through it, its attestation an opaque digest leg (docs/design/keystore-module-backend.md
   ## §4). "off" (the default) keeps every approval on muster's own keystore.
@@ -296,11 +306,12 @@ proc loadSettingsFile() =
       let j = parseJson(readFile(p))
       if j.hasKey("rpc"): gRpcUrl = j["rpc"].getStr()
       if j.hasKey("relayer"): gRelayer = j["relayer"].getStr("self")
+      if j.hasKey("evmChains"): gEvmChains = j["evmChains"].getStr("auto")
       if j.hasKey("btcRpc"): gBtcRpc = j["btcRpc"].getStr()
       if j.hasKey("lezRpc"): gLezRpc = j["lezRpc"].getStr()
       if j.hasKey("lezChain"): gLezChain = j["lezChain"].getStr()
       if j.hasKey("lezMultisigProgram"): gLezProgram = j["lezMultisigProgram"].getStr()
-      if j.hasKey("keystoreBackend"): gKeystoreBackend = j["keystoreBackend"].getStr("off")
+      if j.hasKey("keystoreBackend"): gKeystoreBackend = j["keystoreBackend"].getStr("auto")
       if j.hasKey("keystoreAccount"): gKeystoreAccount = j["keystoreAccount"].getStr()
       if j.hasKey("keystoreBinding"): gKeystoreBinding = j["keystoreBinding"].getStr()
       if j.hasKey("delivery"):
@@ -322,7 +333,7 @@ proc saveSettingsFile() =
     # the Bitcoin node URL may carry its RPC credentials — kept beside the keystore,
     # like a bitcoin.conf, and never shown back (settings() redacts them)
     writeFile(settingsPath(), $(%*{"rpc": gRpcUrl, "delivery": gDeliveryConfig, "relayer": gRelayer,
-                                   "btcRpc": gBtcRpc, "lezRpc": gLezRpc, "lezChain": gLezChain,
+                                   "evmChains": gEvmChains, "btcRpc": gBtcRpc, "lezRpc": gLezRpc, "lezChain": gLezChain,
                                    "lezMultisigProgram": gLezProgram,
                                    "keystoreBackend": gKeystoreBackend,
                                    "keystoreAccount": gKeystoreAccount,
@@ -462,12 +473,31 @@ proc contactBook(): ContactBook =
   gContacts
 
 
+proc keystoreProbe(): KeystoreProbe   ## forward — keystore_module, read over lp_* (below)
+
+proc keystoreAttested(): bool =
+  ## keystore_module answers and attributes our calls to muster_module: under Basecamp or
+  ## logoscore 0.3.x, never in the standalone runner (labbook keystore-caller-attribution).
+  try:
+    let id = keystoreRow(keystoreProbe().read()){"identity"}
+    id != nil and id{"kind"}.getStr() == "module" and id{"identity"}.getStr() == "muster_module"
+  except CatchableError: false
+
+proc keystoreOn(): bool =
+  ## Whether a keystore_module account may approve in-room (exo-149.2, exo-d4d.2):
+  ## "interim" always; "auto" (the default) when keystore_module attests muster, i.e. muster
+  ## runs where the platform holds the person's keys; "off" never.
+  case gKeystoreBackend
+  of "interim": true
+  of "auto": keystoreAttested()
+  else: false
+
 proc myNames(): seq[string] =
   ## The names this member's approvals carry: its own keystore's keys, plus the
   ## keystore_module account it selected (exo-149.5), so its approvals read as its own
   ## here (approvedByMe), in readiness and in home's needs-you.
   result = myContributorNames(moduleKeystore())
-  if gKeystoreBackend == "interim" and gKeystoreAccount.len > 0 and gKeystoreAccount notin result:
+  if keystoreOn() and gKeystoreAccount.len > 0 and gKeystoreAccount notin result:
     result.add gKeystoreAccount
 
 proc myIds(): seq[string] =
@@ -517,7 +547,15 @@ proc musterDescribe(): string =
   ## suggestion disclosable as-is.
   var owners = newJArray()
   for o in gDevSafe.owners: owners.add %toHex(o)
+  # offered only where it can work (exo-d4d.6): a chain 31337 this member actually reads —
+  # their own RPC URL when it is not the platform's, or one in their platform registry.
+  # A fresh Basecamp install has neither, and is not shown a Safe that is not there.
+  var available = not evmPlatform()
+  if not available:
+    for c in platformRegistry().chains:
+      if c.chainId == int(gDevSafe.chainId) and c.enabled: available = true
   $(%*{
+    "available": available,
     "chainId": gDevSafe.chainId.int,
     "safe": SAFE_ADDR,
     "threshold": gDevSafe.threshold,
@@ -998,6 +1036,7 @@ type
     intentId: string
     created: JsonNode              ## a create's disclosure, published once the state is on chain
     started: float
+    submitted: bool                ## a settle through the platform: "submitted" published (with the hash)
 
 const LezPendingDeadlineS = 600.0
 var gLezPending: seq[LezPending]
@@ -1015,7 +1054,8 @@ proc lezPump() =
   if gLezPending.len == 0 or epochTime() - gLezPumpAt < 2.0: return
   gLezPumpAt = epochTime()
   var keep: seq[LezPending]
-  for p in gLezPending:
+  for p0 in gLezPending:
+    var p = p0                         # a settle through the platform notes "submitted" on it
     if p.session != gSession:          # it completes in its own room, when that is joined
       keep.add p
       continue
@@ -1035,13 +1075,20 @@ proc lezPump() =
         if not r.startsWith("unconfirmed"): outcome = r
       of lpSettle:
         let f = p.settle.watch(p.txRef)
+        # through the platform the room hears of it only once the sender broadcast: the
+        # hash, never the marker (exo-d4d.5)
+        let chainRef = resolvedRef(p.txRef)
+        if not p.submitted and chainRef.len > 0:
+          p.session.publish(submitEvent(p.intentId, chainRef = chainRef))
+          p.submitted = true
         if f.status == fsFinal:
-          p.session.publish(finalEvent(p.intentId, chainRef = p.txRef.id))
+          p.session.publish(finalEvent(p.intentId, chainRef = chainRef))
           outcome = "final"
         elif f.status == fsFailed: outcome = "failed: " & f.detail
     except CatchableError:
       discard                          # an unreachable sequencer: try again next tick
-    if outcome.len == 0 and epochTime() - p.started > LezPendingDeadlineS:
+    if outcome.len == 0 and epochTime() - p.started >
+       (if requestOfMarker(p.txRef.id).len > 0: 3600.0 else: LezPendingDeadlineS):   # a person approves first
       outcome = "timed out: the chain did not include it"
     if outcome.len == 0: keep.add p
     else: lezRecord(p, outcome)
@@ -1080,8 +1127,97 @@ proc frostPump() =
       if id in folded and not folded[id].collection.complete: auto.add id
   gFrostAuto = auto
 
+# ── where an EVM chain is read (exo-d4d.3) ────────────────────────────────────
+const PreferTestnets = true
+  ## While muster is pre-release, a split or payment with no chain named settles on a test
+  ## chain. Decided 2026-10-03: testnets until Logos and the LEZ are verified, then mainnets
+  ## become the default (turn this off; the device's own scope then decides).
+var gPlatformAt = -1e9        ## when the platform's chain registry was last read
+var gPlatformReg: tuple[ok: bool, scope: string, chains: seq[PlatformChain]]
+var gEthRpcInstalled = false
+
+proc platformRegistry(): tuple[ok: bool, scope: string, chains: seq[PlatformChain]] =
+  ## The person's chain registry from eth_rpc_module, re-read at most every 30 s (5 min
+  ## after it did not answer: a host without it, like the runner, should not pay a
+  ## registry read on every chain call). init_defaults goes first, once: the platform asks
+  ## every consumer to call it, and it writes only what is absent.
+  let now = epochTime()
+  if now - gPlatformAt < (if gPlatformReg.ok: 30.0 else: 300.0): return gPlatformReg
+  if not gEthRpcInstalled:
+    installEthRpc()
+    installTxSender()
+    discard ethRpcInitDefaults()
+    gEthRpcInstalled = true
+  gPlatformReg = ethRpcChains()
+  gPlatformAt = now
+  gPlatformReg
+
+var gWalletStale = false   ## rebuild the wallet on next use: its EVM account or chains changed (exo-d4d)
+var gLastPlatform = false  ## what evmPlatform last answered
+
+proc evmPlatform(): bool =
+  ## Whether EVM chains are read through the platform's eth_rpc_module. "auto" means: where
+  ## the platform holds the person's keys (keystore_module attests muster: Basecamp,
+  ## logoscore), and offers a chain. The standalone runner carries eth_rpc_module too, but
+  ## keystore_module never attests muster there, so it keeps its own RPC URL (MUSTER_RPC,
+  ## a test chain): seen 2026-10-06, a runner split's payment went to tx_sender_module.
+  result = case gEvmChains
+    of "url": false
+    of "platform": true
+    else:
+      keystoreAttested() and (let reg = platformRegistry(); reg.ok and reg.chains.anyIt(it.offered))
+  if result != gLastPlatform:
+    # the attestation read is asynchronous: when the answer flips after the wallet was
+    # built, rebuild it on its next use
+    gLastPlatform = result
+    gWalletStale = true
+
+proc evmEndpoint(chain: string): string =
+  ## Where THIS member reads `chain` (an eip155 CAIP-2 id): through eth_rpc_module, which
+  ## holds their endpoints (invariant 8: theirs, set once for the device), or their own
+  ## RPC URL. Every caller still checks the chain the endpoint serves before it trusts it.
+  if evmPlatform():
+    let (ok, cid) = evmChainId(chain)
+    if ok and cid > 0'u64: return platformEndpoint(int(cid))
+  gRpcUrl
+
+proc isTestChain(chainId: int): bool =
+  ## A chain that holds no real value: a local devnet, or one the person's chain registry
+  ## marks as a testnet. Unknown is not a testnet.
+  if chainId in [31337, 1337]: return true
+  for c in platformRegistry().chains:
+    if c.chainId == chainId: return c.testnet
+  chainId in [11155111, 560048, 17000]     # Sepolia, Hoodi, Holesky
+
+proc evmEndpointLabel(endpoint: string): string =
+  ## How an endpoint is named to the person: never a platform token, never credentials.
+  if endpoint.isPlatform: "eth_rpc_module (your chain settings)" else: redactUrl(endpoint)
+
+proc myEvmPayAddress(): string =
+  ## The Ethereum address this member pays from and is paid at (exo-d4d.5): under the
+  ## platform, the keystore_module account they chose for approvals, whose key the platform
+  ## holds; otherwise muster's own key's address (the runner, tests).
+  if evmPlatform() and keystoreOn() and gKeystoreAccount.len > 0: gKeystoreAccount.toLowerAscii()
+  else: addrHex(myAddress())
+
 proc rpcChainCaip2(): tuple[ok: bool, chain, detail: string] =
-  ## The CAIP-2 chain THIS member's configured EVM RPC actually serves (parts_evm).
+  ## The CAIP-2 chain THIS member's configured EVM RPC actually serves (parts_evm) — what a
+  ## split settles on when the composer names none (exo-a90.6). On the platform, a chain the
+  ## person's settings offer (exo-d4d.3).
+  if evmPlatform():
+    let reg = platformRegistry()
+    if PreferTestnets:
+      # pre-release: a test chain the person has enabled, Sepolia first, whatever the
+      # device-wide scope shows (that scope is theirs and every wallet's; muster never sets it)
+      for id in [11155111, 560048]:
+        for c in reg.chains:
+          if c.chainId == id and c.enabled: return (true, "eip155:" & $id, "")
+      for c in reg.chains:
+        if c.testnet and c.enabled: return (true, "eip155:" & $c.chainId, "")
+    # the first chain the person's settings offer (mainnets first, as eth_rpc_module lists)
+    for c in reg.chains:
+      if c.offered: return (true, "eip155:" & $c.chainId, "")
+    return (false, "", "no Ethereum chain is enabled in your chain settings")
   rpcChainCaip2(gRpcUrl)
 
 proc splitLezAdapter(): LezAdapter   ## forward — the module's LEZ wallet (moduleWallet, below)
@@ -1121,8 +1257,9 @@ proc splitSeam(chain: string): EvmPartSeam =
   ## does not serve.
   let (_, cid) = evmChainId(chain)
   let wchain = "evm:" & $cid
-  newEvmPartSeam(chain, gRpcUrl, newEvmAdapter(wchain, gRpcUrl, fromUnlocked = false), moduleKeystore(),
-                 Account(chain: wchain, form: afPublic, id: addrHex(myAddress())))
+  let ep = evmEndpoint(chain)
+  newEvmPartSeam(chain, ep, newEvmAdapter(wchain, ep, fromUnlocked = false), moduleKeystore(),
+                 Account(chain: wchain, form: afPublic, id: myEvmPayAddress()))
 
 var gTokenInfo = initTable[string, tuple[symbol: string, decimals: int]]()
 
@@ -1135,9 +1272,10 @@ proc tokenInfo(chain, token: string): tuple[symbol: string, decimals: int] =
   if key in gTokenInfo: return gTokenInfo[key]
   result = ("", -1)
   try:
-    if "eip155:" & rpcChainId(gRpcUrl) == chain:
-      let sym = abiString(toHex(rpcCall(gRpcUrl, token, @[0x95'u8, 0xd8, 0x9b, 0x41], "latest")))
-      let dec = abiUint8(toHex(rpcCall(gRpcUrl, token, @[0x31'u8, 0x3c, 0xe5, 0x67], "latest")))
+    let ep = evmEndpoint(chain)
+    if "eip155:" & rpcChainId(ep) == chain:
+      let sym = abiString(toHex(rpcCall(ep, token, @[0x95'u8, 0xd8, 0x9b, 0x41], "latest")))
+      let dec = abiUint8(toHex(rpcCall(ep, token, @[0x31'u8, 0x3c, 0xe5, 0x67], "latest")))
       result = (sym, dec)
       if dec >= 0: gTokenInfo[key] = result
   except CatchableError: discard
@@ -1161,7 +1299,7 @@ proc myPayTos(family: string): seq[string] =
     # every Bitcoin network this key could be paid on: its wpkh address per network
     for n in Networks: result.add p2wpkhAddress(n.hrp, moduleKeystore().btcPubKey())
     return
-  if family != LezSplitFamily: return @[addrHex(myAddress())]
+  if family != LezSplitFamily: return @[myEvmPayAddress()]
   if epochTime() - gMyLezPayTosAt > 30:
     gMyLezPayTosAt = epochTime()
     try:
@@ -1367,7 +1505,7 @@ proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): s
   # payTo: my own address on the rail — the private split's is my shielded key node. On
   # someone's behalf, the address THEY last shared (their signed address-share), never one
   # typed here; their own client checks it before agreeing (creditorAgreeRefusal).
-  var payTo = addrHex(myAddress())
+  var payTo = myEvmPayAddress()
   if creditor != me:
     if lez: return $(%*{"error": "on-behalf-private", "detail":
                         "a private split is proposed by whoever fronted it: their shielded address is not shared in the room"})
@@ -1632,7 +1770,7 @@ proc musterCoordinateShareAddress(chain: string): string =
     body = %*{"kind": "address-share", "asset": "BTC", "chain": c,
               "address": p2wpkhAddress(hrp, moduleKeystore().btcPubKey()), "form": 1}
   elif c.len == 0 or c.startsWith("eip155:"):
-    body = %*{"kind": "address-share", "asset": "ETH", "address": addrHex(myAddress()).toLowerAscii(), "form": 1}
+    body = %*{"kind": "address-share", "asset": "ETH", "address": myEvmPayAddress().toLowerAscii(), "form": 1}
   else: return $(%*{"error": "no-shared-address", "detail": "nothing is paid to a shared address on " & c})
   let author = toHex(moduleKeystore().encIdentity().toBytes())
   inc gMsgSeq
@@ -1662,15 +1800,16 @@ proc chainViewOf(a: RoomAccount): ChainView =
   if a.family == LezMultisigFamily: return lezChainViewOf(a)
   if a.family != "evm.safe": return (known: false, signers: @[], threshold: 0,
                                      detail: "no chain read for a " & a.family & " account yet")
-  if gRpcUrl.len == 0: return (known: false, signers: @[], threshold: 0, detail: "no RPC configured")
-  let (ok, chain, pd) = probeRpc(gRpcUrl)
+  let ep = evmEndpoint(a.chain)
+  if ep.len == 0: return (known: false, signers: @[], threshold: 0, detail: "no RPC configured")
+  let (ok, chain, pd) = probeRpc(ep)
   if not ok: return (known: false, signers: @[], threshold: 0, detail: pd)   # unreachable, or cooling down
   if "eip155:" & $chain != a.chain:
     return (known: false, signers: @[], threshold: 0,
             detail: "the configured RPC serves eip155:" & $chain & ", the account is on " & a.chain)
-  let owners = getOwners(gRpcUrl, toAddress(a.address))
+  let owners = getOwners(ep, toAddress(a.address))
   if not owners.known: return (known: false, signers: @[], threshold: 0, detail: owners.detail)
-  let thr = getThreshold(gRpcUrl, toAddress(a.address))
+  let thr = getThreshold(ep, toAddress(a.address))
   if not thr.known: return (known: false, signers: @[], threshold: 0, detail: thr.detail)
   (known: true, signers: owners.owners.mapIt(toHex(it)), threshold: thr.threshold, detail: "read from chain")
 
@@ -1686,8 +1825,9 @@ proc bypassesOf(a: RoomAccount): JsonNode =
   ## can block a transaction the owners agreed to — both belong on the card.
   result = %*{"known": false, "modules": [], "guard": "", "detail": ""}
   if a.family != "evm.safe": (result["detail"] = %"no bypass read for this family yet"; return)
-  if gRpcUrl.len == 0: (result["detail"] = %"no RPC configured"; return)
-  let (ok, chain, pd) = probeRpc(gRpcUrl)
+  let ep = evmEndpoint(a.chain)
+  if ep.len == 0: (result["detail"] = %"no RPC configured"; return)
+  let (ok, chain, pd) = probeRpc(ep)
   if not ok: (result["detail"] = %pd; return)
   if "eip155:" & $chain != a.chain:
     result["detail"] = %("the configured RPC serves eip155:" & $chain & ", the account is on " & a.chain)
@@ -1695,9 +1835,9 @@ proc bypassesOf(a: RoomAccount): JsonNode =
   # stop at the first failed read: a node that did not answer one will not answer the next,
   # and each costs a read budget on the module thread (exo-14f; after a no-answer the
   # endpoint cools down, so the reads of the accounts after this one cost nothing, exo-14f.1)
-  let m = getModules(gRpcUrl, toAddress(a.address))
+  let m = getModules(ep, toAddress(a.address))
   if not m.known: (result["detail"] = %m.detail; return)
-  let g = getGuard(gRpcUrl, toAddress(a.address))
+  let g = getGuard(ep, toAddress(a.address))
   if not g.known: (result["detail"] = %g.detail; return)
   var mods = newJArray()
   var list: seq[string]
@@ -1960,7 +2100,7 @@ proc keystoreProbe(): KeystoreProbe =
 
 proc isKeystoreAccount(keyRef: string): bool =
   ## A key ref muster's own keystore does not hold, which keystore_module last listed.
-  gKeystoreBackend == "interim" and keyRef.len > 0 and
+  keystoreOn() and keyRef.len > 0 and
     not moduleKeystore().hasKey(keyRef) and keyRef.toLowerAscii() in keystoreProbe().lastAccounts()
 
 proc keystoreContribute(intentId, account: string): string =
@@ -2000,8 +2140,9 @@ proc musterKeystore_select(address: string): string =
     gKeystoreBinding = ""
     saveSettingsFile()
     return $(%*{"ok": true, "account": ""})
-  if gKeystoreBackend != "interim":
-    return $(%*{"ok": false, "error": "keystore-backend is off: set it to interim first"})
+  if not keystoreOn():
+    return $(%*{"ok": false, "error": (if gKeystoreBackend == "off": "keystore-backend is off"
+                                        else: "keystore_module does not attest muster here")})
   let a = address.strip().toLowerAscii()
   if a notin keystoreProbe().lastAccounts():
     return $(%*{"ok": false, "error": "keystore_module does not list " & a})
@@ -2022,6 +2163,7 @@ proc musterKeystore_select(address: string): string =
   gKsBindingCtx[h] = ctx
   gKeystoreAccount = a
   gKeystoreBinding = ""
+  gWalletStale = true         # the wallet's EVM accounts are this account now (exo-d4d)
   saveSettingsFile()
   if gLpDebug: stderr.writeLine("MUSTER-LP keystore-select " & $(%*{"account": a, "handle": h}))
   $(%*{"ok": true, "account": a, "handle": h, "state": "awaiting-approval"})
@@ -2111,6 +2253,9 @@ proc musterKeystore_requests(): string =
     if h in gKsOutcome: row["published"] = %gKsOutcome[h]
     row["kind"] = %(if h in gKsBindingCtx: "binding" else: "approval")
     rows.add row
+  # payments through tx_sender_module wait on the same person in the same signer (exo-d4d.5):
+  # listed alike, so the view escorts their handles too
+  for r in sendBook.view(): rows.add r
   result = $(%*{"backend": gKeystoreBackend, "selected": gKeystoreAccount, "requests": rows})
   lpDebugOnChange("keystore-requests", result)
 
@@ -2146,10 +2291,13 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
   # nothing is published until they have (keystorePump). Not an approval yet, so it does
   # not pass through noteApproved.
   var keyRef = keyRef
-  if signatureHex.len == 0 and keyRef.len == 0 and gKeystoreBackend == "interim" and
-     gKeystoreAccount.len > 0 and
-     driverFor(intentPolicyOf(gSession.roomEvents(), intentId)) of SafeDriver:
-    keyRef = gKeystoreAccount       # exo-149.5: the member's selected account approves its Safe intents
+  if signatureHex.len == 0 and keyRef.len == 0 and keystoreOn() and gKeystoreAccount.len > 0:
+    let drv = driverFor(intentPolicyOf(gSession.roomEvents(), intentId))
+    # exo-149.5: the member's selected account approves its Safe intents. Under "auto" only on
+    # a test chain: the attestation still reaches the signer as an opaque digest until its
+    # typed form lands (exo-149.6), and that must not be what a mainnet approval rests on.
+    if drv of SafeDriver and (gKeystoreBackend == "interim" or isTestChain(int(SafeDriver(drv).chainId))):
+      keyRef = gKeystoreAccount
   if signatureHex.len == 0 and isKeystoreAccount(keyRef):
     return keystoreContribute(intentId, keyRef.toLowerAscii())
   let r = liveContribute(gSession, moduleKeystore(), driverFor, intentId, signatureHex, keyRef,
@@ -2636,6 +2784,7 @@ proc hostFacts(policy = ""): HostFacts =
     if found:
       let (_, cid) = evmChainId(a.chain)
       facts.expectedChainId = cid.int
+      facts.rpcUrl = evmEndpoint(a.chain)
       facts.safe = toAddress(a.address)
       facts.signers = a.signers.mapIt(toAddress(it))
       if a.family.startsWith("btc."): facts.btcSigners = a.signers   # exo-a50.2.6
@@ -2767,6 +2916,7 @@ proc musterKeystore_status(): string =
     if gKeystoreProbe == nil: gKeystoreProbe = newKeystoreProbe()
     var row = keystoreRow(gKeystoreProbe.read())
     row["backend"] = %gKeystoreBackend
+    row["on"] = %keystoreOn()
     row["selected"] = %gKeystoreAccount
     row["binding"] = %(if gKeystoreAccount.len == 0: "none"
                       else: bindingState(gKeystoreBinding, gKeystoreAccount,
@@ -2833,7 +2983,24 @@ proc musterConnectivity(): string =
       if r.kind == rqEnvironment:
         try: (let c = parseInt(r.name[7 .. ^1]); (if c notin chains: chains.add c))
         except ValueError: discard
-  if rpcWho.len > 0:
+  if rpcWho.len > 0 and evmPlatform():
+    # on the platform each chain has its own endpoint in eth_rpc_module: probe each one the
+    # proposals need; the row is as bad as its worst chain
+    var level = "ok"
+    var details: seq[string]
+    let reg = platformRegistry()
+    if not reg.ok: (level = "down"; details.add "eth_rpc_module did not answer")
+    for c in chains:
+      let (ok, served, d) = probeRpc(platformEndpoint(c))
+      if not ok: (level = "down"; details.add chainLabel("eip155:" & $c) & ": " & d)
+      elif served != c:
+        (if level == "ok": level = "warn"); details.add chainLabel("eip155:" & $c) & ": serves chain " & $served
+      else: details.add chainLabel("eip155:" & $c) & ": ok"
+    rows.add %*{"key": "rpc", "name": "Chains", "level": level, "detail": details.join("; "),
+                "endpoint": evmEndpointLabel(PlatformPrefix), "source": "proposal",
+                "remedy": (if level == "ok": "" else: "check that chain in your chain settings (eth_rpc_ui)"),
+                "introducedBy": introducersJson(rpcWho)}
+  elif rpcWho.len > 0:
     let row = rpcConnectivityRow(gRpcUrl, chains)   # the endpoint redacted (exo-14f.2)
     row["introducedBy"] = introducersJson(rpcWho)
     rows.add row
@@ -2909,7 +3076,7 @@ proc musterCoordinateAccount(): string =
     var assets = newJArray()
     var eth = %*{"symbol": "ETH", "decimals": 18}
     try:
-      let raw = hexToDec(getBalance(gRpcUrl, safeAddr))
+      let raw = hexToDec(getBalance(evmEndpoint(a.chain), safeAddr))
       eth["raw"] = %raw
       eth["display"] = %(formatUnits(raw, 18) & " ETH")
     except CatchableError as e:
@@ -2921,7 +3088,7 @@ proc musterCoordinateAccount(): string =
     # right nonce; without it every proposal used 0 and only the first could settle
     # (exo-275). Best-effort: a failed read omits it and the UI falls back to 0.
     try:
-      o["nonce"] = %(safeNonce(gRpcUrl, safeAddr).int)
+      o["nonce"] = %(safeNonce(evmEndpoint(a.chain), safeAddr).int)
     except CatchableError:
       discard
   $o
@@ -2959,8 +3126,8 @@ proc settlementFor(drv: Driver): Settlement =
   let (isEvm, cid) = evmChainId(p.chain)
   if not isEvm: return nil
   let unlocked = gRelayer.startsWith("unlocked:")
-  let who = (if unlocked: gRelayer["unlocked:".len .. ^1] else: toHex(myAddress()))
-  let adapter = newEvmAdapter("evm:" & $cid, gRpcUrl, fromUnlocked = unlocked)
+  let who = (if unlocked: gRelayer["unlocked:".len .. ^1] else: myEvmPayAddress())
+  let adapter = newEvmAdapter("evm:" & $cid, evmEndpoint(p.chain), fromUnlocked = unlocked)
   settlementFor(drv, adapter, Account(chain: "evm:" & $cid, form: afPublic, id: who))
 
 proc musterCoordinateSubmit(intentId: string): string =
@@ -3010,8 +3177,20 @@ proc musterCoordinateSubmit(intentId: string): string =
     return $(%*{"id": intentId, "error": asm0.error, "detail": asm0.detail,
                 "have": asm0.have, "need": asm0.need})
   var txRef: TxRef
+  var tx = asm0.tx
   try:
-    txRef = st.submit(asm0.tx, moduleKeystore())
+    # what the person approving in the platform's signer reads, and what joins the sender's
+    # history back to this intent (exo-d4d.5); a payload that is not JSON is sent as it is
+    let pj = parseJson(tx.payload)
+    if pj.kind == JObject:
+      let memo = (try: parseJson(effectJson){"memo"}.getStr("") except CatchableError: "")
+      pj["purpose"] = %("Settle " & (if memo.len > 0: "'" & memo & "'" else: "an intent") &
+                        ", agreed in a Muster room")
+      pj["meta"] = %*{"muster": {"intent": intentId}}
+      tx.payload = $pj
+  except CatchableError: discard
+  try:
+    txRef = st.submit(tx, moduleKeystore())
   except CatchableError as e:
     if isBtc:
       return $(%*{"id": intentId, "error": "rpc-unreachable",
@@ -3019,7 +3198,15 @@ proc musterCoordinateSubmit(intentId: string): string =
     return $(%*{"id": intentId, "error": "rpc-unreachable", "relayer": gRelayer,
                 "detail": e.msg & " — the relayer (" & asm0.tx.frm.id & ") must be able to pay gas on " &
                           asm0.tx.frm.chain & "; fund it, or set Settings → relayer"})
-  # Fold the room forward: submit event → every member converges on "submitted".
+  # Fold the room forward: submit event → every member converges on "submitted". Through
+  # the platform there is no hash yet (a person approves first): the pump publishes it.
+  let throughPlatform = requestOfMarker(txRef.id).len > 0
+  if throughPlatform:
+    gLezPending.add LezPending(kind: lpSettle, session: gSession, settle: st, txRef: txRef,
+                               intentId: intentId, started: epochTime())
+    return $(%*{"id": intentId, "state": intentState(gSession.roomEvents(), driverFor, intentId),
+                "onchain": "awaiting-approval", "relayer": tx.frm.id,
+                "detail": "approve it in the Logos Signer"})
   gSession.publish(submitEvent(intentId, chainRef = txRef.id))
   # Observe finality from the chain (never asserted), within SubmitWatchS of wall clock and
   # one read's budget (exo-14f): a slow, unreachable or hung node reports "pending" rather
@@ -3651,17 +3838,35 @@ var gEvm: EvmAdapter = nil          ## typed handle for the EVM-specific verifie
 # gLez is declared before musterCoordinateReadiness (exo-44b L2); set lazily below.
 
 proc moduleWallet(): Wallet =
+  if gWalletStale:
+    gWallet = nil
+    gWalletStale = false
   if gWallet == nil:
     let ks = moduleKeystore()
     gWallet = newWallet(ks)
-    gEvm = newEvmAdapter("evm:31337", gRpcUrl)
-    gWallet.register(gEvm)
-    gMock = newMockChain()
-    gWallet.register(gMock)
-    for acc in gMock.accounts(ks):        # seed the mock so its balances are demonstrable
-      if acc.form == afPublic:
-        gMock.credit(acc.id, "MOCK", "5000000000")
-        gMock.credit(acc.id, "MTK", "1230000")
+    gEvm = nil
+    if evmPlatform():
+      # under the platform (exo-d4d): one adapter per chain the person's registry enables
+      # (test chains only while muster is pre-release), each read through eth_rpc_module,
+      # holding the keystore account they chose, sending through tx_sender_module
+      let owner = myEvmPayAddress()
+      for c in platformRegistry().chains:
+        if c.enabled and (if PreferTestnets: c.testnet else: c.offered):
+          let a = newEvmAdapter("evm:" & $c.chainId, platformEndpoint(c.chainId), fromUnlocked = false, owner = owner)
+          if gEvm == nil: gEvm = a
+          gWallet.register(a)
+    if gEvm == nil:
+      gEvm = newEvmAdapter("evm:31337", gRpcUrl)
+      gWallet.register(gEvm)
+    # the mock shielded chain and its seeded demo balances: the runner's demonstration only,
+    # never beside a person's real chains (exo-d4d.6)
+    if not evmPlatform():
+      gMock = newMockChain()
+      gWallet.register(gMock)
+      for acc in gMock.accounts(ks):        # seed the mock so its balances are demonstrable
+        if acc.form == afPublic:
+          gMock.credit(acc.id, "MOCK", "5000000000")
+          gMock.credit(acc.id, "MTK", "1230000")
     # The Logos Execution Zone — send assets via Logos, public + shielded. Real
     # (LpLezCore over lez_core, against testnet.lez.logos.co) when MUSTER_LEZ_REAL is
     # set AND lez_core is loaded; otherwise the deterministic fake, so a runner without
@@ -3686,10 +3891,14 @@ proc moduleWallet(): Wallet =
     # network and would block this first wallet call on the module thread. The real
     # accounts are created lazily on the first LEZ query (a bounded loading delay at
     # panel-open), and a proving transfer already runs async — so nothing freezes.
-    if lezCore of FakeLezCore:
+    # Under the platform a fake chain's funded balance would sit beside the person's real
+    # chains as though it were theirs (exo-d4d.6): there the fake is neither funded nor shown,
+    # and only the real core (MUSTER_LEZ_REAL; real by default is exo-d4d.10) joins the wallet.
+    let fakeHidden = lezCore of FakeLezCore and evmPlatform()
+    if lezCore of FakeLezCore and not fakeHidden:
       for acc in gLez.accounts(ks):
         if acc.form == afPublic: FakeLezCore(lezCore).fund(acc.id, "1000000000")
-    gWallet.register(gLez)
+    if not fakeHidden: gWallet.register(gLez)
   gWallet
 
 proc splitLezAdapter(): LezAdapter =
@@ -3894,6 +4103,8 @@ proc musterSettings(): string =
     # goes only to this user's own view, never to a room or a log.
     "rpc": gRpcUrl, "rpcMasked": redactUrl(gRpcUrl),
     "relayer": gRelayer,
+    "evmChains": gEvmChains,                 # where EVM chains are read (exo-d4d.3)
+    "evmPlatform": evmPlatform(),            # …and whether that is eth_rpc_module right now
     "btcRpc": gBtcRpc, "btcRpcMasked": redactUrl(gBtcRpc),
     "lez": {"rpc": gLezRpc, "rpcMasked": redactUrl(gLezRpc), "chain": gLezChain,
             "multisigProgram": gLezProgram},
@@ -3916,6 +4127,13 @@ proc musterSetSetting(key, value: string): string =
     gRpcUrl = value
     gWallet = nil            # re-init the EVM adapter against the new endpoint
     forgetCooldown(value)    # naming it again is "try it now" (wallet/rpc_budget.nim, exo-14f.1)
+  of "evm-chains":
+    # where EVM chains are read (exo-d4d.3): the platform's eth_rpc_module, or the rpc URL
+    if value notin ["auto", "platform", "url"]:
+      return $(%*{"error": "evm-chains is \"auto\", \"platform\" (eth_rpc_module) or \"url\" (the rpc setting)"})
+    gEvmChains = value
+    gPlatformAt = -1e9       # re-read the platform's registry on next use
+    gWallet = nil
   of "relayer":
     # who sends settling transactions: "self" or "unlocked:<0x…>" (exo-a50.1.5)
     if value != "self" and not (value.startsWith("unlocked:0x") and value.len == 51):
@@ -3950,8 +4168,8 @@ proc musterSetSetting(key, value: string): string =
     # exo-149.2: whether a keystore_module account may approve in-room. "interim" carries
     # muster's attestation as an opaque digest leg the signer cannot read (the card says
     # so) until typed forms land (exo-149.6).
-    if value notin ["off", "interim"]:
-      return $(%*{"error": "keystore-backend is \"off\" or \"interim\""})
+    if value notin ["off", "interim", "auto"]:
+      return $(%*{"error": "keystore-backend is \"off\", \"interim\" or \"auto\" (when keystore_module attests muster)"})
     gKeystoreBackend = value
   of "delivery":
     # Accept a fleet short-name ("logos.dev", "logos.test"), a full createNode JSON, or "{}"/"" to

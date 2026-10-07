@@ -23,6 +23,8 @@ Item {
     id: settings
 
     property var backend
+    property string manageNote: ""   // what the keystore app hand-off answered (exo-d4d.2)
+    property string chainNote: ""    // what the chain settings hand-off answered (exo-d4d.6)
 
     readonly property var s: {
         try { return JSON.parse(backend ? backend.settingsJson : "{}"); }
@@ -286,8 +288,49 @@ Item {
                         font.pixelSize: Theme.typography.badgeText
                     }
 
-                    // ── RPC endpoint ──
+                    // ── Ethereum chains ──
+                    // Under the platform (exo-d4d) the person's chains and endpoints are set once
+                    // for the device, in the Ethereum RPC app; muster reads them and never writes.
+                    // muster's own RPC URL is for a host without that (the runner, a test chain).
+                    ColumnLayout {
+                        visible: !!(settings.s && settings.s.evmPlatform)
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.tiny
+                        LogosText {
+                            text: qsTr("Ethereum chains  ·  from your device's chain settings (eth_rpc_module)")
+                            color: Theme.palette.textSecondary
+                            font.family: Theme.typography.mono
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                        RowLayout {
+                            spacing: Theme.spacing.small
+                            LogosButton {
+                                objectName: "chainSettings"
+                                text: qsTr("Open chain settings")
+                                variant: LogosButton.Variant.Secondary
+                                onClicked: {
+                                    if (typeof logos === "undefined" || typeof logos.request !== "function") {
+                                        settings.chainNote = qsTr("Open the Ethereum RPC app from Basecamp.");
+                                        return;
+                                    }
+                                    settings.chainNote = "";
+                                    logos.request("evm.rpc.configure", {}, function (res) {
+                                        if (res && res.error === "unavailable")
+                                            settings.chainNote = qsTr("No chain settings app answered: install Ethereum RPC from Basecamp.");
+                                    });
+                                }
+                            }
+                            LogosText {
+                                visible: settings.chainNote.length > 0
+                                text: settings.chainNote
+                                color: Theme.palette.warning
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+                        }
+                    }
+                    // ── RPC endpoint (muster's own, when not on the platform) ──
                     RowLayout {
+                        visible: !(settings.s && settings.s.evmPlatform)
                         spacing: Theme.spacing.small
                         LogosText {
                             objectName: "settingsRpcNow"
@@ -307,6 +350,7 @@ Item {
                         }
                     }
                     RowLayout {
+                        visible: !(settings.s && settings.s.evmPlatform)
                         Layout.fillWidth: true
                         Layout.maximumWidth: 460       // keep the input a tidy width, not full-bleed
                         Layout.alignment: Qt.AlignLeft
@@ -590,31 +634,66 @@ Item {
                         color: Theme.palette.warning
                         font.pixelSize: Theme.typography.badgeText
                     }
+                    // exo-d4d.2: muster never makes keys. Creating, importing and backing up an
+                    // account is the platform keystore app's (evm_keystore_ui), reached by
+                    // the evm.accounts.manage intent; Settings re-reads the row when it returns.
+                    RowLayout {
+                        visible: (settings.keystore.identity || {}).kind === "module"
+                        spacing: Theme.spacing.small
+                        LogosButton {
+                            objectName: "keystoreManage"
+                            text: (settings.keystore.accounts || []).length === 0
+                                  ? qsTr("Create or import an account") : qsTr("Manage accounts")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: {
+                                if (typeof logos === "undefined" || typeof logos.request !== "function") {
+                                    settings.manageNote = qsTr("Open the Logos keystore app from Basecamp.");
+                                    return;
+                                }
+                                settings.manageNote = "";
+                                logos.request("evm.accounts.manage", {}, function (res) {
+                                    if (res && res.error === "unavailable")
+                                        settings.manageNote = qsTr("No keystore app answered: install or open it from Basecamp.");
+                                    if (settings.backend) settings.backend.loadKeystoreStatus();
+                                });
+                            }
+                        }
+                        LogosText {
+                            visible: settings.manageNote.length > 0
+                            text: settings.manageNote
+                            color: Theme.palette.warning
+                            font.pixelSize: Theme.typography.badgeText
+                        }
+                    }
                     Repeater {
                         model: settings.keystore.accounts || []
-                        delegate: RowLayout {
+                        // one account per block: its address, then (on its own line) the button.
+                        // In one RowLayout beside a fill-width elided address, the button never
+                        // drew inside Basecamp 0.3.1 (exo-d4d.2, seen on display).
+                        delegate: ColumnLayout {
+                            id: acctRow
                             required property var modelData
                             readonly property bool chosen: String(settings.keystore.selected || "")
                                                            === String(modelData.address).toLowerCase()
                             Layout.fillWidth: true
-                            spacing: Theme.spacing.small
+                            spacing: 2
                             LogosText {
                                 Layout.fillWidth: true
                                 elide: Text.ElideMiddle
-                                text: (parent.chosen ? "● " : "")
-                                      + (modelData.label ? modelData.label + "  " : "")
-                                      + (modelData.wallet ? "(" + modelData.wallet + ")  " : "")
-                                      + modelData.address
-                                color: parent.chosen ? Theme.palette.textPrimary : Theme.palette.textSecondary
+                                text: (acctRow.chosen ? "● " : "")
+                                      + (acctRow.modelData.label ? acctRow.modelData.label + "  " : "")
+                                      + (acctRow.modelData.wallet ? "(" + acctRow.modelData.wallet + ")  " : "")
+                                      + acctRow.modelData.address
+                                color: acctRow.chosen ? Theme.palette.textPrimary : Theme.palette.textSecondary
                                 font.family: Theme.typography.mono
                                 font.pixelSize: Theme.typography.badgeText
                             }
                             LogosButton {
                                 objectName: "keystoreUse"
-                                visible: !parent.chosen && settings.keystore.backend === "interim"
+                                visible: !acctRow.chosen && settings.keystore.on === true
                                 text: qsTr("Use for approvals")
                                 variant: LogosButton.Variant.Secondary
-                                onClicked: if (settings.backend) settings.backend.keystoreSelect(modelData.address)
+                                onClicked: if (settings.backend) settings.backend.keystoreSelect(acctRow.modelData.address)
                             }
                         }
                     }

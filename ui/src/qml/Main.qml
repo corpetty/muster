@@ -358,6 +358,13 @@ Item {
         anchors.bottom: parent.bottom
         visible: root.view === "home"
         actions: root.homeActions
+        setup: root.homeSetup
+        onManageAccounts: {
+            if (typeof logos !== "undefined" && typeof logos.request === "function")
+                logos.request("evm.accounts.manage", {}, function (res) {});
+            else root.view = "settings";
+        }
+        onOpenSettings: root.view = "settings"
         invites: {
             try { return JSON.parse(root.backend ? root.backend.invitesJson : "[]"); }
             catch (e) { return []; }
@@ -506,8 +513,10 @@ Item {
         }
 
         LogosText {
-            text: qsTr("The Safe you coordinate against — inspect it, act on it directly, "
-                     + "and settle on-chain. To coordinate with people, open a Room.")
+            text: (root.account && root.account.available === false)
+                  ? qsTr("Your balances on the chains you have set up. To coordinate with people, open a Room.")
+                  : qsTr("The Safe you coordinate against — inspect it, act on it directly, "
+                         + "and settle on-chain. To coordinate with people, open a Room.")
             color: Theme.palette.textTertiary
             font.pixelSize: Theme.typography.secondaryText
             wrapMode: Text.WordWrap
@@ -518,8 +527,10 @@ Item {
         // ── the local test Safe (a suggestion) ─────────────────────────────────
         // Shown from describe(): the anvil fixture a member MAY disclose into a room.
         // It is not a room's account — accounts live in the room, disclosed by members
-        // (exo-a50.1.3). A null account renders as "not loaded", never fabricated.
+        // (exo-a50.1.3). A null account renders as "not loaded", never fabricated. Hidden
+        // where no chain 31337 is read (a fresh Basecamp install, exo-d4d.6).
         Rectangle {
+            visible: !root.account || root.account.available !== false
             Layout.fillWidth: true
             implicitHeight: acctCol.implicitHeight + 2 * Theme.spacing.medium
             radius: Theme.spacing.radiusMedium
@@ -615,7 +626,9 @@ Item {
         }
 
         // ── propose composer ──────────────────────────────────────────────────
+        // The direct path drives the local test Safe; hidden where it cannot work (exo-d4d.6).
         Rectangle {
+            visible: !root.account || root.account.available !== false
             Layout.fillWidth: true
             implicitHeight: composeCol.implicitHeight + 2 * Theme.spacing.medium
             radius: Theme.spacing.radiusMedium
@@ -1112,6 +1125,120 @@ Item {
                 color: Theme.palette.textTertiary
                 font.family: Theme.typography.mono
                 font.pixelSize: Theme.typography.badgeText
+            }
+        }
+    }
+
+    // ── the platform's signer (exo-d4d.2 R1) ─────────────────────────────
+    // An approval made with a keystore_module account waits on a person in the platform's
+    // signer (evm_signer_ui). The module answers "awaiting-approval" and lists the request;
+    // here the view raises evm.signing.approve {handle} once per request, so the signer
+    // comes forward with it. The callback is advisory: the request's state comes from the
+    // module's poll (keystore_requests), which also advances it. `unavailable` means no
+    // signer is installed (or access was denied): the person can still open it by hand, so
+    // nothing is cancelled. In the standalone runner there is no intent broker at all.
+    // What a fresh install still needs before money can move (exo-d4d.6): only where the
+    // platform holds the keys (keystore_module attests muster); the runner shows nothing.
+    readonly property var homeKeystore: {
+        try { return JSON.parse(backend ? backend.keystoreStatusJson : "{}") || ({}); }
+        catch (e) { return ({}); }
+    }
+    readonly property var homeSetup: {
+        var k = root.homeKeystore;
+        if (!k.identity || k.identity.kind !== "module") return ({});
+        if ((k.accounts || []).length === 0)
+            return { show: true, action: "accounts", title: qsTr("Set up an Ethereum account"),
+                     detail: qsTr("Your keys live in the Logos keystore, not in Muster. Create or import an account there; Muster asks it to sign, and you approve each signature in the Signer.") };
+        if (!k.selected)
+            return { show: true, action: "settings", title: qsTr("Choose the account Muster approves with"),
+                     detail: qsTr("In Settings, pick one of your keystore accounts: it is what you pay from, what you are paid at, and what approves for you.") };
+        if (k.binding !== "valid" && k.binding !== "expiring")
+            return { show: true, action: "settings", title: qsTr("Link your account to your room identity"),
+                     detail: qsTr("Approve the link in the Signer (Settings → Use for approvals), so the people in your rooms can tell your approvals are yours.") };
+        return ({});
+    }
+    Timer {
+        interval: 5000
+        repeat: true
+        triggeredOnStart: true
+        running: root.ready && root.backend !== null && root.view === "home"
+        onTriggered: root.backend.loadKeystoreStatus()
+    }
+
+    readonly property var keystoreRequests: {
+        try { return JSON.parse(backend ? backend.keystoreRequestsJson : "{}") || ({}); }
+        catch (e) { return ({}); }
+    }
+    property var escorted: ({})          // handle → what the shell answered
+    property string signerNote: ""
+    readonly property bool canRaiseIntents: typeof logos !== "undefined" && typeof logos.request === "function"
+    function openSigner(handle) {
+        if (!root.canRaiseIntents) {
+            root.signerNote = qsTr("Approve it in the Logos Signer (this host has no app-to-app requests).");
+            return;
+        }
+        logos.request("evm.signing.approve", { handle: handle }, function (res) {
+            var e = String((res && res.error) || "");
+            if (e === "unavailable")
+                root.signerNote = qsTr("No signer answered. Install or open the Logos Signer, then approve there.");
+            else if (e === "not_declared" || e === "bad_request" || e === "timeout" || e === "failed")
+                root.signerNote = qsTr("The signer could not be opened (%1). Open the Logos Signer by hand.").arg(e);
+        });
+    }
+    function escortNew() {
+        var rs = (root.keystoreRequests.requests || []);
+        var open = 0;
+        for (var i = 0; i < rs.length; i++) {
+            var r = rs[i];
+            var waiting = r.state === "waiting" || r.state === "shown";
+            if (waiting) open++;
+            if (r.state === "waiting" && r.handle && !root.escorted[r.handle]) {
+                var m = Object.assign({}, root.escorted); m[r.handle] = true; root.escorted = m;
+                root.signerNote = r.intentId ? qsTr("Approve this in the Logos Signer.")
+                                             : qsTr("Approve linking this account to your room identity in the Logos Signer.");
+                root.openSigner(r.handle);
+            }
+        }
+        if (open === 0 && root.signerNote.length > 0 && rs.length > 0) {
+            var last = rs[rs.length - 1];
+            root.signerNote = last.state === "approved" ? ""
+                : (last.state ? qsTr("Signer: %1 %2").arg(last.state).arg(last.reason || "") : "");
+        }
+    }
+    onKeystoreRequestsChanged: escortNew()
+    Timer {
+        // reading keystore_requests advances them; while any waits, read every 1.5 s, else
+        // every 5 s so a request made elsewhere (Settings' account link) is still escorted
+        interval: (root.keystoreRequests.requests || []).some(function (r) { return r.state === "waiting" || r.state === "shown"; }) ? 1500 : 5000
+        repeat: true
+        running: root.ready && root.backend !== null
+        onTriggered: root.backend.loadKeystoreRequests()
+    }
+    Rectangle {
+        visible: root.signerNote.length > 0
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: Theme.spacing.medium
+        z: 100
+        radius: 8
+        color: Theme.palette.surface
+        border.color: Theme.palette.warning
+        implicitWidth: Math.min(signerRow.implicitWidth + 2 * Theme.spacing.medium, parent.width - 2 * Theme.spacing.medium)
+        implicitHeight: signerRow.implicitHeight + 2 * Theme.spacing.small
+        width: implicitWidth
+        height: implicitHeight
+        RowLayout {
+            id: signerRow
+            anchors.centerIn: parent
+            spacing: Theme.spacing.small
+            LogosText {
+                text: root.signerNote
+                color: Theme.palette.textSecondary
+                font.pixelSize: Theme.typography.badgeText
+            }
+            LogosButton {
+                text: qsTr("Dismiss")
+                onClicked: root.signerNote = ""
             }
         }
     }

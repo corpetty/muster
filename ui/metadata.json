@@ -14,6 +14,9 @@
     "delivery_module",
     "lez_core",
     "keystore_module",
+    "eth_rpc_module",
+    "tx_sender_module",
+    "fee_module",
     "liblogos_lez_rln_module",
     "liblogos_rln_module"
   ],
@@ -55,5 +58,15 @@
       ]
     }
   ],
-  "uses": []
+  "uses": [
+    {
+      "intent": "evm.signing.approve"
+    },
+    {
+      "intent": "evm.accounts.manage"
+    },
+    {
+      "intent": "evm.rpc.configure"
+    }
+  ]
 }

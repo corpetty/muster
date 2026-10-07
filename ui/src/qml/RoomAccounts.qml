@@ -24,6 +24,7 @@ Item {
     property var lezCreate: ({})          // the last LEZ multisig create ({address, tx, pending} or {error, detail})
     signal discloseRequested(string accountJson)
     signal discloseSuggested()
+    property bool suggestionAvailable: true   // describe()'s test Safe can work here (exo-d4d.6)
     signal lezMemberRequested()
     signal lezCreateRequested(string threshold, string members)
     property var frostCeremonies: []      // the room's FROST key ceremonies (Phase D)
@@ -174,12 +175,16 @@ Item {
         }
 
         // disclose: the local test Safe (one click on anvil), or any Safe by chain + address
-        LogosButton {
-            objectName: "discloseSuggestedSafe"
+        RowLayout {      // visibility on a wrapper: a LogosButton's own did not take in Basecamp
             Layout.fillWidth: true
-            text: qsTr("Disclose the local test Safe")
-            variant: LogosButton.Variant.Secondary
-            onClicked: acc.discloseSuggested()
+            visible: acc.suggestionAvailable
+            LogosButton {
+                objectName: "discloseSuggestedSafe"
+                Layout.fillWidth: true
+                text: qsTr("Disclose the local test Safe")
+                variant: LogosButton.Variant.Secondary
+                onClicked: acc.discloseSuggested()
+            }
         }
         RowLayout {
             Layout.fillWidth: true
