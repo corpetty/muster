@@ -104,3 +104,14 @@ proc parseChainConfigs*(r: JsonNode): tuple[ok: bool, scope: string, chains: seq
 proc offered*(c: PlatformChain): bool =
   ## A chain muster offers: enabled, and shown by the person's scope.
   c.enabled and c.inScope
+
+const RegistryCapS* = 300.0   ## the longest wait between reads of a registry that does not answer
+
+proc registryRecheckS*(ok: bool, missesInARow: int): float =
+  ## Seconds until the person's chain registry is read again. Answered: 30 s. After the
+  ## n-th unanswered read in a row: 2^n s, capped at 5 min. Basecamp starts eth_rpc_module
+  ## beside muster, so a first read can come before it answers, and is soon tried again;
+  ## a host without it (the runner) settles at the cap.
+  if ok: return 30.0
+  if missesInARow >= 9: return RegistryCapS
+  min(RegistryCapS, float(1 shl max(1, missesInARow)))

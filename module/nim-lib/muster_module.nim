@@ -1135,20 +1135,24 @@ const PreferTestnets = true
 var gPlatformAt = -1e9        ## when the platform's chain registry was last read
 var gPlatformReg: tuple[ok: bool, scope: string, chains: seq[PlatformChain]]
 var gEthRpcInstalled = false
+var gEthRpcSeeded = false      ## init_defaults has answered (asked again until it does)
+var gPlatformMisses = 0        ## registry reads in a row that went unanswered
 
 proc platformRegistry(): tuple[ok: bool, scope: string, chains: seq[PlatformChain]] =
-  ## The person's chain registry from eth_rpc_module, re-read at most every 30 s (5 min
-  ## after it did not answer: a host without it, like the runner, should not pay a
-  ## registry read on every chain call). init_defaults goes first, once: the platform asks
-  ## every consumer to call it, and it writes only what is absent.
+  ## The person's chain registry from eth_rpc_module, re-read every 30 s; after a read it
+  ## did not answer, within seconds, then less often up to 5 min (registryRecheckS: a host
+  ## without it, like the runner, should not pay a registry read on every chain call).
+  ## init_defaults goes first, until it answers once: the platform asks every consumer to
+  ## call it, and it writes only what is absent.
   let now = epochTime()
-  if now - gPlatformAt < (if gPlatformReg.ok: 30.0 else: 300.0): return gPlatformReg
+  if now - gPlatformAt < registryRecheckS(gPlatformReg.ok, gPlatformMisses): return gPlatformReg
   if not gEthRpcInstalled:
     installEthRpc()
     installTxSender()
-    discard ethRpcInitDefaults()
     gEthRpcInstalled = true
+  if not gEthRpcSeeded: gEthRpcSeeded = ethRpcInitDefaults()
   gPlatformReg = ethRpcChains()
+  gPlatformMisses = (if gPlatformReg.ok: 0 else: gPlatformMisses + 1)
   gPlatformAt = now
   gPlatformReg
 

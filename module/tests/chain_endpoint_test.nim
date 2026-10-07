@@ -219,4 +219,20 @@ block:
   doAssert not parseChainConfigs(%*{"ok": false, "error": "eth_rpc not initialized"}).ok
   doAssert not parseChainConfigs(nil).ok
 
+# ── 8. when the registry is read again ────────────────────────────────────────
+block:
+  # Answered: every 30 s. Unanswered: soon, then less often. Basecamp starts muster_module
+  # and eth_rpc_module side by side, so the first read can come before eth_rpc_module
+  # answers; a flat 5 min wait left that person on the URL path for 5 minutes (R6,
+  # 2026-10-07). A host with no eth_rpc_module (the runner) settles at the 5 min cap.
+  doAssert registryRecheckS(true, 0) == 30.0
+  doAssert registryRecheckS(false, 1) == 2.0, "the first miss is retried within seconds"
+  doAssert registryRecheckS(false, 2) == 4.0
+  doAssert registryRecheckS(false, 3) == 8.0
+  doAssert registryRecheckS(false, 9) == 300.0 and registryRecheckS(false, 50) == 300.0,
+    "capped at 5 min, never overflowing"
+  var waited = 0.0
+  for n in 1 .. 8: waited += registryRecheckS(false, n)
+  doAssert waited < 600.0, "a host without the module pays few reads in its first 10 min"
+
 echo "chain_endpoint_test: ok"
