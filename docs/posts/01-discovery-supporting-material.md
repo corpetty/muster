@@ -83,6 +83,11 @@ The criterion the matrix applies, and the reason it is worth applying to ourselv
 
 ### Muster as it stands today — draft self-assessment
 
+> **Dated, 2026-10-07.** This scores the September demo build (`demo/`) as it ran. That
+> build covered the middle links first. The score is a status, not Muster's scope: every
+> link is Muster's to cover. `docs/runbooks/explaining-muster.md` §4c has the current
+> link-by-link status.
+
 **This is the most exposed thing in the post and needs your judgement before it goes anywhere.** It is scored strictly against the *demo as it runs*, not against the specification. Two cells are deliberately left unscored rather than guessed.
 
 | Stage | Mark | Why, strictly |

@@ -33,7 +33,7 @@ The registry's `credibility` field adds a fourth value beyond the article's two:
 
 **Muster classifies; it never scores.** The moment a commitment is a number, the residual trust disappears from view, which is exactly the failure the article's private-order-flow example describes. The card says "four of five inputs structurally bound; residual trust: RPC provider, store node". It never says "80%".
 
-Of the article's seven links (discovery, diligence, negotiation, contracting, ordering, settlement, enforcement) muster touches negotiation, contracting, a slice of diligence (F-14 identity binding), a slice of ordering (the RPC sees the signed transaction before the mempool), and settlement readback. Discovery and enforcement are outside the room. Any claim is over those links, not seven.
+The article's seven links (discovery, diligence, negotiation, contracting, ordering, settlement, enforcement) are muster's scope: all of them. The first builds covered the middle first. Negotiation and contracting were built first; diligence, ordering and settlement were covered in part. That was build order, not a boundary. Each link's status today, and what is ahead for it, is in `docs/runbooks/explaining-muster.md` §4c. A claim describes a link's current status; a planned link is named as planned.
 
 The Bybit failure is the clean example of a link flipping columns: settlement was imperative, signing was motivational (trust the interface). F-4 re-derivation moves signing into the imperative column and can prove it with a test. That sentence belongs in the article's companion material.
 
