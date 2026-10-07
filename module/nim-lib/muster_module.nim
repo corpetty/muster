@@ -2837,6 +2837,7 @@ proc hostFacts(policy = ""): HostFacts =
   let mf = moduleFacts()
   facts.invoker = mf.invoker
   facts.moduleRecord = mf.moduleRecord
+  facts.callableWithoutRegistry = mf.callableWithoutRegistry
   # A Bitcoin proposal introduces the user's node (exo-a50.2.6): graded by asking IT
   # which chain it serves; my key is graded against the account's keys.
   facts.btcRpcUrl = gBtcRpc
