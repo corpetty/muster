@@ -1,6 +1,6 @@
 # Monero in Muster rooms: the plan (exo-dcc)
 
-Status: **planned, 2026-10-07.** Epic `exo-dcc`, with its children `exo-dcc.1`–`.9`.
+Status: **planned, 2026-10-07.** Epic `exo-dcc`, with its children `exo-dcc.1`–`.10`.
 `pb dep tree exo-dcc` shows live status, and `pb ready` shows what can start next.
 
 ## 1. The goal
@@ -141,6 +141,40 @@ Children of `exo-dcc`. Phase 1 starts on day 0, alongside Phase 0.
   resolves delivery and the Monero stack. Fallback: the AppImage (`exo-070`).
 - **`exo-dcc.4`: the mixnet.** Try `anonymityLevel: Preferred` on delivery 0.3.x. If it
   works, ship it with a claim; if not, the copy says "specified, not on".
+- **`exo-dcc.10`: install what's missing, from the card and the proposal form.** A stranger
+  installs Muster, and Muster helps them install whatever a proposal needs. This works for
+  every driver, not only Monero. Today the fresh-install runbook has people install about
+  13 catalogue packages by hand before starting.
+  - **Muster asks; the person confirms.** Basecamp's Package Manager provides the
+    `packages.install` intent, in 0.3.1 and 0.3.2 alike. Muster raises
+    `logos.request("packages.install", {name})`. Package Manager opens on that package, the
+    catalogue resolves its dependencies, and the person confirms in Basecamp's own install
+    dialog. Muster installs nothing itself.
+  - **Readiness grades a module in three states:** not installed (from Package Manager's
+    list), installed but not running, and running. A module installed but not loaded is
+    not ready: a call to it waits out its full deadline.
+  - **The driver names what to install,** which can differ from the module it needs.
+    Monero needs `monero_wallet_backend`, but the package to install is `monero_wallet_ui`:
+    it pulls in the backend, core and node, and holds the wallet roles the backend's
+    defaults name.
+  - **The card.** A missing module shows an "Install …" button. The reply means "Package
+    Manager is open", not "installed", so the card then re-reads readiness until the
+    module is ready. "Installed but not running" points to opening the app that runs it;
+    for Monero, `monero.wallet.unlock` starts the wallet and opens one in one step.
+  - **When the install can't run:**
+    - The package isn't in any enabled catalogue (the request fails after 8 s): the card
+      offers the catalogue settings.
+    - There is no Package Manager, as in the standalone runner: the card keeps today's text.
+    - Only one request runs at a time.
+  - **The room's proposal form.** Each kind on the "Settles on" list carries its needs,
+    graded the same way. A kind whose module is missing shows "Install …" rather than
+    disappearing. Propose waits only on what the proposer's own part needs.
+  - **Metadata.**
+    - `muster_ui` declares `uses` for `packages.install` and `packages.show`.
+    - The Monero modules become **optional** dependencies of `muster_module`: never loaded
+      automatically, and never a reason Muster fails to load. Installing Muster therefore
+      does not force the Monero stack on anyone.
+    - Open: whether `--access-policy enforce` counts optional dependencies as declared.
 
 **Phase 2: the XMR payment request (`exo-dcc.5`, after `.1`)**
 - A typed spec via `discuss-issue`, with tests failing first:
@@ -179,7 +213,7 @@ intent)**
 - The wallet engine signs during `prepare_send`, so Muster gates the broadcast, not the
   signing.
 
-**Phase 4: the deal-desk demo (`exo-dcc.7`, after `.2`, `.3` and `.5`)**
+**Phase 4: the deal-desk demo (`exo-dcc.7`, after `.2`, `.3`, `.5` and `.10`)**
 - **The flow.** Terms → XMR request → pay → confirm → a receipt the member chooses to share.
   This needs `audit.nim` extended to the split families, which it refuses today.
 - **Education.**
@@ -211,7 +245,7 @@ Day 0 is 2026-10-07.
 | Campaign window | Engineering |
 |---|---|
 | Days 0–10 (to 10-17) | Phase 0; messaging decided before 10-14; Phase 2's spec written |
-| Days 10–25 (to 11-01) | Phase 2, 2a first; the installable build; the essay uses §5's columns |
+| Days 10–25 (to 11-01) | Phase 2, 2a first; the installable build, and installing from the card (`exo-dcc.10`); the essay uses §5's columns |
 | Days 25–40 (to 11-16) | Phase 4 and the two-machine acceptance; Phase 3 if the upstream intent has landed |
 | Days 40–60 (to 12-06) | Phase 5; the backlog from critics; a Lambda prize opened |
 
@@ -229,8 +263,8 @@ Day 0 is 2026-10-07.
 
 ## 9. Corrections for the campaign doc
 
-- **"Basecamp ships Monero" is not quite right.** It is a one-click catalogue install, not
-  bundled. The runbook names the step.
+- **"Basecamp ships Monero" is not quite right.** It is a catalogue install, not bundled.
+  Muster's card offers that install the first time a proposal needs it (`exo-dcc.10`).
 - **Claim all seven links as Muster's scope, with §5's columns.** Never present the
   "Ahead" column as shipped.
 - **Not "mixnet integrated"** until `exo-dcc.4` says so.
