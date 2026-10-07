@@ -150,6 +150,12 @@ Children of `exo-dcc`. Phase 1 starts on day 0, alongside Phase 0.
     `logos.request("packages.install", {name})`. Package Manager opens on that package, the
     catalogue resolves its dependencies, and the person confirms in Basecamp's own install
     dialog. Muster installs nothing itself.
+    - Before every request, Basecamp asks "Use this app? Muster wants to
+      packages.install", and it does not remember the answer. A Cancel there reaches
+      Muster as `cancelled`.
+    - Seen on display in Basecamp 0.3.2 (2026-10-07). Installing `monero_wallet_backend`
+      took 4 packages and about 51 s, including the pre-ticked optional `monerod_module`.
+      It installed no app.
   - **Readiness grades a module in three states:** not installed, installed but not
     running, and running.
     - It reads them from Basecamp's `modules_state` registry. `module_record(name)` is
@@ -193,6 +199,13 @@ Children of `exo-dcc`. Phase 1 starts on day 0, alongside Phase 0.
       - The atlas guide says optional dependencies are "never auto-loaded"; the probe
         found otherwise.
     - Open: whether `--access-policy enforce` counts optional dependencies as declared.
+  - **Muster must declare every module it calls.** On display, a module Muster does not
+    declare stayed silent to Muster for five minutes after Basecamp started it. The cause
+    is not yet found. Reopening Muster starts only the modules it declares. So:
+    - the Monero modules become optional dependencies of `muster_module` (Phase 2b);
+    - an installed module's remedy is "close and reopen Muster" only for a declared module,
+      and otherwise "open the app that uses it, or load it in Basecamp's Modules tab".
+    - The investigation is a child of `exo-dcc`.
 
 **Phase 2: the XMR payment request (`exo-dcc.5`, after `.1`)**
 - A typed spec via `discuss-issue`, with tests failing first:
