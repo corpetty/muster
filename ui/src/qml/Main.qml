@@ -440,6 +440,11 @@ Item {
             root.view = "settings";
             if (root.backend) root.backend.loadSettings();
         }
+        // Install what a proposal needs (exo-dcc.10): the card or the form asks, the shell
+        // raises the request, and every answer comes back down in packageRequests.
+        packageRequests: root.packageRequests
+        onPackageInstallRequested: function (pkg) { root.requestPackageInstall(pkg); }
+        onPackageShowRequested: function (pkg) { root.showPackage(pkg); }
         objectName: "roomSurface"
         anchors.top: navBar.bottom
         anchors.left: parent.left
@@ -1184,6 +1189,52 @@ Item {
             else if (e === "not_declared" || e === "bad_request" || e === "timeout" || e === "failed")
                 root.signerNote = qsTr("The signer could not be opened (%1). Open the Logos Signer by hand.").arg(e);
         });
+    }
+
+    // Install what a proposal needs (exo-dcc.10). A card or the proposal form asks
+    // Basecamp's Package Manager to open on a package (packages.install); the person
+    // confirms in Basecamp's own install dialog. Muster installs nothing. An ok answer
+    // means "Package Manager is open on it", never "installed": readiness says when the
+    // module runs. One entry per package, shared by every card and the form:
+    //   { state: "asking" | "open" | "unavailable" | "failed" | "cancelled" | "error",
+    //     error, at (ms, when it answered), showError ("" or why packages.show failed) }
+    // The answer is { ok, data, error } (the app-to-app broker's shape, as for the signer).
+    property var packageRequests: ({})
+    function notePackage(pkg, fields) {
+        var m = Object.assign({}, root.packageRequests);
+        m[pkg] = Object.assign({}, m[pkg] || {}, fields);
+        root.packageRequests = m;
+    }
+    function requestPackageInstall(pkg, done) {
+        var name = String(pkg || "");
+        if (name.length === 0) return;
+        var finish = function (res) {
+            var e = String((res && res.error) || "");
+            var ok = !!(res && res.ok);
+            var st = ok ? "open" : (e === "unavailable" || e === "failed" || e === "cancelled") ? e : "error";
+            root.notePackage(name, { state: st, error: e, at: Date.now(), showError: "" });
+            if (typeof done === "function") done({ ok: ok, data: (res && res.data) || ({}), error: e });
+        };
+        // no app-to-app requests here (the standalone runner): there is no Package Manager
+        if (!root.canRaiseIntents) { finish({ ok: false, data: ({}), error: "unavailable" }); return; }
+        root.notePackage(name, { state: "asking", error: "", at: Date.now(), showError: "" });
+        try { logos.request("packages.install", { name: name }, finish); }
+        catch (x) { finish({ ok: false, data: ({}), error: "unavailable" }); }
+    }
+    // Show the package in Package Manager (packages.show): offered when the install
+    // request found nothing, so the person can check the catalogues there.
+    function showPackage(pkg, done) {
+        var name = String(pkg || "");
+        if (name.length === 0) return;
+        var finish = function (res) {
+            var e = String((res && res.error) || "");
+            var ok = !!(res && res.ok);
+            root.notePackage(name, { showError: ok ? "" : (e.length > 0 ? e : "failed") });
+            if (typeof done === "function") done({ ok: ok, data: (res && res.data) || ({}), error: e });
+        };
+        if (!root.canRaiseIntents) { finish({ ok: false, data: ({}), error: "unavailable" }); return; }
+        try { logos.request("packages.show", { name: name }, finish); }
+        catch (x) { finish({ ok: false, data: ({}), error: "unavailable" }); }
     }
     function escortNew() {
         var rs = (root.keystoreRequests.requests || []);

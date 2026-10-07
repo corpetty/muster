@@ -104,6 +104,17 @@ Item {
     }
     // A remedy that lives in Settings (repoint the RPC): the shell switches views.
     signal settingsRequested()
+    // Install what a proposal needs (exo-dcc.10): a card or the proposal form asks
+    // Basecamp's Package Manager to open on a package; the shell raises the request
+    // (packages.install / packages.show) and hands every answer back in packageRequests,
+    // one entry per package: {state: asking|open|unavailable|failed|cancelled|error, …}.
+    signal packageInstallRequested(string pkg)
+    signal packageShowRequested(string pkg)
+    property var packageRequests: ({})
+    function packageReq(pkg) {
+        var m = room.packageRequests;
+        return (pkg && m && m[pkg]) ? m[pkg] : null;
+    }
 
     readonly property var intents: {
         try { return JSON.parse(backend ? backend.intentsJson : "[]"); }
@@ -170,8 +181,12 @@ Item {
     // changes while it's open (the acting-as owner check is Safe-specific). Not on
     // entry — ask-then-disclose. Also snap the policy to the current kind on open (it
     // may have been left on another kind's policy from a previous compose).
+    // The kind list is re-read too, so each kind's module needs are graded as they are now
+    // (exo-dcc.10: a module installed since launch no longer reads missing).
     onComposingChanged: { if (!composing) room.modeB = false;
-                          if (composing) { refreshRoomAccount(); room.coherePolicy(); } }
+                          if (composing) { refreshRoomAccount(); room.coherePolicy();
+                                           room.installNow = Date.now();
+                                           if (room.backend) room.backend.loadDrivers(); } }
     onPolicyKindChanged: if (composing) refreshRoomAccount()
     // The outcome of the last room-side submit (coordinate_submit): {id, state,
     // onchain, txHash} or {id, error, ...}. Matched to a card by its intent id.
@@ -198,6 +213,96 @@ Item {
         for (var i = 0; i < room.kinds.length; ++i)
             if (room.kinds[i].kind === k) return room.kinds[i];
         return null;
+    }
+
+    // What the selected kind needs from this instance's own modules and does not have
+    // yet (exo-dcc.10): its `needs` from coordinate_drivers, graded here, not met. The
+    // form shows each under the picker, with "Install …" where installing would help;
+    // the kind itself stays on the list.
+    readonly property var composeNeeds: {
+        if (room.composeType === "action") return [];
+        var info = room.kindInfo(room.policyKind);
+        var ns = (info && Array.isArray(info.needs)) ? info.needs : [];
+        return ns.filter(function (n) { return n && typeof n === "object" && String(n.status || "") !== "met"; });
+    }
+    // Propose waits only on a need that is definitely missing for the proposer's own
+    // part: not installed, installed but not running, or failed. "unknown" and
+    // "starting" warn and never block: a host that cannot tell must not stop a proposal.
+    // A need another party's part has (an approver's, a payer's) never blocks proposing.
+    function needBlocks(n) {
+        var st = String((n && n.moduleState) || "");
+        var p = String((n && n.party) || "");
+        return (st === "not-installed" || st === "installed" || st === "error")
+               && p !== "contributor" && p !== "payer" && p !== "counterparty";
+    }
+    readonly property var composeBlockers: room.composeNeeds.filter(function (n) { return room.needBlocks(n); })
+    readonly property bool composeBlocked: room.composeBlockers.length > 0
+    function composeNeedLine(n) {
+        var info = room.kindInfo(room.policyKind);
+        var label = (info && info.label) ? String(info.label) : room.policyKind;
+        var name = String((n && n.name) || "");
+        var d = String((n && n.detail) || "");
+        var p = String((n && n.party) || "");
+        return (d.length > 0 ? qsTr("%1 needs %2 (%3)").arg(label).arg(name).arg(d)
+                             : qsTr("%1 needs %2").arg(label).arg(name))
+             + (p === "contributor" ? qsTr(", to approve") : p === "payer" ? qsTr(", to pay your part") : "");
+    }
+    // "Install …" only where installing would help (as on the card)
+    function needCanInstall(n) {
+        var st = String((n && n.moduleState) || "");
+        return String((n && n.install) || "").length > 0
+               && st !== "installed" && st !== "starting" && st !== "error" && st !== "ready";
+    }
+    // need name → the package the form asked for it
+    property var installAsked: ({})
+    function needPkg(n) {
+        var p = String((n && n.install) || "");
+        return p.length > 0 ? p : String(room.installAsked[String((n && n.name) || "")] || "");
+    }
+    function installNote(pkg) {
+        var r = room.packageReq(pkg);
+        if (!r) return "";
+        if (r.state === "asking") return qsTr("Asking Package Manager to open %1…").arg(pkg);
+        if (r.state === "open")
+            return room.installNow - Number(r.at || 0) >= 180000
+                   // the 3-minute re-read is over: say how to look again, never a stale promise
+                   ? qsTr("Package Manager was opened on %1. To check again, close and reopen this form.").arg(pkg)
+                   : qsTr("Package Manager is open on %1. Confirm the install there; this form updates once it is installed.").arg(pkg);
+        if (r.state === "unavailable") return qsTr("Install %1 from Basecamp's Package Manager.").arg(pkg);
+        if (r.state === "failed")
+            return qsTr("%1 was not found in your catalogues. Check the catalogues in Package Manager.").arg(pkg);
+        if (r.state === "cancelled") return qsTr("The install request was replaced by a newer one.");
+        return qsTr("Package Manager did not answer (%1). Install %2 from Basecamp's Package Manager.")
+               .arg(String(r.error || "")).arg(pkg);
+    }
+    function askInstall(n) {
+        var pkg = String((n && n.install) || "");
+        if (pkg.length === 0) return;
+        var m = Object.assign({}, room.installAsked);
+        m[String(n.name || "")] = pkg;
+        room.installAsked = m;
+        room.installNow = Date.now();
+        room.packageInstallRequested(pkg);
+    }
+    // After Package Manager opened on a package the selected kind needs, re-read the
+    // kind list every 3 s, for up to 3 minutes or until that need reads met.
+    property double installNow: Date.now()
+    readonly property bool composeInstallAwaited: {
+        var ns = room.composeNeeds;
+        for (var i = 0; i < ns.length; ++i) {
+            var r = room.packageReq(room.needPkg(ns[i]));
+            if (r && r.state === "open" && room.installNow - Number(r.at || 0) < 180000) return true;
+        }
+        return false;
+    }
+    Timer {
+        interval: 3000
+        repeat: true
+        running: room.composing && room.composeInstallAwaited
+        onTriggered: {
+            room.installNow = Date.now();
+            if (room.composeInstallAwaited && room.backend) room.backend.loadDrivers();
+        }
     }
 
     // Which policies COHERE with a proposal kind. The policy is HOW the room agrees;
@@ -1167,6 +1272,14 @@ Item {
                                           : qsTr("Marked received."))
                                        : ""
                             onOpenSettings: room.settingsRequested()
+                            // install what's missing (exo-dcc.10): the shell asks Package
+                            // Manager; the answers come back down; readiness is re-read
+                            // (not the offers) until the module runs
+                            packageRequests: room.packageRequests
+                            onInstallPackage: function (pkg) { room.packageInstallRequested(pkg); }
+                            onShowPackage: function (pkg) { room.packageShowRequested(pkg); }
+                            onRecheckReadiness: if (room.backend && msg.liveIntent)
+                                                    room.backend.loadReadiness(String(msg.liveIntent.id || ""))
                         }
 
                         // Advanced: paste a signature produced elsewhere (a Safe owner on
@@ -1792,6 +1905,103 @@ Item {
                     }
                 }
 
+                // What the selected kind needs from your own modules and does not have yet
+                // (exo-dcc.10), each with "Install …" where installing would help: Muster
+                // asks Basecamp's Package Manager, and you confirm the install there. The
+                // kind stays on the list above. Propose waits only when a need of your own
+                // part is definitely missing; a need Muster cannot judge only warns.
+                ColumnLayout {
+                    objectName: "composeNeeds"
+                    visible: room.composeType !== "action" && room.composeNeeds.length > 0
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.tiny
+
+                    Repeater {
+                        model: room.composeType !== "action" ? room.composeNeeds : []
+                        delegate: ColumnLayout {
+                            id: composeNeed
+                            required property var modelData
+                            readonly property string pkg: room.needPkg(composeNeed.modelData)
+                            readonly property var req: room.packageReq(composeNeed.pkg)
+                            readonly property string note: room.installNote(composeNeed.pkg)
+                            readonly property bool installable: room.needCanInstall(composeNeed.modelData)
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            LogosText {
+                                objectName: "composeNeed_" + String(composeNeed.modelData.name || "")
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: room.composeNeedLine(composeNeed.modelData)
+                                color: Theme.palette.warning
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+                            // no Install button (installed but not running, starting,
+                            // failed, or nothing to install): the module's own remedy
+                            LogosText {
+                                visible: !composeNeed.installable && String(composeNeed.modelData.remedy || "").length > 0
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: qsTr("To fix: ") + String(composeNeed.modelData.remedy || "")
+                                color: Theme.palette.textSecondary
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+                            RowLayout {
+                                visible: composeNeed.installable || !!(composeNeed.req && composeNeed.req.state === "failed")
+                                spacing: Theme.spacing.small
+                                LogosButton {
+                                    objectName: "composeNeedInstall_" + String(composeNeed.modelData.name || "")
+                                    visible: composeNeed.installable
+                                    enabled: !(composeNeed.req && composeNeed.req.state === "asking")
+                                    text: qsTr("Install %1").arg(String(composeNeed.modelData.install || ""))
+                                    variant: LogosButton.Variant.Secondary
+                                    onClicked: room.askInstall(composeNeed.modelData)
+                                }
+                                // not in any enabled catalogue: show it in Package Manager
+                                LogosButton {
+                                    objectName: "composeInstallShow_" + composeNeed.pkg
+                                    visible: !!(composeNeed.req && composeNeed.req.state === "failed")
+                                    text: qsTr("Open Package Manager")
+                                    variant: LogosButton.Variant.Secondary
+                                    onClicked: room.packageShowRequested(composeNeed.pkg)
+                                }
+                            }
+                            LogosText {
+                                objectName: "composeInstallStatus_" + composeNeed.pkg
+                                visible: composeNeed.note.length > 0
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: composeNeed.note
+                                color: (composeNeed.req && (composeNeed.req.state === "open" || composeNeed.req.state === "asking"))
+                                       ? Theme.palette.textSecondary : Theme.palette.warning
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+                            LogosText {
+                                visible: !!(composeNeed.req && composeNeed.req.state === "failed" && composeNeed.req.showError)
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: qsTr("Package Manager could not be opened (%1). Open it from Basecamp.")
+                                      .arg(String((composeNeed.req && composeNeed.req.showError) || ""))
+                                color: Theme.palette.warning
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+                        }
+                    }
+
+                    // why Propose is off — or, when Muster cannot tell, that it is not
+                    LogosText {
+                        objectName: "composeNeedsGate"
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: room.composeBlocked
+                              ? qsTr("Propose is off until %1 runs here.")
+                                    .arg(room.composeBlockers.map(function (n) { return String(n.name || ""); }).join(", "))
+                              : qsTr("You can still propose.")
+                        color: room.composeBlocked ? Theme.palette.warning : Theme.palette.textTertiary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                }
+
                 // FROM which account (exo-a50.1.3): an account-bound kind (Safe, Attest) acts
                 // from an account a member disclosed into this room. One chip per account the
                 // kind can use; none → say so and point at the room's Accounts panel. A refused
@@ -2252,6 +2462,7 @@ Item {
                     LogosButton {
                         objectName: "roomSettleUp"
                         visible: !room.splitPrivate && !room.acrossOpen
+                        enabled: !room.composeBlocked     // exo-dcc.10, as Propose
                         Layout.preferredWidth: 320
                         text: qsTr("Settle up the room's open splits instead")
                         variant: LogosButton.Variant.Secondary
@@ -2349,7 +2560,8 @@ Item {
                             LogosButton {
                                 objectName: "roomSettleUpAcross"
                                 text: qsTr("Propose the settle-up")
-                                enabled: room.acrossPriced.length > 0 && String(acrossSource.text || "").trim().length > 0
+                                enabled: !room.composeBlocked && room.acrossPriced.length > 0
+                                         && String(acrossSource.text || "").trim().length > 0
                                 onClicked: {
                                     if (!room.backend) return;
                                     var rates = room.acrossPriced.map(function (r) {
@@ -2615,7 +2827,10 @@ Item {
                         // balance — can't over-send (exo-bf9); the ⚠ above says why it's off.
                         // AND the room must have enough people to act on it (see the hint):
                         // don't submit a proposal into a room that can't yet agree to it.
-                        enabled: room.composeType === "split" ? room.splitPreview(splitTotal.text) !== null && !room.splitTokenPending
+                        // AND no module your own part needs is definitely missing (exo-dcc.10;
+                        // the line under the kind picker says which).
+                        enabled: !room.composeBlocked && (
+                                 room.composeType === "split" ? room.splitPreview(splitTotal.text) !== null && !room.splitTokenPending
                                                                 && !room.splitDust(room.splitPreview(splitTotal.text))
                                                                 && (!room.splitFiat || String(room.splitFiatSource).trim().length > 0)
                                                                 && (room.splitFor.length === 0 || room.sharedAddressOf(room.splitFor).length > 0)
@@ -2624,7 +2839,7 @@ Item {
                                : room.composeType === "action" ? room.chosenAction !== null
                                : room.isBtcPolicy ? proposeTo.text.length > 0 && proposeValue.text.length > 0
                                : room.isLezPolicy ? proposeTo.text.length > 0 && proposeValue.text.length > 0
-                               : proposeTo.text.length > 0 && !room.overSends(proposeValue.text))
+                               : proposeTo.text.length > 0 && !room.overSends(proposeValue.text)))
                         onClicked: {
                             if (room.composeType === "split") {
                                 room.proposeSplit(splitTotal.text, splitMemo.text);
@@ -2769,7 +2984,7 @@ Item {
                 LogosButton {
                     objectName: "roomLezVaultInitPropose"
                     text: qsTr("Propose vault setup")
-                    enabled: room.enoughToPropose && lezDefinition.text.length > 0
+                    enabled: !room.composeBlocked && room.enoughToPropose && lezDefinition.text.length > 0
                     onClicked: {
                         if (room.backend) room.backend.proposeLezVaultInit(lezDefinition.text);
                         lezDefinition.text = "";

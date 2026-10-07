@@ -146,6 +146,98 @@ Rectangle {
     signal shareMaterial(string requirement, string pub)
     // A remedy that lives in Settings (an RPC to configure / repoint).
     signal openSettings()
+    // Install what's missing (exo-dcc.10): ask Basecamp's Package Manager to open on the
+    // package a module need names; the person confirms the install there, never here.
+    // The room relays it to the shell, and what each request answered comes back in
+    // packageRequests (one entry per package, shared by every card and the form).
+    signal installPackage(string pkg)
+    signal showPackage(string pkg)
+    // Re-read this intent's readiness (after Package Manager opened, until the module runs).
+    signal recheckReadiness()
+    property var packageRequests: ({})
+    // need name → the package this card asked for it (the reader's own clicks)
+    property var installAsked: ({})
+    // the clock the 3-minute re-read window is judged against, advanced by its timer
+    property double installNow: Date.now()
+    function installReq(pkg) {
+        var m = cardRoot.packageRequests;
+        return (pkg && m && m[pkg]) ? m[pkg] : null;
+    }
+    // the package for a module need: what the module names, else what was asked for it
+    function installPkg(item) {
+        var p = String((item && item.install) || "");
+        return p.length > 0 ? p : String(cardRoot.installAsked[String((item && item.name) || "")] || "");
+    }
+    // "Install …" only where installing would help: the module names a package, and the
+    // module is not already installed (starting, failed or waiting to be opened).
+    function canInstall(item) {
+        if (!item || item.kind !== "module" || item.status === "met") return false;
+        var st = String(item.moduleState || "");
+        return String(item.install || "").length > 0
+               && st !== "installed" && st !== "starting" && st !== "error" && st !== "ready";
+    }
+    function installNote(pkg) {
+        var r = cardRoot.installReq(pkg);
+        if (!r) return "";
+        if (r.state === "asking") return qsTr("Asking Package Manager to open %1…").arg(pkg);
+        if (r.state === "open")
+            return cardRoot.installLapsed(r)
+                   // the 3-minute re-read is over: say how to look again, never a stale promise
+                   ? qsTr("Package Manager was opened on %1. To check again, close and reopen this box.").arg(pkg)
+                   : qsTr("Package Manager is open on %1. Confirm the install there; this card updates once it is installed.").arg(pkg);
+        if (r.state === "unavailable") return qsTr("Install %1 from Basecamp's Package Manager.").arg(pkg);
+        if (r.state === "failed")
+            return qsTr("%1 was not found in your catalogues. Check the catalogues in Package Manager.").arg(pkg);
+        if (r.state === "cancelled") return qsTr("The install request was replaced by a newer one.");
+        return qsTr("Package Manager did not answer (%1). Install %2 from Basecamp's Package Manager.")
+               .arg(String(r.error || "")).arg(pkg);
+    }
+    // Package Manager opened on it more than 3 minutes ago: the card no longer re-reads
+    function installLapsed(r) {
+        return !!(r && r.state === "open" && cardRoot.installNow - Number(r.at || 0) >= 180000);
+    }
+    // a module need whose re-read window lapsed — reopening the box checks it again
+    function installLapsedAny() {
+        var items = (cardRoot.readiness && Array.isArray(cardRoot.readiness.items)) ? cardRoot.readiness.items : [];
+        for (var i = 0; i < items.length; ++i) {
+            var it = items[i];
+            if (it && it.kind === "module" && it.status !== "met"
+                && cardRoot.installLapsed(cardRoot.installReq(cardRoot.installPkg(it)))) return true;
+        }
+        return false;
+    }
+    function askInstall(item) {
+        var pkg = String((item && item.install) || "");
+        if (pkg.length === 0) return;
+        var m = Object.assign({}, cardRoot.installAsked);
+        m[String(item.name || "")] = pkg;
+        cardRoot.installAsked = m;
+        cardRoot.installNow = Date.now();
+        cardRoot.installPackage(pkg);
+    }
+    // Whether a module this card needs is being installed: Package Manager answered ok on
+    // its package less than 3 minutes ago, and readiness does not yet read it met.
+    readonly property bool installAwaited: {
+        var items = (cardRoot.readiness && Array.isArray(cardRoot.readiness.items)) ? cardRoot.readiness.items : [];
+        for (var i = 0; i < items.length; ++i) {
+            var it = items[i];
+            if (!it || it.kind !== "module" || it.status === "met") continue;
+            var r = cardRoot.installReq(cardRoot.installPkg(it));
+            if (r && r.state === "open" && cardRoot.installNow - Number(r.at || 0) < 180000) return true;
+        }
+        return false;
+    }
+    // Re-read readiness every 3 s while the box is open, for up to 3 minutes after
+    // Package Manager opened, or until the module reads met. Stops with the card.
+    Timer {
+        interval: 3000
+        repeat: true
+        running: cardRoot.needsOpen && cardRoot.installAwaited
+        onTriggered: {
+            cardRoot.installNow = Date.now();
+            if (cardRoot.installAwaited) cardRoot.recheckReadiness();
+        }
+    }
     property bool needsOpen: false
     readonly property var readiness: (cardRoot.card && cardRoot.card.readiness) ? cardRoot.card.readiness : null
     // "From you" (exo-45e K6): which of my own holdings fill the slots this asks of me.
@@ -1696,7 +1788,10 @@ Rectangle {
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
                     cardRoot.needsOpen = !cardRoot.needsOpen;
+                    if (cardRoot.needsOpen) cardRoot.installNow = Date.now();
                     if (cardRoot.needsOpen && !cardRoot.readiness) cardRoot.needs();
+                    // after an install request's re-reads ran out (exo-dcc.10): look again
+                    else if (cardRoot.needsOpen && cardRoot.installLapsedAny()) cardRoot.recheckReadiness();
                 }
             }
 
@@ -1738,7 +1833,14 @@ Rectangle {
                 Repeater {
                     model: (cardRoot.needsOpen && cardRoot.readiness && cardRoot.readiness.items) ? cardRoot.readiness.items : []
                     delegate: ColumnLayout {
+                        id: needRow
                         required property var modelData
+                        // a module need (exo-dcc.10): the package to ask Package Manager
+                        // for, and what that request answered
+                        readonly property string pkg: cardRoot.installPkg(needRow.modelData)
+                        readonly property var req: cardRoot.installReq(needRow.pkg)
+                        readonly property string note: needRow.modelData.status === "met" ? ""
+                                                       : cardRoot.installNote(needRow.pkg)
                         Layout.fillWidth: true
                         spacing: 0
                         RowLayout {
@@ -1768,10 +1870,13 @@ Rectangle {
                             Layout.fillWidth: true
                             Layout.leftMargin: Theme.spacing.medium
                             spacing: Theme.spacing.small
+                            // module remedies are whole instructions now ("install … from
+                            // Basecamp's Package Manager", "start …"), so every row reads
+                            // "To fix:"; the Install button below is the one-click form
                             LogosText {
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
-                                text: (modelData.kind === "module" ? qsTr("Install: ") : qsTr("To fix: ")) + String(modelData.remedy || "")
+                                text: qsTr("To fix: ") + String(modelData.remedy || "")
                                 color: Theme.palette.textSecondary
                                 font.pixelSize: Theme.typography.badgeText
                             }
@@ -1795,6 +1900,54 @@ Rectangle {
                                 text: qsTr("Open settings")
                                 variant: LogosButton.Variant.Secondary
                                 onClicked: cardRoot.openSettings()
+                            }
+                        }
+                        // A module that is not installed (exo-dcc.10): ask Basecamp's
+                        // Package Manager to open on the package the module names. The
+                        // person confirms the install there; Muster installs nothing. An
+                        // ok answer means Package Manager is open, not that it installed,
+                        // so the card re-reads readiness until the module runs.
+                        ColumnLayout {
+                            visible: needRow.modelData.kind === "module" && needRow.modelData.status !== "met"
+                                     && (cardRoot.canInstall(needRow.modelData) || needRow.note.length > 0)
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Theme.spacing.medium
+                            spacing: Theme.spacing.tiny
+                            LogosButton {
+                                objectName: "needInstall_" + String(needRow.modelData.name)
+                                visible: cardRoot.canInstall(needRow.modelData)
+                                enabled: !(needRow.req && needRow.req.state === "asking")
+                                text: qsTr("Install %1").arg(String(needRow.modelData.install || ""))
+                                variant: LogosButton.Variant.Secondary
+                                onClicked: cardRoot.askInstall(needRow.modelData)
+                            }
+                            LogosText {
+                                objectName: "installStatus_" + needRow.pkg
+                                visible: needRow.note.length > 0
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: needRow.note
+                                color: (needRow.req && (needRow.req.state === "open" || needRow.req.state === "asking"))
+                                       ? Theme.palette.textSecondary : Theme.palette.warning
+                                font.pixelSize: Theme.typography.badgeText
+                            }
+                            // not in any enabled catalogue: show the package in Package
+                            // Manager, where the catalogues are
+                            LogosButton {
+                                objectName: "installShow_" + needRow.pkg
+                                visible: !!(needRow.req && needRow.req.state === "failed")
+                                text: qsTr("Open Package Manager")
+                                variant: LogosButton.Variant.Secondary
+                                onClicked: cardRoot.showPackage(needRow.pkg)
+                            }
+                            LogosText {
+                                visible: !!(needRow.req && needRow.req.state === "failed" && needRow.req.showError)
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: qsTr("Package Manager could not be opened (%1). Open it from Basecamp.")
+                                      .arg(String((needRow.req && needRow.req.showError) || ""))
+                                color: Theme.palette.warning
+                                font.pixelSize: Theme.typography.badgeText
                             }
                         }
                     }
