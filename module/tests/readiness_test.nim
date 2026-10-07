@@ -484,4 +484,34 @@ block:
     else: doAssert row["needs"].len == 0, "a kind whose needs cannot be built names none: " & $row
   echo "15. coordinate_drivers rows carry each kind's graded module needs ([] when none, never a raise) OK"
 
+# ── 16. no registry to ask: muster calls only the modules it declares ──────────
+# Without modules_state (the standalone runner, or a registry the access policy denies)
+# muster cannot tell an absent module from a stopped one, and a call to one that is not
+# running blocks for lp's whole deadline: measured 20 s in the runner for a module it does
+# not bundle. The modules muster declares are loaded by the host before muster, so a call to
+# one answers at once; any other module grades unknown, with the install offered, uncalled.
+block:
+  let backend = req(rqModule, "monero_wallet_backend", install = "monero_wallet_ui")
+  let inv = CountingInvoker(methods: newJArray())
+  let declared = proc(name: string): bool {.gcsafe.} = name in ["lez_core", "delivery_module"]
+  let p = probeFromFacts(HostFacts(invoker: inv, moduleRecord: answering(unanswered("no registry")),
+                                   callableWithoutRegistry: declared))
+  let g = p.moduleLoaded("monero_wallet_backend")
+  doAssert inv.asked == 0, "an undeclared module is never called without a registry: asked " & $inv.asked
+  doAssert g.status == rdUnknown and g.state == msUnknown, $g
+  doAssert "cannot say" in g.detail, g.detail
+  let r = assessReadiness(ActionManifest(declared: true, agreement: agreeOne, requirements: @[backend]), p)
+  doAssert r.items[0].install == "monero_wallet_ui" and r.unknown == 1, $r.items[0]
+  # a declared module is still asked, and a running one reads met
+  let inv2 = CountingInvoker(methods: %*[{"name": "transfer"}])
+  let p2 = probeFromFacts(HostFacts(invoker: inv2, moduleRecord: answering(unanswered("no registry")),
+                                    callableWithoutRegistry: declared))
+  doAssert p2.moduleLoaded("lez_core").status == rdMet and inv2.asked == 1
+  # with a registry that answers, the predicate is not consulted: the registry decides
+  let inv3 = CountingInvoker(methods: %*[{"name": "open"}])
+  let p3 = probeFromFacts(HostFacts(invoker: inv3, moduleRecord: answering(rec("ready")),
+                                    callableWithoutRegistry: declared))
+  doAssert p3.moduleLoaded("monero_wallet_backend").status == rdMet and inv3.asked == 1
+  echo "16. no registry: only declared modules are called; any other grades unknown, install offered, uncalled OK"
+
 echo "readiness_test: all OK"

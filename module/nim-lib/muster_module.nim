@@ -159,6 +159,16 @@ var gInvoker: Invoker = nil   ## the execute/discovery/readiness seam to other m
 var gModuleInvoker: Invoker = nil              ## gInvoker for readiness: a module's methods kept 5 s (exo-dcc.10)
 var gModuleRecord: ModuleRecordProbe = nil     ## modules_state.module_record: 500 ms, kept 5 s; unavailable, a minute (exo-dcc.10)
 
+proc declaredModules(metadata: string): seq[string] {.compileTime.} =
+  ## The modules muster's metadata.json declares, hard and optional: the host loads them
+  ## before muster, so readiness may call one even when there is no registry to ask.
+  let j = parseJson(metadata)
+  for key in ["dependencies", "optional_dependencies"]:
+    for d in j{key}.getElems():
+      result.add(if d.kind == JString: d.getStr() else: d{"name"}.getStr())
+
+const DeclaredModules = declaredModules(staticRead("../metadata.json"))
+
 proc moduleFacts(): HostFacts =
   ## What readiness asks about a required module (exo-dcc.10): the host's registry first —
   ## installed? starting? ready? failed? — and muster's own call to the module (its
@@ -171,7 +181,8 @@ proc moduleFacts(): HostFacts =
   if gModuleInvoker == nil: gModuleInvoker = newCachedInvoker(gInvoker)
   if gModuleRecord == nil:
     gModuleRecord = cachedRecords(selfChecked(lpModuleRecord("muster_module"), "muster_module"))
-  HostFacts(invoker: gModuleInvoker, moduleRecord: gModuleRecord)
+  HostFacts(invoker: gModuleInvoker, moduleRecord: gModuleRecord,
+            callableWithoutRegistry: proc(name: string): bool {.gcsafe.} = name in DeclaredModules)
 
 proc seedOf(n: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = n)
 proc thrRosterKey(n: byte): Ed25519Pub = encFromSeed(seedOf(n)).identity().ed

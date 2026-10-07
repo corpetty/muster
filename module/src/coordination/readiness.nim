@@ -204,7 +204,14 @@ type
                                    ## module; bounded and cached by the host (exo-dcc.10).
                                    ## nil = no registry: the module itself is asked, and
                                    ## whether it is installed is unknown
-    safe*: Address                 ## the Safe whose owner set "safe-owner" is graded against
+    callableWithoutRegistry*: proc(name: string): bool {.gcsafe.}
+                                   ## when the registry cannot be asked, which modules
+                                   ## muster may still call to see if they run: the ones it
+                                   ## declares, which the host loads before muster. A call
+                                   ## to a module that is not running blocks for lp's whole
+                                   ## deadline (20 s, measured in the runner), so any other
+                                   ## grades unknown, uncalled. nil = ask any module.
+    safe*: Address                ## the Safe whose owner set "safe-owner" is graded against
     rpcProbe*: proc(url: string): tuple[ok: bool, chainId: int, detail: string] {.gcsafe.}
                                    ## nil = use the real probeRpc
     lezReady*: proc(): Grade {.gcsafe.}
@@ -328,6 +335,12 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
       if a.answered:
         return (rdUnknown, "the host reports " & name & " ready; this host cannot ask it (no invoker)", msReady)
       return (rdUnknown, "no host invoker — cannot ask whether " & name & " is loaded", msUnknown)
+    if not a.answered and facts.callableWithoutRegistry != nil and
+       not facts.callableWithoutRegistry(name):
+      # no registry, and not a module muster declares: a call could block for lp's whole
+      # deadline, so it is not made
+      return (rdUnknown, "this host cannot say whether " & name &
+              " is installed or running (no module registry to ask)", msUnknown)
     let methods = facts.invoker.methodsOf(name)
     if methods != nil and methods.kind == JArray and methods.len > 0:
       return (rdMet, name & " is running (" & $methods.len & " methods)", msReady)
