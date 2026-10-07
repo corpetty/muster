@@ -259,9 +259,14 @@ Item {
         var p = String((n && n.install) || "");
         return p.length > 0 ? p : String(room.installAsked[String((n && n.name) || "")] || "");
     }
-    function installNote(pkg) {
+    function installNote(pkg, item) {
         var r = room.packageReq(pkg);
         if (!r) return "";
+        var st = String((item && item.moduleState) || "");
+        // installed, starting, running or failed: the item's own detail and remedy say
+        // what comes next, so a "Package Manager is open" line would only contradict them
+        if (r.state === "open" && (st === "installed" || st === "starting" || st === "ready" || st === "error"))
+            return "";
         if (r.state === "asking") return qsTr("Asking Package Manager to open %1…").arg(pkg);
         if (r.state === "open")
             return room.installNow - Number(r.at || 0) >= 180000
@@ -271,7 +276,9 @@ Item {
         if (r.state === "unavailable") return qsTr("Install %1 from Basecamp's Package Manager.").arg(pkg);
         if (r.state === "failed")
             return qsTr("%1 was not found in your catalogues. Check the catalogues in Package Manager.").arg(pkg);
-        if (r.state === "cancelled") return qsTr("The install request was replaced by a newer one.");
+        // the person cancelled Basecamp's "Use this app?" chooser, or a newer request
+        // replaced this one: the broker answers both as cancelled
+        if (r.state === "cancelled") return qsTr("The install request was cancelled.");
         return qsTr("Package Manager did not answer (%1). Install %2 from Basecamp's Package Manager.")
                .arg(String(r.error || "")).arg(pkg);
     }
@@ -290,6 +297,9 @@ Item {
     readonly property bool composeInstallAwaited: {
         var ns = room.composeNeeds;
         for (var i = 0; i < ns.length; ++i) {
+            // installed but stopped, or failed: nothing changes until the person acts
+            var st = String(ns[i].moduleState || "");
+            if (st === "installed" || st === "error") continue;
             var r = room.packageReq(room.needPkg(ns[i]));
             if (r && r.state === "open" && room.installNow - Number(r.at || 0) < 180000) return true;
         }
@@ -1923,7 +1933,7 @@ Item {
                             required property var modelData
                             readonly property string pkg: room.needPkg(composeNeed.modelData)
                             readonly property var req: room.packageReq(composeNeed.pkg)
-                            readonly property string note: room.installNote(composeNeed.pkg)
+                            readonly property string note: room.installNote(composeNeed.pkg, composeNeed.modelData)
                             readonly property bool installable: room.needCanInstall(composeNeed.modelData)
                             Layout.fillWidth: true
                             spacing: 2
@@ -1980,8 +1990,11 @@ Item {
                                 visible: !!(composeNeed.req && composeNeed.req.state === "failed" && composeNeed.req.showError)
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
-                                text: qsTr("Package Manager could not be opened (%1). Open it from Basecamp.")
-                                      .arg(String((composeNeed.req && composeNeed.req.showError) || ""))
+                                // "failed": Package Manager opened, but found no such package
+                                text: String((composeNeed.req && composeNeed.req.showError) || "") === "failed"
+                                      ? qsTr("Package Manager opened, but could not find %1. Check its catalogues.").arg(composeNeed.pkg)
+                                      : qsTr("Package Manager could not be opened (%1). Open it from Basecamp.")
+                                        .arg(String((composeNeed.req && composeNeed.req.showError) || ""))
                                 color: Theme.palette.warning
                                 font.pixelSize: Theme.typography.badgeText
                             }
