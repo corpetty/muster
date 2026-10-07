@@ -8,6 +8,7 @@
 import std/json
 import logos_sdk/plugin
 import ./invoker
+import ./module_registry
 
 type
   LpInvoker* = ref object of Invoker
@@ -34,3 +35,17 @@ method methodsOf*(inv: LpInvoker, targetModule: string): JsonNode =
   ## discovery. An unreachable/unloaded module yields an empty array, not a raise.
   try: newPluginProxy(targetModule, inv.origin).methodsOf()
   except CatchableError: newJArray()
+
+proc lpModuleRecord*(origin = "muster_module", budgetMs = RegistryBudgetMs): ModuleRecordProbe =
+  ## modules_state.module_record over lp_* (exo-dcc.10): the host's registry of module
+  ## lifecycle state, asked before muster calls into a module. Bounded by `budgetMs` (in
+  ## Basecamp it answers in milliseconds), never the lp default of 20 s: readiness is
+  ## polled on the module's one thread, and a host without modules_state (the standalone
+  ## runner) must cost little. The registry's own methods are not listed first —
+  ## lp_get_methods takes no deadline — so a null is checked against muster itself
+  ## (module_registry.selfChecked) and the host caches the answers (cachedRecords).
+  (proc(name: string): ModuleRecordAnswer =
+    let r = newPluginProxy("modules_state", origin).callSync("module_record", %*[name], cint(budgetMs))
+    if not r.ok:
+      return unanswered("modules_state did not answer: " & (if r.error != nil: $r.error else: "no error given"))
+    parseModuleRecord(r.value))

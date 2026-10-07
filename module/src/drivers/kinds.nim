@@ -98,15 +98,25 @@ proc kindsFor*(proposal: string): seq[string] =
   for k in Kinds:
     if proposal in k.composes: result.add k.kind
 
-proc kindsJson*(admitted: seq[string]): JsonNode =
+proc kindsJson*(admitted: seq[string], needsOf: proc(kind: string): JsonNode = nil): JsonNode =
   ## Every kind this client has, and whether the joined room has admitted it — what the
   ## picker renders (an unadmitted, non-founding kind is offered as "propose adding it").
+  ## `needs` is what the kind asks of THIS instance before any proposal — its modules,
+  ## graded (readiness.kindNeeds, exo-dcc.10), so the picker can offer "Install …" for a
+  ## kind whose module is missing rather than hide it. `needsOf` is the host's; none, or
+  ## one that raises, is no needs: a list row is never lost to its grade.
   result = newJArray()
   for k in Kinds:
+    var needs = newJArray()
+    if needsOf != nil:
+      try:
+        let n = needsOf(k.kind)
+        if n != nil and n.kind == JArray: needs = n
+      except CatchableError: discard
     result.add %*{"kind": k.kind, "family": k.family, "label": k.label,
                   "composes": k.composes, "founding": k.founding,
                   "accountFamilies": k.accountFamilies, "settlesOn": k.settlesOn,
-                  "admitted": k.kind in admitted}
+                  "admitted": k.kind in admitted, "needs": needs}
 
 # ── an unknown kind: shown, never guessed ────────────────────────────────────
 type UnsupportedDriver* = ref object of Driver

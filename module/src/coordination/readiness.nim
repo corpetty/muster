@@ -12,6 +12,14 @@
 ## The probes are closures the host supplies (`HostFacts` + `probeFromFacts`), so the
 ## grading logic is a pure function testable without a host; the module itself never
 ## installs, fetches, or executes anything here (invariant 3).
+##
+## A module requirement is graded in three states (exo-dcc.10): running, installed but
+## not running, not installed — read from the host's module registry first
+## (module_registry.nim); muster calls into a module only once the registry reports it
+## ready, since a call to one installed but not loaded waits out its whole deadline. The
+## item says which (`moduleState`) and, where installing would help, the catalogue package
+## to install (`install`, which the driver may name apart from the module), so the card
+## can raise Basecamp's `packages.install` for it.
 
 import std/[json, strutils, sequtils]
 import ../drivers/driver
@@ -21,9 +29,10 @@ import ../crypto/secp256k1     # Address
 import ../crypto/curve25519    # Ed25519Pub
 import ../drivers/safe_rpc     # probeRpc
 import ./invoker               # Invoker.methodsOf (is the module loaded?)
+import ./module_registry       # modules_state's answer: installed? running? (exo-dcc.10)
 import ../wallet/btc_adapter   # probeBitcoind (exo-a50.2.6)
 import ../wallet/redact        # an endpoint as it may be shown (exo-14f.2)
-export manifest, driver
+export manifest, driver, module_registry
 
 type
   ReadyStatus* = enum
@@ -33,9 +42,21 @@ type
 
   Grade* = tuple[status: ReadyStatus, detail: string]
 
+  ModuleState* = enum
+    ## Where a required module stands on THIS instance (exo-dcc.10).
+    msNone         = ""               ## not a module requirement
+    msReady        = "ready"          ## running: it answered muster — or the host says so and muster's call is not answered yet
+    msStarting     = "starting"       ## the host is bringing it up (loading / loaded)
+    msInstalled    = "installed"      ## installed, not running (unloaded, stopping, or a state this client does not know)
+    msNotInstalled = "not-installed"  ## the host does not know it: install it
+    msError        = "error"          ## its load failed, or it exited without being asked to
+    msUnknown      = "unknown"        ## this host cannot say whether it is installed
+
+  ModuleGrade* = tuple[status: ReadyStatus, detail: string, state: ModuleState]
+
   ## One closure per requirement kind. A nil closure = the host cannot probe it → unknown.
   ReadinessProbe* = object
-    moduleLoaded*:        proc(name: string): Grade {.gcsafe.}
+    moduleLoaded*:        proc(name: string): ModuleGrade {.gcsafe.}
     environmentReachable*: proc(name: string): Grade {.gcsafe.}
     authorityHeld*:       proc(name: string): Grade {.gcsafe.}
     infraConfigured*:     proc(name: string): Grade {.gcsafe.}
@@ -48,6 +69,9 @@ type
     status*: ReadyStatus
     detail*: string
     remedy*: string
+    moduleState*: ModuleState  ## a module requirement's state; msNone for any other kind
+    install*: string           ## the package to install when installing would help (not
+                               ## met, and not installed or cannot say); "" otherwise
 
   Readiness* = object
     declared*: bool
@@ -57,9 +81,10 @@ type
 
 proc remedyFor*(r: Requirement): string =
   ## The action the card offers next to a non-met requirement. The module only names
-  ## it; the host performs it.
+  ## it; the host performs it. A module's depends on its state (moduleRemedy); this is
+  ## its remedy when the state is not known.
   case r.kind
-  of rqModule:      "install the " & r.name & " module (host install path)"
+  of rqModule:      "install " & r.installPackage() & " from Basecamp's Package Manager"
   of rqEnvironment:
     if r.name.startsWith("bip122:"): "point Settings → Bitcoin node at a node on " & r.name & " (set_setting btc-rpc)"
     elif r.name.startsWith("lez:"): "point Settings → LEZ sequencer at a node serving " & r.name & " (set_setting lez-rpc, lez-chain)"
@@ -77,6 +102,42 @@ proc remedyFor*(r: Requirement): string =
   of rqAddress:     "share a receiving address when the proposal asks (compose / share)"
   of rqAsset:       "choose an asset and amount from your holdings (compose)"
 
+proc moduleRemedy*(r: Requirement, state: ModuleState): string =
+  ## The next step for a module requirement that is not met, by where the module stands.
+  ## Installing goes through Basecamp's Package Manager, on the person's confirmation.
+  case state
+  # Basecamp loads a core module only when an app that depends on it opens (its required
+  # and installed optional dependencies); a restart does not, and nothing else does
+  of msInstalled: "start " & r.name & ": close and reopen Muster, or open the app that uses it"
+  of msStarting: "wait for " & r.name & " to finish starting"
+  of msError: r.name & " failed to load: see Basecamp's logs; reinstalling " & r.installPackage() & " may help"
+  of msReady: "reopen this in a moment"
+  of msNotInstalled, msUnknown, msNone: remedyFor(r)
+
+proc gradeModuleRecord*(name: string, a: ModuleRecordAnswer): ModuleGrade =
+  ## A module graded from what the host's registry says of it, when muster has no answer
+  ## of its own from the module (it was not asked, or it did not answer).
+  if not a.answered:
+    return (rdMissing, name & " is not loaded (this host cannot say whether it is installed)", msUnknown)
+  if not a.known: return (rdMissing, name & " is not installed", msNotInstalled)
+  case a.state
+  of "loading", "loaded": (rdUnknown, name & " is starting", msStarting)
+  of "ready":
+    # the host's view goes ready a moment before a call from muster can succeed (the
+    # token handshake is per caller): not yet met, not missing
+    (rdUnknown, "the host reports " & name & " ready, but it did not answer muster yet", msReady)
+  of "stopping": (rdMissing, name & " is stopping", msInstalled)
+  of "error": (rdMissing, name & " failed to load" & (if a.reason.len > 0: ": " & a.reason else: ""), msError)
+  else:
+    # "unloaded" — and any state this client does not know, which the registry's
+    # forward-compatibility rule reads as "not loaded", never an error
+    (rdMissing, name & " is installed but not running", msInstalled)
+
+proc gradeModule(p: ReadinessProbe, r: Requirement): ModuleGrade =
+  if p.moduleLoaded == nil: return (rdUnknown, "this host cannot check a module requirement", msUnknown)
+  try: p.moduleLoaded(r.name)
+  except CatchableError as e: (rdUnknown, "probe failed: " & e.msg, msUnknown)
+
 proc grade(p: ReadinessProbe, r: Requirement): Grade =
   # address/asset are party-supplied material (proposer/counterparty), not an instance
   # prerequisite: readiness reports them unknown and the offers surface (exo-45e K4)
@@ -85,12 +146,11 @@ proc grade(p: ReadinessProbe, r: Requirement): Grade =
     return (rdUnknown, $r.party & " supplies this " & $r.needs.class &
       " material at compose/contribute — graded by offers, not instance readiness")
   let f = case r.kind
-    of rqModule:      p.moduleLoaded
     of rqEnvironment: p.environmentReachable
     of rqAuthority:   p.authorityHeld
     of rqInfra:       p.infraConfigured
     of rqCapability:  p.capabilityGranted
-    of rqAddress, rqAsset: nil   # unreachable (handled above); keeps the case total
+    of rqModule, rqAddress, rqAsset: nil   # a module is gradeModule's; address/asset above
   if f == nil: return (rdUnknown, "this host cannot check a " & $r.kind & " requirement")
   try: f(r.name)
   except CatchableError as e: (rdUnknown, "probe failed: " & e.msg)
@@ -113,11 +173,19 @@ proc assessReadiness*(m: ActionManifest, p: ReadinessProbe): Readiness =
     # a payer's slot (their own share) is only a payer's: the creditor who agrees pays
     # nothing (exo-272). Unknown keeps it — shown and graded, never silently dropped.
     if r.party == rpPayer and p.pays == elNo: continue
-    let g = grade(p, r)
-    result.items.add ReadinessItem(requirement: r, status: g.status, detail: g.detail,
-                                   remedy: (if g.status == rdMet: "" else: remedyFor(r)))
-    if g.status != rdMet: result.ready = false
-    if g.status == rdUnknown: inc result.unknown
+    var it = ReadinessItem(requirement: r)
+    if r.kind == rqModule:
+      let g = gradeModule(p, r)
+      (it.status, it.detail, it.moduleState) = (g.status, g.detail, g.state)
+      if g.status != rdMet:
+        it.remedy = moduleRemedy(r, g.state)
+        if g.state in {msNotInstalled, msUnknown}: it.install = r.installPackage()
+    else:
+      (it.status, it.detail) = grade(p, r)
+      if it.status != rdMet: it.remedy = remedyFor(r)
+    result.items.add it
+    if it.status != rdMet: result.ready = false
+    if it.status == rdUnknown: inc result.unknown
 
 # ── The host's facts → a probe. Plain data + two optional seams, so a test can build
 # the SAME probe the module builds (without a host) and grade a real driver's manifest.
@@ -130,6 +198,12 @@ type
     signers*: seq[Address]         ## the eip191 signer set ("signer")
     roster*: seq[Ed25519Pub]       ## the room roster ("roster-member")
     invoker*: Invoker              ## nil = cannot ask the host which modules are loaded
+    moduleRecord*: ModuleRecordProbe
+                                   ## modules_state.module_record — installed? starting?
+                                   ## ready? failed? — asked before muster calls into a
+                                   ## module; bounded and cached by the host (exo-dcc.10).
+                                   ## nil = no registry: the module itself is asked, and
+                                   ## whether it is installed is unknown
     safe*: Address                 ## the Safe whose owner set "safe-owner" is graded against
     rpcProbe*: proc(url: string): tuple[ok: bool, chainId: int, detail: string] {.gcsafe.}
                                    ## nil = use the real probeRpc
@@ -239,12 +313,25 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
       of elNo: (rdMissing, "the split does not name you: your agreement would not count")
       of elUnknown: (rdUnknown, "cannot tell whether the split names you")
     else: (rdUnknown, "unrecognized authority requirement: " & name)
-  result.moduleLoaded = proc(name: string): Grade =
+  result.moduleLoaded = proc(name: string): ModuleGrade =
+    # The host's registry first: muster calls into a module only once the host reports
+    # it ready — a call to one installed but not loaded blocks for the caller's whole
+    # deadline (20 s), and lp_get_methods takes none.
+    var a = unanswered("no module registry")
+    if facts.moduleRecord != nil:
+      try: a = facts.moduleRecord(name)
+      except CatchableError as e: a = unanswered("modules_state call failed: " & e.msg)
+    if a.answered and not (a.known and a.state == "ready"): return gradeModuleRecord(name, a)
+    # ready by the host's word — or the registry cannot say (the standalone runner has
+    # none): does it answer muster?
     if facts.invoker == nil:
-      return (rdUnknown, "no host invoker — cannot ask whether " & name & " is loaded")
+      if a.answered:
+        return (rdUnknown, "the host reports " & name & " ready; this host cannot ask it (no invoker)", msReady)
+      return (rdUnknown, "no host invoker — cannot ask whether " & name & " is loaded", msUnknown)
     let methods = facts.invoker.methodsOf(name)
-    if methods.kind == JArray and methods.len > 0: (rdMet, name & " is loaded (" & $methods.len & " methods)")
-    else: (rdMissing, name & " is not loaded")
+    if methods != nil and methods.kind == JArray and methods.len > 0:
+      return (rdMet, name & " is running (" & $methods.len & " methods)", msReady)
+    gradeModuleRecord(name, a)   # ready but silent, or not loaded with no registry to say why
   result.capabilityGranted = nil   # the host broker does not exist yet (exo-002.7) → unknown
 
 proc rpcConnectivityRow*(url: string, chains: seq[int],
@@ -273,8 +360,9 @@ proc rpcConnectivityRow*(url: string, chains: seq[int],
 
 # ── JSON, for the hosted surface and the card ─────────────────────────────────
 proc toJson*(r: Requirement): JsonNode =
-  %*{"kind": $r.kind, "name": r.name, "party": $r.party,
-     "needs": {"class": $r.needs.class, "target": r.needs.target, "field": r.needs.field}}
+  result = %*{"kind": $r.kind, "name": r.name, "party": $r.party,
+              "needs": {"class": $r.needs.class, "target": r.needs.target, "field": r.needs.field}}
+  if r.kind == rqModule: result["install"] = %r.installPackage()
 proc toJson*(d: DriverDescriptor): JsonNode =
   %*{"rounds": d.rounds, "threshold": d.threshold,
      "finality": $d.finality, "domain": d.serializationDomain}
@@ -287,10 +375,29 @@ proc toJson*(m: ActionManifest): JsonNode =
   for t in m.touches: touches.add %*{"target": t.target, "mode": $t.mode}
   %*{"declared": m.declared, "agreement": m.agreement.toJson(),
      "requirements": reqs, "discloses": disc, "touches": touches}
+proc toJson*(it: ReadinessItem): JsonNode =
+  ## One graded requirement: the requirement, its status, detail and remedy; a module's
+  ## also its state and the package to install ("" when installing would not help).
+  result = it.requirement.toJson()
+  result["status"] = %($it.status); result["detail"] = %it.detail; result["remedy"] = %it.remedy
+  if it.requirement.kind == rqModule:
+    result["moduleState"] = %($it.moduleState); result["install"] = %it.install
 proc toJson*(r: Readiness): JsonNode =
   var items = newJArray()
-  for it in r.items:
-    var o = it.requirement.toJson()
-    o["status"] = %($it.status); o["detail"] = %it.detail; o["remedy"] = %it.remedy
-    items.add o
+  for it in r.items: items.add it.toJson()
   %*{"declared": r.declared, "ready": r.ready, "unknown": r.unknown, "items": items}
+
+proc kindNeeds*(m: ActionManifest, p: ReadinessProbe): JsonNode =
+  ## What a kind asks of THIS instance before anything is proposed under it — its module
+  ## requirements, graded exactly as the card grades them (the same items) — for the
+  ## composer's kind list (coordinate_drivers, exo-dcc.10): a kind whose module is missing
+  ## shows "Install …" rather than disappearing. Modules only: the rest of a manifest
+  ## (an environment, an account, a share) depends on the proposal and is the card's.
+  ## [] when undeclared or when it names no module this instance must hold.
+  result = newJArray()
+  if not m.declared: return
+  var mods = m
+  mods.requirements = @[]
+  for r in m.requirements:
+    if r.kind == rqModule: mods.requirements.add r
+  for it in assessReadiness(mods, p).items: result.add it.toJson()
