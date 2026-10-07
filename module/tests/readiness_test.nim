@@ -514,4 +514,26 @@ block:
   doAssert p3.moduleLoaded("monero_wallet_backend").status == rdMet and inv3.asked == 1
   echo "16. no registry: only declared modules are called; any other grades unknown, install offered, uncalled OK"
 
+# ── 16b. the remedy for an installed module says what can actually start it ──────
+# Measured in Basecamp 0.3.2: reopening Muster starts the modules Muster declares, and
+# no others; a relaunch starts nothing. So "close and reopen Muster" is offered only for
+# a declared module. Any other is started by the app that uses it, or by hand in
+# Basecamp's Modules tab. A module the host reports ready but that never answers Muster
+# (seen for an undeclared module, five minutes running) is not told to "reopen this".
+block:
+  let declared = proc(name: string): bool {.gcsafe.} = name in ["lez_core"]
+  let silent = CountingInvoker(methods: newJArray())
+  proc itemOf(name: string, state: string): ReadinessItem =
+    let m = ActionManifest(declared: true, agreement: agreeOne, requirements: @[req(rqModule, name)])
+    assessReadiness(m, probeFromFacts(HostFacts(invoker: silent, moduleRecord: answering(rec(state)),
+                                                callableWithoutRegistry: declared))).item(rqModule)
+  doAssert itemOf("lez_core", "unloaded").remedy == "start lez_core: close and reopen Muster", $itemOf("lez_core", "unloaded")
+  let other = itemOf("monero_wallet_backend", "unloaded")
+  doAssert other.remedy == "start monero_wallet_backend: open the app that uses it, or load it in Basecamp's Modules tab", other.remedy
+  let quiet = itemOf("monero_wallet_backend", "ready")
+  doAssert quiet.status == rdUnknown and quiet.moduleState == msReady, $quiet
+  doAssert quiet.remedy == "monero_wallet_backend is running but does not answer Muster; Muster may need an update that declares it", quiet.remedy
+  doAssert itemOf("lez_core", "ready").remedy == "reopen this in a moment"
+  echo "16b. an installed module's remedy names what can start it: Muster for its own, the app or the Modules tab otherwise OK"
+
 echo "readiness_test: all OK"

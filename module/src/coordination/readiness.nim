@@ -57,6 +57,9 @@ type
   ## One closure per requirement kind. A nil closure = the host cannot probe it → unknown.
   ReadinessProbe* = object
     moduleLoaded*:        proc(name: string): ModuleGrade {.gcsafe.}
+    moduleDeclared*:      proc(name: string): bool {.gcsafe.}
+                          ## whether muster declares the module: reopening Muster starts
+                          ## it, and it answers Muster. nil = cannot tell.
     environmentReachable*: proc(name: string): Grade {.gcsafe.}
     authorityHeld*:       proc(name: string): Grade {.gcsafe.}
     infraConfigured*:     proc(name: string): Grade {.gcsafe.}
@@ -102,16 +105,29 @@ proc remedyFor*(r: Requirement): string =
   of rqAddress:     "share a receiving address when the proposal asks (compose / share)"
   of rqAsset:       "choose an asset and amount from your holdings (compose)"
 
-proc moduleRemedy*(r: Requirement, state: ModuleState): string =
+proc moduleRemedy*(r: Requirement, state: ModuleState,
+                   declared: proc(name: string): bool {.gcsafe.} = nil): string =
   ## The next step for a module requirement that is not met, by where the module stands.
   ## Installing goes through Basecamp's Package Manager, on the person's confirmation.
+  ## `declared` says whether muster declares the module (nil = cannot tell).
+  let known = declared != nil
+  let mine = known and declared(r.name)
   case state
   # Basecamp loads a core module only when an app that depends on it opens (its required
-  # and installed optional dependencies); a restart does not, and nothing else does
-  of msInstalled: "start " & r.name & ": close and reopen Muster, or open the app that uses it"
+  # and installed optional dependencies); a restart does not, and nothing else does.
+  # Reopening Muster starts the modules Muster declares, and no others (Basecamp 0.3.2).
+  of msInstalled:
+    if not known: "start " & r.name & ": close and reopen Muster, or open the app that uses it"
+    elif mine: "start " & r.name & ": close and reopen Muster"
+    else: "start " & r.name & ": open the app that uses it, or load it in Basecamp's Modules tab"
   of msStarting: "wait for " & r.name & " to finish starting"
   of msError: r.name & " failed to load: see Basecamp's logs; reinstalling " & r.installPackage() & " may help"
-  of msReady: "reopen this in a moment"
+  of msReady:
+    # the host reports it running and it did not answer muster: for a module muster does
+    # not declare this lasted five minutes in Basecamp 0.3.2, so waiting is no remedy
+    if known and not mine:
+      r.name & " is running but does not answer Muster; Muster may need an update that declares it"
+    else: "reopen this in a moment"
   of msNotInstalled, msUnknown, msNone: remedyFor(r)
 
 proc gradeModuleRecord*(name: string, a: ModuleRecordAnswer): ModuleGrade =
@@ -178,7 +194,7 @@ proc assessReadiness*(m: ActionManifest, p: ReadinessProbe): Readiness =
       let g = gradeModule(p, r)
       (it.status, it.detail, it.moduleState) = (g.status, g.detail, g.state)
       if g.status != rdMet:
-        it.remedy = moduleRemedy(r, g.state)
+        it.remedy = moduleRemedy(r, g.state, p.moduleDeclared)
         if g.state in {msNotInstalled, msUnknown}: it.install = r.installPackage()
     else:
       (it.status, it.detail) = grade(p, r)
@@ -320,6 +336,7 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
       of elNo: (rdMissing, "the split does not name you: your agreement would not count")
       of elUnknown: (rdUnknown, "cannot tell whether the split names you")
     else: (rdUnknown, "unrecognized authority requirement: " & name)
+  result.moduleDeclared = facts.callableWithoutRegistry
   result.moduleLoaded = proc(name: string): ModuleGrade =
     # The host's registry first: muster calls into a module only once the host reports
     # it ready — a call to one installed but not loaded blocks for the caller's whole
