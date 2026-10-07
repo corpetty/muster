@@ -189,13 +189,19 @@ proc jsonRpc*(url, meth: string, params: JsonNode, budget: Duration, send = fals
   onEndpoint(url, meth, send):
     let deadline = Moment.fromNow(budget)
     proc left(): Duration = max(deadline - Moment.now(), ZeroDuration)
+    # No `finally`: under Nim 2.2.2, raising from an except branch of a try that also has a
+    # finally loses the exception object, and the caller's handler dereferences nil
+    # (SIGSEGV on any refused connection, exo-14f). The client is closed on each path.
     let c = newRpcHttpClient()
+    var answer: JsonNode
     try:
       bounded(c.connect(url), left())
-      parseJson(string(bounded(c.call(meth, params), left())))
+      answer = parseJson(string(bounded(c.call(meth, params), left())))
     except RpcTimeoutError:
+      closeQuietly(c)
       raise timeoutError(meth & ": no answer within " & $budget, budget)
     except CatchableError as e:
-      raise newException(RpcError, meth & ": " & rpcErrorText(e.msg))
-    finally:
       closeQuietly(c)
+      raise newException(RpcError, meth & ": " & rpcErrorText(e.msg))
+    closeQuietly(c)
+    answer
