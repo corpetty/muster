@@ -20,7 +20,7 @@
 #   --no-launch  install only
 #
 # The AppImage's sha256 is the one first downloaded here (2026-10-03): the release
-# publishes none. Logs: .run/basecamp/<name>.log.
+# publishes none. Logs: .run/basecamp/<name>.log, capped (scripts/lib/caplog.py, exo-9eed).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$PWD
@@ -86,8 +86,8 @@ if [ -n "$XDISPLAY" ]; then
     sleep 2
   fi
   env -u WAYLAND_DISPLAY DISPLAY="$XDISPLAY" QT_QPA_PLATFORM=xcb QT_QUICK_BACKEND=software \
-    "$BASE/squashfs-$BASECAMP_TAG/AppRun" --user-dir "$PROFILE" >"$LOG" 2>&1 &
+    "$BASE/squashfs-$BASECAMP_TAG/AppRun" --user-dir "$PROFILE" 2>&1 | python3 scripts/lib/caplog.py "$LOG" >/dev/null 2>&1 &
 else
-  "$BASE/squashfs-$BASECAMP_TAG/AppRun" --user-dir "$PROFILE" >"$LOG" 2>&1 &
+  "$BASE/squashfs-$BASECAMP_TAG/AppRun" --user-dir "$PROFILE" 2>&1 | python3 scripts/lib/caplog.py "$LOG" >/dev/null 2>&1 &
 fi
 echo "Basecamp $BASECAMP_TAG on $PROFILE (pid $!), log $LOG"
