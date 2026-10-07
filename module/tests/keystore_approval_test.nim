@@ -95,4 +95,21 @@ block bindingMakesItMine:
     doAssert mine == withBinding, "with binding " & $withBinding & " → mine " & $mine
   echo "4. with the account's binding published, the approval counts as alice's in bob's view; without it, not OK"
 
+# ── 5. who approves a Safe intent: the one rule the composer and contribute share ──
+block:
+  # R6 (2026-10-07): the composer named the muster identity key ("⚠ not a Safe owner")
+  # while contribute routed the approval to the selected keystore account, an owner.
+  let own = "0x00000000000000000000000000000000000000aa"
+  let acct = "0x00000000000000000000000000000000000000BB"
+  doAssert safeApprover("auto", true, acct, own, testChain = true) == acct.toLowerAscii(),
+    "auto, attested, a test chain: the selected keystore account"
+  doAssert safeApprover("auto", true, acct, own, testChain = false) == own,
+    "auto on a mainnet: the module's own key until the typed attestation (exo-149.6)"
+  doAssert safeApprover("auto", false, acct, own, testChain = true) == own, "auto, not attested: own key"
+  doAssert safeApprover("interim", false, acct, own, testChain = false) == acct.toLowerAscii(),
+    "interim: the keystore account on any chain"
+  doAssert safeApprover("off", true, acct, own, testChain = true) == own
+  doAssert safeApprover("auto", true, "", own, testChain = true) == own, "no account selected: own key"
+  echo "5. a Safe approval is the keystore account's exactly where contribute routes it there OK"
+
 echo "keystore_approval_test: all passed"

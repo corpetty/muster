@@ -37,6 +37,17 @@ const AttestationPurpose* =
   "expiry, and to where each of its inputs came from. Muster's own commitment, shown " &
   "as a hash; the signer cannot read it."
 
+proc safeApprover*(backend: string, attested: bool, selected, own: string, testChain: bool): string =
+  ## Who approves THIS member's Safe intents: their selected keystore_module account, or the
+  ## module's own key. "interim" always uses the account; "auto" (the default) where
+  ## keystore_module attests muster and only on a test chain, since the attestation still
+  ## reaches the signer as an opaque digest until its typed form lands (exo-149.6); "off"
+  ## never. The composer says who you act as, and contribute routes the approval, by this
+  ## one rule, so the warning and the signature never disagree.
+  let on = backend == "interim" or (backend == "auto" and attested)
+  if on and selected.len > 0 and (backend == "interim" or testChain): selected.toLowerAscii()
+  else: own
+
 proc planKeystoreApproval*(s: CoordinationSession, driverFor: DriverFor, intentId, account: string,
                            nowSec: uint64): KeystoreApproval =
   ## The request for `account` (a keystore_module account) to approve `intentId`, after

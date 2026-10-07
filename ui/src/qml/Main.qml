@@ -45,6 +45,9 @@ Item {
     // "compose" (create a room from an action), "room" (the conversation),
     // "dashboard" (the Safe lifecycle spike), "walkthrough" (the claims registry).
     property string view: "home"
+    // describe() is read once at start, possibly before the platform's chain registry
+    // answers; a room's Safe form reads it, so read it again on the way in (R6, 2026-10-07)
+    onViewChanged: if (view === "room" && backend) backend.loadAccount()
 
     // Enter a room by topic: join it in the module, then show the room surface.
     // When `verb` is given (a freshly composed room), PRIME the conversation — the
@@ -1192,7 +1195,9 @@ Item {
             var r = rs[i];
             var waiting = r.state === "waiting" || r.state === "shown";
             if (waiting) open++;
-            if (r.state === "waiting" && r.handle && !root.escorted[r.handle]) {
+            // "shown" too: in Basecamp the Signer keeps running once opened, so it renders a
+            // new request at once while the person is still in Muster (R6, 2026-10-07)
+            if (waiting && r.handle && !root.escorted[r.handle]) {
                 var m = Object.assign({}, root.escorted); m[r.handle] = true; root.escorted = m;
                 root.signerNote = r.intentId ? qsTr("Approve this in the Logos Signer.")
                                              : qsTr("Approve linking this account to your room identity in the Logos Signer.");

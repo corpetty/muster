@@ -167,6 +167,7 @@ proc myAddress(): Address                ## forward — this instance's secp acc
 proc roomAccounts(): seq[RoomAccount]   ## forward — the room's disclosed accounts, folded from the log
 proc evmPlatform(): bool               ## forward — EVM chains read through eth_rpc_module (exo-d4d.3)
 proc platformRegistry(): tuple[ok: bool, scope: string, chains: seq[PlatformChain]]   ## forward — its registry
+proc rpcChainCaip2(): tuple[ok: bool, chain, detail: string]   ## forward — the chain a split settles on
 
 var gDelegatecallAllow: seq[Address] = @[]
 var gDelegatecallAllowLoaded = false
@@ -554,8 +555,15 @@ proc musterDescribe(): string =
   if not available:
     for c in platformRegistry().chains:
       if c.chainId == int(gDevSafe.chainId) and c.enabled: available = true
+  # the chain a Safe disclosure form starts on: the test Safe's where it is offered, else the
+  # one this member's splits settle on (Sepolia first while muster is pre-release)
+  var defaultChainId = $gDevSafe.chainId.int
+  if not available:
+    let c = rpcChainCaip2()
+    if c.ok and c.chain.startsWith("eip155:"): defaultChainId = c.chain["eip155:".len .. ^1]
   $(%*{
     "available": available,
+    "defaultChainId": defaultChainId,
     "chainId": gDevSafe.chainId.int,
     "safe": SAFE_ADDR,
     "threshold": gDevSafe.threshold,
@@ -1135,20 +1143,24 @@ const PreferTestnets = true
 var gPlatformAt = -1e9        ## when the platform's chain registry was last read
 var gPlatformReg: tuple[ok: bool, scope: string, chains: seq[PlatformChain]]
 var gEthRpcInstalled = false
+var gEthRpcSeeded = false      ## init_defaults has answered (asked again until it does)
+var gPlatformMisses = 0        ## registry reads in a row that went unanswered
 
 proc platformRegistry(): tuple[ok: bool, scope: string, chains: seq[PlatformChain]] =
-  ## The person's chain registry from eth_rpc_module, re-read at most every 30 s (5 min
-  ## after it did not answer: a host without it, like the runner, should not pay a
-  ## registry read on every chain call). init_defaults goes first, once: the platform asks
-  ## every consumer to call it, and it writes only what is absent.
+  ## The person's chain registry from eth_rpc_module, re-read every 30 s; after a read it
+  ## did not answer, within seconds, then less often up to 5 min (registryRecheckS: a host
+  ## without it, like the runner, should not pay a registry read on every chain call).
+  ## init_defaults goes first, until it answers once: the platform asks every consumer to
+  ## call it, and it writes only what is absent.
   let now = epochTime()
-  if now - gPlatformAt < (if gPlatformReg.ok: 30.0 else: 300.0): return gPlatformReg
+  if now - gPlatformAt < registryRecheckS(gPlatformReg.ok, gPlatformMisses): return gPlatformReg
   if not gEthRpcInstalled:
     installEthRpc()
     installTxSender()
-    discard ethRpcInitDefaults()
     gEthRpcInstalled = true
+  if not gEthRpcSeeded: gEthRpcSeeded = ethRpcInitDefaults()
   gPlatformReg = ethRpcChains()
+  gPlatformMisses = (if gPlatformReg.ok: 0 else: gPlatformMisses + 1)
   gPlatformAt = now
   gPlatformReg
 
@@ -1192,6 +1204,11 @@ proc isTestChain(chainId: int): bool =
 proc evmEndpointLabel(endpoint: string): string =
   ## How an endpoint is named to the person: never a platform token, never credentials.
   if endpoint.isPlatform: "eth_rpc_module (your chain settings)" else: redactUrl(endpoint)
+
+proc mySafeApprover(chainId: int): string =
+  ## Who approves this member's Safe intents on `chainId`: the selected keystore account or
+  ## the module's own key (coordination/keystore_approval.safeApprover).
+  safeApprover(gKeystoreBackend, keystoreOn(), gKeystoreAccount, toHex(myAddress()), isTestChain(chainId))
 
 proc myEvmPayAddress(): string =
   ## The Ethereum address this member pays from and is paid at (exo-d4d.5): under the
@@ -2291,13 +2308,13 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
   # nothing is published until they have (keystorePump). Not an approval yet, so it does
   # not pass through noteApproved.
   var keyRef = keyRef
-  if signatureHex.len == 0 and keyRef.len == 0 and keystoreOn() and gKeystoreAccount.len > 0:
+  if signatureHex.len == 0 and keyRef.len == 0 and gKeystoreAccount.len > 0:
     let drv = driverFor(intentPolicyOf(gSession.roomEvents(), intentId))
-    # exo-149.5: the member's selected account approves its Safe intents. Under "auto" only on
-    # a test chain: the attestation still reaches the signer as an opaque digest until its
-    # typed form lands (exo-149.6), and that must not be what a mainnet approval rests on.
-    if drv of SafeDriver and (gKeystoreBackend == "interim" or isTestChain(int(SafeDriver(drv).chainId))):
-      keyRef = gKeystoreAccount
+    # exo-149.5: the member's selected account approves its Safe intents (safeApprover:
+    # under "auto" only on a test chain, the rule the composer names too)
+    if drv of SafeDriver:
+      let who = mySafeApprover(int(SafeDriver(drv).chainId))
+      if who != toHex(myAddress()): keyRef = who
   if signatureHex.len == 0 and isKeystoreAccount(keyRef):
     return keystoreContribute(intentId, keyRef.toLowerAscii())
   let r = liveContribute(gSession, moduleKeystore(), driverFor, intentId, signatureHex, keyRef,
@@ -3045,7 +3062,7 @@ proc musterCoordinateAccount(): string =
   let policy = gCoordKind
   let (kind, acctId) = splitPolicy(policy)
   var o = %*{"policy": policy, "kind": kind, "accountId": acctId}
-  let acting = toHex(myAddress())
+  var acting = toHex(myAddress())
   o["actingAs"] = %acting
   # WHAT identity backs a signature here. Safe approvals and eip191 attestations are
   # made with THIS instance's secp256k1 AUTHORIZATION key (the same key that signs
@@ -3063,6 +3080,15 @@ proc musterCoordinateAccount(): string =
     return $o
   o["accountLabel"] = %a.label
   o["disclosedBy"] = %a.disclosedBy
+  if kind == "safe" and a.chain.startsWith("eip155:"):
+    # who approves here: the selected keystore account where contribute routes it there
+    var acting2 = acting
+    try: acting2 = mySafeApprover(parseInt(a.chain["eip155:".len .. ^1]))
+    except ValueError: discard
+    if acting2 != acting:
+      acting = acting2
+      o["actingAs"] = %acting
+      o["signsWith"] = %"your keystore account, approved in the Logos Signer"
   # A recognized-signer check: your key must be one of the account's DISCLOSED signers
   # or your signature won't count (the "nothing happened" you'd otherwise hit).
   let isOwner = acting.toLowerAscii() in a.signers
