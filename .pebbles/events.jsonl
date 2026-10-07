@@ -2102,3 +2102,4 @@
 {"type":"rename","timestamp":"2026-10-07T15:41:09.949927432Z","issue_id":"exo-5a8","payload":{"new_id":"exo-dcc.10"}}
 {"type":"dep_add","timestamp":"2026-10-07T15:41:09.949927432Z","issue_id":"exo-dcc.10","payload":{"dep_type":"parent-child","depends_on":"exo-dcc"}}
 {"type":"dep_add","timestamp":"2026-10-07T15:41:16.425511488Z","issue_id":"exo-dcc.7","payload":{"dep_type":"blocks","depends_on":"exo-dcc.10"}}
+{"type":"status_update","timestamp":"2026-10-07T15:45:48.467231803Z","issue_id":"exo-dcc.10","payload":{"status":"in_progress"}}
