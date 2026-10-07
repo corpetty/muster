@@ -25,7 +25,11 @@
 # (logos.dev, which runs no RLN; TRY_FLEET=logos.test needs an RLN membership since
 # Testnet v0.3, exo-eb6.3), the audit folder
 # .run/try/<peer>-audit, and invites only from the last ten minutes.
-# The module's MUSTER-LP lines and the UI's own log go to .run/try/<peer>.log.
+# The module's MUSTER-LP lines and the UI's own log go to .run/try/<peer>.log, capped
+# (exo-9eed): past TRY_LOG_MB (default 64) it moves to <peer>.log.1 and starts afresh, so a
+# peer left running uses at most twice that. The delivery node logs at INFO; set
+# MUSTER_DELIVERY_LOG=DEBUG to see its connection and discovery chatter. Stop a peer with
+# Ctrl-C in its terminal (or kill the runner); nothing keeps writing after it exits.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$PWD
@@ -68,8 +72,8 @@ if [ $LEZ = 1 ]; then
 fi
 
 echo "→ $PEER: user dir .run/$PEER · RPC ${TRY_RPC:-http://127.0.0.1:8545} · Bitcoin node ${TRY_BTC_RPC:-none}$([ $LEZ = 1 ] && echo " · real LEZ wallet")$([ $FUND = 1 ] && echo ", funding it")"
-echo "  log: .run/try/$PEER.log"
-exec env \
+echo "  log: .run/try/$PEER.log (capped at ${TRY_LOG_MB:-64} MB, then .log.1) · stop: Ctrl-C"
+env \
   MUSTER_DEV_SECP_KEY="$KEY" \
   MUSTER_RPC="${TRY_RPC:-http://127.0.0.1:8545}" \
   ${TRY_BTC_RPC:+MUSTER_BTC_RPC="$TRY_BTC_RPC"} \
@@ -80,4 +84,4 @@ exec env \
   QT_FORCE_STDERR_LOGGING=1 \
   LOGOS_INSTANCE_ID="try$PEER" \
   "${LEZ_ENV[@]}" \
-  "$RUNNER" --user-dir "$DIR" >>"$STATE/$PEER.log" 2>&1
+  "$RUNNER" --user-dir "$DIR" 2>&1 | python3 scripts/lib/caplog.py "$STATE/$PEER.log"

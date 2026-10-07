@@ -2,7 +2,11 @@
 ## Held: a config that names a preset goes without its top-level entryNodes (v0.3 reads
 ## a bare key as the legacy flat shape, whose fixed port stops a second instance on the
 ## same machine), and those nodes stay muster's store peers; QUIC is off unless the
-## config or the caller asks for it; anything else passes through untouched.
+## config or the caller asks for it; the node logs at INFO unless the config or the caller
+## names a level (exo-9eed: delivery's own fleet configs say DEBUG, and a long-lived peer
+## filled a disk), inside messagingOverrides beside a preset (delivery refuses a bare
+## top-level key there), once (it refuses both spellings together), at the top level of a
+## flat config; anything else passes through untouched.
 
 import std/[json, strutils]
 import ../src/transport/node_config
@@ -31,8 +35,31 @@ block untouched:
   for raw in ["""{"clusterId":42,"entryNodes":["/dns4/x"]}""", "{}", "not json", "[1,2]"]:
     let c = nodeConfigFor(raw)
     if raw.startsWith("{\"clusterId"):
-      doAssert parseJson(c.createNode) == parseJson(raw), "a config with no preset is not rewritten"
+      var want = parseJson(raw)
+      want["logLevel"] = %"INFO"
+      doAssert parseJson(c.createNode) == want, "a config with no preset gains only its log level: " & c.createNode
       doAssert c.storePeers == @["/dns4/x"]
     else:
       doAssert c.createNode == raw
-  echo "3. no preset, empty, not JSON, not an object: passed through as given OK"
+  echo "3. no preset, empty, not JSON, not an object: passed through as given (a flat config gains its log level) OK"
+
+block logLevel:
+  # beside a preset: inside messagingOverrides, never a bare top-level key
+  let p = parseJson(nodeConfigFor(Fleet).createNode)
+  doAssert not p.hasKey("logLevel"), "a bare key beside a preset switches delivery to the flat shape"
+  # inside messagingOverrides, once: delivery reads log-level and logLevel as one option and
+  # refuses a config that sets both
+  doAssert p["messagingOverrides"]["log-level"].getStr() == "INFO"
+  doAssert not p["messagingOverrides"].hasKey("logLevel")
+  doAssert parseJson(nodeConfigFor(Fleet, logLevel = "DEBUG").createNode)["messagingOverrides"]["log-level"].getStr() == "DEBUG"
+  # a level the config names itself, either spelling, wins over muster's default
+  let own = parseJson(nodeConfigFor("""{"preset":"logos.dev","messagingOverrides":{"log-level":"TRACE"}}""").createNode)
+  doAssert own["messagingOverrides"]["log-level"].getStr() == "TRACE"
+  let own2 = parseJson(nodeConfigFor("""{"preset":"logos.dev","messagingOverrides":{"logLevel":"TRACE"}}""").createNode)
+  doAssert not own2["messagingOverrides"].hasKey("log-level")
+  # a flat config: at the top level, unless it names one
+  doAssert parseJson(nodeConfigFor("""{"clusterId":198,"relay":true}""", logLevel = "WARN").createNode)["logLevel"].getStr() == "WARN"
+  doAssert parseJson(nodeConfigFor("""{"clusterId":198,"logLevel":"DEBUG"}""").createNode)["logLevel"].getStr() == "DEBUG"
+  # an unknown level is not passed on: the default stands
+  doAssert parseJson(nodeConfigFor(Fleet, logLevel = "LOUD").createNode)["messagingOverrides"]["log-level"].getStr() == "INFO"
+  echo "4. the node logs at INFO unless asked: inside messagingOverrides beside a preset, top level when flat OK"

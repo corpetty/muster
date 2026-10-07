@@ -15,14 +15,26 @@
 ## was tested, every QUIC dial to the logos.dev fleet timed out after 3 s, and store
 ## queries failed with PEER_DIAL_FAILURE, while TCP to the same nodes connected. A
 ## config that sets `quic-support` itself, or MUSTER_DELIVERY_QUIC=1, keeps it on.
+##
+## The node is asked to log at INFO unless the config or the caller names a level
+## (exo-9eed). Delivery's own fleet configs say DEBUG. Beside a preset the level goes inside
+## `messagingOverrides` (`log-level`): a bare top-level key there is refused ("Unrecognized
+## configuration option(s) found: logLevel"), and delivery treats `logLevel` and `log-level`
+## as one option, refusing a config that sets both. Measured 2026-10-06 on logos.dev: at
+## delivery v0.3.0 the node accepts the level and still logs DEBUG (~700-800 lines a
+## minute either way), an upstream bug (exo-9eed notes); the level is sent so it takes
+## effect once delivery applies it. A flat config takes `logLevel` at the top, as muster's
+## local configs always have.
 
-import std/json
+import std/[json, strutils]
 
 type NodeConfig* = object
   createNode*: string        ## the JSON handed to delivery's createNode
   storePeers*: seq[string]   ## the fleet's nodes, for muster's own store catch-up
 
-proc nodeConfigFor*(cfgJson: string, quic = false): NodeConfig =
+const LogLevels* = ["TRACE", "DEBUG", "INFO", "NOTICE", "WARN", "ERROR", "FATAL"]
+
+proc nodeConfigFor*(cfgJson: string, quic = false, logLevel = "INFO"): NodeConfig =
   var j: JsonNode
   try: j = parseJson(cfgJson)
   except CatchableError: return NodeConfig(createNode: cfgJson)
@@ -37,4 +49,10 @@ proc nodeConfigFor*(cfgJson: string, quic = false): NodeConfig =
       j["messagingOverrides"] = newJObject()
     if not quic and not j["messagingOverrides"].hasKey("quic-support"):
       j["messagingOverrides"]["quic-support"] = %false
+  let level = (if logLevel.toUpperAscii() in LogLevels: logLevel.toUpperAscii() else: "INFO")
+  if preset:
+    let mo = j["messagingOverrides"]
+    if not mo.hasKey("log-level") and not mo.hasKey("logLevel"): mo["log-level"] = %level
+  elif j.len > 0 and not j.hasKey("logLevel"):
+    j["logLevel"] = %level
   result.createNode = $j
