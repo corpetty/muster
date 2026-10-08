@@ -106,6 +106,9 @@ import ../src/coordination/covers       # whether a settle-up still covers a sha
 import ../src/coordination/pending_parts  # payments in flight, never forgotten while they might land (exo-a90.23)
 import ../src/coordination/parts_btc    # …and in Bitcoin, from each debtor's own key, confirmed on the creditor's node (exo-d17)
 import ../src/coordination/parts_lez    # …and privately on the LEZ, found by the creditor's scan (exo-a90.9)
+import ../src/coordination/xmr_request  # …and in XMR: a monero: link to pay from any wallet, the creditor's own wallet confirms (exo-dcc.5)
+import ../src/wallet/monero_backend_lp  # …monero_wallet_backend over lp_*: reads and one mint, never a spend
+import ../src/monero/address as xmraddr # the payTo rules and the CAIP-2 map (ADR-018)
 
 proc hexToBytes(s: string): seq[byte] =
   var h = s
@@ -219,10 +222,11 @@ proc roomDriver(kind: string): Driver =
   ## IS a signer and it endorses in-app (no pasted fixture). k is the configured
   ## threshold capped at the roster size (a 1-member room needs 1); "unanimous" is n-of-n.
   let (bare, chain) = splitPolicy(kind)
-  if bare in ["evm-split", "lez-split", "btc-split"]:
+  if bare in SplitKinds:
     # a split (exo-a90): the policy names the CAIP-2 chain the parties pay on; the room's
     # members gate who may be named (the fold reads the parties from the effect alone)
     return newSplitDriver((if bare == "lez-split": LezSplitFamily elif bare == "btc-split": BtcSplitFamily
+                           elif bare == "monero-split": MoneroSplitFamily
                            else: EvmSplitFamily), chain, roomIdentities())
   let roster = currentRoster()
   let n = max(1, roster.len)
@@ -1363,11 +1367,21 @@ proc tokenInfo(chain, token: string): tuple[symbol: string, decimals: int] =
       if dec >= 0: gTokenInfo[key] = result
   except CatchableError: discard
 
+var gMoneroBackend: LpMoneroBackend
+proc moneroBackend(): MoneroBackend =
+  ## THIS member's Monero wallet: the platform's monero_wallet_backend over lp_*, asked only
+  ## its read and mint methods (wallet/monero_backend.nim). A host without the Monero stack
+  ## simply never answers: every read is unread, nothing is confirmed (exo-dcc.5).
+  if gMoneroBackend == nil: gMoneroBackend = newLpMoneroBackend()
+  gMoneroBackend
+
 proc splitSeamFor(policy: string): PartSeam =
   ## The seam a split's policy settles through: this member's own EVM wallet + RPC, or —
-  ## for the private split — their own LEZ wallet on the private rail (exo-a90.9).
+  ## for the private split — their own LEZ wallet on the private rail (exo-a90.9), or — for
+  ## a Monero request — their own Monero wallet's history, which sends nothing (exo-dcc.5).
   let (k, chain) = splitPolicy(policy)
-  if k == "lez-split": PartSeam(newLezPartSeam(chain, splitLezAdapter(), moduleKeystore()))
+  if k == "monero-split": PartSeam(newMoneroPartSeam(chain, moneroBackend(), cmPump))
+  elif k == "lez-split": PartSeam(newLezPartSeam(chain, splitLezAdapter(), moduleKeystore()))
   elif k == "btc-split":
     # this member's own node (Settings → Bitcoin node), on the network the split names
     PartSeam(newBtcPartSeam(chain, newBitcoindAdapterFromUrl(networkByCaip2(chain).name, gBtcRpc), moduleKeystore()))
@@ -1382,6 +1396,9 @@ proc myPayTos(family: string): seq[string] =
     # every Bitcoin network this key could be paid on: its wpkh address per network
     for n in Networks: result.add p2wpkhAddress(n.hrp, moduleKeystore().btcPubKey())
     return
+  if family == MoneroSplitFamily:
+    # what my open Monero wallet lists (receive_info), as last read — a tick never waits on it
+    return moneroBackend().receiveInfo(cmPump).addresses
   if family != LezSplitFamily: return @[myEvmPayAddress()]
   if epochTime() - gMyLezPayTosAt > 30:
     gMyLezPayTosAt = epochTime()
@@ -1422,7 +1439,7 @@ proc seamOfPending(s: CoordinationSession, pp: PendingPart): PartSeam =
   ## wrong chain for good (seen live: a Bitcoin payment watched through the EVM seam).
   if pp.intentId notin gSplitSeams:
     let policy = intentPolicyOf(s.roomEvents(), pp.intentId)
-    if splitPolicy(policy).kind notin ["evm-split", "lez-split", "btc-split"]:
+    if splitPolicy(policy).kind notin SplitKinds:
       raise newException(ValueError, "the room's log does not name " & pp.intentId & "'s policy yet")
     gSplitSeams[pp.intentId] = splitSeamFor(policy)
   gSplitSeams[pp.intentId]
@@ -1475,8 +1492,11 @@ proc splitPump() =
   # the creditor's side: confirm what my own read shows, per chain the room's splits use
   var policies: seq[string]
   for v in reduceIntentViews(gSession.roomEvents(), driverFor):
-    if v.parts.len == 0 or v.state notin ["submitted", "settling"]: continue
-    if splitPolicy(v.policy).kind in ["evm-split", "lez-split", "btc-split"] and v.policy notin policies and
+    # a Monero request is read from "executable" on: its debtors pay outside muster, and the
+    # creditor's own wallet confirms a part whether or not anyone reported it (exo-dcc.5)
+    if v.parts.len == 0 or v.state notin ["executable", "submitted", "settling"]: continue
+    if v.state == "executable" and splitPolicy(v.policy).kind != "monero-split": continue
+    if splitPolicy(v.policy).kind in SplitKinds and v.policy notin policies and
        not (splitPolicy(v.policy).kind == "btc-split" and gBtcRpc.len == 0):   # no node: nothing to read with
       policies.add v.policy
   for pol in policies:
@@ -1510,6 +1530,68 @@ proc splitPump() =
         gSplitLogged[v.id] = line
         stderr.writeLine("MUSTER-LP split " & line)
 
+proc proposeXmrRequest(chain, total, sharesJson, memo: string): string =
+  ## A Monero request (exo-dcc.5, ADR-018): XMR in atomic units on `chain`. Shares as any
+  ## split takes them; even shares are distinct (the i-th debtor owes i atomic units less),
+  ## since one subaddress takes them all. payTo is a FRESH subaddress THIS member's own open
+  ## wallet mints for the request (create_subaddress, no role) — or, on someone's behalf
+  ## ({creditor}), the Monero address they last shared for this chain, which their own client
+  ## checks against their wallet before agreeing. Returns the intent id, or {error, detail}.
+  if xmraddr.networkOfChain(chain).isNone: return $(%*{"error": "not-a-monero-chain", "chain": chain})
+  if "monero-split" notin roomKinds(): return $(%*{"error": "not-admitted", "kind": "monero-split"})
+  let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii().replace("0x", "")
+  var creditor = me
+  var shares: seq[SplitShare]
+  try:
+    if not isCanonDec(total) or total == "0": return $(%*{"error": "bad-total", "total": total})
+    let j = parseJson(sharesJson)
+    if j.kind == JObject and (j{"fiat"} != nil or (j{"asset"}.getStr().len > 0 and j{"asset"}.getStr().toUpperAscii() != "XMR")):
+      return $(%*{"error": "bad-asset", "detail": "a Monero request is in XMR, in atomic units"})
+    if j.kind == JObject and j{"creditor"}.getStr().len > 0:
+      creditor = j["creditor"].getStr().toLowerAscii().replace("0x", "")
+    if j.kind == JArray:
+      shares = evenShares(total, creditor, j.getElems().mapIt(it.getStr().toLowerAscii()), distinctAmounts = true)
+    elif j.kind == JObject and j.hasKey("shares"):
+      for x in j["shares"].getElems(): shares.add SplitShare(who: x{"who"}.getStr().toLowerAscii(), amount: x{"amount"}.getStr())
+    elif j.kind == JObject and j.hasKey("parties"):
+      shares = evenShares(total, creditor, j["parties"].getElems().mapIt(it.getStr().toLowerAscii()),
+                          creditorShares = j{"creditorShares"}.getBool(true), distinctAmounts = true)
+    else: return $(%*{"error": "bad-shares", "detail": "an array of room identities, {parties}, or {shares}"})
+  except CatchableError as e:
+    return $(%*{"error": "bad-shares", "detail": e.msg})
+  if shares.len == 0:
+    return $(%*{"error": "bad-shares", "detail": "no one owes anything (or the shares are too small to tell apart)"})
+  inc gMsgSeq
+  var payTo = ""
+  if creditor != me:
+    gSession.poll()
+    payTo = sharedMoneroAddressOf(gSession.roomEvents(), creditor, chain)
+    if payTo.len == 0:
+      return $(%*{"error": "no-shared-address", "creditor": creditor, "chain": chain,
+                  "detail": "they have shared no Monero address for " & chainLabel(chain)})
+  else:
+    # the request is checked before a subaddress is minted for it: the driver's own rules,
+    # with a stand-in address of the chain's own kind where payTo will go
+    let net = xmraddr.networkOfChain(chain).get
+    let k = encFromSeed(default(array[32, byte])).identity().ed
+    let stand = xmraddr.encodeAddress(net, makSubaddress, k, k)
+    let pre = newSplitDriver(MoneroSplitFamily, chain, roomIdentities()).signRefusal(
+      effectFromJson(splitEffectJson(chain, "XMR", total, creditor, stand, shares, memo)))
+    if pre.len > 0: return $(%*{"error": "refused", "detail": pre})
+    let m = xmrMintPayTo(moneroBackend(), chain, xmrRequestLabel(chain, total, memo, gMsgSeq))
+    if not m.ok:
+      return $(%*{"error": m.why.split(':')[0], "detail": m.why, "request": MoneroUnlockIntent,
+                  "install": MoneroWalletApp})
+    payTo = m.address
+  let effect = splitEffectJson(chain, "XMR", total, creditor, payTo, shares, memo)
+  var ttl = DefaultIntentTtl
+  try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
+  except ValueError: discard
+  inc gMsgSeq
+  let id = xmrPropose(gSession, moduleKeystore(), driverFor, moneroBackend(), chain, effect,
+                      int64(epochTime()), gMsgSeq, ttl)
+  if id.startsWith("0x"): id else: $(%*{"error": id.split(':')[0], "detail": id})
+
 proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): string =
   ## Propose splitting a bill THIS member fronted: they are the creditor, paid at their own
   ## address on `chain` (proposer material, written into the effect so it is reviewed and
@@ -1524,14 +1606,19 @@ proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): s
   let (ck, cq) = splitPolicy(gCoordKind)
   var kind = (if chain.startsWith("lez:"): "lez-split"
               elif chain.startsWith("bip122:"): "btc-split"
-              elif chain.len == 0 and ck in ["evm-split", "lez-split", "btc-split"]: ck
+              elif chain.startsWith("monero:"): "monero-split"
+              elif chain.len == 0 and ck in SplitKinds: ck
               else: "evm-split")
   if chain.len == 0: chain = cq
+  if chain.len == 0 and kind == "monero-split":
+    # a Monero request names its network: stagenet first (ADR-018; mainnet waits for exo-dcc.8)
+    chain = xmraddr.caip2Of(xmrStagenet)
   if chain.len == 0:
     let (ok, c, detail) = splitChainFor(kind)
     if not ok: return $(%*{"error": (if kind == "lez-split": "no-lez-wallet" elif kind == "btc-split": "no-btc-node"
                                      else: "no-rpc"), "detail": detail})
     chain = c
+  if kind == "monero-split": return proposeXmrRequest(chain, total, sharesJson, memo)
   let lez = kind == "lez-split"
   let btc = kind == "btc-split"
   let (isEvm, _) = evmChainId(chain)
@@ -1623,7 +1710,22 @@ proc musterCoordinateSettlePartImpl(intentId: string): string =
   ## derived from the agreed effect (invariant 1); the report follows once it lands.
   if gSession == nil: return $(%*{"error": "not-joined"})
   let policy = intentPolicyOf(gSession.roomEvents(), intentId)
-  if splitPolicy(policy).kind notin ["evm-split", "lez-split", "btc-split"]: return $(%*{"error": "not-a-split"})
+  if splitPolicy(policy).kind notin SplitKinds: return $(%*{"error": "not-a-split"})
+  if splitPolicy(policy).kind == "monero-split":
+    # muster never sends Monero (exo-dcc.5 s6): the debtor pays from their own wallet with
+    # the link derived from the agreed effect, then says so (coordinate_report_paid)
+    gSession.poll()
+    let events = gSession.roomEvents()
+    let me = myIdentity(moduleKeystore())
+    let drv = driverFor(policy)
+    let effect = effectFromJson(effectJsonOf(events, intentId))
+    for l in xmrLinks(events, driverFor, intentId):
+      if drv.partAuthor(effect, l.part, "settled").toLowerAscii() == me:
+        if not l.ok: return $(%*{"error": (if l.why.startsWith("not-agreed"): "not-agreed" else: "refused"), "detail": l.why})
+        return $(%*{"payFrom": "your-wallet", "uri": l.uri, "amount": l.amount, "to": l.payTo, "chain": l.chain,
+                    "detail": "muster never sends Monero: pay this link from your own wallet, then say you paid " &
+                              "(coordinate_report_paid); the creditor's own wallet confirms it"})
+    return $(%*{"error": "not-a-party"})
   if splitPolicy(policy).kind == "btc-split" and gBtcRpc.len == 0:
     return $(%*{"error": "no-btc-node", "detail": "a Bitcoin share is paid through your own node: Settings → Bitcoin node"})
   let seam = splitSeamFor(policy)
@@ -1643,7 +1745,12 @@ proc musterCoordinateConfirmPartImpl(intentId, part, tx: string): string =
   ## reference — received outside muster.
   if gSession == nil: return $(%*{"error": "not-joined"})
   let policy = intentPolicyOf(gSession.roomEvents(), intentId)
-  if splitPolicy(policy).kind notin ["evm-split", "lez-split", "btc-split"]: return $(%*{"error": "not-a-split"})
+  if splitPolicy(policy).kind notin SplitKinds: return $(%*{"error": "not-a-split"})
+  if splitPolicy(policy).kind == "monero-split":
+    # "" = Mark received (my word, shown as such); anything else = read my wallet now
+    let seam = newMoneroPartSeam(splitPolicy(policy).account, moneroBackend(), cmNow)
+    let r = xmrConfirmByHand(gSession, moduleKeystore(), driverFor, seam, intentId, part, fromWallet = tx.len > 0)
+    return (if r in ["executable", "submitted", "settling", "final"]: $(%*{"state": r}) else: $(%*{"error": r}))
   let r = liveConfirmPart(gSession, moduleKeystore(), driverFor, intentId, part, splitSeamFor(policy), tx)
   if r in ["executable", "submitted", "settling", "final"]: $(%*{"state": r}) else: $(%*{"error": r})
 
@@ -1690,6 +1797,9 @@ proc musterCoordinateProposeSettleUpImpl(chain, asset, memo: string): string =
     chain = c
   if chain.startsWith("lez:"):
     return $(%*{"error": "not-netted", "detail": "the private split is never netted: its shares are told apart by amount"})
+  if chain.startsWith("monero:"): return $(%*{"error": "not-netted", "detail": MoneroNotNetted})
+  if familyOfChain(chain) notin [EvmSplitFamily, BtcSplitFamily]:
+    return $(%*{"error": "not-netted", "detail": "no split settles up on " & chain})
   let kind = (if chain.startsWith("bip122:"): "btc-split" else: "evm-split")
   if kind notin roomKinds(): return $(%*{"error": "not-admitted", "kind": kind})
   var a = asset.strip().toLowerAscii()
@@ -1743,6 +1853,7 @@ proc assetDecimals(chain, asset: string): int =
   ## unreadable) — for the composer's "1 BTC = 21.4 ETH" and the card, never a check.
   if asset == "ETH": 18
   elif asset == "BTC": 8
+  elif asset == "XMR": XmrDecimals
   elif isErc20Asset(asset): tokenInfo(chain, asset[6 .. ^1]).decimals
   else: -1
 
@@ -1789,6 +1900,9 @@ proc musterCoordinateProposeSettleUpAcrossImpl(chain, asset, ratesJson, memo: st
     chain = c
   if chain.startsWith("lez:"):
     return $(%*{"error": "not-netted", "detail": "the private split is never netted: its shares are told apart by amount"})
+  if chain.startsWith("monero:"): return $(%*{"error": "not-netted", "detail": MoneroNotNetted})
+  if familyOfChain(chain) notin [EvmSplitFamily, BtcSplitFamily]:
+    return $(%*{"error": "not-netted", "detail": "no split settles up on " & chain})
   let kind = (if chain.startsWith("bip122:"): "btc-split" else: "evm-split")
   if kind notin roomKinds(): return $(%*{"error": "not-admitted", "kind": kind})
   proc assetOf(chain, a: string): string =
@@ -1852,6 +1966,13 @@ proc musterCoordinateShareAddress(chain: string): string =
     except CatchableError: return $(%*{"error": "unknown-network", "chain": c})
     body = %*{"kind": "address-share", "asset": "BTC", "chain": c,
               "address": p2wpkhAddress(hrp, moduleKeystore().btcPubKey()), "form": 1}
+  elif c.startsWith("monero:"):
+    # a fresh subaddress of my own open wallet, minted for the room (exo-dcc.5): what a
+    # request proposed on my behalf pays me at — my client still checks it before I agree
+    if xmraddr.networkOfChain(c).isNone: return $(%*{"error": "unknown-network", "chain": c})
+    let m = xmrMintPayTo(moneroBackend(), c, "muster:share")
+    if not m.ok: return $(%*{"error": m.why.split(':')[0], "detail": m.why, "request": MoneroUnlockIntent})
+    body = xmrShareBody(c, m.address)
   elif c.len == 0 or c.startsWith("eip155:"):
     body = %*{"kind": "address-share", "asset": "ETH", "address": myEvmPayAddress().toLowerAscii(), "form": 1}
   else: return $(%*{"error": "no-shared-address", "detail": "nothing is paid to a shared address on " & c})
@@ -1860,6 +1981,18 @@ proc musterCoordinateShareAddress(chain: string): string =
   let (_, ev) = newMessageEvent(author, int64(epochTime()), $body, gMsgSeq)
   gSession.publishAuthored(moduleKeystore(), ev)
   $(%*{"address": body["address"].getStr()})
+
+proc musterCoordinateReportPaidImpl(intentId, tx: string): string =
+  ## "I paid" for MY part of a Monero request (exo-dcc.5): my author-signed report, with the
+  ## txid if I give one. It never confirms the part — the creditor's own wallet does.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let r = xmrReportPaid(gSession, moduleKeystore(), driverFor, intentId, tx)
+  if r in ["executable", "submitted", "settling", "final"]: $(%*{"state": r}) else: $(%*{"error": r})
+
+proc musterCoordinateReportPaid(intentId, tx: string): string =
+  try: result = musterCoordinateReportPaidImpl(intentId, tx)
+  except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
+  if gLpDebug: stderr.writeLine("MUSTER-LP split report-paid " & intentId & " " & result)
 
 proc musterCoordinateConfirmPart(intentId, part, tx: string): string =
   try: result = musterCoordinateConfirmPartImpl(intentId, part, tx)
@@ -2350,6 +2483,11 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
   if gSession == nil: return "not-joined"
   if signatureHex.len == 0:
     let drv = driverFor(intentPolicyOf(gSession.roomEvents(), intentId))
+    if drv of SplitDriver and drv.profile().family == MoneroSplitFamily:
+      # a Monero request (exo-dcc.5): the creditor's own open wallet must list payTo, on the
+      # agreed network — read now — before their agreement vouches for it
+      return noteApproved(intentId, xmrAgree(gSession, moduleKeystore(), driverFor, moneroBackend(), intentId,
+                                             intentLinkContext(intentId), uint64(epochTime())))
     if drv of SplitDriver:
       # the creditor's agreement is their word that payTo is theirs (exo-770): never given
       # for an address this client does not hold
@@ -2555,11 +2693,17 @@ proc musterCoordinateIntents(): string =
                            "decimals": (if su.asset == "BTC": 8 elif isErc20Asset(su.asset): max(tok[1], 0) else: 18),
                            "symbol": (if isErc20Asset(su.asset): (if tok[0].len > 0: tok[0] else: "units") else: su.asset)}
       except CatchableError: discard
-    if v.parts.len > 0 and prof.family in [EvmSplitFamily, LezSplitFamily, BtcSplitFamily]:
+    if v.parts.len > 0 and prof.family in [EvmSplitFamily, LezSplitFamily, BtcSplitFamily, MoneroSplitFamily]:
       # a split (exo-a90): each person's share and where it stands — only what each disclosed
       # (their agreement, their payment report) and what the creditor confirmed (invariant 9)
       try:
         let sp = splitOf(effectFromJson(v.effectJson))
+        let xmr = prof.family == MoneroSplitFamily
+        # a Monero request: each debtor's monero: link, derived from the agreed effect alone
+        # (xmr_request.xmrLinks) — absent until every party agreed
+        var links = initTable[string, XmrLink]()
+        if xmr:
+          for l in xmrLinks(events, driverFor, v.id): links[l.part] = l
         var sum = "0"
         var parts = newJArray()
         for pv in v.parts:
@@ -2576,6 +2720,9 @@ proc musterCoordinateIntents(): string =
                        "covered": not pv.settled and not pv.confirmed and v.id & "/" & pv.part in coveredNow,
                        # confirmed with no chain reference because a settle-up paid it (exo-a90.19)
                        "settledUp": pv.confirmed and pv.tx.len == 0 and v.id & "/" & pv.part in coveredNow}
+          if xmr:
+            let l = links.getOrDefault(pv.part)
+            parts[^1]["uri"] = %(if l.ok: l.uri else: "")
         o["parts"] = parts
         # a token says its own symbol and decimals (display only, exo-5ab); ETH and LEZ are known
         let tok = (if isErc20Asset(sp.asset): tokenInfo(sp.chain, sp.asset[6 .. ^1]) else: ("", -1))
@@ -2584,6 +2731,7 @@ proc musterCoordinateIntents(): string =
         o["split"] = %*{"total": sp.total, "asset": sp.asset, "payTo": sp.payTo, "memo": sp.memo,
                         # the asset's decimals, so the card shows 0.3 LEZ, not 0.0000000003
                         "decimals": (if sp.asset == "LEZ": 9 elif sp.asset == "BTC": 8
+                                     elif sp.asset == "XMR": XmrDecimals
                                      elif isErc20Asset(sp.asset): max(tok[1], 0) else: 18),
                         "symbol": (if isErc20Asset(sp.asset): (if tok[0].len > 0: tok[0] else: "units") else: sp.asset),
                         "token": (if isErc20Asset(sp.asset): sp.asset[6 .. ^1] else: ""),
@@ -2603,6 +2751,24 @@ proc musterCoordinateIntents(): string =
                         "renewable": splitExpired and v.id notin pendingCover and
                                      renewalOf(events, driverFor, v.id, nowS).why.len == 0,
                         "renewalPending": splitExpired and v.id in pendingCover}
+        if xmr:
+          # a Monero request (exo-dcc.5): MY link if I owe a share; and, on the creditor's
+          # client, whether their open wallet can confirm (cached read, never a wait)
+          var mine = newJNull()
+          for pv in v.parts:
+            if drv.partAuthor(effectFromJson(v.effectJson), pv.part, "settled").toLowerAscii() == myEncHex:
+              let l = links.getOrDefault(pv.part)
+              mine = %*{"part": pv.part, "ok": l.ok, "uri": l.uri, "amount": l.amount, "payTo": l.payTo,
+                        "why": l.why, "reported": pv.settled, "confirmed": pv.confirmed}
+          var wallet = newJNull()
+          if sp.creditor == myEncHex:
+            let why = walletRefusal(moneroBackend().walletStatus(cmPump), sp.chain)
+            wallet = %*{"ready": why.len == 0, "detail": why, "code": why.split(':')[0],
+                        "request": (if why.len == 0 or why.startsWith("wallet-unread") or why.startsWith("wallet-busy"): ""
+                                    else: MoneroUnlockIntent)}
+          o["split"]["xmr"] = %*{"network": $xmraddr.networkOfChain(sp.chain).get(xmrStagenet),
+                                 "chainLabel": chainLabel(sp.chain), "confirmDepth": XmrConfirmDepth,
+                                 "payment": mine, "wallet": wallet}
         # a bill in fiat (exo-3a4): the quote the room is trusting — its currency, amount,
         # rate, source and time — for the card to name before anyone agrees
         if sp.quote.quoted:
@@ -2917,6 +3083,20 @@ proc musterCoordinateReadiness(intentId: string): string =
   # split's parties (named in the effect) are graded (exo-272)
   facts.contributes = drv.mayContribute(effect, myNames())
   facts.pays = drv.settlesAPart(effect, myNames())   # is a share mine to pay
+  if drv.profile().family == MoneroSplitFamily:
+    # a Monero request (exo-dcc.5): the creditor's own open wallet vouches for payTo and
+    # confirms each part; a debtor pays from any wallet of theirs, which muster never reads
+    var creditor = false
+    try: creditor = splitOf(effect).creditor == myIdentity(moduleKeystore())
+    except ValueError: discard
+    let st = (if creditor: moneroBackend().walletStatus(cmPump) else: WalletStatus())
+    facts.moneroWallet = proc(chain: string): Grade {.gcsafe.} =
+      if not creditor:
+        return (rdMet, "you pay from any Monero wallet of yours with the request's monero: link; muster reads none of yours")
+      let why = walletRefusal(st, chain)
+      if why.len == 0: (rdMet, "your " & st.network & " wallet is open: it confirms each part from its own history")
+      elif why.startsWith("wallet-unread") or why.startsWith("wallet-busy"): (rdUnknown, why)
+      else: (rdMissing, why)
   let r = assessReadiness(m, probeFromFacts(facts))
   var o = r.toJson()
   o["intentId"] = %intentId

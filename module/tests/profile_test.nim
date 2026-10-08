@@ -58,7 +58,8 @@ let kinds = @[
   ("lez-frost", %*{"chain": "lez:local", "recovery": frostTestRecoveryHex()}, "module/src/drivers/lez_frost.nim"),
   ("evm-split", %*{"chain": "eip155:31337"}, "module/src/drivers/split.nim"),
   ("lez-split", %*{"chain": "lez:testnet"}, "module/src/drivers/split.nim"),
-  ("btc-split", %*{"chain": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328"}, "module/src/drivers/split.nim")]
+  ("btc-split", %*{"chain": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328"}, "module/src/drivers/split.nim"),
+  ("monero-split", %*{"chain": "monero:76ee3cc98646292206cd3e86f74d88b4"}, "module/src/drivers/split.nim")]
 
 # ── 1. every registered kind declares a consistent profile ─────────────────────
 block:

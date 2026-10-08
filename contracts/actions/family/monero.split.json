@@ -6,7 +6,7 @@
       "area": "family",
       "family": "monero.split",
       "kind": "monero-split",
-      "status": "declared",
+      "status": "built",
       "summary": "The same agreement as every split, settled in XMR (ADR-018). The creditor's own wallet mints a subaddress for the request; each debtor agrees to their own share with their room key, and the creditor that the subaddress is theirs. Each debtor pays from any wallet they like (Basecamp's, Cake, Feather) through a monero: URI, and the creditor's own wallet confirms a part when its history shows an incoming transfer to that subaddress of exactly the share, at the 10-block unlock depth. With one debtor and the creditor not in it, it is a payment request.",
       "effect": {
         "schema": "muster.effect.split.v1",
@@ -41,105 +41,6 @@
           }
         ]
       },
-      "agreement": {
-        "rounds": 1,
-        "threshold": "every party the split names: each debtor and the creditor",
-        "finality": "external",
-        "domain": "muster.split.v1"
-      },
-      "requirements": [
-        {
-          "kind": "module",
-          "name": "monero_wallet_backend",
-          "party": "instance",
-          "class": "capability",
-          "target": "monero_wallet_backend",
-          "field": ""
-        },
-        {
-          "kind": "environment",
-          "name": "monero:*",
-          "party": "instance",
-          "class": "infra",
-          "target": "monero:*",
-          "field": ""
-        },
-        {
-          "kind": "authority",
-          "name": "split-party",
-          "party": "contributor",
-          "class": "authority",
-          "target": "split-party",
-          "field": ""
-        },
-        {
-          "kind": "address",
-          "name": "monero-subaddress",
-          "party": "proposer",
-          "class": "address",
-          "target": "monero:*",
-          "field": "payTo"
-        },
-        {
-          "kind": "asset",
-          "name": "xmr",
-          "party": "payer",
-          "class": "asset",
-          "target": "monero:*",
-          "field": ""
-        }
-      ],
-      "touches": [
-        {
-          "target": "monero:*",
-          "mode": "write"
-        },
-        {
-          "target": "monero-wallet:<creditor>/history",
-          "mode": "read"
-        },
-        {
-          "target": "monero-wallet:<creditor>/subaddresses",
-          "mode": "write"
-        }
-      ],
-      "disclosure": [
-        {
-          "field": "effect",
-          "observer": "room-member",
-          "when": "always"
-        },
-        {
-          "field": "contributions",
-          "observer": "room-member",
-          "when": "always"
-        },
-        {
-          "field": "timing",
-          "observer": "store-node",
-          "when": "always"
-        },
-        {
-          "field": "topic",
-          "observer": "store-node",
-          "when": "always"
-        },
-        {
-          "field": "transaction-exists",
-          "observer": "chain-observer",
-          "when": "settle"
-        },
-        {
-          "field": "wallet-sync",
-          "observer": "rpc-provider",
-          "when": "always"
-        },
-        {
-          "field": "signed-tx",
-          "observer": "rpc-provider",
-          "when": "settle"
-        }
-      ],
       "steps": [
         {
           "step": "propose",
@@ -153,8 +54,8 @@
             }
           ],
           "evidence": [
-            "https://github.com/logos-co/logos-monero-wallet-backend/blob/769098441db339f7541ba8804722ae3f20614309/rust-lib/src/glue.rs",
-            "https://docs.getmonero.org/public-address/subaddress/"
+            "module/src/coordination/xmr_request.nim",
+            "module/tests/probes/probe_xmr_payto_stepper.nim"
           ]
         },
         {
@@ -169,13 +70,14 @@
             }
           ],
           "evidence": [
-            "module/src/drivers/split.nim"
+            "module/src/drivers/split.nim",
+            "module/tests/split_monero_test.nim"
           ]
         },
         {
           "step": "settle",
           "who": "each debtor",
-          "does": "The debtor pays their share to payTo from their own wallet: any Monero wallet, through a monero: URI carrying the address and the exact amount (wallet2's URI format), or Basecamp's own wallet once it can review a send another module prepared (exo-dcc.6). Muster signs nothing here; the debtor's wallet builds and signs the transfer. The debtor then reports that they paid.",
+          "does": "The debtor pays their share to payTo from their own wallet: any Monero wallet, through a monero: URI carrying the address and the exact amount (wallet2's URI format), or Basecamp's own wallet once it can review a send another module prepared (exo-dcc.6). Muster signs nothing here; the debtor's wallet builds and signs the transfer. The debtor then says they paid (coordinate_report_paid, with the txid if they give one): their claim, which never confirms the part.",
           "signs": "the Monero transfer, by the debtor's own wallet",
           "reveals": [
             {
@@ -188,8 +90,9 @@
             }
           ],
           "evidence": [
-            "https://github.com/monero-project/monero/blob/master/src/wallet/wallet2.cpp",
-            "https://github.com/logos-co/logos-monero-wallet-backend/blob/769098441db339f7541ba8804722ae3f20614309/rust-lib/src/glue.rs"
+            "module/src/coordination/xmr_request.nim",
+            "module/tests/probes/probe_xmr_request_uri_stepper.nim",
+            "module/tests/probes/probe_xmr_no_spend_stepper.nim"
           ]
         },
         {
@@ -204,9 +107,9 @@
             }
           ],
           "evidence": [
-            "https://github.com/logos-co/logos-monero-wallet-backend/blob/769098441db339f7541ba8804722ae3f20614309/rust-lib/src/model.rs",
-            "https://github.com/logos-co/logos-monero-wallet-core-module/blob/7fc923dcce9ac5d40db8dd30f658eb63849e7212/src/wallet_runtime.cpp",
-            "https://github.com/monero-project/monero/blob/master/src/cryptonote_config.h"
+            "module/src/coordination/parts_xmr.nim",
+            "module/tests/probes/probe_xmr_confirm_stepper.nim",
+            "module/tests/probes/probe_xmr_network_stepper.nim"
           ]
         },
         {
@@ -216,7 +119,7 @@
           "signs": "",
           "reveals": [],
           "evidence": [
-            "module/src/drivers/split.nim"
+            "module/tests/probes/probe_xmr_request_convergence_stepper.nim"
           ]
         }
       ],
@@ -225,39 +128,56 @@
           "what": "agreeing to a payTo the creditor's own wallet does not list (receive_info)",
           "why": "the creditor's agreement vouches the address is theirs (payto-not-mine)",
           "evidence": [
-            "https://github.com/logos-co/logos-monero-wallet-backend/blob/769098441db339f7541ba8804722ae3f20614309/rust-lib/src/glue.rs"
+            "module/tests/probes/probe_xmr_payto_stepper.nim"
           ]
         },
         {
           "what": "a payTo whose network prefix is not the agreed chain's",
           "why": "invariant 2: an agreement made for stagenet must not be paid, or confirmed, on mainnet",
           "evidence": [
-            "https://docs.getmonero.org/public-address/subaddress/"
+            "module/tests/probes/probe_xmr_payto_stepper.nim",
+            "module/tests/probes/probe_xmr_network_stepper.nim"
           ]
         },
         {
           "what": "confirming a part from anything but the creditor's own wallet read: a debtor's claim, a txid alone, a third-party explorer",
           "why": "a share counts as paid only when the person owed says so, from their own read",
           "evidence": [
-            "https://github.com/logos-co/logos-monero-wallet-backend/blob/769098441db339f7541ba8804722ae3f20614309/rust-lib/src/model.rs"
+            "module/tests/probes/probe_xmr_confirm_stepper.nim"
           ]
         },
         {
           "what": "one incoming transfer confirming two parts",
           "why": "one reference settles one part",
           "evidence": [
-            "module/src/coordination/parts.nim"
+            "module/tests/probes/probe_xmr_one_ref_stepper.nim"
           ]
         },
         {
           "what": "two debtors owing the same amount at the same subaddress",
           "why": "the creditor's wallet could not tell their payments apart (as the private split, lez.split)",
           "evidence": [
-            "module/src/drivers/split.nim"
+            "module/src/drivers/split.nim",
+            "module/tests/probes/probe_xmr_one_ref_stepper.nim"
+          ]
+        },
+        {
+          "what": "netting a Monero split into a settle-up",
+          "why": "its shares are told apart by amount at the creditor's subaddress, and a net payment would need an address the payee vouches for (ADR-018)",
+          "evidence": [
+            "module/tests/split_monero_test.nim"
+          ]
+        },
+        {
+          "what": "a method of the wallet backend that builds, signs or broadcasts a transfer, or changes the wallet's roles",
+          "why": "muster never spends: it reads the creditor's wallet and mints subaddresses, and the call set is closed in code (wallet/monero_backend.nim)",
+          "evidence": [
+            "module/src/wallet/monero_backend.nim",
+            "module/tests/probes/probe_xmr_no_spend_stepper.nim"
           ]
         }
       ],
-      "ui": "not built",
+      "ui": "not built: the module half only (exo-dcc.5). Hosted: coordinate_propose_split on a monero: chain mints payTo; coordinate_intents carries each debtor's monero: link (split.xmr.payment, parts[].uri) and the creditor's wallet state (split.xmr.wallet); coordinate_report_paid is \"I paid\"; the creditor's client confirms on the intents tick. The composer, the card's link and QR, and \"Share my Monero address\" come next.",
       "invariants": [
         1,
         2,
@@ -293,6 +213,42 @@
         }
       ],
       "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/split_monero_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_xmr_request_uri_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_xmr_payto_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_xmr_confirm_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_xmr_one_ref_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_xmr_request_convergence_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_xmr_no_spend_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_xmr_network_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/monero_address_test.nim"
+        },
         {
           "kind": "source",
           "url": "https://github.com/logos-co/logos-monero-wallet-backend/blob/769098441db339f7541ba8804722ae3f20614309/rust-lib/src/glue.rs",
@@ -331,7 +287,21 @@
       ],
       "unverified": [
         "whether an incoming transfer appears in history() before it is confirmed (mempool visibility; the 10-block depth does not depend on it)",
-                "whether muster_module can call monero_wallet_backend in Basecamp once it declares it (exo-dcc.11)"
+        "whether muster_module can call monero_wallet_backend in Basecamp once it declares it (exo-dcc.11)",
+        "the request run end to end against a live stagenet wallet (split-xmr-self-test.sh, not yet written)",
+        "the Room composer and the card's monero: link and QR, which are not built"
+      ],
+      "generated": "monero-split/request",
+      "hosted": [
+        "coordinate_propose_split",
+        "coordinate_share_address",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_decline",
+        "coordinate_readiness",
+        "coordinate_settle_part",
+        "coordinate_report_paid",
+        "coordinate_confirm_part"
       ]
     }
   ]

@@ -23,7 +23,11 @@
 ## split (exo-a90.9): a shielded payTo, the private rail, and every share a distinct amount
 ## so the creditor's scan can attribute each note without the chain naming its payer; and
 ## btc.split (exo-d17): BTC in satoshis, each share its payer's own single-key spend to a
-## payTo of the chain's network, confirmed on the creditor's own node, no share below dust.
+## payTo of the chain's network, confirmed on the creditor's own node, no share below dust;
+## and monero.split (exo-dcc.5, ADR-018): XMR in atomic units, paid to a subaddress the
+## creditor's own wallet minted, from any wallet, through a monero: link; the creditor's own
+## wallet history confirms each part. One subaddress takes every share, so the shares are
+## distinct amounts (as the private split's), and each fits Monero's 64-bit amounts.
 
 import std/[json, strutils, sequtils, algorithm, tables]
 import stint
@@ -34,12 +38,15 @@ import ./driver
 import ./manifest
 import ./profile
 import ../bitcoin/[network, bech32]
+import ../monero/address as xmraddr
 
 const
   EvmSplitFamily* = "evm.split"
   LezSplitFamily* = "lez.split"
   BtcSplitFamily* = "btc.split"   ## paid in BTC on a Bitcoin chain, each share its payer's own spend (exo-d17)
   BtcDust* = 546'u64              ## a Bitcoin output below this is non-standard: no share may be smaller
+  MoneroSplitFamily* = "monero.split"   ## paid in XMR to the creditor's own subaddress, from any wallet (exo-dcc.5)
+  XmrMaxAtomic* = "18446744073709551615" ## Monero amounts are uint64 atomic units: no share above this
   SplitDomain* = "muster.split.v1"
   SplitSchema* = "muster.effect.split.v1"
   MaxMemo* = 280            ## bytes of room-only text
@@ -173,6 +180,19 @@ proc isErc20Asset*(a: string): bool =
   let h = a[8 .. ^1]
   h.allCharsInSet({'0' .. '9', 'a' .. 'f'}) and h != repeat('0', 40)
 
+var xmrPayToSeen {.threadvar.}: Table[string, bool]
+  ## acceptablePayTo's answers, by chain and address: it decompresses and subgroup-checks
+  ## two curve points in pure Nim, and the fold asks the driver about one effect many times
+  ## (describeFor, settlementParts, partAuthor…). A pure function of its inputs, so caching
+  ## it changes no answer; bounded, so a stream of addresses cannot grow it.
+
+proc xmrPayToOk(payTo, chain: string): bool =
+  let key = chain & "|" & payTo
+  if key in xmrPayToSeen: return xmrPayToSeen[key]
+  result = xmraddr.acceptablePayTo(payTo, chain).ok
+  if xmrPayToSeen.len > 4096: xmrPayToSeen.clear()
+  xmrPayToSeen[key] = result
+
 proc payToOk(family, chain, payTo: string): bool =
   case family
   of EvmSplitFamily: payTo.len == 42 and payTo.startsWith("0x") and isLowerHex(payTo[2 .. ^1])
@@ -186,6 +206,11 @@ proc payToOk(family, chain, payTo: string): bool =
     # a shielded key node: the private split pays only a shielded address (§4.6)
     let p = payTo.split(':')
     p.len == 3 and p[0] == "priv" and isLowerHex(p[1]) and isLowerHex(p[2])
+  of MoneroSplitFamily:
+    # a standard address or subaddress of THIS chain's network, as written (Monero
+    # addresses are case-sensitive): its checksum, its keys, its network prefix — never an
+    # integrated address (ADR-018: no payment ids; a fresh subaddress replaces them)
+    xmrPayToOk(payTo, chain)
   else: false
 
 # ── the effect ─────────────────────────────────────────────────────────────────
@@ -236,10 +261,15 @@ proc refusal(d: SplitDriver, sp: Split): string =
     return "only LEZ is split privately on " & d.chain & " so far (asked: " & sp.asset & ")"
   if d.family == BtcSplitFamily and sp.asset != "BTC":
     return "a Bitcoin split is paid in BTC, in satoshis (asked: " & sp.asset & ")"
+  if d.family == MoneroSplitFamily and sp.asset != "XMR":
+    return "a Monero split is paid in XMR, in atomic units (asked: " & sp.asset & ")"
   if not isCanonDec(sp.total): return "the total is not a canonical decimal: " & sp.total
   if sp.total == "0": return "the total must be more than zero"
   if not isRoomIdentity(sp.creditor): return "the creditor is not a room identity (64 bytes, lowercase hex)"
-  if not payToOk(d.family, d.chain, sp.payTo): return "payTo is not a " & d.family & " address in its one spelling: " & sp.payTo
+  if not payToOk(d.family, d.chain, sp.payTo):
+    if d.family == MoneroSplitFamily:
+      return "payTo is not a Monero address this split can be paid at: " & xmraddr.acceptablePayTo(sp.payTo, d.chain).reason
+    return "payTo is not a " & d.family & " address in its one spelling: " & sp.payTo
   if sp.memo.len > MaxMemo: return "the memo is longer than " & $MaxMemo & " bytes"
   if sp.quote.quoted:
     # a bill in fiat (exo-3a4): the total must BE the quote's conversion — derived, never trusted
@@ -265,18 +295,27 @@ proc refusal(d: SplitDriver, sp: Split): string =
     if d.family == BtcSplitFamily and u256(s.amount) < u256(BtcDust):
       return "a share of " & s.amount & " sat is below Bitcoin's dust limit (" & $BtcDust &
              " sat): it could never be paid"
+    if d.family == MoneroSplitFamily and u256(s.amount) > u256(XmrMaxAtomic):
+      return "a share of " & s.amount & " atomic units is more than a Monero amount can be (" &
+             XmrMaxAtomic & ")"
     let before = sum
     sum = sum + u256(s.amount)
     if sum < before: return "the shares overflow"
   if sum > u256(sp.total): return "the shares add up to more than the total"
-  if d.family == LezSplitFamily:
+  if d.family in [LezSplitFamily, MoneroSplitFamily]:
     # the chain names no payer on the private rail, so the AMOUNT is what lets the
-    # creditor's scan tell whose note arrived (§4.7): no two shares may be equal
+    # creditor's scan tell whose note arrived (§4.7): no two shares may be equal. A Monero
+    # request pays every share to one subaddress, and the creditor's wallet history names
+    # no payer either (exo-dcc.5 s4): two equal shares there could not be told apart
     var seen: seq[string]
     for s in sp.shares:
       if s.amount in seen:
-        return "every share of a private split must differ, so the creditor can tell whose payment arrived " &
-               "without the chain naming anyone (" & s.amount & " twice)"
+        return (if d.family == MoneroSplitFamily:
+                  "every share paid to one subaddress must differ, so the creditor's wallet can tell whose " &
+                  "payment arrived (" & s.amount & " twice)"
+                else:
+                  "every share of a private split must differ, so the creditor can tell whose payment arrived " &
+                  "without the chain naming anyone (" & s.amount & " twice)")
       seen.add s.amount
   ""
 
@@ -349,12 +388,16 @@ proc settleParties*(su: SettleUp): seq[string] =
       if w notin result: result.add w
   result.sort()
 
+const MoneroNotNetted* = "a Monero split is never netted: its shares are told apart by amount at the " &
+                         "creditor's subaddress, and a net payment would need an address the payee vouches for (ADR-018)"
+
 proc familyOfChain*(chain: string): string =
   ## The split family whose shares a chain carries: Ethereum and Bitcoin publicly, the LEZ
-  ## privately (the private split).
+  ## privately (the private split), Monero to the creditor's own subaddress.
   if chain.startsWith("eip155:"): EvmSplitFamily
   elif chain.startsWith("bip122:"): BtcSplitFamily
   elif chain.startsWith("lez:"): LezSplitFamily
+  elif chain.startsWith("monero:"): MoneroSplitFamily
   else: ""
 
 proc assetOk(family, asset: string): bool =
@@ -415,6 +458,8 @@ proc settleRefusal(d: SplitDriver, su: SettleUp): string =
   ## Why `su` is not a settle-up this driver will sign or pay ("" = it is one).
   if d.family == LezSplitFamily:
     return "the private split is never netted: its shares are told apart by amount, which netting would erase"
+  if d.family == MoneroSplitFamily:
+    return MoneroNotNetted
   if su.chain != d.chain: return "this settle-up settles on " & su.chain & "; its policy settles on " & d.chain
   if d.family == EvmSplitFamily and su.asset != "ETH" and not isErc20Asset(su.asset):
     return "an Ethereum settle-up is in ETH or an erc20:<0x token> (asked: " & su.asset & ")"
@@ -429,6 +474,7 @@ proc settleRefusal(d: SplitDriver, su: SettleUp): string =
     let fam = familyOfChain(r.chain)
     if fam == LezSplitFamily:
       return "the private split is never netted: its shares are told apart by amount, which netting would erase"
+    if fam == MoneroSplitFamily: return MoneroNotNetted
     if fam.len == 0 or not assetOk(fam, r.asset): return "a rate names a public split's chain and asset: " & r.asset & " on " & r.chain
     if r.chain == su.chain and r.asset == su.asset: return "the payment asset needs no rate"
     if i > 0 and (r.chain, r.asset) <= (su.rates[i-1].chain, su.rates[i-1].asset):
@@ -450,6 +496,7 @@ proc settleRefusal(d: SplitDriver, su: SettleUp): string =
     let fam = familyOfChain(c.chain)
     if fam == LezSplitFamily:
       return "the private split is never netted: its shares are told apart by amount, which netting would erase"
+    if fam == MoneroSplitFamily: return MoneroNotNetted
     if not payToOk(fam, c.chain, c.payTo): return "a cover's payTo is not a " & fam & " address: " & c.payTo
     if i > 0 and (c.intent, c.debtor) <= (su.covers[i-1].intent, su.covers[i-1].debtor):
       return "covers are sorted by intent then debtor, each part once"
@@ -761,17 +808,21 @@ method profile*(d: SplitDriver): FamilyProfile =
   ## settle. lez.split: the private rail — nothing names a payer, payee or amount.
   ## btc.split: every payment is the payer's own Bitcoin spend — its inputs name the payer,
   ## and payee and amount are public once broadcast; the coins bind it to one chain.
+  ## monero.split: every payment is the payer's own Monero transfer — the chain shows no
+  ## sender, receiver or amount; its address names its network and the outputs it spends
+  ## exist on one network only, so it is bound implicitly (ADR-018).
   let lez = d.family == LezSplitFamily
   let btc = d.family == BtcSplitFamily
+  let xmr = d.family == MoneroSplitFamily
   FamilyProfile(declared: true, family: d.family,
-    settlement: (if lez: "lez" elif btc: "bitcoin" else: "evm"),
+    settlement: (if lez: "lez" elif btc: "bitcoin" elif xmr: "monero" else: "evm"),
     locus: loEach, scheme: scSharedBytes, commits: cmContent,
     # a Bitcoin payment spends coins that exist on one chain only: bound implicitly
-    binding: (if lez: bdNone elif btc: bdImplicit else: bdExplicit),
+    binding: (if lez: bdNone elif btc or xmr: bdImplicit else: bdExplicit),
     ordering: orNone, expiry: exOptional, setup: suNone, signerChange: chFixed,
-    revealsPolicy: rvNever, revealsSigners: (if lez: rvNever else: rvAtSettle),
-    revealsEffect: (if lez: evShielded else: evPublic),
-    approverCost: acNone, rounds: 1, secretState: false, maturity: maDemo,
+    revealsPolicy: rvNever, revealsSigners: (if lez or xmr: rvNever else: rvAtSettle),
+    revealsEffect: (if lez or xmr: evShielded else: evPublic),
+    approverCost: acNone, rounds: 1, secretState: false, maturity: (if xmr: maDraft else: maDemo),
     chain: d.chain, account: "", k: 1, n: 0, bypassesKnown: true)
 
 method manifest*(d: SplitDriver, effect: Effect): ActionManifest =
@@ -782,6 +833,24 @@ method manifest*(d: SplitDriver, effect: Effect): ActionManifest =
   ## because several payments reach one address close together, the group itself.
   var (ok, sp, _) = d.validSplit(effect)
   let lez = d.family == LezSplitFamily
+  if d.family == MoneroSplitFamily:
+    # Monero (ADR-018): the creditor's own wallet, through Basecamp's wallet backend
+    # (monero_wallet_ui installs it and holds its roles), mints payTo and confirms each
+    # part from its history; each debtor pays from any wallet of theirs. The chain shows
+    # that a transaction exists; the payer's node sees their wallet's sync and the signed
+    # transfer; nothing names payer, payee or amount on chain.
+    let creditor = (if ok: sp.creditor else: "creditor")
+    return ActionManifest(declared: true, agreement: d.describeFor(effect),
+      requirements: @[
+        req(rqEnvironment, d.chain),
+        req(rqModule, "monero_wallet_backend", install = "monero_wallet_ui"),
+        req(rqAuthority, "split-party", rpContributor),
+        req(rqAsset, "share", rpPayer, need(mcAsset, d.chain & "/XMR")),   # a debtor's; the creditor pays nothing
+        req(rqAddress, "pay-to", rpProposer, need(mcAddress, d.chain, "payTo"))],
+      discloses: @[row("transaction-exists", obChainObserver), row("wallet-sync", obRpcProvider),
+                   row("signed-tx", obRpcProvider)],
+      touches: @[touch(d.chain, tmWrite), touch("monero-wallet:" & creditor & "/history", tmRead),
+                 touch("monero-wallet:" & creditor & "/subaddresses", tmWrite)])
   var touches = @[touch(d.chain, tmWrite)]
   if ok: touches.add touch(d.chain & ":" & sp.payTo, tmWrite)
   if effect.isSettleUp:

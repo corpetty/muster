@@ -89,6 +89,14 @@ method notePayment*(s: PartSeam, intentId, part, memo: string) {.base.} =
   ## send (tx_sender_module, exo-d4d.5) names it to the person approving. Default: nothing.
   discard
 
+method confirmsUnreported*(s: PartSeam): bool {.base.} =
+  ## Whether the counterparty's own read finds a payment with no reference from its payer:
+  ## a rail where the payer pays outside muster and the counterparty's wallet history is
+  ## what proves it (Monero, exo-dcc.5). The pump then reads for every unconfirmed part,
+  ## reported or not, and a payer's report never decides anything. Default: no — a public
+  ## rail looks up the transaction the payer reported.
+  false
+
 method payDeadlineS*(s: PartSeam): float {.base.} =
   ## How long an in-flight payment may take to land before the host stops waiting for it.
   ## A seam that proves (minutes) overrides it with more than its proving budget.
@@ -206,13 +214,14 @@ proc liveSettlePart*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
 
 # ── confirming a part (the counterparty) ─────────────────────────────────────────
 proc liveConfirmPart*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, intentId, part: string,
-                      seam: PartSeam, tx: string): string =
-  ## As the counterparty, confirm `part`. With a reported reference, only after MY OWN read
-  ## shows the part received exactly (the seam's matchReceived — the reported transaction on
-  ## a public rail, an unclaimed note of exactly the share on a private one) — and never a
-  ## reference already confirmed for another part. With none, the part was received outside
-  ## muster: my word, stated as such. Returns the intent's state, or a refusal with nothing
-  ## published.
+                      seam: PartSeam, tx: string, fromRead = false): string =
+  ## As the counterparty, confirm `part`. With a reported reference — or `fromRead`, my own
+  ## read with no reference to look up (a Monero wallet's history, exo-dcc.5) — only after
+  ## MY OWN read shows the part received exactly (the seam's matchReceived — the reported
+  ## transaction on a public rail, an unclaimed note or transfer of exactly the share on a
+  ## private one) — and never a reference already confirmed for another part. With neither,
+  ## the part was received outside muster: my word, stated as such. Returns the intent's
+  ## state, or a refusal with nothing published.
   s.poll()
   let events = s.roomEvents()
   let effectJson = effectJsonOf(events, intentId)
@@ -228,14 +237,17 @@ proc liveConfirmPart*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor
     return (if found and v.state == "final": "already-confirmed" else: "not-agreed")
   if partViewOf(v, part).p.confirmed: return "already-confirmed"
   var reference = ""                   # "" = received outside muster: my word, shown as such
-  if tx.len > 0:
+  if tx.len > 0 or fromRead:
     let claimed = confirmedRefs(events, driverFor)
-    if normRef(tx) in claimed:
+    if tx.len > 0 and normRef(tx) in claimed:
       return "refused: that payment already settled another share"
     let t = drv.partTransfer(effect, part)
     if not t.ok: return "refused: " & t.error
     let got = seam.matchReceived(t, tx, claimed)
     if not got.ok: return "unconfirmed: " & got.detail
+    # one reference settles one part: whatever the seam found, never one already claimed
+    if got.reference.len == 0 or normRef(got.reference) in claimed:
+      return "refused: that payment already settled another share"
     reference = got.reference
   s.publishAuthored(ks, partEvent(intentId, part, "confirmed", myIdentity(ks), reference))
   intentState(s.roomEvents(), driverFor, intentId)
@@ -243,19 +255,23 @@ proc liveConfirmPart*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor
 proc liveConfirmParts*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, seam: PartSeam): seq[string] =
   ## The counterparty's pump (the intents tick): every part reported settled with a
   ## reference, not yet confirmed, of an intent I am the counterparty of — confirmed when my
-  ## own read shows it. Returns "<intent>/<part>" for each confirmed now.
+  ## own read shows it. On a seam that confirmsUnreported (Monero), every unconfirmed part
+  ## of an agreed intent, reported or not: the read decides, a report never does. Returns
+  ## "<intent>/<part>" for each confirmed now.
   s.poll()
-  let events = s.roomEvents()
   let me = myIdentity(ks)
-  for v in reduceIntentViews(events, driverFor):
-    if v.parts.len == 0 or v.state notin ["submitted", "settling"]: continue
+  let unreported = seam.confirmsUnreported()
+  for v in reduceIntentViews(s.roomEvents(), driverFor):
+    if v.parts.len == 0: continue
+    if v.state notin ["submitted", "settling"] and not (unreported and v.state == "executable"): continue
     let drv = driverFor(v.policy)
     let effect = effectFromJson(v.effectJson)
     for p in v.parts:
-      if not p.settled or p.confirmed or p.tx.len == 0: continue
+      if p.confirmed: continue
+      if not unreported and (not p.settled or p.tx.len == 0): continue
       if drv.partAuthor(effect, p.part, "confirmed").toLowerAscii() != me: continue
-      if liveConfirmPart(s, ks, driverFor, v.id, p.part, seam, p.tx) in
-         ["submitted", "settling", "final"]:
+      if liveConfirmPart(s, ks, driverFor, v.id, p.part, seam, (if unreported: "" else: p.tx),
+                         fromRead = unreported) in ["submitted", "settling", "final"]:
         result.add v.id & "/" & p.part
 
 proc partsAwaiting*(events: seq[Event], driverFor: DriverFor, me: string): seq[IntentView] =

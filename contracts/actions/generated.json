@@ -2257,6 +2257,174 @@
       },
       "signRefusal": ""
     },
+    "monero-split/request": {
+      "kind": "monero-split",
+      "variant": "request",
+      "family": "monero.split",
+      "effectExample": {
+        "schema": "muster.effect.split.v1",
+        "fields": {
+          "chain": "monero:76ee3cc98646292206cd3e86f74d88b4",
+          "asset": "XMR",
+          "total": "1500000000000",
+          "creditor": "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+          "payTo": "73LhUiix4DVFMcKhsPRG51QmCsv8dYYbL6GcQoLwEEFvPvkVvc7BhebfA4pnEFF9Lq66hwvLqBvpHjTcqvpJMHmmNjPPBqa",
+          "shares": [
+            [
+              "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+              "750000000000"
+            ],
+            [
+              "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2",
+              "749999999999"
+            ]
+          ],
+          "memo": "Cabin deposit"
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 3,
+        "finality": "external",
+        "domain": "muster.split.v1"
+      },
+      "environment": "monero:76ee3cc98646292206cd3e86f74d88b4",
+      "profile": {
+        "declared": true,
+        "family": "monero.split",
+        "settlement": "monero",
+        "locus": "each",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "implicit",
+        "ordering": "none",
+        "expiry": "optional",
+        "setup": "none",
+        "membershipChange": "fixed",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "never",
+          "signers": "never",
+          "effect": "shielded"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "draft",
+        "chain": "monero:76ee3cc98646292206cd3e86f74d88b4",
+        "account": "",
+        "k": 1,
+        "n": 0,
+        "bypassesKnown": true,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 3,
+          "finality": "external",
+          "domain": "muster.split.v1"
+        },
+        "requirements": [
+          {
+            "kind": "environment",
+            "name": "monero:76ee3cc98646292206cd3e86f74d88b4",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "monero:76ee3cc98646292206cd3e86f74d88b4",
+              "field": ""
+            }
+          },
+          {
+            "kind": "module",
+            "name": "monero_wallet_backend",
+            "party": "instance",
+            "needs": {
+              "class": "capability",
+              "target": "monero_wallet_backend",
+              "field": ""
+            },
+            "install": "monero_wallet_ui"
+          },
+          {
+            "kind": "authority",
+            "name": "split-party",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "split-party",
+              "field": ""
+            }
+          },
+          {
+            "kind": "asset",
+            "name": "share",
+            "party": "payer",
+            "needs": {
+              "class": "asset",
+              "target": "monero:76ee3cc98646292206cd3e86f74d88b4/XMR",
+              "field": ""
+            }
+          },
+          {
+            "kind": "address",
+            "name": "pay-to",
+            "party": "proposer",
+            "needs": {
+              "class": "address",
+              "target": "monero:76ee3cc98646292206cd3e86f74d88b4",
+              "field": "payTo"
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          },
+          {
+            "field": "transaction-exists",
+            "to": "chain-observer"
+          },
+          {
+            "field": "wallet-sync",
+            "to": "rpc-provider"
+          },
+          {
+            "field": "signed-tx",
+            "to": "rpc-provider"
+          }
+        ],
+        "touches": [
+          {
+            "target": "monero:76ee3cc98646292206cd3e86f74d88b4",
+            "mode": "write"
+          },
+          {
+            "target": "monero-wallet:c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1/history",
+            "mode": "read"
+          },
+          {
+            "target": "monero-wallet:c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1/subaddresses",
+            "mode": "write"
+          }
+        ]
+      },
+      "signRefusal": ""
+    },
     "safe/contract-call": {
       "kind": "safe",
       "variant": "contract-call",

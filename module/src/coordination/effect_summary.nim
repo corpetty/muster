@@ -147,14 +147,15 @@ proc effectSummary*(effectJson: string, label: proc (who: string): string = nil,
     # who owes the creditor what (exo-a90.3) — never dressed up as one payment
     let n = j{"shares"}.getElems().len
     let asset = j{"asset"}.getStr()
-    let unit = (if asset == "ETH": "wei" elif asset == "BTC": "sat" else: asset)
+    let unit = (if asset == "ETH": "wei" elif asset == "BTC": "sat" elif asset == "XMR": "atomic" else: asset)
     let total = numText(j{"total"})
     let memo = j{"memo"}.getStr()
     # the words read in the asset's own decimals (ETH 18, LEZ 9, BTC 8); .amount/.unit stay raw
     let tokenAddr = (if asset.startsWith("erc20:"): asset[6 .. ^1] else: "")
     let t = (if tokenAddr.len > 0 and token != nil: token(asset) else: ("", -1))
     let shown =
-      if tokenAddr.len == 0: inDecimals(total, (if asset == "LEZ": 9 elif asset == "BTC": 8 else: 18)) & " " & asset
+      if tokenAddr.len == 0:
+        inDecimals(total, (if asset == "LEZ": 9 elif asset == "BTC": 8 elif asset == "XMR": 12 else: 18)) & " " & asset
       elif t[1] >= 0: inDecimals(total, t[1]) & " " & (if t[0].len > 0: t[0] else: "units")
       else: total & " base units of token " & short(tokenAddr)
     # a bill in fiat (exo-3a4): the bill in its currency, then what it comes to in the asset
