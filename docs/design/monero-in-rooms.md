@@ -107,7 +107,7 @@ the demo at the end of Phase 4 can show truthfully for each link, and what stays
 | Diligence | Each member's identities are bound to each other (F-14). What a counterparty discloses is all the client says about them (invariant 9) | Checks beyond what they disclose |
 | Negotiation | The encrypted room, with no coordination server | Offer/counter (F-11) |
 | Contracting | Signed terms ("Decide something") and an XMR request both parties agree to; the client re-derives what it signs | — |
-| Ordering | The payer broadcasts through their own wallet and node. A local monerod (`monerod_ui`) or a proxy keeps the remote node from learning the wallet's IP. Readiness grades local versus remote | The mixnet for room messages (`exo-dcc.4`) |
+| Ordering | The payer broadcasts through their own wallet and node. A local monerod (`monerod_ui`) or a proxy keeps the remote node from learning the wallet's IP. Readiness grades local versus remote. Room messages can go out through the mixnet (an opt-in `mix` setting, sends only, `exo-dcc.4`) | Hiding who reads a room: reading is a store query from the reader's own address |
 | Settlement | Monero: the chain shows no sender, receiver or amount; a subaddress per request is unlinkable to the payee's other addresses. This is Monero's guarantee, and the card says so | — |
 | Enforcement | Monero is mined by a permissionless proof-of-work set, not a named sequencer. The payment counts only when the payee's own wallet sees it. The room's record exports as a receipt the member chooses to share | Escrow; the swap (RFP-003 M4); a chain-side receipt (tx proofs, upstream) |
 
@@ -305,7 +305,9 @@ Day 0 is 2026-10-07.
   Muster's card offers that install the first time a proposal needs it (`exo-dcc.10`).
 - **Claim all seven links as Muster's scope, with §5's columns.** Never present the
   "Ahead" column as shipped.
-- **Not "mixnet integrated"** until `exo-dcc.4` says so.
+- **The mixnet, in these words only** (`exo-dcc.4`, `docs/labbook/mixnet-on-delivery-03.md`): "Muster can send a room's messages through the Logos mixnet. It is an opt-in setting, built on Logos Delivery 0.3's sender anonymity. It hides which participant sent a message, not who reads a room: reading still asks a store node for the room directly."
+  - Never "mixnet integrated" without that qualifier.
+  - Never "metadata-private", never on by default, and never that it protects against the network operator.
 - **"No new token" holds only if `exo-dcc.2` lands.**
 - **"The user chooses to share a receipt" fits.** In v1 the receipt is the room's signed
   record. A Monero tx proof is upstream ask 3.
