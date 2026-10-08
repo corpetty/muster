@@ -55,6 +55,23 @@ Item {
         onTriggered: settings.backend.loadRlnStatus()
     }
 
+    // This node's mix row (mix_status, exo-dcc.4), from the connectivity rows: present
+    // only while the node's sends are asked to ride the mixnet; {} otherwise.
+    readonly property var mix: {
+        try {
+            var rows = (JSON.parse(backend ? backend.connectivityJson : "{}") || ({})).rows || [];
+            for (var i = 0; i < rows.length; i++) if (rows[i].key === "mix") return rows[i];
+        } catch (e) {}
+        return ({});
+    }
+    Timer {
+        interval: 5000
+        repeat: true
+        triggeredOnStart: true
+        running: settings.visible && !!settings.backend
+        onTriggered: settings.backend.loadConnectivity()
+    }
+
     // The official EVM keystore row (keystore_status, exo-149.1 K1): {level, detail,
     // remedy?, identity?, approvers, accounts:[{address, label, wallet}]}; {} until the
     // first read lands. keystore_module holds the EVM keys; muster only asks.
@@ -514,6 +531,98 @@ Item {
                             variant: LogosButton.Variant.Secondary
                             onClicked: if (settings.backend) settings.backend.setSetting("delivery", "logos.test")
                         }
+                    }
+
+                    // ── the mixnet for sends (exo-dcc.4) ──
+                    // Delivery's sender anonymity: each send goes over three mix hops to an
+                    // exit that publishes it. It carries sends only, and the text says so.
+                    LogosText {
+                        Layout.topMargin: Theme.spacing.small
+                        text: qsTr("MIXNET FOR SENDS")
+                        color: Theme.palette.textTertiary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                        font.weight: Theme.typography.weightMedium
+                    }
+                    LogosText {
+                        objectName: "settingsMixNow"
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        // the level the next node is asked for differs from the setting only
+                        // when the delivery config names its own (or turns mix off)
+                        readonly property string level: String((settings.s && settings.s.mix) || "off")
+                        readonly property string asked: String((settings.s && settings.s.mixAsked) || "")
+                        text: qsTr("now: %1").arg(level)
+                              + ((asked.length > 0 && asked.toLowerCase() !== (level === "off" ? "none" : level))
+                                 ? qsTr("  ·  the delivery config asks for %1 itself").arg(asked) : "")
+                        color: Theme.palette.textSecondary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                    RowLayout {
+                        spacing: Theme.spacing.small
+                        LogosButton {
+                            objectName: "settingsMixOff"
+                            text: qsTr("Off")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: if (settings.backend) settings.backend.setSetting("mix", "off")
+                        }
+                        LogosButton {
+                            objectName: "settingsMixPreferred"
+                            text: qsTr("Preferred")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: if (settings.backend) settings.backend.setSetting("mix", "preferred")
+                        }
+                        LogosButton {
+                            objectName: "settingsMixRequired"
+                            text: qsTr("Required")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: if (settings.backend) settings.backend.setSetting("mix", "required")
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: !!settings.mix.detail
+                        spacing: Theme.spacing.small
+                        Rectangle {
+                            Layout.alignment: Qt.AlignTop
+                            Layout.topMargin: 5
+                            Layout.preferredWidth: 8
+                            Layout.preferredHeight: 8
+                            radius: 4
+                            color: settings.mix.level === "ok" ? Theme.palette.success
+                                 : settings.mix.level === "warn" ? Theme.palette.warning
+                                 : settings.mix.level === "down" ? Theme.palette.error
+                                 : Theme.palette.textTertiary
+                        }
+                        LogosText {
+                            objectName: "settingsMixDetail"
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: String(settings.mix.detail || "")
+                            color: Theme.palette.textSecondary
+                            font.pixelSize: Theme.typography.secondaryText
+                        }
+                    }
+                    LogosText {
+                        Layout.fillWidth: true
+                        visible: !!settings.mix.remedy
+                        wrapMode: Text.WordWrap
+                        text: String(settings.mix.remedy || "")
+                        color: Theme.palette.warning
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                    LogosText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: qsTr("Preferred and Required send each room message through the Logos mixnet: three mix hops, "
+                                 + "then an exit that publishes it, so the relay and store nodes do not learn which node sent it. "
+                                 + "Preferred takes the plain path when the mixnet cannot carry a send; Required never does, so "
+                                 + "that send fails. The mixnet carries sends only: reading a room still asks a store node for "
+                                 + "the room's topic from this node's own address. On logos.dev most mix nodes are the fleet "
+                                 + "operator's, who also runs the store nodes. Applies from the next room you join.")
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: Theme.typography.badgeText
                     }
 
                     // ── RLN membership (exo-eb6.3) ──

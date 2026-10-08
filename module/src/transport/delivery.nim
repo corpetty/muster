@@ -69,6 +69,7 @@ type
     catchup: StoreCatchup                         ## store peers (all entryNodes; none disables catchup) + each topic's paging
     storeQueue: InboundQueue                      ## async store-query responses land here; poll() parses them
     lastCatchupMs: int64                          ## throttle: only re-query the store every gCatchupPeriodMs
+    asked: string                                 ## the anonymityLevel createNode was given (exo-dcc.4)
 
 proc invoke(t: DeliveryTransport, meth, argsJson: string): JsonNode =
   ## One synchronous inter-module call. Returns the result JSON (or nil on error).
@@ -130,10 +131,11 @@ proc onStoreResult(ok: cint, json: cstring, userData: pointer) {.cdecl, gcsafe.}
   if userData == nil or json == nil: return
   cast[DeliveryTransport](userData).storeQueue.enqueue(json)
 
-proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000): DeliveryTransport =
+proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000, mix = mixOff): DeliveryTransport =
   ## Bind a client to delivery_module, boot its node, and open the single
   ## messageReceived subscription. `nodeConfigJson` is delivery's createNode config
-  ## (the user-configurable endpoint set — invariant 8 lives in this string).
+  ## (the user-configurable endpoint set — invariant 8 lives in this string); `mix` is
+  ## the mix setting, which asks delivery to send through the mixnet (exo-dcc.4).
   result = DeliveryTransport(handlers: initTable[string, seq[MessageHandler]](),
                              timeoutMs: cint(timeoutMs))
   initInboundQueue(result.queue)             # ready before any callback can fire
@@ -147,7 +149,8 @@ proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000): DeliveryTra
   # the node logs at INFO unless MUSTER_DELIVERY_LOG names a level (exo-9eed): DEBUG is
   # many lines a second, into the host's uncapped log
   let nc = nodeConfigFor(nodeConfigJson, quic = getEnv("MUSTER_DELIVERY_QUIC") == "1",
-                         logLevel = getEnv("MUSTER_DELIVERY_LOG", "INFO"))
+                         logLevel = getEnv("MUSTER_DELIVERY_LOG", "INFO"), mix = mix)
+  result.asked = anonymityOf(nc.createNode)
   result.catchup = newStoreCatchup(nc.storePeers)
   if gLpDebug: stderr.writeLine("MUSTER-LP creating delivery client (mode=" & $lp_get_mode() & ")")
   result.client = lp_client_create("delivery_module", "muster_module", nil, nil)
@@ -351,6 +354,23 @@ method nodeInfo*(t: DeliveryTransport): string {.gcsafe.} =
   ## (node not up / unreachable), so a down node reads as down, never a false green.
   try: $t.invoke("getNodeInfo", "[]")
   except CatchableError: "{}"
+
+method mixInputs*(t: DeliveryTransport): MixInputs {.gcsafe.} =
+  ## The node's mix path (exo-dcc.4): the level createNode was given, the mix key the
+  ## node mounted (getNodeInfo MyMixPubKey: "" when mix is not mounted), its metrics
+  ## (the mix_pool_size gauge) and its connection status (Required reports Disconnected
+  ## until a mix exit is ready). All local to the module, no network; asked only when a
+  ## level above None was given.
+  result = MixInputs(asked: t.asked, joined: t.nodeStarted == 1)
+  if t.asked == "None" or t.nodeStarted != 1: return
+  try:
+    let k = t.invoke("getNodeInfo", $(%*["MyMixPubKey"]))
+    if k != nil and nodeInfoOk($k): (result.pubKeyRead = true; result.pubKey = $k)
+    let m = t.invoke("getNodeInfo", $(%*["Metrics"]))
+    if m != nil and nodeInfoOk($m): result.metrics = $m
+    let c = t.invoke("getConnectionStatus", "[]")
+    if c != nil and nodeInfoOk($c): result.connection = $c
+  except CatchableError: discard
 
 proc close*(t: DeliveryTransport) =
   ## Release the subscription + client and drop the GC anchor.
