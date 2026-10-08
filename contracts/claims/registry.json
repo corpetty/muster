@@ -72,12 +72,12 @@
       "step": "open-room",
       "kind": "gap",
       "title": "The store node still sees the conversation graph",
-      "body": "Content is encrypted, but a store node still sees the room's content topic, the timing and size of publishes and fetches, and each frame's kind — so that someone asked to join, and how many members an admit re-keyed — the conversation graph, pseudonymously. It never sees who is in the room (FS-7). This surface names that limit rather than claiming to hide it (FS-9).",
-      "fix": "route through the Logos transport-layer mixnet, which unlinks the subscription set and timing from the reader",
-      "status": "specified",
-      "spec_stage": "raw (LOGOS-MIXNET, send-only proof-of-concept)",
+      "body": "Content is encrypted, but a store node still sees the room's content topic, the timing and size of publishes and fetches, and each frame's kind — so that someone asked to join, and how many members an admit re-keyed — the conversation graph, pseudonymously. Reading is the half no setting hides yet: each fetch names the room's topic from the reader's own address. It never sees who is in the room (FS-7). This surface names that limit rather than claiming to hide it (FS-9).",
+      "fix": "route through the Logos transport-layer mixnet. Sends can ride it now: delivery 0.3's sender anonymity, behind muster's mix setting (off by default), takes each publish over three mix hops to an exit, so a store node that does not also run the path's mix nodes no longer learns which node published. Fetches, the store queries that name a room's topic from the reader's own address, have no mix path; and on logos.dev most mix nodes are run by the store nodes' own operator",
+      "status": "partial",
+      "spec_stage": "raw (LOGOS-MIXNET); delivery 0.3 ships sender anonymity, send-only, no cover traffic (docs/labbook/mixnet-on-delivery-03.md)",
       "credibility": "exposed",
-      "party": "the store node operator (sees which topics a client subscribes to, and when it publishes and fetches, each frame's size and kind)"
+      "party": "the store node operator (sees which topics a client fetches, and when; which topics it publishes to, and when, unless the mix setting is on; each frame's size and kind)"
     },
     {
       "step": "propose",

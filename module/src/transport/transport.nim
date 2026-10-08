@@ -19,7 +19,8 @@
 import std/[tables, sets]
 import ../hashing/sha256
 import ../security/levels
-export levels
+import ./mix_status
+export levels, mix_status
 
 type
   IncomingMessage* = object
@@ -86,6 +87,11 @@ method rlnState*(t: Transport): string {.base, gcsafe.} =
   ## rlnState() reply, raw (transport/rln_status.parseRlnState reads it). "" when the
   ## transport has no node, as the in-process LocalTransport never does.
   ""
+
+method mixInputs*(t: Transport): MixInputs {.base, gcsafe.} =
+  ## What the transport's node reports about its mix path (exo-dcc.4), for
+  ## mix_status.mixRow. The in-process LocalTransport has no node and never mixes.
+  MixInputs(asked: "None")
 
 # ── content address ───────────────────────────────────────────────────────────
 

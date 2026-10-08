@@ -30,6 +30,8 @@ import ../src/intents/signing_payload
 import ../src/intents/lifecycle
 import logos_sdk/ffi                  # the lp_* inter-module call binding (protocol ABI, shared SDK)
 import ../src/transport/delivery      # DeliveryTransport (transport over lp_*)
+import ../src/transport/node_config   # the mix setting → createNode's anonymityLevel (exo-dcc.4)
+import ../src/transport/mix_status    # …and the node's mix path as a status row
 import ../src/crypto/epoch_crypto     # EpochCrypto (ECIES-secp256k1 + libsodium AEAD)
 import ../src/crypto/keystore         # persistent module identity (FS-4)
 import ../src/coordination/session    # the multi-instance coordination flow
@@ -306,6 +308,12 @@ proc deliveryConfigFor(v: string): string =
   v
 
 var gDeliveryConfig = deliveryPreset(DefaultFleet)   ## the room works with no env/flags
+var gMix = mixOff
+  ## whether this node sends through the mixnet (exo-dcc.4): off (delivery's default),
+  ## preferred, required. Applies to the next room joined, like the delivery setting.
+  ## Off by default: mix carries sends only, and Preferred adds a send's mix round trip
+  ## (docs/labbook/mixnet-on-delivery-03.md).
+var gMixSaved = false               ## did the user persist a mix choice? (else MUSTER_MIX/default)
 
 # Persist the infra settings beside the keystore, so a user's chosen endpoints
 # survive a restart. Best-effort — a missing/malformed file leaves the defaults.
@@ -345,7 +353,16 @@ proc loadSettingsFile() =
       if j.hasKey("delivery"):
         gDeliveryConfig = deliveryConfigFor(j["delivery"].getStr())
         gDeliverySaved = true
+      if j.hasKey("mix"):
+        let (ok, m) = parseMixLevel(j["mix"].getStr())
+        if ok: (gMix = m; gMixSaved = true)
   except CatchableError: discard
+  # MUSTER_MIX (off | preferred | required) sets the mix level for a runner or a
+  # self-test, as MUSTER_DELIVERY_CONFIG does the config; a saved setting wins.
+  let envMix = getEnv("MUSTER_MIX")
+  if envMix.len > 0 and not gMixSaved:
+    let (ok, m) = parseMixLevel(envMix)
+    if ok: gMix = m
   # A host/runner can still point every instance at a specific bootstrap set via
   # MUSTER_DELIVERY_CONFIG (a full createNode JSON or a fleet short-name), the way
   # `make run-fleet` does. It applies only when the user has NOT persisted a delivery
@@ -360,7 +377,9 @@ proc saveSettingsFile() =
     createDir(parentDir(settingsPath()))
     # the Bitcoin node URL may carry its RPC credentials — kept beside the keystore,
     # like a bitcoin.conf, and never shown back (settings() redacts them)
-    writeFile(settingsPath(), $(%*{"rpc": gRpcUrl, "delivery": gDeliveryConfig, "relayer": gRelayer,
+    writeFile(settingsPath(), $(%*{"rpc": gRpcUrl, "delivery": gDeliveryConfig,
+                                   # only a level the user chose: one from MUSTER_MIX stays the runner's
+                                   "mix": (if gMixSaved: $gMix else: ""), "relayer": gRelayer,
                                    "evmChains": gEvmChains, "btcRpc": gBtcRpc, "lezRpc": gLezRpc, "lezChain": gLezChain,
                                    "lezMultisigProgram": gLezProgram,
                                    "keystoreBackend": gKeystoreBackend,
@@ -829,7 +848,7 @@ proc musterCoordinateJoin(topic: string): string =
   if ctopic in gSessions:
     gSession = gSessions[ctopic]          # re-activate an already-joined room
   else:
-    gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(ks), ctopic)
+    gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig, mix = gMix), newEpochCrypto(ks), ctopic)
     gSessions[ctopic] = gSession
   gTopic = ctopic
   # Remember the room beside the keystore, so a relaunch re-enters it (exo-ecbe).
@@ -877,7 +896,7 @@ proc inboxSessionFor(ctopic: string): CoordinationSession =
   ## which would tell the topic when its owner is online (exo-661.7).
   gInboxTopics.incl ctopic
   if ctopic in gSessions: return gSessions[ctopic]
-  let s = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochJoiner(moduleKeystore()), ctopic)
+  let s = newCoordinationSession(newDeliveryTransport(gDeliveryConfig, mix = gMix), newEpochJoiner(moduleKeystore()), ctopic)
   gSessions[ctopic] = s
   s
 
@@ -893,7 +912,7 @@ proc restoreJoinedRooms(): seq[string] =
   let ks = moduleKeystore()
   for ctopic in loadJoinedRooms(joinedRoomsPath()):
     if ctopic in gSessions or ctopic in gInboxTopics: continue
-    let s = newCoordinationSession(newDeliveryTransport(gDeliveryConfig), newEpochCrypto(ks), ctopic)
+    let s = newCoordinationSession(newDeliveryTransport(gDeliveryConfig, mix = gMix), newEpochCrypto(ks), ctopic)
     gSessions[ctopic] = s
     s.announceBeacon()
     result.add ctopic
@@ -2963,6 +2982,21 @@ proc rlnRowNow(): JsonNode =
   if gRlnProbe == nil: gRlnProbe = newRlnProbe()
   rlnRow(gRlnProbe.read(preset, gRlnNode.state, gRlnNode.message))
 
+# ── the node's mix path (exo-dcc.4) ─────────────────────────────────────────────
+var gMixIn: MixInputs
+var gMixAt = 0.0
+
+proc mixRowNow(): JsonNode =
+  ## This node's mix row: what the active room's node reports (asked at most every 5 s:
+  ## the metrics reply is the node's whole metrics text), or, before a room is joined,
+  ## the level the next node will be asked for.
+  if gSession == nil:
+    gMixIn = MixInputs(asked: anonymityOf(nodeConfigFor(gDeliveryConfig, mix = gMix).createNode))
+  elif epochTime() - gMixAt > 5.0:
+    gMixIn = gSession.mixInputs()
+    gMixAt = epochTime()
+  mixRow(gMixIn)
+
 proc musterRln_status(): string =
   try: result = $rlnRowNow()
   except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
@@ -3025,6 +3059,9 @@ proc musterConnectivity(): string =
   # logos.test sends nothing without one; elsewhere it is no dependency (exo-428), and
   # rln_status says "not needed" for Settings
   if presetOf(gDeliveryConfig) == RlnPreset: rows.add rlnRowNow()
+  # the node's mix path (exo-dcc.4), only when its sends are asked to ride it
+  let mixRowJ = mixRowNow()
+  if mixRowJ["level"].getStr() != "off": rows.add mixRowJ
   if gSession == nil:
     result = $(%*{"rows": rows})
     lpDebugOnChange("connectivity", result)
@@ -4180,6 +4217,10 @@ proc musterSettings(): string =
     "lez": {"rpc": gLezRpc, "rpcMasked": redactUrl(gLezRpc), "chain": gLezChain,
             "multisigProgram": gLezProgram},
     "delivery": gDeliveryConfig,
+    # the mix setting, and the level the next node is asked for: a delivery config that
+    # names its own level (or turns mix off) wins over the setting (exo-dcc.4)
+    "mix": $gMix,
+    "mixAsked": anonymityOf(nodeConfigFor(gDeliveryConfig, mix = gMix).createNode),
     "keystoreBackend": gKeystoreBackend,
     "environment": "eip155:" & $gDevSafe.chainId.int,   # the wallet's dev chain (CAIP-2)
     "identity": {"address": toHex(ks.address()),
@@ -4248,6 +4289,15 @@ proc musterSetSetting(key, value: string): string =
     # over the env on the next launch.
     gDeliveryConfig = deliveryConfigFor(value)
     gDeliverySaved = true
+  of "mix":
+    # whether this node sends through the mixnet (exo-dcc.4); like "delivery", the NEXT
+    # room joined (or relaunch) boots with it
+    let (ok, m) = parseMixLevel(value)
+    if not ok:
+      return $(%*{"error": "mix is \"off\", \"preferred\" (the mixnet when it can carry a send, " &
+                           "else the plain path) or \"required\" (the mixnet only: a send it cannot carry fails)"})
+    gMix = m
+    gMixSaved = true
   else:
     return $(%*{"error": "unknown setting: " & key})
   saveSettingsFile()         # persist beside the keystore, so it survives a restart

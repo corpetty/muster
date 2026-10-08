@@ -182,6 +182,8 @@ proc securityLevel*(s: CoordinationSession): SecurityLevel = s.crypto.securityLe
 
 proc nodeInfo*(s: CoordinationSession): string = s.transport.nodeInfo()
 proc rlnState*(s: CoordinationSession): string = s.transport.rlnState()
+proc mixInputs*(s: CoordinationSession): MixInputs = s.transport.mixInputs()
+  ## The transport node's mix path (exo-dcc.4), for the mix status row.
   ## The transport node's live view of itself (delivery: getNodeInfo) — for the
   ## connectivity indicators. "{}" for the in-process transport / a down node.
 
