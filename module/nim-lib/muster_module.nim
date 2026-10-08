@@ -311,7 +311,7 @@ proc deliveryConfigFor(v: string): string =
 var gDeliveryConfig = deliveryPreset(DefaultFleet)   ## the room works with no env/flags
 var gMix = mixOff
   ## whether this node sends through the mixnet (exo-dcc.4): off (delivery's default),
-  ## preferred, required. Applies to the next room joined, like the delivery setting.
+  ## preferred, required. Applies the next time Muster starts: one delivery node per run (exo-dcc.12).
   ## Off by default: mix carries sends only, and Preferred adds a send's mix round trip
   ## (docs/labbook/mixnet-on-delivery-03.md).
 var gMixSaved = false               ## did the user persist a mix choice? (else MUSTER_MIX/default)
@@ -849,7 +849,9 @@ proc musterCoordinateJoin(topic: string): string =
   if ctopic in gSessions:
     gSession = gSessions[ctopic]          # re-activate an already-joined room
   else:
-    gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig, mix = gMix), newEpochCrypto(ks), ctopic)
+    # Joining by name founds this member's own epoch 0 on the topic, under a key derived
+    # from the keystore and the room (exo-7b3): a relaunch's catch-up opens it again.
+    gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig, mix = gMix), newEpochCrypto(ks, ctopic), ctopic)
     gSessions[ctopic] = gSession
   gTopic = ctopic
   # Remember the room beside the keystore, so a relaunch re-enters it (exo-ecbe).
@@ -913,7 +915,9 @@ proc restoreJoinedRooms(): seq[string] =
   let ks = moduleKeystore()
   for ctopic in loadJoinedRooms(joinedRoomsPath()):
     if ctopic in gSessions or ctopic in gInboxTopics: continue
-    let s = newCoordinationSession(newDeliveryTransport(gDeliveryConfig, mix = gMix), newEpochCrypto(ks), ctopic)
+    # The same founding epoch coordinate_join made, derived again (exo-6dc.1): the room's
+    # pre-admit history opens on relaunch, not only the epochs granted since.
+    let s = newCoordinationSession(newDeliveryTransport(gDeliveryConfig, mix = gMix), newEpochCrypto(ks, ctopic), ctopic)
     gSessions[ctopic] = s
     s.announceBeacon()
     result.add ctopic

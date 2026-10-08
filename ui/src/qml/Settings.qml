@@ -620,7 +620,7 @@ Item {
                                  + "Preferred takes the plain path when the mixnet cannot carry a send; Required never does, so "
                                  + "that send fails. The mixnet carries sends only: reading a room still asks a store node for "
                                  + "the room's topic from this node's own address. On logos.dev most mix nodes are the fleet "
-                                 + "operator's, who also runs the store nodes. Applies from the next room you join.")
+                                 + "operator's, who also runs the store nodes. Applies the next time Muster starts.")
                         color: Theme.palette.textTertiary
                         font.pixelSize: Theme.typography.badgeText
                     }
@@ -827,8 +827,8 @@ Item {
                         Layout.fillWidth: true
                         Layout.topMargin: 2
                         wrapMode: Text.WordWrap
-                        text: qsTr("RPC applies to the wallet/Safe path on next use; delivery config applies to "
-                                 + "the next room you join. Saved beside your keystore (settings.json), so they survive a restart; inside basecamp the platform's own settings are the eventual home.")
+                        text: qsTr("RPC applies to the wallet/Safe path on next use; delivery config applies the "
+                                 + "next time Muster starts (one node per run). Saved beside your keystore (settings.json), so they survive a restart; inside basecamp the platform's own settings are the eventual home.")
                         color: Theme.palette.textTertiary
                         font.pixelSize: Theme.typography.badgeText
                     }

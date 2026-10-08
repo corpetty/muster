@@ -59,10 +59,10 @@ echo "0. content-addressed intent id OK (", id, ")"
 # The room: Alice and Bob share an epoch (their room identity is their Safe key).
 let net = newLocalNetwork()
 let bobMem = bobKs.encIdentity()
-let aliceCrypto = newEpochCrypto(aliceKs, @[bobMem])
+const topic = "/muster/1/safe-5FbD/proto"
+let aliceCrypto = newEpochCrypto(aliceKs, topic, @[bobMem])
 let bobCrypto = newEpochJoiner(bobKs)
 bobCrypto.ingestGrant(aliceCrypto.grantFor(0, bobMem))
-const topic = "/muster/1/safe-5FbD/proto"
 let alice = newCoordinationSession(newLocalTransport(net), aliceCrypto, topic)
 let bob = newCoordinationSession(newLocalTransport(net), bobCrypto, topic)
 

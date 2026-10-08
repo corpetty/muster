@@ -52,10 +52,10 @@ let mat = canonicalize(drv, effectFromJson(effectJson))
 # The shared room.
 let net = newLocalNetwork()
 let bobEnc = bobKs.encIdentity()
-let aliceCrypto = newEpochCrypto(aliceKs, @[bobEnc])
+const topic = "/muster/1/invoke-demo/proto"
+let aliceCrypto = newEpochCrypto(aliceKs, topic, @[bobEnc])
 let bobCrypto = newEpochJoiner(bobKs)
 bobCrypto.ingestGrant(aliceCrypto.grantFor(0, bobEnc))
-const topic = "/muster/1/invoke-demo/proto"
 let alice = newCoordinationSession(newLocalTransport(net), aliceCrypto, topic)
 let bob = newCoordinationSession(newLocalTransport(net), bobCrypto, topic)
 

@@ -172,7 +172,7 @@ block:
   let net = newLocalNetwork()
   let vMem = victorKs.encIdentity()
   let mMem = malloryKs.encIdentity()
-  let aliceCrypto = newEpochCrypto(aliceKs, @[vMem, mMem])
+  let aliceCrypto = newEpochCrypto(aliceKs, roomA, @[vMem, mMem])
   let victorCrypto = newEpochJoiner(victorKs)
   let malloryCrypto = newEpochJoiner(malloryKs)
   victorCrypto.ingestGrant(aliceCrypto.grantFor(0, vMem))

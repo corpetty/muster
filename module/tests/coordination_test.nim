@@ -30,7 +30,7 @@ const topic = "/muster/1/room-1/proto"
 let net = newLocalNetwork()
 
 # The room: Alice founds epoch 0 with Bob and Dave; both are granted the key.
-let aliceCrypto = newEpochCrypto(aliceKs, @[bobMem, daveMem])
+let aliceCrypto = newEpochCrypto(aliceKs, topic, @[bobMem, daveMem])
 let bobCrypto = newEpochJoiner(bobKs)
 bobCrypto.ingestGrant(aliceCrypto.grantFor(0, bobMem))
 

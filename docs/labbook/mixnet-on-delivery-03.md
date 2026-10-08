@@ -193,7 +193,7 @@ Not hidden, mix or no mix:
 - **`mix` setting:** `off` | `preferred` | `required`, off by default.
   - Set it with `set_setting("mix", …)`, or in Settings under "Mixnet for sends".
   - `MUSTER_MIX` sets it for runners and self-tests; a saved choice wins.
-  - It applies to the next room joined, like the delivery setting.
+  - It applies the next time Muster starts: the module boots one delivery node per run (exo-dcc.12), and a second createNode was always refused.
   - `node_config.nim` writes `anonymityLevel` inside `messagingOverrides` beside a preset,
     or at the top of a flat config. With the setting off, `createNode` is unchanged.
   - A delivery config that names its own level, or sets `mix: false`, wins. `settings()`

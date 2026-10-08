@@ -12,6 +12,8 @@
 ## anonymous, which the epoch layer relies on. All primitives are libsodium; the
 ## secret never needs to leave a keystore that holds it.
 
+import nimcrypto/[hmac, sha2]      # HMAC-SHA256: derivedSecret (exo-7b3)
+
 type Curve25519Error* = object of CatchableError
 
 {.push importc, cdecl.}
@@ -65,6 +67,13 @@ proc encFromSeed*(seed: array[32, byte]): EncKeys =
     raise newException(Curve25519Error, "ed25519->x25519 sk conversion failed")
 
 proc identity*(k: EncKeys): EncIdentity = EncIdentity(ed: k.edPk, x: k.xPk)
+
+proc derivedSecret*(k: EncKeys, info: openArray[byte]): array[32, byte] =
+  ## HMAC-SHA256 under this identity's seed (the first half of libsodium's Ed25519
+  ## secret) over `info`: a one-way, single-purpose secret, the same on every launch
+  ## from the same seed. The caller domain-separates `info` (a hash-input record); the
+  ## seed itself never leaves this module.
+  sha256.hmac(k.edSk.toOpenArray(0, 31), info).data
 
 proc toBytes*(id: EncIdentity): seq[byte] =
   ## Wire form: ed25519(32) ++ x25519(32). Fixed length, so it frames cleanly.

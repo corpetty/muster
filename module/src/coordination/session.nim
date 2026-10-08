@@ -190,11 +190,15 @@ proc mixInputs*(s: CoordinationSession): MixInputs = s.transport.mixInputs()
 proc selfIdentity*(s: CoordinationSession): Member = s.crypto.identity()
   ## Our own member key, so the roster can flag which entry is us.
 
-proc pendingBindings*(s: CoordinationSession): seq[LinkStatement] = s.pending
+proc pendingBindings*(s: CoordinationSession): seq[LinkStatement] =
   ## Bindings awaiting an admission decision — the caller verifies each against its
-  ## owner set (F-9, bindingBinds) before deciding, then calls admit.
+  ## owner set (F-9, bindingBinds) before deciding, then calls admit. A relaunch's
+  ## catch-up replays the topic in order, so a request is read before the grant that
+  ## answered it (exo-7b3): anyone the current epoch already holds is not waiting.
+  let members = s.crypto.members()
+  s.pending.filterIt(it.enc notin members)
 
-proc pendingJoins*(s: CoordinationSession): seq[Member] = s.pending.mapIt(it.enc)
+proc pendingJoins*(s: CoordinationSession): seq[Member] = s.pendingBindings().mapIt(it.enc)
 
 proc admit*(s: CoordinationSession, joiner: Member) =
   ## Admit a joiner (an existing member's decision): re-key forward and publish the
