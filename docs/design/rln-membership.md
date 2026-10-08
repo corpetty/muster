@@ -170,3 +170,32 @@ What that flow already does by itself, from the modules' contracts (`liblogos_rl
 **Still open:** Q1, the default fleet, stays `logos.dev` until R4. Q3 asks who funds the
 first payer or gifter: a funded native-LEZ account on the registry's zone, the bridge, or a
 public gifter.
+
+## 7. For the Monero campaign (exo-dcc.2): which network the demo runs on
+
+Status: **options for the operator, 2026-10-08.** The campaign promises no new token, so a participant must never need LEZ to chat.
+
+**Facts:**
+- Muster already defaults to `logos.dev` (no RLN). Proof validation on `logos.test`, from about 2026-10-14, changes nothing for Muster unless we move.
+- No public RLN gifter runs today. The standalone allocation service is an open Logos deliverable: logos-co/anoncomms-pm#81.
+- `logos-rln-gifter` exists. A funded gifter registers memberships on clients' behalf. A client authenticates with a pluggable vector (Keycard, or an EIP-191 signature against an allowlist), never holds funds, and keeps its identity secret.
+- A registration spends about 7.5×10⁷ native LEZ on the registry's zone ("LEZ classic", `209.38.241.182:3240`). The rest of the 1.8×10⁸ reserve is refunded.
+
+**Options:**
+
+1. **Demo on `logos.dev`.** It works today, and nothing needs funding.
+   - Risk: the fleet is "redeployed freely and may break at any time" (§1). A broken fleet on demo day is the failure.
+   - Mitigation: a dry run the day before. `MUSTER_FLEET=local` is a fallback for a demo on one machine.
+2. **Demo on `logos.test`, with a gifter the campaign team runs.** Each participant's node requests a membership.
+   - Our gifter pays for it: about 7.5×10⁷ LEZ per participant, bridged onto LEZ classic.
+   - Strangers can't be allowlisted ahead of time, so a public campaign gifter needs an open vector with a rate limit, which the gifter does not have today. Otherwise the gifter's allowlist is people who announced an Ethereum address (EIP-191).
+   - The chain shows one funder behind every campaign membership, which §6 Q4 accepted.
+   - Needs R2 (one membership active end to end) and R3 (the gifter request from Muster) built first.
+3. **Demo on `logos.test`, with a public Logos gifter.** It needs anoncomms-pm#81 shipped, on a date we don't control.
+
+**Recommendation:**
+- Option 1 for the demo (the plan's day 25–40).
+- Ask the Logos team about #81's date.
+- Build R2/R3 after the demo, so the handover (day 40–60) can move to `logos.test` if a gifter exists by then.
+
+Campaign copy says "on Logos's development network" until then.

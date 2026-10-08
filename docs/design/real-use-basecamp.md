@@ -216,6 +216,12 @@ publishing into the room it came from. This is exo-273, and it is on this epic's
 - **Bitcoin.** No platform key holder or node module for Bitcoin exists in the 0.3.1 catalog.
   `btc.split` and the PSBT families keep muster's key and the user's own node.
 - **LEZ.** Already on the platform (`lez_core`). Its provisioning is exo-44b.
+- **Monero: its own epic, `exo-dcc` (ADR-018, `docs/design/monero-in-rooms.md`).**
+  - The 0.3.1 and 0.3.2 catalogues ship a Monero wallet stack at 0.1.0. It is catalogue-only, not bundled.
+  - `monero_wallet_core_module` (wallet2) is the only key holder. Muster calls `monero_wallet_backend`, and the wallet app (`monero_wallet_ui`) opens wallets and approves sends.
+  - Its default network is stagenet, and it has no multisig.
+  - Muster uses the same posture as the EVM stack here: the platform holds the keys, the person unlocks and approves in the platform's app, and Muster never makes itself approver.
+  - Unlike EVM, the payee's half needs no role: a subaddress per request, and a history read to confirm.
 - **Moving muster's room crypto to `chat_module`.** ADR-010; exo-eb6.5.
 
 ## 7. The plan
