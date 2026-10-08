@@ -310,7 +310,7 @@ proc deliveryConfigFor(v: string): string =
 var gDeliveryConfig = deliveryPreset(DefaultFleet)   ## the room works with no env/flags
 var gMix = mixOff
   ## whether this node sends through the mixnet (exo-dcc.4): off (delivery's default),
-  ## preferred, required. Applies to the next room joined, like the delivery setting.
+  ## preferred, required. Applies the next time Muster starts: one delivery node per run (exo-dcc.12).
   ## Off by default: mix carries sends only, and Preferred adds a send's mix round trip
   ## (docs/labbook/mixnet-on-delivery-03.md).
 var gMixSaved = false               ## did the user persist a mix choice? (else MUSTER_MIX/default)
