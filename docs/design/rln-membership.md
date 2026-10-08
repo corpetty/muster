@@ -199,3 +199,9 @@ Status: **options for the operator, 2026-10-08.** The campaign promises no new t
 - Build R2/R3 after the demo, so the handover (day 40–60) can move to `logos.test` if a gifter exists by then.
 
 Campaign copy says "on Logos's development network" until then.
+
+**Decided (2026-10-08, by the operator): option 2, `logos.test` with a gifter we run.**
+- The design is R3's room gifter (§6): our funded node is in every demo room and serves as its gifter, with the room members' disclosed secp256k1 addresses as the EIP-191 allowlist. Participants never hold LEZ.
+- The gifter's funding lands on LEZ classic, about 7.5×10⁷ per membership. That is the campaign team's cost and is recorded as such.
+- Slices: R2 (one membership active end to end, self-funded), then R3 (the room gifter), then R4 (the default fleet moves to `logos.test`).
+- Campaign copy says "on the Logos testnet" once R4 lands.

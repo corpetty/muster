@@ -1,6 +1,6 @@
 # Monero in Muster rooms: the plan (exo-dcc)
 
-Status: **planned, 2026-10-07.** Epic `exo-dcc`, with its children `exo-dcc.1`–`.10`.
+Status: **planned 2026-10-07. ADR-018 accepted 2026-10-08; the demo runs on `logos.test` with a gifter we run (exo-dcc.2, `rln-membership.md` §7); the catalogue lives in this repo (`catalog/`, exo-dcc.3).** Epic `exo-dcc`, with its children `exo-dcc.1`–`.10`.
 `pb dep tree exo-dcc` shows live status, and `pb ready` shows what can start next.
 
 ## 1. The goal
