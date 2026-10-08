@@ -74,6 +74,9 @@ const LezTokenProgram = "ccc4713e2b5ecdff37b0c67c295369effc04b7e8994eb11c3f410bb
 const LezRecipient = "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c"
 const LezTokenDefinition = "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d"
 const LezModeBFrom = "0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e"
+const XmrStagenet = "monero:76ee3cc98646292206cd3e86f74d88b4"   ## the monero-split fixture's chain (exo-dcc.5)
+## a stagenet subaddress (monero-project tests/functional_tests, as monero_address_test holds it)
+const XmrPayTo = "73LhUiix4DVFMcKhsPRG51QmCsv8dYYbL6GcQoLwEEFvPvkVvc7BhebfA4pnEFF9Lq66hwvLqBvpHjTcqvpJMHmmNjPPBqa"
 ## a Bitcoin payee (bcrt1q… of the BIP-173 example program), as btc_settlement_test pays
 let BtcPayee = encodeSegwitAddress("bcrt", 0, hexToBytes("751e76e8199196d454941c45d1b3a323f1433bd6"))
 
@@ -113,6 +116,7 @@ proc configOf(kind: string): JsonNode =
   of "evm-split": %*{"chain": "eip155:31337", "members": [SplitCreditor, SplitDebtors[0], SplitDebtors[1]]}
   of "lez-split": %*{"chain": "lez:testnet", "members": [SplitCreditor, SplitDebtors[0], SplitDebtors[1]]}
   of "btc-split": %*{"chain": BtcRegtest, "members": [SplitCreditor, SplitDebtors[0], SplitDebtors[1]]}
+  of "monero-split": %*{"chain": XmrStagenet, "members": [SplitCreditor, SplitDebtors[0], SplitDebtors[1]]}
   else: raise newException(ValueError, "no corpus fixture for kind " & kind)
 
 # ── the effects, built as the hosted composers build them ─────────────────────
@@ -227,6 +231,13 @@ proc effectJsonFor(kind, variant: string, d: Driver): string =
     splitEffectJson(BtcRegtest, "BTC", "900000", SplitCreditor,
                     p2wpkhAddress("bcrt", hexToBytes("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")),
                     evenShares("900000", SplitCreditor, @SplitDebtors), "Cabin")
+  of "monero-split/request":
+    # an XMR payment request: two debtors, the creditor not in it (chip in), every share
+    # distinct (one subaddress takes both), in atomic units, paid to the creditor's
+    # subaddress on stagenet
+    splitEffectJson(XmrStagenet, "XMR", "1500000000000", SplitCreditor, XmrPayTo,
+                    evenShares("1500000000000", SplitCreditor, @SplitDebtors, creditorShares = false,
+                               distinctAmounts = true), "Cabin deposit")
   of "btc-split/settle-up":
     # settle up in Bitcoin: two agreed splits between the creditor and one debtor netted,
     # in satoshis — 300000 owed one way, 200000 the other: one payment of 100000, to the
@@ -247,7 +258,8 @@ const Variants* = [
   ("invoke", "module-call"), ("invoke", "lez-transfer"),
   ("btc-p2wsh", "spend"), ("btc-tapscript", "spend"), ("btc-frost", "spend"),
   ("lez-multisig", "transfer"), ("lez-multisig", "vault-init"), ("lez-frost", "transfer"),
-  ("evm-split", "split"), ("evm-split", "settle-up"), ("lez-split", "split"), ("btc-split", "split"), ("btc-split", "settle-up")]
+  ("evm-split", "split"), ("evm-split", "settle-up"), ("lez-split", "split"), ("btc-split", "split"), ("btc-split", "settle-up"),
+  ("monero-split", "request")]
 
 # ── JSON ──────────────────────────────────────────────────────────────────────
 proc cborJson(v: CborValue): JsonNode =

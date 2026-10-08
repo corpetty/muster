@@ -114,7 +114,7 @@ One row per family, generated from the registry (`contracts/families/registry.js
 | `zcash.frost-orchard` | aggregate | partial (t-of-n) | explicit | 2 ⚿ · dkg | reshare | – / – / **shielded** | dedup · optional | – | demo | candidate |
 | `penumbra.threshold` | aggregate | partial (t-of-n) | explicit | 2 ⚿ · dkg | new-address | – / – / **shielded** | dedup · optional | – | production | watch |
 | `monero.multisig` | aggregate | partial (t-of-n) | **none** | 2 ⚿ · dkg | new-address | – / – / **shielded** | dedup · none | – | experimental | reject |
-| `monero.split` | each | same bytes | implicit | 1 · none | fixed | – / – / **shielded** | none · optional | – | draft | candidate |
+| `monero.split` | each | same bytes | implicit | 1 · none | fixed | – / – / **shielded** | none · optional | – | draft | built |
 | `aztec.account-contract` | contract | same bytes | explicit | 1 · deploy | in-place | – / – / **shielded** | dedup · optional | – | experimental | watch |
 | `mpc.threshold-ecdsa` | aggregate | partial (t-of-n) | explicit | 4 ⚿ · dkg | reshare | – / – / public | sequence · none | – | production | candidate |
 | `lez.public-witness` | native | same bytes | **none** | 1 · derive | fixed | spend / spend / public | sequence · none | – | early | candidate |

@@ -19,9 +19,10 @@
 ## tests/profile_test.nim (drift in either direction fails), so the atlas, the doc
 ## and the running driver cannot tell three different stories.
 
-import std/[json, strutils]
+import std/[json, strutils, options]
 import ./driver
 import ../bitcoin/network
+import ../monero/address as xmraddr
 
 type
   Locus* = enum
@@ -145,6 +146,11 @@ proc chainLabel*(chain: string): string =
     except CatchableError: chain
   elif chain.startsWith("lez:") and chain.len > "lez:".len:
     "LEZ " & chain["lez:".len .. ^1]
+  elif chain.startsWith("monero:"):
+    let n = xmraddr.networkOfChain(chain)
+    if n.isNone: chain
+    elif n.get == xmrMainnet: "Monero"
+    else: "Monero " & $n.get
   else: chain
 
 # ── the rules a profile must satisfy to be believed ──────────────────────────

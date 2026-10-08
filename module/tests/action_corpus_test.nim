@@ -20,7 +20,7 @@ const Fixed = ["safe/transfer", "safe/contract-call", "safe/delegatecall",
                "btc-p2wsh/spend", "btc-tapscript/spend", "btc-frost/spend",
                "lez-multisig/transfer", "lez-multisig/vault-init", "lez-frost/transfer",
                "evm-split/split", "evm-split/settle-up", "lez-split/split", "btc-split/split",
-               "btc-split/settle-up"]
+               "btc-split/settle-up", "monero-split/request"]
 const EntryFields = ["kind", "variant", "family", "effectExample", "describe", "environment",
                      "profile", "manifest", "signRefusal"]
 

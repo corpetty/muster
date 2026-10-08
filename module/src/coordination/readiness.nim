@@ -77,6 +77,9 @@ type
     moduleState*: ModuleState  ## a module requirement's state; msNone for any other kind
     install*: string           ## the package to install when installing would help (not
                                ## met, and not installed or cannot say); "" otherwise
+    request*: string           ## an app-to-app intent the card can raise for it ("" = none):
+                               ## monero.wallet.unlock when a Monero wallet must be opened —
+                               ## the wallet app asks for the password, never muster (exo-dcc.5)
 
   Readiness* = object
     declared*: bool
@@ -92,6 +95,8 @@ proc remedyFor*(r: Requirement): string =
   of rqModule:      "install " & r.installPackage() & " from Basecamp's Package Manager"
   of rqEnvironment:
     if r.name.startsWith("bip122:"): "point Settings → Bitcoin node at a node on " & r.name & " (set_setting btc-rpc)"
+    elif r.name.startsWith("monero:"):
+      "open your Monero wallet for " & r.name & " in Monero Wallet: it asks for the password (monero.wallet.unlock)"
     elif r.name.startsWith("lez:"): "point Settings → LEZ sequencer at a node serving " & r.name & " (set_setting lez-rpc, lez-chain)"
     else: "point the RPC setting at a node on " & r.name & " (set_setting rpc)"
   of rqAuthority:
@@ -200,6 +205,8 @@ proc assessReadiness*(m: ActionManifest, p: ReadinessProbe): Readiness =
     else:
       (it.status, it.detail) = grade(p, r)
       if it.status != rdMet: it.remedy = remedyFor(r)
+      if it.status != rdMet and r.kind == rqEnvironment and r.name.startsWith("monero:"):
+        it.request = "monero.wallet.unlock"
     result.items.add it
     if it.status != rdMet: result.ready = false
     if it.status == rdUnknown: inc result.unknown
@@ -247,6 +254,13 @@ type
                                    ## job (exo-44b), which the remedy names.
     lezRpcUrl*: string             ## the user's LEZ sequencer JSON-RPC ("" = none configured)
     btcRpcUrl*: string             ## the user's Bitcoin node ("" = none configured)
+    moneroWallet*: proc(chain: string): Grade {.gcsafe.}
+                                   ## grade a "monero:<ref>" environment: whether THIS member's
+                                   ## open Monero wallet can vouch for and confirm a request on
+                                   ## that chain (open, on its network, not view-only) — or,
+                                   ## for a debtor, that none is needed (they pay from any
+                                   ## wallet). The host reads wallet_status, cached; nil =
+                                   ## cannot read a Monero wallet → unknown (exo-dcc.5).
     btcProbe*: proc(url: string): tuple[ok: bool, chain: string, detail: string] {.gcsafe.}
                                    ## which chain (CAIP-2) the node serves; nil = the real
                                    ## probeBitcoind (getblockhash 0)
@@ -301,6 +315,9 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
       if not ok: return (rdMissing, "Bitcoin node unreachable: " & detail)
       if chain == name: return (rdMet, detail)
       return (rdMissing, "the Bitcoin node serves " & chain & ", the action needs " & name)
+    if name.startsWith("monero:"):
+      if facts.moneroWallet == nil: return (rdUnknown, "this host cannot read a Monero wallet")
+      return facts.moneroWallet(name)
     if not name.startsWith("eip155:"):
       # a chain (CAIP-2) this host has no probe for
       return (rdUnknown, "this host has no probe for " & name & " yet")
@@ -440,6 +457,7 @@ proc toJson*(it: ReadinessItem): JsonNode =
   result["status"] = %($it.status); result["detail"] = %it.detail; result["remedy"] = %it.remedy
   if it.requirement.kind == rqModule:
     result["moduleState"] = %($it.moduleState); result["install"] = %it.install
+  if it.request.len > 0: result["request"] = %it.request
 proc toJson*(r: Readiness): JsonNode =
   var items = newJArray()
   for it in r.items: items.add it.toJson()

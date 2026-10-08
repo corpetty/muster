@@ -218,7 +218,8 @@ block:
                       ("threshold", %*{"roster": roster, "k": 2}), ("frost", %*{"roster": roster, "k": 2}),
                       ("invoke", %*{"roster": roster, "k": 1}), ("eip191", %*{"signers": owners, "threshold": 1}),
                       ("stub", %*{"rounds": 2, "threshold": 2}),
-                      ("evm-split", %*{"chain": "eip155:31337"}), ("lez-split", %*{"chain": "lez:testnet"})]:
+                      ("evm-split", %*{"chain": "eip155:31337"}), ("lez-split", %*{"chain": "lez:testnet"}),
+                      ("monero-split", %*{"chain": "monero:76ee3cc98646292206cd3e86f74d88b4"})]:
     let r = checkProfileConformance(newDriver(kind, cfg))
     doAssert r.allPass(), kind & " must declare a consistent family profile: failed " & $r.failed()
   echo "10. every driver the registry builds declares a consistent family profile OK"
@@ -262,5 +263,18 @@ block:
   let lr = checkConformance(lezDrv, le, lt, Contribution(bytes: @(edSign(debtors[0], canonicalize(lezDrv, le).bytes))))
   doAssert lr.allPass(), "private split must conform: failed " & $lr.failed()
   echo "11b. the private split conforms too (", lr.checks.len, " checks) OK"
+  # a Monero request (exo-dcc.5): a stagenet subaddress, XMR in atomic units, distinct shares
+  const xs = "monero:76ee3cc98646292206cd3e86f74d88b4"
+  const xp = "73LhUiix4DVFMcKhsPRG51QmCsv8dYYbL6GcQoLwEEFvPvkVvc7BhebfA4pnEFF9Lq66hwvLqBvpHjTcqvpJMHmmNjPPBqa"
+  let xmrDrv = newSplitDriver(MoneroSplitFamily, xs)
+  let xsh = evenShares("600", idHex(creditor), debtors.mapIt(idHex(it)), distinctAmounts = true)
+  let xe = effectFromJson(splitEffectJson(xs, "XMR", "600", idHex(creditor), xp, xsh, "rent"))
+  var xm = xsh
+  xm[0].amount = $(parseInt(xm[0].amount) - 1)
+  let xt = effectFromJson(splitEffectJson(xs, "XMR", "600", idHex(creditor), xp, xm, "rent"))
+  doAssert xmrDrv.signRefusal(xe) == "", xmrDrv.signRefusal(xe)
+  let xr = checkConformance(xmrDrv, xe, xt, Contribution(bytes: @(edSign(debtors[0], canonicalize(xmrDrv, xe).bytes))))
+  doAssert xr.allPass(), "a Monero request must conform: failed " & $xr.failed()
+  echo "11c. a Monero request conforms too (", xr.checks.len, " checks) OK"
 
 echo "conformance_test: all OK"
