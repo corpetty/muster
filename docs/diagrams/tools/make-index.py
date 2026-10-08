@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate index.html — the landing page for the Pages site.
+"""Generate index.html — the diagram index, served at /diagrams/ on the Pages site.
 
 Built from manifest.json rather than written by hand, for the same reason the
 provenance blocks are: a figure and its description maintained in two places
@@ -171,6 +171,8 @@ PAGE = """<!DOCTYPE html>
     font-family: var(--sans); background: var(--paper); color: var(--ink);
     margin: 0 auto; padding: 3rem 1.5rem 5rem; max-width: 1080px; line-height: 1.65;
   }}
+  .home {{ font-family: var(--mono); font-size: .78rem; margin: 0 0 1.4rem; color: var(--muted); }}
+  .home a {{ text-decoration: none; }}
   h1 {{ font-size: 2rem; letter-spacing: -0.5px; margin: 0 0 .3rem; }}
   .sub {{ color: var(--muted); font-size: 1.05rem; margin: 0 0 1.6rem; max-width: 62ch; }}
   h2 {{ font-size: 1.15rem; margin: 0 0 .25rem; }}
@@ -222,12 +224,13 @@ PAGE = """<!DOCTYPE html>
 </head>
 <body>
 
+<p class="home"><a href="../">← Muster</a> · <a href="../atlas/">the action atlas</a></p>
 <h1>Muster — diagrams</h1>
 <p class="sub">Architecture and pipeline figures for <a href="{repo}">Muster</a>, a local-first client for coordinating
 multi-party transactions inside conversations. Every figure declares where its facts came from, and which of its
 content is measured, read from source, or illustrative.</p>
-<p class="sub">Also here: <a href="atlas/">the multisig family atlas</a> — every multisig family muster has
-built, plans, watches or rejected, and exactly how each one differs.</p>
+<p class="sub">Also here: <a href="../atlas/">the action atlas</a> — every action a person can take in Muster,
+and every multisig family it has built, plans, watches or rejected, and exactly how each one differs.</p>
 
 {sections}
 

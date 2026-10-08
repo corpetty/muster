@@ -1,5 +1,10 @@
-# Publish docs/diagrams/ — plus the action atlas at /atlas/, and nothing else — as the
-# Pages site.
+# Publish the Pages site: the landing page (site/index.html) at /, docs/diagrams/ at
+# /diagrams/, the action atlas at /atlas/ — and nothing else. scripts/build-site.sh
+# assembles it; run it locally to see exactly what is published.
+#
+# The landing page (2026-10-08) took the root, which the diagram index held before.
+# The figures and substrates are still copied to the root as well, so every link
+# already posted to them keeps working.
 #
 # The interactive substrates need a page that permits <script>, which forum
 # software does not (docs/diagrams/README.md §3.2). Posts embed the exported
@@ -21,8 +26,11 @@ on:
   push:
     branches: [main]
     paths:
+      - 'site/**'
       - 'docs/diagrams/**'
       - 'docs/design/multisig-atlas.html'
+      - 'scripts/build-site.sh'
+      - 'scripts/check-site-links.py'
       - 'contracts/actions/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
@@ -64,11 +72,10 @@ jobs:
           python3 scripts/check-family-registry.py
           python3 scripts/check-action-corpus.py
 
+      # The landing page at /, the diagrams at /diagrams/ (and at their old root
+      # URLs), the atlas at /atlas/; then every relative link must resolve.
       - name: Assemble the site
-        run: |
-          mkdir -p _site/atlas
-          cp -r docs/diagrams/. _site/
-          cp docs/design/multisig-atlas.html _site/atlas/index.html
+        run: scripts/build-site.sh _site
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

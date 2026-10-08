@@ -30,3 +30,4 @@ ui/flake.lock
 # the probes' Nim closure + libsodium, linked for the spec grader (scripts/grade-specs.sh, exo-a7b)
 module/.probe-env/
 __pycache__/
+_site/

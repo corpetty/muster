@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Muster</title>
+<meta name="description" content="Muster is a local-first client for coordinating multi-party transactions inside private conversations, on the Logos stack. The conversation is the security boundary.">
+<meta property="og:title" content="Muster — do things together, privately">
+<meta property="og:description" content="A local-first client for coordinating multi-party transactions inside private conversations, on the Logos stack.">
+<meta property="og:type" content="website">
+<meta name="color-scheme" content="light dark">
+<!-- The landing page of the Pages site. Hand-written, self-contained: no build step,
+     open it straight from a checkout (links into diagrams/ and atlas/ resolve only in
+     the assembled site — .github/workflows/pages.yml). Every claim here traces to
+     docs/00-vision.md, CLAUDE.md or contracts/claims/registry.json; keep it so. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234B33C4'/%3E%3Ccircle cx='10' cy='16' r='3.2' fill='%23F7F8F5'/%3E%3Ccircle cx='16' cy='10' r='3.2' fill='%23F7F8F5'/%3E%3Ccircle cx='22' cy='16' r='3.2' fill='%23F7F8F5'/%3E%3Ccircle cx='16' cy='22' r='3.2' fill='%23F7F8F5'/%3E%3C/svg%3E">
+<style>
+/* Tokens follow ui/prototype/coordination-prototype-v2.html, as the atlas and the
+   diagram index do: paper/surface/ink, the violet signal, settled green, caution
+   amber, alarm red, and the dark "outside" panel for what the world outside the
+   room sees. */
+:root{
+  --paper:#E4E6E0; --surface:#F7F8F5; --raised:#FFFFFF; --ink:#1A1F1C; --ink-2:#3F4742; --muted:#656E66; --rule:#C6CBC3; --rule-soft:#DADDD7;
+  --signal:#4B33C4; --signal-soft:#EAE6FA; --on-signal:#FFFFFF;
+  --settled:#1E6B52; --settled-soft:#DFEDE6;
+  --caution:#855A06; --caution-soft:#F4EAD5;
+  --alarm:#A32D1E; --alarm-soft:#F6E3DF;
+  --outside:#23282A; --outside-ink:#DCE2DE; --outside-muted:#9AA5A0; --outside-rule:#3A4144; --outside-accent:#8FA3F5;
+  --ui:"Instrument Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:"DM Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --r:10px;
+  --wrap:1160px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --paper:#111412; --surface:#181C19; --raised:#1E2320; --ink:#E3E7E2; --ink-2:#B6BEB8; --muted:#8E978F; --rule:#2F3631; --rule-soft:#252B27;
+    --signal:#A99AF7; --signal-soft:#26213F; --on-signal:#111412;
+    --settled:#6CC4A0; --settled-soft:#15302A;
+    --caution:#E2B25E; --caution-soft:#352A12;
+    --alarm:#F0907F; --alarm-soft:#3A1D19;
+    --outside:#0A0C0B; --outside-ink:#DCE2DE; --outside-muted:#8C9792; --outside-rule:#2A302D; --outside-accent:#9FB0F7;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --paper:#111412; --surface:#181C19; --raised:#1E2320; --ink:#E3E7E2; --ink-2:#B6BEB8; --muted:#8E978F; --rule:#2F3631; --rule-soft:#252B27;
+  --signal:#A99AF7; --signal-soft:#26213F; --on-signal:#111412;
+  --settled:#6CC4A0; --settled-soft:#15302A;
+  --caution:#E2B25E; --caution-soft:#352A12;
+  --alarm:#F0907F; --alarm-soft:#3A1D19;
+  --outside:#0A0C0B; --outside-ink:#DCE2DE; --outside-muted:#8C9792; --outside-rule:#2A302D; --outside-accent:#9FB0F7;
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--ui);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:var(--signal);text-underline-offset:.18em}
+a:hover{text-decoration-thickness:2px}
+:focus-visible{outline:2px solid var(--signal);outline-offset:3px;border-radius:4px}
+img{max-width:100%;display:block}
+.wrap{max-width:var(--wrap);margin:0 auto;padding-inline:16px}
+@media (min-width:720px){.wrap{padding-inline:28px}}
+.mono{font-family:var(--mono)}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0}
+h1,h2,h3{text-wrap:balance;margin:0}
+p{text-wrap:pretty}
+
+/* ---------- top bar ---------- */
+.top{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--paper) 86%,transparent);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--rule-soft)}
+.top .wrap{display:flex;align-items:center;gap:20px;height:56px}
+.brand{display:inline-flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em;color:var(--ink);text-decoration:none;font-size:17px}
+.brand svg{flex:none}
+.top nav{display:flex;gap:4px;margin-left:auto;overflow-x:auto;scrollbar-width:none}
+.top nav::-webkit-scrollbar{display:none}
+.top nav a{color:var(--ink-2);text-decoration:none;font-size:14px;font-weight:500;padding:6px 10px;border-radius:6px;white-space:nowrap}
+.top nav a:hover{background:var(--surface);color:var(--ink)}
+.top nav a.gh{border:1px solid var(--rule);margin-left:4px}
+@media (max-width:760px){.top nav a.sec{display:none}}
+
+/* ---------- hero ---------- */
+.hero{padding:56px 0 64px}
+.hero .wrap{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:56px;align-items:center}
+@media (max-width:920px){.hero .wrap{grid-template-columns:1fr;gap:40px}.hero{padding:36px 0 48px}}
+.hero h1{font-size:clamp(40px,6.4vw,72px);line-height:.98;letter-spacing:-.035em;font-weight:700;margin:14px 0 20px}
+.hero h1 em{font-style:normal;color:var(--signal)}
+.hero .lede{font-size:clamp(17px,1.6vw,19.5px);color:var(--ink-2);max-width:36em;margin:0 0 14px}
+.hero .lede b{color:var(--ink);font-weight:600}
+.ctas{display:flex;flex-wrap:wrap;gap:10px;margin-top:28px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:999px;font-weight:600;font-size:15px;text-decoration:none;border:1px solid var(--rule);color:var(--ink);background:var(--surface);transition:transform .15s,background .15s}
+.btn:hover{background:var(--raised);transform:translateY(-1px);text-decoration:none}
+.btn.primary{background:var(--signal);border-color:var(--signal);color:var(--on-signal)}
+.btn.primary:hover{background:color-mix(in srgb,var(--signal) 88%,#000)}
+.btn .arr{transition:transform .15s}
+.btn:hover .arr{transform:translateX(2px)}
+@media (prefers-reduced-motion: reduce){.btn,.btn .arr{transition:none}.btn:hover,.btn:hover .arr{transform:none}}
+
+/* the room mock */
+.mock{position:relative}
+.room{background:var(--surface);border:1px solid var(--rule);border-radius:16px;box-shadow:0 1px 0 rgba(0,0,0,.02),0 24px 48px -24px rgba(26,31,28,.28);overflow:hidden}
+.room-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--rule-soft)}
+.room-head .name{font-weight:600;font-size:14px}
+.room-head .scope{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap}
+.lock{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--signal-soft);color:var(--signal)}
+.thread{padding:14px 16px 16px;display:flex;flex-direction:column;gap:10px}
+.msg{display:flex;gap:10px;align-items:flex-start;font-size:14px}
+.av{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-family:var(--mono);font-size:9.5px;font-weight:500;color:#fff}
+.bubble{background:var(--paper);border-radius:4px 12px 12px 12px;padding:7px 11px;color:var(--ink-2)}
+.bubble b{color:var(--ink);font-weight:600}
+.icard{border:1px solid var(--signal);background:var(--raised);border-radius:12px;padding:13px 14px 14px;margin-left:36px}
+.icard .k{display:flex;justify-content:space-between;gap:8px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.icard .k .driver{color:var(--signal)}
+.icard h3{font-size:16.5px;letter-spacing:-.01em;margin:6px 0 10px}
+.rail{display:grid;grid-template-columns:repeat(5,1fr);gap:3px;margin-bottom:6px}
+.rail i{height:4px;border-radius:2px;background:var(--rule-soft)}
+.rail i.on{background:var(--signal)}
+.rail i.now{background:linear-gradient(90deg,var(--signal) 50%,var(--rule-soft) 50%)}
+.rail-l{display:grid;grid-template-columns:repeat(5,1fr);gap:3px;font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:11px}
+.rail-l span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rail-l .cur{color:var(--ink)}
+.slots{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:11px}
+.slot{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 9px 3px 4px;border-radius:999px;border:1px dashed var(--rule)}
+.slot .av{width:18px;height:18px;font-size:7.5px}
+.slot.ok{border-style:solid;border-color:var(--settled);background:var(--settled-soft);color:var(--settled)}
+.check{display:flex;gap:8px;align-items:flex-start;font-family:var(--mono);font-size:10.5px;line-height:1.5;color:var(--settled);background:var(--settled-soft);border-radius:6px;padding:7px 9px}
+.check code{font-family:inherit;color:var(--ink)}
+.acts{display:flex;gap:6px;margin-top:11px}
+.acts span{font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:999px;border:1px solid var(--rule);color:var(--ink-2)}
+.acts span.go{background:var(--signal);border-color:var(--signal);color:var(--on-signal)}
+.outside{background:var(--outside);color:var(--outside-ink);padding:12px 16px 14px;font-family:var(--mono);font-size:10.5px;line-height:1.6}
+.outside .t{letter-spacing:.1em;text-transform:uppercase;color:var(--outside-muted);margin-bottom:6px}
+.outside .row{display:flex;flex-wrap:wrap;gap:6px}
+.outside .row span{border:1px solid var(--outside-rule);border-radius:4px;padding:1px 7px}
+.outside .row span.no{color:var(--outside-muted);text-decoration:line-through;text-decoration-color:var(--outside-muted)}
+.mock .caption{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin:10px 4px 0;text-align:right}
+
+/* ---------- sections ---------- */
+section.band{padding:80px 0;border-top:1px solid var(--rule-soft)}
+@media (max-width:720px){section.band{padding:56px 0}}
+.head{max-width:46em;margin-bottom:36px}
+.head h2{font-size:clamp(28px,3.6vw,42px);line-height:1.05;letter-spacing:-.03em;font-weight:700;margin:10px 0 14px}
+.head p{color:var(--ink-2);font-size:17px;margin:0}
+.alt{background:var(--surface)}
+
+/* three layers */
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+@media (max-width:860px){.three{grid-template-columns:1fr}}
+.tile{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);padding:22px 22px 24px}
+.alt .tile{background:var(--paper)}
+.tile .n{font-family:var(--mono);font-size:11px;color:var(--signal);letter-spacing:.08em}
+.tile h3{font-size:19px;letter-spacing:-.015em;margin:8px 0 8px}
+.tile p{margin:0;color:var(--ink-2);font-size:15px}
+
+/* lifecycle */
+.life{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:0;margin:0 0 34px;padding:0;list-style:none;counter-reset:s}
+.life li{position:relative;padding:34px 10px 0 0;font-family:var(--mono);font-size:12.5px;color:var(--ink);counter-increment:s}
+.life li::before{content:"";position:absolute;top:10px;left:0;right:0;height:2px;background:var(--rule)}
+.life li::after{content:"";position:absolute;top:4px;left:0;width:14px;height:14px;border-radius:50%;background:var(--paper);border:2px solid var(--signal)}
+.life li:last-child::after{background:var(--signal)}
+.life li small{display:block;font-family:var(--ui);font-size:13px;color:var(--muted);line-height:1.45;margin-top:4px}
+@media (max-width:860px){
+  .life{grid-template-columns:1fr;gap:0}
+  .life li{padding:0 0 18px 30px}
+  .life li::before{top:0;bottom:0;left:6px;right:auto;width:2px;height:auto}
+  .life li:last-child::before{display:none}
+  .life li::after{top:3px}
+}
+.qs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0;padding:0;list-style:none}
+@media (max-width:960px){.qs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:540px){.qs{grid-template-columns:1fr}}
+.qs li{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);padding:16px 16px 18px}
+.qs li b{display:block;font-size:15.5px;margin-bottom:4px}
+.qs li span{font-size:14px;color:var(--ink-2)}
+.qs li.four{border-color:var(--caution);background:var(--caution-soft)}
+.qs li.four b{color:var(--caution)}
+
+/* comparison */
+.cmp{border:1px solid var(--rule);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.cmp .row{display:grid;grid-template-columns:minmax(0,.62fr) minmax(0,1fr) minmax(0,1fr);border-top:1px solid var(--rule-soft)}
+.cmp .row:first-child{border-top:none}
+.cmp .row > div{padding:14px 16px;font-size:14.5px;color:var(--ink-2)}
+.cmp .row > div:first-child{font-weight:600;color:var(--ink)}
+.cmp .row > div.us{background:color-mix(in srgb,var(--signal-soft) 55%,transparent)}
+.cmp .hd > div{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:500!important;padding-block:11px}
+.cmp .row.hd > div{color:var(--muted)}
+.cmp .row.hd > div.us{color:var(--signal)}
+@media (max-width:760px){
+  .cmp .row{grid-template-columns:1fr}
+  .cmp .hd{display:none}
+  .cmp .row > div{padding:6px 16px}
+  .cmp .row > div:first-child{padding-top:14px}
+  .cmp .row > div:last-child{padding-bottom:14px}
+  .cmp .row > div.us::before,.cmp .row > div.them::before{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+  .cmp .row > div.us::before{content:"Muster on Logos";color:var(--signal)}
+  .cmp .row > div.them::before{content:"Conventional stacks"}
+}
+.fine{font-size:13.5px;color:var(--muted);margin:14px 2px 0;max-width:62em}
+
+/* invariants */
+.inv{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:0;padding:0;list-style:none;counter-reset:i}
+@media (max-width:1080px){.inv{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:760px){.inv{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:480px){.inv{grid-template-columns:1fr}}
+.inv li{counter-increment:i;background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);padding:16px 16px 18px}
+.inv li::before{content:counter(i,decimal-leading-zero);display:inline-grid;place-items:center;height:24px;padding:0 7px;margin-bottom:12px;border-radius:6px;background:var(--signal-soft);color:var(--signal);font-family:var(--mono);font-size:11.5px;font-weight:500}
+.inv b{display:block;font-size:15px;line-height:1.35;margin-bottom:4px}
+.inv span{font-size:14px;color:var(--ink-2);line-height:1.5;display:block}
+
+/* what a room can do */
+.can{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media (max-width:960px){.can{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:600px){.can{grid-template-columns:1fr}}
+.can article{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);padding:18px 18px 20px;display:flex;flex-direction:column}
+.can .loc{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.can h3{font-size:18px;letter-spacing:-.01em;margin:6px 0 6px}
+.can p{margin:0 0 12px;font-size:14.5px;color:var(--ink-2)}
+.can .chains{margin-top:auto;display:flex;flex-wrap:wrap;gap:5px}
+.tag{font-family:var(--mono);font-size:10.5px;padding:2px 8px;border-radius:4px;border:1px solid var(--rule);color:var(--ink-2);background:var(--paper)}
+.tag.built{border-color:var(--settled);color:var(--settled);background:var(--settled-soft)}
+
+/* gaps */
+.gaps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media (max-width:900px){.gaps{grid-template-columns:1fr}}
+.gap{background:var(--outside);color:var(--outside-ink);border-radius:var(--r);padding:20px 20px 22px;display:flex;flex-direction:column}
+.gap .st{align-self:flex-start;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--outside-rule);color:var(--outside-accent);padding:2px 8px;border-radius:4px}
+.gap h3{font-size:17.5px;margin:12px 0 8px;letter-spacing:-.01em}
+.gap p{font-size:14px;color:var(--outside-muted);margin:0 0 10px}
+.gap p b{color:var(--outside-ink);font-weight:600}
+.gap p:last-child{margin-bottom:0}
+
+/* explore */
+.explore{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px}
+@media (max-width:900px){.explore{grid-template-columns:1fr}}
+.door{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--rule);border-radius:14px;overflow:hidden;color:var(--ink);text-decoration:none;transition:border-color .15s,transform .15s}
+.door:hover{border-color:var(--signal);transform:translateY(-2px);text-decoration:none}
+@media (prefers-reduced-motion: reduce){.door{transition:none}.door:hover{transform:none}}
+.door .pic{background:#E4E6E0;border-bottom:1px solid var(--rule);aspect-ratio:16/8.4;overflow:hidden}
+.door .pic img{width:100%;height:100%;object-fit:cover;object-position:top left}
+.door .body{padding:18px 20px 20px}
+.door h3{font-size:21px;letter-spacing:-.02em;margin:6px 0 6px;display:flex;align-items:center;gap:8px}
+.door p{margin:0;color:var(--ink-2);font-size:15px}
+.head p.eyebrow,.door p.eyebrow{font-size:11px;color:var(--muted);margin:0}
+.door .go{color:var(--signal);font-weight:600;font-size:14px;margin-top:12px;display:inline-block}
+.stack{display:grid;gap:16px}
+.door .pic.atlas-pic{background:var(--paper);padding:18px;display:flex;flex-direction:column;gap:8px;justify-content:center}
+.atlas-pic .bar{display:flex;gap:3px;height:46px}
+.atlas-pic .bar i{border-radius:4px;border:1px solid var(--rule);background:var(--surface);display:flex;align-items:flex-end;padding:5px 7px;font-style:normal;font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);min-width:0;overflow:hidden;white-space:nowrap}
+.atlas-pic .bar i.on{background:var(--signal);border-color:var(--signal);color:var(--on-signal)}
+.atlas-pic .rows{display:grid;gap:5px}
+.atlas-pic .rows span{display:flex;gap:8px;align-items:center;font-size:12.5px;background:var(--surface);border:1px solid var(--rule-soft);border-radius:6px;padding:6px 9px;color:var(--ink-2)}
+.atlas-pic .rows span em{font-style:normal;margin-left:auto;font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:1px 6px;border-radius:3px}
+.atlas-pic .rows em.b{color:var(--settled);background:var(--settled-soft)}
+.atlas-pic .rows em.c{color:var(--signal);background:var(--signal-soft)}
+.atlas-pic .rows em.w{color:var(--caution);background:var(--caution-soft)}
+.figs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:16px}
+@media (max-width:900px){.figs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.fig{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);overflow:hidden;text-decoration:none;color:var(--ink);display:flex;flex-direction:column}
+.fig:hover{border-color:var(--signal);text-decoration:none}
+.fig .pic{background:#E4E6E0;aspect-ratio:4/3;overflow:hidden;border-bottom:1px solid var(--rule-soft)}
+.fig .pic img{width:100%;height:100%;object-fit:cover;object-position:top center}
+.fig span{display:block;font-size:13.5px;font-weight:600;padding:10px 12px 12px;line-height:1.35}
+.reading{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:28px}
+.reading a{display:block;padding:14px 16px;border:1px solid var(--rule);border-radius:var(--r);background:var(--surface);text-decoration:none;color:var(--ink)}
+.reading a:hover{border-color:var(--signal)}
+.reading b{display:block;font-size:15px}
+.reading span{font-size:13.5px;color:var(--muted)}
+
+/* status */
+.status{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media (max-width:860px){.status{grid-template-columns:1fr}}
+.status .col{background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);padding:20px 22px}
+.status h3{font-size:16px;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--settled);flex:none}
+.dot.amber{background:var(--caution)}
+.status ul{margin:0;padding-left:18px;color:var(--ink-2);font-size:14.5px}
+.status li{margin-bottom:6px}
+.asof{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:14px}
+
+/* footer */
+footer{border-top:1px solid var(--rule);padding:36px 0 56px;font-size:14px;color:var(--muted)}
+footer .wrap{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center}
+footer nav{display:flex;flex-wrap:wrap;gap:6px 18px;margin-left:auto}
+footer a{color:var(--ink-2)}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="Muster home">
+      <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--signal)"/><circle cx="10" cy="16" r="3.2" fill="var(--paper)"/><circle cx="16" cy="10" r="3.2" fill="var(--paper)"/><circle cx="22" cy="16" r="3.2" fill="var(--paper)"/><circle cx="16" cy="22" r="3.2" fill="var(--paper)"/></svg>
+      Muster
+    </a>
+    <nav aria-label="Site">
+      <a class="sec" href="#how">How it works</a>
+      <a class="sec" href="#guarantees">Guarantees</a>
+      <a class="sec" href="#open">What is open</a>
+      <a href="atlas/">Atlas</a>
+      <a href="diagrams/">Diagrams</a>
+      <a class="gh" href="https://github.com/corpetty/muster">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<!-- ============ hero ============ -->
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <p class="eyebrow">A local-first client on the Logos stack</p>
+      <h1>Do things together, <em>privately.</em></h1>
+      <p class="lede"><b>Muster</b> (v.) — to assemble, as people gathering for a common purpose. Get people into a room, agree on what to do, and do it, without anyone outside the room watching.</p>
+      <p class="lede">Muster coordinates multi-party transactions inside end-to-end encrypted conversations. <b>The conversation is the security boundary:</b> who is in the room decides who can read what is being done.</p>
+      <div class="ctas">
+        <a class="btn primary" href="#how">See how it works <span class="arr" aria-hidden="true">→</span></a>
+        <a class="btn" href="atlas/">Explore the atlas</a>
+        <a class="btn" href="https://github.com/corpetty/muster">Read the code</a>
+      </div>
+    </div>
+
+    <figure class="mock" aria-label="Illustration of a Muster room with a proposal card" style="margin:0">
+      <div class="room">
+        <div class="room-head">
+          <span class="lock" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg></span>
+          <span class="name">Offsite budget</span>
+          <span class="scope">3 members · epoch 2</span>
+        </div>
+        <div class="thread">
+          <div class="msg"><span class="av" style="background:#7A2F63">AN</span><div class="bubble"><b>Ana</b> — Venue wants the deposit today. Proposing it from the team Safe.</div></div>
+          <div class="icard">
+            <div class="k"><span class="driver">Safe · 2 of 3</span><span>proposed by Ana</span></div>
+            <h3>Pay 1.2 ETH to the venue</h3>
+            <div class="rail" aria-hidden="true"><i class="on"></i><i class="now"></i><i></i><i></i><i></i></div>
+            <div class="rail-l"><span>proposed</span><span class="cur">collecting</span><span>executable</span><span>submitted</span><span>final</span></div>
+            <div class="slots">
+              <span class="slot ok"><span class="av" style="background:#7A2F63">AN</span>Ana approved</span>
+              <span class="slot"><span class="av" style="background:#4B33C4">YOU</span>You</span>
+              <span class="slot"><span class="av" style="background:#1E6B52">JO</span>Joe</span>
+            </div>
+            <div class="check"><span aria-hidden="true">✓</span><span>Re-derived <code>safeTxHash</code> from the effect you reviewed. It matches; your key may sign.</span></div>
+            <div class="acts"><span class="go">Approve</span><span>Decline</span></div>
+          </div>
+        </div>
+        <div class="outside">
+          <div class="t">Outside the room · what a store node sees</div>
+          <div class="row"><span>ciphertext</span><span>content topic</span><span>timing &amp; size</span><span class="no">the proposal</span><span class="no">who is in the room</span></div>
+        </div>
+      </div>
+      <figcaption class="caption">An illustration, drawn after the real room card.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ the shape ============ -->
+<section class="band alt" id="how">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">The shape of the product</p>
+      <h2>Start with what you want to do, not with a chat.</h2>
+      <p>A chat app asks <i>who?</i> first. Muster asks what you are doing, and derives the rest: the room, the account, and what each person must bring.</p>
+    </div>
+    <div class="three">
+      <div class="tile">
+        <span class="n">01 · THE SHELL</span>
+        <h3>Who you are, and what you reach</h3>
+        <p>Your keys, your wallets, the plugins you trust, and the infrastructure you point at. RPC endpoints and store nodes are settings — untrusted and chosen by you. No server, no telemetry.</p>
+      </div>
+      <div class="tile">
+        <span class="n">02 · THE INTENTION</span>
+        <h3>Start something</h3>
+        <p>Name what you want to do with a group — pay from a shared account, split a bill. The intention opens the room and asks each person for exactly what it needs.</p>
+      </div>
+      <div class="tile">
+        <span class="n">03 · THE ROOM</span>
+        <h3>Proposals that carry their own proof</h3>
+        <p>Every proposal is a card with its live state. Open it to see the exact bytes you would sign, the domain they bind to, and where each input came from.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ lifecycle ============ -->
+<section class="band" id="lifecycle">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">The lifecycle is the curriculum</p>
+      <h2>Every step of a transaction, made visible.</h2>
+      <p>Muster's first job is education. It walks people through the whole lifecycle of a multi-party transaction, and at each step answers four questions on screen. The teaching client and the real client are the same client: there is no demo mode.</p>
+    </div>
+    <ol class="life">
+      <li>draft<small>Someone writes what the group should do.</small></li>
+      <li>proposed<small>It enters the encrypted room as a card.</small></li>
+      <li>collecting<small>Members review the effect and contribute.</small></li>
+      <li>executable<small>The driver's threshold is met.</small></li>
+      <li>submitted<small>It leaves the room, onto a chain.</small></li>
+      <li>settling<small>The driver says what finality means.</small></li>
+      <li>final<small>Settled, and rebuilt from the log alone.</small></li>
+    </ol>
+    <ul class="qs">
+      <li><b>What just happened?</b><span>The mechanical step, in plain language.</span></li>
+      <li><b>What does Logos protect here?</b><span>What stays inside the room, and which property guarantees it.</span></li>
+      <li><b>Where do others leak?</b><span>The concrete comparison, at the same step, in a conventional stack.</span></li>
+      <li class="four"><b>What is still open?</b><span>The gap at this step, named plainly, with what would close it and its real status.</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ comparison ============ -->
+<section class="band alt" id="compare">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Same step, different stack</p>
+      <h2>Where the information goes.</h2>
+      <p>Coordinating a shared transaction usually means a service in the middle: it holds the proposals, pools the signatures, and sees everything. Muster keeps that work inside the room.</p>
+    </div>
+    <div class="cmp" role="table" aria-label="Muster compared with conventional stacks, by lifecycle stage">
+      <div class="row hd" role="row"><div role="columnheader">Stage</div><div class="us" role="columnheader">Muster on Logos</div><div class="them" role="columnheader">Conventional stacks</div></div>
+      <div class="row" role="row"><div role="rowheader">Compose &amp; propose</div><div class="us" role="cell">The proposal lives in an end-to-end encrypted conversation. Store nodes see ciphertext.</div><div class="them" role="cell">Proposals sit in a coordination service's database, visible to its operator, often behind a public read API.</div></div>
+      <div class="row" role="row"><div role="rowheader">Review</div><div class="us" role="cell">You review the effect. Your client re-derives the bytes to sign and refuses on any mismatch.</div><div class="them" role="cell">Signers approve opaque calldata or a hash they cannot rebuild. Blind signing is the norm.</div></div>
+      <div class="row" role="row"><div role="rowheader">Collect signatures</div><div class="us" role="cell">Signatures travel in the room, bound to environment, account, slot and expiry — worthless anywhere else.</div><div class="them" role="cell">Signatures pool in a central service. Progress, signers and timing are public or visible to the operator.</div></div>
+      <div class="row" role="row"><div role="rowheader">Submit &amp; settle</div><div class="us" role="cell">The card names what became public and what stayed inside. Finality is described by the driver; a reorg shows as a state change.</div><div class="them" role="cell">The coordination history often becomes linkable in indexers. Finality is assumed; a reorg silently rewrites the UI.</div></div>
+      <div class="row" role="row"><div role="rowheader">Membership over time</div><div class="us" role="cell">Each change of members re-keys. A new member cannot read what came before they joined.</div><div class="them" role="cell">Chat and signing membership are separate or unmanaged. Departed members keep the full history.</div></div>
+      <div class="row" role="row"><div role="rowheader">Infrastructure</div><div class="us" role="cell">No server-side state. Store nodes and RPC are untrusted and chosen by you — but untrusted is not blind (see below).</div><div class="them" role="cell">Vendor servers hold application state. Telemetry is on by default.</div></div>
+    </div>
+    <p class="fine">Illustrative, from <a href="https://github.com/corpetty/muster/blob/main/docs/00-vision.md">the vision</a>. Inside the client, every "Logos protects" claim maps to a requirement and a test that fails if it stops being true, held in a claims registry that CI checks.</p>
+  </div>
+</section>
+
+<!-- ============ invariants ============ -->
+<section class="band" id="guarantees">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Ten invariants</p>
+      <h2>Breaking one is a bug, not a trade-off.</h2>
+      <p>Ten rules the code holds, whatever the tests say. Each has a typed spec with acceptance oracles, and probes that run against the module core.</p>
+    </div>
+    <ol class="inv">
+      <li><b>Review the effect; sign the materialization.</b><span>Your client re-derives the bytes from what you reviewed and refuses on mismatch. This check cannot be turned off.</span></li>
+      <li><b>A signature is worthless anywhere else.</b><span>Every signing payload commits to environment, account, slot and expiry.</span></li>
+      <li><b>Plugins never sign.</b><span>They hold no keys and touch no network. They emit typed blocks only.</span></li>
+      <li><b>State = reduce(log).</b><span>Nothing exists that cannot be rebuilt from the log and your keys. Reorder or duplicate events: the state converges.</span></li>
+      <li><b>Deterministic bytes.</b><span>The same value always encodes to the same bytes. Every hash is a domain-separated record.</span></li>
+      <li><b>The core never interprets contributions.</b><span>Drivers do. Rounds, threshold and finality are described by the driver, never hardcoded.</span></li>
+      <li><b>Membership epochs are real.</b><span>Adding a member re-keys forward. They cannot read earlier epochs.</span></li>
+      <li><b>No server, no telemetry.</b><span>Store nodes and RPC endpoints are untrusted, configurable infrastructure.</span></li>
+      <li><b>You speak only for yourself.</b><span>The client tells a member only what another member disclosed. Inside the room, every approval and decline is named.</span></li>
+      <li><b>Nothing is signed whose inputs are unaccounted for.</b><span>Each input to a signature has a recorded origin and log position. If any origin is unknown, signing is refused.</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============ what a room can do ============ -->
+<section class="band alt" id="can">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">What a room can do today</p>
+      <h2>One room, many ways to agree.</h2>
+      <p>The core is driver-generic. A driver says where the threshold lives — in a contract, in a script, in an aggregate key, in an on-chain vote, or with each person paying their own share — and the room coordinates it.</p>
+    </div>
+    <div class="can">
+      <article>
+        <span class="loc">Threshold in a contract</span>
+        <h3>Safe multisig</h3>
+        <p>A 2-of-3 Safe, with every transaction field in the signed hash. A delegatecall is shown and refused unless allowed. Settled on chain by the room.</p>
+        <div class="chains"><span class="tag built">built</span><span class="tag">EVM</span></div>
+      </article>
+      <article>
+        <span class="loc">Threshold in a script</span>
+        <h3>Bitcoin multisig, through PSBT</h3>
+        <p>P2WSH sortedmulti and taproot multi_a. Sign in the app, or export a PSBT to a signer outside Muster and import what comes back.</p>
+        <div class="chains"><span class="tag built">built</span><span class="tag">Bitcoin</span></div>
+      </article>
+      <article>
+        <span class="loc">Threshold in one key</span>
+        <h3>FROST threshold Schnorr</h3>
+        <p>The room runs the key ceremony and both signing rounds over its log. On chain, the spend is one signature — the same as a single signer's.</p>
+        <div class="chains"><span class="tag built">built</span><span class="tag">Bitcoin</span><span class="tag">LEZ</span></div>
+      </article>
+      <article>
+        <span class="loc">Threshold in a vote</span>
+        <h3>LEZ multisig program</h3>
+        <p>Logos's own chain. Each approval is the member's own on-chain vote, read back and confirmed by the room before it counts.</p>
+        <div class="chains"><span class="tag built">built</span><span class="tag">LEZ</span></div>
+      </article>
+      <article>
+        <span class="loc">Each pays their own</span>
+        <h3>Split the bill</h3>
+        <p>One person fronted a bill. Each person agrees to their share and pays it from their own wallet; the creditor's client confirms each payment from its own read. Fiat bills convert exactly.</p>
+        <div class="chains"><span class="tag built">built</span><span class="tag">ETH &amp; ERC-20</span><span class="tag">Bitcoin</span><span class="tag">LEZ, private</span></div>
+      </article>
+      <article>
+        <span class="loc">Each pays their own</span>
+        <h3>Settle up</h3>
+        <p>Net the room's open shares into fewer payments. Every balance is conserved, and every person covered agrees again before anyone pays.</p>
+        <div class="chains"><span class="tag built">built</span><span class="tag">split families</span></div>
+      </article>
+    </div>
+    <p class="fine">The atlas lists every multisig family Muster has surveyed — built, candidate, watched and rejected — and every action a person can take, with who acts, what is signed, and who learns what. <a href="atlas/">Open the atlas →</a></p>
+  </div>
+</section>
+
+<!-- ============ what is open ============ -->
+<section class="band" id="open">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">The fourth question</p>
+      <h2>What Muster does not hide — yet.</h2>
+      <p>A client that ships a real improvement and names its remaining leak teaches more than one that claims the perfect stack already exists. Each gap names the fix and where that fix actually stands.</p>
+    </div>
+    <div class="gaps">
+      <div class="gap">
+        <span class="st">Partial</span>
+        <h3>The store node sees the conversation graph</h3>
+        <p>Content is encrypted. But a store node still sees a room's content topic, and the timing and size of what is published and fetched. It never sees who is in the room.</p>
+        <p><b>The fix:</b> a transport-layer mixnet. Sends can ride it now, behind a setting that is off by default. Fetches have no mix path yet.</p>
+      </div>
+      <div class="gap">
+        <span class="st">Partial</span>
+        <h3>Verified reads trust a state root</h3>
+        <p>A verified balance checks a Merkle proof against a state root — which the client fetches from the RPC you configured, and trusts.</p>
+        <p><b>The fix:</b> a beacon light-client sidecar that verifies the root itself. Deferred on infrastructure.</p>
+      </div>
+      <div class="gap">
+        <span class="st">Not built</span>
+        <h3>Nothing makes anyone pay their share</h3>
+        <p>A split records who agreed and who paid, truthfully. But no contract holds the money: it is a promise the group can see, not one the chain enforces.</p>
+        <p><b>The fix:</b> a split with deposits, each share locked in escrow at agreement.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ explore ============ -->
+<section class="band alt" id="explore">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Explore</p>
+      <h2>Go deeper.</h2>
+      <p>Two references are published here. Both are self-contained pages, and each figure says where its facts came from.</p>
+    </div>
+    <div class="explore">
+      <a class="door" href="atlas/">
+        <div class="pic atlas-pic" aria-hidden="true">
+          <div class="bar"><i style="flex:2">room</i><i class="on" style="flex:3">contract</i><i style="flex:3">native</i><i style="flex:2">vote</i><i style="flex:2">aggregate</i><i style="flex:1">each</i></div>
+          <div class="rows">
+            <span>Safe (v1.4.1 / v1.5.0)<em class="b">built</em></span>
+            <span>Safe via Safe4337Module<em class="c">candidate</em></span>
+            <span>ERC-7579 account + OwnableValidator<em class="w">watch</em></span>
+          </div>
+        </div>
+        <div class="body">
+          <p class="eyebrow">Interactive reference</p>
+          <h3>The Action Atlas</h3>
+          <p>Every action a person can take in Muster: each multisig family and what it lets a room do, every room action, every wallet send. For each: who acts, exactly what is signed, who learns what and when, and what Muster refuses. Built actions are generated from the running code.</p>
+          <span class="go">Open the atlas →</span>
+        </div>
+      </a>
+      <div class="stack">
+        <a class="door" href="diagrams/">
+          <div class="pic"><img src="diagrams/pipeline-seven-stages.png" alt="" loading="lazy"></div>
+          <div class="body">
+            <p class="eyebrow">Figure programme</p>
+            <h3>The diagrams</h3>
+            <p>Architecture, Muster's own guarantees, and the seven-stage pipeline of a transaction — with who is positioned to see what at each stage. Each figure is marked measured, from source, or illustrative.</p>
+            <span class="go">Browse the diagrams →</span>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <div class="figs">
+      <a class="fig" href="diagrams/substrate-pipeline.html"><div class="pic"><img src="diagrams/substrate-pipeline-overview.png" alt="" loading="lazy"></div><span>The pipeline, interactive</span></a>
+      <a class="fig" href="diagrams/mech-effect-materialization.svg"><div class="pic"><img src="diagrams/mech-effect-materialization.png" alt="" loading="lazy"></div><span>What you review vs. what gets signed</span></a>
+      <a class="fig" href="diagrams/mech-membership-epochs.svg"><div class="pic"><img src="diagrams/mech-membership-epochs.png" alt="" loading="lazy"></div><span>Membership epochs</span></a>
+      <a class="fig" href="diagrams/pipeline-negotiation-comparison.svg"><div class="pic"><img src="diagrams/pipeline-negotiation-comparison.png" alt="" loading="lazy"></div><span>A hosted service vs. the encrypted room</span></a>
+    </div>
+
+    <div class="reading">
+      <a href="https://github.com/corpetty/muster/blob/main/docs/00-vision.md"><b>The vision</b><span>Why Muster exists, and the honesty rules that bind every surface.</span></a>
+      <a href="https://github.com/corpetty/muster/blob/main/docs/posts/01-the-pipeline-and-discovery.md"><b>The pipeline and discovery</b><span>The argument, as a post.</span></a>
+      <a href="https://github.com/corpetty/muster/blob/main/docs/01-furps.md"><b>The requirements</b><span>Normative, with stable ids.</span></a>
+      <a href="https://github.com/corpetty/muster/tree/main/contracts/specs"><b>The typed specs</b><span>Each invariant, with its acceptance oracles.</span></a>
+      <a href="https://github.com/corpetty/muster/tree/main/docs/labbook"><b>The labbook</b><span>Traps found the expensive way.</span></a>
+      <a href="https://github.com/corpetty/muster/blob/main/docs/runbooks/client-tour.md"><b>The client tour</b><span>Run it yourself, every chain local.</span></a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ status ============ -->
+<section class="band" id="status">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Where it stands</p>
+      <h2>Real, running, and honest about the rest.</h2>
+      <p>Everything shown is enforced by running code. A Nim core behind a language-neutral contract, and a QML interface, built as Logos modules.</p>
+    </div>
+    <div class="status">
+      <div class="col">
+        <h3><span class="dot"></span>Runs today</h3>
+        <ul>
+          <li>The whole lifecycle in the UI — propose, approve, submit — against a real 2-of-3 Safe.</li>
+          <li>Two instances converge over the live Logos network: join, ask, admit, re-key.</li>
+          <li>Safe, Bitcoin, FROST and the LEZ multisig program, coordinated from the room.</li>
+          <li>Split the bill in ETH, tokens, Bitcoin, and privately on the LEZ.</li>
+          <li>All ten invariants, each held by probes in the test suite.</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h3><span class="dot amber"></span>Still ahead</h3>
+        <ul>
+          <li>The multi-party runs across two machines: a Safe transaction settled over the live network, and resilience when a member drops mid-collection.</li>
+          <li>The LEZ multisig and a FROST ceremony, run across two instances.</li>
+          <li>Every LEZ path live on the v0.3 testnet.</li>
+          <li>A plugin runtime beyond the sandbox.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="asof">As of 2026-10-08 · the current phase is in <a href="https://github.com/corpetty/muster/blob/main/CLAUDE.md#current-phase">CLAUDE.md</a></p>
+    <div class="ctas">
+      <a class="btn primary" href="https://github.com/corpetty/muster#run-the-specified-client">Run the client <span class="arr" aria-hidden="true">→</span></a>
+      <a class="btn" href="https://github.com/corpetty/muster/releases/tag/v0.1.0-demo">The demo release</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span><b style="color:var(--ink)">Muster</b> · built on <a href="https://logos.co">Logos</a></span>
+    <nav aria-label="Footer">
+      <a href="atlas/">Atlas</a>
+      <a href="diagrams/">Diagrams</a>
+      <a href="https://github.com/corpetty/muster">Source</a>
+      <a href="https://github.com/corpetty/muster/blob/main/docs/00-vision.md">Vision</a>
+    </nav>
+  </div>
+</footer>
+
+</body>
+</html>
