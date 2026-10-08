@@ -10,6 +10,12 @@
 ## over the peers so a down node costs one tick. Ingest dedups every overlap (R-2/R-4), and
 ## the log reduces order-independently (inv 4), so re-asking a page is always harmless.
 ##
+## Neither query names both ends of a time range: the history read names no time at all,
+## and the window only where it starts. A delivery v0.3 store node refuses a range whose
+## two ends are more than 24 h apart ("BAD_REQUEST: time range exceeds 24h",
+## logos-delivery#4349), so this keeps every query clear of that rule, and a room of any
+## age is still read from its first message (exo-dcc.12, store_catchup_test §12).
+##
 ## A peer that cannot be dialled is backed off (exo-eb6.1): skipped for 5 s, doubling to
 ## a minute while it keeps failing, cleared by its next answer. Delivery v0.3.0 reports a
 ## dial failure with no requestId, only the peer's id, so the caller passes that id here.
