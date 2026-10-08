@@ -96,3 +96,4 @@
 {"type": "comment", "issue_id": "exo-a90.12", "payload": {"body": "spec: contracts/specs/derived-exo-a90.spec.json"}}
 {"type": "comment", "issue_id": "exo-a90.20", "payload": {"body": "spec: contracts/specs/derived-exo-a90.20.spec.json"}}
 {"type": "comment", "issue_id": "exo-a90.17.6", "payload": {"body": "spec: contracts/specs/derived-exo-a90.17.spec.json"}}
+{"type": "comment", "issue_id": "exo-dcc.5", "payload": {"body": "spec: contracts/specs/derived-exo-dcc.5.spec.json"}}

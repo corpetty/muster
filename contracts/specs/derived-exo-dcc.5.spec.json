@@ -1,0 +1,269 @@
+{
+  "id": "derived-exo-dcc.5",
+  "original_statement": "exo-dcc.5: the XMR payment request (monero.split, ADR-018). A payee requests XMR in a room; each payer pays from any wallet through a monero: link; the payee's own wallet confirms the payment (a subaddress per request, the exact share, 10 confirmations). Muster holds no Monero key and never spends.",
+  "restatement": "Whatever the input, an XMR payment request keeps seven guarantees: (s1) The payment is derived from the agreed request: the monero: link a debtor is shown carries exactly the agreed payTo and that debtor's agreed share, in atomic units, never typed by hand. Any other address or amount is a different link, and nothing else changes it. (s2) payTo is the creditor's own subaddress on the agreed network: the creditor's client refuses to propose or agree to a payTo its own wallet does not list, an address for another network, or an integrated address; no client treats as payable a request whose payTo fails Monero address validation for its chain. (s3) Only the creditor's own wallet read confirms a part: an incoming transfer in its history to payTo's subaddress, of exactly the share, with at least 10 confirmations. A debtor's report, a txid alone, an amount off by one atomic unit, another subaddress, fewer confirmations, or a busy or unread wallet read never confirms it; an unread read is not yet known, never paid and never failed. (s4) One incoming transfer settles one part: a transfer already used to confirm one part never confirms another, and two debtors owing the same amount at the same subaddress are refused at proposal. (s5) The request is final only when every part is confirmed, and every member's client folds the room's events to the same state whatever the order or duplication of events; a report alone never finalizes. (s6) Muster never spends: on the request's paths it calls only the wallet backend's read and mint methods (wallet status, receive info, create subaddress, history, caller identity) and never a method that builds, signs or broadcasts a transfer or changes the wallet's roles. (s7) No confirmation across networks: if the creditor's open wallet is on a different network from the agreed chain, nothing is confirmed from it; a stagenet agreement is never settled by mainnet history, or the reverse.",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "The payment is derived from the agreed request: the monero: link a debtor is shown carries exactly the agreed payTo and that debtor's agreed share, in atomic units, never typed by hand. Any other address or amount is a different link, and nothing else changes it."
+    },
+    {
+      "id": "s2",
+      "text": "payTo is the creditor's own subaddress on the agreed network: the creditor's client refuses to propose or agree to a payTo its own wallet does not list, an address for another network, or an integrated address; no client treats as payable a request whose payTo fails Monero address validation for its chain."
+    },
+    {
+      "id": "s3",
+      "text": "Only the creditor's own wallet read confirms a part: an incoming transfer in its history to payTo's subaddress, of exactly the share, with at least 10 confirmations. A debtor's report, a txid alone, an amount off by one atomic unit, another subaddress, fewer confirmations, or a busy or unread wallet read never confirms it; an unread read is not yet known, never paid and never failed."
+    },
+    {
+      "id": "s4",
+      "text": "One incoming transfer settles one part: a transfer already used to confirm one part never confirms another, and two debtors owing the same amount at the same subaddress are refused at proposal."
+    },
+    {
+      "id": "s5",
+      "text": "The request is final only when every part is confirmed, and every member's client folds the room's events to the same state whatever the order or duplication of events; a report alone never finalizes."
+    },
+    {
+      "id": "s6",
+      "text": "Muster never spends: on the request's paths it calls only the wallet backend's read and mint methods (wallet status, receive info, create subaddress, history, caller identity) and never a method that builds, signs or broadcasts a transfer or changes the wallet's roles."
+    },
+    {
+      "id": "s7",
+      "text": "No confirmation across networks: if the creditor's open wallet is on a different network from the agreed chain, nothing is confirmed from it; a stagenet agreement is never settled by mainnet history, or the reverse."
+    }
+  ],
+  "goal": "A typed spec, derived-exo-dcc.5, with one top-strength acceptance oracle per guarantee of the XMR payment request, graded against the live code by scripts/grade-specs.sh: none of the seven can regress without a spec going red.",
+  "acceptance_criteria": [
+    "The payment is derived from the agreed request: the monero: link a debtor is shown carries exactly the agreed payTo and that debtor's agreed share, in atomic units, never typed by hand. Any other address or amount is a different link, and nothing else changes it.",
+    "payTo is the creditor's own subaddress on the agreed network: the creditor's client refuses to propose or agree to a payTo its own wallet does not list, an address for another network, or an integrated address; no client treats as payable a request whose payTo fails Monero address validation for its chain.",
+    "Only the creditor's own wallet read confirms a part: an incoming transfer in its history to payTo's subaddress, of exactly the share, with at least 10 confirmations. A debtor's report, a txid alone, an amount off by one atomic unit, another subaddress, fewer confirmations, or a busy or unread wallet read never confirms it; an unread read is not yet known, never paid and never failed.",
+    "One incoming transfer settles one part: a transfer already used to confirm one part never confirms another, and two debtors owing the same amount at the same subaddress are refused at proposal.",
+    "The request is final only when every part is confirmed, and every member's client folds the room's events to the same state whatever the order or duplication of events; a report alone never finalizes.",
+    "Muster never spends: on the request's paths it calls only the wallet backend's read and mint methods (wallet status, receive info, create subaddress, history, caller identity) and never a method that builds, signs or broadcasts a transfer or changes the wallet's roles.",
+    "No confirmation across networks: if the creditor's open wallet is on a different network from the agreed chain, nothing is confirmed from it; a stagenet agreement is never settled by mainnet history, or the reverse."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The payment is derived from the agreed request: the monero: link a debtor is shown carries exactly the agreed payTo and that debtor's agreed share, in atomic units, never typed by hand. Any other address or amount is a different link, and nothing else changes it."
+    },
+    {
+      "id": "c2",
+      "text": "payTo is the creditor's own subaddress on the agreed network: the creditor's client refuses to propose or agree to a payTo its own wallet does not list, an address for another network, or an integrated address; no client treats as payable a request whose payTo fails Monero address validation for its chain."
+    },
+    {
+      "id": "c3",
+      "text": "Only the creditor's own wallet read confirms a part: an incoming transfer in its history to payTo's subaddress, of exactly the share, with at least 10 confirmations. A debtor's report, a txid alone, an amount off by one atomic unit, another subaddress, fewer confirmations, or a busy or unread wallet read never confirms it; an unread read is not yet known, never paid and never failed."
+    },
+    {
+      "id": "c4",
+      "text": "One incoming transfer settles one part: a transfer already used to confirm one part never confirms another, and two debtors owing the same amount at the same subaddress are refused at proposal."
+    },
+    {
+      "id": "c5",
+      "text": "The request is final only when every part is confirmed, and every member's client folds the room's events to the same state whatever the order or duplication of events; a report alone never finalizes."
+    },
+    {
+      "id": "c6",
+      "text": "Muster never spends: on the request's paths it calls only the wallet backend's read and mint methods (wallet status, receive info, create subaddress, history, caller identity) and never a method that builds, signs or broadcasts a transfer or changes the wallet's roles."
+    },
+    {
+      "id": "c7",
+      "text": "No confirmation across networks: if the creditor's open wallet is on a different network from the agreed chain, nothing is confirmed from it; a stagenet agreement is never settled by mainnet history, or the reverse."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s1",
+      "proves": "Each case runs the REAL hosted path for a request over a fake Monero backend: network (mainnet, stagenet, testnet) x payTo kind (standard, subaddress) x share (1 atomic unit, 1 XMR, 1.5 XMR, near the u64 maximum) x each of two debtors x two memos. The link each debtor is shown equals makePaymentUri(agreed payTo, that debtor's share) with no description; mutating payTo or the share by one atomic unit changes it, changing the memo does not. Catches a hand-typed or stale amount, rounding (1.5 vs 1.500000000000), the other debtor's share, and the memo leaking into the link.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_xmr_request_uri_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 130,
+      "description": "The payment is derived from the agreed request: the monero: link a debtor is shown carries exactly the agreed payTo and that debtor's agreed share, in atomic units, never typed by hand. Any other address or amount is a different link, and nothing else changes it.",
+      "clause_id": "c1"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s2",
+      "proves": "Each case runs the REAL propose/agree path: payTo in {the creditor's own listed subaddress, another wallet's subaddress, the same subaddress on another network, an integrated address, a corrupted checksum} x {the creditor proposes; a member proposes on the creditor's behalf and the creditor agrees} x three networks. The creditor's propose or agree is accepted iff its own fake wallet lists payTo, the network matches the agreed chain and the kind is not integrated, and every client's payable verdict is false for an invalid payTo. Catches agreement to an address the creditor doesn't hold, a cross-network or integrated payTo, and a payable request with a malformed address.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_xmr_payto_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 40,
+      "description": "payTo is the creditor's own subaddress on the agreed network: the creditor's client refuses to propose or agree to a payTo its own wallet does not list, an address for another network, or an integrated address; no client treats as payable a request whose payTo fails Monero address validation for its chain.",
+      "clause_id": "c2"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s3",
+      "proves": "Each case feeds the REAL confirm path one history row and one wallet read: direction {in, out} x subaddress {payTo's, another} x amount {share-1, share, share+1} x confirmations {0, 9, 10, 11} x failed {no, yes} x read {answered, busy, unreachable} x debtor report {none, the matching txid, an unrelated txid}. The part is confirmed iff the row is in, on payTo's subaddress, exactly the share, with at least 10 confirmations, not failed, and the read answered; a busy or unreachable read leaves the part pending, never confirmed and never released. Catches confirmation on a report, an off-by-one amount, insufficient depth, a busy read taken as paid or as failed.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_xmr_confirm_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 900,
+      "description": "Only the creditor's own wallet read confirms a part: an incoming transfer in its history to payTo's subaddress, of exactly the share, with at least 10 confirmations. A debtor's report, a txid alone, an amount off by one atomic unit, another subaddress, fewer confirmations, or a busy or unread wallet read never confirms it; an unread read is not yet known, never paid and never failed.",
+      "clause_id": "c3"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s4",
+      "proves": "Each case runs the REAL confirm path for a two-part request: history with one txid's row duplicated, one transfer offered to both parts, and a proposal with equal shares on one subaddress. Confirmed parts' references are pairwise distinct and each maps to a transfer of its own exact amount; equal shares on one subaddress are refused at proposal. Catches one payment settling two parts.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_xmr_one_ref_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 20,
+      "description": "One incoming transfer settles one part: a transfer already used to confirm one part never confirms another, and two debtors owing the same amount at the same subaddress are refused at proposal.",
+      "clause_id": "c4"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s5",
+      "proves": "Each case folds a two-debtor request's eight events (propose, three agreements, two paid reports, two confirmations) in one of the 8! orders, with and without every event duplicated, on three members' clients through the REAL fold. Every client reaches the same state; the state is final iff both parts are confirmed; no ordering with reports but no confirmation is final. Catches order-dependent folds and a report finalizing a part.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_xmr_request_convergence_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 81000,
+      "description": "The request is final only when every part is confirmed, and every member's client folds the room's events to the same state whatever the order or duplication of events; a report alone never finalizes.",
+      "clause_id": "c5"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s6",
+      "proves": "Each case drives one hosted step of the request (propose, agree, show the link, report paid, pump ticks, confirm, relaunch) against a recording fake monero_wallet_backend. The methods called are a subset of {wallet_status, receive_info, create_subaddress, history, caller_identity, list_networks, address_valid}; any call to prepare_send, confirm_send, cancel_send, configure, set_*, reveal_*, open_wallet, close_wallet or restore_* fails the case. Catches a path that spends, signs or takes the wallet's roles.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_xmr_no_spend_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 20,
+      "description": "Muster never spends: on the request's paths it calls only the wallet backend's read and mint methods (wallet status, receive info, create subaddress, history, caller identity) and never a method that builds, signs or broadcasts a transfer or changes the wallet's roles.",
+      "clause_id": "c6"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s7",
+      "proves": "Each case runs the REAL confirm path with a perfectly matching history row: agreed chain (mainnet, stagenet, testnet) x the open wallet's network (the three, or no wallet open). The part is confirmed iff the wallet's network equals the agreed chain and the wallet is ready; a mismatch yields the 'your wallet is on another network' remedy, never a confirmation. Catches a stagenet agreement settled by mainnet history, and the reverse.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_xmr_network_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 20,
+      "description": "No confirmation across networks: if the creditor's open wallet is on a different network from the agreed chain, nothing is confirmed from it; a stagenet agreement is never settled by mainnet history, or the reverse.",
+      "clause_id": "c7"
+    }
+  ],
+  "criticality": "catastrophic",
+  "declared_new_entrypoints": [
+    "tests/probes/probe_xmr_request_uri_stepper.nim",
+    "tests/probes/probe_xmr_payto_stepper.nim",
+    "tests/probes/probe_xmr_confirm_stepper.nim",
+    "tests/probes/probe_xmr_one_ref_stepper.nim",
+    "tests/probes/probe_xmr_request_convergence_stepper.nim",
+    "tests/probes/probe_xmr_no_spend_stepper.nim",
+    "tests/probes/probe_xmr_network_stepper.nim"
+  ]
+}
