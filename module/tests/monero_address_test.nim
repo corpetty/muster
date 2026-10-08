@@ -163,7 +163,11 @@ block decodeAddrNegative:
     ("jerj2e4mESo", mrUnknownTag),           # FF 00 …: a varint with a redundant zero byte
     ("1", mrBadBase58), ("1111", mrBadBase58),
     ("11", mrBadLength), ("111", mrBadLength), ("11111", mrBadLength),   # ≤ 4 bytes: no
-    ("111111", mrBadLength), ("999999", mrBadLength), ("ZZZZZZ", mrBadLength)] # room for data
+    ("111111", mrBadLength),                                             # room for data
+    # base58.cpp names these "address_too_short" too, but decode_block refuses them
+    # first: six characters decode to 4 bytes, and "999999" is 8·(58⁶−1)/57 ≈ 5.3·10⁹
+    # ("ZZZZZZ" ≈ 2.1·10¹⁰), both ≥ 2³² — a block overflow.
+    ("999999", mrBadBase58), ("ZZZZZZ", mrBadBase58)]
   for (enc, want) in neg:
     let d = decodeAddr(enc)
     doAssert d.refusal == want, enc.escape & ": want " & $want & ", got " & $d.refusal
