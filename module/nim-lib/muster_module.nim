@@ -3704,6 +3704,11 @@ proc musterCoordinateExecute(intentId: string): string =
     return $(%*{"id": intentId, "error": "bad-effect"})
   if gInvoker == nil: gInvoker = newLpInvoker("muster_module")
   let ex = executeInvoke(gInvoker, invokeAllowlist(), module, meth, argsJson)
+  # the target's reply exactly as lp_invoke handed it over (re-serialized from its parse), so
+  # a host run shows a module's reply shape: a tstr method's JSON arrives as a JSON string
+  if gLpDebug:
+    stderr.writeLine("MUSTER-LP execute " & module & "." & meth & " args=" & argsJson &
+                     " state=" & ex.state & " reply=" & ex.reason)
   if not ex.executed:
     # a refusal is an error the card names (exo-59c): it used to come back without one,
     # so the ready box read "Running…" for a call that never ran
