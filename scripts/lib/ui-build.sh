@@ -46,6 +46,12 @@ esac
 #                            reached. It checks the code while the fleet is down; the
 #                            fleet runs stay the live check.
 # The fleets' configs are infra/fleets/<name>.json.
+#
+# MUSTER_MIX=preferred|required (unset: off) reaches every instance through the
+# environment and sends its room messages through the mixnet (exo-dcc.4,
+# docs/labbook/mixnet-on-delivery-03.md). Each instance is then a mix node others route
+# through, and one that has exited stays in the network's mix pool for a while: a later
+# run's sends that pick it wait 5 s and retry.
 MUSTER_FLEET="${MUSTER_FLEET:-logos.dev}"
 
 # ui_local_config [hub multiaddr] — a local node's createNode config on a free port,
