@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "name": "muster",
+  "displayName": "Muster",
+  "description": "Muster: rooms where people agree on a payment, a bill split or a decision, then settle it. Publishes only muster_module and muster_ui; every dependency comes from the official Logos catalogue. Unsigned.",
+  "homepage": "https://github.com/corpetty/muster/tree/main/catalog",
+  "indexUrl": "https://raw.githubusercontent.com/corpetty/muster/main/catalog/index.json",
+  "trustedSigners": []
+}
