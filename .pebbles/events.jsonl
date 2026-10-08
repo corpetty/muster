@@ -2163,3 +2163,5 @@
 {"type":"dep_add","timestamp":"2026-10-08T18:58:50.246571166Z","issue_id":"exo-dcc.15","payload":{"dep_type":"parent-child","depends_on":"exo-dcc"}}
 {"type":"rename","timestamp":"2026-10-08T18:58:50.472003297Z","issue_id":"exo-e88","payload":{"new_id":"exo-dcc.16"}}
 {"type":"dep_add","timestamp":"2026-10-08T18:58:50.472003297Z","issue_id":"exo-dcc.16","payload":{"dep_type":"parent-child","depends_on":"exo-dcc"}}
+{"type":"close","timestamp":"2026-10-08T18:59:29.084405592Z","issue_id":"exo-dcc.12","payload":{}}
+{"type":"close","timestamp":"2026-10-08T18:59:29.285593918Z","issue_id":"exo-6dc.1","payload":{}}
