@@ -136,9 +136,16 @@ Children of `exo-dcc`. Phase 1 starts on day 0, alongside Phase 0.
 - **`exo-dcc.2`: messaging with no LEZ.** Decide before 2026-10-14. Ask the Logos team for
   a public testnet gifter. As fallback, build R2 and the room gifter, R3 (`exo-eb6.3`). If
   neither is ready, demo on `logos.dev` and say so.
-- **`exo-dcc.3`: an installable Muster.** Finish `exo-d4d.8` (the current module ABI, off
-  the forked builder). Then publish the `.lgx` files to a catalogue, so Package Manager
-  resolves delivery and the Monero stack. Fallback: the AppImage (`exo-070`).
+- **`exo-dcc.3`: an installable Muster.** Design: `docs/design/catalogue-install.md`.
+  - The official catalogue is for apps by the Logos team (logos-modules-release#98), so
+    Muster runs **its own catalogue**.
+  - Basecamp resolves dependencies across every enabled catalogue, so ours publishes only
+    `muster_module` and `muster_ui`.
+  - For linux-amd64 this does **not** wait for `exo-d4d.8`. The forked builder's bundler
+    does drop `optional_dependencies` from the manifest, which matters for the Monero
+    modules.
+  - Steps: version ranges, a Forum-style catalogue repo, acceptance on two fresh
+    profiles, then the install page (about a week). CI, the fork exit and macOS follow.
 - **`exo-dcc.4`: the mixnet.** Try `anonymityLevel: Preferred` on delivery 0.3.x. If it
   works, ship it with a claim; if not, the copy says "specified, not on".
 - **`exo-dcc.10`: install what's missing, from the card and the proposal form.** A stranger
