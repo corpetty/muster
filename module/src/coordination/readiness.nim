@@ -17,7 +17,9 @@
 ## not running, not installed — read from the host's module registry first
 ## (module_registry.nim); muster calls into a module only once the registry reports it
 ## ready, since a call to one installed but not loaded waits out its whole deadline. The
-## item says which (`moduleState`) and, where installing would help, the catalogue package
+## registry's `ready` is met (exo-dcc.11): Basecamp's lp_get_methods is always [], so the
+## module's own answer cannot confirm it there; a call that then fails is reported at the
+## call. The item says which (`moduleState`) and, where installing would help, the catalogue package
 ## to install (`install`, which the driver may name apart from the module), so the card
 ## can raise Basecamp's `packages.install` for it.
 
@@ -45,7 +47,7 @@ type
   ModuleState* = enum
     ## Where a required module stands on THIS instance (exo-dcc.10).
     msNone         = ""               ## not a module requirement
-    msReady        = "ready"          ## running: it answered muster — or the host says so and muster's call is not answered yet
+    msReady        = "ready"          ## running: the host's registry reports it ready, or (no registry) it listed its methods to muster
     msStarting     = "starting"       ## the host is bringing it up (loading / loaded)
     msInstalled    = "installed"      ## installed, not running (unloaded, stopping, or a state this client does not know)
     msNotInstalled = "not-installed"  ## the host does not know it: install it
@@ -122,26 +124,25 @@ proc moduleRemedy*(r: Requirement, state: ModuleState,
     else: "start " & r.name & ": open the app that uses it, or load it in Basecamp's Modules tab"
   of msStarting: "wait for " & r.name & " to finish starting"
   of msError: r.name & " failed to load: see Basecamp's logs; reinstalling " & r.installPackage() & " may help"
-  of msReady:
-    # the host reports it running and it did not answer muster: for a module muster does
-    # not declare this lasted five minutes in Basecamp 0.3.2, so waiting is no remedy
-    if known and not mine:
-      r.name & " is running but does not answer Muster; Muster may need an update that declares it"
-    else: "reopen this in a moment"
+  # running by the host's word is met (exo-dcc.11): nothing to do
+  of msReady: ""
   of msNotInstalled, msUnknown, msNone: remedyFor(r)
 
 proc gradeModuleRecord*(name: string, a: ModuleRecordAnswer): ModuleGrade =
-  ## A module graded from what the host's registry says of it, when muster has no answer
-  ## of its own from the module (it was not asked, or it did not answer).
+  ## A module graded from what the host's registry says of it (exo-dcc.10). `ready` is
+  ## met (exo-dcc.11): it is the host's word, and in Basecamp muster has no other —
+  ## lp_get_methods always returns [] there (logos-protocol's remote transport does not
+  ## implement introspection), so an empty list from the module says nothing. The
+  ## registry's ready goes true a few hundred ms before a caller's token handshake
+  ## completes; a call made in that moment fails and is reported at the call, since
+  ## readiness is a guide. Unanswered (no registry) and no methods from the module: it is
+  ## not loaded, and whether it is installed is not known.
   if not a.answered:
     return (rdMissing, name & " is not loaded (this host cannot say whether it is installed)", msUnknown)
   if not a.known: return (rdMissing, name & " is not installed", msNotInstalled)
   case a.state
   of "loading", "loaded": (rdUnknown, name & " is starting", msStarting)
-  of "ready":
-    # the host's view goes ready a moment before a call from muster can succeed (the
-    # token handshake is per caller): not yet met, not missing
-    (rdUnknown, "the host reports " & name & " ready, but it did not answer muster yet", msReady)
+  of "ready": (rdMet, name & " is running", msReady)
   of "stopping": (rdMissing, name & " is stopping", msInstalled)
   of "error": (rdMissing, name & " failed to load" & (if a.reason.len > 0: ": " & a.reason else: ""), msError)
   else:
@@ -343,7 +344,8 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
       of elNo: (rdMissing, "the split does not name you: your agreement would not count")
       of elUnknown: (rdUnknown, "cannot tell whether the split names you")
     else: (rdUnknown, "unrecognized authority requirement: " & name)
-  result.moduleDeclared = (if facts.declared != nil: facts.declared else: facts.callableWithoutRegistry)
+  let declaredBy = (if facts.declared != nil: facts.declared else: facts.callableWithoutRegistry)
+  result.moduleDeclared = declaredBy
   result.moduleLoaded = proc(name: string): ModuleGrade =
     # The host's registry first: muster calls into a module only once the host reports
     # it ready — a call to one installed but not loaded blocks for the caller's whole
@@ -352,23 +354,42 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
     if facts.moduleRecord != nil:
       try: a = facts.moduleRecord(name)
       except CatchableError as e: a = unanswered("modules_state call failed: " & e.msg)
-    if a.answered and not (a.known and a.state == "ready"): return gradeModuleRecord(name, a)
-    # ready by the host's word — or the registry cannot say (the standalone runner has
-    # none): does it answer muster?
+    if a.answered:
+      # the registry's word stands; ready is met (exo-dcc.11). Muster's own call adds a
+      # method count where the host lists them (in process); Basecamp lists none.
+      var g = gradeModuleRecord(name, a)
+      if g.state == msReady:
+        if facts.invoker != nil:
+          let methods = facts.invoker.methodsOf(name)
+          if methods != nil and methods.kind == JArray and methods.len > 0:
+            g.detail &= " (" & $methods.len & " methods)"
+        if declaredBy != nil and not declaredBy(name):
+          # with the access policy off it answers Muster; enforced, it is refused. Muster
+          # cannot tell which while it can still ask the registry, so it says both.
+          g.detail &= "; Muster does not declare it, so a host that enforces its access " &
+                      "policy refuses Muster's calls to it"
+      return g
+    # the registry cannot say (the standalone runner has none; an access policy that
+    # refuses it): does the module answer muster?
+    let refused = policyRefused(a)
+    let why = (if refused: "its access policy denies Muster the module registry, modules_state"
+               else: "no module registry to ask")
     if facts.invoker == nil:
-      if a.answered:
-        return (rdUnknown, "the host reports " & name & " ready; this host cannot ask it (no invoker)", msReady)
       return (rdUnknown, "no host invoker — cannot ask whether " & name & " is loaded", msUnknown)
-    if not a.answered and facts.callableWithoutRegistry != nil and
-       not facts.callableWithoutRegistry(name):
-      # no registry, and not a module muster declares: a call could block for lp's whole
+    if facts.callableWithoutRegistry != nil and not facts.callableWithoutRegistry(name):
+      # no registry, and not a module muster requires: a call could block for lp's whole
       # deadline, so it is not made
       return (rdUnknown, "this host cannot say whether " & name &
-              " is installed or running (no module registry to ask)", msUnknown)
+              " is installed or running (" & why & ")", msUnknown)
     let methods = facts.invoker.methodsOf(name)
     if methods != nil and methods.kind == JArray and methods.len > 0:
       return (rdMet, name & " is running (" & $methods.len & " methods)", msReady)
-    gradeModuleRecord(name, a)   # ready but silent, or not loaded with no registry to say why
+    if refused:
+      # a host with an access policy is Basecamp, whose lp_get_methods is always []:
+      # an empty list there says nothing, and a required module loaded before Muster
+      return (rdUnknown, name & " lists no methods, and the host's access policy denies Muster " &
+              "the module registry (modules_state): cannot say whether it is running", msUnknown)
+    gradeModuleRecord(name, a)   # not loaded, with no registry to say why
   result.capabilityGranted = nil   # the host broker does not exist yet (exo-002.7) → unknown
 
 proc rpcConnectivityRow*(url: string, chains: seq[int],

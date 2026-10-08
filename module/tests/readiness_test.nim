@@ -278,12 +278,17 @@ block:
     doAssert r.status == rdUnknown and r.moduleState == msStarting and r.install == "", $r
     doAssert r.detail == "monero_wallet_backend is starting", r.detail
     doAssert r.remedy == "wait for monero_wallet_backend to finish starting", r.remedy
-  # the host says ready, but muster's own call has not been answered yet (the token
-  # handshake is per caller): unknown, never a silent met
+  # the host says ready, and muster's own call lists no methods: met all the same
+  # (exo-dcc.11). Basecamp runs core modules out of process, and logos-protocol's remote
+  # transport does not implement introspection (lp_get_methods is always []), so an
+  # empty list says nothing about the module: keystore_module read "did not answer muster
+  # yet" while its caller_identity answered muster two seconds later. The registry's
+  # ready goes true a few hundred ms before a caller's token handshake completes; a call
+  # made in that moment fails, and is reported at the call — readiness is a guide.
   let rs = gradeWith(silent, answering(rec("ready")))
-  doAssert rs.status == rdUnknown and rs.moduleState == msReady and rs.install == "", $rs
-  doAssert rs.detail == "the host reports monero_wallet_backend ready, but it did not answer muster yet", rs.detail
-  doAssert rs.remedy == "reopen this in a moment", rs.remedy
+  doAssert rs.status == rdMet and rs.moduleState == msReady and rs.install == "", $rs
+  doAssert rs.detail == "monero_wallet_backend is running", rs.detail
+  doAssert rs.remedy == "", rs.remedy
   let st = gradeWith(silent, answering(rec("stopping")))
   doAssert st.status == rdMissing and st.moduleState == msInstalled and st.install == "", $st
   doAssert st.detail == "monero_wallet_backend is stopping", st.detail
@@ -298,16 +303,18 @@ block:
   doAssert none.status == rdUnknown and none.moduleState == msUnknown and none.install == "monero_wallet_ui", $none
   doAssert "no host invoker" in none.detail, none.detail
   doAssert none.remedy == "install monero_wallet_ui from Basecamp's Package Manager", none.remedy
-  # no invoker, but the registry answers: its answer stands; ready cannot be confirmed
+  # no invoker, but the registry answers: its answer stands, and ready is met (exo-dcc.11:
+  # the host's word is the answer; muster's own call adds a method count at most)
   let noneReady = gradeWith(nil, answering(rec("ready")))
-  doAssert noneReady.status == rdUnknown and noneReady.moduleState == msReady and noneReady.install == "", $noneReady
+  doAssert noneReady.status == rdMet and noneReady.moduleState == msReady and noneReady.install == "", $noneReady
+  doAssert noneReady.detail == "monero_wallet_backend is running" and noneReady.remedy == "", $noneReady
   doAssert gradeWith(nil, answering(ModuleRecordAnswer(answered: true, known: false))).moduleState == msNotInstalled
-  # starting and ready-but-silent count as unknown, and nothing short of met is ready
+  # starting counts as unknown, and nothing short of met is ready
   let both = assessReadiness(ActionManifest(declared: true, agreement: agreeOne,
                                             requirements: @[backend, req(rqModule, "lez_core")]),
                              probeFromFacts(HostFacts(invoker: silent, moduleRecord: answering(rec("loading")))))
   doAssert not both.ready and both.unknown == 2
-  echo "9. module grades, registry first: running / not installed / installed / starting / ready-but-silent / stopping / error / cannot say OK"
+  echo "9. module grades, registry first: running / not installed / installed / starting / ready / stopping / error / cannot say OK"
 
 # ── 10. the package to install: the module's own name unless the driver names another ──
 block:
@@ -518,8 +525,12 @@ block:
 # Measured in Basecamp 0.3.2: reopening Muster starts the modules Muster declares, and
 # no others; a relaunch starts nothing. So "close and reopen Muster" is offered only for
 # a declared module. Any other is started by the app that uses it, or by hand in
-# Basecamp's Modules tab. A module the host reports ready but that never answers Muster
-# (seen for an undeclared module, five minutes running) is not told to "reopen this".
+# Basecamp's Modules tab. A module the host reports ready is met, declared or not
+# (exo-dcc.11): the "five minutes running and silent" this block once encoded was
+# readiness's own blindness (Basecamp's lp_get_methods is always []), not the module —
+# with the access policy off an undeclared module answers Muster. Under an enforced
+# policy it does not, and the detail says so, conditionally: Muster cannot tell whether
+# the host enforces its policy while it can still ask the registry.
 block:
   let declared = proc(name: string): bool {.gcsafe.} = name in ["lez_core"]
   let silent = CountingInvoker(methods: newJArray())
@@ -531,9 +542,12 @@ block:
   let other = itemOf("monero_wallet_backend", "unloaded")
   doAssert other.remedy == "start monero_wallet_backend: open the app that uses it, or load it in Basecamp's Modules tab", other.remedy
   let quiet = itemOf("monero_wallet_backend", "ready")
-  doAssert quiet.status == rdUnknown and quiet.moduleState == msReady, $quiet
-  doAssert quiet.remedy == "monero_wallet_backend is running but does not answer Muster; Muster may need an update that declares it", quiet.remedy
-  doAssert itemOf("lez_core", "ready").remedy == "reopen this in a moment"
+  doAssert quiet.status == rdMet and quiet.moduleState == msReady and quiet.remedy == "", $quiet
+  doAssert quiet.detail == "monero_wallet_backend is running; Muster does not declare it, so a host " &
+    "that enforces its access policy refuses Muster's calls to it", quiet.detail
+  doAssert "update" notin quiet.detail and "does not answer" notin quiet.detail, quiet.detail
+  let own = itemOf("lez_core", "ready")
+  doAssert own.status == rdMet and own.detail == "lez_core is running" and own.remedy == "", $own
   echo "16b. an installed module's remedy names what can start it: Muster for its own, the app or the Modules tab otherwise OK"
 
 # ── 16c. an OPTIONAL dependency is declared, but never assumed loaded ─────────────
@@ -572,7 +586,9 @@ block:
     assessReadiness(m, probeFromFacts(HostFacts(invoker: silent, moduleRecord: answering(rec(state)),
                                                 callableWithoutRegistry: hard, declared: decl))).item(rqModule)
   doAssert itemOf("unloaded").remedy == "start monero_wallet_backend: close and reopen Muster", itemOf("unloaded").remedy
-  doAssert itemOf("ready").remedy == "reopen this in a moment", itemOf("ready").remedy
+  let ready = itemOf("ready")   # its own, so no access-policy note (exo-dcc.11)
+  doAssert ready.status == rdMet and ready.remedy == "" and
+           ready.detail == "monero_wallet_backend is running", $ready
   # no `declared` given: the remedy falls back to the callable set, as before
   let m1 = ActionManifest(declared: true, agreement: agreeOne,
                           requirements: @[req(rqModule, "monero_wallet_backend")])
@@ -580,5 +596,73 @@ block:
                                                         callableWithoutRegistry: hard))).item(rqModule).remedy ==
            "start monero_wallet_backend: open the app that uses it, or load it in Basecamp's Modules tab"
   echo "16c. an optional dependency is muster's own to restart, but is called only when the registry says it runs OK"
+
+# ── 16d. ready is met; a registry the access policy refuses is named (exo-dcc.11) ──
+# In Basecamp, lp_get_methods is always [] (logos-protocol's remote transport does not
+# implement introspection), so readiness reads the host's registry: ready is met, and the
+# method count is added only where muster's own call lists some (the standalone runner,
+# in process). A registry call refused by the access policy (capability_module: "access
+# policy denies 'muster_module' -> 'modules_state'", the caller's reply "unauthorized")
+# is said to be that, not "no registry"; and with no registry a required module that lists
+# no methods is unknown there, never "not loaded": the host loaded it before Muster.
+block:
+  # running, and its methods are listed: the count is a detail
+  let listing = CountingInvoker(methods: %*[{"name": "a"}, {"name": "b"}])
+  let p = probeFromFacts(HostFacts(invoker: listing, moduleRecord: answering(rec("ready"))))
+  let g = p.moduleLoaded("keystore_module")
+  doAssert g.status == rdMet and g.state == msReady and g.detail == "keystore_module is running (2 methods)", $g
+  # running in Basecamp: lp_get_methods is [], and it is met all the same — a required
+  # dependency (keystore_module) and an optional one (the Monero backend) alike
+  let blind = CountingInvoker(methods: newJArray())
+  let hard = proc(name: string): bool {.gcsafe.} = name in ["keystore_module"]
+  let decl = proc(name: string): bool {.gcsafe.} = name in ["keystore_module", "monero_wallet_backend"]
+  let pb = probeFromFacts(HostFacts(invoker: blind, moduleRecord: answering(rec("ready")),
+                                    callableWithoutRegistry: hard, declared: decl))
+  for name in ["keystore_module", "monero_wallet_backend"]:
+    let r = assessReadiness(ActionManifest(declared: true, agreement: agreeOne,
+                                           requirements: @[req(rqModule, name)]), pb)
+    doAssert r.ready and r.unknown == 0, $r.items[0]
+    doAssert r.items[0].status == rdMet and r.items[0].detail == name & " is running" and
+             r.items[0].remedy == "" and r.items[0].install == "", $r.items[0]
+  # a module the registry does not report ready is still never called
+  let never = CountingInvoker(methods: %*[{"name": "a"}])
+  discard probeFromFacts(HostFacts(invoker: never, moduleRecord: answering(rec("loading")))).moduleLoaded("x")
+  doAssert never.asked == 0
+  # the access policy refuses the registry: recognised from the caller's error...
+  let refused = unanswered("modules_state did not answer: {\"code\":\"unauthorized\",\"message\":" &
+    "\"call to 'modules_state' rejected: token not recognized (re-exchange failed)\"}")
+  doAssert policyRefused(refused)
+  doAssert policyRefused(unanswered("access policy denies 'muster_module' -> 'modules_state'"))
+  for other in [unanswered("modules_state did not answer: timed out after 500 ms"), unanswered("no module registry"),
+                unanswered("modules_state answered \"\", not a module record"),
+                ModuleRecordAnswer(answered: true, known: false), rec("ready")]:
+    doAssert not policyRefused(other), $other
+  # ...an undeclared module is not called, and the detail names the policy
+  let inv = CountingInvoker(methods: newJArray())
+  let pr = probeFromFacts(HostFacts(invoker: inv, moduleRecord: answering(refused),
+                                    callableWithoutRegistry: hard, declared: decl))
+  let u = pr.moduleLoaded("monero_wallet_backend")
+  doAssert inv.asked == 0 and u.status == rdUnknown and u.state == msUnknown, $u
+  doAssert u.detail == "this host cannot say whether monero_wallet_backend is installed or running (its " &
+    "access policy denies Muster the module registry, modules_state)", u.detail
+  # ...a required one is called; methods listed → met, none → unknown, never "not loaded"
+  let k = pr.moduleLoaded("keystore_module")
+  doAssert inv.asked == 1 and k.status == rdUnknown and k.state == msUnknown, $k
+  doAssert k.detail == "keystore_module lists no methods, and the host's access policy denies Muster the " &
+    "module registry (modules_state): cannot say whether it is running", k.detail
+  let kl = probeFromFacts(HostFacts(invoker: listing, moduleRecord: answering(refused),
+                                    callableWithoutRegistry: hard)).moduleLoaded("keystore_module")
+  doAssert kl.status == rdMet and kl.detail == "keystore_module is running (2 methods)", $kl
+  # no registry for any other reason: the generic wording, as before
+  let nr = probeFromFacts(HostFacts(invoker: inv, moduleRecord: answering(unanswered("no registry")),
+                                    callableWithoutRegistry: hard)).moduleLoaded("monero_wallet_backend")
+  doAssert nr.detail == "this host cannot say whether monero_wallet_backend is installed or running " &
+    "(no module registry to ask)", nr.detail
+  # nothing anywhere says Muster cannot reach a module it does not declare
+  for st in [msNone, msReady, msStarting, msInstalled, msNotInstalled, msError, msUnknown]:
+    let rem = moduleRemedy(req(rqModule, "x"), st, proc(name: string): bool {.gcsafe.} = false)
+    doAssert "does not answer" notin rem and "update" notin rem, rem
+  doAssert moduleRemedy(req(rqModule, "x"), msReady) == "", "a running module needs no remedy"
+  echo "16d. ready is met (Basecamp lists no methods); a registry the access policy refuses is named OK"
 
 echo "readiness_test: all OK"

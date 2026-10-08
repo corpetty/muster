@@ -24,6 +24,9 @@
 ## bundles no modules_state), a failed or timed-out call, a value that is not a record, a
 ## registry that does not know muster itself — is "cannot say": readiness then asks the
 ## module itself, as it did before the registry, and never grades it not installed.
+## A record in `ready` is met (exo-dcc.11): in Basecamp, lp_get_methods always returns []
+## (logos-protocol's remote transport does not implement introspection), so muster's own
+## call cannot confirm a module there; it adds a method count where it can (the runner).
 ##
 ## Readiness is polled — by the card and by the composer's kind list — on the module's one
 ## dispatch thread. So the host bounds each registry call (lp_invoker.lpModuleRecord, a
@@ -31,7 +34,7 @@
 ## cannot be asked stays unasked for a minute (cachedRecords; the module's own methods,
 ## newCachedInvoker in invoker.nim). This half is pure: the lp call is the plugin's.
 
-import std/[json, tables, times, monotimes]
+import std/[json, tables, times, monotimes, strutils]
 
 type
   ModuleRecordAnswer* = object
@@ -56,6 +59,17 @@ const
 
 proc unanswered*(detail: string): ModuleRecordAnswer =
   ModuleRecordAnswer(answered: false, detail: detail)
+
+proc policyRefused*(a: ModuleRecordAnswer): bool =
+  ## Whether the registry could not be asked because the host's access policy refused
+  ## muster the call (exo-dcc.11). Under `--access-policy enforce` Basecamp 0.3.2 refuses a
+  ## callee muster does not declare: capability_module logs "access policy denies
+  ## 'muster_module' -> 'modules_state'", and the caller's reply is
+  ## {"code":"unauthorized", …"token not recognized (re-exchange failed)"}. muster declares
+  ## modules_state (an optional dependency), so this names a host that still refuses it.
+  if a.answered: return false
+  let d = a.detail.toLowerAscii()
+  "unauthorized" in d or "access policy" in d
 
 proc declaredModules*(metadataJson: string, optional = true): seq[string] =
   ## The modules a metadata.json declares: its `dependencies` and, unless `optional` is
