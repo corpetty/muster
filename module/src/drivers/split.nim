@@ -180,6 +180,19 @@ proc isErc20Asset*(a: string): bool =
   let h = a[8 .. ^1]
   h.allCharsInSet({'0' .. '9', 'a' .. 'f'}) and h != repeat('0', 40)
 
+var xmrPayToSeen {.threadvar.}: Table[string, bool]
+  ## acceptablePayTo's answers, by chain and address: it decompresses and subgroup-checks
+  ## two curve points in pure Nim, and the fold asks the driver about one effect many times
+  ## (describeFor, settlementParts, partAuthor…). A pure function of its inputs, so caching
+  ## it changes no answer; bounded, so a stream of addresses cannot grow it.
+
+proc xmrPayToOk(payTo, chain: string): bool =
+  let key = chain & "|" & payTo
+  if key in xmrPayToSeen: return xmrPayToSeen[key]
+  result = xmraddr.acceptablePayTo(payTo, chain).ok
+  if xmrPayToSeen.len > 4096: xmrPayToSeen.clear()
+  xmrPayToSeen[key] = result
+
 proc payToOk(family, chain, payTo: string): bool =
   case family
   of EvmSplitFamily: payTo.len == 42 and payTo.startsWith("0x") and isLowerHex(payTo[2 .. ^1])
@@ -197,7 +210,7 @@ proc payToOk(family, chain, payTo: string): bool =
     # a standard address or subaddress of THIS chain's network, as written (Monero
     # addresses are case-sensitive): its checksum, its keys, its network prefix — never an
     # integrated address (ADR-018: no payment ids; a fresh subaddress replaces them)
-    xmraddr.acceptablePayTo(payTo, chain).ok
+    xmrPayToOk(payTo, chain)
   else: false
 
 # ── the effect ─────────────────────────────────────────────────────────────────

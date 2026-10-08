@@ -103,7 +103,16 @@ proc readMatch*(s: MoneroPartSeam, t: PartTransfer, claimed: HashSet[string]): X
   let info = s.backend.receiveInfo(s.mode)
   if info.read != rsAnswered or info.indexOf(t.to) < 0:
     return matchXmrPayment(t, st, info, History(read: rsUnread), claimed)
-  matchXmrPayment(t, st, info, s.backend.history(s.mode), claimed)
+  let hist = s.backend.history(s.mode)
+  # a history names no wallet: the wallet open after it was read must be the one open
+  # before, or what it shows is not known to be this wallet's (s7)
+  let after = s.backend.walletStatus(s.mode)
+  if after.read != rsAnswered or after.wallet != st.wallet or after.network != st.network or
+     after.state != st.state:
+    let m = matchXmrPayment(t, after, info, History(read: rsUnread), claimed)
+    if m.verdict != xvPending: return m
+    return XmrMatch(verdict: xvPending, detail: "the open wallet changed while its history was read: read again")
+  matchXmrPayment(t, st, info, hist, claimed)
 
 method sendPart*(s: MoneroPartSeam, t: PartTransfer): tuple[ok: bool, tx, detail: string] =
   (false, "", "muster never sends Monero: pay your share from your own wallet with the request's monero: link, " &
