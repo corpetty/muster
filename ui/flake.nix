@@ -26,11 +26,14 @@
     # The real transport (P3): muster_module depends on delivery_module (it calls it
     # over the lp_* ABI to boot delivery's Waku node and carry the sealed room
     # frames). It must therefore be in the standalone runner's module set, so
-    # coordinate_join's lp_client_create("delivery_module") resolves. v0.3.0 is
+    # coordinate_join's lp_client_create("delivery_module") resolves. v0.3.x is
     # Testnet v0.3's (exo-eb6.1): logos.dev is cluster 3 there, and logos.test needs
-    # the RLN modules and a funded membership (exo-eb6.3). Mapped to the module name
+    # the RLN modules and a funded membership (exo-eb6.3). v0.3.2 (logos-delivery
+    # v0.39.1) is Basecamp 0.3.2's catalog release; its store catch-up keeps to the
+    # store's 24 h query limit, where v0.3.0's is refused on every first launch
+    # (exo-dcc.12). Same pin as module/flake.nix. Mapped to the module name
     # `delivery_module` below.
-    logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.3.0";
+    logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.3.2";
     # The LEZ wallet (P-L3): muster_module calls lez_core over lp_* to send assets on
     # the zone, so it must be in the standalone runner's module set for
     # lp_client_create("lez_core") to resolve. lez_core 0.5.0, LEZ 0.3.0 (b89e5d2,
@@ -47,7 +50,7 @@
     logos-evm-tx-sender-module.url = "github:logos-co/logos-evm-tx-sender-module/7cd2fead60a78ac9ac8a4337fd9f01e1ab5515e2";
     logos-evm-fee-module.url = "github:logos-co/logos-evm-fee-module/5bf49b768cf178d2e8c58267f17822060f813fbf";
     # The RLN modules a delivery v0.3 node on logos.test needs (exo-eb6.3 R1). The packages
-    # are delivery v0.3.0's own re-exports, so their versions are the ones it was built
+    # are delivery v0.3.2's own re-exports, so their versions are the ones it was built
     # against; this pins only their LIDL contracts, at the same rev (logos-rln-modules
     # 25357cf), for the code generator.
     logos-rln-modules = { url = "github:logos-co/logos-rln-modules/25357cfd877ba18d6e0880564b8fd7ba0abf2d70"; flake = false; };

@@ -13,7 +13,9 @@
 ##     another peer while there is no cursor yet, and from the start on another peer once
 ##     the paging peer has failed MaxPageRetries times (a dead store node never stalls it);
 ##   * a store that keeps returning cursors is cut off after MaxDeepPages;
-##   * each topic pages on its own.
+##   * each topic pages on its own;
+##   * no query names a time range a delivery v0.3 store refuses (both ends, > 24 h apart),
+##     so a room older than a day is still read whole (exo-dcc.12).
 
 import std/[json, sets, strutils]
 import ../src/transport/store_catchup
@@ -234,5 +236,49 @@ block:
   let o = d.nextQuery(Other, t, Lookback, windowEveryMs = Every)
   doAssert o.fire and o.deep
   echo "11. once read whole, a topic's window is asked only every windowEveryMs; history at full speed OK"
+
+# ── 12. a v0.3 store's 24 h rule never refuses muster's own queries (exo-dcc.12) ──────
+# Since logos-delivery#4349 (2026-09-29, on the logos.dev fleet from its 2026-10-02
+# redeploy) a store node answers "BAD_REQUEST: time range exceeds 24h" to a query that
+# names BOTH ends of a range more than 24 h apart (waku_store/common.nim validate();
+# either end alone is never checked). Seen in Basecamp: 174 such refusals on a first
+# launch — all from delivery v0.3.0's OWN startup catch-up ("recv backfill", which asks
+# [start − 24 h, now) on a first run), none from muster: every muster query was answered
+# 200. Held here so a fix for the wrong component never lands in this one: the history
+# read names no time at all, so a room of any age is read whole from its first message,
+# and the window names only where it starts.
+block:
+  const MaxQueryTimeRangeNs = 24'i64 * 60 * 60 * 1_000_000_000   # the store's rule
+  const Day = 24'i64 * 60 * 60 * 1000
+  proc storeRefuses(req: JsonNode): bool =
+    ## the store's own check, as logos-delivery v0.39.1 makes it
+    req.hasKey("timeStart") and req.hasKey("timeEnd") and
+      req["timeEnd"].getBiggestInt() - req["timeStart"].getBiggestInt() > MaxQueryTimeRangeNs
+  # a room founded three days before this member (re)launches
+  let founded = 1_790_000_000_000'i64
+  var d = newStoreCatchup(Peers)
+  var t = founded + 3 * Day
+  var asked = 0
+  var cursor = 0
+  while true:
+    let q = d.nextQuery(Room, t, Lookback)
+    doAssert q.fire
+    inc asked
+    doAssert not storeRefuses(q.req), "a query the store refuses: " & $q.req
+    if not q.deep: break
+    doAssert not q.req.hasKey("timeStart") and not q.req.hasKey("timeEnd"),
+             "the history read names no time, so the room is read from its first message: " & $q.req
+    inc cursor
+    d.onResponse(page(q.req, if cursor < 5: "0xold" & $cursor else: ""))
+    t += 1000
+  doAssert cursor == 5 and d.caughtUp(Room), "a three-day-old room is paged whole"
+  # the window: where it starts, never where it ends — even with a lookback past 24 h
+  # (MUSTER_CATCHUP_LOOKBACK_MS has no ceiling)
+  for lookback in [Lookback, Day, 3 * Day]:
+    t += 1000
+    let w = d.nextQuery(Room, t, lookback)
+    doAssert w.fire and not w.deep and not storeRefuses(w.req)
+    doAssert w.req.hasKey("timeStart") and not w.req.hasKey("timeEnd"), $w.req
+  echo "12. no muster query names a range the store refuses; a room three days old is read whole OK"
 
 echo "store_catchup_test: all OK"

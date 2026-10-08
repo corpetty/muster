@@ -45,10 +45,13 @@
     };
     # The real transport (P3): muster_module calls delivery_module over the lp_*
     # C ABI (src/transport/delivery.nim) — it boots delivery's embedded Waku node
-    # and carries the sealed coordination frames. v0.3.0 is Testnet v0.3's
-    # (exo-eb6.1); mapped to the module name `delivery_module` below so
-    # metadata.json#dependencies resolves it into the host module set.
-    logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.3.0";
+    # and carries the sealed coordination frames. v0.3.x is Testnet v0.3's
+    # (exo-eb6.1); v0.3.2 (logos-delivery v0.39.1) is Basecamp 0.3.2's catalog release,
+    # and its own store catch-up keeps to the store's 24 h query limit, where v0.3.0's
+    # is refused on every first launch (exo-dcc.12). Mapped to the module name
+    # `delivery_module` below so metadata.json#dependencies resolves it into the host
+    # module set.
+    logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.3.2";
     # The Logos Execution Zone wallet (P-L3): muster_module calls lez_core over lp_*
     # (src/wallet/lez_lp.nim) to send assets on the zone. lez_core 0.5.0, LEZ 0.3.0
     # (b89e5d2, exo-eb6.4): the testnet runs v0.3.0 since 2026-09-30, and 0.5.0 drops the
