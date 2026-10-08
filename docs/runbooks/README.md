@@ -3,6 +3,7 @@
 Repeatable scripts for demos and posts. Not specs — the specs are `docs/01-furps.md` and
 `contracts/specs/`; these are how to *show* what the specs guarantee.
 
+- [`install-from-catalogue.md`](install-from-catalogue.md): install Muster in Logos Basecamp 0.3.2 from Muster's own catalogue. Add the URL, install from Applications, untick the full Monero node, and read what adding the catalogue trusts. These are the stranger-facing steps the campaign page reuses. The maintainers' section tests a release from a local https server.
 - [`client-tour.md`](client-tour.md) — try everything by hand, two instances on one
   machine. `scripts/try-infra.sh up` brings up every local chain it uses, funded (anvil
   with the real Safe and an ERC-20; Bitcoin Core on regtest with a miner), and
