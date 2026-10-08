@@ -18,6 +18,7 @@ export MUSTER_FLEET="${MUSTER_FLEET:-logos.dev}"
 
 declare -A SUITE=(
   [card]="scripts/card-self-test.sh"
+  [install]="scripts/install-self-test.sh"
   [infra-safe]="scripts/infra-self-test.sh"
   [infra-threshold]="env POLICY=threshold scripts/infra-self-test.sh"
   [audit]="scripts/audit-download-self-test.sh"
@@ -27,7 +28,7 @@ declare -A SUITE=(
   [split]="scripts/split-self-test.sh"
   [split-btc]="nix shell nixpkgs#bitcoind -c scripts/split-btc-self-test.sh"
 )
-ORDER=(card infra-safe infra-threshold audit invite two-instance relaunch split split-btc)
+ORDER=(card install infra-safe infra-threshold audit invite two-instance relaunch split split-btc)
 [ $# -gt 0 ] && ORDER=("$@")
 
 LOGS=$(mktemp -d)

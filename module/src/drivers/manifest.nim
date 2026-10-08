@@ -68,6 +68,11 @@ type
     name*: string
     party*: RequirementParty
     needs*: MaterialNeed
+    install*: string  ## a module requirement: the catalogue package whose install provides
+                      ## the module, when it is not the module's own ("" = the module's own
+                      ## name). Monero's driver needs monero_wallet_backend, installed by
+                      ## monero_wallet_ui, which pulls in the backend and holds its roles
+                      ## (exo-dcc.10). Named only: Basecamp's Package Manager installs it.
 
   TouchMode* = enum
     tmRead  = "read"
@@ -103,15 +108,21 @@ proc need*(class: MaterialClass, target = "", field = ""): MaterialNeed =
   MaterialNeed(class: class, target: target, field: field)
 
 proc req*(kind: RequirementKind, name: string, party = rpInstance,
-          needs = MaterialNeed(class: mcInfra, target: "", field: "")): Requirement =
+          needs = MaterialNeed(class: mcInfra, target: "", field: ""), install = ""): Requirement =
   ## Build a requirement. When `needs` is left at the sentinel default, it is derived
   ## from the kind (class = classForKind(kind), target = name), so the common
   ## instance/contributor requirements stay a one-liner; a driver supplies an explicit
   ## `need(...)` only where the material carries an effect field (proposer/counterparty).
+  ## `install` names the package that provides a module, when it is not the module itself.
   var n = needs
   if n.target.len == 0 and n.field.len == 0:
     n = need(classForKind(kind), name)   # sentinel default → derive from the kind
-  Requirement(kind: kind, name: name, party: party, needs: n)
+  Requirement(kind: kind, name: name, party: party, needs: n, install: install)
+
+proc installPackage*(r: Requirement): string =
+  ## The catalogue package to install for a module requirement: the one the driver
+  ## named, else the module's own name.
+  if r.install.len > 0: r.install else: r.name
 
 proc touch*(target: string, mode: TouchMode): Touch =
   Touch(target: target, mode: mode)

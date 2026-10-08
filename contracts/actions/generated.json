@@ -1456,7 +1456,8 @@
               "class": "capability",
               "target": "lez_core",
               "field": ""
-            }
+            },
+            "install": "lez_core"
           },
           {
             "kind": "address",
@@ -1588,7 +1589,8 @@
               "class": "capability",
               "target": "delivery_module",
               "field": ""
-            }
+            },
+            "install": "delivery_module"
           }
         ],
         "discloses": [
@@ -2182,7 +2184,8 @@
               "class": "capability",
               "target": "lez_core",
               "field": ""
-            }
+            },
+            "install": "lez_core"
           },
           {
             "kind": "authority",

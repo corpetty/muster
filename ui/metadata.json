@@ -67,6 +67,12 @@
     },
     {
       "intent": "evm.rpc.configure"
+    },
+    {
+      "intent": "packages.install"
+    },
+    {
+      "intent": "packages.show"
     }
   ]
 }
