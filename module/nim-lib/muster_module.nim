@@ -156,6 +156,33 @@ var gDevSafe = SafeDriver(newDriver("safe", %*{
 # intent already carries its own policy. driverFor() is the resolver the folds take.
 var gCoordKind = "threshold"
 var gInvoker: Invoker = nil   ## the execute/discovery/readiness seam to other modules, created lazily
+var gModuleInvoker: Invoker = nil              ## gInvoker for readiness: a module's methods kept 5 s (exo-dcc.10)
+var gModuleRecord: ModuleRecordProbe = nil     ## modules_state.module_record: 500 ms, kept 5 s; unavailable, a minute (exo-dcc.10)
+
+proc declaredModules(metadata: string): seq[string] {.compileTime.} =
+  ## The modules muster's metadata.json declares, hard and optional: the host loads them
+  ## before muster, so readiness may call one even when there is no registry to ask.
+  let j = parseJson(metadata)
+  for key in ["dependencies", "optional_dependencies"]:
+    for d in j{key}.getElems():
+      result.add(if d.kind == JString: d.getStr() else: d{"name"}.getStr())
+
+const DeclaredModules = declaredModules(staticRead("../metadata.json"))
+
+proc moduleFacts(): HostFacts =
+  ## What readiness asks about a required module (exo-dcc.10): the host's registry first —
+  ## installed? starting? ready? failed? — and muster's own call to the module (its
+  ## methods) only once the host reports it ready, or when there is no registry to ask (the
+  ## standalone runner). A call to a module installed but not loaded blocks for its whole
+  ## deadline, and readiness is polled by the card and the composer's kind list, so each
+  ## answer is bounded and kept 5 s per module name, and a registry that cannot be asked is
+  ## left for a minute: a poll never stalls the module thread.
+  if gInvoker == nil: gInvoker = newLpInvoker("muster_module")
+  if gModuleInvoker == nil: gModuleInvoker = newCachedInvoker(gInvoker)
+  if gModuleRecord == nil:
+    gModuleRecord = cachedRecords(selfChecked(lpModuleRecord("muster_module"), "muster_module"))
+  HostFacts(invoker: gModuleInvoker, moduleRecord: gModuleRecord,
+            callableWithoutRegistry: proc(name: string): bool {.gcsafe.} = name in DeclaredModules)
 
 proc seedOf(n: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = n)
 proc thrRosterKey(n: byte): Ed25519Pub = encFromSeed(seedOf(n)).identity().ed
@@ -983,12 +1010,27 @@ proc roomKinds(): seq[string] =
   if gSession == nil: return foundingKinds()
   roomDriverKinds(gSession.roomEvents(), driverFor)
 
+proc kindNeedsOf(kind: string, probe: ReadinessProbe): JsonNode =
+  ## A kind's module needs before anything is proposed under it: the manifest of an empty
+  ## effect, from the driver a proposal under it would get — a split on no chain yet (its
+  ## modules do not depend on which), an account-bound kind as it resolves without an
+  ## account (unsupported: it names none until a proposal names the account) — graded as
+  ## the card grades them (readiness.kindNeeds). A manifest that cannot be built names none.
+  try:
+    let d = (if kindSettlesOnChain(kind): roomDriver(kind) else: driverForKind(kind))
+    kindNeeds(d.manifest(Effect()), probe)
+  except CatchableError: newJArray()
+
 proc musterCoordinateDrivers(): string =
   ## Every driver kind this client has — the one list (drivers/kinds.nim) — each with
   ## its family, label, the proposals it serves, and whether the joined room has
   ## admitted it (folded from the shared log, invariant 6). The composer's picker is
-  ## drawn from this, so the UI names no kind of its own (exo-a50.1.2).
-  $kindsJson(roomKinds())
+  ## drawn from this, so the UI names no kind of its own (exo-a50.1.2). Each row also
+  ## carries `needs`: the modules the kind asks of THIS instance, graded running /
+  ## installed / not installed with the package to install (exo-dcc.10), so the picker
+  ## offers "Install …" rather than hiding the kind. Muster installs nothing (invariant 3).
+  let probe = probeFromFacts(moduleFacts())
+  $kindsJson(roomKinds(), proc(kind: string): JsonNode = kindNeedsOf(kind, probe))
 
 # ── the LEZ multisig, live (exo-3c9) ──────────────────────────────────────────
 # A member's LEZ accounts are keystore-derived, one per slot label "lez-member/<i>", so
@@ -2808,8 +2850,11 @@ proc hostFacts(policy = ""): HostFacts =
   # The Safe owner set is read FROM THE CHAIN (getOwners, F-10), never a configured or
   # self-injected set: without a chain read the authority grade is unknown, and a key the
   # chain does not recognize grades missing (rule s4, contracts/specs/derived-exo-45e, K3).
-  if gInvoker == nil: gInvoker = newLpInvoker("muster_module")
-  facts.invoker = gInvoker
+  # A required module: running, installed, or not — bounded and kept (exo-dcc.10).
+  let mf = moduleFacts()
+  facts.invoker = mf.invoker
+  facts.moduleRecord = mf.moduleRecord
+  facts.callableWithoutRegistry = mf.callableWithoutRegistry
   # A Bitcoin proposal introduces the user's node (exo-a50.2.6): graded by asking IT
   # which chain it serves; my key is graded against the account's keys.
   facts.btcRpcUrl = gBtcRpc

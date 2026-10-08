@@ -184,13 +184,33 @@ five inputs are structurally bound; residual trust: the RPC provider, the store 
 **never** says "80% private." Every claim in the registry names its column (imperative /
 motivational / exposed) and, where conduct or a view remains, *whose*.
 
-### 4c. Which links Muster actually touches
+### 4c. Which links Muster covers: all seven, at different stages
 
-Of PriFi's seven links — discovery, diligence, negotiation, contracting, ordering,
-settlement, enforcement — Muster touches **negotiation** and **contracting** (the room's
-agreement), a slice of **diligence** (F-14 identity binding), a slice of **ordering** (the
-RPC sees the signed tx before the mempool), and **settlement** readback. Discovery and
-enforcement are outside the room. Make claims over *those* links, not all seven.
+Muster's subject is the whole lifecycle of a transaction between people (`00-vision.md`).
+PriFi's seven links are that same lifecycle, seen through what each step leaks:
+**discovery, diligence, negotiation, contracting, ordering, settlement, enforcement.**
+Every one of them is Muster's to cover.
+
+The first builds started in the middle, with negotiation and contracting, because nothing
+else covered that part. The early write-ups scored that build
+(`docs/posts/01-discovery-supporting-material.md` §2), so they read as if the other links
+were out of scope. They are not. Each link is in scope and gets covered as it is built.
+
+§4b's rule and the education layer's still hold. A claim describes what the code guarantees
+today. Anything planned is named as planned. So the honest statement always has two parts:
+the link is in scope, and here is its status.
+
+| Link | What leaks (PriFi) | Muster today | Ahead |
+|---|---|---|---|
+| Discovery | Counterparties, intent | A room starts from an invite, not a directory or a lookup. Nothing on a room's topic names its members (`store_node_view_test`). The store node still sees that someone asked to join | Finding counterparties you don't already know, with no platform that learns who looked |
+| Diligence | Address history, identity graph | Each member's two identities are bound by a signed link statement (F-14). Members disclose their own accounts, and the client checks them against the chain. Readiness grades your own keys, never anyone else's (invariant 9) | Checks on a counterparty beyond what they disclose |
+| Negotiation | Size, terms, reservation price | An end-to-end encrypted room with no coordination server. Proposals, declines and chat stay inside it. Membership epochs re-key forward (F-16) | Choice blocks and offer/counter (F-11) |
+| Contracting | Frontend and signing context | The client re-derives what it signs and refuses on a mismatch (F-4). Every signing payload commits to environment, account, slot and expiry (F-5). Signing is refused when any input's origin is unaccountable (F-20). The card answers the five questions | The defection-cost facet of motivational commitments (`exo-3ae`) |
+| Ordering | Pending order flow, mempool, MEV, network origin | Submission goes through infrastructure the member chooses (FS-1, FS-8), and the flow view names the RPC provider when a driver uses one. There is no network-origin protection yet: the mixnet is specified, not on | The mixnet for the room (`exo-dcc.4`); submission through your own node or a proxy, rail by rail |
+| Settlement | Balances, approvals, positions | The intent settles on the chain its driver names, and the card says what that chain reveals. A FROST spend shows one signature. A LEZ private split shows the chain only that private transfers happened. A Safe or Bitcoin multisig is public | More rails, Monero first (`exo-dcc`) |
+| Enforcement | Whether block producers can be identified and coerced; whether the agreement holds | The card names the rail, and so whose producers settle it. The chain enforces the multisig families' thresholds (Safe, the LEZ multisig program, FROST). Every room's record exports as a self-verifying proof. A split share counts as paid only when the person owed says so, and nothing yet makes anyone pay it (claim 30) | Escrow; swaps (RFP-003) |
+
+Claim each link's "Muster today" column. Never present the "Ahead" column as shipped.
 
 ### 4d. The Bybit frame — a link flipping columns
 

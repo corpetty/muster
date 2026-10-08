@@ -16,7 +16,7 @@
 ##      comes back as an error, surfaced honestly as a failed execution — never a
 ##      false "done". (Invariant 3: the driver never invokes; the core does.)
 
-import std/[json, tables]
+import std/[json, tables, times, monotimes]
 
 type
   InvokeOutcome* = object
@@ -35,6 +35,36 @@ method methodsOf*(inv: Invoker, targetModule: string): JsonNode {.base, gcsafe.}
   ## (P-D3). Empty by default; the real invoker asks the module, the local one returns
   ## a registered descriptor.
   newJArray()
+
+# ── CachedInvoker: readiness asks about a module at most once a window ──────────
+# Readiness is polled (the card, the composer's kind list) on the module's one dispatch
+# thread, and asking a module that is not running is the slow case. So the readiness facts
+# hold each module's methods for a window (exo-dcc.10): a module that starts shows as
+# running within it. Calls are never cached — only the question "is it running".
+
+type
+  CachedInvoker* = ref object of Invoker
+    inner*: Invoker
+    window: Duration
+    now: proc(): MonoTime {.gcsafe.}
+    seen: Table[string, tuple[at: MonoTime, methods: JsonNode]]
+
+proc newCachedInvoker*(inner: Invoker, window = initDuration(seconds = 5),
+                       now: proc(): MonoTime {.gcsafe.} = nil): CachedInvoker =
+  ## `inner`, its methodsOf kept `window` per module name. `now` is the clock (tests turn
+  ## it); nil = the monotonic clock.
+  CachedInvoker(inner: inner, window: window, now: now,
+                seen: initTable[string, tuple[at: MonoTime, methods: JsonNode]]())
+
+method methodsOf*(inv: CachedInvoker, targetModule: string): JsonNode =
+  let t = (if inv.now != nil: inv.now() else: getMonoTime())
+  if targetModule in inv.seen and t - inv.seen[targetModule].at < inv.window:
+    return inv.seen[targetModule].methods
+  result = inv.inner.methodsOf(targetModule)
+  inv.seen[targetModule] = (t, result)
+
+method call*(inv: CachedInvoker, targetModule, targetMethod, argsJson: string): InvokeOutcome =
+  inv.inner.call(targetModule, targetMethod, argsJson)
 
 # ── the allowlist (config) ─────────────────────────────────────────────────────
 
