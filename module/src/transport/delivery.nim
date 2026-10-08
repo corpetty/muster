@@ -131,6 +131,8 @@ proc onStoreResult(ok: cint, json: cstring, userData: pointer) {.cdecl, gcsafe.}
   if userData == nil or json == nil: return
   cast[DeliveryTransport](userData).storeQueue.enqueue(json)
 
+var gNodeBooted = false   ## this module instance booted delivery's node (exo-dcc.12)
+
 proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000, mix = mixOff): DeliveryTransport =
   ## Bind a client to delivery_module, boot its node, and open the single
   ## messageReceived subscription. `nodeConfigJson` is delivery's createNode config
@@ -162,11 +164,19 @@ proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000, mix = mixOff
   # synchronous createNode reaches delivery and succeeds; the async variant booted
   # the node but the receive path never surfaced messages, so we match the proven
   # sync ordering (the event handler is registered against a started node).
-  if gLpDebug: stderr.writeLine("MUSTER-LP createNode config=" & nc.createNode)
-  var args = newJArray(); args.add %nc.createNode
-  let cn = result.invoke("createNode", $args)
-  if gLpDebug: stderr.writeLine("MUSTER-LP createNode result=" & (if cn != nil: $cn else: "<nil>"))
-  discard result.invoke("start", "[]")
+  # ONE node per module instance (exo-dcc.12): delivery refuses a second createNode
+  # ("Context already…"), and a second start on a node still starting crashed delivery
+  # 0.3.2 on relaunch, when the inbox and every restored room each booted in the same
+  # call (an unhandled `len(a) == L` in its dial, every store query then null). So only
+  # the first transport boots it; the rest bind to the running node.
+  if not gNodeBooted:
+    if gLpDebug: stderr.writeLine("MUSTER-LP createNode config=" & nc.createNode)
+    var args = newJArray(); args.add %nc.createNode
+    let cn = result.invoke("createNode", $args)
+    if gLpDebug: stderr.writeLine("MUSTER-LP createNode result=" & (if cn != nil: $cn else: "<nil>"))
+    discard result.invoke("start", "[]")
+    gNodeBooted = true
+  elif gLpDebug: stderr.writeLine("MUSTER-LP delivery node already booted; binding to it")
   result.nodeStarted = 1
   GC_ref(result)                             # keep alive for the C-held user_data
   result.sub = lp_subscribe(result.client, "messageReceived",
