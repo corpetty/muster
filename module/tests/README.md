@@ -120,6 +120,10 @@ wants (below), which the runner supplies.
 - `frost_signing_test` (exo-d7e — BIP-445 FROST signing against all 266 draft vectors in `tests/vectors/bip-0445/`)
 - `frost_group_test` (exo-b9c — points with infinity, scalars mod n; BIP-340 in those operations agrees with libsecp)
 
+**Monero (epic exo-dcc, ADR-018).**
+
+- `monero_address_test` (exo-dcc.5 — `src/monero/address.nim` held to monero-project/monero at `24272e4`: block-wise base58 against `tests/unit_tests/base58.cpp`; every network's standard, subaddress and integrated address from `tests/functional_tests/validate_address.py`, with the keys and payment ids the functional tests state; `check_address`'s key refusals, including a point outside the prime-order subgroup; the CAIP-2 references re-derived from `cryptonote_config.h`'s genesis constants; `acceptablePayTo`'s refusals; `make_uri` / `parse_uri` and their amount and percent-encoding rules; `$STINT`)
+
 ## Running one test by hand
 
 Materialize the closure once (or let the runner do it), then build the flag groups
