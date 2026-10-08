@@ -1,11 +1,11 @@
 {
   "name": "muster_ui",
   "display_name": "Muster",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "ui_qml",
   "interface": "universal",
   "category": "general",
-  "description": "Muster coordination UI (P4 loading spike): reads muster_module.health() through the generated logos-API client and shows it in QML.",
+  "description": "Muster: rooms where people agree on a payment, a bill split or a decision together, then settle it. Every card shows what is needed, who can see what, and what you are signing.",
   "main": "muster_ui_plugin",
   "icon": "src/icons/icon.png",
   "view": "qml/Main.qml",
