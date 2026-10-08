@@ -166,9 +166,10 @@ const RequiredModules = declaredModules(MusterMetadata, optional = false)
   ## muster's `dependencies`: the host loads them before muster, so readiness may call one
   ## even when there is no registry to ask
 const DeclaredModules = declaredModules(MusterMetadata)
-  ## ...and its `optional_dependencies` (the Monero backend, exo-dcc.1): started with
-  ## Muster once installed, so "close and reopen Muster" is their remedy, but never called
-  ## without a registry: the host may not have them
+  ## ...and its `optional_dependencies` (the Monero backend, exo-dcc.1; modules_state, the
+  ## registry itself, so `--access-policy enforce` lets readiness ask it, exo-dcc.11):
+  ## started with Muster once installed, so "close and reopen Muster" is their remedy, but
+  ## never called without a registry: the host may not have them
 
 proc moduleFacts(): HostFacts =
   ## What readiness asks about a required module (exo-dcc.10): the host's registry first —
