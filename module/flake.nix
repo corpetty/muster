@@ -39,7 +39,14 @@
       inputs.logos-standalone-app.url = "github:logos-co/logos-standalone-app/c25aa61e3ad69358bbd9c8192c319ffcbf774189";
       inputs.logos-test-framework.url = "github:logos-co/logos-test-framework/eb1600cc6f61b66f6d75edd4773a58f0d1fa1ca4";
       inputs.logos-nix.url = "github:logos-co/logos-nix/e637a1f5e871244d1c2df1e3c52a067f2eb406f2";
-      inputs.nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx/b49074a8e1157832002b11d3d254c1aaa4b96680";
+      # The .lgx bundler, alone, at upstream main (c8c4659, 2026-10-08) rather than the
+      # June b49074a basecamp's builder set carried: b49074a copies only `dependencies`
+      # into the package manifest and drops `optional_dependencies` (and `provides`),
+      # so the installed manifest never named the Monero backend (exo-dcc.1). d0828e0
+      # (#14) added them; c8c4659 also relocks logos-package to c25a116, the lgx
+      # Basecamp 0.3.2 itself ships. The plugin's own embedded metadata (what liblogos
+      # loads by) carries the key either way; Package Manager reads the manifest.
+      inputs.nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx/c8c46595114d64526cb48dab6a9bf83f298473a9";
       inputs.nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install/55de9a6fce755387224ececd0493f46b028ee0a3";
       inputs.rust-overlay.url = "github:oxalica/rust-overlay/14f58845249f3552a89b07772626b8d3c632fa86";
     };
@@ -71,6 +78,15 @@
     # The platform's one EVM sender (exo-d4d.5): muster pays a share through it over lp_*
     # (src/wallet/tx_sender_lp.nim). The catalog's tx_sender_module 0.1.0.
     logos-evm-tx-sender-module.url = "github:logos-co/logos-evm-tx-sender-module/7cd2fead60a78ac9ac8a4337fd9f01e1ab5515e2";
+    # The Monero wallet's coordinator (exo-dcc.1): muster calls it over lp_* for XMR
+    # payment requests. An OPTIONAL dependency (metadata.json#optional_dependencies): a
+    # missing or failing Monero stack never fails Muster's load, and Basecamp 0.3.2 starts
+    # it with Muster once installed. Pinned to the commit Basecamp's default catalog
+    # released as monero_wallet_backend 0.1.0; mapped to the module name below. This
+    # builder ignores optional_dependencies (no typed wrapper; muster calls it raw), so the
+    # pin records the contract muster targets and is ready for a builder that reads them.
+    # The standalone runner does not bundle the Monero stack (ui/flake.nix).
+    logos-monero-wallet-backend.url = "github:logos-co/logos-monero-wallet-backend/769098441db339f7541ba8804722ae3f20614309";
   };
 
   outputs = inputs@{ self, logos-module-builder, ... }:
@@ -103,7 +119,8 @@
           flakeInputs = { delivery_module = deliveryForModule; lez_core = inputs.lez_core;
                          keystore_module = inputs.logos-evm-keystore-module;
                          eth_rpc_module = inputs.logos-evm-eth-rpc-module;
-                         tx_sender_module = inputs.logos-evm-tx-sender-module; } // inputs;
+                         tx_sender_module = inputs.logos-evm-tx-sender-module;
+                         monero_wallet_backend = inputs.logos-monero-wallet-backend; } // inputs;
         }).packages.${system});
     };
 }
