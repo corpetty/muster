@@ -90,7 +90,37 @@ QJsonArray getMethods() override { return QJsonArray(); }   // "Remote introspec
 So every module item stays `unknown` ("did not answer muster yet") in Basecamp — the same
 for `keystore_module`, a required dependency whose `caller_identity` then answered Muster two
 seconds later. And the remedy for an undeclared module ("Muster may need an update that
-declares it") rests on a cause this run disproved. Neither is fixed here.
+declares it") rests on a cause this run disproved. Neither is fixed here; both are in the
+next section.
+
+## Fixed: ready is met, and the registry survives enforce (exo-dcc.11)
+
+- **Ready is met.** The registry's `ready` (modules_state.module_record) grades the module
+  `met`, "<name> is running", with "(N methods)" added only where muster's own call lists
+  some (the standalone runner). The registry goes ready a few hundred ms before a caller's
+  token handshake completes; a call made then fails and is reported at the call. Muster still
+  never calls a module the registry does not report ready, and without a registry still calls
+  only its required dependencies. The "ready but silent" state and its remedies are gone.
+- **An undeclared module** that is running reads `met`, with the condition named: "Muster
+  does not declare it, so a host that enforces its access policy refuses Muster's calls to
+  it". While the registry answers, Muster cannot tell whether the policy is enforced.
+- **modules_state is declared**, as an optional dependency (pinned in `module/flake.nix` to
+  logos-modules-state-module `c70da49`, the one Basecamp 0.3.2 bundles), so under `enforce`
+  readiness keeps its registry. A registry refused by the policy anyway is named as that
+  (`policyRefused`), and a required module that then lists no methods reads unknown rather
+  than "not loaded".
+
+Same profile, Basecamp 0.3.2, Xvfb `:84` (scratchpad `ready-is-met/`, logs `out/{r1,k1,e1,e3}.log`):
+
+| run | readiness, first read | the call |
+|---|---|---|
+| `monero_wallet_backend.caller_identity` | `met` — "monero_wallet_backend is running"; `ready: true, unknown: 0` | executed |
+| `keystore_module.caller_identity` | `met` — "keystore_module is running" | executed |
+| the backend, under `enforce` | `met` — the registry answered; modules_state's allowed callers went from 4 to 5, and no denial for it | executed |
+| undeclared `monero_node_module.list_networks`, under `enforce` | `met`, with the access-policy condition in the detail | refused: `access policy denies 'muster_module' -> 'monero_node_module'` |
+
+The last row is still open. The card reads "you have everything this needs" for a call the
+enforced policy will refuse, and gives the condition only in the item's detail.
 
 ## The reply shapes (stagenet default, no wallet open)
 
