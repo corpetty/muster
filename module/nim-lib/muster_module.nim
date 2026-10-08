@@ -914,7 +914,9 @@ proc restoreJoinedRooms(): seq[string] =
   let ks = moduleKeystore()
   for ctopic in loadJoinedRooms(joinedRoomsPath()):
     if ctopic in gSessions or ctopic in gInboxTopics: continue
-    let s = newCoordinationSession(newDeliveryTransport(gDeliveryConfig, mix = gMix), newEpochCrypto(ks), ctopic)
+    # The same founding epoch coordinate_join made, derived again (exo-6dc.1): the room's
+    # pre-admit history opens on relaunch, not only the epochs granted since.
+    let s = newCoordinationSession(newDeliveryTransport(gDeliveryConfig, mix = gMix), newEpochCrypto(ks, ctopic), ctopic)
     gSessions[ctopic] = s
     s.announceBeacon()
     result.add ctopic
