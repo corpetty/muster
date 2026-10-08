@@ -39,7 +39,14 @@
       inputs.logos-standalone-app.url = "github:logos-co/logos-standalone-app/c25aa61e3ad69358bbd9c8192c319ffcbf774189";
       inputs.logos-test-framework.url = "github:logos-co/logos-test-framework/eb1600cc6f61b66f6d75edd4773a58f0d1fa1ca4";
       inputs.logos-nix.url = "github:logos-co/logos-nix/e637a1f5e871244d1c2df1e3c52a067f2eb406f2";
-      inputs.nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx/b49074a8e1157832002b11d3d254c1aaa4b96680";
+      # The .lgx bundler, alone, at upstream main (c8c4659, 2026-10-08) rather than the
+      # June b49074a basecamp's builder set carried: b49074a copies only `dependencies`
+      # into the package manifest and drops `optional_dependencies` (and `provides`),
+      # so the installed manifest never named the Monero backend (exo-dcc.1). d0828e0
+      # (#14) added them; c8c4659 also relocks logos-package to c25a116, the lgx
+      # Basecamp 0.3.2 itself ships. The plugin's own embedded metadata (what liblogos
+      # loads by) carries the key either way; Package Manager reads the manifest.
+      inputs.nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx/c8c46595114d64526cb48dab6a9bf83f298473a9";
       inputs.nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install/55de9a6fce755387224ececd0493f46b028ee0a3";
       inputs.rust-overlay.url = "github:oxalica/rust-overlay/14f58845249f3552a89b07772626b8d3c632fa86";
     };
