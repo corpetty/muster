@@ -302,7 +302,10 @@ Keycard signer backend over PC/SC (F-14). Logos Storage module as the artifact b
     - A part is confirmed by a `history()` row on that subaddress: direction in, exactly the share in atomic units, at least 10 confirmations (Monero's default spendable age).
     - A debtor's report, a txid alone or an explorer never confirms a part.
     - When one subaddress takes several shares, the shares are distinct amounts, as in the private split. A subaddress per share is a later effect version.
-  - **CAIP-2.** `monero:<the first 32 hex characters of the network's genesis block hash>`, after bip122, for mainnet, stagenet and testnet. The values are read from monerod and held by a test vector.
+  - **CAIP-2.** `monero:<the first 32 hex characters of the network's genesis block hash>`, after bip122. The genesis hashes were read from the platform's default nodes (`get_block_header_by_height 0`, 2026-10-08) and are held by a test vector:
+    - mainnet `monero:418015bb9ae982a1975da7d79277c270`;
+    - stagenet `monero:76ee3cc98646292206cd3e86f74d88b4`;
+    - testnet `monero:48ca7cd3c8de5b6a4d53d2861fbdaedc`.
   - **Binding (invariant 2): `implicit`.**
     - A Monero address names its network in its prefix byte, and Muster refuses a `payTo` whose network is not the agreed chain's.
     - The outputs a spend references exist in one network's history, so a payment lands only where it was made.

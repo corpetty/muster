@@ -331,8 +331,7 @@
       ],
       "unverified": [
         "whether an incoming transfer appears in history() before it is confirmed (mempool visibility; the 10-block depth does not depend on it)",
-        "the CAIP-2 references for Monero's networks: the bip122-style genesis-hash prefixes, to be read from monerod (ADR-018)",
-        "whether muster_module can call monero_wallet_backend in Basecamp once it declares it (exo-dcc.11)"
+                "whether muster_module can call monero_wallet_backend in Basecamp once it declares it (exo-dcc.11)"
       ]
     }
   ]
