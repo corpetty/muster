@@ -60,6 +60,9 @@ const Kinds*: seq[KindInfo] = @[
   KindInfo(kind: "btc-split", family: "btc.split", label: "Split (Bitcoin)", composes: @["split"],
            founding: true, settlesOn: @["bip122"])]
 
+const SplitKinds* = ["evm-split", "lez-split", "btc-split", "monero-split"]
+  ## every kind whose intents settle in parts on the each locus (the split families)
+
 # ── a policy is a kind, optionally bound to an account ─────────────────────────
 # An account-bound intent's policy is "<kind>@<CAIP-10 account>" (exo-a50.1.3), so the
 # intent id — which commits to the policy — commits to WHICH account it acts from: the

@@ -629,3 +629,24 @@ proc sharedAddressOf*(events: seq[Event], who: string): string =
       if a.len == 42 and a.startsWith("0x") and a[2 .. ^1].allCharsInSet(HexDigits) and a != "0x" & repeat('0', 40):
         result = a
     except CatchableError: discard
+
+proc sharedMoneroAddressOf*(events: seq[Event], who, chain: string): string =
+  ## The Monero address `who` last shared into the room for `chain` (exo-dcc.5) — their
+  ## newest address-share card with asset XMR on that chain, as written (a Monero address
+  ## is case-sensitive: never lowercased), or "". Over the authentic view, as
+  ## sharedAddressOf: a share in `who`'s name by anyone else never reaches here. Whether
+  ## it is a valid address on the chain is the driver's question, and whether it is
+  ## theirs their own client's, before they agree.
+  proc bare(s: string): string =
+    result = s.toLowerAscii()
+    if result.startsWith("0x"): result = result[2 .. ^1]
+  let w = bare(who)
+  for m in reduceMessages(events):             # oldest first: the newest share wins
+    if bare(m.author) != w: continue
+    try:
+      let b = parseJson(m.body)
+      if b.kind != JObject or b{"kind"}.getStr() != "address-share" or b{"asset"}.getStr() != "XMR" or
+         b{"chain"}.getStr() != chain: continue
+      let a = b{"address"}.getStr()
+      if a.len > 0: result = a
+    except CatchableError: discard
