@@ -323,6 +323,48 @@ Rectangle {
     // the creditor — mark one person's share received outside muster.
     signal settlePart()
     signal confirmPart(string part)
+    // A Monero request (exo-dcc.5): muster never sends Monero. A debtor pays from any wallet
+    // with the monero: link the module derives from the agreed request, then says so —
+    // "I paid", with the transaction id if they give one: their claim, never a
+    // confirmation. The creditor's own open wallet confirms; when it cannot, the card
+    // asks Monero Wallet to open it (the room raises the intent; its answer comes back in
+    // moneroWalletNote, "" = nothing asked).
+    signal reportPaid(string tx)
+    signal openMoneroWallet(string wallet)
+    property string moneroWalletNote: ""
+    readonly property var xmr: (cardRoot.split && cardRoot.split.xmr) ? cardRoot.split.xmr : null
+    readonly property bool isXmr: cardRoot.xmr !== null
+    // MY share's link, if I owe one: {part, ok, uri, amount, payTo, why, reported, confirmed}
+    readonly property var xmrPay: (cardRoot.xmr && cardRoot.xmr.payment) ? cardRoot.xmr.payment : null
+    // on the creditor's client: whether their open wallet can confirm {ready, detail, code, request}
+    readonly property var xmrWallet: (cardRoot.xmr && cardRoot.xmr.wallet) ? cardRoot.xmr.wallet : null
+    readonly property int xmrDepth: cardRoot.xmr ? Number(cardRoot.xmr.confirmDepth || 10) : 10
+    // a payment request: one share, and the creditor's own share nothing
+    readonly property bool isRequest: cardRoot.isSplit && cardRoot.parts.length === 1
+                                      && String(cardRoot.split.creditorShare || "") === "0"
+    // a request's headline: who asks whom for what
+    function requestLine() {
+        if (!cardRoot.isRequest) return "";
+        var p = cardRoot.parts[0];
+        var who = String(p.name || "").length > 0 ? String(p.name) : String(p.who || "").slice(0, 10) + "…";
+        var memo = String(cardRoot.split.memo || "").length > 0 ? " · " + String(cardRoot.split.memo) : "";
+        return cardRoot.iAmCreditor
+               ? qsTr("You ask %1 for %2 %3%4").arg(who).arg(cardRoot.eth(cardRoot.split.total)).arg(cardRoot.unit).arg(memo)
+               : qsTr("%1 asks %2 for %3 %4%5").arg(cardRoot.creditorName).arg(who)
+                     .arg(cardRoot.eth(cardRoot.split.total)).arg(cardRoot.unit).arg(memo);
+    }
+    // A wallet refusal in plain words: by its code where one says it better, else the
+    // module's own words without the code and the intent's name
+    // ("no-wallet: … (monero.wallet.unlock)").
+    function xmrDetail(d, code) {
+        var c = String(code || "");
+        if (c === "no-wallet") return qsTr("no Monero wallet is open. Open it in Monero Wallet.");
+        if (c === "wallet-watch-only") return qsTr("the open wallet is view-only. Open the wallet that can spend what it receives.");
+        var t = String(d || "");
+        var i = t.indexOf(": ");
+        if (i > 0 && /^[a-z-]+$/.test(t.slice(0, i))) t = t.slice(i + 2);
+        return t.replace(/ \(monero\.wallet\.unlock\)$/, "");
+    }
     // A split past its expiry (exo-a90.15): renew its unpaid shares — a settle-up of it.
     signal renewSplit()
     readonly property bool splitExpired: !!(cardRoot.split && cardRoot.split.expired) && !cardRoot.paid
@@ -363,6 +405,7 @@ Rectangle {
     function shortPayTo(p) {
         if (p.indexOf("priv:") === 0)
             return qsTr("a shielded key node, %1…%2").arg(p.slice(5, 17)).arg(p.slice(-8));
+        if (cardRoot.isXmr && p.length > 24) return p.slice(0, 12) + "…" + p.slice(-8);
         return p;
     }
     readonly property var parts: (cardRoot.card && Array.isArray(cardRoot.card.parts)) ? cardRoot.card.parts : []
@@ -411,6 +454,21 @@ Rectangle {
     // payment report) and what the creditor confirmed (invariant 9).
     function partState(p) {
         if (!p) return "";
+        if (cardRoot.isXmr) {
+            // only the creditor's own wallet confirms; a report is the debtor's claim
+            if (p.confirmed) return String(p.tx || "").length > 0
+                                    ? (cardRoot.iAmCreditor ? qsTr("✓ received — your wallet saw it at %1 confirmations").arg(cardRoot.xmrDepth)
+                                       : qsTr("✓ received — %1's wallet saw it at %2 confirmations").arg(cardRoot.creditorName).arg(cardRoot.xmrDepth))
+                                    : (cardRoot.iAmCreditor ? qsTr("✓ you marked it received")
+                                       : qsTr("✓ marked received by %1").arg(cardRoot.creditorName));
+            if (p.settled) {
+                var ref = String(p.tx || "").length > 0 ? " (" + String(p.tx).slice(0, 10) + "…)" : "";
+                return cardRoot.iAmCreditor
+                       ? qsTr("says they paid%1 — your wallet confirms it at %2 confirmations").arg(ref).arg(cardRoot.xmrDepth)
+                       : qsTr("says they paid%1 — waiting for %3's wallet to see it at %2 confirmations")
+                             .arg(ref).arg(cardRoot.xmrDepth).arg(cardRoot.creditorName);
+            }
+        }
         if (p.confirmed) return String(p.tx || "").indexOf("note:") === 0 ? qsTr("✓ received — a private note of exactly this share")
                               : String(p.tx || "").length > 0 ? qsTr("✓ received")
                               : p.settledUp ? qsTr("✓ paid through a settle-up") : qsTr("✓ received outside muster");
@@ -960,7 +1018,9 @@ Rectangle {
                 LogosText {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: cardRoot.split
+                    text: cardRoot.isRequest
+                          ? cardRoot.requestLine()
+                          : cardRoot.split
                           ? qsTr("%1 %2%3 — %4 paid; %5%6")
                                 .arg(cardRoot.eth(cardRoot.split.total)).arg(cardRoot.unit)
                                 .arg(String(cardRoot.split.memo || "").length > 0 ? " · " + String(cardRoot.split.memo) : "")
@@ -1018,7 +1078,14 @@ Rectangle {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     visible: cardRoot.split !== null
-                    text: cardRoot.split
+                    text: cardRoot.isRequest
+                          ? qsTr("Paid to %1%2.").arg(cardRoot.shortPayTo(String(cardRoot.split.payTo || "")))
+                                .arg(!cardRoot.isXmr ? ""
+                                     : cardRoot.iAmCreditor ? qsTr(", a subaddress of your own Monero wallet on %1")
+                                                                  .arg(String(cardRoot.xmr.chainLabel || ""))
+                                     : qsTr(", a subaddress of %1's own Monero wallet on %2")
+                                           .arg(cardRoot.creditorName).arg(String(cardRoot.xmr.chainLabel || "")))
+                          : cardRoot.split
                           ? qsTr("%1 own share: %2 %3 (it absorbs any rounding). Paid to %4.")
                                 .arg(cardRoot.iAmCreditor ? qsTr("Your") : cardRoot.creditorName + qsTr("'s"))
                                 .arg(cardRoot.eth(cardRoot.split.creditorShare)).arg(cardRoot.unit)
@@ -1102,7 +1169,7 @@ Rectangle {
                     objectName: "cardMyShare"
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    visible: cardRoot.iAmDebtor
+                    visible: cardRoot.iAmDebtor && !cardRoot.isXmr
                     text: cardRoot.myPart
                           ? qsTr("Your share: %1 %2 → %3, from your own wallet%4. Muster builds the payment from this split — nothing to type, and nothing else can be sent.")
                                 .arg(cardRoot.eth(cardRoot.myPart.amount)).arg(cardRoot.unit).arg(cardRoot.creditorName)
@@ -1110,6 +1177,159 @@ Rectangle {
                           : ""
                     color: Theme.palette.textSecondary
                     font.pixelSize: Theme.typography.badgeText
+                }
+
+                // ── a Monero request (exo-dcc.5): MY share's link, from the module's
+                // projection — derived from the request everyone agreed, never typed ──
+                ColumnLayout {
+                    id: xmrPayBox
+                    objectName: "cardXmrPay"
+                    visible: cardRoot.isXmr && cardRoot.iAmDebtor && cardRoot.xmrPay !== null
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.tiny
+                    readonly property var pay: cardRoot.xmrPay || ({})
+                    readonly property bool linkShown: !!pay.ok && !pay.reported && !pay.confirmed && !cardRoot.splitExpired
+
+                    LogosText {
+                        objectName: "cardXmrPayLine"
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: {
+                            var p = xmrPayBox.pay;
+                            if (p.confirmed) return qsTr("✓ %1's wallet confirmed your payment.").arg(cardRoot.creditorName);
+                            if (p.reported)
+                                return qsTr("You said you paid. %1's own wallet confirms it once it has %2 confirmations (about 20 minutes).")
+                                       .arg(cardRoot.creditorName).arg(cardRoot.xmrDepth);
+                            if (!p.ok)
+                                return String(p.why || "").indexOf("not-agreed") === 0
+                                       ? qsTr("Your share: %1 XMR to %2. The link to pay it appears here once everyone named has agreed.")
+                                             .arg(cardRoot.eth(cardRoot.myPart ? cardRoot.myPart.amount : "0")).arg(cardRoot.creditorName)
+                                       : qsTr("⚠ No link to pay: %1").arg(cardRoot.xmrDetail(p.why));
+                            return qsTr("Pay %1 XMR to %2 from any Monero wallet: Cake, Feather or Basecamp's Monero Wallet. Scan the code or copy the link: it carries the address and the exact amount. Muster never sends Monero.")
+                                   .arg(cardRoot.eth(p.amount)).arg(cardRoot.creditorName);
+                        }
+                        color: !xmrPayBox.pay.ok && String(xmrPayBox.pay.why || "").indexOf("not-agreed") !== 0
+                               ? Theme.palette.warning : Theme.palette.textSecondary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+
+                    // the link as a QR code, for a wallet on a phone
+                    QrCode {
+                        objectName: "cardXmrQr"
+                        visible: xmrPayBox.linkShown && size > 0
+                        text: xmrPayBox.linkShown ? String(xmrPayBox.pay.uri || "") : ""
+                        Layout.preferredWidth: 196
+                        Layout.preferredHeight: 196
+                    }
+                    // the link itself, whole: what the code holds
+                    TextEdit {
+                        objectName: "cardXmrUri"
+                        visible: xmrPayBox.linkShown
+                        Layout.fillWidth: true
+                        readOnly: true
+                        selectByMouse: true
+                        wrapMode: TextEdit.WrapAnywhere
+                        text: String(xmrPayBox.pay.uri || "")
+                        color: Theme.palette.text
+                        selectionColor: Theme.palette.primary
+                        font.family: Theme.typography.mono
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                    RowLayout {
+                        visible: xmrPayBox.linkShown
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        LogosButton {
+                            id: copyLink
+                            objectName: "cardXmrCopy"
+                            property bool copied: false
+                            text: copied ? qsTr("✓ Copied") : qsTr("Copy link")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: {
+                                clip.text = String(cardRoot.xmrPay ? cardRoot.xmrPay.uri || "" : "");
+                                clip.selectAll();
+                                clip.copy();
+                                copied = true;
+                                copiedReset.restart();
+                            }
+                            TextEdit { id: clip; visible: false; width: 0; height: 0 }
+                            Timer { id: copiedReset; interval: 1500; onTriggered: copyLink.copied = false }
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+
+                    // "I paid": the debtor's claim, with the transaction id if they give one
+                    RowLayout {
+                        visible: xmrPayBox.linkShown
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        LogosTextField {
+                            id: xmrTx
+                            objectName: "cardXmrTx"
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("transaction id (optional)")
+                            font.family: Theme.typography.mono
+                        }
+                        LogosButton {
+                            objectName: "cardXmrPaid"
+                            readonly property string tx: String(xmrTx.text || "").trim().toLowerCase()
+                            enabled: tx.length === 0 || /^[0-9a-f]{64}$/.test(tx)
+                            text: qsTr("I paid")
+                            onClicked: cardRoot.reportPaid(tx)
+                        }
+                    }
+                    LogosText {
+                        visible: xmrPayBox.linkShown
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: String(xmrTx.text || "").trim().length > 0 && !/^[0-9a-fA-F]{64}$/.test(String(xmrTx.text || "").trim())
+                              ? qsTr("⚠ A transaction id is 64 hex characters. Leave it empty if you don't have it.")
+                              : qsTr("“I paid” tells the room; it doesn't confirm anything. %1's own wallet confirms the payment when it reaches %2 confirmations.")
+                                    .arg(cardRoot.creditorName).arg(cardRoot.xmrDepth)
+                        color: String(xmrTx.text || "").trim().length > 0 && !/^[0-9a-fA-F]{64}$/.test(String(xmrTx.text || "").trim())
+                               ? Theme.palette.warning : Theme.palette.textTertiary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                }
+
+                // on the creditor's client: can my own wallet confirm these payments?
+                ColumnLayout {
+                    id: xmrWalletBox
+                    objectName: "cardXmrWallet"
+                    visible: cardRoot.isXmr && cardRoot.iAmCreditor && cardRoot.xmrWallet !== null && !cardRoot.paid
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.tiny
+                    readonly property var w: cardRoot.xmrWallet || ({})
+                    LogosText {
+                        objectName: "cardXmrWalletLine"
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: xmrWalletBox.w.ready
+                              ? qsTr("Your Monero wallet is open on %1: it confirms each payment once it has %2 confirmations. You can also mark a share received yourself.")
+                                    .arg(String(cardRoot.xmr ? cardRoot.xmr.chainLabel || "" : "")).arg(cardRoot.xmrDepth)
+                              : String(xmrWalletBox.w.code || "") === "wallet-unread" || String(xmrWalletBox.w.code || "") === "wallet-busy"
+                              ? qsTr("Your Monero wallet hasn't answered yet, so nothing is confirmed for now. %1").arg(cardRoot.xmrDetail(xmrWalletBox.w.detail))
+                              : qsTr("⚠ Your Monero wallet can't confirm payments now: %1").arg(cardRoot.xmrDetail(xmrWalletBox.w.detail, xmrWalletBox.w.code))
+                        color: xmrWalletBox.w.ready ? Theme.palette.textSecondary
+                             : String(xmrWalletBox.w.request || "").length > 0 ? Theme.palette.warning : Theme.palette.textTertiary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                    LogosButton {
+                        objectName: "cardXmrOpenWallet"
+                        visible: !xmrWalletBox.w.ready && String(xmrWalletBox.w.request || "") === "monero.wallet.unlock"
+                        text: qsTr("Open Monero Wallet")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: cardRoot.openMoneroWallet(String(xmrWalletBox.w.wallet || ""))
+                    }
+                    LogosText {
+                        objectName: "cardXmrWalletNote"
+                        visible: !xmrWalletBox.w.ready && cardRoot.moneroWalletNote.length > 0
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: cardRoot.moneroWalletNote
+                        color: Theme.palette.textSecondary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
                 }
             }
 
@@ -1896,11 +2116,22 @@ Rectangle {
                             }
                             LogosButton {
                                 objectName: "needRemedy_" + String(modelData.kind)
-                                visible: (modelData.kind === "infra" && modelData.name !== "lez-account")
-                                         || modelData.kind === "environment"
+                                visible: ((modelData.kind === "infra" && modelData.name !== "lez-account")
+                                          || modelData.kind === "environment")
+                                         && String(modelData.request || "").length === 0
                                 text: qsTr("Open settings")
                                 variant: LogosButton.Variant.Secondary
                                 onClicked: cardRoot.openSettings()
+                            }
+                            // a Monero wallet that is closed or on another network (exo-dcc.5):
+                            // Monero Wallet opens it; muster never holds its password
+                            LogosButton {
+                                objectName: "needRequest_" + String(modelData.name)
+                                visible: String(modelData.request || "") === "monero.wallet.unlock"
+                                         && modelData.status !== "met"
+                                text: qsTr("Open Monero Wallet")
+                                variant: LogosButton.Variant.Secondary
+                                onClicked: cardRoot.openMoneroWallet(String(modelData.wallet || ""))
                             }
                         }
                         // A module that is not installed (exo-dcc.10): ask Basecamp's
@@ -2147,7 +2378,7 @@ Rectangle {
         // button carries no amount and no address.
         LogosButton {
             objectName: "cardPayShare"
-            visible: cardRoot.kind === "intent-propose" && cardRoot.isSplit && cardRoot.iAmDebtor
+            visible: cardRoot.kind === "intent-propose" && cardRoot.isSplit && cardRoot.iAmDebtor && !cardRoot.isXmr
                 && cardRoot.ready && !cardRoot.paid && !cardRoot.splitExpired
                 && cardRoot.myPart !== null && !cardRoot.myPart.settled && !cardRoot.myPart.paying
                 && !cardRoot.myPart.covered

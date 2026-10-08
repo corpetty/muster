@@ -773,6 +773,16 @@ void MusterUiBackend::confirmPart(const QString &intentId, const QString &part, 
     loadIntents();
 }
 
+void MusterUiBackend::reportPaid(const QString &intentId, const QString &tx)
+{
+    // coordinate_report_paid: "I paid" for MY share of a Monero request (exo-dcc.5) — my
+    // author-signed claim, with the txid if I gave one. It never confirms the part.
+    const QString r = modules().muster_module.coordinate_report_paid(intentId, tx.trimmed());
+    qInfo() << "[muster_ui] coordinate_report_paid" << intentId << tx << "->" << r;
+    setSplitJson(splitOutcome("report", intentId, r));
+    loadIntents();
+}
+
 void MusterUiBackend::proposeLezTransfer(const QString &recipient, const QString &amount)
 {
     // coordinate_propose_lez_transfer → the proposer's own Propose, sent (not awaited);
@@ -1047,6 +1057,17 @@ void MusterUiBackend::onContextReady()
                     loadFlow();
                     loadConnectivity();   // the proposal may have introduced infra (exo-428)
                     qInfo() << "[muster_ui] AUTOPROPOSE intents ->" << intentsJson();
+                });
+            }
+            // XMR request self-test (exo-dcc.5): MUSTER_AUTOREPORTPAID=<intent id> says "I
+            // paid" for it once joined — the card's "I paid" slot — so an offscreen run shows
+            // the slot reaching coordinate_report_paid (the module logs the answer).
+            const QByteArray autoreport = qgetenv("MUSTER_AUTOREPORTPAID");
+            if (!autoreport.isEmpty()) {
+                const QString id = QString::fromUtf8(autoreport);
+                QTimer::singleShot(4000, this, [this, id]() {
+                    reportPaid(id, QString());
+                    qInfo() << "[muster_ui] AUTOREPORTPAID ->" << splitJson();
                 });
             }
             // Poll pending/members so a two-instance self-test shows cross-host

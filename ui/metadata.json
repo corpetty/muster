@@ -73,6 +73,12 @@
     },
     {
       "intent": "packages.show"
+    },
+    {
+      "intent": "monero.wallet.unlock"
+    },
+    {
+      "intent": "monero.accounts.manage"
     }
   ]
 }

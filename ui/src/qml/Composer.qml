@@ -92,6 +92,10 @@ Item {
           note: qsTr("Money moves from a shared account, coordinated by the room. Each person's address stays in the room — the transaction is signed off together.") },
         { id: "split",  proposal: "split",     name: qsTr("Split a bill"),
           note: qsTr("You paid for something shared. Everyone named agrees to their own share, then each pays you back from their own wallet. No shared account — the room holds the agreement, and nothing makes anyone pay.") },
+        // a payment request (exo-dcc.5): a split with one person who pays and you not in
+        // it — in XMR by default (ADR-018), changeable in the room like any split
+        { id: "request", proposal: "split",    prefer: "monero-split", name: qsTr("Request a payment"),
+          note: qsTr("Ask one person to pay you. They agree, then pay from any wallet of theirs; your own wallet confirms it. In XMR by default: your Monero wallet makes a new address for the request.") },
         { id: "talk",   proposal: "statement", name: qsTr("Just talk"),
           note: qsTr("A private conversation. Only the people in the room can read it — the room is the boundary.") }
     ]
@@ -101,13 +105,16 @@ Item {
     // module's one kind list (coordinate_drivers, exo-a50.1.2). Changeable later from the
     // room's policy row. "" until the list is loaded — the room then coheres the policy.
     readonly property string pickedPolicy: {
-        var proposal = "";
+        var proposal = "", prefer = "";
         var vs = composer.verbs;
         for (var i = 0; i < vs.length; i++)
-            if (vs[i].id === composer.pickedVerb) proposal = String(vs[i].proposal);
+            if (vs[i].id === composer.pickedVerb) { proposal = String(vs[i].proposal); prefer = String(vs[i].prefer || ""); }
         var ks = [];
         try { ks = JSON.parse(composer.backend ? composer.backend.driversJson : "[]"); } catch (e) { ks = []; }
         if (!Array.isArray(ks)) return "";
+        // a verb's own preference first (a request is in XMR), when the room offers it
+        for (var p = 0; p < ks.length && prefer.length > 0; p++)
+            if (ks[p] && ks[p].founding && String(ks[p].kind) === prefer) return prefer;
         for (var j = 0; j < ks.length; j++)
             if (ks[j] && ks[j].founding && (ks[j].composes || []).indexOf(proposal) >= 0)
                 return String(ks[j].kind);
@@ -317,8 +324,12 @@ Item {
                     Layout.fillWidth: true
                     text: composer.pickedPolicy === "safe"
                           ? qsTr("This settles on a shared Safe — signed off by the room, on-chain. You can change how the room approves once you're in it.")
+                          : composer.pickedVerb === "request"
+                          ? (composer.pickedPolicy === "monero-split"
+                             ? qsTr("They pay from any Monero wallet (Cake, Feather or Basecamp's Monero Wallet) with a link the room gives them; your own Monero wallet confirms it. Muster never sends Monero. You can pick another chain in the room.")
+                             : qsTr("They pay from their own wallet, on the chain; the room holds only the agreement. Pick where it settles once you're in the room."))
                           : String(composer.pickedPolicy).endsWith("-split")
-                          ? qsTr("Each person pays their own share from their own wallet, on the chain; the room holds only the agreement. Once you're in it, pick where it settles: Ethereum, Bitcoin, or privately on the LEZ.")
+                          ? qsTr("Each person pays their own share from their own wallet, on the chain; the room holds only the agreement. Once you're in it, pick where it settles: Ethereum, Bitcoin, Monero, or privately on the LEZ.")
                           : qsTr("This is a group endorsement — the room signs off, nothing touches a chain. You can change how the room approves once you're in it.")
                     color: Theme.palette.textTertiary
                     font.pixelSize: Theme.typography.secondaryText

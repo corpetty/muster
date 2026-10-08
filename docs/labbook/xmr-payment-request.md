@@ -1,7 +1,8 @@
 # The XMR payment request: the module half (exo-dcc.5)
 
 **2026-10-08. Status: built and held over a recording fake wallet backend; not yet run
-against a live stagenet wallet; no UI.** ADR-018 (accepted) in
+against a live stagenet wallet. The UI is built (below) and held offscreen; no live wallet
+has driven it.** ADR-018 (accepted) in
 `docs/02-implementation-plan.md`; plan `docs/design/monero-in-rooms.md` §4, §6 Phase 2; typed
 spec `contracts/specs/derived-exo-dcc.5.spec.json`, graded 7/7 by
 `scripts/grade-specs.sh exo-dcc.5`.
@@ -207,12 +208,41 @@ non-LEZ, non-Bitcoin chain as EVM.
   points in pure Nim, and the fold asks the driver about one effect many times. With the
   cache a Monero request folds in ~3.5 ms, the same as an EVM split.
 
+## The UI (exo-dcc.5, second half)
+
+- **Home's "Request a payment" verb** opens the room's split composer under the **Request**
+  kind: one person pays, the requester is not in it. It prefers the `monero-split` kind when
+  the room offers it; the room's "Settles on" row still picks any split rail.
+- **The Split composer on Monero**: the total in XMR, 12 decimals, by string arithmetic. No
+  token, no fiat quote, no settle-up and no "who paid" (the module refuses or never nets
+  them). payTo is never typed: Propose calls `coordinate_propose_split("", …)`, and the
+  module mints it from the proposer's open wallet. A wallet refusal is said in plain words,
+  with **Open Monero Wallet** (when `request` is set) and **Install monero_wallet_ui** (when
+  the wallet did not answer at all).
+- **The card**, for the debtor: `split.xmr.payment.uri` as a QR code (`QrCode.qml`, pure
+  QML/JS, decoded back by `ui/tests/qrcode-test.sh`), as text, and **Copy link**; then
+  **I paid** with an optional 64-hex txid, the new backend slot `reportPaid` →
+  `coordinate_report_paid`, landing on `splitJson {op: "report"}`. For the creditor: each
+  part's state (reported, confirmed by their wallet at 10, or marked received), their
+  wallet's state from `split.xmr.wallet`, Open Monero Wallet, and Mark received as before.
+- **Readiness**: the module item's Install names `monero_wallet_ui`; an environment item
+  carrying `request: "monero.wallet.unlock"` shows Open Monero Wallet instead of Open
+  settings.
+- **Which intent opens the wallet.** `monero.wallet.unlock` needs `{wallet: <registry
+  name>}`; Monero Wallet answers `bad_request` without one. No projection names a wallet
+  (muster cannot list them: `list_wallets` is outside `MoneroReadMethods`), so the UI raises
+  `monero.accounts.manage`, which brings Monero Wallet up to open one, and raises
+  `monero.wallet.unlock {wallet}` only when a projection carries `wallet`. Both are in
+  `ui/metadata.json`'s `uses`.
+- **Not shown: n/10 confirmations.** The projection says reported or confirmed, never how
+  many confirmations a seen transfer has; the card says "confirms it at 10 confirmations".
+- **Still not built: "Share my Monero address"**, for a request proposed on someone's
+  behalf. `coordinate_share_address("monero:…")` exists, but the address-request card asks
+  only for ETH and BTC, and the composer offers no "who paid" on Monero.
+
 ## Not built yet
 
-- **The UI.** The composer's "Request a payment" and XMR in the Split composer, the card's
-  link and QR, "I paid" (with a txid field), "Share my Monero address", and the unlock and
-  install buttons from readiness.
-- **A live stagenet run** (`split-xmr-self-test.sh`): two runners in Basecamp, a stagenet
+- **A live stagenet run**: two runners in Basecamp, a stagenet
   wallet in Monero Wallet, a payment from another wallet, and 10 confirmations. Still unknown:
   whether an incoming transfer appears in `history()` before it confirms (the 10-block rule
   does not depend on it), and what lp actually delivers for `history()` at size.

@@ -81,8 +81,12 @@ Item {
             roomSurface.composeType = "payment";
         else if (v === "decide")
             roomSurface.composeType = "statement";
-        else if (v === "split")
-            roomSurface.composeType = "split";   // you fronted it: the split composer (exo-a90)
+        else if (v === "split" || v === "request") {
+            // you fronted it: the split composer (exo-a90); a request is one of one person
+            // who pays you, and you not in it (exo-dcc.5)
+            roomSurface.composeType = "split";
+            roomSurface.splitRequest = v === "request";
+        }
         // Auto-ask to join UNLESS this is a fresh composer creation (a verb): a joiner
         // entering a room someone else already founded can't see them (their epoch is
         // sealed), so without this they'd have no idea they must ask. Requesting is
@@ -92,9 +96,10 @@ Item {
         if (v.length === 0)
             root.backend.requestJoin();
         // A split asks nobody for an address: the person who fronted the bill is paid at
-        // their own, which the split carries (exo-a90). Only a payment primes an ask.
-        var purpose = v === "pay" ? qsTr("Pay someone")
-                    : v === "request" ? qsTr("Ask to be paid") : "";
+        // their own, which the split carries (exo-a90) — and so does a payment request,
+        // whose address the requester's own wallet makes (exo-dcc.5). Only a payment
+        // primes an ask.
+        var purpose = v === "pay" ? qsTr("Pay someone") : "";
         if (purpose.length > 0)
             root.backend.postMessage(JSON.stringify({
                 kind: "address-request", intent: v, purpose: purpose
@@ -112,7 +117,7 @@ Item {
                 roomSurface.prefillPayment(String(o.to || ""),
                                            (o.value !== undefined ? String(o.value) : ""));
             } catch (e) { roomSurface.composing = true; }
-        } else if (v === "pay" || v === "decide" || v === "split") {
+        } else if (v === "pay" || v === "decide" || v === "split" || v === "request") {
             roomSurface.composing = true;
         }
     }
@@ -448,6 +453,9 @@ Item {
         packageRequests: root.packageRequests
         onPackageInstallRequested: function (pkg) { root.requestPackageInstall(pkg); }
         onPackageShowRequested: function (pkg) { root.showPackage(pkg); }
+        // open the Monero wallet (exo-dcc.5): the same, for monero.wallet.unlock / manage
+        moneroWallet: root.moneroWallet
+        onMoneroWalletRequested: function (wallet) { root.openMoneroWallet(wallet); }
         objectName: "roomSurface"
         anchors.top: navBar.bottom
         anchors.left: parent.left
@@ -1223,6 +1231,29 @@ Item {
         root.notePackage(name, { state: "asking", error: "", at: Date.now(), showError: "" });
         try { logos.request("packages.install", { name: name }, finish); }
         catch (x) { finish({ ok: false, data: ({}), error: "unavailable" }); }
+    }
+    // Open the Monero wallet (exo-dcc.5). A Monero request is vouched for and confirmed by
+    // the requester's OWN open wallet, which muster never unlocks: it asks Monero Wallet.
+    // With a wallet's registry name, monero.wallet.unlock opens that wallet's password
+    // sheet and answers ok only once that wallet is open; with none (the module names no
+    // wallet: it cannot list them), monero.accounts.manage brings the app up to open one.
+    // The answer: { intent, wallet, state: "asking" | "open" | "unavailable" | "failed" |
+    // "cancelled" | "error", error, at }.
+    property var moneroWallet: ({})
+    function openMoneroWallet(wallet) {
+        var w = String(wallet || "");
+        var intent = w.length > 0 ? "monero.wallet.unlock" : "monero.accounts.manage";
+        var finish = function (res) {
+            var e = String((res && res.error) || "");
+            var ok = !!(res && res.ok);
+            root.moneroWallet = { intent: intent, wallet: w, error: e, at: Date.now(),
+                                  state: ok ? "open" : (e === "unavailable" || e === "cancelled") ? e
+                                         : e.length > 0 ? "failed" : "error" };
+        };
+        if (!root.canRaiseIntents) { finish({ ok: false, error: "unavailable" }); return; }
+        root.moneroWallet = { intent: intent, wallet: w, state: "asking", error: "", at: Date.now() };
+        try { logos.request(intent, w.length > 0 ? { wallet: w } : ({}), finish); }
+        catch (x) { finish({ ok: false, error: "unavailable" }); }
     }
     // Show the package in Package Manager (packages.show): offered when the install
     // request found nothing, so the person can check the catalogues there.
