@@ -159,15 +159,14 @@ var gInvoker: Invoker = nil   ## the execute/discovery/readiness seam to other m
 var gModuleInvoker: Invoker = nil              ## gInvoker for readiness: a module's methods kept 5 s (exo-dcc.10)
 var gModuleRecord: ModuleRecordProbe = nil     ## modules_state.module_record: 500 ms, kept 5 s; unavailable, a minute (exo-dcc.10)
 
-proc declaredModules(metadata: string): seq[string] {.compileTime.} =
-  ## The modules muster's metadata.json declares, hard and optional: the host loads them
-  ## before muster, so readiness may call one even when there is no registry to ask.
-  let j = parseJson(metadata)
-  for key in ["dependencies", "optional_dependencies"]:
-    for d in j{key}.getElems():
-      result.add(if d.kind == JString: d.getStr() else: d{"name"}.getStr())
-
-const DeclaredModules = declaredModules(staticRead("../metadata.json"))
+const MusterMetadata = staticRead("../metadata.json")
+const RequiredModules = declaredModules(MusterMetadata, optional = false)
+  ## muster's `dependencies`: the host loads them before muster, so readiness may call one
+  ## even when there is no registry to ask
+const DeclaredModules = declaredModules(MusterMetadata)
+  ## ...and its `optional_dependencies` (the Monero backend, exo-dcc.1): started with
+  ## Muster once installed, so "close and reopen Muster" is their remedy, but never called
+  ## without a registry: the host may not have them
 
 proc moduleFacts(): HostFacts =
   ## What readiness asks about a required module (exo-dcc.10): the host's registry first —
@@ -182,7 +181,8 @@ proc moduleFacts(): HostFacts =
   if gModuleRecord == nil:
     gModuleRecord = cachedRecords(selfChecked(lpModuleRecord("muster_module"), "muster_module"))
   HostFacts(invoker: gModuleInvoker, moduleRecord: gModuleRecord,
-            callableWithoutRegistry: proc(name: string): bool {.gcsafe.} = name in DeclaredModules)
+            callableWithoutRegistry: proc(name: string): bool {.gcsafe.} = name in RequiredModules,
+            declared: proc(name: string): bool {.gcsafe.} = name in DeclaredModules)
 
 proc seedOf(n: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = n)
 proc thrRosterKey(n: byte): Ed25519Pub = encFromSeed(seedOf(n)).identity().ed
@@ -2855,6 +2855,7 @@ proc hostFacts(policy = ""): HostFacts =
   facts.invoker = mf.invoker
   facts.moduleRecord = mf.moduleRecord
   facts.callableWithoutRegistry = mf.callableWithoutRegistry
+  facts.declared = mf.declared
   # A Bitcoin proposal introduces the user's node (exo-a50.2.6): graded by asking IT
   # which chain it serves; my key is graded against the account's keys.
   facts.btcRpcUrl = gBtcRpc

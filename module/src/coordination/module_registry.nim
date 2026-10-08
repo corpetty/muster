@@ -57,6 +57,18 @@ const
 proc unanswered*(detail: string): ModuleRecordAnswer =
   ModuleRecordAnswer(answered: false, detail: detail)
 
+proc declaredModules*(metadataJson: string, optional = true): seq[string] =
+  ## The modules a metadata.json declares: its `dependencies` and, unless `optional` is
+  ## false, its `optional_dependencies` (exo-dcc.1). An entry is a bare name or an object
+  ## `{name, version?, signer?}`. Pure, so muster_module.nim reads its own metadata.json at
+  ## compile time. The two sets differ in what the host promises: a required dependency is
+  ## loaded before muster, or muster does not load; an optional one is loaded with muster
+  ## only when it is installed (Basecamp 0.3.2), and its absence never fails muster's load.
+  let j = parseJson(metadataJson)
+  for key in (if optional: @["dependencies", "optional_dependencies"] else: @["dependencies"]):
+    for d in j{key}.getElems():
+      result.add(if d.kind == JString: d.getStr() else: d{"name"}.getStr())
+
 proc parseModuleRecord*(v: JsonNode): ModuleRecordAnswer =
   ## module_record's value as it arrives over lp_*: null → not known (not installed); a
   ## record → its state and reason; a JSON value wrapped in a string is unwrapped first.

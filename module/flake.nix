@@ -68,6 +68,15 @@
     # The platform's one EVM sender (exo-d4d.5): muster pays a share through it over lp_*
     # (src/wallet/tx_sender_lp.nim). The catalog's tx_sender_module 0.1.0.
     logos-evm-tx-sender-module.url = "github:logos-co/logos-evm-tx-sender-module/7cd2fead60a78ac9ac8a4337fd9f01e1ab5515e2";
+    # The Monero wallet's coordinator (exo-dcc.1): muster calls it over lp_* for XMR
+    # payment requests. An OPTIONAL dependency (metadata.json#optional_dependencies): a
+    # missing or failing Monero stack never fails Muster's load, and Basecamp 0.3.2 starts
+    # it with Muster once installed. Pinned to the commit Basecamp's default catalog
+    # released as monero_wallet_backend 0.1.0; mapped to the module name below. This
+    # builder ignores optional_dependencies (no typed wrapper; muster calls it raw), so the
+    # pin records the contract muster targets and is ready for a builder that reads them.
+    # The standalone runner does not bundle the Monero stack (ui/flake.nix).
+    logos-monero-wallet-backend.url = "github:logos-co/logos-monero-wallet-backend/769098441db339f7541ba8804722ae3f20614309";
   };
 
   outputs = inputs@{ self, logos-module-builder, ... }:
@@ -100,7 +109,8 @@
           flakeInputs = { delivery_module = deliveryForModule; lez_core = inputs.lez_core;
                          keystore_module = inputs.logos-evm-keystore-module;
                          eth_rpc_module = inputs.logos-evm-eth-rpc-module;
-                         tx_sender_module = inputs.logos-evm-tx-sender-module; } // inputs;
+                         tx_sender_module = inputs.logos-evm-tx-sender-module;
+                         monero_wallet_backend = inputs.logos-monero-wallet-backend; } // inputs;
         }).packages.${system});
     };
 }

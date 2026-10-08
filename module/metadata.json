@@ -15,6 +15,9 @@
     "eth_rpc_module",
     "tx_sender_module"
   ],
+  "optional_dependencies": [
+    "monero_wallet_backend"
+  ],
   "include": [],
   "capabilities": [],
   "codegen": {

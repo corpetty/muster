@@ -223,10 +223,17 @@ type
     callableWithoutRegistry*: proc(name: string): bool {.gcsafe.}
                                    ## when the registry cannot be asked, which modules
                                    ## muster may still call to see if they run: the ones it
-                                   ## declares, which the host loads before muster. A call
+                                   ## REQUIRES, which the host loads before muster. A call
                                    ## to a module that is not running blocks for lp's whole
                                    ## deadline (20 s, measured in the runner), so any other
-                                   ## grades unknown, uncalled. nil = ask any module.
+                                   ## grades unknown, uncalled — an optional dependency
+                                   ## too, which is loaded only when installed. nil = ask
+                                   ## any module.
+    declared*: proc(name: string): bool {.gcsafe.}
+                                   ## the modules muster declares, required or optional:
+                                   ## reopening Muster starts an installed one (Basecamp
+                                   ## 0.3.2), so that is its remedy (exo-dcc.1). nil = the
+                                   ## callableWithoutRegistry set.
     safe*: Address                ## the Safe whose owner set "safe-owner" is graded against
     rpcProbe*: proc(url: string): tuple[ok: bool, chainId: int, detail: string] {.gcsafe.}
                                    ## nil = use the real probeRpc
@@ -336,7 +343,7 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
       of elNo: (rdMissing, "the split does not name you: your agreement would not count")
       of elUnknown: (rdUnknown, "cannot tell whether the split names you")
     else: (rdUnknown, "unrecognized authority requirement: " & name)
-  result.moduleDeclared = facts.callableWithoutRegistry
+  result.moduleDeclared = (if facts.declared != nil: facts.declared else: facts.callableWithoutRegistry)
   result.moduleLoaded = proc(name: string): ModuleGrade =
     # The host's registry first: muster calls into a module only once the host reports
     # it ready — a call to one installed but not loaded blocks for the caller's whole
