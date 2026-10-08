@@ -10,42 +10,15 @@
   "icon": "src/icons/icon.png",
   "view": "qml/Main.qml",
   "dependencies": [
-    {
-      "name": "muster_module",
-      "version": "~0.2.0"
-    },
-    {
-      "name": "delivery_module",
-      "version": "~0.3.2"
-    },
-    {
-      "name": "lez_core",
-      "version": "~0.5.0"
-    },
-    {
-      "name": "keystore_module",
-      "version": "~0.1.0"
-    },
-    {
-      "name": "eth_rpc_module",
-      "version": "~0.1.0"
-    },
-    {
-      "name": "tx_sender_module",
-      "version": "~0.1.0"
-    },
-    {
-      "name": "fee_module",
-      "version": "~0.1.0"
-    },
-    {
-      "name": "liblogos_lez_rln_module",
-      "version": "~4.2.1"
-    },
-    {
-      "name": "liblogos_rln_module",
-      "version": "~0.10.0"
-    }
+    "muster_module",
+    "delivery_module",
+    "lez_core",
+    "keystore_module",
+    "eth_rpc_module",
+    "tx_sender_module",
+    "fee_module",
+    "liblogos_lez_rln_module",
+    "liblogos_rln_module"
   ],
   "codegen": {
     "rep": "src/muster_ui.rep"
