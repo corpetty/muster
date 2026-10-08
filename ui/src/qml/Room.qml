@@ -223,7 +223,20 @@ Item {
                           if (composing) { refreshRoomAccount(); room.coherePolicy();
                                            room.installNow = Date.now();
                                            if (room.backend) room.backend.loadDrivers(); } }
-    onPolicyKindChanged: if (composing) refreshRoomAccount()
+    onPolicyKindChanged: {
+        if (room.policyKind === room.requestedPolicy.split("@")[0]) room.requestedPolicy = "";
+        if (composing) refreshRoomAccount();
+    }
+    // A policy asked of the module and not yet read back (setPolicy answers through
+    // policyJson, a moment later). coherePolicy judges by it, so opening a room under a
+    // verb's policy (a request's monero-split) is not snapped back to the kind's first
+    // policy by a policyKind that has not caught up yet (exo-dcc.5, seen in Basecamp).
+    property string requestedPolicy: ""
+    function choosePolicy(k) {
+        room.requestedPolicy = String(k || "");
+        if (room.backend && room.requestedPolicy.length > 0) room.backend.setPolicy(room.requestedPolicy);
+    }
+    onPolicyErrorChanged: room.requestedPolicy = ""
     // The outcome of the last room-side submit (coordinate_submit): {id, state,
     // onchain, txHash} or {id, error, ...}. Matched to a card by its intent id.
     readonly property var roomSubmit: {
@@ -378,8 +391,9 @@ Item {
     function coherePolicy() {
         if (!room.backend || room.composeType === "action") return;
         var valid = room.policiesForKind(room.composeType).filter(function (p) { return room.hasDriver(p); });
-        if (valid.length > 0 && valid.indexOf(room.policyKind) < 0)
-            room.backend.setPolicy(valid[0]);
+        var cur = room.requestedPolicy.length > 0 ? room.requestedPolicy.split("@")[0] : room.policyKind;
+        if (valid.length > 0 && valid.indexOf(cur) < 0)
+            room.choosePolicy(valid[0]);
     }
 
     // The coordinatable module actions available to the room (loadAvailableActions):

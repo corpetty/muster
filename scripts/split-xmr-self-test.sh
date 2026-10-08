@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # A Monero payment request through the real UI binary (exo-dcc.5) — no GUI, no clicks, and
 # NO Monero wallet: the runner bundles no monero_wallet_backend. Two offscreen runners:
-#   A founds a room, admits B, and once B is in requests 0.123456789012 XMR of B on
-#     stagenet (MUSTER_AUTOSPLIT with MUSTER_AUTOSPLIT_CHAIN=monero:… — the slot the Split
-#     composer's Propose calls under the "Request" kind and the Monero rail);
+#   A founds a room, admits B, and once B is in chooses the "Split (Monero)" kind bare
+#     (MUSTER_AUTOPOLICY=monero-split — the "Settles on" button) and requests
+#     0.123456789012 XMR of B with no chain named (MUSTER_AUTOSPLIT — the slot the Split
+#     composer's Propose calls under the "Request" kind);
 #   B says "I paid" for a request that does not exist (MUSTER_AUTOREPORTPAID — the slot the
 #     card's "I paid" calls).
 # Passes when
+#   * the bare kind is taken on Monero stagenet, never the EVM RPC's chain;
 #   * A's module refuses the request BEFORE minting anything, with a wallet error that names
 #     both remedies the composer offers: request monero.wallet.unlock (Open Monero Wallet)
 #     and install monero_wallet_ui (Install);
@@ -36,7 +38,7 @@ trap ui_cleanup EXIT
 
 common=(MUSTER_LP_DEBUG=1 MUSTER_AUTOJOIN_TOPIC="$TOPIC" QT_FORCE_STDERR_LOGGING=1)
 ui_launch "$D/A" "$D/A.log" "${common[@]}" MUSTER_DELIVERY_CONFIG="$CFG" LOGOS_INSTANCE_ID=xmrA \
-  MUSTER_AUTOADMIT=1 MUSTER_AUTOSPLIT="$TOTAL" MUSTER_AUTOSPLIT_CHAIN="$STAGENET"
+  MUSTER_AUTOADMIT=1 MUSTER_AUTOSPLIT="$TOTAL" MUSTER_AUTOPOLICY=monero-split
 CFG=$(ui_peer_config "$D/A.log") || exit 1
 ui_launch "$D/B" "$D/B.log" "${common[@]}" MUSTER_DELIVERY_CONFIG="$CFG" LOGOS_INSTANCE_ID=xmrB \
   MUSTER_AUTOREPORTPAID="$FAKE_ID"
@@ -65,6 +67,9 @@ checks = [("refused with a wallet error", j.get("error") in wallet),
 for name, good in checks: print(("  ok   " if good else "  FAIL ") + name, "" if good else j)
 sys.exit(0 if all(g for _, g in checks) else 1)
 EOF
+pol=$(grep -a 'AUTOPOLICY ->' "$D/A.log" | tail -1)
+if echo "$pol" | grep -q "monero-split@$STAGENET"; then echo "  ok   the bare kind is taken on Monero stagenet"
+else echo "  FAIL the bare kind: ${pol:-no AUTOPOLICY line}"; ok=0; fi
 if grep -aqE 'MUSTER-LP split 0x[0-9a-f]+ state=' "$D/A.log" "$D/B.log"; then
   echo "  FAIL a split reached the room"; ok=0
 else echo "  ok   no request reached the room"; fi

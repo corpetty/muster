@@ -67,8 +67,10 @@ Item {
         root.view = "room";
         // Set the room to coordinate under the intent's chosen policy (its driver).
         var p = String(policy || "");
+        // Through the room, so its coherePolicy judges by this choice until the module's
+        // answer arrives — not by the previous room's policy (exo-dcc.5).
         if (p.length > 0)
-            root.backend.setPolicy(p);
+            roomSurface.choosePolicy(p);
         var v = String(verb || "");
         // Seed the room to the ACTIVITY chosen in the composer, so each verb opens a
         // genuinely different room rather than all landing on the same chat:

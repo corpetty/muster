@@ -1133,6 +1133,14 @@ void MusterUiBackend::onContextReady()
                                       {"parties", QJsonArray{me}}, {"creditor", others.first()}})
                                       .toJson(QJsonDocument::Compact))
                                 : QString::fromUtf8(QJsonDocument(others).toJson(QJsonDocument::Compact));
+                            // MUSTER_AUTOPOLICY: choose the split's kind first, bare — the
+                            // "Settles on" row's button — so chain "" takes the kind's own
+                            // default (a Monero request: stagenet, exo-dcc.5)
+                            const QByteArray splitPolicy = qgetenv("MUSTER_AUTOPOLICY");
+                            if (!splitPolicy.isEmpty()) {
+                                setPolicy(QString::fromUtf8(splitPolicy));
+                                qInfo().noquote() << "[muster_ui] AUTOPOLICY ->" << policyJson() << policyErrorJson();
+                            }
                             proposeSplit(QString::fromUtf8(qgetenv("MUSTER_AUTOSPLIT_CHAIN")),
                                          QString::fromUtf8(autosplit), shares,
                                          QStringLiteral("split self-test"));
