@@ -1,0 +1,338 @@
+{
+  "actions": [
+    {
+      "id": "monero.split/request",
+      "name": "Request a payment, or split a bill, in XMR: agree who owes what, each pays from their own wallet, the payee's own wallet confirms",
+      "area": "family",
+      "family": "monero.split",
+      "kind": "monero-split",
+      "status": "declared",
+      "summary": "The same agreement as every split, settled in XMR (ADR-018). The creditor's own wallet mints a subaddress for the request; each debtor agrees to their own share with their room key, and the creditor that the subaddress is theirs. Each debtor pays from any wallet they like (Basecamp's, Cake, Feather) through a monero: URI, and the creditor's own wallet confirms a part when its history shows an incoming transfer to that subaddress of exactly the share, at the 10-block unlock depth. With one debtor and the creditor not in it, it is a payment request.",
+      "effect": {
+        "schema": "muster.effect.split.v1",
+        "fields": [
+          {
+            "name": "chain",
+            "means": "the Monero network, as CAIP-2 monero:<genesis-hash prefix> (mainnet, stagenet or testnet; stagenet first)"
+          },
+          {
+            "name": "asset",
+            "means": "XMR"
+          },
+          {
+            "name": "total",
+            "means": "the bill in atomic units (1 XMR = 10^12), a decimal string"
+          },
+          {
+            "name": "creditor",
+            "means": "the member who is owed, by room identity"
+          },
+          {
+            "name": "payTo",
+            "means": "a subaddress the creditor's own wallet minted for this request (create_subaddress, labelled for the intent)"
+          },
+          {
+            "name": "shares",
+            "means": "each debtor and the atomic amount they owe; distinct amounts when one subaddress takes several shares, so a transfer names its part"
+          },
+          {
+            "name": "memo",
+            "means": "what the payment is for; stays in the room, never on chain"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "every party the split names: each debtor and the creditor",
+        "finality": "external",
+        "domain": "muster.split.v1"
+      },
+      "requirements": [
+        {
+          "kind": "module",
+          "name": "monero_wallet_backend",
+          "party": "instance",
+          "class": "capability",
+          "target": "monero_wallet_backend",
+          "field": ""
+        },
+        {
+          "kind": "environment",
+          "name": "monero:*",
+          "party": "instance",
+          "class": "infra",
+          "target": "monero:*",
+          "field": ""
+        },
+        {
+          "kind": "authority",
+          "name": "split-party",
+          "party": "contributor",
+          "class": "authority",
+          "target": "split-party",
+          "field": ""
+        },
+        {
+          "kind": "address",
+          "name": "monero-subaddress",
+          "party": "proposer",
+          "class": "address",
+          "target": "monero:*",
+          "field": "payTo"
+        },
+        {
+          "kind": "asset",
+          "name": "xmr",
+          "party": "payer",
+          "class": "asset",
+          "target": "monero:*",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "monero:*",
+          "mode": "write"
+        },
+        {
+          "target": "monero-wallet:<creditor>/history",
+          "mode": "read"
+        },
+        {
+          "target": "monero-wallet:<creditor>/subaddresses",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "always"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "transaction-exists",
+          "observer": "chain-observer",
+          "when": "settle"
+        },
+        {
+          "field": "wallet-sync",
+          "observer": "rpc-provider",
+          "when": "always"
+        },
+        {
+          "field": "signed-tx",
+          "observer": "rpc-provider",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "the creditor (whoever is owed)",
+          "does": "The creditor's own wallet mints a subaddress for the request (create_subaddress, which needs no wallet role), and the creditor writes the total and each debtor's share. The proposal is the creditor's agreement that the subaddress is theirs.",
+          "signs": "the agreement, with the creditor's room key",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/logos-co/logos-monero-wallet-backend/blob/769098441db339f7541ba8804722ae3f20614309/rust-lib/src/glue.rs",
+            "https://docs.getmonero.org/public-address/subaddress/"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "each debtor the request names",
+          "does": "Each debtor agrees to their own share with their room key; an agreement by anyone the request does not name never counts.",
+          "signs": "the agreement, with the debtor's room key",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/src/drivers/split.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "each debtor",
+          "does": "The debtor pays their share to payTo from their own wallet: any Monero wallet, through a monero: URI carrying the address and the exact amount (wallet2's URI format), or Basecamp's own wallet once it can review a send another module prepared (exo-dcc.6). Muster signs nothing here; the debtor's wallet builds and signs the transfer. The debtor then reports that they paid.",
+          "signs": "the Monero transfer, by the debtor's own wallet",
+          "reveals": [
+            {
+              "field": "transaction-exists",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "https://github.com/monero-project/monero/blob/master/src/wallet/wallet2.cpp",
+            "https://github.com/logos-co/logos-monero-wallet-backend/blob/769098441db339f7541ba8804722ae3f20614309/rust-lib/src/glue.rs"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "the creditor",
+          "does": "The creditor's own wallet confirms a part: a history row with direction in, the subaddress index of payTo, exactly the share in atomic units, and at least 10 confirmations (the default spendable age). Only the creditor's own read confirms; a debtor's report alone never does.",
+          "signs": "the confirmation, with the creditor's room key",
+          "reveals": [
+            {
+              "field": "contributions",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://github.com/logos-co/logos-monero-wallet-backend/blob/769098441db339f7541ba8804722ae3f20614309/rust-lib/src/model.rs",
+            "https://github.com/logos-co/logos-monero-wallet-core-module/blob/7fc923dcce9ac5d40db8dd30f658eb63849e7212/src/wallet_runtime.cpp",
+            "https://github.com/monero-project/monero/blob/master/src/cryptonote_config.h"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one",
+          "does": "Every part confirmed: the request is final on every member's client.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/src/drivers/split.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "agreeing to a payTo the creditor's own wallet does not list (receive_info)",
+          "why": "the creditor's agreement vouches the address is theirs (payto-not-mine)",
+          "evidence": [
+            "https://github.com/logos-co/logos-monero-wallet-backend/blob/769098441db339f7541ba8804722ae3f20614309/rust-lib/src/glue.rs"
+          ]
+        },
+        {
+          "what": "a payTo whose network prefix is not the agreed chain's",
+          "why": "invariant 2: an agreement made for stagenet must not be paid, or confirmed, on mainnet",
+          "evidence": [
+            "https://docs.getmonero.org/public-address/subaddress/"
+          ]
+        },
+        {
+          "what": "confirming a part from anything but the creditor's own wallet read: a debtor's claim, a txid alone, a third-party explorer",
+          "why": "a share counts as paid only when the person owed says so, from their own read",
+          "evidence": [
+            "https://github.com/logos-co/logos-monero-wallet-backend/blob/769098441db339f7541ba8804722ae3f20614309/rust-lib/src/model.rs"
+          ]
+        },
+        {
+          "what": "one incoming transfer confirming two parts",
+          "why": "one reference settles one part",
+          "evidence": [
+            "module/src/coordination/parts.nim"
+          ]
+        },
+        {
+          "what": "two debtors owing the same amount at the same subaddress",
+          "why": "the creditor's wallet could not tell their payments apart (as the private split, lez.split)",
+          "evidence": [
+            "module/src/drivers/split.nim"
+          ]
+        }
+      ],
+      "ui": "not built",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The chain shows no sender, receiver or amount of the payment, and the subaddress is unlinkable to the creditor's other addresses; the link to the request lives only in the room",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A share counts as paid only when the creditor's own wallet sees exactly that amount arrive at the request's subaddress",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Nothing makes a debtor pay their share",
+          "credibility": "motivational",
+          "party": "each debtor"
+        },
+        {
+          "claim": "The payer's Monero node, a remote one by default, sees the wallet sync and when the transfer is broadcast, unless the payer runs their own node or a proxy",
+          "credibility": "exposed",
+          "party": "the payer's Monero node operator"
+        },
+        {
+          "claim": "Any module loaded in the same Basecamp can read the creditor's wallet history and subaddresses: the wallet backend's reads take no role",
+          "credibility": "exposed",
+          "party": "modules loaded beside Muster"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/logos-monero-wallet-backend/blob/769098441db339f7541ba8804722ae3f20614309/rust-lib/src/glue.rs",
+          "what": "monero_wallet_backend 0.1.0: create_subaddress, receive_info and history take no role; prepare_send builds a reviewed send; confirm_send needs the approver role (the wallet app by default)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/logos-monero-wallet-backend/blob/769098441db339f7541ba8804722ae3f20614309/rust-lib/src/model.rs",
+          "what": "the history row: direction, amount in atomic units, confirmations, pending, subaddrIndex (a comma-joined string), account."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/logos-monero-wallet-core-module/blob/7fc923dcce9ac5d40db8dd30f658eb63849e7212/src/wallet_runtime.cpp",
+          "what": "the wallet engine (wallet2 via monero_c) holds the keys and the password; reads answer within 750 ms or report busy."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/logos-monero-wallet-ui/blob/345fc5deb3ac61844dc27bb396bd77087e89c05c/qml/MoneroWalletView.qml",
+          "what": "monero_wallet_ui provides monero.wallet.unlock: another app asks the wallet app to open a wallet, and the person types the password there."
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.getmonero.org/public-address/subaddress/",
+          "what": "subaddresses: one wallet, many receiving addresses, unlinkable to each other on chain."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/monero-project/monero/blob/master/src/cryptonote_config.h",
+          "what": "CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE: received outputs unlock after 10 blocks."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/monero-project/monero/blob/master/src/wallet/wallet2.cpp",
+          "what": "wallet2 make_uri / parse_uri: the monero: URI with tx_amount, tx_description and recipient_name, which other Monero wallets read."
+        }
+      ],
+      "unverified": [
+        "whether an incoming transfer appears in history() before it is confirmed (mempool visibility; the 10-block depth does not depend on it)",
+                "whether muster_module can call monero_wallet_backend in Basecamp once it declares it (exo-dcc.11)"
+      ]
+    }
+  ]
+}

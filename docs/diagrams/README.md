@@ -135,7 +135,7 @@ The SVG entries in the catalogue below therefore do **not** become obsolete. The
 
 **One correctness fix, and it is not optional.** The network layer reads `P2P · discovery · peering · mix`, and the messaging view is titled *"Encrypted chat over the mixnet"* with body text about traffic riding "out through the mix-routed P2P layer". By this project's own rules that is a shipped-status claim for something at status `raw` — a send-only testnet proof of concept, not on the published near-term roadmap. `00-vision.md` names this exact failure ("'Coming soon' is not a status and never appears in the walkthrough"), and post 1 already prints the honest version.
 
-The fix is cheap because **the vocabulary already exists in the file**: `.bc-node-proposed` — dashed stroke, muted italic — is defined and used for the Monero module. Mix needs the same treatment, split out of the P2P bar as its own dashed element rather than listed as a shipped property of it. Worth raising upstream regardless of whether Muster forks it; the diagram is otherwise careful, which is what makes this row stand out.
+The fix is cheap because **the vocabulary already exists in the file**: `.bc-node-proposed` — dashed stroke, muted italic — is defined and used for the Monero module (since 2026-09-28 the Monero modules ship in Basecamp's catalogue, so that example is itself out of date; the dashed vocabulary is still the right tool for mix). Mix needs the same treatment, split out of the P2P bar as its own dashed element rather than listed as a shipped property of it. Worth raising upstream regardless of whether Muster forks it; the diagram is otherwise careful, which is what makes this row stand out.
 
 **Then, in rough order of effort:**
 

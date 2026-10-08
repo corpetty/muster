@@ -285,6 +285,45 @@ Keycard signer backend over PC/SC (F-14). Logos Storage module as the artifact b
   **Why not other options.** *Keep the digest leg:* blind signing on mainnet is exactly what muster exists to end (vision §Review). *An EIP-191 message of the fields:* the signer only signs printable text ≤ 8 KiB and renders it as a claim, not as typed fields it checked. *Make P itself EIP-712:* P's canonical form is dCBOR by invariant 5, shared by every key type (Ed25519 signs P itself); a second canonical form of P would be two truths.
   **Consequences.** New probes (append-only): a typed attestation verifies; changing any rendered field, the payload digest, or the domain refuses it; a typed signature never verifies as `hash-input` and the reverse. The keystore legs (`wallet/keystore_legs.nim`) send `typed_data` instead of `digest`; `keystore-backend = auto` routes approvals to the platform on every chain; the interim digest leg is retired. Builds before this cannot read `eip712` attestations, so mixed-version rooms see such approvals as unverified until upgraded (the card says so); nothing already in a log changes meaning.
   **Slices.** K6a this ADR · K6b the typed builders and verifiers, with the probes · K6c the keystore legs send them, and Settings/the card stop calling the attestation opaque · K6d `auto` on every chain, the interim gate removed (`exo-149.6`).
+- **ADR-018 Monero settles on the `each` locus, through the platform's wallet, confirmed by the payee's own wallet** — **proposed (2026-10-08), `exo-dcc.1`; plan `docs/design/monero-in-rooms.md`.**
+  **Problem.** The Monero-community campaign (epic `exo-dcc`) needs XMR used from inside rooms. Settlement stays on Monero, private by default; the room covers the rest of the deal.
+  - Basecamp's catalogue ships a Monero wallet stack at 0.1.0: `monero_wallet_core_module` (wallet2, the only key holder), `monero_wallet_backend` (what a third-party module calls), `monero_node_module`, `monerod_module`, `monero_wallet_ui` and `monerod_ui`. It is catalogue-only, not bundled.
+  - The stack has no multisig, no tx proofs, no payment id or integrated addresses, and no cold signing, and it allows one send in flight per device.
+  - The wallet engine signs while it builds a preview (`prepare_send`); `confirm_send` only governs the broadcast, and it needs the approver role, which the wallet app holds.
+  - The role gate is not a boundary against co-loaded modules: `configure` is ungated, and the core will commit a transaction for any caller while a wallet is open (`stacks/monero-wallet.md` §4 in the logos-module-atlas plugin).
+  **Decision.**
+  - **The locus is `each`.** Monero joins the split as family `monero.split`. A payment request is its one-debtor case, with the creditor not in it. `monero.multisig` stays rejected.
+  - **Muster holds no Monero key and no wallet password.** It calls `monero_wallet_backend` over lp_*, declared as an optional dependency. Opening a wallet is the wallet app's job, through `monero.wallet.unlock`.
+  - **Muster never makes itself approver.** It never calls `configure`, the same posture `exo-149` took for `keystore_module`.
+    - In v1 each debtor pays from **any wallet**, through a `monero:` URI carrying the address and the exact amount. Muster signs nothing on chain.
+    - Paying from Basecamp's own wallet waits for the wallet app to offer a review of a send another module prepared (an upstream ask, `exo-dcc.6`). Muster then checks the preview against the agreed part before asking for that review.
+  - **The payee's own wallet confirms.**
+    - `payTo` is a subaddress the creditor's wallet mints for the request, with `create_subaddress`, which needs no role.
+    - A part is confirmed by a `history()` row on that subaddress: direction in, exactly the share in atomic units, at least 10 confirmations (Monero's default spendable age).
+    - A debtor's report, a txid alone or an explorer never confirms a part.
+    - When one subaddress takes several shares, the shares are distinct amounts, as in the private split. A subaddress per share is a later effect version.
+  - **CAIP-2.** `monero:<the first 32 hex characters of the network's genesis block hash>`, after bip122. The genesis hashes were read from the platform's default nodes (`get_block_header_by_height 0`, 2026-10-08) and are held by a test vector:
+    - mainnet `monero:418015bb9ae982a1975da7d79277c270`;
+    - stagenet `monero:76ee3cc98646292206cd3e86f74d88b4`;
+    - testnet `monero:48ca7cd3c8de5b6a4d53d2861fbdaedc`.
+  - **Binding (invariant 2): `implicit`.**
+    - A Monero address names its network in its prefix byte, and Muster refuses a `payTo` whose network is not the agreed chain's.
+    - The outputs a spend references exist in one network's history, so a payment lands only where it was made.
+    - The room's attestation already commits to the chain.
+  - **Stagenet first.** Mainnet waits for `exo-dcc.8`, the stack's threat model handled.
+  - **Not netted.** A settle-up refuses a Monero split, as it refuses the private split: its shares are told apart by amount and subaddress, and a net transfer would need an address the payee vouches for.
+  **Why not other options.**
+  - *Monero multisig:* upstream calls it experimental and warns a malicious member can steal funds; the platform backend does not expose it; FCMP++ changes it.
+  - *Muster running its own wallet2:* a second key holder beside the platform's, which is what designing around the custodian rules out.
+  - *Confirming by the payer's tx proof:* the backend has no tx proofs, and the payee's own read trusts no one's claim.
+  - *Payment ids or integrated addresses:* the backend does not forward them, and subaddresses replace them.
+  - *Enrolling Muster as approver for in-app sends:* `configure` is total and in-memory, so it would evict the wallet app's roles. Muster would then hold broadcast authority over every send, the person's own included.
+  **Consequences.**
+  - Family `monero.split` is in the registry as a candidate, with a declared action (`contracts/actions/family/monero.split.json`). It becomes built as the payment request lands (`exo-dcc.5`).
+  - The manifest declares `monero_wallet_backend` (to install: `monero_wallet_ui`). It discloses that a co-loaded module can read the payee's wallet history and subaddresses, and that the payer's node sees their wallet's sync unless they run their own node or a proxy.
+  - Whether an incoming transfer shows in `history()` before it confirms is unverified. The 10-block depth does not depend on it.
+  - Whether Muster can call an undeclared module is `exo-dcc.11`. Declaring it is part of this decision.
+  **Slices.** `exo-dcc.5` 2a, a `monero:` URI on the card and the payee confirms by hand · 2b, the payee's wallet confirms (`MoneroPartSeam` over `monero_wallet_backend`) · `exo-dcc.6`, paying from Basecamp's wallet, after the upstream review intent · `exo-dcc.8`, mainnet.
 
 ## Working agreements for Claude Code
 

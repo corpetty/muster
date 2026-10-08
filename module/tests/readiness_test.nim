@@ -536,4 +536,49 @@ block:
   doAssert itemOf("lez_core", "ready").remedy == "reopen this in a moment"
   echo "16b. an installed module's remedy names what can start it: Muster for its own, the app or the Modules tab otherwise OK"
 
+# ── 16c. an OPTIONAL dependency is declared, but never assumed loaded ─────────────
+# muster declares the Monero backend as an optional dependency (exo-dcc.1): Basecamp 0.3.2
+# starts an installed optional dependency when Muster opens, and a missing one never fails
+# Muster's load. So it is muster's own ("close and reopen Muster" starts it once installed)
+# — but with no registry to ask (the standalone runner, which does not bundle it) it may be
+# absent, and a call to a module that is not running blocks for lp's whole deadline. Only a
+# REQUIRED dependency is called without a registry; the declared set names both.
+block:
+  const meta = staticRead("../metadata.json")
+  let required = declaredModules(meta, optional = false)
+  let declaredAll = declaredModules(meta)
+  doAssert "monero_wallet_backend" in declaredAll, $declaredAll
+  doAssert "monero_wallet_backend" notin required, "Monero must never fail Muster's load: " & $required
+  for d in ["delivery_module", "lez_core", "keystore_module", "eth_rpc_module", "tx_sender_module"]:
+    doAssert d in required and d in declaredAll, d
+  # entries may be a bare name or {name, version?, signer?}, under either key
+  doAssert declaredModules("""{"dependencies": ["a", {"name": "b", "version": "~0.1.0"}],
+                               "optional_dependencies": [{"name": "c"}, "d"]}""") == @["a", "b", "c", "d"]
+  doAssert declaredModules("""{"dependencies": ["a"]}""") == @["a"]
+  doAssert declaredModules("""{"optional_dependencies": ["c"]}""", optional = false).len == 0
+  let hard = proc(name: string): bool {.gcsafe.} = name in ["lez_core"]
+  let decl = proc(name: string): bool {.gcsafe.} = name in ["lez_core", "monero_wallet_backend"]
+  # no registry: the optional one is not called (it may not be there) — unknown, install offered
+  let inv = CountingInvoker(methods: newJArray())
+  let p = probeFromFacts(HostFacts(invoker: inv, moduleRecord: answering(unanswered("no registry")),
+                                   callableWithoutRegistry: hard, declared: decl))
+  let g = p.moduleLoaded("monero_wallet_backend")
+  doAssert inv.asked == 0 and g.status == rdUnknown and g.state == msUnknown, $g
+  # the registry says installed, not running: it is muster's own, so reopening Muster starts it
+  let silent = CountingInvoker(methods: newJArray())
+  proc itemOf(state: string): ReadinessItem =
+    let m = ActionManifest(declared: true, agreement: agreeOne,
+                           requirements: @[req(rqModule, "monero_wallet_backend", install = "monero_wallet_ui")])
+    assessReadiness(m, probeFromFacts(HostFacts(invoker: silent, moduleRecord: answering(rec(state)),
+                                                callableWithoutRegistry: hard, declared: decl))).item(rqModule)
+  doAssert itemOf("unloaded").remedy == "start monero_wallet_backend: close and reopen Muster", itemOf("unloaded").remedy
+  doAssert itemOf("ready").remedy == "reopen this in a moment", itemOf("ready").remedy
+  # no `declared` given: the remedy falls back to the callable set, as before
+  let m1 = ActionManifest(declared: true, agreement: agreeOne,
+                          requirements: @[req(rqModule, "monero_wallet_backend")])
+  doAssert assessReadiness(m1, probeFromFacts(HostFacts(invoker: silent, moduleRecord: answering(rec("unloaded")),
+                                                        callableWithoutRegistry: hard))).item(rqModule).remedy ==
+           "start monero_wallet_backend: open the app that uses it, or load it in Basecamp's Modules tab"
+  echo "16c. an optional dependency is muster's own to restart, but is called only when the registry says it runs OK"
+
 echo "readiness_test: all OK"

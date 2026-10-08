@@ -120,6 +120,14 @@ Each one was found live, through `two-instance-proof.sh` and `split-self-test.sh
    (`MUSTER_CATCHUP_WINDOW_MS`), and one query may hold delivery at most 3 s
    (`MUSTER_STORE_TIMEOUT_MS`) (`store_catchup_test` §11).
 
+7. **The fleet moved on and v0.3.0's own catch-up fell behind it** (2026-10-08,
+   exo-dcc.12). From 2026-10-02 the `logos.dev` store nodes refuse any query whose time
+   range is longer than 24 h (logos-delivery#4349). Delivery v0.3.0's own startup
+   catch-up asks for just over 24 h on every first launch, so it is refused on every
+   pass. Muster's own queries never name such a range. muster now pins delivery v0.3.2,
+   which walks that range in windows of at most 24 h. Details:
+   `store-24h-rule-and-the-lost-relaunch.md`.
+
 One thing v0.3 fixed for us: **live receive works**. v0.2.0's relay never surfaced a
 received message on muster's shard (blocker 3 in `two-instance-live-wire-blockers.md`),
 so cross-host receive rode store polling alone. On v0.3.0 both peers log `inbound
