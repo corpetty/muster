@@ -16,7 +16,8 @@
     "tx_sender_module"
   ],
   "optional_dependencies": [
-    "monero_wallet_backend"
+    "monero_wallet_backend",
+    "modules_state"
   ],
   "include": [],
   "capabilities": [],

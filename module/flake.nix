@@ -87,6 +87,16 @@
     # pin records the contract muster targets and is ready for a builder that reads them.
     # The standalone runner does not bundle the Monero stack (ui/flake.nix).
     logos-monero-wallet-backend.url = "github:logos-co/logos-monero-wallet-backend/769098441db339f7541ba8804722ae3f20614309";
+    # The host's module registry (exo-dcc.11): readiness asks modules_state.module_record
+    # whether a module is installed, starting or running (coordination/module_registry.nim).
+    # Under `--access-policy enforce` Basecamp refuses a callee muster does not declare, so
+    # this is declared — OPTIONAL (metadata.json#optional_dependencies, which count as
+    # declared under enforce, exo-dcc.1): Basecamp bundles and always loads it, the
+    # standalone runner has none and Muster must still load there. Pinned to the
+    # modules_state Basecamp 0.3.2 bundles; mapped to the module name below. Like the Monero
+    # backend's, this builder ignores the key (muster calls it over raw lp_*), so the pin
+    # records the contract muster targets.
+    logos-modules-state-module.url = "github:logos-co/logos-modules-state-module/c70da49aa56e48f867d50b9ff58679749f09dbcf";
   };
 
   outputs = inputs@{ self, logos-module-builder, ... }:
@@ -120,7 +130,8 @@
                          keystore_module = inputs.logos-evm-keystore-module;
                          eth_rpc_module = inputs.logos-evm-eth-rpc-module;
                          tx_sender_module = inputs.logos-evm-tx-sender-module;
-                         monero_wallet_backend = inputs.logos-monero-wallet-backend; } // inputs;
+                         monero_wallet_backend = inputs.logos-monero-wallet-backend;
+                         modules_state = inputs.logos-modules-state-module; } // inputs;
         }).packages.${system});
     };
 }

@@ -565,6 +565,11 @@ block:
   doAssert "monero_wallet_backend" notin required, "Monero must never fail Muster's load: " & $required
   for d in ["delivery_module", "lez_core", "keystore_module", "eth_rpc_module", "tx_sender_module"]:
     doAssert d in required and d in declaredAll, d
+  # the registry itself is an optional dependency (exo-dcc.11): under --access-policy
+  # enforce an undeclared callee is refused, and readiness lost modules_state there. Never
+  # required: the standalone runner has none, and Muster must still load.
+  doAssert "modules_state" in declaredAll, $declaredAll
+  doAssert "modules_state" notin required, "the runner has no modules_state: " & $required
   # entries may be a bare name or {name, version?, signer?}, under either key
   doAssert declaredModules("""{"dependencies": ["a", {"name": "b", "version": "~0.1.0"}],
                                "optional_dependencies": [{"name": "c"}, "d"]}""") == @["a", "b", "c", "d"]
