@@ -82,6 +82,7 @@ docs/            00-vision · 01-furps · 02-implementation-plan
 contracts/specs/ typed specs with acceptance oracles, one per invariant (derived-exo-*)
 contracts/families/ the multisig family registry · actions/ the action corpus (exo-661): generated.json (built drivers' describe/profile/manifest, from module/tools/action_corpus.nim, held by action_corpus_test) + family/<id>.json, room.json, wallet.json (authored, checked by scripts/check-action-corpus.py) — rendered by docs/design/multisig-atlas.html, served at https://corpetty.github.io/muster/atlas/
 ui/prototype/    coordination-prototype-v2.html — the standalone HTML reference build
+site/            index.html — the Pages landing page (https://corpetty.github.io/muster/); scripts/build-site.sh assembles it with docs/diagrams/ at /diagrams/ and the atlas at /atlas/, and checks every relative link
 ui-nim/          the UI in Nim on nim-seaqt + nimside (epic exo-607, docs/design/seaqt-ui.md): flake.nix pins seaqt qt-6.8 against the runner's exact Qt 6.9.2 · nix/seaqt-app.nix · hello/ (T1) · contract/ (T2: repContract, the .rep → nimside qobject: macro, checked index for index against repc) · app/ (T4a: muster-app, the real QML in a Nim host over liblogos + lp_*) · nix/seaqt-ro.nix + nix/seaqt-gen-patches/ + ro/ (T3: QtRemoteObjects bindings generated at build time, never committed)
 scripts/         git hooks
 ```
