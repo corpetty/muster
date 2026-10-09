@@ -111,6 +111,42 @@ Item {
     signal packageInstallRequested(string pkg)
     signal packageShowRequested(string pkg)
     property var packageRequests: ({})
+    // Open the Monero wallet (exo-dcc.5): a Monero request is vouched for and confirmed by
+    // the requester's own open wallet. The shell raises monero.wallet.unlock (a wallet
+    // named) or monero.accounts.manage, and the answer comes back in moneroWallet:
+    // {intent, wallet, state: asking|open|unavailable|failed|cancelled|error, error, at}.
+    signal moneroWalletRequested(string wallet)
+    property var moneroWallet: ({})
+    // What the last Monero wallet request answered, in words ("" = nothing asked yet).
+    function moneroWalletNote() {
+        var r = room.moneroWallet || {};
+        var st = String(r.state || "");
+        if (st === "asking") return qsTr("Asking Monero Wallet to open…");
+        if (st === "open")
+            return String(r.intent || "") === "monero.wallet.unlock"
+                   ? qsTr("Your Monero wallet is open.")
+                   : qsTr("Monero Wallet is open: open your wallet there, then come back.");
+        if (st === "unavailable")
+            return qsTr("Monero Wallet is not installed here: install monero_wallet_ui from Basecamp's Package Manager.");
+        if (st === "cancelled") return qsTr("Cancelled.");
+        if (st === "failed" || st === "error")
+            return qsTr("Monero Wallet answered: %1").arg(String(r.error || qsTr("no answer")));
+        return "";
+    }
+    // A Monero wallet refusal in plain words: the module's code (before the first ':') and
+    // its detail, which already names the network and the remedy.
+    function moneroWhy(code, detail) {
+        var c = String(code || ""), d = String(detail || "");
+        var rest = d.indexOf(": ") > 0 && d.indexOf(c) === 0 ? d.slice(d.indexOf(": ") + 2) : d;
+        if (c === "no-wallet") return qsTr("no Monero wallet is open. Open it in Monero Wallet: it makes the address you are paid at.");
+        if (c === "wallet-other-network") return qsTr("your open Monero wallet is on another network (%1).").arg(rest);
+        if (c === "wallet-watch-only") return qsTr("your open Monero wallet is view-only. Open the wallet that can spend what it receives.");
+        if (c === "wallet-busy") return qsTr("your Monero wallet is busy. Try again in a moment.");
+        if (c === "wallet-unread")
+            return qsTr("Muster could not reach a Monero wallet here. Install Monero Wallet (monero_wallet_ui) and open your wallet, then try again.");
+        if (c === "payto-not-mine") return qsTr("your open wallet does not list that address as its own.");
+        return rest.length > 0 ? c + ": " + rest : c;
+    }
     function packageReq(pkg) {
         var m = room.packageRequests;
         return (pkg && m && m[pkg]) ? m[pkg] : null;
@@ -187,7 +223,20 @@ Item {
                           if (composing) { refreshRoomAccount(); room.coherePolicy();
                                            room.installNow = Date.now();
                                            if (room.backend) room.backend.loadDrivers(); } }
-    onPolicyKindChanged: if (composing) refreshRoomAccount()
+    onPolicyKindChanged: {
+        if (room.policyKind === room.requestedPolicy.split("@")[0]) room.requestedPolicy = "";
+        if (composing) refreshRoomAccount();
+    }
+    // A policy asked of the module and not yet read back (setPolicy answers through
+    // policyJson, a moment later). coherePolicy judges by it, so opening a room under a
+    // verb's policy (a request's monero-split) is not snapped back to the kind's first
+    // policy by a policyKind that has not caught up yet (exo-dcc.5, seen in Basecamp).
+    property string requestedPolicy: ""
+    function choosePolicy(k) {
+        room.requestedPolicy = String(k || "");
+        if (room.backend && room.requestedPolicy.length > 0) room.backend.setPolicy(room.requestedPolicy);
+    }
+    onPolicyErrorChanged: room.requestedPolicy = ""
     // The outcome of the last room-side submit (coordinate_submit): {id, state,
     // onchain, txHash} or {id, error, ...}. Matched to a card by its intent id.
     readonly property var roomSubmit: {
@@ -342,8 +391,9 @@ Item {
     function coherePolicy() {
         if (!room.backend || room.composeType === "action") return;
         var valid = room.policiesForKind(room.composeType).filter(function (p) { return room.hasDriver(p); });
-        if (valid.length > 0 && valid.indexOf(room.policyKind) < 0)
-            room.backend.setPolicy(valid[0]);
+        var cur = room.requestedPolicy.length > 0 ? room.requestedPolicy.split("@")[0] : room.policyKind;
+        if (valid.length > 0 && valid.indexOf(cur) < 0)
+            room.choosePolicy(valid[0]);
     }
 
     // The coordinatable module actions available to the room (loadAvailableActions):
@@ -562,6 +612,9 @@ Item {
         var isSplit = effKind === "split";
         // a settle-up (exo-3c6): several splits netted — its own body: the net payments
         var isSettleUp = effKind === "settle-up";
+        // a payment request (exo-dcc.5): one share, the creditor's own share nothing
+        var isRequest = isSplit && it && it.split && Array.isArray(it.parts) && it.parts.length === 1
+                        && String(it.split.creditorShare || "") === "0";
         return {
             kind: "intent-propose",
             split: (isSplit && it && it.split) ? it.split : null,
@@ -569,7 +622,7 @@ Item {
             parts: (isSplit && it && Array.isArray(it.parts)) ? it.parts : [],
             // who proposed it, by their signed claim (exo-770); [] = unattributed
             proposedBy: (it && Array.isArray(it.proposedBy)) ? it.proposedBy : [],
-            label: isSettleUp ? qsTr("Settle up") : isSplit ? qsTr("Split")
+            label: isSettleUp ? qsTr("Settle up") : isRequest ? qsTr("Request") : isSplit ? qsTr("Split")
                  : isGovernance ? qsTr("Add policy")
                  : isLez ? qsTr("LEZ multisig")
                  : isInvoke ? qsTr("Action")
@@ -593,7 +646,8 @@ Item {
               : (!isStatement && eff.to !== undefined) ? String(eff.to)
               : (it && it.summary && it.summary.to && !isInvoke && !isLez) ? String(it.summary.to) : "",
             // the heading, in the family's words (a Bitcoin payment, a LEZ transfer, a new policy…)
-            heading: isSettleUp ? qsTr("Proposed to settle up") : isSplit ? qsTr("Proposed a split")
+            heading: isSettleUp ? qsTr("Proposed to settle up") : isRequest ? qsTr("Requested a payment")
+                   : isSplit ? qsTr("Proposed a split")
                    : room.headingFor(it && it.summary ? String(it.summary.kind || "") : ""),
             // who approved, named (or "you"), and whether I did (exo-59c)
             approvers: (it && Array.isArray(it.approvers)) ? it.approvers : [],
@@ -761,7 +815,8 @@ Item {
     // A private split is proposed only by whoever fronted it (their shielded key node is
     // not shared in the room).
     property string splitCreditor: ""
-    readonly property string splitFor: (room.splitPrivate || room.splitBitcoin) ? "" : room.splitCreditor
+    readonly property string splitFor: (room.splitPrivate || room.splitBitcoin || room.splitMonero || room.splitRequest)
+                                       ? "" : room.splitCreditor
     function memberLabel(identity) {
         var id = String(identity || "").toLowerCase();
         for (var i = 0; i < room.members.length; ++i) {
@@ -829,18 +884,30 @@ Item {
     // whoever fronted it proposes — the room's shared addresses are Ethereum ones).
     readonly property bool splitPrivate: room.policyKind === "lez-split"
     readonly property bool splitBitcoin: room.policyKind === "btc-split"
+    // A Monero request (exo-dcc.5, ADR-018): in XMR, 12 decimals. Its payTo is a fresh
+    // subaddress the proposer's OWN open wallet makes when it is proposed — never typed —
+    // and each person pays from any Monero wallet with a monero: link. No token, no
+    // other currency, never netted, and only whoever is owed proposes it here.
+    readonly property bool splitMonero: room.policyKind === "monero-split"
+    onSplitMoneroChanged: if (room.splitMonero) room.splitFiat = false
+    // "Request a payment" (exo-dcc.5): a split with ONE person who pays and you not in it.
+    property bool splitRequest: false
+    property string splitPayer: ""           // who pays, when more than one could
+    onSplitRequestChanged: room.splitCreditorShares = !room.splitRequest
+    // whether the creditor's own share is in the total: never in a request
+    readonly property bool splitCreditorIn: room.splitCreditorShares && !room.splitRequest
     // An Ethereum split may be paid in a token (exo-5ab): the address typed, and what the
     // token says about itself once looked up — its decimals and symbol, display only.
     property string splitToken: ""
     readonly property var splitTokenInfo: {
-        if (room.splitPrivate || room.splitBitcoin || room.splitToken.length === 0 || !room.backend) return null;
+        if (room.splitPrivate || room.splitBitcoin || room.splitMonero || room.splitToken.length === 0 || !room.backend) return null;
         var j = {};
         try { j = JSON.parse(String(room.backend.tokenInfoJson || "{}")); } catch (e) { return null; }
         return (j && !j.error && String(j.token || "") === room.splitToken.toLowerCase()) ? j : null;
     }
-    readonly property int splitDecimals: room.splitPrivate ? 9 : room.splitBitcoin ? 8
+    readonly property int splitDecimals: room.splitPrivate ? 9 : room.splitBitcoin ? 8 : room.splitMonero ? 12
                                        : room.splitTokenInfo ? Number(room.splitTokenInfo.decimals) : 18
-    readonly property string splitUnit: room.splitPrivate ? "LEZ" : room.splitBitcoin ? "BTC"
+    readonly property string splitUnit: room.splitPrivate ? "LEZ" : room.splitBitcoin ? "BTC" : room.splitMonero ? "XMR"
                                       : room.splitTokenInfo ? (String(room.splitTokenInfo.symbol || "") || qsTr("units"))
                                       : "ETH"
     // Settle up across assets and chains (exo-a90.17): paid in this rail's asset; every other
@@ -886,7 +953,7 @@ Item {
         return out;
     }
     // a token typed but not (yet) readable: the split cannot be composed in it
-    readonly property bool splitTokenPending: !room.splitPrivate && !room.splitBitcoin && room.splitToken.length > 0
+    readonly property bool splitTokenPending: !room.splitPrivate && !room.splitBitcoin && !room.splitMonero && room.splitToken.length > 0
                                               && room.splitTokenInfo === null
     function ethToWei(eth, decimals) {
         var dec = (decimals === undefined) ? room.splitDecimals : decimals;
@@ -931,6 +998,14 @@ Item {
     // Who owes in the next split: every member but whoever fronted it, unless left out.
     function splitDebtors() {
         var out = [];
+        if (room.splitRequest) {
+            // one person: the one picked, else the only other member
+            var others = [];
+            for (var k = 0; k < room.members.length; ++k)
+                if (room.members[k] && !room.members[k].self) others.push(String(room.members[k].identity || ""));
+            if (room.splitPayer.length > 0 && others.indexOf(room.splitPayer) >= 0) return [room.splitPayer];
+            return others.length === 1 ? others : [];
+        }
         var cred = room.splitFor.toLowerCase();
         for (var i = 0; i < room.members.length; ++i) {
             var m = room.members[i];
@@ -990,9 +1065,9 @@ Item {
         var total = room.splitTotalOf(totalEth);
         var n = room.splitDebtors().length;
         if (total.length === 0 || total === "0" || n === 0) return null;
-        var parts = n + (room.splitCreditorShares ? 1 : 0);
+        var parts = n + (room.splitCreditorIn ? 1 : 0);
         var qr = room.divSmall(total, parts);
-        return { each: qr[0], mine: room.addSmall(room.splitCreditorShares ? qr[0] : "0", qr[1]), total: total, n: n };
+        return { each: qr[0], mine: room.addSmall(room.splitCreditorIn ? qr[0] : "0", qr[1]), total: total, n: n };
     }
     function proposeSplit(totalEth, memo) {
         if (!room.backend) return;
@@ -1001,7 +1076,7 @@ Item {
         if (total.length === 0 || who.length === 0) return;
         if (room.splitTokenPending) return;
         if (room.splitFor.length > 0 && room.sharedAddressOf(room.splitFor).length === 0) return;
-        var spec = { parties: who, creditorShares: room.splitCreditorShares };
+        var spec = { parties: who, creditorShares: room.splitCreditorIn };
         if (room.splitFor.length > 0) spec.creditor = room.splitFor;   // on their behalf (exo-770)
         if (room.splitTokenInfo) spec.asset = String(room.splitTokenInfo.asset);   // exo-5ab
         if (room.splitFiat) {
@@ -1009,8 +1084,9 @@ Item {
             spec.fiat = { currency: String(room.splitFiatCurrency).trim().toUpperCase(), amount: String(totalEth).trim(),
                           rate: String(room.splitFiatRate).trim(), source: String(room.splitFiatSource).trim() };
         }
-        // chain "" = the chain your configured RPC serves; it is written into the split,
-        // so everyone reviews it before agreeing.
+        // chain "" = the chain your configured RPC serves — or, under the Monero kind,
+        // stagenet (ADR-018); it is written into the split, so everyone reviews it before
+        // agreeing. A Monero payTo is minted by your own open wallet, never typed here.
         room.backend.proposeSplit("", total, JSON.stringify(spec), String(memo || ""));
         room.composing = false;
     }
@@ -1256,12 +1332,24 @@ Item {
                             }
                             onRenewSplit: if (room.backend && msg.liveIntent)
                                               room.backend.renewSplit(String(msg.liveIntent.id || ""))
+                            // a Monero request (exo-dcc.5): "I paid", my claim (a txid if given) —
+                            // never a confirmation; and the creditor's wallet, opened in Monero Wallet
+                            onReportPaid: function (tx) {
+                                if (room.backend && msg.liveIntent)
+                                    room.backend.reportPaid(String(msg.liveIntent.id || ""), tx);
+                            }
+                            onOpenMoneroWallet: function (wallet) { room.moneroWalletRequested(wallet); }
+                            moneroWalletNote: room.moneroWalletNote()
                             splitNote: (room.splitResult && room.splitResult.id && msg.liveIntent
                                         && String(room.splitResult.id) === String(msg.liveIntent.id || "")
                                         && room.splitResult.op !== "propose")
                                        ? (room.splitResult.error
                                           ? (String(room.splitResult.error) === "paying"
                                              ? qsTr("Your earlier payment of this share has not landed yet. Muster will not send another while it might; it shows as paid once it lands.")
+                                             : String(room.splitResult.error).indexOf("unconfirmed: ") === 0
+                                             // a Monero share read from the creditor's wallet now: not there yet
+                                             ? qsTr("⚠ Not confirmed yet: %1").arg(room.moneroWhy(String(room.splitResult.error).slice(13).split(":")[0],
+                                                                                                   String(room.splitResult.error).slice(13)))
                                              : qsTr("⚠ %1").arg(String(room.splitResult.error) + (room.splitResult.detail ? ": " + String(room.splitResult.detail) : "")))
                                           : room.splitResult.op === "pay"
                                           ? (room.myPartSettled(msg.liveIntent) ? ""
@@ -1279,6 +1367,9 @@ Item {
                                                 .arg(String(room.splitResult.pending || "").slice(0, 12) + "…"))
                                           : room.splitResult.op === "renew"
                                           ? qsTr("Renewal proposed — it appears below; everyone who still owes a share agrees to it again.")
+                                          : room.splitResult.op === "report"
+                                          ? qsTr("Noted: you said you paid. Only %1's own wallet confirms it.")
+                                                .arg(String((((msg.liveIntent && msg.liveIntent.split) || {}).creditorName) || qsTr("the requester")))
                                           : qsTr("Marked received."))
                                        : ""
                             onOpenSettings: room.settingsRequested()
@@ -1786,6 +1877,7 @@ Item {
                 LogosText {
                     text: room.composeType === "statement" ? qsTr("Propose a statement")
                         : room.composeType === "action" ? qsTr("Propose an action")
+                        : room.composeType === "split" && room.splitRequest ? qsTr("Request a payment")
                         : room.composeType === "split" ? (room.splitFor.length > 0
                                                           ? qsTr("Split a bill %1 paid").arg(room.memberLabel(room.splitFor))
                                                           : qsTr("Split a bill you paid"))
@@ -1846,9 +1938,19 @@ Item {
                         objectName: "roomKindSplit"
                         Layout.preferredWidth: 90
                         text: qsTr("Split")
-                        variant: room.composeType === "split"
+                        variant: room.composeType === "split" && !room.splitRequest
                                  ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                        onClicked: room.composeType = "split"
+                        onClicked: { room.splitRequest = false; room.composeType = "split"; }
+                    }
+
+                    // a payment request (exo-dcc.5): one person pays you, and you're not in it
+                    LogosButton {
+                        objectName: "roomKindRequest"
+                        Layout.preferredWidth: 110
+                        text: qsTr("Request")
+                        variant: room.composeType === "split" && room.splitRequest
+                                 ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                        onClicked: { room.splitRequest = true; room.composeType = "split"; }
                     }
 
                     Item { Layout.fillWidth: true }
@@ -2373,7 +2475,10 @@ Item {
                             objectName: "roomSplitTotal"
                             visible: !room.acrossOpen     // a settle-up has no total of its own
                             Layout.preferredWidth: 160
-                            placeholderText: qsTr("total (%1)").arg(room.splitFiat ? String(room.splitFiatCurrency).toUpperCase()
+                            placeholderText: room.splitRequest
+                                             ? qsTr("amount (%1)").arg(room.splitFiat ? String(room.splitFiatCurrency).toUpperCase()
+                                                                                       : room.splitUnit)
+                                             : qsTr("total (%1)").arg(room.splitFiat ? String(room.splitFiatCurrency).toUpperCase()
                                                                                      : room.splitUnit)
                             font.family: Theme.typography.mono
                         }
@@ -2391,7 +2496,8 @@ Item {
                     // currency, and the rate is YOUR quote — recorded with the proposal
                     LogosButton {
                         objectName: "roomSplitFiat"
-                        visible: !room.acrossOpen
+                        // a Monero request is in XMR only (the module refuses a quote)
+                        visible: !room.acrossOpen && !room.splitMonero
                         Layout.preferredWidth: 320   // the label whole, never "…curre…"
                         text: room.splitFiat ? qsTr("✓ The bill is in another currency") : qsTr("The bill is in another currency")
                         variant: room.splitFiat ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
@@ -2443,7 +2549,7 @@ Item {
 
                     LogosTextField {
                         objectName: "roomSplitToken"
-                        visible: !room.splitPrivate && !room.splitBitcoin
+                        visible: !room.splitPrivate && !room.splitBitcoin && !room.splitMonero
                         Layout.fillWidth: true
                         placeholderText: qsTr("pay in a token instead of ETH: its address (0x…), or leave empty")
                         font.family: Theme.typography.mono
@@ -2454,7 +2560,7 @@ Item {
                         }
                     }
                     LogosText {
-                        visible: !room.splitPrivate && !room.splitBitcoin && room.splitToken.length > 0
+                        visible: !room.splitPrivate && !room.splitBitcoin && !room.splitMonero && room.splitToken.length > 0
                         Layout.fillWidth: true
                         Layout.preferredWidth: 0
                         wrapMode: Text.WordWrap
@@ -2474,7 +2580,7 @@ Item {
                     // into fewer payments — every party agrees before anything is paid
                     LogosButton {
                         objectName: "roomSettleUp"
-                        visible: !room.splitPrivate && !room.acrossOpen
+                        visible: !room.splitPrivate && !room.splitMonero && !room.splitRequest && !room.acrossOpen
                         enabled: !room.composeBlocked     // exo-dcc.10, as Propose
                         Layout.preferredWidth: 320
                         text: qsTr("Settle up the room's open splits instead")
@@ -2491,7 +2597,7 @@ Item {
                     // or on other chains too, each at the rate YOU give — everyone agrees to it
                     LogosButton {
                         objectName: "roomSettleUpAcrossOpen"
-                        visible: !room.splitPrivate && !room.acrossOpen
+                        visible: !room.splitPrivate && !room.splitMonero && !room.splitRequest && !room.acrossOpen
                         Layout.preferredWidth: 320
                         text: qsTr("Settle up across assets and chains…")
                         variant: LogosButton.Variant.Secondary
@@ -2599,13 +2705,15 @@ Item {
                     // who fronted it (exo-770): you, or someone else — then it is paid at the
                     // address they shared, and nobody pays until they agree it is theirs
                     LogosText {
-                        visible: !room.splitPrivate && !room.splitBitcoin && room.members.length > 1 && !room.acrossOpen
+                        visible: !room.splitPrivate && !room.splitBitcoin && !room.splitMonero && !room.splitRequest
+                                 && room.members.length > 1 && !room.acrossOpen
                         text: qsTr("Who paid the bill?")
                         color: Theme.palette.textTertiary
                         font.pixelSize: Theme.typography.badgeText
                     }
                     Flow {
-                        visible: !room.splitPrivate && !room.splitBitcoin && room.members.length > 1 && !room.acrossOpen
+                        visible: !room.splitPrivate && !room.splitBitcoin && !room.splitMonero && !room.splitRequest
+                                 && room.members.length > 1 && !room.acrossOpen
                         Layout.fillWidth: true
                         spacing: Theme.spacing.tiny
                         Repeater {
@@ -2639,7 +2747,10 @@ Item {
 
                     LogosText {
                         visible: !room.acrossOpen
-                        text: room.members.length > 1
+                        text: room.splitRequest
+                              ? (room.members.length > 1 ? qsTr("Who pays you? Tap one person:")
+                                 : qsTr("Nobody here to ask yet: invite and admit the person who pays you, then request."))
+                              : room.members.length > 1
                               ? (room.splitFor.length > 0
                                  ? qsTr("Who owes %1 a share — tap to leave someone out:").arg(room.memberLabel(room.splitFor))
                                  : qsTr("Who owes you a share — tap to leave someone out:"))
@@ -2667,13 +2778,14 @@ Item {
                                 text: modelData.self ? qsTr("You")
                                       : (modelData.alias && String(modelData.alias).length > 0)
                                       ? String(modelData.alias) : ident.slice(0, 10) + "…"
-                                variant: room.splitOut[ident]
+                                variant: (room.splitRequest ? room.splitDebtors().indexOf(ident) < 0 : !!room.splitOut[ident])
                                          ? LogosButton.Variant.Secondary : LogosButton.Variant.Primary
-                                onClicked: room.splitToggle(ident)
+                                onClicked: if (room.splitRequest) room.splitPayer = ident; else room.splitToggle(ident)
                             }
                         }
                         LogosButton {
                             objectName: "roomSplitMine"
+                            visible: !room.splitRequest      // a request: you are never in it
                             text: room.splitFor.length > 0
                                   ? (room.splitCreditorShares ? qsTr("✓ %1 is in it too").arg(room.memberLabel(room.splitFor))
                                                               : qsTr("%1 is not in it").arg(room.memberLabel(room.splitFor)))
@@ -2696,6 +2808,18 @@ Item {
                               : pv === null ? qsTr("Leave at least one person in.")
                               : room.splitDust(pv)
                               ? qsTr("⚠ Each share would be %1 sat — below Bitcoin's 546-sat dust limit, so it could never be paid.").arg(pv.each)
+                              : room.splitRequest
+                              ? (room.splitMonero
+                                 ? qsTr("%1 pays you %2 XMR from any Monero wallet, with a link the room gives them.")
+                                       .arg(room.memberLabel(room.splitDebtors()[0])).arg(room.weiToEth(pv.each))
+                                 : qsTr("%1 pays you %2 %3 from their own wallet — the payment is public on the chain.")
+                                       .arg(room.memberLabel(room.splitDebtors()[0])).arg(room.weiToEth(pv.each)).arg(room.splitUnit))
+                              : room.splitMonero
+                              ? (pv.n === 1
+                                 ? qsTr("1 person owes you %1 XMR; your own share is %2 XMR (it absorbs any rounding). They pay from any Monero wallet, with a link the room gives them.")
+                                       .arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine))
+                                 : qsTr("%1 people owe you about %2 XMR each — every share a few piconero apart, so your wallet can tell whose payment arrived; your own share absorbs the rest. Each pays from any Monero wallet, with a link the room gives them.")
+                                       .arg(pv.n).arg(room.weiToEth(pv.each)))
                               : room.splitFor.length > 0
                               ? (pv.n === 1
                                  ? qsTr("1 person owes %4 %1 %3; %4's own share is %2 %3 (it absorbs any rounding). They pay from their own wallet — the payment is public on the chain.")
@@ -2720,6 +2844,18 @@ Item {
                                  ? qsTr(" Each share is exactly %1 sat.").arg(pv.each) : "")
                         color: (pv === null || room.splitDust(pv))
                                ? Theme.palette.warning : Theme.palette.textSecondary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+
+                    // where a Monero request is paid: an address your own wallet makes for it
+                    LogosText {
+                        objectName: "roomSplitMoneroNote"
+                        visible: room.splitMonero && !room.acrossOpen
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 0
+                        wrapMode: Text.WordWrap
+                        text: qsTr("On Monero stagenet. Proposing asks your open Monero wallet for a new address for this request; your wallet confirms each payment at 10 confirmations. Muster never sends Monero.")
+                        color: Theme.palette.textTertiary
                         font.pixelSize: Theme.typography.badgeText
                     }
                 }
@@ -2920,10 +3056,50 @@ Item {
                                      .arg(what).arg(String(r.name || "")).arg(String(r.chainLabel || r.chain || ""));
                     if (String(r.error || "") === "expired-duplicate")
                         return qsTr("⚠ %1 — an identical split expired in this room. Change its note to propose it again, or renew the old one's unpaid shares from its card.").arg(what);
+                    // a Monero wallet refusal (exo-dcc.5): the request names the remedy
+                    if (String(r.request || "") === "monero.wallet.unlock" || String(r.error || "").indexOf("wallet-") === 0
+                        || String(r.error || "") === "no-wallet" || String(r.error || "") === "payto-not-mine")
+                        return qsTr("⚠ %1 — %2").arg(what)
+                                                 .arg(room.moneroWhy(r.error, r.detail));
                     return qsTr("⚠ %1 — %2%3").arg(what).arg(String(r.error || ""))
                                .arg(r.detail ? ": " + String(r.detail) : "");
                 }
                 color: room.noAddressAnswered ? Theme.palette.textSecondary : Theme.palette.warning
+                font.pixelSize: Theme.typography.badgeText
+            }
+
+            // a Monero refusal's remedies (exo-dcc.5): open the wallet, or install it
+            RowLayout {
+                objectName: "roomMoneroRemedy"
+                readonly property var r: room.splitResult || ({})
+                visible: String(r.request || "") === "monero.wallet.unlock" && String(r.error || "") !== "wallet-busy"
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                LogosButton {
+                    objectName: "roomOpenMoneroWallet"
+                    text: qsTr("Open Monero Wallet")
+                    variant: LogosButton.Variant.Secondary
+                    enabled: String((room.moneroWallet || {}).state || "") !== "asking"
+                    onClicked: room.moneroWalletRequested(String((room.splitResult || {}).wallet || ""))
+                }
+                LogosButton {
+                    objectName: "roomInstallMoneroWallet"
+                    readonly property string pkg: String((room.splitResult || {}).install || "")
+                    visible: pkg.length > 0 && (String((room.splitResult || {}).error || "") === "wallet-unread"
+                                                || String((room.moneroWallet || {}).state || "") === "unavailable")
+                    text: qsTr("Install %1").arg(pkg)
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: room.packageInstallRequested(pkg)
+                }
+                Item { Layout.fillWidth: true }
+            }
+            LogosText {
+                objectName: "roomMoneroWalletNote"
+                visible: String((room.splitResult || {}).request || "") === "monero.wallet.unlock" && room.moneroWalletNote().length > 0
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: room.moneroWalletNote()
+                color: String((room.moneroWallet || {}).state || "") === "open" ? Theme.palette.textSecondary : Theme.palette.warning
                 font.pixelSize: Theme.typography.badgeText
             }
 

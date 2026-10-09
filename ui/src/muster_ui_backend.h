@@ -93,6 +93,7 @@ public:
     void renewSplit(const QString &intentId) override;
     void lookupToken(const QString &chain, const QString &token) override;
     void confirmPart(const QString &intentId, const QString &part, const QString &tx) override;
+    void reportPaid(const QString &intentId, const QString &tx) override;
     void proposeLezTransfer(const QString &recipient, const QString &amount) override;
     void proposeLezVaultInit(const QString &definition) override;
     void lezMemberAccount(const QString &index) override;

@@ -1319,6 +1319,11 @@ proc splitChainFor(kind: string): tuple[ok: bool, chain, detail: string] =
     # a Bitcoin split: the chain this member's own node serves, asked of the node
     if gBtcRpc.len == 0: (false, "", "no Bitcoin node configured (Settings → Bitcoin node)")
     else: probeBitcoind(gBtcRpc)
+  elif "monero" in kindInfo(kind).settlesOn:
+    # a Monero request names its network: stagenet first (ADR-018; mainnet waits for
+    # exo-dcc.8). Never the EVM RPC's chain: choosing the kind bare ("Split (Monero)" in
+    # the composer) must not read eip155 and refuse (exo-dcc.5).
+    (true, xmraddr.caip2Of(xmrStagenet), "")
   else: rpcChainCaip2()
 
 # ── a split: each pays their own share (exo-a90; docs/design/split-the-bill.md) ─────

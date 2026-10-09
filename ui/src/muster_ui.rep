@@ -252,6 +252,12 @@ class MusterUi
     SLOT(void proposeSettleUpAcross(const QString &chain, const QString &asset, const QString &ratesJson, const QString &memo))
     SLOT(void shareAddress(const QString &chain))
     SLOT(void confirmPart(const QString &intentId, const QString &part, const QString &tx))
+    // A Monero request (exo-dcc.5): muster never sends Monero, so a debtor pays from any
+    // wallet with the monero: link the intent's projection carries, then says so — "I
+    // paid" (coordinate_report_paid), with the 64-hex transaction id or "". Their claim,
+    // never a confirmation: only the creditor's own wallet confirms. Lands on splitJson
+    // {op: "report", id, state} or {op: "report", id, error}; intents reload after.
+    SLOT(void reportPaid(const QString &intentId, const QString &tx))
     // The LEZ multisig (exo-3c9). A LEZ step is SENT at once and completes on a later
     // intents tick once the chain includes it (the module's pump), so none of these waits
     // on a block. Propose a token transfer out of the room's LEZ multisig vault, or the

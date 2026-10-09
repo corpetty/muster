@@ -773,6 +773,16 @@ void MusterUiBackend::confirmPart(const QString &intentId, const QString &part, 
     loadIntents();
 }
 
+void MusterUiBackend::reportPaid(const QString &intentId, const QString &tx)
+{
+    // coordinate_report_paid: "I paid" for MY share of a Monero request (exo-dcc.5) — my
+    // author-signed claim, with the txid if I gave one. It never confirms the part.
+    const QString r = modules().muster_module.coordinate_report_paid(intentId, tx.trimmed());
+    qInfo() << "[muster_ui] coordinate_report_paid" << intentId << tx << "->" << r;
+    setSplitJson(splitOutcome("report", intentId, r));
+    loadIntents();
+}
+
 void MusterUiBackend::proposeLezTransfer(const QString &recipient, const QString &amount)
 {
     // coordinate_propose_lez_transfer → the proposer's own Propose, sent (not awaited);
@@ -1049,6 +1059,17 @@ void MusterUiBackend::onContextReady()
                     qInfo() << "[muster_ui] AUTOPROPOSE intents ->" << intentsJson();
                 });
             }
+            // XMR request self-test (exo-dcc.5): MUSTER_AUTOREPORTPAID=<intent id> says "I
+            // paid" for it once joined — the card's "I paid" slot — so an offscreen run shows
+            // the slot reaching coordinate_report_paid (the module logs the answer).
+            const QByteArray autoreport = qgetenv("MUSTER_AUTOREPORTPAID");
+            if (!autoreport.isEmpty()) {
+                const QString id = QString::fromUtf8(autoreport);
+                QTimer::singleShot(4000, this, [this, id]() {
+                    reportPaid(id, QString());
+                    qInfo() << "[muster_ui] AUTOREPORTPAID ->" << splitJson();
+                });
+            }
             // Poll pending/members so a two-instance self-test shows cross-host
             // delivery (another peer's join-request arriving) in the console.
             const bool founder = !qgetenv("MUSTER_AUTOADMIT").isEmpty();
@@ -1112,6 +1133,14 @@ void MusterUiBackend::onContextReady()
                                       {"parties", QJsonArray{me}}, {"creditor", others.first()}})
                                       .toJson(QJsonDocument::Compact))
                                 : QString::fromUtf8(QJsonDocument(others).toJson(QJsonDocument::Compact));
+                            // MUSTER_AUTOPOLICY: choose the split's kind first, bare — the
+                            // "Settles on" row's button — so chain "" takes the kind's own
+                            // default (a Monero request: stagenet, exo-dcc.5)
+                            const QByteArray splitPolicy = qgetenv("MUSTER_AUTOPOLICY");
+                            if (!splitPolicy.isEmpty()) {
+                                setPolicy(QString::fromUtf8(splitPolicy));
+                                qInfo().noquote() << "[muster_ui] AUTOPOLICY ->" << policyJson() << policyErrorJson();
+                            }
                             proposeSplit(QString::fromUtf8(qgetenv("MUSTER_AUTOSPLIT_CHAIN")),
                                          QString::fromUtf8(autosplit), shares,
                                          QStringLiteral("split self-test"));
