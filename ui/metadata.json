@@ -1,7 +1,7 @@
 {
   "name": "muster_ui",
   "display_name": "Muster",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "ui_qml",
   "interface": "universal",
   "category": "general",

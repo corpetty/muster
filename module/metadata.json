@@ -1,7 +1,7 @@
 {
   "name": "muster_module",
   "display_name": "Muster Module",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Muster's core: people agree on a transaction inside an end-to-end encrypted room, then each part settles on its own chain. It keeps the room's log and keys, re-derives what it signs, and asks the platform's wallets to sign and send.",
   "author": "Muster",
   "type": "core",
