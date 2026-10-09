@@ -74,8 +74,8 @@
 
   <rect x="40" y="400" width="380" height="72" rx="4" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.4"/>
   <text x="54" y="420" font-size="12" font-weight="600" fill="#1A1F1C">The Nim core</text>
-  <text x="54" y="436" font-size="9.5" fill="#656E66">dcbor · hashing · log · intents · drivers · crypto · transport ·</text>
-  <text x="54" y="450" font-size="9.5" fill="#656E66">coordination · wallet · settlement · bitcoin · frost · lez · plugins.</text>
+  <text x="54" y="436" font-size="9.5" fill="#656E66">dcbor · hashing · log · intents · drivers · crypto · transport · security ·</text>
+  <text x="54" y="450" font-size="9.5" fill="#656E66">coordination · wallet · settlement · bitcoin · monero · frost · lez · plugins.</text>
   <text x="54" y="464" font-size="9.5" fill="#656E66">Everything the invariants are about, behind the generated surface.</text>
 
   <!-- ══════════ RIGHT: the view module ══════════ -->
