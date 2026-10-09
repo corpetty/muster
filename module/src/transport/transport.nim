@@ -62,6 +62,12 @@ method subscribe*(t: Transport, contentTopic: string, handler: MessageHandler)
 method unsubscribe*(t: Transport, contentTopic: string) {.base, gcsafe.} =
   raise newException(CatchableError, "Transport.unsubscribe is abstract")
 
+method detach*(t: Transport) {.base, gcsafe.} =
+  ## Stop taking traffic for good (exo-dcc.28: the member left the room this transport
+  ## served). Nothing more is queued or delivered. A no-op for a transport that only
+  ## delivers to the topics it subscribes.
+  discard
+
 method storeQuery*(t: Transport, contentTopic: string): seq[IncomingMessage]
     {.base, gcsafe.} =
   ## Offline catchup: the messages a store node retains for a topic, oldest first.

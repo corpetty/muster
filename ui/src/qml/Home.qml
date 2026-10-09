@@ -46,6 +46,8 @@ Item {
     signal openSettings()
     // A received invite's Join was clicked → open (and ask to join) that room.
     signal joinInvite(string topic)
+    // join a room by the code someone shared (exo-dcc.28)
+    signal joinCode(string topic)
     // A received invite's Dismiss was clicked → clear it so it stops showing.
     signal dismissInvite(string topic)
 
@@ -131,6 +133,26 @@ Item {
             objectName: "startSomethingButton"
             text: qsTr("Start something")
             onClicked: home.newActivity()
+        }
+
+        // ── join with a room code (exo-dcc.28) ────────────────────────────
+        // Someone shared a room's code (the room's "Copy room code"): join it from here,
+        // whatever room is open. Joining asks the room's members to let you in.
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Theme.spacing.small
+            LogosTextField {
+                id: codeField
+                objectName: "homeRoomCodeField"
+                Layout.fillWidth: true
+                placeholderText: qsTr("Have a room code? Paste it here")
+            }
+            LogosButton {
+                objectName: "homeJoinCodeButton"
+                text: qsTr("Join")
+                enabled: codeField.text.trim().length > 0
+                onClicked: { home.joinCode(codeField.text.trim()); codeField.text = ""; }
+            }
         }
 
         // ── invitations ───────────────────────────────────────────────────

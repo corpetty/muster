@@ -1023,6 +1023,37 @@ proc musterCoordinateInvites(): string =
       stderr.writeLine("MUSTER-LP " & line)
   $arr
 
+proc roomTitlesPath(): string =
+  var dir = context().instancePersistencePath
+  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  dir / "room_titles.json"
+
+proc musterCoordinateLeave(roomTopic: string): string =
+  ## Leave a room (exo-dcc.28): stop following it here, forget it so a relaunch does not
+  ## re-enter it, and drop its name. Its session takes no more of the room's traffic;
+  ## the delivery node keeps running for the rooms still joined. Nothing is announced
+  ## and nothing re-keys: the others still hold this member in the roster, and joining
+  ## the topic again reads the room back. Leaving the active room leaves none active.
+  let ctopic = toContentTopic(roomTopic)
+  if ctopic notin gSessions or ctopic in gInboxTopics: return "not-joined"
+  gSessions[ctopic].leave()
+  gSessions.del ctopic
+  discard forgetJoinedRoom(joinedRoomsPath(), ctopic)
+  discard setRoomTitle(roomTitlesPath(), ctopic, "")
+  if gTopic == ctopic:
+    gSession = nil
+    gTopic = ""
+  "ok"
+
+proc musterCoordinateSetRoomTitle(roomTopic, title: string): string =
+  ## Name a room for yourself (exo-dcc.25): its topic names nothing, so without a name
+  ## Home and the room header show a code. The name is this member's own and stays on
+  ## this device; it is never sent to the room. An empty title clears it.
+  let ctopic = toContentTopic(roomTopic)
+  if ctopic.len == 0: return "bad-topic"
+  discard setRoomTitle(roomTitlesPath(), ctopic, title.strip())
+  "ok"
+
 proc musterCoordinateDismissInvite(roomTopic: string): string =
   ## Clear a received invite so it stops showing (the user isn't joining that room).
   ## Keyed by the normalized content topic, so it matches however the topic was phrased.
@@ -4130,6 +4161,7 @@ proc musterCoordinateConversations(): string =
   ## lists what waits on THIS member in that room ({id, what, text}), and `waiting` /
   ## `settled` count the rest, each classed from the room's log and this member's keys.
   var arr = newJArray()
+  let titles = loadRoomTitles(roomTitlesPath())
   let ks = moduleKeystore()
   let myAddr = toHex(ks.address())
   let myEnc = ks.encIdentity()
@@ -4164,7 +4196,8 @@ proc musterCoordinateConversations(): string =
                      "text": homeSummary(it.effectJson, label)}
       of hcWaiting: inc waiting
       of hcSettled: inc settled
-    arr.add %*{"topic": topic, "address": myAddr, "lastTs": lastTs,
+    arr.add %*{"topic": topic, "title": titles.getOrDefault(topic, ""),
+               "address": myAddr, "lastTs": lastTs,
                "active": (topic == gTopic), "needs": needs, "waiting": waiting, "settled": settled}
   $arr
 

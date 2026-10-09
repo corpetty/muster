@@ -197,6 +197,26 @@ Item {
         var m = Object.assign({}, root.roomLabels);   // reassign so bindings re-evaluate
         m[root.contentTopicOf(topic)] = label;
         root.roomLabels = m;
+        // kept by the module too, beside the joined rooms, so a relaunch shows it (exo-dcc.25)
+        if (root.backend)
+            root.backend.setRoomTitle(topic, label);
+    }
+    // A room's name: this member's own, from the module (it survives a relaunch), else
+    // what this session labelled it; empty when it has none.
+    // A room with no name is told apart by the tail of its code ("Room 9cdc366149").
+    function shortRoom(topic) {
+        var parts = root.contentTopicOf(topic).split("/");
+        var name = String(parts[3] || "");
+        var tail = name.split(".").pop();
+        return qsTr("Room %1").arg(tail.length > 10 ? tail.slice(-10) : tail);
+    }
+    function titleOf(topic) {
+        var t = root.contentTopicOf(topic);
+        var convs = root.conversations;
+        for (var i = 0; i < convs.length; ++i)
+            if (String(convs[i].topic || "") === t && String(convs[i].title || "").length > 0)
+                return String(convs[i].title);
+        return root.roomLabels[t] || "";
     }
     function shortId(s) {
         s = String(s || "").replace(/^0x/i, "");
@@ -227,7 +247,7 @@ Item {
         for (var i = 0; i < convs.length; ++i) {
             var c = convs[i];
             var topic = String(c.topic || "");
-            var title = root.roomLabels[topic] || topic;
+            var title = root.titleOf(topic) || root.shortRoom(topic);
             var ns = Array.isArray(c.needs) ? c.needs : [];
             for (var j = 0; j < ns.length; ++j)
                 needs.push({ topic: topic, title: title, action: root.needsHeadline(String(ns[j].what || "")),
@@ -388,6 +408,7 @@ Item {
             catch (e) { return []; }
         }
         onActivated: root.enterRoom(topic)
+        onJoinCode: function (topic) { root.enterRoom(topic); }   // joiner path → asks to join
         onJoinInvite: function(topic) {   // joiner path → auto-asks to join
             // Title the room from the sealed invite (its note and sender), never its topic.
             for (var i = 0; i < invites.length; ++i) {
@@ -444,7 +465,14 @@ Item {
     Room {
         id: roomSurface
         // the session title for this room (never its topic, which names nothing)
-        roomTitle: root.roomLabels[roomSurface.topic] || ""
+        roomTitle: roomSurface.topic.length > 0 ? (root.titleOf(roomSurface.topic) || root.shortRoom(roomSurface.topic)) : ""
+        // Leave (exo-dcc.28): the module forgets the room; back to Home, where it no
+        // longer shows. Rename (exo-dcc.25): this member's own name for it.
+        onLeaveRequested: function (topic) {
+            if (root.backend) root.backend.leaveRoom(topic);
+            root.view = "home";
+        }
+        onRenameRequested: function (topic, title) { root.labelRoom(topic, title); }
         // A card remedy that lives in Settings (repoint the RPC): hop to the view.
         onSettingsRequested: {
             root.view = "settings";
