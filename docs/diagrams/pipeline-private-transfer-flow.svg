@@ -30,12 +30,12 @@
                    one. 'No mixnet here' is the transfer's path: the mixnet Muster offers
                    since 2026-10-08 carries room sends only. Ordering/mempool is marked NOT
                    ASSESSED in the figure itself, not omitted
-     recheck:  P3 and P4, and before any post using it publishes. F-4/FS-6 and F-20
-               landing removes the step-04 flag and the footer's 're-derives nothing it
-               signs'; ADR-010 may change which module mints identity; the mempool cell
-               becomes assessable only when the zone answers; libchat#28 (chat_module
-               state not persisted) changes what steps 01 and 06 survive across a
-               restart.
+     recheck:  Before any post using it publishes. It is the demo build's private
+               transfer; Muster's own client re-derives (F-4/FS-6) and refuses the
+               unaccountable (F-20), and the footer says the demo did not. The mempool
+               cell becomes assessable only when the zone answers; libchat#28
+               (chat_module state not persisted) changes what steps 01 and 06 survive
+               across a restart.
 -->
 
   <defs>

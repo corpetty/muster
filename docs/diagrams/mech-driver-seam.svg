@@ -13,6 +13,8 @@
                module/src/drivers/driver.nim
                module/src/drivers/registry.nim
                module/src/settlement/settlement.nim
+               module/src/intents/materialization.nim
+               module/src/coordination/parts.nim
      evidence: [from-source] The seven method names and what describe returns, verbatim
                    from F-6; the r=1/r=2 characterisation from F-7; S-1's no-merge-on-red
                    rule
@@ -23,8 +25,8 @@
                    split none), intents/materialization.nim's describeFor and the part hooks
                    with coordination/parts.nim's PartSeam (a split settles in parts); the
                    sixteen kinds from drivers/registry.nim. F-8's queue is not in the code
-     recheck:  When a driver kind is added to registry.nim, the Driver's methods change,
-               or F-8's queue lands.
+     recheck:  When a driver kind is added to registry.nim, the Driver's methods change
+               (describeFor, settlement in parts), or F-8's queue lands.
 -->
 
   <rect width="880" height="660" fill="#E4E6E0"/>
