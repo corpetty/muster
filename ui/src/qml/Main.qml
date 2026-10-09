@@ -516,6 +516,13 @@ Item {
         anchors.bottom: parent.bottom
         visible: root.view === "settings"
         backend: root.backend
+        // the account link waits on the Logos Signer (exo-dcc.27): Settings shows where its
+        // request stands, opens the signer on it, and offers to install the signer app
+        keystoreRequests: root.keystoreRequests
+        signerPackage: root.signerPackage
+        signerInstall: root.packageRequests[root.signerPackage] || ({})
+        onOpenSignerRequested: function (handle) { root.openSigner(handle); }
+        onSignerInstallRequested: root.requestPackageInstall(root.signerPackage)
     }
 
     // The address book — name the ids you coordinate with (aliases resolve into the
@@ -1228,8 +1235,12 @@ Item {
         }
         logos.request("evm.signing.approve", { handle: handle }, function (res) {
             var e = String((res && res.error) || "");
-            if (e === "unavailable")
-                root.signerNote = qsTr("No signer answered. Install or open the Logos Signer, then approve there.");
+            // No signer app answered, or the person turned down Basecamp's offer to install
+            // one (exo-dcc.27): the request waits on an app that is not there, so say which
+            // one and offer to install it.
+            root.signerMissing = (e === "unavailable" || e === "cancelled");
+            if (root.signerMissing)
+                root.signerNote = qsTr("No Logos Signer answered: it is a separate app (evm_signer_ui). Install or open it, then approve there.");
             else if (e === "not_declared" || e === "bad_request" || e === "timeout" || e === "failed")
                 root.signerNote = qsTr("The signer could not be opened (%1). Open the Logos Signer by hand.").arg(e);
         });
@@ -1305,6 +1316,16 @@ Item {
         try { logos.request("packages.show", { name: name }, finish); }
         catch (x) { finish({ ok: false, data: ({}), error: "unavailable" }); }
     }
+    // The signer app the keystore names as its approver (exo-dcc.27): approvals and the
+    // account's link to this identity wait on it, and it is not installed by default.
+    property bool signerMissing: false
+    readonly property string signerPackage: {
+        try {
+            var k = JSON.parse(root.backend ? root.backend.keystoreStatusJson : "{}") || ({});
+            var a = Array.isArray(k.approvers) ? k.approvers : [];
+            return a.length > 0 ? String(a[0]) : "evm_signer_ui";
+        } catch (e) { return "evm_signer_ui"; }
+    }
     function escortNew() {
         var rs = (root.keystoreRequests.requests || []);
         var open = 0;
@@ -1357,6 +1378,12 @@ Item {
                 text: root.signerNote
                 color: Theme.palette.textSecondary
                 font.pixelSize: Theme.typography.badgeText
+            }
+            LogosButton {
+                objectName: "signerInstall"
+                visible: root.signerMissing
+                text: qsTr("Install the Logos Signer")
+                onClicked: root.requestPackageInstall(root.signerPackage)
             }
             LogosButton {
                 text: qsTr("Dismiss")

@@ -124,6 +124,8 @@ Item {
     readonly property string peer: peerField ? peerField.text.trim() : ""
     readonly property bool hasVerb: composer.pickedVerb.length > 0
     readonly property bool hasPeer: composer.peer.length > 0
+    // a chat id: 64 bytes (ed25519 ++ x25519) as 128 hex, 0x optional — what an invite needs
+    readonly property bool peerIsChatId: /^(0x)?[0-9a-fA-F]{128}$/.test(composer.peer)
     readonly property int scopeCount: 1 + (composer.hasPeer ? 1 : 0)
 
     // A room's topic is public: every store node and subscriber reads it (FS-9). So it
@@ -261,6 +263,21 @@ Item {
                     objectName: "composerPeerField"
                     Layout.fillWidth: true
                     placeholderText: qsTr("paste their chat id (leave empty for just you)")
+                }
+                // Say what will happen to them (exo-dcc.26): only a chat id (their 64-byte
+                // identity, 128 hex) can carry an invite. Anything else opens the room
+                // without telling them, which used to happen silently.
+                LogosText {
+                    objectName: "composerPeerHint"
+                    visible: composer.hasPeer
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: composer.peerIsChatId
+                          ? qsTr("They'll get an invite on their Home and join as a member, no asking.")
+                          : qsTr("That isn't a chat id, so no invite can reach them. A chat id is 128 hex characters: "
+                                 + "they copy theirs from Settings (Your chat id) and send it to you, or pick them from your contacts.")
+                    color: composer.peerIsChatId ? Theme.palette.textTertiary : Theme.palette.warning
+                    font.pixelSize: Theme.typography.badgeText
                 }
 
                 // …or tap a name from your address book instead of pasting.

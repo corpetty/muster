@@ -75,6 +75,24 @@ Item {
     // The official EVM keystore row (keystore_status, exo-149.1 K1): {level, detail,
     // remedy?, identity?, approvers, accounts:[{address, label, wallet}]}; {} until the
     // first read lands. keystore_module holds the EVM keys; muster only asks.
+    // The account link waits on the Logos Signer (exo-dcc.27). Main passes where its
+    // request stands, the signer's package and what installing it answered.
+    property var keystoreRequests: ({})
+    property string signerPackage: "evm_signer_ui"
+    property var signerInstall: ({})
+    signal openSignerRequested(string handle)
+    signal signerInstallRequested()
+    // the latest link request for the selected account: { handle, state, ... } or null
+    readonly property var bindingRequest: {
+        var sel = String(settings.keystore.selected || "").toLowerCase();
+        var rs = (settings.keystoreRequests && settings.keystoreRequests.requests) || [];
+        var last = null;
+        for (var i = 0; i < rs.length; ++i)
+            if (rs[i].kind === "binding" && String(rs[i].account || "").toLowerCase() === sel) last = rs[i];
+        return last;
+    }
+    readonly property bool bindingWaiting: !!settings.bindingRequest
+        && (settings.bindingRequest.state === "waiting" || settings.bindingRequest.state === "shown")
     readonly property var keystore: {
         try { return JSON.parse(backend ? backend.keystoreStatusJson : "{}") || ({}); }
         catch (e) { return ({}); }
@@ -816,10 +834,55 @@ Item {
                             const b = String(settings.keystore.binding || "none")
                             if (b === "valid") return qsTr("Approvals go through the selected account, linked to your Muster identity.")
                             if (b === "expiring") return qsTr("The account's link to your identity expires within a day: select it again to renew.")
-                            if (b === "expired" || b === "invalid") return qsTr("The account's link to your identity is no longer valid: select it again.")
-                            return qsTr("Waiting for you to approve the account's link to your identity in the signer.")
+                            if (b === "expired" || b === "invalid") return qsTr("The account's link to your identity is no longer valid: ask again.")
+                            // not linked yet: say where the request stands, and who must answer it
+                            if (settings.bindingWaiting)
+                                return qsTr("Approve linking this account to your identity in the Logos Signer (%1), a separate app. "
+                                            + "Not installed? Install it, then open the request.").arg(settings.signerPackage)
+                            var st = settings.bindingRequest ? String(settings.bindingRequest.state || "") : "";
+                            return st.length > 0
+                                ? qsTr("The link request ended without an approval (%1). Install or open the Logos Signer (%2), then ask again.").arg(st).arg(settings.signerPackage)
+                                : qsTr("The account is not linked to your identity yet. Ask for the link, then approve it in the Logos Signer (%1).").arg(settings.signerPackage)
                         }
                         color: settings.keystore.binding === "valid" ? Theme.palette.textTertiary : Theme.palette.warning
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                    // what to do about it: open the request, ask again, install the signer (exo-dcc.27)
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        visible: !!settings.keystore.selected && settings.keystore.binding !== "valid"
+                        LogosButton {
+                            objectName: "keystoreOpenSigner"
+                            visible: settings.bindingWaiting
+                            text: qsTr("Open the request in the Signer")
+                            onClicked: settings.openSignerRequested(String(settings.bindingRequest.handle || ""))
+                        }
+                        LogosButton {
+                            objectName: "keystoreAskAgain"
+                            visible: !settings.bindingWaiting
+                            text: qsTr("Ask again")
+                            onClicked: if (settings.backend) settings.backend.keystoreSelect(String(settings.keystore.selected))
+                        }
+                        LogosButton {
+                            objectName: "keystoreInstallSigner"
+                            text: qsTr("Install the Logos Signer")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: settings.signerInstallRequested()
+                        }
+                    }
+                    LogosText {
+                        Layout.fillWidth: true
+                        visible: !!settings.signerInstall.state && settings.keystore.binding !== "valid"
+                        wrapMode: Text.WordWrap
+                        text: {
+                            var st = String(settings.signerInstall.state || "");
+                            return st === "open" ? qsTr("Package Manager is open on the Logos Signer: confirm the install there, then come back.")
+                                 : st === "asking" ? qsTr("Asking Basecamp to install the Logos Signer…")
+                                 : st === "unavailable" ? qsTr("No Package Manager answered: install %1 from Basecamp's Package Manager.").arg(settings.signerPackage)
+                                 : qsTr("Installing the Logos Signer did not start (%1).").arg(String(settings.signerInstall.error || st));
+                        }
+                        color: Theme.palette.textTertiary
                         font.pixelSize: Theme.typography.badgeText
                     }
 
