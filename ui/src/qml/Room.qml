@@ -258,6 +258,7 @@ Item {
                                            if (room.backend) room.backend.loadDrivers(); } }
     onPolicyKindChanged: {
         if (room.policyKind === room.requestedPolicy.split("@")[0]) room.requestedPolicy = "";
+        if (room.policyKind === room.pickedKind) room.pickedKind = "";
         if (composing) refreshRoomAccount();
     }
     // A policy asked of the module and not yet read back (setPolicy answers through
@@ -265,8 +266,21 @@ Item {
     // verb's policy (a request's monero-split) is not snapped back to the kind's first
     // policy by a policyKind that has not caught up yet (exo-dcc.5, seen in Basecamp).
     property string requestedPolicy: ""
+    // The kind the person last picked in the picker. A pick the module refuses (no account
+    // to act from yet) leaves policyKind where it was, so the picker shows THIS, and the
+    // amount's unit follows it; Propose waits until the module has taken it (exo-dcc.31).
+    property string pickedKind: ""
+    readonly property string shownKind: room.pickedKind.length > 0 ? room.pickedKind : room.policyKind
+    readonly property bool pickPending: room.pickedKind.length > 0 && room.pickedKind !== room.policyKind
+    readonly property bool shownBtc: room.shownKind.indexOf("btc-") === 0
+    readonly property bool shownLez: room.shownKind === "lez-multisig" || room.shownKind === "lez-frost"
+    // the unit a payment's amount is typed in, for the kind picked
+    readonly property string payUnit: room.shownBtc ? qsTr("sat") : room.shownLez ? qsTr("token units") : qsTr("wei")
     function choosePolicy(k) {
         room.requestedPolicy = String(k || "");
+        // the composer's own pick (coherePolicy) is shown as picked too, so a kind refused for
+        // want of an account still reads as the selection, with the remedy under it
+        if (room.requestedPolicy.length > 0) room.pickedKind = room.requestedPolicy.split("@")[0];
         if (room.backend && room.requestedPolicy.length > 0) room.backend.setPolicy(room.requestedPolicy);
     }
     onPolicyErrorChanged: room.requestedPolicy = ""
@@ -318,7 +332,7 @@ Item {
                && p !== "contributor" && p !== "payer" && p !== "counterparty";
     }
     readonly property var composeBlockers: room.composeNeeds.filter(function (n) { return room.needBlocks(n); })
-    readonly property bool composeBlocked: room.composeBlockers.length > 0
+    readonly property bool composeBlocked: room.composeBlockers.length > 0 || room.pickPending
     function composeNeedLine(n) {
         var info = room.kindInfo(room.policyKind);
         var label = (info && info.label) ? String(info.label) : room.policyKind;
@@ -552,6 +566,7 @@ Item {
     // Also keep the policy coherent with the kind (payment→Safe, statement→endorsement),
     // so the composer can never hold a nonsense pairing.
     onComposeTypeChanged: {
+        room.pickedKind = "";
         if (composing && composeType === "action" && room.backend)
             room.backend.loadAvailableActions();
         room.coherePolicy();
@@ -2181,12 +2196,14 @@ Item {
                             readonly property string label: info && info.label ? String(info.label) : String(modelData)
                             objectName: "roomPolicy" + String(modelData).charAt(0).toUpperCase() + String(modelData).slice(1)
                             text: room.hasDriver(modelData) ? label : qsTr("＋ Propose %1").arg(label.toLowerCase())
-                            variant: room.policyKind === modelData
+                            variant: room.shownKind === modelData
                                      ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
                             onClicked: {
                                 if (!room.backend) return;
-                                if (room.hasDriver(modelData))
+                                if (room.hasDriver(modelData)) {
+                                    room.pickedKind = String(modelData);
                                     room.backend.setPolicy(modelData);
+                                }
                                 else   // propose admitting it — the room approves, then it appears
                                     room.backend.proposeInRoom(JSON.stringify({ effect: "add-driver", kind: modelData }));
                             }
@@ -3091,8 +3108,8 @@ Item {
                         id: proposeTo
                         objectName: "roomProposeTo"
                         Layout.fillWidth: true
-                        placeholderText: room.isLezPolicy ? qsTr("recipient token holding (base58 or hex)")
-                                       : room.isBtcPolicy ? qsTr("recipient Bitcoin address (bc1… / tb1… / bcrt1…)")
+                        placeholderText: room.shownLez ? qsTr("recipient token holding (base58 or hex)")
+                                       : room.shownBtc ? qsTr("recipient Bitcoin address (bc1… / tb1… / bcrt1…)")
                                        : qsTr("recipient (0x…)")
                         font.family: Theme.typography.mono
                     }
@@ -3117,7 +3134,7 @@ Item {
                                 kind: "address-request",
                                 intent: "pay",
                                 purpose: proposeValue.text.length > 0
-                                    ? qsTr("Pay %1 wei").arg(proposeValue.text)
+                                    ? qsTr("Pay %1 %2").arg(proposeValue.text).arg(room.payUnit)
                                     : qsTr("Pay someone from the room")
                             }));
                         }
@@ -3149,6 +3166,35 @@ Item {
                     font.pixelSize: Theme.typography.badgeText
                 }
 
+                // a Bitcoin payment's fee rate: sat/vB over an upper bound of its signed size,
+                // paid out of the account's own coins. On its own labelled line, so the amount
+                // beside Propose keeps room for its unit (exo-dcc.31).
+                RowLayout {
+                    visible: room.composeType === "payment" && room.shownBtc
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+                    LogosText {
+                        text: qsTr("Fee rate")
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                    LogosTextField {
+                        id: proposeFeeRate
+                        objectName: "roomProposeFeeRate"
+                        Layout.preferredWidth: 90
+                        placeholderText: qsTr("2")
+                        text: "2"
+                        font.family: Theme.typography.mono
+                        validator: IntValidator { bottom: 1 }
+                    }
+                    LogosText {
+                        text: qsTr("sat/vB, paid from the account's own coins")
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+
                 RowLayout {
                     // the across box has its own Propose and Cancel (exo-a90.17)
                     visible: !(room.composeType === "split" && room.acrossOpen)
@@ -3160,11 +3206,11 @@ Item {
                         objectName: "roomProposeValue"
                         visible: room.composeType === "payment"
                         Layout.fillWidth: true
+                        Layout.minimumWidth: 160   // room for the unit: "amount (token units)"
                         // wei — the Safe transfers this exact value; the balance above is
                         // shown in ETH and in wei so the unit you type against is explicit.
                         // A Bitcoin payment is in satoshis.
-                        placeholderText: room.isBtcPolicy ? qsTr("amount (sat)")
-                                       : room.isLezPolicy ? qsTr("amount (token units)") : qsTr("amount (wei)")
+                        placeholderText: qsTr("amount (%1)").arg(room.payUnit)
                         font.family: Theme.typography.mono
                         // Any run of digits: amounts are arbitrary precision (wei exceeds
                         // 32 bits: 0.001 ETH is 10^15). IntValidator capped input at
@@ -3172,18 +3218,6 @@ Item {
                         validator: RegularExpressionValidator { regularExpression: /[0-9]*/ }
                     }
 
-                    // a Bitcoin payment's fee rate: sat/vB over an upper bound of its
-                    // signed size, paid out of the account's own coins
-                    LogosTextField {
-                        id: proposeFeeRate
-                        objectName: "roomProposeFeeRate"
-                        visible: room.composeType === "payment" && room.isBtcPolicy
-                        Layout.preferredWidth: 150
-                        placeholderText: qsTr("fee (sat/vB)")
-                        text: "2"
-                        font.family: Theme.typography.mono
-                        validator: IntValidator { bottom: 1 }
-                    }
 
                     // keep the buttons right-aligned when the amount field is hidden.
                     Item { visible: room.composeType !== "payment"; Layout.fillWidth: true }
