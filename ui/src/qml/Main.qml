@@ -63,6 +63,9 @@ Item {
         // (no verb) leaves it cleared, so it never auto-admits into the wrong room.
         roomSurface.expectedMember = "";
         roomSurface.autoAdmitted = ({});
+        // A room opened from the composer (a verb) is this member's own: it asks no one
+        // to join it (below), and its scope panel offers no "Ask to join" (exo-dcc.30).
+        roomSurface.founded = String(verb || "").length > 0;
         root.backend.joinRoom(topic);
         // A person named in the composer (their 64-byte chat id, 128 hex chars) is invited
         // now, before the room says anything: the invite admits them (exo-dcc.29), so they

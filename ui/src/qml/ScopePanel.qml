@@ -41,6 +41,13 @@ Item {
     // one arrives the ask can't be sent, and the panel says so instead of going quiet.
     property string joinStatus: ""
 
+    // Whether this member opened the room (entered it from the composer) rather than
+    // joining one someone else holds. A founder has nothing to ask: anyone who asks shows
+    // up below for them to admit (exo-dcc.30). The roster says the rest — past one, this
+    // member is in a shared epoch, so already admitted.
+    property bool founder: false
+    readonly property bool canAskToJoin: !scope.founder && scope.roster.length <= 1
+
     // Asks the host to grow the room; the host collects the new member's key.
     signal addMember()
 
@@ -264,25 +271,35 @@ Item {
             // both opened this topic each start their own single-member epoch; they
             // can't read each other until one admits the other. "Ask to join"
             // announces our key on the topic (coordinate_request_join); a member who
-            // is already here sees the request below and admits it.
-            LogosButton {
-                objectName: "requestJoinButton"
+            // is already here sees the request below and admits it. Only while this member
+            // is alone and did not open the room: a founder and an admitted member have
+            // nothing to ask (exo-dcc.30).
+            RowLayout {      // visibility on a wrapper: a LogosButton's own did not take in Basecamp
                 Layout.fillWidth: true
-                text: qsTr("Ask to join this room")
-                onClicked: scope.requestJoin()
+                visible: scope.canAskToJoin
+                LogosButton {
+                    objectName: "requestJoinButton"
+                    Layout.fillWidth: true
+                    text: qsTr("Ask to join this room")
+                    onClicked: scope.requestJoin()
+                }
             }
 
             // When you're the only one on the roster, you can't tell whether the room
             // is empty or someone's already here (their epoch is sealed to them until
             // they admit you). Entering already sends a join request for you — so say
             // so, and that a member here will admit you, rather than leave you guessing.
+            // A founder alone is told who can come in instead.
             LogosText {
                 visible: scope.roster.length <= 1
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: qsTr("Only you are here so far. If someone already has this room open, "
-                         + "they'll see your request and can let you in — you don't need to "
-                         + "do anything else. (Asking again above re-sends the request.)")
+                text: scope.founder
+                      ? qsTr("Only you are here so far. Someone you invite arrives a member; "
+                           + "anyone else who asks shows up here for you to admit.")
+                      : qsTr("Only you are here so far. If someone already has this room open, "
+                           + "they'll see your request and can let you in — you don't need to "
+                           + "do anything else. (Asking again above re-sends the request.)")
                 color: Theme.palette.textTertiary
                 font.pixelSize: Theme.typography.badgeText
             }
@@ -290,7 +307,7 @@ Item {
             // Where the ask stands — sealed and sent, or still waiting for the room's key.
             LogosText {
                 objectName: "joinStatusLabel"
-                visible: scope.roster.length <= 1 && scope.joinStatus.length > 0
+                visible: scope.canAskToJoin && scope.joinStatus.length > 0
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: scope.joinStatus === "waiting-for-room-key"
@@ -346,14 +363,6 @@ Item {
                 }
             }
 
-            LogosText {
-                Layout.fillWidth: true
-                text: qsTr("Admitting someone re-keys the room forward — they read from here on, never the messages before (F-16).")
-                color: Theme.palette.textTertiary
-                font.pixelSize: Theme.typography.badgeText
-                wrapMode: Text.WordWrap
-            }
-
             // ── Scope ─────────────────────────────────────────────────────────
             LogosText {
                 Layout.fillWidth: true
@@ -391,10 +400,10 @@ Item {
             }
 
             // Why growing the room is a boundary change, not a settings toggle
-            // (F-16). Said here because here is where the roster changes.
+            // (F-16). Said once, here, for inviting and admitting alike.
             LogosText {
                 Layout.fillWidth: true
-                text: qsTr("Adding someone re-keys the room forward — they read from here on, never earlier.")
+                text: qsTr("Adding someone re-keys the room forward — they read from here on, never the messages before.")
                 color: Theme.palette.textTertiary
                 font.pixelSize: Theme.typography.secondaryText
                 wrapMode: Text.WordWrap

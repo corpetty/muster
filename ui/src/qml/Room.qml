@@ -45,6 +45,9 @@ Item {
     // them, so you shouldn't have to click Admit, and they shouldn't have to ask. The
     // binding is still verified on admit (F-9); this only removes the manual step.
     property string expectedMember: ""
+    // Whether this member opened this room from the composer (Main.enterRoom sets it).
+    // A founder has no one to ask to let them in (exo-dcc.30).
+    property bool founded: false
     // ids we've already auto-admitted, so a pending entry lingering one extra tick
     // (before the re-key propagates) doesn't trigger a second admit.
     property var autoAdmitted: ({})
@@ -1376,7 +1379,10 @@ Item {
                 objectName: "joinRoomButton"
                 text: qsTr("Join")
                 enabled: topicField.text.length > 0
-                onClicked: if (room.backend) room.backend.joinRoom(topicField.text)
+                onClicked: {
+                    room.founded = false;   // joined by name: maybe someone else's room
+                    if (room.backend) room.backend.joinRoom(topicField.text);
+                }
             }
         }
 
@@ -3521,8 +3527,10 @@ Item {
             // FROST and LEZ multisig sections), and it used to set the whole room's height —
             // pushing the message row and its "+" below the bottom of a normal window
             // (exo-9a4). It scrolls in its own share of the column now, as the history and
-            // the scope below it do; its width stays its natural width.
+            // the scope below it do; its width stays its natural width. When an add-an-account
+            // form opens it scrolls to show it, since the forms sit at the end (exo-dcc.30).
             Flickable {
+                id: accountsFlick
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredHeight: 2
@@ -3531,6 +3539,9 @@ Item {
                 contentWidth: width
                 contentHeight: topCol.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds
+                function showEnd() { contentY = Math.max(0, contentHeight - height); }
+                // after the layout has taken the newly shown form's height
+                Timer { id: accountsFollow; interval: 60; onTriggered: accountsFlick.showEnd() }
 
             ColumnLayout {
                 id: topCol
@@ -3547,6 +3558,14 @@ Item {
             RoomAccounts {
                 Layout.fillWidth: true
                 accounts: room.roomAccounts
+                // The composer was refused for want of an account this kind can act from:
+                // open the form that discloses one (exo-dcc.30).
+                wantedFamilies: {
+                    var e = room.policyError || {};
+                    if (e.error !== "no-account" || !room.kindNeedsAccount(room.policyKind)) return [];
+                    var info = room.kindInfo(room.policyKind);
+                    return (info && info.accountFamilies) ? info.accountFamilies : [];
+                }
                 discloseResult: room.discloseResult
                 suggestionAvailable: {
                     try { return JSON.parse(room.backend ? room.backend.accountJson : "{}").available !== false; }
@@ -3570,6 +3589,7 @@ Item {
                     if (room.backend) room.backend.lezCreateMultisig(threshold, members);
                 }
                 onDiscloseSuggested: if (room.backend) room.backend.discloseSuggestedAccount()
+                onFormShown: accountsFollow.restart()
             }
             }
             }
@@ -3617,6 +3637,7 @@ Item {
                 pending: room.pending
                 topic: room.topic
                 joinStatus: room.backend ? String(room.backend.joinStatus || "") : ""
+                founder: room.founded
                 securityLevels: room.securityLevels
                 onRequestJoin: if (room.backend) room.backend.requestJoin()
                 onAdmit: function(identityHex) {
