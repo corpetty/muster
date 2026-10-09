@@ -1,6 +1,6 @@
 # Monero in Muster rooms: the plan (exo-dcc)
 
-Status: **planned 2026-10-07. ADR-018 accepted 2026-10-08; the demo runs on `logos.test` with a gifter we run (exo-dcc.2, `rln-membership.md` §7); the catalogue lives in this repo (`catalog/`, exo-dcc.3). As of 2026-10-09 (day 2): Phases 0 and 2 are done, ahead of the calendar; two things wait on funds (§0).** Epic `exo-dcc`, with its children `exo-dcc.1`–`.23`.
+Status: **planned 2026-10-07. ADR-018 accepted 2026-10-08; the target network is `logos.test` with a gifter we run, but for now everything live runs on `logos.dev` (2026-10-09; exo-dcc.2, `rln-membership.md` §7); the catalogue lives in this repo (`catalog/`, exo-dcc.3). As of 2026-10-09 (day 2): Phases 0 and 2 are done, ahead of the calendar; two things wait on funds (§0).** Epic `exo-dcc`, with its children `exo-dcc.1`–`.23`.
 `pb dep tree exo-dcc` shows live status, and `pb ready` shows what can start next.
 
 ## 0. Where it stands (2026-10-09)
@@ -10,7 +10,7 @@ Read from the pebbles on 2026-10-09. The pebbles win over this table.
 | Phase | Pebble | State |
 |---|---|---|
 | 0 Ground truth | `exo-dcc.1` | **Done** (2026-10-08). Basecamp 0.3.2 and delivery 0.3.2; Muster reaches `monero_wallet_backend`, attested as `muster_module`; ADR-018 accepted. Two spike questions are still open, because they need a funded stagenet wallet: whether an incoming transfer shows in `history()` before it confirms, and how long a first sync takes. `exo-dcc.19` answers them |
-| 1 Messaging with no LEZ | `exo-dcc.2` | **Decided, not built.** `logos.test` with a room gifter we run. Slices R2, R3, R4 (`rln-membership.md` §7). **Waits on funds**: native LEZ on LEZ classic for the gifter |
+| 1 Messaging with no LEZ | `exo-dcc.2` | **Decided, not built.** The target is `logos.test` with a room gifter we run. Slices R2, R3, R4 (`rln-membership.md` §7). **Waits on funds**: native LEZ on LEZ classic for the gifter. Meanwhile (2026-10-09) the demo and live testing run on `logos.dev`, the default |
 | 1 An installable Muster | `exo-dcc.3` | **Published.** Version ranges and 0.2.0; `catalog/` and `scripts/catalog-release.sh`; a fresh Basecamp 0.3.2 installed Muster from a locally served copy; release `muster-v0.2.0` published 2026-10-09 with `catalog/index.json` on `main`. Ahead: CI builds, the fork exit, macOS |
 | 1 The mixnet | `exo-dcc.4` | **Done** (2026-10-08). An opt-in `mix` setting, off by default, sends only. Untested on `logos.test` |
 | 1 Install what's missing | `exo-dcc.10`, `.11` | **Done** (2026-10-08). Seen on display in Basecamp 0.3.2 |
@@ -312,7 +312,7 @@ Day 0 is 2026-10-07. Today, 2026-10-09, is day 2.
 **On day 2:**
 - **Ahead of the plan.** Phase 0 is done. Phase 2's spec, module and UI are done, which the plan put in days 10–25. `exo-dcc.10` is done, and the catalogue's tooling is.
 - **Behind it, for want of funds.** Phase 2's live payment (`exo-dcc.19`) needs stagenet XMR. The messaging decision was made on day 1, well before 10-14, but R2–R4 are not built, and the gifter needs native LEZ.
-- **The date that matters next is about 2026-10-14**, when `logos.test` starts rejecting messages without RLN proofs. Muster still defaults to `logos.dev`, so nothing breaks then. What changes is that the demo cannot move to `logos.test` until the gifter runs.
+- **The date that matters next is about 2026-10-14**, when `logos.test` starts rejecting messages without RLN proofs. Muster still defaults to `logos.dev`, so nothing breaks then. What changes is that the demo cannot move to `logos.test` until the gifter runs. Until then it stays on `logos.dev` (decided 2026-10-09).
 - **Phase 4 can start** once the catalogue release is up and `exo-dcc.19` has run. It still waits on the gifter for the network it is meant to run on.
 
 ## 8. Asks of other teams
@@ -347,7 +347,8 @@ All three were open when this plan was written. Each is now decided.
 
 - **Demo network: stagenet.** ADR-018: stagenet first; mainnet waits for `exo-dcc.8`.
 - **Messaging: `logos.test` with a room gifter we run** (2026-10-08, `rln-membership.md` §7).
-  Not a public gifter, and not `logos.dev`.
+  Not a public gifter. **For now** (2026-10-09) the demo and live testing run on `logos.dev`,
+  until RLN is settled and the gifter is funded.
 - **Paying from the Basecamp wallet: wait for the upstream review intent.** ADR-018: Muster
   never makes itself approver, not even for demos.
 

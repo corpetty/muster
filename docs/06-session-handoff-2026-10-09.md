@@ -93,7 +93,8 @@ as in 05.
   Our funded node is in every demo room, and the members' disclosed secp256k1 addresses are
   its EIP-191 allowlist, so participants never hold LEZ. Slices: R2 (one membership active
   end to end), R3 (the room gifter), R4 (the default fleet moves to `logos.test`). None is
-  built.
+  built. **Amended later on 2026-10-09:** for now the demo and all live testing run on
+  `logos.dev`, the default, until RLN is settled and the gifter is funded (§7's amendment).
 - **The catalogue lives in this repo** (`catalog/`, served raw from `main`), with the `.lgx`
   files as release assets.
 
