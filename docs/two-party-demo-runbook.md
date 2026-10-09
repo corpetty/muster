@@ -50,7 +50,7 @@ the room, so the two peers' own identities are the signer set automatically.
 ## Scenario A — one machine, two instances (most reliable; use this for recording)
 
 Local anvil, two isolated peers. Nothing crosses a network except the room itself (over
-the public `logos.test` fleet, the default).
+the public `logos.dev` fleet, the default).
 
 **1. Start anvil + deploy the real Safe v1.4.1** (one command; needs foundry):
 
@@ -58,7 +58,7 @@ the public `logos.test` fleet, the default).
 infra/anvil/devnet.sh
 ```
 
-Leave it running. It prints `SAFE_ADDR=0x5FbDB…0aa3` and `RPC=http://127.0.0.1:8545`
+Leave it running. It prints `SAFE_ADDR=0xEb45…E841` and `RPC=http://127.0.0.1:8545`
 (the module's default — no RPC change needed on one machine). It must be a **fresh**
 anvil for the Safe address to match; re-run it on a restarted anvil if in doubt.
 
@@ -130,7 +130,7 @@ Both tracks drive the **same lifecycle**. Knowing the states makes the demo legi
 can say exactly where you are and what each step put on the wire.
 
 **Before the room — check the account.** Open **Muster → Account**. The **SAFE ACCOUNT**
-card should show the 2-of-3 Safe you're coordinating (`0x5FbDB…0aa3`) and your own owner
+card should show the 2-of-3 Safe you are coordinating (`0xEb45…E841`) and your own owner
 address. If it says **"account not loaded"**, your keystore didn't open — fix that first
 (see Troubleshooting), because nothing downstream will settle.
 
@@ -223,7 +223,7 @@ settle.
   relaunch. The module now reports this as a clear `keystore locked (…): … passphrase …
   does not match` line in the terminal instead of silently blanking the account.
 - **Peers never reach 2 members.** They must use the **same room name** and both be on the
-  same delivery config (default `logos.test` — leave it). Cross-host receive rides store
+  same delivery config (default `logos.dev` — leave it). Cross-host receive rides store
   catchup (~1s), so allow a few seconds. Check Settings → Infrastructure shows the same
   delivery config on both.
 - **Safe Submit fails / card stuck at executable.** The signatures didn't recover to real

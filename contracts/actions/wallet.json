@@ -2325,7 +2325,7 @@
         {
           "kind": "source",
           "url": "https://github.com/corpetty/muster/blob/main/ui/src/qml/Room.qml",
-          "what": "the address-share card button posts an ETH address"
+          "what": "the address-share card button posts an address for the card's chain: ETH, BTC, or a fresh Monero subaddress (room/share-address)"
         }
       ],
       "unverified": [
