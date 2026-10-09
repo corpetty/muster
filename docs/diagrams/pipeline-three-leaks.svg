@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 590" width="880" height="590" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 604" width="880" height="604" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>Three kinds of leak, and why collapsing them is the mistake</title>
   <desc>A leak you chose, a leak the stack chose for you, and a leak nobody chose and everyone inherited. Each has a different fix, a different owner, and a different obligation on whoever describes it.</desc>
 <!-- provenance
@@ -13,7 +13,11 @@
                    a payer cannot upgrade a public destination — observed in the running
                    build
                [from-source] Class 02's one-topic-per-conversation shape, and LOGOS-
-                   MIXNET at status raw, send-only, off the near-term roadmap. Dated 2026-08
+                   MIXNET at status raw, send-only, off the near-term roadmap, printed as
+                   dated 2026-08. Beside it, today's status: since 2026-10-08 a Muster room's
+                   sends can go over the mixnet, opt-in and off by default, while reading a
+                   room still leaves from the reader's own address (docs/labbook/mixnet-on-
+                   delivery-03.md)
                [measured] Class 03's account-identifier finding — reproduced twice, cause
                    identified, reported upstream with a single-file reproducer
      recheck:  If LOGOS-MIXNET moves, or the upstream account-identifier bug is fixed.
@@ -21,9 +25,13 @@
                kind of staleness.
 -->
 
-  <rect width="880" height="590" fill="#E4E6E0"/>
+  <rect width="880" height="604" fill="#E4E6E0"/>
 
   <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">Three kinds of leak</text>
+
+  <!-- dated label: every "in this build" below is the demo build of August 2026 -->
+  <rect x="560" y="25" width="280" height="22" rx="11" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1.2"/>
+  <text x="700" y="40" text-anchor="middle" font-size="9.5" font-weight="600" letter-spacing="0.06em" font-family="ui-monospace,'SF Mono',Menlo,monospace" fill="#656E66">"THIS BUILD": THE DEMO, AUGUST 2026</text>
   <text x="40" y="64" font-size="13.5" fill="#656E66">Most privacy writing collapses these into one. They have different fixes, different owners, and different obligations.</text>
 
   <!-- ══════════ 1. YOU CHOSE ══════════ -->
@@ -45,8 +53,8 @@
   <text x="256" y="190" font-size="10.5" fill="#1A1F1C" font-weight="600">The obligation: <tspan font-weight="400" fill="#3F4742">say what it costs at the moment of choosing, not in a panel someone has to go and open.</tspan></text>
 
   <!-- ══════════ 2. THE STACK CHOSE ══════════ -->
-  <rect x="40" y="226" width="800" height="140" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
-  <rect x="40" y="226" width="5" height="140" rx="2.5" fill="#4B33C4"/>
+  <rect x="40" y="226" width="800" height="154" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="40" y="226" width="5" height="154" rx="2.5" fill="#4B33C4"/>
 
   <text x="64" y="256" font-size="26" font-weight="600" fill="#EAE6FA">02</text>
   <text x="64" y="280" font-size="13" font-weight="600" fill="#4B33C4">A leak the stack</text>
@@ -61,29 +69,30 @@
   <text x="256" y="304" font-size="10" fill="#3F4742"><tspan font-style="italic">who by IP</tspan>, not <tspan font-style="italic">what links to what</tspan>. Running your own store node is not a fix either: it protects the operator's own</text>
   <text x="256" y="318" font-size="10" fill="#3F4742">metadata, not their peers', and it lets an operator learn when a target fetches.</text>
 
-  <text x="256" y="342" font-size="10.5" fill="#1A1F1C" font-weight="600">The obligation: <tspan font-weight="400" fill="#3F4742">name the fix and its real status.</tspan><tspan font-weight="400" fill="#A32D1E">&#160;LOGOS-MIXNET is a LIP at status `raw`, implemented</tspan></text>
-  <text x="256" y="356" font-size="10" fill="#A32D1E">send-only, and absent from the near-term roadmap. "Coming soon" is not a status.</text>
+  <text x="256" y="342" font-size="10.5" fill="#1A1F1C" font-weight="600" xml:space="preserve">The obligation: <tspan font-weight="400" fill="#3F4742">name the fix and its real status.</tspan> <tspan font-weight="400" fill="#A32D1E">In August 2026 LOGOS-MIXNET was a LIP at `raw`,</tspan></text>
+  <text x="256" y="356" font-size="10" fill="#A32D1E">implemented send-only, off the near-term roadmap. <tspan fill="#1E6B52">Since 2026-10-08 a Muster room's sends can go out over it,</tspan></text>
+  <text x="256" y="370" font-size="10" fill="#1E6B52">opt-in and off by default; reading a room still leaves from your own address. <tspan fill="#3F4742">"Coming soon" is not a status.</tspan></text>
 
   <!-- ══════════ 3. NOBODY CHOSE ══════════ -->
-  <rect x="40" y="378" width="800" height="140" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
-  <rect x="40" y="378" width="5" height="140" rx="2.5" fill="#A32D1E"/>
+  <rect x="40" y="392" width="800" height="140" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <rect x="40" y="392" width="5" height="140" rx="2.5" fill="#A32D1E"/>
 
-  <text x="64" y="408" font-size="26" font-weight="600" fill="#F6E3DF">03</text>
-  <text x="64" y="432" font-size="13" font-weight="600" fill="#A32D1E">A leak nobody</text>
-  <text x="64" y="448" font-size="13" font-weight="600" fill="#A32D1E">chose</text>
-  <text x="64" y="470" font-size="9" fill="#656E66">Inherited. Everyone</text>
-  <text x="64" y="482" font-size="9" fill="#656E66">on the network has it.</text>
+  <text x="64" y="422" font-size="26" font-weight="600" fill="#F6E3DF">03</text>
+  <text x="64" y="446" font-size="13" font-weight="600" fill="#A32D1E">A leak nobody</text>
+  <text x="64" y="462" font-size="13" font-weight="600" fill="#A32D1E">chose</text>
+  <text x="64" y="484" font-size="9" fill="#656E66">Inherited. Everyone</text>
+  <text x="64" y="496" font-size="9" fill="#656E66">on the network has it.</text>
 
-  <text x="256" y="404" font-size="10.5" fill="#1A1F1C" font-weight="600">In this build: <tspan font-weight="400" fill="#3F4742">the anonymity set is small because the network is young — a demo with two users is the</tspan></text>
-  <text x="256" y="418" font-size="10" fill="#3F4742">smallest one there is. Every shielded transfer is unlinkable to every other, and there are only two people it could</text>
-  <text x="256" y="432" font-size="10" fill="#3F4742">have been between. No amount of cryptography closes that; only other users do.</text>
+  <text x="256" y="418" font-size="10.5" fill="#1A1F1C" font-weight="600">In this build: <tspan font-weight="400" fill="#3F4742">the anonymity set is small because the network is young — a demo with two users is the</tspan></text>
+  <text x="256" y="432" font-size="10" fill="#3F4742">smallest one there is. Every shielded transfer is unlinkable to every other, and there are only two people it could</text>
+  <text x="256" y="446" font-size="10" fill="#3F4742">have been between. No amount of cryptography closes that; only other users do.</text>
 
-  <text x="256" y="456" font-size="10.5" fill="#1A1F1C" font-weight="600">What would change it: <tspan font-weight="400" fill="#3F4742">time and adoption. Nothing in this repository, and nothing upstream either —</tspan></text>
-  <text x="256" y="470" font-size="10" fill="#3F4742">which is what makes it the honest example of the class rather than a bug wearing the class as a costume.</text>
+  <text x="256" y="470" font-size="10.5" fill="#1A1F1C" font-weight="600">What would change it: <tspan font-weight="400" fill="#3F4742">time and adoption. Nothing in this repository, and nothing upstream either —</tspan></text>
+  <text x="256" y="484" font-size="10" fill="#3F4742">which is what makes it the honest example of the class rather than a bug wearing the class as a costume.</text>
 
-  <text x="256" y="494" font-size="10.5" fill="#1A1F1C" font-weight="600">The obligation: <tspan font-weight="400" fill="#3F4742">do not present an inherited limit as a design — nor a misdiagnosis as an inherited limit.</tspan></text>
+  <text x="256" y="508" font-size="10.5" fill="#1A1F1C" font-weight="600">The obligation: <tspan font-weight="400" fill="#3F4742">do not present an inherited limit as a design — nor a misdiagnosis as an inherited limit.</tspan></text>
 
   <!-- ══════════ THE POINT ══════════ -->
-  <text x="40" y="552" font-size="12.5" font-weight="600" fill="#1A1F1C">Three different fixes, three different owners, three different things a reader can do about it.</text>
-  <text x="40" y="572" font-size="11.5" fill="#656E66">A write-up that calls all three "privacy trade-offs" has told you nothing about which one you can act on.</text>
+  <text x="40" y="566" font-size="12.5" font-weight="600" fill="#1A1F1C">Three different fixes, three different owners, three different things a reader can do about it.</text>
+  <text x="40" y="586" font-size="11.5" fill="#656E66">A write-up that calls all three "privacy trade-offs" has told you nothing about which one you can act on.</text>
 </svg>
