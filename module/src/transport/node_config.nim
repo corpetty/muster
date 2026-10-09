@@ -119,3 +119,14 @@ proc nodeConfigFor*(cfgJson: string, quic = false, logLevel = "INFO", mix = mixO
     if keyCI(layer, "anonymityLevel").len == 0 and not mixOffInConfig:
       layer["anonymityLevel"] = %anonymityLevelFor(mix)
   result.createNode = $j
+
+proc nodeStartedElsewhere*(createNodeReply: string): bool =
+  ## Whether delivery refused createNode because its node already exists (exo-dcc.24). In
+  ## Basecamp one delivery node serves every module, and the first to call createNode picks
+  ## its fleet, so this means another app chose the network and Muster's own fleet setting
+  ## did not apply. A missing or unparsable reply is no evidence either way: false.
+  try:
+    let j = parseJson(createNodeReply)
+    if j.kind != JObject or j{"success"}.getBool(true): return false
+    j{"error"}.getStr().toLowerAscii().contains("already initialized")
+  except CatchableError: false

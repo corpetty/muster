@@ -132,6 +132,11 @@ proc onStoreResult(ok: cint, json: cstring, userData: pointer) {.cdecl, gcsafe.}
   cast[DeliveryTransport](userData).storeQueue.enqueue(json)
 
 var gNodeBooted = false   ## this module instance booted delivery's node (exo-dcc.12)
+var gNodeElsewhere = false  ## delivery's node was already running: another app chose its fleet (exo-dcc.24)
+
+proc nodeElsewhere*(): bool = gNodeElsewhere
+  ## Whether another app started the delivery node before Muster asked (Basecamp runs one
+  ## node for every module), so Muster's fleet setting may not be the network it is on.
 
 proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000, mix = mixOff): DeliveryTransport =
   ## Bind a client to delivery_module, boot its node, and open the single
@@ -174,6 +179,7 @@ proc newDeliveryTransport*(nodeConfigJson = "{}", timeoutMs = 5000, mix = mixOff
     var args = newJArray(); args.add %nc.createNode
     let cn = result.invoke("createNode", $args)
     if gLpDebug: stderr.writeLine("MUSTER-LP createNode result=" & (if cn != nil: $cn else: "<nil>"))
+    if cn != nil and nodeStartedElsewhere($cn): gNodeElsewhere = true
     discard result.invoke("start", "[]")
     gNodeBooted = true
   elif gLpDebug: stderr.writeLine("MUSTER-LP delivery node already booted; binding to it")

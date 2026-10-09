@@ -129,3 +129,15 @@ block mixFlat:
     doAssert nodeConfigFor(raw, mix = mixRequired).createNode == raw
     doAssert anonymityOf(raw) == "None"
   echo "9. a flat config takes the level at its top; anything else passes through OK"
+
+block nodeElsewhere:
+  # exo-dcc.24: in Basecamp one delivery node serves every module, and the first to call
+  # createNode picks its fleet. A createNode refused because the node already exists means
+  # another app chose the network; Muster must say so, never assume its own fleet.
+  doAssert nodeStartedElsewhere("""{"error":"Context already initialized","success":false,"value":null}""")
+  doAssert nodeStartedElsewhere("""{"success":false,"error":"context ALREADY initialized"}""")
+  doAssert not nodeStartedElsewhere("""{"error":null,"success":true,"value":null}"""), "Muster's own boot"
+  doAssert not nodeStartedElsewhere("""{"success":false,"error":"invalid config"}"""), "a refusal of ours, not another app's node"
+  for raw in ["", "null", "not json", "[1]"]:
+    doAssert not nodeStartedElsewhere(raw), "no answer is not evidence of another app: " & raw
+  echo "10. a node another app started is told from one Muster booted OK"
