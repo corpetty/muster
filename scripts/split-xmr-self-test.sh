@@ -6,14 +6,17 @@
 #     0.123456789012 XMR of B with no chain named (MUSTER_AUTOSPLIT — the slot the Split
 #     composer's Propose calls under the "Request" kind);
 #   B says "I paid" for a request that does not exist (MUSTER_AUTOREPORTPAID — the slot the
-#     card's "I paid" calls).
+#     card's "I paid" calls), and shares a Monero address on stagenet (MUSTER_AUTOSHARE —
+#     the slot the address-request card's "Share my Monero address" calls, exo-dcc.20).
 # Passes when
 #   * the bare kind is taken on Monero stagenet, never the EVM RPC's chain;
 #   * A's module refuses the request BEFORE minting anything, with a wallet error that names
 #     both remedies the composer offers: request monero.wallet.unlock (Open Monero Wallet)
 #     and install monero_wallet_ui (Install);
 #   * no request reaches the room (neither instance folds a split);
-#   * B's "I paid" reaches coordinate_report_paid, which refuses the unknown request.
+#   * B's "I paid" reaches coordinate_report_paid, which refuses the unknown request;
+#   * B's "Share my Monero address" reaches coordinate_share_address, which refuses for want
+#     of a wallet on the chain asked, naming both remedies, and posts no address-share.
 #
 # What this cannot prove without a wallet: the mint of payTo, B's agreement, the monero:
 # link and QR on B's card, the report on a real request, and A's wallet confirming at 10
@@ -41,7 +44,7 @@ ui_launch "$D/A" "$D/A.log" "${common[@]}" MUSTER_DELIVERY_CONFIG="$CFG" LOGOS_I
   MUSTER_AUTOADMIT=1 MUSTER_AUTOSPLIT="$TOTAL" MUSTER_AUTOPOLICY=monero-split
 CFG=$(ui_peer_config "$D/A.log") || exit 1
 ui_launch "$D/B" "$D/B.log" "${common[@]}" MUSTER_DELIVERY_CONFIG="$CFG" LOGOS_INSTANCE_ID=xmrB \
-  MUSTER_AUTOREPORTPAID="$FAKE_ID"
+  MUSTER_AUTOREPORTPAID="$FAKE_ID" MUSTER_AUTOSHARE="$STAGENET"
 
 refused() { grep -aE 'MUSTER-LP split propose \{' "$D/A.log" 2>/dev/null | tail -1; }
 echo "watching for A's request to be answered (up to 150s)..."
@@ -53,8 +56,10 @@ sleep 5   # let both folds run a few ticks: a request that did land would show b
 
 line=$(refused)
 report=$(grep -aE "MUSTER-LP split report-paid $FAKE_ID" "$D/B.log" | tail -1)
+share=$(grep -aE "coordinate_share_address \"?$STAGENET" "$D/B.log" | tail -1)
 echo "A: ${line:-<no answer>}"
 echo "B: ${report:-<no report line>}"
+echo "B: ${share:-<no share line>}"
 ok=1
 python3 - "$line" <<'EOF' || ok=0
 import json, sys
@@ -63,7 +68,8 @@ j = json.loads(line[line.index("{"):]) if "{" in line else {}
 wallet = {"no-wallet", "wallet-unread", "wallet-busy", "wallet-other-network", "wallet-watch-only"}
 checks = [("refused with a wallet error", j.get("error") in wallet),
           ("names monero.wallet.unlock", j.get("request") == "monero.wallet.unlock"),
-          ("names monero_wallet_ui to install", j.get("install") == "monero_wallet_ui")]
+          ("names monero_wallet_ui to install", j.get("install") == "monero_wallet_ui"),
+          ("names the chain", j.get("chain") == "monero:76ee3cc98646292206cd3e86f74d88b4")]
 for name, good in checks: print(("  ok   " if good else "  FAIL ") + name, "" if good else j)
 sys.exit(0 if all(g for _, g in checks) else 1)
 EOF
@@ -76,6 +82,19 @@ else echo "  ok   no request reached the room"; fi
 if echo "$report" | grep -qE '"error":"(unknown-intent|not-a-monero-request)"'; then
   echo "  ok   B's \"I paid\" reached coordinate_report_paid and was refused"
 else echo "  FAIL B's \"I paid\" answer: ${report:-none}"; ok=0; fi
+python3 - "$share" <<'EOF' || ok=0
+import json, sys
+line = sys.argv[1]
+j = json.loads(line[line.index("{"):].replace('\\"', '"').rstrip('"')) if "{" in line else {}
+wallet = {"no-wallet", "wallet-unread", "wallet-busy", "wallet-other-network", "wallet-watch-only"}
+checks = [("Share my Monero address reached the module and was refused for want of a wallet", j.get("error") in wallet),
+          ("…naming monero.wallet.unlock and monero_wallet_ui", j.get("request") == "monero.wallet.unlock"
+                                                               and j.get("install") == "monero_wallet_ui")]
+for name, good in checks: print(("  ok   " if good else "  FAIL ") + name, "" if good else line)
+sys.exit(0 if all(g for _, g in checks) else 1)
+EOF
+if grep -aqE 'address-share[^}]*XMR' "$D/A.log"; then echo "  FAIL a Monero address-share reached A"; ok=0
+else echo "  ok   no Monero address-share reached the room"; fi
 grep -aq 'members=2' "$D/A.log" && echo "  ok   both in the room" || echo "  (A never logged members=2)"
 
 if [ "$ok" = 1 ]; then

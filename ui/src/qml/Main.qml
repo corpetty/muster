@@ -1237,8 +1237,10 @@ Item {
     // Open the Monero wallet (exo-dcc.5). A Monero request is vouched for and confirmed by
     // the requester's OWN open wallet, which muster never unlocks: it asks Monero Wallet.
     // With a wallet's registry name, monero.wallet.unlock opens that wallet's password
-    // sheet and answers ok only once that wallet is open; with none (the module names no
-    // wallet: it cannot list them), monero.accounts.manage brings the app up to open one.
+    // sheet and answers ok only once that wallet is open. The module names the wallet
+    // (list_wallets, exo-dcc.20): the open one, or the one on the request's network, or —
+    // several — the person picks one; only when none exists (or the list did not answer)
+    // is none named, and monero.accounts.manage brings the app up to set one up.
     // The answer: { intent, wallet, state: "asking" | "open" | "unavailable" | "failed" |
     // "cancelled" | "error", error, at }.
     property var moneroWallet: ({})

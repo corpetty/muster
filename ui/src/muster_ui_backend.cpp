@@ -748,9 +748,13 @@ void MusterUiBackend::proposeSettleUpAcross(const QString &chain, const QString 
 
 void MusterUiBackend::shareAddress(const QString &chain)
 {
-    // coordinate_share_address: MY address for a chain, as an author-signed address-share card
+    // coordinate_share_address: MY address for a chain, as an author-signed address-share card.
+    // A Monero address is minted by my own open wallet and can be refused (no wallet open,
+    // another network): the answer lands in splitJson {op: "share"} so the room says why
+    // and offers Open Monero Wallet, naming the wallet (exo-dcc.20).
     const QString r = modules().muster_module.coordinate_share_address(chain.trimmed());
     qInfo() << "[muster_ui] coordinate_share_address" << chain << "->" << r;
+    setSplitJson(splitOutcome("share", "", r));
     loadMessages();
 }
 
@@ -1084,9 +1088,17 @@ void MusterUiBackend::onContextReady()
                 loadPending(); loadMembers(); loadMessages(); loadIntents();
                 // Split self-test, on someone's behalf (exo-770): MUSTER_AUTOSHARE shares
                 // this member's address into the room once someone else is in — the
-                // address-share card's "Share an address".
+                // address-share card's "Share an address". MUSTER_AUTOSHARE=<chain> for a
+                // Bitcoin or Monero chain is "Share my Bitcoin/Monero address" instead: the
+                // module makes the address (exo-dcc.20), and its answer lands in splitJson.
                 static bool shared = false;
-                if (!shared && !qgetenv("MUSTER_AUTOSHARE").isEmpty()
+                const QString shareOn = QString::fromUtf8(qgetenv("MUSTER_AUTOSHARE"));
+                if (!shared && (shareOn.startsWith("monero:") || shareOn.startsWith("bip122:"))
+                    && membersJson().contains("\"self\":false")) {
+                    shared = true;
+                    shareAddress(shareOn);
+                }
+                if (!shared && !shareOn.isEmpty()
                     && membersJson().contains("\"self\":false")) {
                     const QString addr = QJsonDocument::fromJson(settingsJson().toUtf8()).object()
                                              .value("identity").toObject().value("address").toString();
