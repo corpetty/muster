@@ -25,10 +25,11 @@ declare -A SUITE=(
   [invite]="scripts/invite-proof.sh"
   [two-instance]="scripts/two-instance-proof.sh"
   [relaunch]="scripts/relaunch-self-test.sh"
+  [leave]="scripts/leave-self-test.sh"
   [split]="scripts/split-self-test.sh"
   [split-btc]="nix shell nixpkgs#bitcoind -c scripts/split-btc-self-test.sh"
 )
-ORDER=(card install infra-safe infra-threshold audit invite two-instance relaunch split split-btc)
+ORDER=(card install infra-safe infra-threshold audit invite two-instance relaunch leave split split-btc)
 [ $# -gt 0 ] && ORDER=("$@")
 
 LOGS=$(mktemp -d)

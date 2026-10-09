@@ -10,8 +10,16 @@ import Logos.Controls
 // disagrees (and what differs), or unknown (and why). Two members disclosing different
 // signers or thresholds for one account is shown as a conflict, never merged.
 //
-// Pure-render: `accounts` is coordinate_accounts' array; the only outputs are the two
-// signals (disclose one, or disclose the local test Safe describe() suggests). No state.
+// Pure-render: `accounts` is coordinate_accounts' array; the only outputs are the
+// signals (disclose one, disclose the local test Safe describe() suggests, the LEZ and
+// FROST requests). The one piece of state is which add-an-account form is open.
+//
+// Quiet by default (exo-dcc.30): a fresh room shows the heading, one line, and "Add an
+// account". The four families' forms stay folded until a member picks one — or until the
+// composer asks for an account no one has disclosed (`wantedFamilies`), when the matching
+// form opens so the remedy is one step away. What the room already holds (the disclosed
+// accounts, key ceremonies, a LEZ create in flight, any error) always shows. The forms are
+// hidden, never destroyed, so every control keeps its objectName.
 //
 // NB (ADR-011): nix build does not evaluate QML; a stray type or Theme key blanks the
 // view. Restricted to Theme keys + the Logos.Controls types the room proves.
@@ -42,7 +50,45 @@ Item {
         signet: "bip122:00000008819873e925422c1ff0f99f7c",
         regtest: "bip122:0f9188f13cb7b2c71f2a335e3a4fc328" })
 
+    // Which add-an-account form is open: "" (folded), "chooser" (the four families, none
+    // picked yet), or one family: "safe" | "btc" | "frost" | "lez".
+    property string openForm: ""
+    // A form (or the chooser) just opened: the host may scroll it into view.
+    signal formShown()
+    onOpenFormChanged: if (acc.openForm.length > 0) acc.formShown()
+    // The account families the composer needs and the room lacks (its no-account refusal);
+    // a non-empty list opens the matching form. Room.qml binds it.
+    property var wantedFamilies: []
+    onWantedFamiliesChanged: if (acc.wantedFamilies && acc.wantedFamilies.length > 0)
+                                 acc.expandForFamilies(acc.wantedFamilies)
+
     implicitHeight: col.implicitHeight
+
+    // An account family (kinds.nim accountFamilies) → the form that discloses it.
+    function formForFamily(f) {
+        f = String(f || "");
+        if (f === "evm.safe") return "safe";
+        if (f.indexOf("frost") >= 0) return "frost";
+        if (f === "btc.p2wsh-sortedmulti" || f === "btc.tapscript-multi-a") return "btc";
+        if (f === "lez.multisig-program") return "lez";
+        return "";
+    }
+    function formTitle(form) {
+        return form === "safe" ? qsTr("Disclose a Safe")
+             : form === "btc" ? qsTr("Disclose a Bitcoin multisig")
+             : form === "frost" ? qsTr("Make a key in a FROST ceremony")
+             : form === "lez" ? qsTr("Create or disclose a LEZ multisig")
+             : qsTr("Add an account");
+    }
+    function expandForFamilies(fams) {
+        for (var i = 0; i < fams.length; ++i) {
+            var form = acc.formForFamily(fams[i]);
+            if (form.length === 0) continue;
+            if (form === "btc") acc.btcFamily = String(fams[i]);
+            acc.openForm = form;
+            return;
+        }
+    }
 
     function checkColor(st) {
         return st === "verified" ? Theme.palette.success
@@ -82,7 +128,7 @@ Item {
         LogosText {
             Layout.fillWidth: true
             visible: acc.accounts.length === 0
-            text: qsTr("No one has disclosed an account here yet. A Safe payment acts from an account a member discloses into the room.")
+            text: qsTr("No shared accounts yet")
             color: Theme.palette.textTertiary
             font.pixelSize: Theme.typography.badgeText
             wrapMode: Text.WordWrap
@@ -175,154 +221,15 @@ Item {
             }
         }
 
-        // disclose: the local test Safe (one click on anvil), or any Safe by chain + address
-        RowLayout {      // visibility on a wrapper: a LogosButton's own did not take in Basecamp
-            Layout.fillWidth: true
-            visible: acc.suggestionAvailable
-            LogosButton {
-                objectName: "discloseSuggestedSafe"
-                Layout.fillWidth: true
-                text: qsTr("Disclose the local test Safe")
-                variant: LogosButton.Variant.Secondary
-                onClicked: acc.discloseSuggested()
-            }
-        }
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Theme.spacing.small
-            LogosTextField {
-                id: chainField
-                objectName: "discloseChain"
-                Layout.preferredWidth: 80
-                placeholderText: qsTr("chain id")
-                text: acc.defaultChainId
-            }
-            LogosTextField {
-                id: addrField
-                objectName: "discloseAddress"
-                Layout.fillWidth: true
-                placeholderText: qsTr("Safe address 0x…")
-            }
-        }
-        LogosButton {
-            objectName: "discloseSafe"
-            Layout.fillWidth: true
-            enabled: addrField.text.trim().length === 42 && chainField.text.trim().length > 0
-            text: qsTr("Disclose this Safe")
-            variant: LogosButton.Variant.Secondary
-            onClicked: acc.discloseRequested(JSON.stringify({
-                family: "evm.safe", chain: "eip155:" + chainField.text.trim(),
-                address: addrField.text.trim(), label: "" }))
-        }
-        // ── a Bitcoin multisig (exo-a50.2 families; this form, exo-59c) ──
-        // k of n members' compressed keys (each finds theirs in Settings → YOUR BITCOIN KEY).
-        // The address is derived from the keys, so nothing here is taken on trust: every
-        // member re-derives it, and the module refuses a key list that doesn't parse.
+        // ── what the room already holds, shown whatever is folded ──
+        // The FROST key ceremonies under way here (Phase D), each with Join while it has room.
         LogosText {
             Layout.fillWidth: true
             Layout.topMargin: Theme.spacing.small
-            text: qsTr("Bitcoin multisig")
+            visible: acc.frostCeremonies.length > 0
+            text: qsTr("Key ceremonies")
             color: Theme.palette.textSecondary
             font.pixelSize: Theme.typography.badgeText
-        }
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Theme.spacing.small
-            LogosButton {
-                objectName: "btcFamilyP2wsh"
-                text: qsTr("P2WSH")
-                variant: acc.btcFamily === "btc.p2wsh-sortedmulti" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                onClicked: acc.btcFamily = "btc.p2wsh-sortedmulti"
-            }
-            LogosButton {
-                objectName: "btcFamilyTaproot"
-                text: qsTr("Taproot")
-                variant: acc.btcFamily === "btc.tapscript-multi-a" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                onClicked: acc.btcFamily = "btc.tapscript-multi-a"
-            }
-            LogosTextField {
-                id: btcK
-                objectName: "btcThreshold"
-                Layout.preferredWidth: 44
-                placeholderText: qsTr("k")
-                text: "2"
-            }
-            LogosTextField {
-                id: btcNet
-                objectName: "btcNetwork"
-                Layout.fillWidth: true
-                placeholderText: qsTr("network")
-                text: "regtest"
-            }
-        }
-        LogosTextField {
-            id: btcKeys
-            objectName: "btcKeys"
-            Layout.fillWidth: true
-            placeholderText: qsTr("members' Bitcoin keys (66 hex each), comma-separated")
-        }
-        LogosButton {
-            objectName: "discloseBtc"
-            Layout.fillWidth: true
-            readonly property var keys: btcKeys.text.split(",").map(function (k) { return k.trim().replace(/^0x/i, ""); })
-                                                    .filter(function (k) { return k.length > 0; })
-            enabled: keys.length >= 1 && Number(btcK.text) >= 1 && Number(btcK.text) <= keys.length
-                     && acc.btcChains[btcNet.text.trim()] !== undefined
-            text: qsTr("Disclose this Bitcoin multisig")
-            variant: LogosButton.Variant.Secondary
-            onClicked: acc.discloseRequested(JSON.stringify({
-                family: acc.btcFamily, chain: acc.btcChains[btcNet.text.trim()],
-                signers: keys, threshold: Number(btcK.text), label: "" }))
-        }
-        // ── a FROST key ceremony (Phase D) ──
-        // The room is the ceremony's coordinator. Each participant's part runs on the room's
-        // tick, and the t-of-n taproot account is disclosed here when it completes. To the
-        // chain it will look like one key: one signature, no policy.
-        LogosText {
-            Layout.fillWidth: true
-            Layout.topMargin: Theme.spacing.small
-            text: qsTr("FROST key ceremony (Bitcoin taproot)")
-            color: Theme.palette.textSecondary
-            font.pixelSize: Theme.typography.badgeText
-        }
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Theme.spacing.small
-            LogosTextField {
-                id: frostCid
-                objectName: "frostCeremonyId"
-                Layout.fillWidth: true
-                placeholderText: qsTr("a name for the key")
-            }
-            LogosTextField {
-                id: frostT
-                objectName: "frostT"
-                Layout.preferredWidth: 50
-                placeholderText: qsTr("t")
-                text: "2"
-            }
-            LogosTextField {
-                id: frostN
-                objectName: "frostN"
-                Layout.preferredWidth: 50
-                placeholderText: qsTr("n")
-                text: "3"
-            }
-            LogosTextField {
-                id: frostNet
-                objectName: "frostNetwork"
-                Layout.preferredWidth: 90
-                placeholderText: qsTr("network")
-                text: "regtest"
-            }
-        }
-        LogosButton {
-            objectName: "frostOpen"
-            Layout.fillWidth: true
-            enabled: frostCid.text.trim().length > 0
-            text: qsTr("Open the ceremony and join it")
-            variant: LogosButton.Variant.Secondary
-            onClicked: acc.frostOpenRequested(frostCid.text.trim(), frostNet.text.trim(), frostT.text.trim(), frostN.text.trim())
         }
         Repeater {
             model: acc.frostCeremonies
@@ -361,66 +268,7 @@ Item {
             font.pixelSize: Theme.typography.badgeText
             wrapMode: Text.WordWrap
         }
-
-        // ── a LEZ multisig (exo-3c9) ──
-        // Each member gives the creator a FRESH LEZ account (its key stays in their own
-        // keystore); the creator puts the k-of-n on chain, and it is disclosed here once
-        // a block includes it. An existing one is disclosed by its config.
-        LogosText {
-            Layout.fillWidth: true
-            Layout.topMargin: Theme.spacing.small
-            text: qsTr("LEZ multisig")
-            color: Theme.palette.textSecondary
-            font.pixelSize: Theme.typography.badgeText
-        }
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Theme.spacing.small
-            LogosButton {
-                objectName: "lezShowMember"
-                text: qsTr("My LEZ member account")
-                variant: LogosButton.Variant.Secondary
-                onClicked: acc.lezMemberRequested()
-            }
-            LogosText {
-                objectName: "lezMemberAccount"
-                Layout.fillWidth: true
-                elide: Text.ElideMiddle
-                text: acc.lezMember && acc.lezMember.base58 ? String(acc.lezMember.base58)
-                    : acc.lezMember && acc.lezMember.error ? "⚠ " + String(acc.lezMember.error)
-                      + (acc.lezMember.detail ? ": " + String(acc.lezMember.detail) : "")
-                    : qsTr("give this to whoever creates the multisig")
-                color: Theme.palette.textSecondary
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.badgeText
-            }
-        }
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Theme.spacing.small
-            LogosTextField {
-                id: lezThreshold
-                objectName: "lezCreateThreshold"
-                Layout.preferredWidth: 60
-                placeholderText: qsTr("k")
-                text: "2"
-            }
-            LogosTextField {
-                id: lezMembers
-                objectName: "lezCreateMembers"
-                Layout.fillWidth: true
-                placeholderText: qsTr("members' LEZ accounts, comma-separated")
-                font.family: Theme.typography.mono
-            }
-        }
-        LogosButton {
-            objectName: "lezCreate"
-            Layout.fillWidth: true
-            enabled: lezMembers.text.trim().length > 0 && lezThreshold.text.trim().length > 0
-            text: qsTr("Create this LEZ multisig on chain")
-            variant: LogosButton.Variant.Secondary
-            onClicked: acc.lezCreateRequested(lezThreshold.text.trim(), lezMembers.text.trim())
-        }
+        // A LEZ multisig sent to the chain, disclosed here once a block includes it.
         LogosText {
             objectName: "lezCreateResult"
             Layout.fillWidth: true
@@ -434,26 +282,6 @@ Item {
             color: acc.lezCreate && acc.lezCreate.error ? Theme.palette.error : Theme.palette.textSecondary
             font.pixelSize: Theme.typography.badgeText
         }
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Theme.spacing.small
-            LogosTextField {
-                id: lezConfig
-                objectName: "lezDiscloseConfig"
-                Layout.fillWidth: true
-                placeholderText: qsTr("an existing LEZ multisig's config {program, createKey, pda, layout}")
-                font.family: Theme.typography.mono
-            }
-            LogosButton {
-                objectName: "lezDisclose"
-                text: qsTr("Disclose")
-                variant: LogosButton.Variant.Secondary
-                enabled: lezConfig.text.trim().length > 0
-                onClicked: acc.discloseRequested(JSON.stringify({
-                    family: "lez.multisig-program", chain: "", address: "", label: "",
-                    config: lezConfig.text.trim() }))
-            }
-        }
         LogosText {
             Layout.fillWidth: true
             visible: acc.discloseResult && acc.discloseResult.error !== undefined
@@ -463,6 +291,331 @@ Item {
             color: Theme.palette.error
             font.pixelSize: Theme.typography.badgeText
             wrapMode: Text.WordWrap
+        }
+
+        // ── add an account: one button, then a family, then only that family's form ──
+        RowLayout {      // visibility on a wrapper: a LogosButton's own did not take in Basecamp
+            Layout.fillWidth: true
+            visible: acc.openForm === ""
+            LogosButton {
+                objectName: "addAccountButton"
+                Layout.fillWidth: true
+                text: qsTr("Add an account")
+                variant: LogosButton.Variant.Secondary
+                onClicked: acc.openForm = "chooser"
+            }
+        }
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: acc.openForm !== ""
+            spacing: Theme.spacing.small
+
+            RowLayout {
+                Layout.fillWidth: true
+                LogosText {
+                    objectName: "addAccountTitle"
+                    Layout.fillWidth: true
+                    text: acc.formTitle(acc.openForm)
+                    color: Theme.palette.text
+                    font.pixelSize: Theme.typography.secondaryText
+                    font.weight: Theme.typography.weightMedium
+                    wrapMode: Text.WordWrap
+                }
+                LogosButton {
+                    objectName: "addAccountClose"
+                    Layout.preferredWidth: 90
+                    text: qsTr("Close")
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: acc.openForm = ""
+                }
+            }
+            LogosText {
+                Layout.fillWidth: true
+                visible: acc.openForm === "chooser"
+                text: qsTr("An account is shared here once a member discloses it. Every member checks it against the chain.")
+                color: Theme.palette.textTertiary
+                font.pixelSize: Theme.typography.badgeText
+                wrapMode: Text.WordWrap
+            }
+            // The four families, until one is picked; then only its form shows (Close
+            // folds it, and Add an account offers the four again).
+            GridLayout {
+                Layout.fillWidth: true
+                visible: acc.openForm === "chooser"
+                columns: 2
+                columnSpacing: Theme.spacing.small
+                rowSpacing: Theme.spacing.small
+                LogosButton {
+                    objectName: "addAccountSafe"
+                    Layout.fillWidth: true
+                    text: qsTr("Safe")
+                    variant: acc.openForm === "safe" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                    onClicked: acc.openForm = "safe"
+                }
+                LogosButton {
+                    objectName: "addAccountBtc"
+                    Layout.fillWidth: true
+                    text: qsTr("Bitcoin multisig")
+                    variant: acc.openForm === "btc" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                    onClicked: acc.openForm = "btc"
+                }
+                LogosButton {
+                    objectName: "addAccountFrost"
+                    Layout.fillWidth: true
+                    text: qsTr("FROST key ceremony")
+                    variant: acc.openForm === "frost" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                    onClicked: acc.openForm = "frost"
+                }
+                LogosButton {
+                    objectName: "addAccountLez"
+                    Layout.fillWidth: true
+                    text: qsTr("LEZ multisig")
+                    variant: acc.openForm === "lez" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                    onClicked: acc.openForm = "lez"
+                }
+            }
+        }
+
+        // ── a Safe: the local test Safe (one click on anvil), or any Safe by chain + address ──
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: acc.openForm === "safe"
+            spacing: Theme.spacing.small
+
+            RowLayout {      // visibility on a wrapper: a LogosButton's own did not take in Basecamp
+                Layout.fillWidth: true
+                visible: acc.suggestionAvailable
+                LogosButton {
+                    objectName: "discloseSuggestedSafe"
+                    Layout.fillWidth: true
+                    text: qsTr("Disclose the local test Safe")
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: acc.discloseSuggested()
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                LogosTextField {
+                    id: chainField
+                    objectName: "discloseChain"
+                    Layout.preferredWidth: 80
+                    placeholderText: qsTr("chain id")
+                    text: acc.defaultChainId
+                }
+                LogosTextField {
+                    id: addrField
+                    objectName: "discloseAddress"
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("Safe address 0x…")
+                }
+            }
+            LogosButton {
+                objectName: "discloseSafe"
+                Layout.fillWidth: true
+                enabled: addrField.text.trim().length === 42 && chainField.text.trim().length > 0
+                text: qsTr("Disclose this Safe")
+                variant: LogosButton.Variant.Secondary
+                onClicked: acc.discloseRequested(JSON.stringify({
+                    family: "evm.safe", chain: "eip155:" + chainField.text.trim(),
+                    address: addrField.text.trim(), label: "" }))
+            }
+        }
+
+        // ── a Bitcoin multisig (exo-a50.2 families; this form, exo-59c) ──
+        // k of n members' compressed keys (each finds theirs in Settings → YOUR BITCOIN KEY).
+        // The address is derived from the keys, so nothing here is taken on trust: every
+        // member re-derives it, and the module refuses a key list that doesn't parse.
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: acc.openForm === "btc"
+            spacing: Theme.spacing.small
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                LogosButton {
+                    objectName: "btcFamilyP2wsh"
+                    text: qsTr("P2WSH")
+                    variant: acc.btcFamily === "btc.p2wsh-sortedmulti" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                    onClicked: acc.btcFamily = "btc.p2wsh-sortedmulti"
+                }
+                LogosButton {
+                    objectName: "btcFamilyTaproot"
+                    text: qsTr("Taproot")
+                    variant: acc.btcFamily === "btc.tapscript-multi-a" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                    onClicked: acc.btcFamily = "btc.tapscript-multi-a"
+                }
+                LogosTextField {
+                    id: btcK
+                    objectName: "btcThreshold"
+                    Layout.preferredWidth: 44
+                    placeholderText: qsTr("k")
+                    text: "2"
+                }
+                LogosTextField {
+                    id: btcNet
+                    objectName: "btcNetwork"
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("network")
+                    text: "regtest"
+                }
+            }
+            LogosTextField {
+                id: btcKeys
+                objectName: "btcKeys"
+                Layout.fillWidth: true
+                placeholderText: qsTr("members' Bitcoin keys (66 hex each), comma-separated")
+            }
+            LogosButton {
+                objectName: "discloseBtc"
+                Layout.fillWidth: true
+                readonly property var keys: btcKeys.text.split(",").map(function (k) { return k.trim().replace(/^0x/i, ""); })
+                                                        .filter(function (k) { return k.length > 0; })
+                enabled: keys.length >= 1 && Number(btcK.text) >= 1 && Number(btcK.text) <= keys.length
+                         && acc.btcChains[btcNet.text.trim()] !== undefined
+                text: qsTr("Disclose this Bitcoin multisig")
+                variant: LogosButton.Variant.Secondary
+                onClicked: acc.discloseRequested(JSON.stringify({
+                    family: acc.btcFamily, chain: acc.btcChains[btcNet.text.trim()],
+                    signers: keys, threshold: Number(btcK.text), label: "" }))
+            }
+        }
+
+        // ── a FROST key ceremony (Phase D) ──
+        // The room is the ceremony's coordinator. Each participant's part runs on the room's
+        // tick, and the t-of-n taproot account is disclosed here when it completes. To the
+        // chain it will look like one key: one signature, no policy.
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: acc.openForm === "frost"
+            spacing: Theme.spacing.small
+
+            LogosText {
+                Layout.fillWidth: true
+                text: qsTr("One key the room holds t of n: to the chain, one signature and no policy.")
+                color: Theme.palette.textTertiary
+                font.pixelSize: Theme.typography.badgeText
+                wrapMode: Text.WordWrap
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                LogosTextField {
+                    id: frostCid
+                    objectName: "frostCeremonyId"
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("a name for the key")
+                }
+                LogosTextField {
+                    id: frostT
+                    objectName: "frostT"
+                    Layout.preferredWidth: 50
+                    placeholderText: qsTr("t")
+                    text: "2"
+                }
+                LogosTextField {
+                    id: frostN
+                    objectName: "frostN"
+                    Layout.preferredWidth: 50
+                    placeholderText: qsTr("n")
+                    text: "3"
+                }
+            }
+            LogosTextField {
+                id: frostNet
+                objectName: "frostNetwork"
+                Layout.fillWidth: true
+                placeholderText: qsTr("network")
+                text: "regtest"
+            }
+            LogosButton {
+                objectName: "frostOpen"
+                Layout.fillWidth: true
+                enabled: frostCid.text.trim().length > 0
+                text: qsTr("Open the ceremony and join it")
+                variant: LogosButton.Variant.Secondary
+                onClicked: acc.frostOpenRequested(frostCid.text.trim(), frostNet.text.trim(), frostT.text.trim(), frostN.text.trim())
+            }
+        }
+
+        // ── a LEZ multisig (exo-3c9) ──
+        // Each member gives the creator a FRESH LEZ account (its key stays in their own
+        // keystore); the creator puts the k-of-n on chain, and it is disclosed here once
+        // a block includes it. An existing one is disclosed by its config.
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: acc.openForm === "lez"
+            spacing: Theme.spacing.small
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                LogosButton {
+                    objectName: "lezShowMember"
+                    text: qsTr("My LEZ member account")
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: acc.lezMemberRequested()
+                }
+                LogosText {
+                    objectName: "lezMemberAccount"
+                    Layout.fillWidth: true
+                    elide: Text.ElideMiddle
+                    text: acc.lezMember && acc.lezMember.base58 ? String(acc.lezMember.base58)
+                        : acc.lezMember && acc.lezMember.error ? "⚠ " + String(acc.lezMember.error)
+                          + (acc.lezMember.detail ? ": " + String(acc.lezMember.detail) : "")
+                        : qsTr("give this to whoever creates the multisig")
+                    color: Theme.palette.textSecondary
+                    font.family: Theme.typography.mono
+                    font.pixelSize: Theme.typography.badgeText
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                LogosTextField {
+                    id: lezThreshold
+                    objectName: "lezCreateThreshold"
+                    Layout.preferredWidth: 60
+                    placeholderText: qsTr("k")
+                    text: "2"
+                }
+                LogosTextField {
+                    id: lezMembers
+                    objectName: "lezCreateMembers"
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("members' LEZ accounts, comma-separated")
+                    font.family: Theme.typography.mono
+                }
+            }
+            LogosButton {
+                objectName: "lezCreate"
+                Layout.fillWidth: true
+                enabled: lezMembers.text.trim().length > 0 && lezThreshold.text.trim().length > 0
+                text: qsTr("Create this LEZ multisig on chain")
+                variant: LogosButton.Variant.Secondary
+                onClicked: acc.lezCreateRequested(lezThreshold.text.trim(), lezMembers.text.trim())
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                LogosTextField {
+                    id: lezConfig
+                    objectName: "lezDiscloseConfig"
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("an existing LEZ multisig's config {program, createKey, pda, layout}")
+                    font.family: Theme.typography.mono
+                }
+                LogosButton {
+                    objectName: "lezDisclose"
+                    text: qsTr("Disclose")
+                    variant: LogosButton.Variant.Secondary
+                    enabled: lezConfig.text.trim().length > 0
+                    onClicked: acc.discloseRequested(JSON.stringify({
+                        family: "lez.multisig-program", chain: "", address: "", label: "",
+                        config: lezConfig.text.trim() }))
+                }
+            }
         }
     }
 }

@@ -38,5 +38,34 @@ block:
   doAssert loadJoinedRooms(path) == @[roomA, roomB], "the next join rewrites the file clean"
   echo "3. a damaged file reads as what it validly holds OK"
 
+block:
+  # leaving a room forgets it (exo-dcc.28): a relaunch no longer re-enters it
+  removeDir(dir)
+  discard rememberJoinedRoom(path, roomA)
+  discard rememberJoinedRoom(path, roomB)
+  doAssert forgetJoinedRoom(path, roomA), "a joined room is forgotten"
+  doAssert loadJoinedRooms(path) == @[roomB], "the others stay, in order"
+  doAssert not forgetJoinedRoom(path, roomA), "forgetting it twice changes nothing"
+  doAssert rememberJoinedRoom(path, roomA), "joining it again remembers it again"
+  echo "4. leave: a room is forgotten, the rest kept OK"
+
+block:
+  # a room's name is this member's own (exo-dcc.25), kept beside the rooms so a
+  # relaunch shows it instead of the topic; the rooms file's format is unchanged
+  let titles = dir / "room_titles.json"
+  doAssert loadRoomTitles(titles).len == 0, "no file yet: no names"
+  doAssert setRoomTitle(titles, roomA, "Dinner at Ana's")
+  doAssert setRoomTitle(titles, roomB, "split · with bob")
+  doAssert loadRoomTitles(titles)[roomA] == "Dinner at Ana's", "a name survives a relaunch"
+  doAssert setRoomTitle(titles, roomA, "Dinner, Friday")
+  doAssert loadRoomTitles(titles)[roomA] == "Dinner, Friday", "renaming replaces it"
+  doAssert setRoomTitle(titles, roomB, ""), "an empty name clears it"
+  doAssert roomB notin loadRoomTitles(titles)
+  doAssert not setRoomTitle(titles, "", "x"), "no topic, no name"
+  writeFile(titles, "[1,2]")
+  doAssert loadRoomTitles(titles).len == 0, "a damaged file reads as no names, never a raise"
+  doAssert loadJoinedRooms(path) == @[roomB, roomA], "the rooms file is untouched by names"
+  echo "5. room names: kept, renamed, cleared, damage-proof OK"
+
 removeDir(dir)
 echo "joined_rooms_test: all OK"

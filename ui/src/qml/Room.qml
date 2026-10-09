@@ -45,6 +45,9 @@ Item {
     // them, so you shouldn't have to click Admit, and they shouldn't have to ask. The
     // binding is still verified on admit (F-9); this only removes the manual step.
     property string expectedMember: ""
+    // Whether this member opened this room from the composer (Main.enterRoom sets it).
+    // A founder has no one to ask to let them in (exo-dcc.30).
+    property bool founded: false
     // ids we've already auto-admitted, so a pending entry lingering one extra tick
     // (before the re-key propagates) doesn't trigger a second admit.
     property var autoAdmitted: ({})
@@ -104,6 +107,10 @@ Item {
     }
     // A remedy that lives in Settings (repoint the RPC): the shell switches views.
     signal settingsRequested()
+    // Leave this room (exo-dcc.28) and rename it for yourself (exo-dcc.25): the shell
+    // calls the module and moves the view.
+    signal leaveRequested(string topic)
+    signal renameRequested(string topic, string title)
     // Install what a proposal needs (exo-dcc.10): a card or the proposal form asks
     // Basecamp's Package Manager to open on a package; the shell raises the request
     // (packages.install / packages.show) and hands every answer back in packageRequests,
@@ -1232,14 +1239,53 @@ Item {
             spacing: Theme.spacing.small
 
             LogosText {
+                objectName: "roomTitleText"
+                visible: !renameRow.visible
                 Layout.fillWidth: true
-                text: room.joined ? qsTr("Room · %1").arg(room.roomTitle.length > 0 ? room.roomTitle : room.topic)
+                text: room.joined ? (room.roomTitle.length > 0 ? room.roomTitle : qsTr("Unnamed room"))
                                   : qsTr("Join a room")
                 color: Theme.palette.text
                 font.family: Theme.typography.publicSans
                 font.pixelSize: Theme.typography.primaryText
                 font.weight: Theme.typography.weightBold
                 elide: Text.ElideRight
+            }
+
+            // Rename: the name is yours, kept on this device, never sent to the room.
+            RowLayout {
+                id: renameRow
+                property bool open: false
+                visible: room.joined && open
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                LogosTextField {
+                    id: renameField
+                    objectName: "roomRenameField"
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("A name for this room (only you see it)")
+                }
+                LogosButton {
+                    id: renameSave
+                    objectName: "roomRenameSave"
+                    text: qsTr("Save")
+                    onClicked: { room.renameRequested(room.topic, renameField.text); renameRow.open = false; }
+                }
+            }
+
+            LogosButton {
+                objectName: "roomRenameButton"
+                visible: room.joined && !renameRow.open
+                text: qsTr("Rename")
+                variant: LogosButton.Variant.Secondary
+                onClicked: { renameField.text = room.roomTitle; renameRow.open = true; renameField.forceActiveFocus(); }
+            }
+
+            LogosButton {
+                objectName: "leaveRoomButton"
+                visible: room.joined
+                text: qsTr("Leave")
+                variant: LogosButton.Variant.Secondary
+                onClicked: leaveConfirm.visible = true
             }
 
             LogosText {
@@ -1249,6 +1295,70 @@ Item {
                 color: Theme.palette.textTertiary
                 font.family: Theme.typography.mono
                 font.pixelSize: Theme.typography.badgeText
+            }
+        }
+
+        // ── leaving: say what it does before doing it (exo-dcc.28) ─────────
+        RowLayout {
+            id: leaveConfirm
+            objectName: "leaveConfirm"
+            visible: false
+            Layout.fillWidth: true
+            spacing: Theme.spacing.small
+            LogosText {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("Leave this room? It stops showing here, and this device stops following it. "
+                           + "The others are not told and still count you in. Join it again with its room code.")
+                color: Theme.palette.textSecondary
+                font.pixelSize: Theme.typography.secondaryText
+            }
+            LogosButton {
+                objectName: "leaveRoomConfirm"
+                text: qsTr("Leave room")
+                onClicked: { leaveConfirm.visible = false; room.leaveRequested(room.topic); }
+            }
+            LogosButton {
+                text: qsTr("Stay")
+                variant: LogosButton.Variant.Secondary
+                onClicked: leaveConfirm.visible = false
+            }
+        }
+
+        // ── the room code: what someone else needs to find this room (exo-dcc.25) ──
+        // In full and copyable: the random tail is the part that names the room, so it is
+        // never elided. Whoever joins with it asks to join; a person you invite from Home's
+        // composer is let in by the invite itself.
+        RowLayout {
+            visible: room.joined
+            Layout.fillWidth: true
+            spacing: Theme.spacing.small
+            LogosText {
+                text: qsTr("Room code")
+                color: Theme.palette.textTertiary
+                font.pixelSize: Theme.typography.badgeText
+            }
+            TextEdit {
+                id: roomCode
+                objectName: "roomTopicText"
+                Layout.fillWidth: true
+                readOnly: true
+                selectByMouse: true
+                wrapMode: TextEdit.WrapAnywhere
+                text: room.topic
+                color: Theme.palette.textSecondary
+                selectionColor: Theme.palette.primary
+                font.family: Theme.typography.mono
+                font.pixelSize: Theme.typography.badgeText
+            }
+            LogosButton {
+                id: copyCode
+                objectName: "copyRoomTopic"
+                property bool copied: false
+                text: copied ? qsTr("Copied") : qsTr("Copy room code")
+                variant: LogosButton.Variant.Secondary
+                onClicked: { roomCode.selectAll(); roomCode.copy(); roomCode.deselect(); copied = true; copiedReset.restart(); }
+                Timer { id: copiedReset; interval: 2000; onTriggered: copyCode.copied = false }
             }
         }
 
@@ -1262,14 +1372,17 @@ Item {
                 id: topicField
                 objectName: "roomTopicField"
                 Layout.fillWidth: true
-                placeholderText: qsTr("topic, e.g. muster.demo.room")
+                placeholderText: qsTr("room code, e.g. /muster/1/muster.room.6ac8ea9cdc366149/proto")
             }
 
             LogosButton {
                 objectName: "joinRoomButton"
                 text: qsTr("Join")
                 enabled: topicField.text.length > 0
-                onClicked: if (room.backend) room.backend.joinRoom(topicField.text)
+                onClicked: {
+                    room.founded = false;   // joined by name: maybe someone else's room
+                    if (room.backend) room.backend.joinRoom(topicField.text);
+                }
             }
         }
 
@@ -3414,8 +3527,10 @@ Item {
             // FROST and LEZ multisig sections), and it used to set the whole room's height —
             // pushing the message row and its "+" below the bottom of a normal window
             // (exo-9a4). It scrolls in its own share of the column now, as the history and
-            // the scope below it do; its width stays its natural width.
+            // the scope below it do; its width stays its natural width. When an add-an-account
+            // form opens it scrolls to show it, since the forms sit at the end (exo-dcc.30).
             Flickable {
+                id: accountsFlick
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredHeight: 2
@@ -3424,6 +3539,9 @@ Item {
                 contentWidth: width
                 contentHeight: topCol.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds
+                function showEnd() { contentY = Math.max(0, contentHeight - height); }
+                // after the layout has taken the newly shown form's height
+                Timer { id: accountsFollow; interval: 60; onTriggered: accountsFlick.showEnd() }
 
             ColumnLayout {
                 id: topCol
@@ -3440,6 +3558,14 @@ Item {
             RoomAccounts {
                 Layout.fillWidth: true
                 accounts: room.roomAccounts
+                // The composer was refused for want of an account this kind can act from:
+                // open the form that discloses one (exo-dcc.30).
+                wantedFamilies: {
+                    var e = room.policyError || {};
+                    if (e.error !== "no-account" || !room.kindNeedsAccount(room.policyKind)) return [];
+                    var info = room.kindInfo(room.policyKind);
+                    return (info && info.accountFamilies) ? info.accountFamilies : [];
+                }
                 discloseResult: room.discloseResult
                 suggestionAvailable: {
                     try { return JSON.parse(room.backend ? room.backend.accountJson : "{}").available !== false; }
@@ -3463,6 +3589,7 @@ Item {
                     if (room.backend) room.backend.lezCreateMultisig(threshold, members);
                 }
                 onDiscloseSuggested: if (room.backend) room.backend.discloseSuggestedAccount()
+                onFormShown: accountsFollow.restart()
             }
             }
             }
@@ -3510,6 +3637,7 @@ Item {
                 pending: room.pending
                 topic: room.topic
                 joinStatus: room.backend ? String(room.backend.joinStatus || "") : ""
+                founder: room.founded
                 securityLevels: room.securityLevels
                 onRequestJoin: if (room.backend) room.backend.requestJoin()
                 onAdmit: function(identityHex) {

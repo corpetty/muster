@@ -107,6 +107,12 @@ class MusterUi
     SLOT(void sendInvite(const QString &peerChatId, const QString &roomTopic, const QString &note))
     SLOT(void loadInvites())
     SLOT(void dismissInvite(const QString &roomTopic))
+    // Leave a room (coordinate_leave, exo-dcc.28): stop following it here and forget it;
+    // when it is the open room, the view is left with no room. Name a room for yourself
+    // (coordinate_set_room_title, exo-dcc.25): a topic names nothing, so the name is this
+    // member's own label, returned as `title` in conversationsJson.
+    SLOT(void leaveRoom(const QString &roomTopic))
+    SLOT(void setRoomTitle(const QString &roomTopic, const QString &title))
 
     // Room intents (the multi-party path). Propose an effect into the joined room
     // (coordinate_propose), contribute an owner signature (coordinate_contribute),

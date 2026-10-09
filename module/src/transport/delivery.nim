@@ -382,6 +382,15 @@ method mixInputs*(t: DeliveryTransport): MixInputs {.gcsafe.} =
     if c != nil and nodeInfoOk($c): result.connection = $c
   except CatchableError: discard
 
+method detach*(t: DeliveryTransport) =
+  ## Stop taking traffic (exo-dcc.28): drop the messageReceived subscription, which
+  ## queues every topic's messages, and every route. The client and the GC anchor stay,
+  ## so a store answer already in flight lands on a live object rather than freed memory
+  ## (the `abandoned` lesson); its one queued reply is never polled. The node is shared
+  ## and keeps running for the rooms still joined.
+  if t.sub != nil: (lp_unsubscribe(t.sub); t.sub = nil)
+  t.handlers.clear()
+
 proc close*(t: DeliveryTransport) =
   ## Release the subscription + client and drop the GC anchor.
   if t.sub != nil: (lp_unsubscribe(t.sub); t.sub = nil)

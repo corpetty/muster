@@ -55,7 +55,7 @@ Item {
     // exchange, so the room opens with an address-request naming the intent; whoever
     // holds the needed address answers it with address-share (the card's button).
     // "talk" primes nothing. Re-opening an existing room passes no verb → no priming.
-    function enterRoom(topic, verb, policy, draftJson) {
+    function enterRoom(topic, verb, policy, draftJson, invitee) {
         if (!root.backend || !topic)
             return;
         // Reset per-room auto-admit state on every entry; onCreateRoom re-sets the
@@ -63,7 +63,18 @@ Item {
         // (no verb) leaves it cleared, so it never auto-admits into the wrong room.
         roomSurface.expectedMember = "";
         roomSurface.autoAdmitted = ({});
+        // A room opened from the composer (a verb) is this member's own: it asks no one
+        // to join it (below), and its scope panel offers no "Ask to join" (exo-dcc.30).
+        roomSurface.founded = String(verb || "").length > 0;
         root.backend.joinRoom(topic);
+        // A person named in the composer (their 64-byte chat id, 128 hex chars) is invited
+        // now, before the room says anything: the invite admits them (exo-dcc.29), so they
+        // arrive a member, never ask to join, and read the room's opening lines. Pass the
+        // RAW topic; both sides normalize it to the same content topic on join. A pasted
+        // address (not a chat id) is skipped.
+        var inv = String(invitee || "").replace(/^0x/i, "");
+        if (inv.length >= 128)
+            root.backend.sendInvite(invitee, topic, String(verb || ""));
         root.view = "room";
         // Set the room to coordinate under the intent's chosen policy (its driver).
         var p = String(policy || "");
@@ -189,6 +200,26 @@ Item {
         var m = Object.assign({}, root.roomLabels);   // reassign so bindings re-evaluate
         m[root.contentTopicOf(topic)] = label;
         root.roomLabels = m;
+        // kept by the module too, beside the joined rooms, so a relaunch shows it (exo-dcc.25)
+        if (root.backend)
+            root.backend.setRoomTitle(topic, label);
+    }
+    // A room's name: this member's own, from the module (it survives a relaunch), else
+    // what this session labelled it; empty when it has none.
+    // A room with no name is told apart by the tail of its code ("Room 9cdc366149").
+    function shortRoom(topic) {
+        var parts = root.contentTopicOf(topic).split("/");
+        var name = String(parts[3] || "");
+        var tail = name.split(".").pop();
+        return qsTr("Room %1").arg(tail.length > 10 ? tail.slice(-10) : tail);
+    }
+    function titleOf(topic) {
+        var t = root.contentTopicOf(topic);
+        var convs = root.conversations;
+        for (var i = 0; i < convs.length; ++i)
+            if (String(convs[i].topic || "") === t && String(convs[i].title || "").length > 0)
+                return String(convs[i].title);
+        return root.roomLabels[t] || "";
     }
     function shortId(s) {
         s = String(s || "").replace(/^0x/i, "");
@@ -219,7 +250,7 @@ Item {
         for (var i = 0; i < convs.length; ++i) {
             var c = convs[i];
             var topic = String(c.topic || "");
-            var title = root.roomLabels[topic] || topic;
+            var title = root.titleOf(topic) || root.shortRoom(topic);
             var ns = Array.isArray(c.needs) ? c.needs : [];
             for (var j = 0; j < ns.length; ++j)
                 needs.push({ topic: topic, title: title, action: root.needsHeadline(String(ns[j].what || "")),
@@ -380,6 +411,7 @@ Item {
             catch (e) { return []; }
         }
         onActivated: root.enterRoom(topic)
+        onJoinCode: function (topic) { root.enterRoom(topic); }   // joiner path → asks to join
         onJoinInvite: function(topic) {   // joiner path → auto-asks to join
             // Title the room from the sealed invite (its note and sender), never its topic.
             for (var i = 0; i < invites.length; ++i) {
@@ -423,20 +455,12 @@ Item {
         backend: root.backend
         onCreateRoom: {
             root.labelRoom(topic, String(verb || "room") + (peer ? " · with " + root.shortId(peer) : ""));
-            root.enterRoom(topic, verb, policy, draftJson);
-            // If a specific person was chosen (their 64-byte chat id, 128 hex chars), invite
-            // them: seal this room's topic to their inbox so it appears on their instance —
-            // no telling them a name out-of-band. Pass the RAW topic; both sides normalize it
-            // to the same content topic on join. A pasted address (not a chat id) is skipped.
+            // the invite (and with it their admission) goes out inside enterRoom
+            root.enterRoom(topic, verb, policy, draftJson, peer);
+            // Should a join request from them still arrive (an inviter on an older Muster,
+            // which did not admit on invite), admit it without a manual Admit.
             var p = String(peer || "").replace(/^0x/i, "");
-            if (root.backend && p.length >= 128) {
-                root.backend.sendInvite(peer, topic, verb);
-                // Key the room to them: when their join-request arrives, admit it
-                // automatically — you named them, so no manual Admit / ask-to-join.
-                roomSurface.expectedMember = String(peer);
-            } else {
-                roomSurface.expectedMember = "";
-            }
+            roomSurface.expectedMember = p.length >= 128 ? String(peer) : "";
         }
     }
 
@@ -444,7 +468,14 @@ Item {
     Room {
         id: roomSurface
         // the session title for this room (never its topic, which names nothing)
-        roomTitle: root.roomLabels[roomSurface.topic] || ""
+        roomTitle: roomSurface.topic.length > 0 ? (root.titleOf(roomSurface.topic) || root.shortRoom(roomSurface.topic)) : ""
+        // Leave (exo-dcc.28): the module forgets the room; back to Home, where it no
+        // longer shows. Rename (exo-dcc.25): this member's own name for it.
+        onLeaveRequested: function (topic) {
+            if (root.backend) root.backend.leaveRoom(topic);
+            root.view = "home";
+        }
+        onRenameRequested: function (topic, title) { root.labelRoom(topic, title); }
         // A card remedy that lives in Settings (repoint the RPC): hop to the view.
         onSettingsRequested: {
             root.view = "settings";

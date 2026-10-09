@@ -86,3 +86,22 @@ action. A `gate_failed` naming a sha main has since passed: transient-by-drift
 reducer holding the pebble, and only through the integrator's own steps
 (rebase, full gate, in-process spec grade, ff-only advance, bus close with the
 verdict recorded).
+
+### Token spend is a budget: pick the model per task
+
+Ratified 2026-10-09 by an operator whose fan-out of top-model subagents was
+burning through their token allocation. Be conscientious about token balances
+and spending at all times. Never default every subagent to the session's own,
+most capable model:
+
+- **Read-only search, inventories, file location:** the cheapest model (Haiku).
+- **Well-scoped implementation, test runs, bug reproduction:** a mid-tier
+  model (Sonnet).
+- **The top model:** only for design decisions and judgement across the
+  invariants.
+
+Fan out only when the work is genuinely parallel. Do small, file-local fixes
+directly rather than delegating them. Give every subagent a narrow brief, a
+stopping point and a word limit for its report. Avoid open-ended exploratory
+agents, such as ones driving a display with no defined end. Don't schedule
+check-ins that a completion notification already covers.

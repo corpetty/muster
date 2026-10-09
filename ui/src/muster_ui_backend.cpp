@@ -205,7 +205,11 @@ void MusterUiBackend::joinRoom(const QString &topic)
     }
     const QString r = modules().muster_module.coordinate_join(topic);
     qInfo() << "[muster_ui] coordinate_join(" << topic << ") ->" << r;
-    setRoomTopic(topic);
+    // Key the view by the room's content topic — the name the module gives it — however
+    // it was typed, so its name (keyed the same way) is found and Home and the header
+    // agree on one room (exo-dcc.25).
+    const QString ctopic = QJsonDocument::fromJson(r.toUtf8()).object().value("topic").toString();
+    setRoomTopic(ctopic.isEmpty() ? topic : ctopic);
     setLastError(QString());
     loadPolicy();
     loadMessages();
@@ -293,11 +297,60 @@ void MusterUiBackend::sendInvite(const QString &peerChatId, const QString &roomT
     qInfo() << "[muster_ui] coordinate_invite(" << roomTopic << ") ->" << r;
 }
 
+void MusterUiBackend::leaveRoom(const QString &roomTopic)
+{
+    // coordinate_leave → stop following the room here and forget it (exo-dcc.28). Leaving
+    // the open room clears the room view, so Join is offered again.
+    const QString r = modules().muster_module.coordinate_leave(roomTopic);
+    qInfo() << "[muster_ui] coordinate_leave(" << roomTopic << ") ->" << r;
+    if (!roomTopic.isEmpty() && (roomTopic == this->roomTopic())) {
+        setRoomTopic(QString());
+        setMessagesJson(QStringLiteral("[]"));
+        setMembersJson(QStringLiteral("[]"));
+        setPendingJson(QStringLiteral("[]"));
+        setIntentsJson(QStringLiteral("[]"));
+        setAccountsJson(QStringLiteral("[]"));
+    }
+    loadConversations();
+}
+
+void MusterUiBackend::setRoomTitle(const QString &roomTopic, const QString &title)
+{
+    // coordinate_set_room_title → this member's own name for the room (exo-dcc.25).
+    modules().muster_module.coordinate_set_room_title(roomTopic, title);
+    loadConversations();
+}
+
 void MusterUiBackend::loadInvites()
 {
     // coordinate_invites → the invites received on our inbox, [{topic, from, fromAlias,
     // note, ts}]. The home surface lists them with Join / Dismiss.
     setInvitesJson(modules().muster_module.coordinate_invites());
+    // Invite self-test (exo-dcc.29): MUSTER_AUTOACCEPT_INVITE=<room> joins the invite for
+    // that room as Home's Join does, but sends NO join request — so a run shows the invite
+    // alone made this identity a member. Named, because the store still holds invites from
+    // earlier runs. Off unless the env var is set.
+    static bool accepted = false;
+    const QString want = QString::fromUtf8(qgetenv("MUSTER_AUTOACCEPT_INVITE"));
+    if (!accepted && !want.isEmpty()) {
+        const QJsonArray a = QJsonDocument::fromJson(invitesJson().toUtf8()).array();
+        QString topic;
+        for (const auto &v : a)
+            if (v.toObject().value("topic").toString() == want) topic = want;
+        if (!topic.isEmpty()) {
+            accepted = true;
+            qInfo() << "[muster_ui] AUTOACCEPT_INVITE ->" << topic;
+            joinRoom(topic);
+            // drive the room as its open view would, so the module logs its roster
+            auto *t = new QTimer(this);
+            auto *n = new int(0);
+            connect(t, &QTimer::timeout, this, [this, t, n]() {
+                loadPending();
+                if (++*n >= 60) { t->stop(); delete n; }
+            });
+            t->start(1000);
+        }
+    }
 }
 
 void MusterUiBackend::dismissInvite(const QString &roomTopic)
@@ -1008,12 +1061,29 @@ void MusterUiBackend::onContextReady()
     // Qt main thread (so muster's lp client has an event loop) and drives the full
     // coordinate_join → delivery createNode path, so the runner can be exercised
     // offscreen. Off unless the env var is set; never affects a normal launch.
+    // Leave/rename self-test (exo-dcc.25, .28): MUSTER_AUTOTITLE=<name> names the autojoined
+    // room; MUSTER_AUTOLEAVE=<topic> leaves that room 10 s after startup, once the module
+    // has re-entered the rooms it remembers. Each calls the slot the room's own button calls.
+    const QByteArray autoleave = qgetenv("MUSTER_AUTOLEAVE");
+    if (!autoleave.isEmpty()) {
+        const QString topic = QString::fromUtf8(autoleave);
+        QTimer::singleShot(10000, this, [this, topic]() {
+            qInfo() << "[muster_ui] AUTOLEAVE ->" << topic;
+            leaveRoom(topic);
+            qInfo().noquote() << "[muster_ui] AUTOLEAVE conversations ->" << conversationsJson();
+        });
+    }
     const QByteArray autojoin = qgetenv("MUSTER_AUTOJOIN_TOPIC");
     if (!autojoin.isEmpty()) {
         const QString topic = QString::fromUtf8(autojoin);
         QTimer::singleShot(5000, this, [this, topic]() {
             qInfo() << "[muster_ui] AUTOJOIN ->" << topic;
             joinRoom(topic);
+            const QByteArray autotitle = qgetenv("MUSTER_AUTOTITLE");
+            if (!autotitle.isEmpty()) {
+                setRoomTitle(topic, QString::fromUtf8(autotitle));
+                qInfo().noquote() << "[muster_ui] AUTOTITLE conversations ->" << conversationsJson();
+            }
             QTimer::singleShot(3000, this, [this]() { requestJoin(); });
             // Invite self-test: MUSTER_AUTOINVITE=<contact alias> invites that contact to
             // this room once joined, exactly as the composer's "Open the room with them"

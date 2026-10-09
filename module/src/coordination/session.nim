@@ -215,6 +215,26 @@ proc admit*(s: CoordinationSession, joiner: Member) =
   # every current member (the new one included) can open.
   s.announceBeacon()
 
+proc admitInvited*(s: CoordinationSession, invitee: Member): bool =
+  ## Admit someone this member invites by name (exo-dcc.29): the invite IS the member's
+  ## decision, and the identity is the one the member holds for them, so there is no
+  ## request to wait for and nothing to verify. The grant waits in the store, so the
+  ## invitee is a member on arrival and reads the room from here on, never before (F-16).
+  ## Only a member of the current epoch can admit; someone already in is left alone (no
+  ## re-key). True when the invitee is a member afterwards.
+  let members = s.crypto.members()
+  if invitee in members: return true
+  if s.crypto.identity() notin members: return false
+  s.admit(invitee)
+  true
+
+proc leave*(s: CoordinationSession) =
+  ## Stop following this room here (exo-dcc.28): no more of its traffic is taken. The log
+  ## and keys stay what they were, so joining the topic again reads the room back from
+  ## the store and the keystore. The others are not told; nothing re-keys.
+  s.transport.unsubscribe(s.topic)
+  s.transport.detach()
+
 proc catchUp*(s: CoordinationSession) =
   ## Offline catchup (F-15): pull the store's retained envelopes for the topic and
   ## ingest the ones we can open. Idempotent — the log dedups (R-2/R-4), and
