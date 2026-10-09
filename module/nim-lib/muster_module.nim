@@ -3321,8 +3321,17 @@ proc musterConnectivity(): string =
       except CatchableError: discard
     else:
       delLevel = "warn"; delDetail = "joined; node info unavailable"
-  rows.add %*{"key": "delivery", "name": "Delivery", "level": delLevel, "detail": delDetail,
-              "source": "room", "introducedBy": []}
+  var delRow = %*{"key": "delivery", "name": "Delivery", "level": delLevel, "detail": delDetail,
+                  "source": "room", "introducedBy": []}
+  # Basecamp runs one delivery node for every module, and the first to start it picks its
+  # fleet (exo-dcc.24): when another app did, Muster cannot tell which network it is on,
+  # and two members on different fleets never see each other's rooms or invites.
+  if nodeElsewhere():
+    delRow["level"] = %"warn"
+    delRow["detail"] = %(delDetail & "; started by another app, so it may not be on " &
+                         (let p = presetOf(gDeliveryConfig); if p.len > 0: p else: "Muster's fleet"))
+    delRow["remedy"] = %"If rooms or invites don't arrive, quit Basecamp, start it again and open Muster before any other messaging app."
+  rows.add delRow
   # the node's RLN membership (exo-eb6.3), only where the room relies on it: a node on
   # logos.test sends nothing without one; elsewhere it is no dependency (exo-428), and
   # rln_status says "not needed" for Settings
