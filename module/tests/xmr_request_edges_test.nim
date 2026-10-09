@@ -132,7 +132,7 @@ block share:
   let (s, ks) = x.r.sessionOf("alice")
   let w = x.wallet("alice")
   let before = w.subs.len
-  let r = xmrShareAddress(s, ks, w, XmrStage, 1)
+  let r = xmrShareAddress(s, ks, w, XmrStage, 1, int64(Now))
   doAssert r.ok and r.why == "", r.why
   doAssert w.subs.len == before + 1 and w.subs[^1].address == r.address and w.subs[^1].label == "muster:share"
   doAssert acceptablePayTo(r.address, XmrStage).ok
@@ -159,7 +159,7 @@ block share:
   x.r.sync()
   doAssert x.agree("alice", id) == "collecting"
   # a newer share wins
-  let r2 = xmrShareAddress(s, ks, w, XmrStage, 6)
+  let r2 = xmrShareAddress(s, ks, w, XmrStage, 6, int64(Now) + 60)   # a later share: the newest wins
   x.r.sync()
   doAssert r2.ok and r2.address != r.address
   doAssert sharedMoneroAddressOf(x.r.carol.roomEvents(), alice, XmrStage) == r2.address
@@ -233,5 +233,40 @@ block history:
   x.r.sync()
   doAssert lines("alice") == @["Bob settled their part"], $lines("alice")
   echo "5. history: a Monero report says they paid until the creditor's wallet confirms it OK"
+
+# ── 6. the pump's wallet-bound cache, seen on display ───────────────────────────
+# On display a request made on the creditor's behalf never offered them Agree: the
+# projection's receive_info (cmPump) was never served. Each tick reads wallet_status, then
+# receive_info; both are re-asked every 2 s, so a fresh receive_info reply arrived in the
+# same tick as the status that would have confirmed the one before — and replaced it
+# unconfirmed. In lockstep nothing was ever served (nor any history, to the confirm pump).
+block boundCache:
+  const K = "musterxmr|stagenet|ready"
+  var c: WalletBoundCache
+  var seq = 1
+  c.offer("A", 0.0, K, K, seq)
+  doAssert c.read(K, seq, 0.5, 15) == "", "a reply no later status confirmed is not served"
+  # every tick: a status reply, then a fresh reply, in lockstep
+  for (i, raw) in [(2, "B"), (3, "C"), (4, "D")]:
+    seq = i
+    let before = (if i == 2: "A" elif i == 3: "B" else: "C")
+    c.offer(raw, float(i * 2), K, K, seq)
+    doAssert c.read(K, seq, float(i * 2) + 0.5, 15) == before,
+      "tick " & $i & ": the reply the status confirmed is served, got " & c.read(K, seq, float(i * 2) + 0.5, 15)
+  # a reply asked about another wallet is never served, and never displaces one that is
+  const K2 = "other|stagenet|ready"
+  c.offer("X", 9.0, K2, K, 5)
+  seq = 6
+  doAssert c.read(K, seq, 9.5, 15) == "D"
+  # the wallet named now is another: nothing about the one before is served
+  doAssert c.read(K2, seq, 9.5, 15) == ""
+  # stale: nothing
+  doAssert c.read(K, seq, 60.0, 15) == ""
+  # asked now (cmNow): served at once, as current as the status read just before it
+  c.put("N", 10.0, K, 7)
+  doAssert c.read(K, 7, 10.1, 15) == "N"
+  c.clear()
+  doAssert c.read(K, 8, 10.2, 15) == ""
+  echo "6. the pump's wallet-bound cache: served once confirmed, even in lockstep; never another wallet's OK"
 
 echo "xmr_request_edges_test: all OK"

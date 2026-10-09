@@ -106,6 +106,50 @@ type
     address*: string
     detail*: string
 
+  BoundReply* = object
+    raw*: string              ## the reply as it arrived ("" = none)
+    at*: float                ## when it arrived
+    key*: string              ## the wallet ("<wallet>|<network>|<state>") it was asked about
+    seq*: int                 ## how many wallet_status replies had been read when it arrived
+
+  WalletBoundCache* = object
+    ## A pump's cached history or receive_info (exo-dcc.5 s7): neither names a wallet, so a
+    ## reply is served only while the wallet the status named when it was asked is still the
+    ## one named, and only once a status reply read AFTER it says so too.
+    served*: BoundReply       ## the newest reply a later status confirmed
+    fresh*: BoundReply        ## the newest reply, not yet confirmed
+
+proc put*(c: var WalletBoundCache, raw: string, at: float, walletKey: string, statusSeq: int) =
+  ## A reply asked now (cmNow): as current as the status read just before it.
+  c.served = BoundReply(raw: raw, at: at, key: walletKey, seq: statusSeq - 1)
+  c.fresh = BoundReply()
+
+proc promote(c: var WalletBoundCache, walletKey: string, statusSeq: int) =
+  ## The fresh reply becomes the served one once a status read after it names its wallet.
+  if c.fresh.raw.len > 0 and c.fresh.key == walletKey and statusSeq > c.fresh.seq:
+    c.served = c.fresh
+    c.fresh = BoundReply()
+
+proc offer*(c: var WalletBoundCache, raw: string, at: float, firedKey, walletKey: string, statusSeq: int) =
+  ## A pump reply arrived. One asked about another wallet than the one named now is dropped.
+  ## It waits as `fresh` until a later status confirms it; meanwhile the reply confirmed
+  ## before it is still served (exo-dcc.20: replacing it unconfirmed starved the pump when
+  ## the status and the reply arrived in lockstep, every tick).
+  if raw.len == 0 or firedKey != walletKey: return
+  c.promote(walletKey, statusSeq)
+  c.fresh = BoundReply(raw: raw, at: at, key: walletKey, seq: statusSeq)
+
+proc read*(c: var WalletBoundCache, walletKey: string, statusSeq: int, now, staleS: float): string =
+  ## What may be served now ("" = nothing yet): confirmed by a later status, about the
+  ## wallet named now, and no older than staleS. A fresh reply a later status confirms
+  ## is promoted first.
+  c.promote(walletKey, statusSeq)
+  let r = c.served
+  if r.raw.len == 0 or now - r.at > staleS or r.key != walletKey or statusSeq <= r.seq: return ""
+  r.raw
+
+proc clear*(c: var WalletBoundCache) = c = WalletBoundCache()
+
 method invoke*(b: MoneroBackend, meth: string, args: JsonNode, mode: CallMode): string {.base, gcsafe.} =
   ## One raw call: lp's reply string as it arrives ("" = no answer). The base answers
   ## nothing: a host with no Monero stack.

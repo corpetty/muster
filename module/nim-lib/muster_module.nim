@@ -2804,6 +2804,9 @@ proc musterCoordinateIntents(): string =
             let opens = not (why.len == 0 or why.startsWith("wallet-unread") or why.startsWith("wallet-busy"))
             wallet = %*{"ready": why.len == 0, "detail": why, "code": why.split(':')[0],
                         "request": (if opens: MoneroUnlockIntent else: "")}
+            # whether payToMine is known (exo-dcc.20): an address list not read yet is not
+            # "not yours" — the card keeps Agree, and the agreement itself reads it now
+            o["split"]["payToMineKnown"] = %(moneroBackend().receiveInfo(cmPump).read == rsAnswered)
             # which wallet Open Monero Wallet names (exo-dcc.20): read on the tick, cached
             if opens:
               for k, val in unlockJson(xmrUnlockTarget(moneroBackend(), sp.chain, cmPump)): wallet[k] = val
