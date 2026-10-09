@@ -1,7 +1,29 @@
 # Monero in Muster rooms: the plan (exo-dcc)
 
-Status: **planned 2026-10-07. ADR-018 accepted 2026-10-08; the demo runs on `logos.test` with a gifter we run (exo-dcc.2, `rln-membership.md` §7); the catalogue lives in this repo (`catalog/`, exo-dcc.3).** Epic `exo-dcc`, with its children `exo-dcc.1`–`.10`.
+Status: **planned 2026-10-07. ADR-018 accepted 2026-10-08; the demo runs on `logos.test` with a gifter we run (exo-dcc.2, `rln-membership.md` §7); the catalogue lives in this repo (`catalog/`, exo-dcc.3). As of 2026-10-09 (day 2): Phases 0 and 2 are done, ahead of the calendar; two things wait on funds (§0).** Epic `exo-dcc`, with its children `exo-dcc.1`–`.23`.
 `pb dep tree exo-dcc` shows live status, and `pb ready` shows what can start next.
+
+## 0. Where it stands (2026-10-09)
+
+Read from the pebbles on 2026-10-09. The pebbles win over this table.
+
+| Phase | Pebble | State |
+|---|---|---|
+| 0 Ground truth | `exo-dcc.1` | **Done** (2026-10-08). Basecamp 0.3.2 and delivery 0.3.2; Muster reaches `monero_wallet_backend`, attested as `muster_module`; ADR-018 accepted. Two spike questions are still open, because they need a funded stagenet wallet: whether an incoming transfer shows in `history()` before it confirms, and how long a first sync takes. `exo-dcc.19` answers them |
+| 1 Messaging with no LEZ | `exo-dcc.2` | **Decided, not built.** `logos.test` with a room gifter we run. Slices R2, R3, R4 (`rln-membership.md` §7). **Waits on funds**: native LEZ on LEZ classic for the gifter |
+| 1 An installable Muster | `exo-dcc.3` | **In progress.** Version ranges and 0.2.0; `catalog/` and `scripts/catalog-release.sh`; a fresh Basecamp 0.3.2 installed Muster from a locally served copy. Release `muster-v0.2.0` is being published; the catalogue lists Muster once `catalog/index.json` is on `main` |
+| 1 The mixnet | `exo-dcc.4` | **Done** (2026-10-08). An opt-in `mix` setting, off by default, sends only. Untested on `logos.test` |
+| 1 Install what's missing | `exo-dcc.10`, `.11` | **Done** (2026-10-08). Seen on display in Basecamp 0.3.2 |
+| 2 The XMR payment request | `exo-dcc.5`, `.20` | **Done, except the live payment** (2026-10-09). Spec `derived-exo-dcc.5`, 7/7. The UI was seen on display in Basecamp 0.3.2 with a real stagenet wallet, up to the payment. The live two-machine run is `exo-dcc.19`, which **waits on funds**: stagenet XMR for the payer. Detail: `docs/labbook/xmr-payment-request.md` |
+| 3 Pay from Basecamp's own wallet | `exo-dcc.6` | **Not started.** Waits on the upstream review intent (§8, ask 2) |
+| 4 The deal-desk demo | `exo-dcc.7` | **Not started.** Needs `.2`, `.3` and `.19`. `audit.nim` still refuses the split families |
+| 5 The mainnet gate | `exo-dcc.8` | **Not started** |
+
+Smaller follow-ups, all open: a local copy of each room's log (`exo-dcc.14`, P2); a 0.3.2 catalogue file for the Basecamp harness (`.15`); readiness under `--access-policy enforce` (`.16`); the `frost_ceremony_room_test` flake (`.17`); upstream asks from the catalogue run (`.18`), the mix path (`.13`) and Monero Wallet's `failed` answer to `monero.wallet.unlock` (`.21`); a grader leftover (`.22`); a spec wording fix (`.23`).
+
+**Waiting on funds.** Both are the operator's to fund. The public addresses are in `docs/06-session-handoff-2026-10-09.md` §4; the wallets themselves live outside the repo.
+- **`exo-dcc.19`, the live XMR payment:** stagenet XMR for the payer's wallet, from a stagenet faucet.
+- **`exo-dcc.2`, the gifter:** native LEZ on LEZ classic (`209.38.241.182:3240`), about 7.5×10⁷ per membership, for the gifter's RLN payer.
 
 ## 1. The goal
 
@@ -278,7 +300,7 @@ intent)**
 
 ## 7. Against the campaign's 60 days
 
-Day 0 is 2026-10-07.
+Day 0 is 2026-10-07. Today, 2026-10-09, is day 2.
 
 | Campaign window | Engineering |
 |---|---|
@@ -286,6 +308,12 @@ Day 0 is 2026-10-07.
 | Days 10–25 (to 11-01) | Phase 2, 2a first; the installable build, and installing from the card (`exo-dcc.10`); the essay uses §5's columns |
 | Days 25–40 (to 11-16) | Phase 4 and the two-machine acceptance; Phase 3 if the upstream intent has landed |
 | Days 40–60 (to 12-06) | Phase 5; the backlog from critics; a Lambda prize opened |
+
+**On day 2:**
+- **Ahead of the plan.** Phase 0 is done. Phase 2's spec, module and UI are done, which the plan put in days 10–25. `exo-dcc.10` is done, and the catalogue's tooling is.
+- **Behind it, for want of funds.** Phase 2's live payment (`exo-dcc.19`) needs stagenet XMR. The messaging decision was made on day 1, well before 10-14, but R2–R4 are not built, and the gifter needs native LEZ.
+- **The date that matters next is about 2026-10-14**, when `logos.test` starts rejecting messages without RLN proofs. Muster still defaults to `logos.dev`, so nothing breaks then. What changes is that the demo cannot move to `logos.test` until the gifter runs.
+- **Phase 4 can start** once the catalogue release is up and `exo-dcc.19` has run. It still waits on the gifter for the network it is meant to run on.
 
 ## 8. Asks of other teams
 
@@ -313,12 +341,15 @@ Day 0 is 2026-10-07.
   record. A Monero tx proof is upstream ask 3.
 - **Paying from Cake or Feather is the v1 path,** not a fallback.
 
-## 10. Open decisions (recommendations first)
+## 10. Decisions
 
-- **Demo network:** stagenet, or mainnet.
-- **Messaging:** ask for a public gifter, or demo on `logos.dev`.
-- **Paying from the Basecamp wallet:** wait for the upstream review intent, or allow an
-  operator-enrolled approver for demos only.
+All three were open when this plan was written. Each is now decided.
+
+- **Demo network: stagenet.** ADR-018: stagenet first; mainnet waits for `exo-dcc.8`.
+- **Messaging: `logos.test` with a room gifter we run** (2026-10-08, `rln-membership.md` §7).
+  Not a public gifter, and not `logos.dev`.
+- **Paying from the Basecamp wallet: wait for the upstream review intent.** ADR-018: Muster
+  never makes itself approver, not even for demos.
 
 Sources: the logos-module-atlas plugin `0.1.202610071320` (Basecamp 0.3.2:
 `stacks/monero-wallet.md` and the module cards); logos-docs#519; `docs/design/rln-membership.md`;

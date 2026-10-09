@@ -14,9 +14,10 @@ in `../contracts/specs/derived-exo-*.spec.json`; each names probes under
 ## Status
 
 **P0–P4 landed; P3 built — two instances converge over the live Logos fleet;
-the multisig families (Phases A–D) landed 2026-09-24/25.** The signing-path core,
-the intent lifecycle and driver interface, all ten invariants (99 unit tests and
-55 invariant probes, green via `tests/run-suite.sh`), and the LIDL codegen that
+the multisig families (Phases A–D) landed 2026-09-24/25; the XMR payment request
+landed 2026-10-09.** The signing-path core,
+the intent lifecycle and driver interface, all ten invariants (149 unit tests and
+84 invariant probes, 233/233 green via `tests/run-suite.sh` on 2026-10-09), and the LIDL codegen that
 generates the surface from the contract are all in. P4 put the whole lifecycle
 through the real UI (ADR-013). P3 — transport, encryption, and multi-party
 coordination — is built and tested; two `muster-ui` instances converge over the
@@ -28,12 +29,28 @@ driven from the room on a local v0.3 zone), and FROST
 (one BIP-340 signature on Bitcoin, or from an untweaked LEZ account). What remains
 is the multi-party runs across two machines. Author-bearing log events (chat,
 declines, material shares, account disclosures, FROST joins) are signed by their author,
-and the room reads only those that verify (exo-f76). See [`../CLAUDE.md`](../CLAUDE.md) for the phase-by-phase detail and
+and the room reads only those that verify (exo-f76).
+
+**The XMR payment request (epic exo-dcc, ADR-018).** Family `monero.split` in
+`src/drivers/split.nim`: one debtor pays the requester from any wallet through a
+`monero:` link (`src/monero/address.nim` writes it, and parses and checks every Monero
+address); the requester's own wallet, reached through `monero_wallet_backend` over lp_*
+(`src/wallet/monero_backend{,_lp}.nim`, a closed set of read and mint calls, never a
+spend), mints the subaddress and confirms the part from its own history at 10
+confirmations (`src/coordination/parts_xmr.nim`, `xmr_request.nim`). Spec
+`derived-exo-dcc.5`, 7/7, over a recording fake backend; no live stagenet payment yet.
+`monero_wallet_backend` is an optional dependency in `metadata.json`, so a missing
+Monero stack never fails the module's load. Readiness grades a needed module as not
+installed, installed but not running, or running, from Basecamp's `modules_state`
+(`src/coordination/module_registry.nim`), and names the package to install.
+
+See [`../CLAUDE.md`](../CLAUDE.md) for the phase-by-phase detail and
 [`../docs/two-instance-fleet-runbook.md`](../docs/two-instance-fleet-runbook.md)
 for the operator flow.
 
 **Landed beyond the phase plan:** a chain-agnostic wallet (EVM + mock + a real LEZ
-adapter — send assets via Logos on the zone's four rails); a driver standard (registry,
+adapter — send assets via Logos on the zone's four rails; under Basecamp, chain reads
+through `eth_rpc_module` and every EVM send through `tx_sender_module`); a driver standard (registry,
 conformance suite, a threshold k-of-n driver, and a generic **invoke** driver that
 coordinates any Logos module action); the **action manifest** — one per-action object
 answering what an action does / needs / touches / discloses / how the room agrees, with
@@ -96,18 +113,22 @@ src/
   drivers/      driver interface (inv 6) · manifest (per-action provenance/permissions/
                 disclosure) · profile (the multisig family) · conformance · safe ·
                 btc_multisig · lez_multisig · frost / btc_frost / lez_frost · threshold ·
-                invoke (any module action) · eip191
+                invoke (any module action) · eip191 · split (a bill split, each pays their
+                own part: evm / lez / btc / monero)
   crypto/       two bound identities (secp256k1 auth + Ed25519/X25519 enc),
                 signed binding, keystore seam, epoch crypto (F-14/F-16)
-  transport/    Transport interface + local/delivery transports (inv 8)
+  transport/    Transport interface + local/delivery transports (inv 8) · the opt-in mix setting
   coordination/ multi-party session · intent lifecycle = reduce(log) · authorship (author-
                 signed events, the room's authentic view) · readiness ·
-                information-flow view · offers/material folds
-  wallet/       chain-agnostic wallet: EVM + Bitcoin Core + mock + real LEZ adapters, verified reads
+                information-flow view · offers/material folds · parts (settlement in parts:
+                EVM, LEZ, Bitcoin, Monero) · module_registry (installed / running)
+  wallet/       chain-agnostic wallet: EVM + Bitcoin Core + mock + real LEZ adapters, verified reads;
+                eth_rpc_module + tx_sender_module under Basecamp; monero_backend (read and mint only)
   settlement/   the settlement seam, chosen by the driver's profile: Safe · Bitcoin · LEZ multisig · LEZ FROST
   bitcoin/      Bitcoin primitives + PSBT, pinned to the BIP vectors
   frost/        FROST (BIP-445) + ChillDKG, held to every draft vector; round secrets as keystore ops
   lez/          the LEZ multisig program model + LEZ public transactions
+  monero/       Monero addresses and the monero: payment URI, held to monero-project's vectors; pure, no keys
   plugins/      plugin sandbox (inv 3)
 nim-lib/        muster_gen.nim (generated) + muster_module.nim (hosted surface)
 tools/          regen.sh (fetches the SDK's lidl-gen + regenerates muster_gen.nim) · nim-closure.sh
@@ -125,4 +146,4 @@ tests/          unit tests · run-suite.sh (all of them, one command) · vectors
 - Invariant tests are append-only. Extend, don't weaken.
 - The module imports nothing from `../ui/`; it reaches other modules only through logos-core.
 
-<!-- rot-check: current-phase=CLAUDE.md sha256=d4bdc15119bde5e85d5d679f06732a2ff9b51cf4339984f79504baee7de47947 -->
+<!-- rot-check: current-phase=CLAUDE.md sha256=a242a2001546a6387615c5c19f1f5635682b1ffbb30635162e0fd05494c3bb02 -->

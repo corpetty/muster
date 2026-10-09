@@ -1,6 +1,6 @@
 # Runbook: try everything — two instances, one machine
 
-**As of 2026-09-30 (main after #195).** Two instances on one machine, driven by you,
+**As of 2026-09-30 (main after #195); Part 6i, the XMR request, added 2026-10-09.** Two instances on one machine, driven by you,
 through everything the client can do today. Two scripts do all the setup:
 `scripts/try-infra.sh` brings up every local chain the tour uses, already funded, and
 `scripts/try-peer.sh` launches each peer seeded for it. After that, every part is
@@ -22,6 +22,7 @@ the finding.
 | [5](#5-bitcoin-a-multisig-and-a-frost-key) | Bitcoin: a multisig with a signer outside muster, and a FROST key | regtest (up) | 20 min |
 | [6](#6-split-the-bill) | Split the bill: ETH, a token, for someone else, another currency, settle up, Bitcoin, renewing an expired split | anvil + regtest (up) | 35 min |
 | [6h](#6h-the-private-split-on-the-lez-testnet) | The private split on the LEZ testnet | internet; proofs of minutes each | 40 min |
+| [6i](#6i-request-xmr) | Request a payment in XMR | Basecamp 0.3.2 with Monero Wallet; a stagenet wallet | 30 min |
 | [7](#7-the-lez-multisig-on-the-public-testnet) | The LEZ multisig on the public testnet | internet; ~40 s blocks | 20 min |
 | [8](#8-lez-frost) | LEZ FROST | internet | 10 min |
 | [9](#9-wallet-and-send-λ) | Wallet and Send λ | — | 5 min |
@@ -55,7 +56,8 @@ The first build takes minutes. It warns if `module/` has uncommitted edits.
 
 **Every peer must run this build.** Since #167 the wire format changed: join requests,
 key grants and envelopes are all sealed differently. An older build, the `v0.1.0-demo`
-AppImage included, cannot share a room with this one in either direction.
+AppImage included, cannot share a room with this one in either direction. So does the
+`v0.2.0-demo` AppImage.
 
 ### The chains
 
@@ -446,8 +448,9 @@ Nothing on the chain says who was at dinner.
 | **Split (Ethereum)** | ETH, or an ERC-20 token | the creditor's own RPC read |
 | **Split (Bitcoin)** | BTC | the creditor's own node, at 1 confirmation on regtest |
 | **Split privately (LEZ)** | LEZ, shielded to shielded | the creditor's own wallet scan |
+| **Split (Monero)** | XMR, from any Monero wallet | the creditor's own Monero wallet, at 10 confirmations (Part 6i; needs Basecamp) |
 
-All three are usable at once: the room does not vote to admit them.
+All four are offered at once: the room does not vote to admit them.
 
 **Stay in the room while a payment lands.** A payer's client reports the payment, and the
 creditor's client confirms it, only while that room is the one on screen. Leave it
@@ -702,6 +705,19 @@ the change his note kept.
 **If it stalls:** Bob's pay answers *no one shielded note of yours covers …* until the
 shield has landed, and *… pay once it has; it cannot yet see the note it would spend*
 while his scan catches up. Wait, then pay again.
+
+### 6i. Request XMR
+
+**Not in the runner.** The payee's Monero wallet is Basecamp's Monero Wallet, reached
+through `monero_wallet_backend`, and the standalone runner bundles neither. In the runner,
+**Split (Monero)** is offered, and every request is refused before anything is minted, with
+**Open Monero Wallet** and **Install monero_wallet_ui** as the remedies. That refusal is the expected result
+here, and `scripts/split-xmr-self-test.sh` checks it.
+
+To make a request for real, run the payee in Basecamp 0.3.2 with Monero Wallet and a
+stagenet wallet, and pay from any stagenet wallet: [`xmr-payment-request.md`](xmr-payment-request.md).
+The payer can stay in the runner. No payment has been made through it yet, so steps 3 and 4
+there are first on screen.
 
 ---
 
