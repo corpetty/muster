@@ -99,7 +99,7 @@ a{color:var(--signal)}
 
 /* atlas */
 .atlas{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:20px;align-items:start}
-@media (max-width:760px){.atlas{grid-template-columns:1fr}}
+@media (max-width:760px){.atlas{grid-template-columns:minmax(0,1fr)}}
 .list{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
 .group-h{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:10px 12px 6px;background:var(--paper);border-top:1px solid var(--rule)}
 .group-h:first-child{border-top:none}
@@ -135,14 +135,14 @@ a{color:var(--signal)}
 .row>div{padding:9px 16px;border-top:1px dashed var(--rule-soft)}
 .row:first-child>div{border-top:none}
 .row .lbl{font-family:var(--mono);font-size:10.5px;color:var(--muted);letter-spacing:.02em;padding-right:4px}
-.row .val{font-size:13.5px}
+.row .val{font-size:13.5px;overflow-wrap:anywhere}
 .row .det{display:block;font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:4px;line-height:1.5;overflow-wrap:anywhere}
 .cred{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;padding:1px 6px;border-radius:3px;margin-left:6px;white-space:nowrap;vertical-align:1px}
 .cred.imperative{background:var(--settled-soft);color:var(--settled)}
 .cred.motivational{background:var(--caution-soft);color:var(--caution)}
 .cred.exposed{background:var(--alarm-soft);color:var(--alarm)}
 .party{display:block;font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:3px}
-@media (max-width:520px){.rows{grid-template-columns:1fr}.row .lbl{padding-bottom:0;border-top:1px dashed var(--rule-soft)}.row .val{border-top:none;padding-top:3px}.row:first-child .lbl{border-top:none}}
+@media (max-width:520px){.rows{grid-template-columns:minmax(0,1fr)}.row .lbl{padding-bottom:0;border-top:1px dashed var(--rule-soft)}.row .val{border-top:none;padding-top:3px}.row:first-child .lbl{border-top:none}}
 
 /* outside panel: what the chain learns */
 .outside{background:var(--outside);color:var(--outside-ink);padding:12px 16px 14px}
@@ -223,9 +223,10 @@ section[hidden]{display:none!important}
 .mono{font-family:var(--mono);font-size:11.5px;overflow-wrap:anywhere}
 .tbl{width:100%;border-collapse:collapse;font-size:12.5px}
 .tbl th{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:left;font-weight:500;padding:4px 8px 4px 0;border-bottom:1px solid var(--rule-soft)}
-.tbl td{padding:6px 8px 6px 0;border-bottom:1px dashed var(--rule-soft);vertical-align:top}
+.tbl td{padding:6px 8px 6px 0;border-bottom:1px dashed var(--rule-soft);vertical-align:top;overflow-wrap:anywhere}
 .tbl td.mono{font-size:11px}
 .tbl td:first-child{white-space:nowrap}
+@media (max-width:520px){.tbl td:first-child{white-space:normal;overflow-wrap:normal}}
 .party{font-family:var(--mono);font-size:10px;padding:1px 6px;border-radius:3px;background:var(--signal-soft);color:var(--signal);white-space:nowrap}
 .steps{list-style:none;margin:0;padding:0;counter-reset:st}
 .steps>li{position:relative;padding:0 0 12px 34px}
@@ -242,7 +243,7 @@ section[hidden]{display:none!important}
 .obs .o .h{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;display:flex;justify-content:space-between;gap:8px}
 .obs .o.out .h{color:var(--outside-muted)}
 .obs .o .fs{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:6px}
-.fld{font-family:var(--mono);font-size:11px;padding:1px 6px;border-radius:3px;background:var(--surface);border:1px solid var(--rule-soft)}
+.fld{font-family:var(--mono);font-size:11px;padding:1px 6px;border-radius:3px;background:var(--surface);border:1px solid var(--rule-soft);max-width:100%;overflow-wrap:anywhere}
 .obs .o.out .fld{background:transparent;border-color:var(--outside-rule);color:var(--outside-ink)}
 .fld i{font-style:normal;opacity:.65;margin-left:4px}
 .banner{padding:9px 16px;font-size:12.5px;border-bottom:1px solid var(--rule-soft)}
@@ -763,8 +764,8 @@ function renderDims(){
 const PHASES = [
   ["A","The Safe, done properly — landed","Landed 2026-09-24 (epic exo-a50): accounts are disclosed by members into the room, every driver declares its family profile, one kind list, the Safe maps every field and refuses an unallowlisted delegatecall against the real Safe v1.4.1, settlement is a seam, and the card's ten rows come from the profile. Its family, evm.safe, is now built."],
   ["B","Bitcoin through PSBT — landed","Landed 2026-09-24 (exo-a50.2): P2WSH sortedmulti and single-leaf tapscript multi_a accounts disclosed in the room, spends built from the UTXOs your own node reports, a member signing in-app through the keystore, a signer outside muster signing the exported PSBT (counted, shown as such), witnesses finalized and broadcast — verified against Bitcoin Core on regtest, where Core's wallet was the outside signer. Both families are now built. A Keycard Shell cosigning over QR is the same PSBT path, not yet run on the device. The two cards read the same: with one leaf, tapscript reveals what P2WSH does."],
-  ["C","The LEZ multisig program — core landed","Landed 2026-09-24 against an in-process model of lez-multisig: an account disclosed with its config, proposals put on chain by the proposer, each approval the member's own public vote transaction — re-read and checked against what the room reviewed before it is cast, confirmed after — and settlement that counts the votes on chain. The live chain waits upstream: the published program targets nssa v0.2.0-rc3 and must be rebuilt for the LEE v0.2.5 chain lez_core speaks."],
-  ["D","FROST, in the room","A key ceremony held in the room and a spend the chain can't tell from a single signer, on Bitcoin taproot and a LEZ account."]
+  ["C","The LEZ multisig program — core landed","Landed 2026-09-24 against an in-process model of lez-multisig: an account disclosed with its config, proposals put on chain by the proposer, each approval the member's own public vote transaction — re-read and checked against what the room reviewed before it is cast, confirmed after — and settlement that counts the votes on chain. Then live: the program, rebuilt for LEZ v0.2.4, was deployed to the public testnet (logos-co/lez-multisig#45) and the room drove it there. Since the testnet moved to LEZ v0.3.0 it is ported to v0.3's program ABI and driven from the room on a local v0.3 zone; the testnet run on v0.3 is still ahead."],
+  ["D","FROST, in the room — landed","Landed 2026-09-25 (exo-a50.4): a key ceremony (ChillDKG) held in the room, and a spend the chain can't tell from a single signer — on a real Bitcoin Core regtest a 2-of-3 spends with one 64-byte signature, and an aggregate key owns an untweaked LEZ public account. FROST signing and ChillDKG are held to their draft BIPs' vectors. Demo-grade: not constant time."]
 ];
 function renderPlan(){
   document.getElementById("phases").innerHTML = PHASES.map(([p, h, d]) => {

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Muster</title>
-<meta name="description" content="Muster is a local-first client for coordinating multi-party transactions inside private conversations, on the Logos stack. The conversation is the security boundary.">
+<meta name="description" content="Muster is a local-first client for coordinating multi-party transactions inside private conversations, on the Logos stack: pay from a shared account, split a bill, or request XMR. The conversation is the security boundary. Install it in Logos Basecamp from its own catalogue.">
 <meta property="og:title" content="Muster — do things together, privately">
 <meta property="og:description" content="A local-first client for coordinating multi-party transactions inside private conversations, on the Logos stack.">
 <meta property="og:type" content="website">
@@ -12,7 +12,11 @@
 <!-- The landing page of the Pages site. Hand-written, self-contained: no build step,
      open it straight from a checkout (links into diagrams/ and atlas/ resolve only in
      the assembled site — .github/workflows/pages.yml). Every claim here traces to
-     docs/00-vision.md, CLAUDE.md or contracts/claims/registry.json; keep it so. -->
+     docs/00-vision.md, CLAUDE.md or contracts/claims/registry.json; keep it so.
+     The Monero, install, mixnet and seven-links copy (2026-10-09) follows the binding
+     rules in docs/design/monero-in-rooms.md §5 and §9 and docs/runbooks/explaining-muster.md
+     §4b–4c: each link's current status, planned things named as planned, and the mixnet
+     only in the words §9 gives. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -82,6 +86,7 @@ p{text-wrap:pretty}
 .top nav a:hover{background:var(--surface);color:var(--ink)}
 .top nav a.gh{border:1px solid var(--rule);margin-left:4px}
 @media (max-width:760px){.top nav a.sec{display:none}}
+@media (max-width:440px){.top nav a.wide{display:none}}
 
 /* ---------- hero ---------- */
 .hero{padding:56px 0 64px}
@@ -128,7 +133,7 @@ p{text-wrap:pretty}
 .slot .av{width:18px;height:18px;font-size:7.5px}
 .slot.ok{border-style:solid;border-color:var(--settled);background:var(--settled-soft);color:var(--settled)}
 .check{display:flex;gap:8px;align-items:flex-start;font-family:var(--mono);font-size:10.5px;line-height:1.5;color:var(--settled);background:var(--settled-soft);border-radius:6px;padding:7px 9px}
-.check code{font-family:inherit;color:var(--ink)}
+.check code{font-family:inherit;font-size:inherit;color:var(--ink);background:none;border:0;padding:0}
 .acts{display:flex;gap:6px;margin-top:11px}
 .acts span{font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:999px;border:1px solid var(--rule);color:var(--ink-2)}
 .acts span.go{background:var(--signal);border-color:var(--signal);color:var(--on-signal)}
@@ -223,6 +228,62 @@ section.band{padding:80px 0;border-top:1px solid var(--rule-soft)}
 .tag{font-family:var(--mono);font-size:10.5px;padding:2px 8px;border-radius:4px;border:1px solid var(--rule);color:var(--ink-2);background:var(--paper)}
 .tag.built{border-color:var(--settled);color:var(--settled);background:var(--settled-soft)}
 
+/* XMR in a room */
+.xsteps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 28px;padding:0;list-style:none;counter-reset:x}
+@media (max-width:960px){.xsteps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:540px){.xsteps{grid-template-columns:1fr}}
+.xsteps li{counter-increment:x;background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);padding:16px 16px 18px}
+.xsteps li::before{content:counter(x);display:inline-grid;place-items:center;width:24px;height:24px;margin-bottom:10px;border-radius:50%;background:var(--signal);color:var(--on-signal);font-family:var(--mono);font-size:11.5px;font-weight:500}
+.xsteps b{display:block;font-size:15.5px;margin-bottom:4px}
+.xsteps span{font-size:14px;color:var(--ink-2);display:block}
+main code{font-family:var(--mono);font-size:.88em;background:var(--paper);border:1px solid var(--rule-soft);border-radius:4px;padding:0 4px;overflow-wrap:anywhere}
+.status .col code{background:var(--surface)}
+.xmr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start;margin-bottom:28px}
+@media (max-width:900px){.xmr{grid-template-columns:1fr}}
+.who{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.who li{background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--signal);border-radius:var(--r);padding:14px 16px 15px}
+.who li.chain{border-left-color:var(--settled)}
+.who li.keys{border-left-color:var(--caution)}
+.who .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.who b{display:block;font-size:15.5px;margin:3px 0 3px}
+.who span{font-size:14px;color:var(--ink-2);display:block}
+.icard .conf{font-family:var(--mono);font-size:10.5px;color:var(--caution);background:var(--caution-soft);border-radius:6px;padding:6px 9px;margin-top:10px}
+.uri{font-family:var(--mono);font-size:10.5px;color:var(--ink-2);background:var(--paper);border:1px dashed var(--rule);border-radius:6px;padding:6px 9px;margin-bottom:10px;overflow-wrap:anywhere}
+
+/* the seven links: the comparison table's shape, with its own phone labels */
+.cmp.links .row{grid-template-columns:minmax(0,.42fr) minmax(0,1.3fr) minmax(0,.85fr)}
+.cmp.links .row > div.them{color:var(--muted)}
+@media (max-width:760px){
+  .cmp.links .row{grid-template-columns:1fr}
+  .cmp.links .row > div.us::before{content:"Muster today"}
+  .cmp.links .row > div.them::before{content:"Ahead"}
+}
+
+/* install */
+.install{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:900px){.install{grid-template-columns:1fr}}
+.isteps{margin:0;padding:0;list-style:none;counter-reset:n;display:grid;gap:12px}
+.isteps > li{counter-increment:n;position:relative;background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);padding:16px 18px 18px 56px;font-size:15px;color:var(--ink-2)}
+.isteps > li::before{content:counter(n);position:absolute;left:16px;top:15px;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--signal);color:var(--on-signal);font-family:var(--mono);font-size:12px;font-weight:500}
+.isteps b{display:block;color:var(--ink);font-size:16px;margin-bottom:4px}
+.isteps p{margin:0 0 8px}
+.isteps p:last-child{margin-bottom:0}
+.repo{display:flex;align-items:stretch;gap:0;margin:10px 0 8px;border:1px solid var(--signal);border-radius:8px;overflow:hidden;background:var(--raised)}
+.repo code{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;line-height:1.5;color:var(--ink);padding:9px 11px;overflow-wrap:anywhere;background:none;border:0;border-radius:0}
+.repo button{flex:none;font:600 13px var(--ui);border:0;border-left:1px solid var(--signal);background:var(--signal-soft);color:var(--signal);padding:0 14px;cursor:pointer}
+.repo button:hover{background:var(--signal);color:var(--on-signal)}
+.needs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 16px}
+.trust{background:var(--outside);color:var(--outside-ink);border-radius:var(--r);padding:20px 22px 22px}
+.trust .st{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--outside-rule);color:var(--outside-accent);padding:2px 8px;border-radius:4px}
+.trust h3{font-size:17.5px;margin:12px 0 10px;letter-spacing:-.01em}
+.trust ul{margin:0;padding-left:18px;font-size:14px;color:var(--outside-muted)}
+.trust li{margin-bottom:8px}
+.trust li b{color:var(--outside-ink);font-weight:600}
+.trust code{font-family:var(--mono);font-size:.9em;color:var(--outside-ink);background:none;border:0;padding:0}
+.trust a{color:var(--outside-accent)}
+.trust .more{font-size:13.5px;color:var(--outside-muted);margin:14px 0 0}
+.nav-path{font-weight:600;color:var(--ink);white-space:nowrap}
+
 /* gaps */
 .gaps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 @media (max-width:900px){.gaps{grid-template-columns:1fr}}
@@ -298,10 +359,12 @@ footer a{color:var(--ink-2)}
     </a>
     <nav aria-label="Site">
       <a class="sec" href="#how">How it works</a>
-      <a class="sec" href="#guarantees">Guarantees</a>
+      <a class="sec" href="#monero">XMR</a>
+      <a class="sec" href="#links">Seven links</a>
       <a class="sec" href="#open">What is open</a>
+      <a href="#install">Install</a>
       <a href="atlas/">Atlas</a>
-      <a href="diagrams/">Diagrams</a>
+      <a class="wide" href="diagrams/">Diagrams</a>
       <a class="gh" href="https://github.com/corpetty/muster">GitHub</a>
     </nav>
   </div>
@@ -316,11 +379,11 @@ footer a{color:var(--ink-2)}
       <p class="eyebrow">A local-first client on the Logos stack</p>
       <h1>Do things together, <em>privately.</em></h1>
       <p class="lede"><b>Muster</b> (v.) — to assemble, as people gathering for a common purpose. Get people into a room, agree on what to do, and do it, without anyone outside the room watching.</p>
-      <p class="lede">Muster coordinates multi-party transactions inside end-to-end encrypted conversations. <b>The conversation is the security boundary:</b> who is in the room decides who can read what is being done.</p>
+      <p class="lede">Muster coordinates multi-party transactions inside end-to-end encrypted conversations. Pay from a shared account, split a bill, or request XMR. <b>The conversation is the security boundary:</b> who is in the room decides who can read what is being done.</p>
       <div class="ctas">
-        <a class="btn primary" href="#how">See how it works <span class="arr" aria-hidden="true">→</span></a>
+        <a class="btn primary" href="#install">Install in Basecamp <span class="arr" aria-hidden="true">→</span></a>
+        <a class="btn" href="#how">See how it works</a>
         <a class="btn" href="atlas/">Explore the atlas</a>
-        <a class="btn" href="https://github.com/corpetty/muster">Read the code</a>
       </div>
     </div>
 
@@ -374,7 +437,7 @@ footer a{color:var(--ink-2)}
       <div class="tile">
         <span class="n">02 · THE INTENTION</span>
         <h3>Start something</h3>
-        <p>Name what you want to do with a group — pay from a shared account, split a bill. The intention opens the room and asks each person for exactly what it needs.</p>
+        <p>Name what you want to do with a group — pay from a shared account, split a bill, request a payment in XMR. The intention opens the room and asks each person for exactly what it needs.</p>
       </div>
       <div class="tile">
         <span class="n">03 · THE ROOM</span>
@@ -491,8 +554,8 @@ footer a{color:var(--ink-2)}
       <article>
         <span class="loc">Each pays their own</span>
         <h3>Split the bill</h3>
-        <p>One person fronted a bill. Each person agrees to their share and pays it from their own wallet; the creditor's client confirms each payment from its own read. Fiat bills convert exactly.</p>
-        <div class="chains"><span class="tag built">built</span><span class="tag">ETH &amp; ERC-20</span><span class="tag">Bitcoin</span><span class="tag">LEZ, private</span></div>
+        <p>One person fronted a bill. Each person agrees to their share and pays it from their own wallet; the creditor's client confirms each payment from its own read. Fiat bills convert exactly. With one payer, it is a payment request.</p>
+        <div class="chains"><span class="tag built">built</span><span class="tag">ETH &amp; ERC-20</span><span class="tag">Bitcoin</span><span class="tag">LEZ, private</span><span class="tag">Monero</span></div>
       </article>
       <article>
         <span class="loc">Each pays their own</span>
@@ -502,6 +565,96 @@ footer a{color:var(--ink-2)}
       </article>
     </div>
     <p class="fine">The atlas lists every multisig family Muster has surveyed — built, candidate, watched and rejected — and every action a person can take, with who acts, what is signed, and who learns what. <a href="atlas/">Open the atlas →</a></p>
+  </div>
+</section>
+
+<!-- ============ XMR in a room ============ -->
+<section class="band" id="monero">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">New · XMR in a room</p>
+      <h2>Request XMR. The payee's own wallet confirms it.</h2>
+      <p>Monero is fungible cash, and settlement stays on Monero. Muster covers the rest of the deal: agreeing in a private room, asking for the payment, and confirming it — with no new wallet app, and no custody.</p>
+    </div>
+    <ol class="xsteps">
+      <li><b>Agree in the room</b><span>The terms and the request live in the encrypted room. The payee agrees to the request too: their word that the address in it is theirs.</span></li>
+      <li><b>A fresh subaddress</b><span>The payee's own Monero wallet in Basecamp mints a subaddress for this request alone.</span></li>
+      <li><b>Pay from any wallet</b><span>Each payer pays through a <code>monero:</code> link or QR code carrying the address and the exact amount — from Cake, Feather, or Basecamp's own wallet.</span></li>
+      <li><b>Their own wallet confirms</b><span>The payment counts when the payee's wallet sees exactly that amount arrive at that subaddress, at 10 confirmations. A payer's "I paid" never decides.</span></li>
+    </ol>
+    <div class="xmr">
+      <ul class="who">
+        <li class="chain"><span class="k">On chain · Monero's guarantee</span><b>No sender, receiver or amount</b><span>The Monero chain shows none of them, and a subaddress cannot be linked to the payee's other addresses. That privacy is Monero's, not Muster's, and the card says so.</span></li>
+        <li><span class="k">In the room · Muster's</span><b>The deal stays inside</b><span>The terms, the memo and the transaction id stay in the encrypted room. The <code>monero:</code> link carries only the address and the amount.</span></li>
+        <li class="keys"><span class="k">Keys · none in Muster</span><b>Muster holds no Monero key and never spends</b><span>It asks the payee's wallet, through the platform's Monero modules, for a subaddress and for its history. Opening the wallet is the wallet app's job, and every payment is sent by the payer's own wallet.</span></li>
+      </ul>
+      <figure class="mock" aria-label="Illustration of an XMR payment request card in a Muster room" style="margin:0">
+        <div class="room">
+          <div class="room-head">
+            <span class="lock" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg></span>
+            <span class="name">Deal room</span>
+            <span class="scope">2 members · epoch 1</span>
+          </div>
+          <div class="thread">
+            <div class="msg"><span class="av" style="background:#1E6B52">JO</span><div class="bubble"><b>Joe</b> — Terms agreed. Send me the request.</div></div>
+            <div class="icard">
+              <div class="k"><span class="driver">Monero · stagenet</span><span>requested by you</span></div>
+              <h3>Joe pays you 0.25 XMR</h3>
+              <div class="rail" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i><i class="now"></i><i></i></div>
+              <div class="rail-l"><span>proposed</span><span>collecting</span><span>executable</span><span class="cur">submitted</span><span>final</span></div>
+              <div class="uri">monero:7…?tx_amount=0.25</div>
+              <div class="conf">Joe says they paid — seen, 4 of 10 confirmations. Only your own wallet confirms it.</div>
+            </div>
+          </div>
+          <div class="outside">
+            <div class="t">Outside the room · what the Monero chain shows</div>
+            <div class="row"><span>a transaction</span><span class="no">sender</span><span class="no">receiver</span><span class="no">amount</span><span class="no">the room</span></div>
+          </div>
+        </div>
+        <figcaption class="caption">An illustration, drawn after the real request card.</figcaption>
+      </figure>
+    </div>
+    <div class="status">
+      <div class="col">
+        <h3><span class="dot"></span>Built, on stagenet</h3>
+        <ul>
+          <li>The request, a bill split in XMR, the link and QR code, "I paid", and the rule by which the payee's wallet confirms. Family <code class="mono">monero.split</code>; its seven guarantees are a typed spec, graded 7/7.</li>
+          <li>Seen on screen in Basecamp 0.3.2: a real stagenet wallet minting the request's subaddress, and the QR code reading back as the link, byte for byte.</li>
+          <li>Until a payment is confirmed automatically, the payee can mark it received by hand.</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h3><span class="dot amber"></span>Still ahead</h3>
+        <ul>
+          <li>A live stagenet payment, confirmed by the payee's own wallet at 10 confirmations, end to end. So far that rule is held by tests over a stand-in wallet.</li>
+          <li>Paying from Basecamp's own wallet, once the wallet app can review a send another module prepared (an upstream ask).</li>
+          <li>Mainnet, behind a gate. A chain-side receipt needs Monero tx proofs upstream.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="fine">Monero multisig stays out: upstream calls it experimental, and the platform's wallet does not expose it. Every XMR action is each person paying their own part. The plan: <a href="https://github.com/corpetty/muster/blob/main/docs/design/monero-in-rooms.md">Monero in rooms</a> · the build: <a href="https://github.com/corpetty/muster/blob/main/docs/labbook/xmr-payment-request.md">the labbook</a> · the spec: <a href="https://github.com/corpetty/muster/blob/main/contracts/specs/derived-exo-dcc.5.spec.json">derived-exo-dcc.5</a>.</p>
+  </div>
+</section>
+
+<!-- ============ the seven links ============ -->
+<section class="band alt" id="links">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">The whole transaction, link by link</p>
+      <h2>All seven links are Muster's to cover.</h2>
+      <p>A transaction between people leaks at seven links: discovery, diligence, negotiation, contracting, ordering, settlement, enforcement. Every one is in Muster's scope, at different stages. Each row says what the code does today; what is planned is named as planned.</p>
+    </div>
+    <div class="cmp links" role="table" aria-label="The seven links: what Muster does today, and what is ahead">
+      <div class="row hd" role="row"><div role="columnheader">Link</div><div class="us" role="columnheader">Muster today</div><div class="them" role="columnheader">Ahead</div></div>
+      <div class="row" role="row"><div role="rowheader">Discovery</div><div class="us" role="cell">A room starts from an invite, not a directory or a lookup. Nothing on a room's topic names its members. The store node still sees that someone asked to join.</div><div class="them" role="cell">Finding counterparties you don't already know, with no platform that learns who looked.</div></div>
+      <div class="row" role="row"><div role="rowheader">Diligence</div><div class="us" role="cell">Each member's two identities are bound by a signed statement. Members disclose their own accounts, and the client checks them against the chain. It says about a member only what that member disclosed.</div><div class="them" role="cell">Checks on a counterparty beyond what they disclose.</div></div>
+      <div class="row" role="row"><div role="rowheader">Negotiation</div><div class="us" role="cell">An end-to-end encrypted room with no coordination server. Proposals, declines and chat stay inside it. Adding a member re-keys forward.</div><div class="them" role="cell">Choice blocks, and offer and counter-offer.</div></div>
+      <div class="row" role="row"><div role="rowheader">Contracting</div><div class="us" role="cell">The client re-derives what it signs and refuses on a mismatch. Every signing payload commits to environment, account, slot and expiry. Signing is refused when any input's origin is unaccountable.</div><div class="them" role="cell">Showing what breaking a commitment would cost the party who could break it (proposed).</div></div>
+      <div class="row" role="row"><div role="rowheader">Ordering</div><div class="us" role="cell">Submission goes through infrastructure you choose, and the flow view names the RPC provider when a driver uses one. An XMR payer broadcasts through their own wallet and node. Muster can send a room's messages through the Logos mixnet. It is an opt-in setting, built on Logos Delivery 0.3's sender anonymity. It hides which participant sent a message, not who reads a room: reading still asks a store node for the room directly.</div><div class="them" role="cell">Hiding who reads a room. Submission through your own node or a proxy, rail by rail.</div></div>
+      <div class="row" role="row"><div role="rowheader">Settlement</div><div class="us" role="cell">The intent settles on the chain its driver names, and the card says what that chain reveals. A FROST spend shows one signature; a LEZ private split shows only that private transfers happened; a Safe or Bitcoin multisig is public; on Monero the chain shows no sender, receiver or amount — Monero's guarantee.</div><div class="them" role="cell">More rails.</div></div>
+      <div class="row" role="row"><div role="rowheader">Enforcement</div><div class="us" role="cell">The card names the rail, and so whose producers settle it. The chain enforces the multisig thresholds. Every room's record exports as a self-verifying proof. A split share — XMR included — counts as paid only when the person owed confirms it, and nothing yet makes anyone pay.</div><div class="them" role="cell">Escrow; swaps (RFP-003); a chain-side XMR receipt, once Monero tx proofs exist upstream.</div></div>
+    </div>
+    <p class="fine">Muster classifies; it never scores. A link is described by what holds it and whose conduct it still rests on, never by a percentage. The full table, with what each link leaks: <a href="https://github.com/corpetty/muster/blob/main/docs/runbooks/explaining-muster.md">explaining Muster</a>, §4c.</p>
   </div>
 </section>
 
@@ -518,7 +671,7 @@ footer a{color:var(--ink-2)}
         <span class="st">Partial</span>
         <h3>The store node sees the conversation graph</h3>
         <p>Content is encrypted. But a store node still sees a room's content topic, and the timing and size of what is published and fetched. It never sees who is in the room.</p>
-        <p><b>The fix:</b> a transport-layer mixnet. Sends can ride it now, behind a setting that is off by default. Fetches have no mix path yet.</p>
+        <p><b>Partly addressed:</b> Muster can send a room's messages through the Logos mixnet. It is an opt-in setting, built on Logos Delivery 0.3's sender anonymity. It hides which participant sent a message, not who reads a room: reading still asks a store node for the room directly.</p>
       </div>
       <div class="gap">
         <span class="st">Partial</span>
@@ -529,7 +682,7 @@ footer a{color:var(--ink-2)}
       <div class="gap">
         <span class="st">Not built</span>
         <h3>Nothing makes anyone pay their share</h3>
-        <p>A split records who agreed and who paid, truthfully. But no contract holds the money: it is a promise the group can see, not one the chain enforces.</p>
+        <p>A split records who agreed and who paid, truthfully. But no contract holds the money: it is a promise the group can see, not one the chain enforces. An XMR request is the same.</p>
         <p><b>The fix:</b> a split with deposits, each share locked in escrow at agreement.</p>
       </div>
     </div>
@@ -588,12 +741,56 @@ footer a{color:var(--ink-2)}
       <a href="https://github.com/corpetty/muster/tree/main/contracts/specs"><b>The typed specs</b><span>Each invariant, with its acceptance oracles.</span></a>
       <a href="https://github.com/corpetty/muster/tree/main/docs/labbook"><b>The labbook</b><span>Traps found the expensive way.</span></a>
       <a href="https://github.com/corpetty/muster/blob/main/docs/runbooks/client-tour.md"><b>The client tour</b><span>Run it yourself, every chain local.</span></a>
+      <a href="https://github.com/corpetty/muster/blob/main/docs/runbooks/install-from-catalogue.md"><b>Install from the catalogue</b><span>Every step and label, as Basecamp 0.3.2 shows them.</span></a>
+      <a href="https://github.com/corpetty/muster/blob/main/docs/design/monero-in-rooms.md"><b>Monero in rooms</b><span>The plan for XMR, and what each link can show.</span></a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ install ============ -->
+<section class="band" id="install">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Install</p>
+      <h2>Add Muster's catalogue to Basecamp.</h2>
+      <p>Muster ships its own catalogue for <a href="https://github.com/logos-co/logos-basecamp">Logos Basecamp</a>. Add it once, then install Muster like any other app; Basecamp resolves every dependency from the official Logos catalogue. The first release is <a href="https://github.com/corpetty/muster/releases/tag/muster-v0.2.0"><code class="mono">muster-v0.2.0</code></a>, published 2026-10-09.</p>
+    </div>
+    <div class="needs" aria-label="What you need"><span class="tag">Linux x86_64 only</span><span class="tag">Logos Basecamp 0.3.2</span><span class="tag">about 650 MB of downloads</span><span class="tag">unsigned</span></div>
+    <div class="install">
+      <ol class="isteps">
+        <li>
+          <b>Add the catalogue</b>
+          <p>In Basecamp, open <span class="nav-path">Settings → Package Repositories</span>. Under <i>Add a repository</i>, paste this URL and press <i>Add</i>:</p>
+          <div class="repo"><code id="repo-url">https://raw.githubusercontent.com/corpetty/muster/main/catalog/logos-repo.json</code><button type="button" id="copy-url" aria-label="Copy the repository URL">Copy</button></div>
+          <p>A <i>Muster</i> entry appears in the list, below <i>Logos Official</i>, enabled.</p>
+        </li>
+        <li>
+          <b>Install Muster</b>
+          <p>Open <i>Applications</i>, search <code>muster</code>, and click Muster. In the install dialog, untick <i>Monero Node (local)</i> unless you mean to run your own Monero node — the wallet can use a remote one. Keep the rest, then press <i>Install</i>.</p>
+        </li>
+        <li>
+          <b>Open it</b>
+          <p>Press <i>Launch</i>. Muster opens on Home, where you set up your accounts and chains (<a href="https://github.com/corpetty/muster/blob/main/docs/runbooks/basecamp-fresh-install.md">first-run runbook</a>). Members of a room should run the same version.</p>
+        </li>
+      </ol>
+      <div class="trust">
+        <span class="st">What adding it trusts</span>
+        <h3>Read this before you add the URL.</h3>
+        <ul>
+          <li><b>It publishes two packages, <code>muster_module</code> and <code>muster_ui</code>, and nothing else.</b> Basecamp takes the newest version of a package across every catalogue you enable, so a catalogue that listed an official package's name could replace it. Muster's never does; its release script refuses to.</li>
+          <li><b>Every dependency comes from the official Logos catalogue</b>, which Basecamp enables by default: Delivery, the LEZ core, the EVM and RLN modules, and the optional Monero wallet modules.</li>
+          <li><b>Nothing is signed.</b> That is true of the official catalogue too. Basecamp checks each download against the hash the catalogue lists, so you get the file it names. Nothing proves who built it.</li>
+          <li><b>Muster runs inside your Basecamp session with no sandbox</b>, like every Basecamp module. Adding a catalogue means trusting its publisher with that.</li>
+          <li><b>Linux x86_64 only.</b> On other platforms Basecamp shows Muster as "Not Available".</li>
+        </ul>
+        <p class="more">The full steps and the known rough edges: <a href="https://github.com/corpetty/muster/blob/main/docs/runbooks/install-from-catalogue.md">install from the catalogue</a> · <a href="https://github.com/corpetty/muster/tree/main/catalog">the catalogue</a> · <a href="https://github.com/corpetty/muster/releases">releases</a></p>
+      </div>
     </div>
   </div>
 </section>
 
 <!-- ============ status ============ -->
-<section class="band" id="status">
+<section class="band alt" id="status">
   <div class="wrap">
     <div class="head">
       <p class="eyebrow">Where it stands</p>
@@ -606,8 +803,11 @@ footer a{color:var(--ink-2)}
         <ul>
           <li>The whole lifecycle in the UI — propose, approve, submit — against a real 2-of-3 Safe.</li>
           <li>Two instances converge over the live Logos network: join, ask, admit, re-key.</li>
+          <li>A relaunched member re-enters its rooms and reads them again, its founding epoch included, on Logos Delivery 0.3.2.</li>
           <li>Safe, Bitcoin, FROST and the LEZ multisig program, coordinated from the room.</li>
-          <li>Split the bill in ETH, tokens, Bitcoin, and privately on the LEZ.</li>
+          <li>Split the bill in ETH, tokens, Bitcoin, privately on the LEZ, and in XMR, where a one-payer split is a payment request (stagenet).</li>
+          <li>Muster can send a room's messages through the Logos mixnet. It is an opt-in setting, built on Logos Delivery 0.3's sender anonymity. It hides which participant sent a message, not who reads a room: reading still asks a store node for the room directly.</li>
+          <li>An install from Muster's own Basecamp catalogue.</li>
           <li>All ten invariants, each held by probes in the test suite.</li>
         </ul>
       </div>
@@ -615,16 +815,18 @@ footer a{color:var(--ink-2)}
         <h3><span class="dot amber"></span>Still ahead</h3>
         <ul>
           <li>The multi-party runs across two machines: a Safe transaction settled over the live network, and resilience when a member drops mid-collection.</li>
+          <li>An XMR payment on stagenet confirmed by the payee's own wallet end to end; paying from Basecamp's own wallet; mainnet.</li>
           <li>The LEZ multisig and a FROST ceremony, run across two instances.</li>
           <li>Every LEZ path live on the v0.3 testnet.</li>
-          <li>A plugin runtime beyond the sandbox.</li>
+          <li>Hiding who reads a room, and a plugin runtime beyond the sandbox.</li>
         </ul>
       </div>
     </div>
-    <p class="asof">As of 2026-10-08 · the current phase is in <a href="https://github.com/corpetty/muster/blob/main/CLAUDE.md#current-phase">CLAUDE.md</a></p>
+    <p class="asof">As of 2026-10-09 · the current phase is in <a href="https://github.com/corpetty/muster/blob/main/CLAUDE.md#current-phase">CLAUDE.md</a></p>
     <div class="ctas">
-      <a class="btn primary" href="https://github.com/corpetty/muster#run-the-specified-client">Run the client <span class="arr" aria-hidden="true">→</span></a>
-      <a class="btn" href="https://github.com/corpetty/muster/releases/tag/v0.1.0-demo">The demo release</a>
+      <a class="btn primary" href="#install">Install in Basecamp <span class="arr" aria-hidden="true">→</span></a>
+      <a class="btn" href="https://github.com/corpetty/muster#run-the-specified-client">Build from source</a>
+      <a class="btn" href="https://github.com/corpetty/muster/releases">Releases</a>
     </div>
   </div>
 </section>
@@ -635,13 +837,29 @@ footer a{color:var(--ink-2)}
   <div class="wrap">
     <span><b style="color:var(--ink)">Muster</b> · built on <a href="https://logos.co">Logos</a></span>
     <nav aria-label="Footer">
+      <a href="#install">Install</a>
       <a href="atlas/">Atlas</a>
       <a href="diagrams/">Diagrams</a>
+      <a href="https://github.com/corpetty/muster/tree/main/docs/runbooks">Runbooks</a>
       <a href="https://github.com/corpetty/muster">Source</a>
       <a href="https://github.com/corpetty/muster/blob/main/docs/00-vision.md">Vision</a>
     </nav>
   </div>
 </footer>
+
+<script>
+/* Copy the catalogue URL. Without a clipboard (a file:// page, an old browser) the
+   button selects the URL instead, so it can still be copied by hand. */
+(function(){
+  var btn = document.getElementById("copy-url"), url = document.getElementById("repo-url");
+  if (!btn || !url) return;
+  function select(){ var r = document.createRange(); r.selectNodeContents(url); var s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+  btn.addEventListener("click", function(){
+    var done = function(){ btn.textContent = "Copied"; setTimeout(function(){ btn.textContent = "Copy"; }, 1600); };
+    try { navigator.clipboard.writeText(url.textContent.trim()).then(done, select); } catch (e) { select(); }
+  });
+})();
+</script>
 
 </body>
 </html>
