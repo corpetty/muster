@@ -579,7 +579,7 @@
     {
       "file": "mech-driver-seam.svg",
       "serves": "BUILD",
-      "shows": "F-6's seven driver methods and where the build puts each (the Driver, the core's Collection, the Settlement seam), the axes describe returns, three of the registry's drivers behind one interface, and the conformance suite that gates them.",
+      "shows": "F-6's seven driver methods and where the build puts each (the Driver, the core's Collection, the Settlement seam, or for a split settlement in parts), the axes describe returns, three of the registry's drivers behind one interface, and the conformance suite that gates them.",
       "sources": [
         {
           "path": "docs/01-furps.md",
@@ -619,7 +619,7 @@
         },
         {
           "grade": "from-source",
-          "note": "The split, read from the build: driver.nim (describe, verifyContribution, environment, Collection), intents/materialization.nim (canonicalize and the fold hooks), drivers/manifest.nim and profile.nim, settlement/settlement.nim (assemble, submit, watch); the twelve kinds from drivers/registry.nim. F-8's queue is not in the code"
+          "note": "The split, read from the build: driver.nim (describe, verifyContribution, environment, Collection), intents/materialization.nim (canonicalize and the fold hooks), drivers/manifest.nim and profile.nim, settlement/settlement.nim (assemble, submit, watch; settlementFor gives a split none), intents/materialization.nim's describeFor and the part hooks with coordination/parts.nim's PartSeam (a split settles in parts); the sixteen kinds from drivers/registry.nim. F-8's queue is not in the code"
         }
       ],
       "recheck": "When a driver kind is added to registry.nim, the Driver's methods change, or F-8's queue lands."
@@ -1100,7 +1100,7 @@
         },
         {
           "grade": "from-source",
-          "note": "FS-4: key material stays behind the keystore seam; the wallet signs through it, never holding a key"
+          "note": "FS-4: no adapter holds a key. A send is signed behind a keystore: muster's own seam (evm_sign through Keystore), the LEZ wallet inside lez_core (lez_adapter: the keystore is unused), or under Basecamp the platform's signer through tx_sender_module (evm_adapter submitThroughPlatform, exo-d4d), whose reads go through eth_rpc_module (evm_rpc). Monero is not a ChainAdapter: wallet/monero_backend.nim reaches monero_wallet_backend with a closed read-and-mint call set, never a spend (ADR-018)"
         },
         {
           "grade": "measured",
@@ -1145,7 +1145,7 @@
         },
         {
           "grade": "from-source",
-          "note": "a trustless state root needs a beacon light client (Nimbus verified proxy, REST mode) — a documented sidecar, deferred (needs a running beacon endpoint)"
+          "note": "a trustless state root needs a beacon light client (Nimbus verified proxy, REST mode) — a documented sidecar, deferred (needs a running beacon endpoint); under Basecamp the platform's verified proxy proves reads and eth_rpc_module reports route = verified (wallet/evm_rpc.nim, chain_endpoint.nim), but muster's balances still grade attested (exo-d4d.9, docs/runbooks/basecamp-fresh-install.md)"
         }
       ],
       "recheck": "Re-check when the light-client sidecar is wired (the state root becomes trustless end to end) or nim-eth's proof API changes."
@@ -1249,11 +1249,11 @@
         },
         {
           "grade": "from-source",
-          "note": "conformance.nim grades describe, canonicalize, re-derive-or-refuse, verifyContribution, convergence and the manifest (checkConformance) plus the profile (checkProfileConformance); conformance_test runs it on stub, Safe, threshold, frost, invoke and eip191, btc_driver_test and lez_multisig_driver_test on the Bitcoin and LEZ multisig drivers, and profile_test checks every kind's profile. Read from the tests, not run for this figure"
+          "note": "conformance.nim grades describe, canonicalize, re-derive-or-refuse, verifyContribution, convergence and the manifest (checkConformance) plus the profile (checkProfileConformance); conformance_test runs it on stub, Safe, threshold, frost, invoke and eip191, and (§11) on the split as evm, lez and monero, against describeFor(effect), btc_driver_test and lez_multisig_driver_test on the Bitcoin and LEZ multisig drivers, and profile_test checks every kind's profile. Read from the tests, not run for this figure"
         },
         {
           "grade": "from-source",
-          "note": "F-6/F-7 name the axes; FROST (frost, btc-frost, lez-frost), Bitcoin P2WSH/tapscript and the LEZ multisig program are registered in drivers/registry.nim, and a new kind is also named once in drivers/kinds.nim"
+          "note": "F-6/F-7 name the axes; FROST (frost, btc-frost, lez-frost), Bitcoin P2WSH/tapscript, the LEZ multisig program and the four splits (evm-, lez-, btc-, monero-split) are registered in drivers/registry.nim, and a new kind is also named once in drivers/kinds.nim"
         }
       ],
       "recheck": "When a driver kind is added, or a check is added to src/drivers/conformance.nim."

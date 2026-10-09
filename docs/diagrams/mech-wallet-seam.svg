@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 528" width="880" height="528" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 562" width="880" height="562" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>One wallet, any chain — the settlement seam</title>
-  <desc>Settlement is chain-agnostic: the app never becomes the settlement layer. A Wallet aggregate speaks a ChainAdapter seam, and each chain is an adapter behind it — an EVM adapter (ETH + ERC-20, public accounts, over the user's untrusted RPC) and a mock shielded chain modelled on the LEZ (public and shielded accounts, delayed finality). The seam refuses to collapse four divergences: the account model, the asset model, finality latency, and the failure channel. Signing goes through the keystore seam (FS-4); a failed read raises rather than returning a false zero. Both adapters are built and tested, and three more have since registered behind the same seam — the real LEZ adapter, the LEZ multisig program's chain, and a bitcoind adapter — so a new chain is a registration, not a rewrite.</desc>
+  <desc>Settlement is chain-agnostic: the app never becomes the settlement layer. A Wallet aggregate speaks a ChainAdapter seam, and each chain is an adapter behind it — an EVM adapter (ETH + ERC-20, public accounts, over the user's untrusted RPC) and a mock shielded chain modelled on the LEZ (public and shielded accounts, delayed finality). The seam refuses to collapse four divergences: the account model, the asset model, finality latency, and the failure channel. No adapter holds a key (FS-4): a send is signed behind a keystore — muster's own seam, the LEZ wallet inside lez_core, or under Basecamp the platform's signer, reached through tx_sender_module, with reads through eth_rpc_module. A failed read raises rather than returning a false zero. Both adapters are built and tested, and three more have since registered behind the same seam — the real LEZ adapter, the LEZ multisig program's chain, and a bitcoind adapter — so a new chain is a registration, not a rewrite. Monero is not one of them: muster never sends XMR, and the creditor's own wallet, reached through monero_wallet_backend, only mints a subaddress and confirms what arrived.</desc>
 <!-- provenance
      serves:   BOTH
      shows:    A Wallet aggregate over a ChainAdapter seam, drawn with its first two
@@ -15,8 +15,14 @@
                module/src/lez/multisig_chain.nim
      evidence: [from-source] F-Design: settlement chain-agnostic, the app never becomes
                    the settlement layer; invariant 8: untrusted user-configurable RPC
-               [from-source] FS-4: key material stays behind the keystore seam; the
-                   wallet signs through it, never holding a key
+               [from-source] FS-4: no adapter holds a key. A send is signed behind a
+                   keystore: muster's own seam (evm_sign through Keystore), the LEZ wallet
+                   inside lez_core (lez_adapter: the keystore is unused), or under Basecamp
+                   the platform's signer through tx_sender_module (evm_adapter
+                   submitThroughPlatform, exo-d4d), whose reads go through eth_rpc_module
+                   (evm_rpc). Monero is not a ChainAdapter: wallet/monero_backend.nim reaches
+                   monero_wallet_backend with a closed read-and-mint call set, never a spend
+                   (ADR-018)
                [measured] both adapters built and tested (wallet_types_test,
                    wallet_mock_test, wallet_evm_test); the hosted wallet_* surface is wired
                [from-source] Five ChainAdapter impls: EvmAdapter, MockChain, LezAdapter
@@ -32,7 +38,7 @@
     </marker>
   </defs>
 
-  <rect width="880" height="528" fill="#E4E6E0"/>
+  <rect width="880" height="562" fill="#E4E6E0"/>
 
   <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">One wallet, any chain</text>
   <text x="40" y="64" font-size="13.5" fill="#656E66">Settlement is chain-agnostic — a chain is an adapter behind a seam, never an assumption the app bakes in.</text>
@@ -57,8 +63,8 @@
   <text x="56" y="260" font-size="11.5" font-weight="600" fill="#1A1F1C">ETH + ERC-20 over the user's RPC</text>
   <text x="56" y="280" font-size="10" fill="#3F4742">Accounts: one public address.</text>
   <text x="56" y="296" font-size="10" fill="#3F4742">Finality: immediate (anvil) / probabilistic.</text>
-  <text x="56" y="312" font-size="10" fill="#3F4742">Reads via nim-web3; balances can be verified</text>
-  <text x="56" y="326" font-size="10" fill="#3F4742">against a state root (see mech-verified-reads).</text>
+  <text x="56" y="312" font-size="10" fill="#3F4742">Reads via nim-web3, or eth_rpc_module under Basecamp;</text>
+  <text x="56" y="326" font-size="10" fill="#3F4742">a balance can be checked against a state root.</text>
   <text x="56" y="342" font-size="9.5" fill="#1E6B52">The chain the Safe settles on.</text>
 
   <!-- ══ mock shielded adapter ══ -->
@@ -78,14 +84,17 @@
   <text x="56" y="414" font-size="9.5" fill="#656E66"> </text>
 
   <!-- ══ seam obligations ══ -->
-  <rect x="40" y="430" width="390" height="42" rx="6" fill="#23282A"/>
+  <rect x="40" y="430" width="390" height="60" rx="6" fill="#23282A"/>
   <text x="56" y="450" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#96A19B">SIGNING — FS-4</text>
-  <text x="56" y="466" font-size="10.5" fill="#DCE2DE">Every send signs through the keystore seam; the key never leaves it.</text>
+  <text x="56" y="466" font-size="10" fill="#DCE2DE">No adapter holds a key: a send is signed by muster's keystore</text>
+  <text x="56" y="480" font-size="10" fill="#DCE2DE">seam, lez_core's wallet, or under Basecamp the platform's signer.</text>
 
-  <rect x="450" y="430" width="390" height="42" rx="6" fill="#23282A"/>
+  <rect x="450" y="430" width="390" height="60" rx="6" fill="#23282A"/>
   <text x="466" y="450" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#96A19B">READS — INVARIANT 8</text>
-  <text x="466" y="466" font-size="10.5" fill="#DCE2DE">The RPC is untrusted; a failed read raises, never a false zero.</text>
+  <text x="466" y="466" font-size="10" fill="#DCE2DE">The RPC is untrusted; a failed read raises, never a false zero.</text>
+  <text x="466" y="480" font-size="10" fill="#DCE2DE">Under Basecamp: the user's own endpoints, via eth_rpc_module.</text>
 
-  <text x="40" y="500" font-size="10.5" font-weight="600" fill="#1E6B52">The real LEZ adapter (four rails, minutes-long proving) and a bitcoind adapter since registered the same way — chains gained, no rewrite.</text>
-  <text x="40" y="516" font-size="10.5" fill="#3F4742">A balance carries its grade: <tspan font-weight="600" fill="#1E6B52">verified-locally</tspan> when checked against consensus, <tspan font-weight="600">attested</tspan> when it is only what the RPC said.</text>
+  <text x="40" y="516" font-size="10.5" font-weight="600" fill="#1E6B52">The real LEZ adapter (four rails, minutes-long proving) and a bitcoind adapter since registered the same way — chains gained, no rewrite.</text>
+  <text x="40" y="532" font-size="10.5" fill="#3F4742"><tspan font-weight="600" fill="#1A1F1C">Monero is not an adapter:</tspan> muster never sends XMR. The creditor's own wallet, via monero_wallet_backend, mints and confirms.</text>
+  <text x="40" y="548" font-size="10.5" fill="#3F4742">A balance carries its grade: <tspan font-weight="600" fill="#1E6B52">verified-locally</tspan> when checked against consensus, <tspan font-weight="600">attested</tspan> when it is only what the RPC said.</text>
 </svg>

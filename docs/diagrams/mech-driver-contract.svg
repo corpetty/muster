@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 598" width="880" height="598" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 612" width="880" height="612" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>How to write a driver — the contract and its conformance suite</title>
-  <desc>A driver is one type behind the Driver seam implementing three methods — describe (its coordination policy: rounds, serialization domain, finality, threshold), canonicalize (the effect to the exact bytes owners sign), and verifyContribution (is a contribution valid this round) — and declaring two things: its action manifest (what it needs, touches and discloses) and its family profile (which kind of multisig it is). Both default to UNDECLARED, which fails conformance. The driver-generic core routes opaque contributions purely off describe() and never reads their bytes (invariant 6), and the re-derive-or-refuse check calls canonicalize (invariant 1). A conformance suite grades any driver on the properties the core relies on — describe stable, canonicalize deterministic, re-derive-or-refuse honest, verifyContribution pure, the collection converges, the manifest and profile declared and consistent — and the stub, Safe, threshold, frost, invoke, eip191, Bitcoin and LEZ multisig drivers pass it, with every registry kind's profile checked. Adding a driver is: implement the three methods, declare the manifest and profile, pass conformance, register — no core change.</desc>
+  <desc>A driver is one type behind the Driver seam implementing three methods — describe (its coordination policy: rounds, serialization domain, finality, threshold), canonicalize (the effect to the exact bytes owners sign), and verifyContribution (is a contribution valid this round) — and declaring two things: its action manifest (what it needs, touches and discloses) and its family profile (which kind of multisig it is). Both default to UNDECLARED, which fails conformance. The driver-generic core routes opaque contributions purely off describe() and never reads their bytes (invariant 6), and the re-derive-or-refuse check calls canonicalize (invariant 1). A conformance suite grades any driver on the properties the core relies on — describe stable, canonicalize deterministic, re-derive-or-refuse honest, verifyContribution pure, the collection converges, the manifest and profile declared and consistent — and the stub, Safe, threshold, frost, invoke, eip191, Bitcoin and LEZ multisig drivers pass it, and so does the split (EVM, LEZ and Monero), graded against its per-proposal policy (describeFor), with every registry kind's profile checked. The split added two driver-generic seams with defaults (a per-proposal policy, settlement in parts), never a split case in the core. Adding a driver is: implement the three methods, declare the manifest and profile, pass conformance, register — no core change.</desc>
 <!-- provenance
      serves:   BOTH
      shows:    The Driver contract (describe/canonicalize/verifyContribution plus a
@@ -23,13 +23,14 @@
                    refuse, verifyContribution, convergence and the manifest
                    (checkConformance) plus the profile (checkProfileConformance);
                    conformance_test runs it on stub, Safe, threshold, frost, invoke and
-                   eip191, btc_driver_test and lez_multisig_driver_test on the Bitcoin and
-                   LEZ multisig drivers, and profile_test checks every kind's profile. Read
-                   from the tests, not run for this figure
+                   eip191, and (§11) on the split as evm, lez and monero, against
+                   describeFor(effect), btc_driver_test and lez_multisig_driver_test on the
+                   Bitcoin and LEZ multisig drivers, and profile_test checks every kind's
+                   profile. Read from the tests, not run for this figure
                [from-source] F-6/F-7 name the axes; FROST (frost, btc-frost, lez-frost),
-                   Bitcoin P2WSH/tapscript and the LEZ multisig program are registered in
-                   drivers/registry.nim, and a new kind is also named once in
-                   drivers/kinds.nim
+                   Bitcoin P2WSH/tapscript, the LEZ multisig program and the four splits
+                   (evm-, lez-, btc-, monero-split) are registered in drivers/registry.nim,
+                   and a new kind is also named once in drivers/kinds.nim
      recheck:  When a driver kind is added, or a check is added to
                src/drivers/conformance.nim.
 -->
@@ -40,7 +41,7 @@
     </marker>
   </defs>
 
-  <rect width="880" height="598" fill="#E4E6E0"/>
+  <rect width="880" height="612" fill="#E4E6E0"/>
 
   <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">How to write a driver</text>
   <text x="40" y="64" font-size="13.5" fill="#656E66">Three methods and two declarations behind one seam. Pass conformance, register — the core never changes (inv 6).</text>
@@ -65,10 +66,10 @@
   <!-- ══ the generic core ══ -->
   <rect x="526" y="128" width="314" height="190" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1.2"/>
   <text x="542" y="150" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">THE CORE — DRIVER-GENERIC</text>
-  <text x="542" y="174" font-size="10.5" fill="#3F4742">Routes opaque contributions purely</text>
-  <text x="542" y="188" font-size="10.5" fill="#3F4742">off describe() — never reads their</text>
-  <text x="542" y="202" font-size="10.5" fill="#3F4742">bytes (inv 6). Rounds and threshold</text>
-  <text x="542" y="216" font-size="10.5" fill="#3F4742">are the descriptor's, not constants.</text>
+  <text x="542" y="174" font-size="10.5" fill="#3F4742">Routes opaque contributions purely off</text>
+  <text x="542" y="188" font-size="10.5" fill="#3F4742">describe() — never reads their bytes</text>
+  <text x="542" y="202" font-size="10.5" fill="#3F4742">(inv 6). A split's threshold is per</text>
+  <text x="542" y="216" font-size="10.5" fill="#3F4742">proposal: describeFor(effect).</text>
   <text x="542" y="240" font-size="10.5" fill="#3F4742">Before signing it re-derives via</text>
   <text x="542" y="254" font-size="10.5" fill="#3F4742">canonicalize and refuses on any</text>
   <text x="542" y="268" font-size="10.5" fill="#1A1F1C" font-weight="600">mismatch (inv 1) — cannot be disabled.</text>
@@ -82,7 +83,7 @@
   <text x="56" y="426" font-size="10.5" fill="#2A4A3C">· the collection converges at the declared threshold</text>
   <text x="56" y="442" font-size="10.5" fill="#2A4A3C">· the manifest and the profile are declared and consistent</text>
   <text x="56" y="464" font-size="11" fill="#1A1F1C"><tspan font-weight="600" fill="#1E6B52">stub ✓</tspan>  <tspan font-weight="600" fill="#1E6B52">Safe ✓</tspan>  <tspan font-weight="600" fill="#1E6B52">threshold ✓</tspan>  <tspan font-weight="600" fill="#1E6B52">frost ✓</tspan>  <tspan font-weight="600" fill="#1E6B52">invoke ✓</tspan>  <tspan font-weight="600" fill="#1E6B52">eip191 ✓</tspan></text>
-  <text x="56" y="480" font-size="11" fill="#1A1F1C"><tspan font-weight="600" fill="#1E6B52">btc ✓</tspan>  <tspan font-weight="600" fill="#1E6B52">lez-multisig ✓</tspan>  <tspan fill="#2A4A3C">· every kind's profile ✓</tspan>  <tspan fill="#656E66" font-family="'DM Mono',ui-monospace,Menlo,monospace">yours → ?</tspan></text>
+  <text x="56" y="480" font-size="11" fill="#1A1F1C"><tspan font-weight="600" fill="#1E6B52">btc ✓</tspan>  <tspan font-weight="600" fill="#1E6B52">lez-multisig ✓</tspan>  <tspan font-weight="600" fill="#1E6B52">split ✓</tspan>  <tspan fill="#2A4A3C">· every kind's profile ✓</tspan>  <tspan fill="#656E66" font-family="'DM Mono',ui-monospace,Menlo,monospace">yours → ?</tspan></text>
   <text x="56" y="496" font-size="9.5" fill="#656E66">Never merge with it red (the working agreement).</text>
 
   <!-- ══ to add a driver ══ -->
@@ -98,5 +99,6 @@
   <text x="40" y="528" font-size="11" font-weight="600" fill="#1A1F1C">The first three: the stub, the Safe driver (EIP-712, 2-of-3, on-chain), and a threshold driver (Ed25519 k-of-n) — nothing</text>
   <text x="40" y="546" font-size="10.5" fill="#3F4742">like Safe, yet it folds the same intent to executable through the same reduceIntents. That is the genericity, demonstrated —</text>
   <text x="40" y="560" font-size="10.5" fill="#3F4742">not just typed. FROST (frost, btc-frost, lez-frost), Bitcoin P2WSH and tapscript, and the LEZ multisig program have since slotted in.</text>
-  <text x="40" y="584" font-size="10.5" fill="#1E6B52" font-weight="600">Turnkey now: newDriver(kind, config) selects by config, and the multi-party fold is driver-generic — a non-Safe driver runs end to end.</text>
+  <text x="40" y="574" font-size="10.5" fill="#3F4742">The split (evm, lez, btc, monero) added two driver-generic seams, never a split case in the core: describeFor and settlement in parts.</text>
+  <text x="40" y="598" font-size="10.5" fill="#1E6B52" font-weight="600">Turnkey now: newDriver(kind, config) selects by config, and the multi-party fold is driver-generic — a non-Safe driver runs end to end.</text>
 </svg>

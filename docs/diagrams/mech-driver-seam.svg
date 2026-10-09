@@ -1,12 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 616" width="880" height="616" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 660" width="880" height="660" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <title>The driver seam: the core never interprets contribution bytes</title>
-  <desc>The core routes opaque blobs and asks a driver what they mean. Rounds, serialization domain and finality are described by the driver, never hardcoded, and a shared conformance suite is the contract every driver passes. Specified as F-6, F-7 and S-1; built at P1–P2. The build splits F-6's seven methods three ways: describe, canonicalize and verifyContribution on the Driver (with environment, manifest, profile and the fold hooks), collection progress in the core's Collection, and assemble, submit and watch on the Settlement seam. Twelve driver kinds are registered; F-8's visible queue for sequential domains is not built yet.</desc>
+  <desc>The core routes opaque blobs and asks a driver what they mean. Rounds, serialization domain and finality are described by the driver, never hardcoded, and a shared conformance suite is the contract every driver passes. Specified as F-6, F-7 and S-1; built at P1–P2. The build splits F-6's seven methods three ways: describe, canonicalize and verifyContribution on the Driver (with environment, manifest, profile and the fold hooks), collection progress in the core's Collection, and assemble, submit and watch on the Settlement seam. Sixteen driver kinds are registered. A split (evm, lez, btc and monero) has no shared account, so it does not go through the Settlement seam: it settles in parts, the driver deriving each payer's transfer from the agreed effect, each payer paying from their own wallet, and the creditor's own read through its PartSeam confirming each part (for Monero muster sends nothing and only confirms). F-8's visible queue for sequential domains is not built yet.</desc>
 <!-- provenance
      serves:   BUILD
      shows:    F-6's seven driver methods and where the build puts each (the Driver, the
-               core's Collection, the Settlement seam), the axes describe returns, three
-               of the registry's drivers behind one interface, and the conformance suite
-               that gates them.
+               core's Collection, the Settlement seam, or for a split settlement in
+               parts), the axes describe returns, three of the registry's drivers behind
+               one interface, and the conformance suite that gates them.
      sources:  docs/01-furps.md
                docs/02-implementation-plan.md
                CLAUDE.md
@@ -19,13 +19,15 @@
                [from-source] The split, read from the build: driver.nim (describe,
                    verifyContribution, environment, Collection), intents/materialization.nim
                    (canonicalize and the fold hooks), drivers/manifest.nim and profile.nim,
-                   settlement/settlement.nim (assemble, submit, watch); the twelve kinds from
-                   drivers/registry.nim. F-8's queue is not in the code
+                   settlement/settlement.nim (assemble, submit, watch; settlementFor gives a
+                   split none), intents/materialization.nim's describeFor and the part hooks
+                   with coordination/parts.nim's PartSeam (a split settles in parts); the
+                   sixteen kinds from drivers/registry.nim. F-8's queue is not in the code
      recheck:  When a driver kind is added to registry.nim, the Driver's methods change,
                or F-8's queue lands.
 -->
 
-  <rect width="880" height="616" fill="#E4E6E0"/>
+  <rect width="880" height="660" fill="#E4E6E0"/>
 
   <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">The core routes bytes it cannot read</text>
   <text x="40" y="64" font-size="13.5" fill="#656E66">Every difference between one settlement system and another lives behind this seam, described rather than hardcoded.</text>
@@ -63,42 +65,45 @@
   <text x="207" y="264" font-size="9" text-anchor="middle" fill="#656E66"><tspan font-weight="600" fill="#1A1F1C">Driver</tspan> — plus environment · manifest · profile · fold hooks</text>
   <text x="435" y="264" font-size="9" text-anchor="middle" fill="#656E66"><tspan font-weight="600" fill="#1A1F1C">core</tspan> Collection</text>
   <text x="668" y="264" font-size="9" text-anchor="middle" fill="#656E66"><tspan font-weight="600" fill="#1A1F1C">Settlement seam</tspan> — chosen by the driver's profile</text>
+  <text x="668" y="277" font-size="9" text-anchor="middle" fill="#656E66">or, a split, <tspan font-weight="600" fill="#1A1F1C">in parts</tspan>: each pays, the creditor's own read confirms</text>
 
   <!-- ══ what describe returns ══ -->
-  <rect x="40" y="280" width="800" height="94" rx="6" fill="#F7F8F5" stroke="#4B33C4" stroke-width="1.2"/>
-  <text x="56" y="302" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">WHAT describe RETURNS — THE THREE DIVERGENCE AXES, PLUS POLICY SHAPE</text>
+  <rect x="40" y="292" width="800" height="112" rx="6" fill="#F7F8F5" stroke="#4B33C4" stroke-width="1.2"/>
+  <text x="56" y="314" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">WHAT describe RETURNS — THE THREE DIVERGENCE AXES, PLUS POLICY SHAPE</text>
 
-  <text x="56" y="326" font-size="10.5" fill="#3F4742"><tspan font-weight="600" fill="#1A1F1C">round count r</tspan> — Safe is the degenerate r=1. FROST at r=2 is the round model's real test: nonce commitments, then partial signatures.</text>
-  <text x="56" y="344" font-size="10.5" fill="#3F4742"><tspan font-weight="600" fill="#1A1F1C">serialization domain</tspan> — a domain tag on the signed bytes; F-8's visible queue for sequential domains is not built yet.</text>
-  <text x="56" y="362" font-size="10.5" fill="#3F4742"><tspan font-weight="600" fill="#1A1F1C">finality descriptor</tspan> — which is how a reorg becomes a state transition rather than a silent rewrite. <tspan font-weight="600" fill="#1A1F1C">threshold</tspan> — the policy shape, k of n.</text>
+  <text x="56" y="338" font-size="10.5" fill="#3F4742"><tspan font-weight="600" fill="#1A1F1C">round count r</tspan> — Safe is the degenerate r=1. FROST at r=2 is the round model's real test: nonce commitments, then partial signatures.</text>
+  <text x="56" y="356" font-size="10.5" fill="#3F4742"><tspan font-weight="600" fill="#1A1F1C">serialization domain</tspan> — a domain tag on the signed bytes; F-8's visible queue for sequential domains is not built yet.</text>
+  <text x="56" y="374" font-size="10.5" fill="#3F4742"><tspan font-weight="600" fill="#1A1F1C">finality descriptor</tspan> — which is how a reorg becomes a state transition rather than a silent rewrite. <tspan font-weight="600" fill="#1A1F1C">threshold</tspan> — the policy shape, k of n.</text>
+  <text x="56" y="392" font-size="10.5" fill="#3F4742">Where the effect names the parties (a split), the threshold is per proposal: <tspan font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#1A1F1C">describeFor(effect)</tspan> counts the parties it names.</text>
 
   <!-- ══ drivers ══ -->
-  <text x="40" y="402" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">THREE OF THE REGISTRY'S DRIVERS, ONE INTERFACE, ONE SUITE</text>
+  <text x="40" y="432" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">THREE OF THE REGISTRY'S DRIVERS, ONE INTERFACE, ONE SUITE</text>
 
-  <rect x="40" y="412" width="256" height="76" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
-  <text x="56" y="432" font-size="11" font-weight="600" fill="#1A1F1C">Stub</text>
-  <text x="56" y="450" font-size="10" fill="#3F4742">Configurable r and k (default r=1, k=2).</text>
-  <text x="56" y="464" font-size="10" fill="#3F4742">Integration tests use this rather</text>
-  <text x="56" y="478" font-size="10" fill="#3F4742">than mocking the interface.</text>
+  <rect x="40" y="442" width="256" height="76" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="56" y="462" font-size="11" font-weight="600" fill="#1A1F1C">Stub</text>
+  <text x="56" y="480" font-size="10" fill="#3F4742">Configurable r and k (default r=1, k=2).</text>
+  <text x="56" y="494" font-size="10" fill="#3F4742">Integration tests use this rather</text>
+  <text x="56" y="508" font-size="10" fill="#3F4742">than mocking the interface.</text>
 
-  <rect x="312" y="412" width="256" height="76" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
-  <text x="328" y="432" font-size="11" font-weight="600" fill="#1A1F1C">Safe</text>
-  <text x="328" y="450" font-size="10" fill="#3F4742">r=1. EIP-712 computed locally,</text>
-  <text x="328" y="464" font-size="10" fill="#3F4742">with no transaction service in</text>
-  <text x="328" y="478" font-size="10" fill="#3F4742">the loop at all.</text>
+  <rect x="312" y="442" width="256" height="76" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="328" y="462" font-size="11" font-weight="600" fill="#1A1F1C">Safe</text>
+  <text x="328" y="480" font-size="10" fill="#3F4742">r=1. EIP-712 computed locally,</text>
+  <text x="328" y="494" font-size="10" fill="#3F4742">with no transaction service in</text>
+  <text x="328" y="508" font-size="10" fill="#3F4742">the loop at all.</text>
 
-  <rect x="584" y="412" width="256" height="76" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
-  <text x="600" y="432" font-size="11" font-weight="600" fill="#1A1F1C">FROST<tspan font-size="9.5" font-weight="400" fill="#656E66">&#160;— frost · btc-frost · lez-frost</tspan></text>
-  <text x="600" y="450" font-size="10" fill="#3F4742">r=2: nonce commitments, then partials.</text>
-  <text x="600" y="464" font-size="10" fill="#3F4742">On Bitcoin and LEZ one aggregate sig</text>
-  <text x="600" y="478" font-size="10" fill="#3F4742">settles: chain sees no signer set.</text>
+  <rect x="584" y="442" width="256" height="76" rx="6" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="600" y="462" font-size="11" font-weight="600" fill="#1A1F1C">FROST<tspan font-size="9.5" font-weight="400" fill="#656E66">&#160;— frost · btc-frost · lez-frost</tspan></text>
+  <text x="600" y="480" font-size="10" fill="#3F4742">r=2: nonce commitments, then partials.</text>
+  <text x="600" y="494" font-size="10" fill="#3F4742">On Bitcoin and LEZ one aggregate sig</text>
+  <text x="600" y="508" font-size="10" fill="#3F4742">settles: chain sees no signer set.</text>
 
-  <text x="40" y="508" font-size="10" fill="#3F4742"><tspan font-weight="600" fill="#1A1F1C">Also registered:</tspan> threshold and unanimous (Ed25519 k-of-n) · invoke · eip191 · btc-p2wsh · btc-tapscript · lez-multisig — twelve kinds.</text>
+  <text x="40" y="538" font-size="10" fill="#3F4742"><tspan font-weight="600" fill="#1A1F1C">Also registered:</tspan> threshold and unanimous (Ed25519 k-of-n) · invoke · eip191 · btc-p2wsh · btc-tapscript · lez-multisig ·</text>
+  <text x="40" y="552" font-size="10" fill="#3F4742">evm-split · lez-split · btc-split · monero-split (no shared account: each pays their own part) — <tspan font-weight="600" fill="#1A1F1C">sixteen kinds</tspan>.</text>
 
   <!-- ══ the gate ══ -->
-  <rect x="40" y="522" width="800" height="52" rx="6" fill="#23282A"/>
-  <text x="56" y="544" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#96A19B">S-1 — THE SUITE IS THE CONTRACT</text>
-  <text x="56" y="562" font-size="11.5" font-weight="600" fill="#DCE2DE">Shared fixtures across rounds, domains and finality. No driver feature merges with conformance red.</text>
+  <rect x="40" y="566" width="800" height="52" rx="6" fill="#23282A"/>
+  <text x="56" y="588" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#96A19B">S-1 — THE SUITE IS THE CONTRACT</text>
+  <text x="56" y="606" font-size="11.5" font-weight="600" fill="#DCE2DE">Shared fixtures across rounds, domains and finality. No driver feature merges with conformance red.</text>
 
-  <text x="40" y="600" font-size="10.5" font-weight="600" fill="#A32D1E">The three axes are load-bearing and must not be collapsed for convenience —<tspan font-weight="400" fill="#3F4742">&#160;collapsing one is how a client quietly becomes single-chain.</tspan></text>
+  <text x="40" y="644" font-size="10.5" font-weight="600" fill="#A32D1E">The three axes are load-bearing and must not be collapsed for convenience —<tspan font-weight="400" fill="#3F4742">&#160;collapsing one is how a client quietly becomes single-chain.</tspan></text>
 </svg>
