@@ -14,12 +14,16 @@
   What this fork changes, and why — see ../README.md §3.3:
 
     · Re-skinned to the prototype tokens, so figures and app screenshots sit together.
-    · MIX IS NO LONGER CLAIMED AS SHIPPED. Upstream listed it as a property of the
-      P2P layer and titled a view "Encrypted chat over the mixnet". LOGOS-MIXNET is
-      a LIP at status `raw`, implemented as a send-only testnet proof of concept and
-      absent from the near-term roadmap. It is now a dashed node that says so.
-    · `muster_module` is dashed for the same reason: P0 has not run. The demo build
-      has no Muster module at all, which is a view rather than a footnote.
+    · MIX IS NOT CLAIMED AS MORE THAN IT IS. Upstream listed it as a property of the
+      P2P layer and titled a view "Encrypted chat over the mixnet". Delivery 0.3
+      carries a room's SENDS over mix when asked (sender anonymity: no cover traffic,
+      no spam protection), and Muster's `mix` setting is off by default; reads are
+      store queries from the reader's own address and never go over mix
+      (docs/labbook/mixnet-on-delivery-03.md). It is a dashed node that says so.
+    · Dashed means optional: Muster loads and runs without it. That is mix, and the
+      two optional dependencies in module/metadata.json (monero_wallet_backend,
+      modules_state). `muster_module` itself is built and solid. The demo build has
+      no Muster module at all, which is a view rather than a footnote.
     · A dark BEYOND YOUR DEVICE band. This is the addition that makes it Muster's
       diagram rather than a stack diagram: every box below the boundary is somebody
       who learns something, so the architecture reading and the privacy reading are
@@ -188,10 +192,10 @@
   /* Ours, as opposed to the platform's. */
   .bc-node-ours rect { stroke: var(--bc-signal); fill: var(--bc-signal-soft); }
 
-  /* Specified but not built. Dashed, and it says so in words as well —
+  /* Optional: Muster runs without it. Dashed, and it says so in words as well —
      the dash is a reminder, the label is the claim. */
-  .bc-node-unbuilt rect { stroke-dasharray: 4 3; fill: var(--bc-paper); }
-  .bc-node-unbuilt text { font-style: italic; fill: var(--bc-muted); }
+  .bc-node-optional rect { stroke-dasharray: 4 3; fill: var(--bc-paper); }
+  .bc-node-optional text { font-style: italic; fill: var(--bc-muted); }
 
   /* Beyond the device: dark ground, light ink. */
   .bc-node-out rect { fill: #2E3436; stroke: var(--bc-outside-rule); }
@@ -251,8 +255,8 @@
   .bc-svg .bc-hl.bc-node-out rect { fill: #2E3436; stroke: var(--bc-outside-accent); stroke-width: 1.8; }
   .bc-svg .bc-hl.bc-node-out text { fill: var(--bc-outside-accent); }
 
-  .bc-svg .bc-hl.bc-node-unbuilt rect { fill: var(--bc-paper); stroke: var(--bc-signal); }
-  .bc-svg .bc-hl.bc-node-unbuilt text { fill: var(--bc-signal); font-style: italic; }
+  .bc-svg .bc-hl.bc-node-optional rect { fill: var(--bc-paper); stroke: var(--bc-signal); }
+  .bc-svg .bc-hl.bc-node-optional text { fill: var(--bc-signal); font-style: italic; }
 
   .bc-flow-arrow path { stroke: var(--bc-signal); }
   .bc-flow-arrow .bc-arrow-head { fill: var(--bc-signal); }
@@ -278,7 +282,7 @@
   .bc-legend span { display: inline-flex; align-items: center; gap: 0.5em; }
   .bc-legend i { width: 20px; height: 12px; border-radius: 2px; display: inline-block; }
   .bc-key-ours    { background: var(--bc-signal-soft); border: 1px solid var(--bc-signal); }
-  .bc-key-unbuilt { background: var(--bc-paper); border: 1px dashed var(--bc-muted); }
+  .bc-key-optional { background: var(--bc-paper); border: 1px dashed var(--bc-muted); }
   .bc-key-out     { background: #2E3436; border: 1px solid var(--bc-outside-rule); }
 
   .bc-sr {
@@ -404,7 +408,7 @@
           <rect class="bc-entry-frame" x="722" y="46" width="206" height="132" rx="7"/>
           <path class="bc-entry-header" d="M 729 46 L 921 46 A 7 7 0 0 1 928 53 L 928 74 L 722 74 L 722 53 A 7 7 0 0 1 729 46 Z"/>
           <text class="bc-entry-title" x="825" y="60">Headless</text>
-          <text class="bc-entry-sub"   x="825" y="86">CI and P0–P3 · no UI</text>
+          <text class="bc-entry-sub"   x="825" y="86">tests and scripts · no UI</text>
         </g>
         <g class="bc-node" data-id="headless-cli">
           <rect x="732" y="98" width="186" height="72" rx="3"/>
@@ -413,88 +417,91 @@
         </g>
 
         <!-- ═══ APP BACKENDS (content y=230–266) ═══ -->
-        <g class="bc-node bc-node-ours bc-node-unbuilt" data-id="muster-module">
-          <rect x="270" y="230" width="386" height="36" rx="3"/>
-          <text x="463" y="242">muster-module.lgx — Nim core behind muster.lidl</text>
-          <text x="463" y="256" class="bc-node-sub">specified, not built (P0)</text>
+        <!-- muster-module's centre (x=580) sits over the free column in the upper
+             module row (556–600), so its arrows reach the lower row without
+             crossing a box. Keep that column empty. -->
+        <g class="bc-node bc-node-ours" data-id="muster-module">
+          <rect x="380" y="230" width="400" height="36" rx="3"/>
+          <text x="580" y="242">muster-module.lgx — Nim core behind muster.lidl</text>
+          <text x="580" y="256" class="bc-node-sub">built · 0.2.0 in Basecamp's catalogue</text>
         </g>
         <g class="bc-node" data-id="app-dex">
-          <rect x="666" y="230" width="80" height="36" rx="3"/>
-          <text x="706" y="248">Dex</text>
+          <rect x="790" y="230" width="80" height="36" rx="3"/>
+          <text x="830" y="248">Dex</text>
         </g>
         <g class="bc-node" data-id="app-more">
-          <rect x="756" y="230" width="40" height="36" rx="3"/>
-          <text x="776" y="248">…</text>
+          <rect x="880" y="230" width="40" height="36" rx="3"/>
+          <text x="900" y="248">…</text>
         </g>
 
-        <!-- ═══ MODULES — upper row composes the lower row (y=316–348) ═══ -->
-        <g class="bc-node" data-id="lez">
-          <rect x="270" y="316" width="220" height="32" rx="3"/>
-          <text x="380" y="326">lez_core</text>
-          <text x="380" y="340" class="bc-node-sub">zone wallet · token ops · labels</text>
+        <!-- ═══ MODULES — upper row composes the lower row (y=316–348) ═══
+             The modules muster_module calls are all in this row (module/metadata.json):
+             dependencies solid, optional_dependencies dashed. The lower row is what
+             they compose, plus the host's own. -->
+        <g class="bc-node" data-id="evm">
+          <rect x="40" y="316" width="210" height="32" rx="3"/>
+          <text x="145" y="326">EVM modules</text>
+          <text x="145" y="340" class="bc-node-sub">keystore · eth_rpc · tx_sender</text>
         </g>
-        <g class="bc-node" data-id="files">
-          <rect x="500" y="316" width="90" height="32" rx="3"/>
-          <text x="545" y="333">Files</text>
+        <g class="bc-node" data-id="lez">
+          <rect x="260" y="316" width="190" height="32" rx="3"/>
+          <text x="355" y="326">lez_core</text>
+          <text x="355" y="340" class="bc-node-sub">zone wallet · token ops · labels</text>
         </g>
         <g class="bc-node" data-id="chat">
-          <rect x="600" y="316" width="132" height="32" rx="3"/>
-          <text x="666" y="326">chat_module</text>
-          <text x="666" y="340" class="bc-node-sub">e2e · MLS groups</text>
+          <rect x="460" y="316" width="96" height="32" rx="3"/>
+          <text x="508" y="326">chat_module</text>
+          <text x="508" y="340" class="bc-node-sub">e2e · MLS groups</text>
         </g>
-        <g class="bc-node" data-id="swaps">
-          <rect x="742" y="316" width="90" height="32" rx="3"/>
-          <text x="787" y="333">Swaps</text>
+        <g class="bc-node bc-node-optional" data-id="monero">
+          <rect x="600" y="316" width="168" height="32" rx="3"/>
+          <text x="684" y="326">monero_wallet_backend</text>
+          <text x="684" y="340" class="bc-node-sub">optional · XMR requests</text>
         </g>
-        <g class="bc-node" data-id="modules-upper-more">
-          <rect x="842" y="316" width="40" height="32" rx="3"/>
-          <text x="862" y="333">…</text>
+        <g class="bc-node bc-node-optional" data-id="modules-state">
+          <rect x="776" y="316" width="154" height="32" rx="3"/>
+          <text x="853" y="326">modules_state</text>
+          <text x="853" y="340" class="bc-node-sub">optional · what is installed</text>
         </g>
-
         <g class="bc-arrow bc-arrow-static" data-id="arrow-chat-delivery">
-          <path d="M 666 348 L 666 400" marker-end="url(#bc-arrow-marker)"/>
+          <path d="M 508 348 L 508 400" marker-end="url(#bc-arrow-marker)"/>
         </g>
-        <g class="bc-arrow bc-arrow-static" data-id="arrow-files-storage">
-          <path d="M 545 348 L 545 400" marker-end="url(#bc-arrow-marker)"/>
-        </g>
-
         <!-- ═══ MODULES — lower row (y=402–444) ═══ -->
         <g class="bc-node" data-id="capability">
           <rect x="40" y="402" width="100" height="42" rx="3"/>
           <text x="90" y="423">Capability</text>
         </g>
         <g class="bc-node" data-id="package-manager">
-          <rect x="150" y="402" width="110" height="42" rx="3"/>
-          <text x="205" y="416">Package</text>
-          <text x="205" y="430">Manager</text>
+          <rect x="150" y="402" width="100" height="42" rx="3"/>
+          <text x="200" y="416">Package</text>
+          <text x="200" y="430">Manager</text>
         </g>
         <g class="bc-node" data-id="blockchain">
-          <rect x="270" y="402" width="220" height="42" rx="3"/>
-          <text x="380" y="423">Blockchain</text>
-        </g>
-        <g class="bc-node" data-id="storage">
-          <rect x="500" y="402" width="90" height="42" rx="3"/>
-          <text x="545" y="423">Storage</text>
+          <rect x="260" y="402" width="190" height="42" rx="3"/>
+          <text x="355" y="423">Blockchain</text>
         </g>
         <g class="bc-node" data-id="delivery">
-          <rect x="600" y="402" width="132" height="42" rx="3"/>
-          <text x="666" y="416">delivery_module</text>
-          <text x="666" y="430" class="bc-node-sub">embeds a Logos Messaging node</text>
+          <rect x="460" y="402" width="180" height="42" rx="3"/>
+          <text x="550" y="416">delivery_module</text>
+          <text x="550" y="430" class="bc-node-sub">embeds a Logos Messaging node</text>
+        </g>
+        <g class="bc-node" data-id="storage">
+          <rect x="650" y="402" width="90" height="42" rx="3"/>
+          <text x="695" y="423">Storage</text>
         </g>
         <g class="bc-node" data-id="modules-lower-more">
-          <rect x="742" y="402" width="40" height="42" rx="3"/>
-          <text x="762" y="423">…</text>
+          <rect x="750" y="402" width="40" height="42" rx="3"/>
+          <text x="770" y="423">…</text>
         </g>
-
         <!-- ═══ NETWORK (y=494–516) ═══ -->
         <g class="bc-node" data-id="p2p">
           <rect x="40" y="494" width="660" height="22" rx="3"/>
           <text x="370" y="506">P2P · discovery · peering</text>
         </g>
-        <g class="bc-node bc-node-unbuilt" data-id="mix">
+        <g class="bc-node bc-node-optional" data-id="mix">
           <rect x="712" y="482" width="228" height="36" rx="3"/>
-          <text x="826" y="494">mix routing — not shipped</text>
-          <text x="826" y="508" class="bc-node-sub">LIP status raw · send-only PoC</text>
+          <text x="826" y="494">mix routing — opt-in, sends only</text>
+          <text x="826" y="508" class="bc-node-sub">hides who sent, not who reads</text>
         </g>
 
         <!-- ═══ RUNTIME (y=568–590) ═══ -->
@@ -506,7 +513,7 @@
         <!-- ═══ BEYOND YOUR DEVICE (y=644–692) ═══ -->
         <g class="bc-node bc-node-out" data-id="store-nodes">
           <rect x="40" y="644" width="290" height="48" rx="3"/>
-          <text x="185" y="662">Store nodes — logos.test fleet</text>
+          <text x="185" y="662">Store nodes — the Logos fleet</text>
           <text x="185" y="678" class="bc-node-sub">sees subscription shape and timing</text>
         </g>
         <g class="bc-node bc-node-out" data-id="sequencer">
@@ -526,7 +533,7 @@
 
     <div class="bc-legend">
       <span><i class="bc-key-ours"></i> ours</span>
-      <span><i class="bc-key-unbuilt"></i> specified, not built</span>
+      <span><i class="bc-key-optional"></i> optional — Muster runs without it</span>
       <span><i class="bc-key-out"></i> infrastructure you do not run</span>
     </div>
 
@@ -550,7 +557,7 @@
     "id": "overview",
     "label": "The stack, whole",
     "title": "The stack, whole",
-    "body": "Runtime at the foundation, network above it, modules stacked above that — a module higher up composes the ones beneath it — and app backends at the apex. Three entry points answer <em>how</em> you reach in. Two things are dashed because they do not exist yet: mix routing, and Muster's own module. Everything below the dark rule is somebody else's infrastructure.",
+    "body": "Runtime at the foundation, network above it, modules stacked above that — a module higher up composes the ones beneath it — and app backends at the apex. Three entry points answer <em>how</em> you reach in. Dashed boxes are optional: Muster loads and runs without them. Two are optional dependencies of its module — the Monero wallet backend and the host's module registry — and the third is mix routing, which carries a room's sends only when you turn it on. Everything below the dark rule is somebody else's infrastructure.",
     "entry": null,
     "paths": [],
     "extras": []
@@ -559,11 +566,14 @@
     "id": "basecamp",
     "label": "Inside Basecamp",
     "title": "Muster as a Basecamp UI plugin",
-    "body": "Install the <code>.lgx</code>, and Basecamp loads Muster beside every other UI plugin — one launcher, one module set, shared runtime. This is the path that makes Muster a thing you already have rather than a thing you go and install.",
+    "body": "Install Muster from Basecamp's catalogue, and Basecamp loads it beside every other UI plugin — one launcher, one module set, shared runtime. Its module leans on the platform's own: the EVM keystore, RPC and sender, <code>lez_core</code> for the zone, <code>delivery_module</code> for the room. Two more are optional and used when present: the Monero wallet backend, for XMR payment requests once the Monero wallet is installed, and <code>modules_state</code>, which tells a card what is installed.",
     "entry": "basecamp",
     "paths": [
       ["ui-muster", "muster-module", "lez", "blockchain", "p2p", "runtime"],
-      ["muster-module", "chat", "delivery", "p2p"]
+      ["muster-module", "delivery", "p2p"],
+      ["muster-module", "evm"],
+      ["muster-module", "monero"],
+      ["muster-module", "modules-state"]
     ],
     "extras": ["capability", "package-manager"]
   },
@@ -571,11 +581,12 @@
     "id": "standalone",
     "label": "Standalone binary",
     "title": "The same app, shipped as one binary",
-    "body": "No launcher. The app bundles its own UI with just the modules it needs and starts the core itself. Identical module set, identical contract surface — what changes is who owns the event loop and who supplies the QML host. A user who wants only Muster never meets Basecamp.",
+    "body": "No launcher. The app bundles its own UI with just the modules it needs and starts the core itself. The same required modules and the same contract surface — what changes is who owns the event loop and who supplies the QML host. The two optional modules are not bundled, and Muster loads without them. A user who wants only Muster never meets Basecamp.",
     "entry": "standalone",
     "paths": [
       ["standalone-app", "muster-module", "lez", "blockchain", "p2p", "runtime"],
-      ["muster-module", "chat", "delivery", "p2p"]
+      ["muster-module", "delivery", "p2p"],
+      ["muster-module", "evm"]
     ],
     "extras": ["capability"]
   },
@@ -583,11 +594,12 @@
     "id": "headless",
     "label": "Headless",
     "title": "No UI at all — the phases that come first",
-    "body": "<code>logoscore</code> loads the module and calls it directly. This is where P0 through P3 live and where CI runs: the protocol core is proven headless, across two instances with isolated persistence, before any QML exists. The UI layer is skipped entirely rather than stubbed.",
+    "body": "<code>logoscore</code> loads the module and calls it directly. This is how P0 through P3 began: the protocol core proven without QML, the UI built after. The UI layer is skipped entirely rather than stubbed, and the optional modules are there only if they were installed.",
     "entry": "headless",
     "paths": [
       ["headless-cli", "muster-module", "lez", "blockchain", "p2p", "runtime"],
-      ["muster-module", "chat", "delivery", "p2p"]
+      ["muster-module", "delivery", "p2p"],
+      ["muster-module", "evm"]
     ],
     "extras": []
   },
@@ -595,7 +607,7 @@
     "id": "demo-build",
     "label": "What demo/ is today",
     "title": "The demo build — note what is missing",
-    "body": "<strong>There is no Muster module.</strong> <code>demo/</code> is a fork of the chat UI whose C++ backend calls <code>chat_module</code> and <code>lez_core</code> directly, so the app-backend layer is empty and everything the module was going to guarantee — the signed log, the effect/materialization split, replay binding — is absent by construction. It deliberately violates the root invariants; that is its purpose, and it is why it ships this week.",
+    "body": "<strong>There is no Muster module.</strong> <code>demo/</code> is a fork of the chat UI whose C++ backend calls <code>chat_module</code> and <code>lez_core</code> directly, so the app-backend layer is empty and everything the module was going to guarantee — the signed log, the effect/materialization split, replay binding — is absent by construction. It deliberately violates the root invariants; that is its purpose, and it is why it shipped first.",
     "entry": "basecamp",
     "paths": [
       ["ui-muster", "chat", "delivery", "p2p", "runtime"],
@@ -605,13 +617,16 @@
   },
   {
     "id": "spec-build",
-    "title": "The specified build — the same picture with one box filled in",
+    "title": "The specified build — the same picture, the app backend filled in",
     "label": "…and what it becomes",
-    "body": "Toggle this against <em>What demo/ is today</em>: nothing moves except the app-backend layer. <code>muster-module.lgx</code> — a Nim core behind a published <code>muster.lidl</code> — takes over every module call, and with it come the things the demo has no place to put: a signed hash-linked log, the effect/materialization split with the client re-deriving what it signs, and replay binding. It is still dashed here, because P0 has not run. <strong>The gap between these two views is the project.</strong>",
+    "body": "Toggle this against <em>What demo/ is today</em>: the app-backend layer fills in. <code>muster-module.lgx</code> — a Nim core behind a published <code>muster.lidl</code>, built and released as 0.2.0 — takes over every module call, and with it come the things the demo has no place to put: a signed hash-linked log, the effect/materialization split with the client re-deriving what it signs, and replay binding. It carries the room over <code>delivery_module</code> itself, so <code>chat_module</code> drops out (ADR-010: an interim sealed-box layer until native chat ships persistence and member removal), and it reaches Ethereum chains through the platform's EVM modules. <strong>The gap between these two views is the project.</strong>",
     "entry": "basecamp",
     "paths": [
       ["ui-muster", "muster-module", "lez", "blockchain", "p2p", "runtime"],
-      ["muster-module", "chat", "delivery", "p2p"]
+      ["muster-module", "delivery", "p2p"],
+      ["muster-module", "evm"],
+      ["muster-module", "monero"],
+      ["muster-module", "modules-state"]
     ],
     "extras": ["capability"]
   },
@@ -619,7 +634,7 @@
     "id": "beyond",
     "label": "Who is watching",
     "title": "The same run, read as observers",
-    "body": "Nothing above the rule changes; only what you attend to. The store-node fleet carries every conversation and sees which topics this client subscribes to and when it publishes or fetches — the contact graph, pseudonymously, which end-to-end encryption does not touch. The sequencer learns that a transfer happened and when. The public record keeps whatever the chosen rail disclosed. Self-hosting a node does not fix the first: it protects the operator's own metadata, not their peers'.",
+    "body": "Nothing above the rule changes; only what you attend to. The store-node fleet carries every conversation and sees which topics this client subscribes to and when it publishes or fetches — the contact graph, pseudonymously, which end-to-end encryption does not touch. Mix routing, off by default, hides who published a message when a room turns it on; it does not hide who reads a room, because reading is a store query from the reader's own address. The sequencer learns that a transfer happened and when. The public record keeps whatever the chosen rail disclosed. Self-hosting a node does not fix the first: it protects the operator's own metadata, not their peers'.",
     "entry": null,
     "paths": [
       ["delivery", "p2p", "store-nodes"],

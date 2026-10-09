@@ -35,15 +35,15 @@
       "evidence": [
         {
           "grade": "from-source",
-          "note": "The module set and every dependency edge, read off metadata.json and flake.nix rather than drawn from memory"
+          "note": "The module set and every dependency edge, read off metadata.json and flake.nix rather than drawn from memory: demo/muster-ui's for the demo build; for the specified build, module/metadata.json's dependencies (solid) and optional_dependencies (dashed: monero_wallet_backend, modules_state)"
         },
         {
           "grade": "from-source",
-          "note": "LOGOS-MIXNET at status raw, send-only proof of concept, absent from the near-term roadmap — dated 2026-08 and shown as not shipped. muster-module.lgx is dashed for the same reason: P0 has not run"
+          "note": "Mix routing shown dashed, as opt-in and for sends only: delivery 0.3 carries a room's sends over mix when Muster's mix setting is on (off by default), and reads stay store queries from the reader's own address (docs/labbook/mixnet-on-delivery-03.md). muster-module.lgx is solid: built, released as 0.2.0"
         },
         {
           "grade": "illustrative",
-          "note": "The neighbouring platform pieces (Files, Swaps, Dex, Storage) place Muster in context; they are not an enumeration of the platform's modules"
+          "note": "The neighbouring platform pieces (Dex, Storage) place Muster in context; they are not an enumeration of the platform's modules"
         }
       ],
       "generates": [
