@@ -977,7 +977,18 @@ Item {
     property bool acrossPending: false      // proposed; the box closes only once it is accepted
     property var acrossRates: ({})          // "chain|asset" → the typed rate, per ONE unit
     // A refusal keeps the box and its rates; success closes it (exo-a90.17).
+    property double splitResultAt: 0
+    // A Monero wallet refusal is over once Monero Wallet answered that the wallet it named
+    // is open — after the refusal (exo-dcc.20, seen on display): its words and its Open
+    // Monero Wallet give way to that answer and "Try again".
+    readonly property bool moneroRefusalResolved: {
+        var r = room.splitResult || {}, w = room.moneroWallet || {};
+        return String(r.request || "") === "monero.wallet.unlock"
+               && String(w.intent || "") === "monero.wallet.unlock" && String(w.state || "") === "open"
+               && Number(w.at || 0) >= room.splitResultAt;
+    }
     onSplitResultChanged: {
+        room.splitResultAt = Date.now();
         room.moneroStateAt = Date.now();     // a newer answer: an older wallet note is stale (exo-dcc.20)
         if (!room.acrossPending || !room.splitResult || room.splitResult.op !== "settle-up") return;
         room.acrossPending = false;
@@ -2816,6 +2827,7 @@ Item {
                     LogosButton {
                         objectName: "roomAskMoneroAddress"
                         visible: room.splitMonero && room.splitFor.length > 0 && room.splitForAddress.length === 0 && !room.acrossOpen
+                        Layout.preferredWidth: 360
                         text: qsTr("Ask %1 for a Monero address").arg(room.memberLabel(room.splitFor))
                         variant: LogosButton.Variant.Secondary
                         onClicked: {
@@ -3133,7 +3145,7 @@ Item {
             // a split action that did nothing says why — never a silent no-op (exo-a90)
             LogosText {
                 objectName: "roomSplitFeedback"
-                visible: !!(room.splitResult && room.splitResult.error)
+                visible: !!(room.splitResult && room.splitResult.error) && !room.moneroRefusalResolved
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: {
@@ -3169,6 +3181,7 @@ Item {
                 objectName: "roomMoneroRemedy"
                 readonly property var r: room.splitResult || ({})
                 visible: String(r.request || "") === "monero.wallet.unlock" && String(r.error || "") !== "wallet-busy"
+                         && !room.moneroRefusalResolved
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
                 // which wallet (exo-dcc.20): the one the module names, else one button per
@@ -3209,7 +3222,7 @@ Item {
                 visible: String((room.splitResult || {}).request || "") === "monero.wallet.unlock" && room.moneroWalletNote().length > 0
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: room.moneroWalletNote()
+                text: room.moneroWalletNote() + (room.moneroRefusalResolved ? qsTr(" Try again.") : "")
                 color: String((room.moneroWallet || {}).state || "") === "open" ? Theme.palette.textSecondary : Theme.palette.warning
                 font.pixelSize: Theme.typography.badgeText
             }
