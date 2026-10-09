@@ -177,7 +177,7 @@
           ]
         }
       ],
-      "ui": "not built: the module half only (exo-dcc.5). Hosted: coordinate_propose_split on a monero: chain mints payTo; coordinate_intents carries each debtor's monero: link (split.xmr.payment, parts[].uri) and the creditor's wallet state (split.xmr.wallet); coordinate_report_paid is \"I paid\"; the creditor's client confirms on the intents tick. The composer, the card's link and QR, and \"Share my Monero address\" come next.",
+      "ui": "Built (exo-dcc.5, exo-dcc.20) and seen on display in Basecamp 0.3.2 with a real stagenet wallet minting payTo. Home's Request a payment verb opens the room's Split composer under Request on Monero: the total in XMR by string arithmetic, payTo never typed. The debtor's card shows the monero: link as a QR code (QrCode.qml), as text and Copy link, then I paid with an optional txid; the creditor's card shows each part (says they paid, seen n of 10 confirmations, confirmed by their wallet, or marked received) and their wallet's state, with Open Monero Wallet naming the wallet to open. Share my Monero address answers an address-request. Monero Wallet answers monero.wallet.unlock with failed after opening the wallet (upstream); acting again clears the refusal.",
       "invariants": [
         1,
         2,
@@ -250,6 +250,14 @@
           "path": "module/tests/monero_address_test.nim"
         },
         {
+          "kind": "test",
+          "path": "module/tests/xmr_request_edges_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "scripts/split-xmr-self-test.sh"
+        },
+        {
           "kind": "source",
           "url": "https://github.com/logos-co/logos-monero-wallet-backend/blob/769098441db339f7541ba8804722ae3f20614309/rust-lib/src/glue.rs",
           "what": "monero_wallet_backend 0.1.0: create_subaddress, receive_info and history take no role; prepare_send builds a reviewed send; confirm_send needs the approver role (the wallet app by default)."
@@ -287,9 +295,7 @@
       ],
       "unverified": [
         "whether an incoming transfer appears in history() before it is confirmed (mempool visibility; the 10-block depth does not depend on it)",
-        "whether muster_module can call monero_wallet_backend in Basecamp once it declares it (exo-dcc.11)",
-        "the request run end to end against a live stagenet wallet (split-xmr-self-test.sh, not yet written)",
-        "the Room composer and the card's monero: link and QR, which are not built"
+        "a live stagenet payment end to end: a payment from another wallet and 10 confirmations, read through lp at size (split-xmr-self-test.sh runs with no wallet; the display runs minted payTo from a real stagenet wallet but no payment was made)"
       ],
       "generated": "monero-split/request",
       "hosted": [

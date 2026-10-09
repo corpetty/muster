@@ -20,7 +20,7 @@
           "name": "delivery-node",
           "party": "instance",
           "class": "infra",
-          "target": "the delivery createNode config in Settings (default: the logos.test fleet's entry nodes)",
+          "target": "the delivery createNode config in Settings (default: the logos.dev fleet's entry nodes; on logos.test a node sends nothing until it holds an active RLN membership)",
           "field": ""
         },
         {
@@ -63,7 +63,7 @@
         {
           "step": "act",
           "who": "the member joining or starting the room",
-          "does": "Normalizes the room name to a 4-segment Waku content topic, /muster/1/<name>/proto (an already valid topic passes through), so two peers who name the same room derive the same topic. If the instance already has a session on that topic it re-activates it. Otherwise it opens a CoordinationSession over the delivery transport with a fresh EpochCrypto: epoch 0, a new random key, members = this instance only. Joining also clears any stored invite to that topic. It then announces the room's join key on the topic (a beacon): 32 bytes derived from its current epoch key, naming no member, so someone who knows only the topic can ask to join without saying who they are in the clear.",
+          "does": "Normalizes the room name to a 4-segment Waku content topic, /muster/1/<name>/proto (an already valid topic passes through), so two peers who name the same room derive the same topic. If the instance already has a session on that topic it re-activates it. Otherwise it opens a CoordinationSession over the delivery transport with a fresh EpochCrypto: epoch 0, a new random key, members = this instance only. Joining also clears any stored invite to that topic. It then announces the room's join key on the topic (a beacon): 32 bytes derived from its current epoch key, naming no member, so someone who knows only the topic can ask to join without saying who they are in the clear. With the mix setting on (off by default; it applies the next time Muster starts), each publish goes as a Sphinx packet over three mix hops to an exit that publishes it (delivery 0.3's sender anonymity); reads never do.",
           "signs": "nothing",
           "reveals": [
             {
@@ -79,13 +79,14 @@
             "scripts/two-instance-proof.sh",
             "module/nim-lib/muster_module.nim",
             "module/src/coordination/session.nim",
-            "module/tests/store_node_view_test.nim"
+            "module/tests/store_node_view_test.nim",
+            "module/tests/delivery_node_config_test.nim"
           ]
         },
         {
           "step": "act",
           "who": "the same member, continuously",
-          "does": "Subscribes to the topic and polls the store every ~1 s (MUSTER_CATCHUP_MS, floor 200 ms) for a 60 s window (MUSTER_CATCHUP_LOOKBACK_MS), round-robin across the configured entry nodes; the first ticks per topic fetch deeper history. It ingests only envelopes it can open: it tries each epoch key it holds, newest first, and the one whose MAC verifies is the envelope's epoch. An envelope sealed under an epoch it holds no key for is skipped. No epoch number rides outside the seal, so a store node sees the same shape in every epoch.",
+          "does": "Subscribes to the topic and takes what delivery hands it live, and catches up from the store: the first ticks per topic page the topic's whole history, following the store's cursor; after that it asks a sliding window (MUSTER_CATCHUP_LOOKBACK_MS, default 60 s) every 15 s (MUSTER_CATCHUP_WINDOW_MS), round-robin across the configured entry nodes, skipping a store peer that failed to dial for 5 s, doubling while it keeps failing, up to a minute. Every store query names the topic and leaves from this node's own address, mix or no mix. It ingests only envelopes it can open: it tries each epoch key it holds, newest first, and the one whose MAC verifies is the envelope's epoch. An envelope sealed under an epoch it holds no key for is skipped. No epoch number rides outside the seal, so a store node sees the same shape in every epoch.",
           "signs": "nothing",
           "reveals": [
             {
@@ -96,6 +97,9 @@
           "evidence": [
             "module/tests/coordination_test.nim",
             "module/src/transport/delivery.nim",
+            "module/src/transport/store_catchup.nim",
+            "module/tests/store_catchup_test.nim",
+            "module/tests/delivery_received_test.nim",
             "module/src/crypto/epoch_crypto.nim",
             "module/tests/store_node_view_test.nim"
           ]
@@ -153,6 +157,10 @@
         {
           "claim": "Home's titles for rooms this instance opened or was invited to live only in this session; after a restart the list shows each room's topic.",
           "credibility": "not-applicable"
+        },
+        {
+          "claim": "With the mix setting on, a store node that does not also run the path's mix nodes no longer learns which node published a message. It still sees which node reads the room, and when: every store query leaves from the reader's own address. On logos.dev most mix nodes are run by the store nodes' own operator, and there is no cover traffic (docs/labbook/mixnet-on-delivery-03.md).",
+          "credibility": "exposed"
         }
       ],
       "evidence": [
@@ -180,12 +188,25 @@
         {
           "kind": "source",
           "url": "https://github.com/corpetty/muster/blob/main/module/src/transport/delivery.nim",
-          "what": "the store catch-up period, window and store-peer rotation"
+          "what": "the store catch-up period, window and lookback; store_catchup.nim: paging, store-peer rotation and backoff"
         },
         {
           "kind": "source",
           "url": "https://github.com/corpetty/muster/blob/main/ui/src/qml/Composer.qml",
           "what": "derivedTopic: muster.room.<16 random hex> — no verb, no peer, no time (exo-661.7)"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/store_catchup_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/delivery_node_config_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/docs/labbook/mixnet-on-delivery-03.md",
+          "what": "what delivery 0.3's mix path carries for a room (sends only), the runs on logos.dev, and the mix setting"
         }
       ],
       "unverified": [
@@ -1374,6 +1395,210 @@
       ]
     },
     {
+      "id": "room/share-address",
+      "name": "Share your address for a chain (Ethereum, Bitcoin or Monero)",
+      "area": "room",
+      "status": "built",
+      "summary": "Posts YOUR receiving address for one chain into the room as an author-signed address-share card: your Ethereum address on an eip155 chain, the Bitcoin address of your own muster key (wpkh) on a bip122 network, or, on a monero: chain, a fresh subaddress your own open Monero wallet mints for it. It is what a split or a settle-up proposed on your behalf pays you at, and your client still agrees only to an address it holds. Nothing is agreed by sharing.",
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "room-member",
+          "party": "instance",
+          "class": "authority",
+          "target": "the current membership epoch key of the room",
+          "field": ""
+        },
+        {
+          "kind": "module",
+          "name": "monero_wallet_backend",
+          "party": "instance",
+          "class": "capability",
+          "target": "monero_wallet_backend, installed by monero_wallet_ui (a monero: chain only)",
+          "field": ""
+        },
+        {
+          "kind": "environment",
+          "name": "your open Monero wallet on the chain's network",
+          "party": "instance",
+          "class": "infra",
+          "target": "monero:<network> (a monero: chain only; opened in Monero Wallet, monero.wallet.unlock)",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "topic:/muster/1/<room>/proto",
+          "mode": "write"
+        },
+        {
+          "target": "module:monero_wallet_backend (wallet_status, create_subaddress)",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "address",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "sharer",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "address (Ethereum or Bitcoin, once paid at it)",
+          "observer": "chain-observer",
+          "when": "settle"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the member sharing (asked by an address-request card, or of their own accord)",
+          "does": "coordinate_share_address(chain). On an eip155 chain (or none) it posts {kind: address-share, asset: ETH, address: this instance's EVM pay address}. On a bip122 chain it posts the P2WPKH address of this instance's own Bitcoin key on that network. On a monero: chain it asks the member's own open wallet to mint a subaddress (create_subaddress, labelled muster:share), holds it to the chain's network and the payTo rules (not integrated), and posts it. The event is author-signed and sealed to the current epoch. A newer share for the same chain supersedes an older one.",
+          "signs": "Ed25519, by the author's encryption identity (its signing half, F-14), over the muster.event.author.v1 hash-input record (exo-f76)",
+          "reveals": [
+            {
+              "field": "address",
+              "observer": "room-member"
+            },
+            {
+              "field": "sharer",
+              "observer": "room-member"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/nim-lib/muster_module.nim",
+            "module/src/coordination/xmr_request.nim",
+            "module/tests/xmr_request_edges_test.nim",
+            "module/tests/probes/probe_settle_up_payto_stepper.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "every member",
+          "does": "Folds the sharer's latest authentic address-share per chain (sharedAddressOf, sharedMoneroAddressOf). A split or a settle-up across chains proposed on the sharer's behalf is paid there, and the sharer's own client agrees only while it holds that address (payto-not-mine): its own key's address, or one its Monero wallet still lists.",
+          "signs": "nothing",
+          "reveals": [],
+          "evidence": [
+            "module/tests/split_creditor_test.nim",
+            "module/tests/xmr_request_edges_test.nim",
+            "module/tests/probes/probe_xmr_payto_stepper.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a Monero share when no wallet is open, the open wallet is on another network or watch-only, or the wallet did not answer",
+          "why": "the wallet cannot vouch for the address: nothing is minted and nothing is posted, and the error names the wallet to open (monero.wallet.unlock) and the package to install",
+          "evidence": [
+            "module/tests/xmr_request_edges_test.nim"
+          ]
+        },
+        {
+          "what": "an address-share posted in another member's name",
+          "why": "only the member's own key signs it; any other is dropped from every view (exo-f76)",
+          "evidence": [
+            "module/tests/split_creditor_test.nim",
+            "module/tests/authorship_test.nim"
+          ]
+        },
+        {
+          "what": "a share for a chain nothing is paid at (not eip155, bip122 or monero)",
+          "why": "coordinate_share_address returns {error: no-shared-address}",
+          "evidence": [
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "what": "asking the Monero wallet to build, sign or send anything",
+          "why": "sharing mints a subaddress and reads the wallet's status, nothing else (muster never spends)",
+          "evidence": [
+            "module/tests/xmr_request_edges_test.nim",
+            "module/tests/probes/probe_xmr_no_spend_stepper.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_share_address"
+      ],
+      "ui": "MusterCard.qml: the address-request card's Share my address button (Share my Bitcoin address / Share my Monero address by its asset; Room.qml calls the backend's shareAddress), with Open Monero Wallet naming the wallet when it is refused); MusterCard.qml renders the address-share, with no Use as recipient for a Monero one, since muster never sends Monero",
+      "invariants": [
+        4,
+        8,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "Only the sharer's own key can post their address; a share in someone else's name is dropped.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A Monero share is a fresh subaddress of the sharer's own wallet: unlinkable on chain to their other addresses, and the link to the room lives only in the room.",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "An Ethereum or Bitcoin share is a public address: once paid at, anyone reading the chain sees what it receives.",
+          "credibility": "exposed"
+        },
+        {
+          "claim": "The room learns the address the sharer chose; the sharer's own client agrees to be paid there only while it holds it.",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/xmr_request_edges_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/split_creditor_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_settle_up_payto_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "scripts/split-xmr-self-test.sh"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/nim-lib/muster_module.nim",
+          "what": "musterCoordinateShareAddressImpl: the address per chain family"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/corpetty/muster/blob/main/module/src/coordination/xmr_request.nim",
+          "what": "xmrShareAddress: mint, check, post; refused unposted when the wallet cannot vouch"
+        }
+      ],
+      "unverified": [
+        "The Ethereum and Bitcoin branches are read from source; the probes post address-shares through a test room, not the hosted call."
+      ]
+    },
+    {
       "id": "room/disclose-account",
       "name": "Disclose an account into the room",
       "area": "room",
@@ -2256,7 +2481,7 @@
       "name": "Check whether you are ready to take part in a proposal",
       "area": "room",
       "status": "built",
-      "summary": "The card's 'What this needs': the proposal's five questions plus this instance's readiness, each requirement graded met, missing or unknown with a remedy (exo-002.2). It grades your own keys and configuration only. The module installs nothing. Nothing is agreed.",
+      "summary": "The card's 'What this needs': the proposal's five questions plus this instance's readiness, each requirement graded met, missing or unknown with a remedy (exo-002.2). It grades your own keys, configuration and modules only. A missing module is named with the catalogue package that installs it, for Basecamp's Package Manager to install on your confirmation; the module installs nothing. Nothing is agreed.",
       "requirements": [
         {
           "kind": "authority",
@@ -2270,6 +2495,10 @@
       "touches": [
         {
           "target": "chain:<the proposal's chain>",
+          "mode": "read"
+        },
+        {
+          "target": "module:monero_wallet_backend (wallet_status, list_wallets)",
           "mode": "read"
         }
       ],
@@ -2289,7 +2518,7 @@
         {
           "step": "act",
           "who": "a member looking at a proposal",
-          "does": "coordinate_readiness(intentId) reads the proposal's policy and effect from the log, computes its driver's manifest, and grades each requirement for this instance only. module: asks the host whether the module is loaded. environment: probes the configured RPC (eth_chainId) or Bitcoin node (which chain it serves). authority: a Safe's owner set read from the chain (getOwners) and compared locally with your address; a Bitcoin key compared with the account's keys; a roster key with the room's roster. infra: configuration, or a funded LEZ account through lez_core. capability: unknown, since no host broker exists. The payload also carries the manifest (agreement, requirements, the full disclosure with the store node's rows, touches), the profile and the effect.",
+          "does": "coordinate_readiness(intentId) reads the proposal's policy and effect from the log, computes its driver's manifest, and grades each requirement for this instance only. module: read from the host's module registry, in three states (running, installed but not running, not installed); where installing would help it names the catalogue package, which the driver may name apart from the module (monero_wallet_backend is installed by monero_wallet_ui), so the card can raise Basecamp's packages.install. environment: probes the configured RPC (eth_chainId) or Bitcoin node (which chain it serves); on a monero: chain, the creditor's open wallet, read from the wallet backend's wallet_status, must be on the agreed network (a debtor pays from any wallet), and the remedy names the wallet to open (monero.wallet.unlock). authority: a Safe's owner set read from the chain (getOwners) and compared locally with your address; a Bitcoin key compared with the account's keys; a roster key with the room's roster. infra: configuration, or a funded LEZ account through lez_core. capability: unknown, since no host broker exists. The payload also carries the manifest (agreement, requirements, the full disclosure with the store node's rows, touches), the profile and the effect.",
           "signs": "nothing",
           "reveals": [
             {
@@ -2304,7 +2533,8 @@
           "evidence": [
             "module/tests/readiness_test.nim",
             "module/tests/lez_readiness_test.nim",
-            "scripts/card-self-test.sh"
+            "scripts/card-self-test.sh",
+            "module/tests/xmr_request_edges_test.nim"
           ]
         }
       ],
@@ -2333,9 +2563,10 @@
         },
         {
           "what": "installing or fetching what is missing",
-          "why": "the module names a remedy; the host acts on it (invariant 3)",
+          "why": "the module names the package and the remedy; Basecamp's Package Manager installs it, on the person's confirmation (invariant 3)",
           "evidence": [
-            "module/src/coordination/readiness.nim"
+            "module/src/coordination/readiness.nim",
+            "module/tests/readiness_test.nim"
           ]
         }
       ],
@@ -2364,6 +2595,10 @@
         {
           "claim": "Your RPC provider sees which Safe your client asks about, and when.",
           "credibility": "exposed"
+        },
+        {
+          "claim": "A Monero request's readiness reads only your own wallet's status: which wallet is open and on which network. It never asks the wallet to open, send or reveal anything.",
+          "credibility": "imperative"
         }
       ],
       "evidence": [
@@ -2374,6 +2609,10 @@
         {
           "kind": "test",
           "path": "module/tests/lez_readiness_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/xmr_request_edges_test.nim"
         },
         {
           "kind": "test",
@@ -2406,7 +2645,7 @@
       "name": "Check the room's infrastructure",
       "area": "room",
       "status": "built",
-      "summary": "Shows the liveness of the infrastructure the room relies on, and only that: the delivery node always, and any RPC or chain a proposal's driver introduced (exo-428). A room that only talks never probes an RPC. Nothing is agreed.",
+      "summary": "Shows the liveness of the infrastructure the room relies on, and only that: the delivery node always; its RLN membership on logos.test, where a node sends nothing without one; its mix path while sends are asked to ride the mixnet; and any RPC, chain or wallet a proposal's driver introduced (exo-428). A room that only talks never probes an RPC. Nothing is agreed.",
       "requirements": [
         {
           "kind": "infra",
@@ -2434,7 +2673,7 @@
         {
           "step": "act",
           "who": "a member",
-          "does": "connectivity() reads the delivery node's own view (getNodeInfo, local), then every row a proposal in the room introduced through an instance-party infra or environment requirement: a Safe proposal introduces the RPC, probed with eth_chainId and checked against the chain it needs. Each row is ok, warn, down or unknown and names the proposals that introduced it. An undeclared driver shows as unknown.",
+          "does": "connectivity() reads the delivery node's own view (getNodeInfo, local). On logos.test it adds the node's RLN membership row (rln_status). While the mix setting asks sends to ride the mixnet it adds the mix row, read from what delivery reports (the level asked, the node's mix key, the mix pool size against the four a path needs) and always saying that mix carries sends only. Then every row a proposal in the room introduced through an instance-party infra or environment requirement: a Safe proposal introduces the RPC, probed with eth_chainId and checked against the chain it needs; a Monero request introduces the wallet, graded from wallet_status (met when the creditor's wallet is open on the agreed network, unknown while unread or busy, missing when closed or elsewhere; a debtor pays from any wallet). Each row is ok, warn, down or unknown and names the proposals that introduced it. An undeclared driver shows as unknown.",
           "signs": "nothing",
           "reveals": [
             {
@@ -2444,7 +2683,10 @@
           ],
           "evidence": [
             "module/tests/room_infra_test.nim",
-            "scripts/infra-self-test.sh"
+            "scripts/infra-self-test.sh",
+            "module/tests/mix_status_test.nim",
+            "module/tests/rln_status_test.nim",
+            "module/tests/xmr_request_edges_test.nim"
           ]
         }
       ],
@@ -2466,7 +2708,8 @@
         }
       ],
       "hosted": [
-        "connectivity"
+        "connectivity",
+        "rln_status"
       ],
       "ui": "ConnectionIndicators.qml in Room.qml",
       "invariants": [
@@ -2484,6 +2727,10 @@
         {
           "claim": "An introduced RPC provider sees the chain-id probe and its timing.",
           "credibility": "exposed"
+        },
+        {
+          "claim": "The mix row never shows a false green: a reply it could not read is unknown, a pool below four mix nodes is a warning, and every row says mix carries sends, not reads.",
+          "credibility": "imperative"
         }
       ],
       "evidence": [
@@ -2499,6 +2746,18 @@
           "kind": "source",
           "url": "https://github.com/corpetty/muster/blob/main/module/src/coordination/room_infra.nim",
           "what": "the needs a room's proposals introduce"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/mix_status_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/rln_status_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/xmr_request_edges_test.nim"
         }
       ]
     },
