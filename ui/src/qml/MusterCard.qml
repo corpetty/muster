@@ -1211,6 +1211,7 @@ Rectangle {
                     spacing: Theme.spacing.tiny
                     readonly property var pay: cardRoot.xmrPay || ({})
                     readonly property bool linkShown: !!pay.ok && !pay.reported && !pay.confirmed && !cardRoot.splitExpired
+                    property bool walletAsked: false   // Pay with Monero Wallet was pressed
 
                     LogosText {
                         objectName: "cardXmrPayLine"
@@ -1277,7 +1278,51 @@ Rectangle {
                             TextEdit { id: clip; visible: false; width: 0; height: 0 }
                             Timer { id: copiedReset; interval: 1500; onTriggered: copyLink.copied = false }
                         }
+                        // Pay with Basecamp's own Monero Wallet: copy the address, then bring the
+                        // wallet app up, where the person sends. Its Send form takes an address
+                        // and an amount, not a monero: link (monero_wallet_ui 0.1.1), so the two
+                        // go across separately. Muster still sends nothing and approves nothing
+                        // (ADR-018); a review of a send Muster prepared waits on the wallet app
+                        // (exo-dcc.6).
+                        LogosButton {
+                            objectName: "cardXmrPayWithWallet"
+                            text: qsTr("Pay with Monero Wallet")
+                            onClicked: {
+                                clip.text = String(xmrPayBox.pay.payTo || "");
+                                clip.selectAll();
+                                clip.copy();
+                                xmrPayBox.walletAsked = true;
+                                cardRoot.openMoneroWallet("");
+                            }
+                        }
+                        LogosButton {
+                            objectName: "cardXmrCopyAmount"
+                            visible: xmrPayBox.walletAsked
+                            text: qsTr("Copy amount")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: {
+                                clip.text = cardRoot.eth(xmrPayBox.pay.amount);
+                                clip.selectAll();
+                                clip.copy();
+                            }
+                        }
                         Item { Layout.fillWidth: true }
+                    }
+                    LogosText {
+                        objectName: "cardXmrPayWithWalletHint"
+                        visible: xmrPayBox.linkShown && xmrPayBox.walletAsked
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        // the steps always; the wallet's answer too when it did not simply open
+                        text: {
+                            var steps = qsTr("The address is copied. In Monero Wallet, open Send, paste it as the address and enter exactly %1 XMR (Copy amount puts it on the clipboard). Send from there, then come back and press I paid.")
+                                        .arg(cardRoot.eth(xmrPayBox.pay.amount));
+                            var n = cardRoot.moneroWalletNote;
+                            return (n.length > 0 && n.indexOf(qsTr("Monero Wallet is open")) !== 0 && n !== qsTr("Your Monero wallet is open."))
+                                   ? steps + "\n" + n : steps;
+                        }
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: Theme.typography.badgeText
                     }
 
                     // "I paid": the debtor's claim, with the transaction id if they give one
