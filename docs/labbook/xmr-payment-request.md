@@ -1,8 +1,8 @@
 # The XMR payment request: the module half (exo-dcc.5)
 
 **2026-10-08. Status: built and held over a recording fake wallet backend; not yet run
-against a live stagenet wallet. The UI is built (below) and held offscreen; no live wallet
-has driven it.** ADR-018 (accepted) in
+against a live stagenet payment. The UI is built (below), held offscreen, and was seen on
+display in Basecamp 0.3.2 with a real stagenet wallet minting payTo.** ADR-018 (accepted) in
 `docs/02-implementation-plan.md`; plan `docs/design/monero-in-rooms.md` §4, §6 Phase 2; typed
 spec `contracts/specs/derived-exo-dcc.5.spec.json`, graded 7/7 by
 `scripts/grade-specs.sh exo-dcc.5`.
@@ -236,6 +236,23 @@ non-LEZ, non-Bitcoin chain as EVM.
   `ui/metadata.json`'s `uses`.
 - **Not shown: n/10 confirmations.** The projection says reported or confirmed, never how
   many confirmations a seen transfer has; the card says "confirms it at 10 confirmations".
+- **Seen on display (2026-10-09, Basecamp 0.3.2 on Xvfb, with the Monero stack and a fresh
+  stagenet wallet; the second member a standalone runner window on the same local
+  network).** Home's verb opens the room on Request and Split (Monero). With the wallet
+  closed, Propose is refused with `no-wallet`; Open Monero Wallet raises
+  `monero.accounts.manage`, Basecamp asks "Use this app? Muster wants to
+  monero.accounts.manage" and opens Monero Wallet. With the wallet open, Propose mints a
+  real stagenet subaddress; the debtor's card shows the QR (zbarimg reads it back as the
+  projection's `uri`, byte for byte), the link and I paid; the creditor's card shows "says
+  they paid", then, with the wallet closed, the warning, Open Monero Wallet, and the
+  readiness row's Open Monero Wallet; Mark received makes it final on both.
+- **Two fixes the display found.** `coordinate_set_policy("monero-split")` took the EVM
+  RPC's chain and refused (`splitChainFor` now defaults a Monero kind to stagenet), and the
+  room snapped a fresh request room back to "Split (Ethereum)" before the module's answer
+  arrived (`Room.requestedPolicy`).
+- **Seen, not fixed here (module copy and projections):** the Connections panel lists the
+  Monero chain as "this host cannot read a Monero wallet" even while the wallet is open,
+  and the room history says "settled their part" for an "I paid" report.
 - **Still not built: "Share my Monero address"**, for a request proposed on someone's
   behalf. `coordinate_share_address("monero:…")` exists, but the address-request card asks
   only for ETH and BTC, and the composer offers no "who paid" on Monero.
