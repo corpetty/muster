@@ -1,14 +1,22 @@
 # Runbook — verify the current state (2026-08-21)
 
-> **Superseded (2026-09-25) — a record of the 2026-08-21 state, not current instructions.**
-> It predates P4's completion (ADR-013 routed around `exo-c6a`), the fresh-clone build,
-> and Phases A–D. Verify the build today with:
-> [`module/tests/README.md`](../module/tests/README.md) (`module/tests/run-suite.sh` —
-> every unit test and probe in one command, plus the chain-bound tests),
-> the offscreen UI self-tests in [`scripts/`](../scripts/) (`card-`, `infra-`,
-> `audit-download-self-test.sh`, `two-instance-proof.sh`), and
-> [`manual-test-runbook.md`](manual-test-runbook.md) for what only a person at the screen
-> can check. The phase status lives in `CLAUDE.md`.
+> **Superseded (2026-09-25, pointers refreshed 2026-10-09) — a record of the 2026-08-21
+> state, not current instructions.** It predates P4's completion (ADR-013 routed around
+> `exo-c6a`), the fresh-clone build, Phases A–D, the split, Basecamp real use and the XMR
+> request. Its "42 probes" are 84 today. Verify the build today with:
+> - [`module/tests/README.md`](../module/tests/README.md): `module/tests/run-suite.sh` runs
+>   every unit test and probe in one command (233/233 on 2026-10-09), plus the chain-bound
+>   tests by name;
+> - `scripts/ui-parity.sh`: every offscreen UI self-test in [`scripts/`](../scripts/), one
+>   at a time, as a green/red table. `scripts/split-xmr-self-test.sh` and
+>   `ui/tests/qrcode-test.sh` cover the XMR request;
+> - [`manual-test-runbook.md`](manual-test-runbook.md) and
+>   [`runbooks/client-tour.md`](runbooks/client-tour.md), for what only a person at the
+>   screen can check;
+> - [`runbooks/install-from-catalogue.md`](runbooks/install-from-catalogue.md), for the
+>   install path a stranger takes.
+>
+> The phase status lives in `CLAUDE.md`.
 
 A layered runbook for exercising what the **real `module/`+`ui/` build** does today.
 Each layer is independent; run top-to-bottom for a full sweep, or jump to the layer
