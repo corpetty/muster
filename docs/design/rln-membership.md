@@ -7,7 +7,7 @@ and 3 are still open.
 ## 1. Why it is needed
 
 Since Testnet v0.3, `logos.test` rate-limits every message with RLN (Rate-Limiting
-Nullifiers). A delivery v0.3.0 node on that preset:
+Nullifiers). A delivery v0.3 node on that preset:
 
 - loads `liblogos_rln_module` ≥ 0.10.0 and `liblogos_lez_rln_module` ≥ 4.2.1;
 - runs without a membership, but **sends nothing** until its RLN membership is `active`

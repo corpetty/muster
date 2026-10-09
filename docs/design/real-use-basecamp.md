@@ -244,7 +244,7 @@ time two people could use muster without anyone seeding it.
 ## 8. Open questions
 
 1. **Does the 0.2-generation `muster_module` load beside 0.9-generation catalog modules in
-   Basecamp, and call them?** It does under the runner (delivery v0.3.0) and under `logoscore`
+   Basecamp, and call them?** It does under the runner (delivery v0.3.x; v0.3.2 is pinned) and under `logoscore`
    (keystore_module). R0 answers it for Basecamp.
 2. **Sepolia or Hoodi for R6?** Both are seeded by `eth_rpc_module.init_defaults()`. Sepolia
    has the Safe v1.4.1 deployments and more faucets, so it is the default.
