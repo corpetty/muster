@@ -205,3 +205,9 @@ Campaign copy says "on Logos's development network" until then.
 - The gifter's funding lands on LEZ classic, about 7.5×10⁷ per membership. That is the campaign team's cost and is recorded as such.
 - Slices: R2 (one membership active end to end, self-funded), then R3 (the room gifter), then R4 (the default fleet moves to `logos.test`).
 - Campaign copy says "on the Logos testnet" once R4 lands.
+
+**Amended (2026-10-09, by the operator): for now, everything live runs on `logos.dev`.** This covers the demo, dry runs and live testing. The target stays option 2, but it waits on two things: RLN being settled upstream, and the gifter's payer funded on LEZ classic. Until both hold:
+- Muster's default fleet stays `logos.dev`. The code always defaulted to it, and so does the released 0.2.0. R4 is the slice that changes the default, and it is not built.
+- `logos.test` stays one click away (Settings, `MUSTER_FLEET=logos.test`, `TRY_FLEET`, `FLEET=`). It is for working on R2 and R3, not for the demo.
+- Campaign copy says "on Logos's development network", with option 1's risk and mitigation: a dry run the day before, and `MUSTER_FLEET=local` as the fallback on one machine.
+- One trap goes with `logos.dev` in Basecamp. Delivery runs one node per Logos Core instance, and the first module to call `createNode` picks its fleet for every module. If another app, Chat for instance, boots it on `logos.test` first, Muster binds to that node (`exo-dcc.24`).

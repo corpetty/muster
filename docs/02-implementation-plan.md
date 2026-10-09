@@ -237,7 +237,7 @@ It cuts across the phases rather than adding one:
 | Phase | Pebble | State |
 |---|---|---|
 | 0 Ground truth: Basecamp 0.3.2, the lp_* spike, the ADR | `exo-dcc.1` | ✅ done 2026-10-08. Two spike questions wait on a funded stagenet wallet (`exo-dcc.19`) |
-| 1 Messaging with no LEZ | `exo-dcc.2` | Decided 2026-10-08: `logos.test` with a room gifter we run. Not built; waits on native LEZ to fund the gifter |
+| 1 Messaging with no LEZ | `exo-dcc.2` | Decided 2026-10-08: `logos.test` with a room gifter we run. Not built; waits on native LEZ to fund the gifter. For now (2026-10-09) the demo and live testing run on `logos.dev`, the default |
 | 1 An installable Muster | `exo-dcc.3` | Done: release `muster-v0.2.0` published 2026-10-09, installable from the catalogue |
 | 1 The mixnet | `exo-dcc.4` | ✅ opt-in `mix` setting, off by default |
 | 1 Install what's missing | `exo-dcc.10`, `.11` | ✅ seen on display in Basecamp 0.3.2 |
