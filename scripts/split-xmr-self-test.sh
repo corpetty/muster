@@ -56,7 +56,7 @@ sleep 5   # let both folds run a few ticks: a request that did land would show b
 
 line=$(refused)
 report=$(grep -aE "MUSTER-LP split report-paid $FAKE_ID" "$D/B.log" | tail -1)
-share=$(grep -aE "coordinate_share_address \"?$STAGENET" "$D/B.log" | tail -1)
+share=$(grep -aE "MUSTER-LP share-address $STAGENET \{" "$D/B.log" | tail -1)
 echo "A: ${line:-<no answer>}"
 echo "B: ${report:-<no report line>}"
 echo "B: ${share:-<no share line>}"
@@ -85,7 +85,7 @@ else echo "  FAIL B's \"I paid\" answer: ${report:-none}"; ok=0; fi
 python3 - "$share" <<'EOF' || ok=0
 import json, sys
 line = sys.argv[1]
-j = json.loads(line[line.index("{"):].replace('\\"', '"').rstrip('"')) if "{" in line else {}
+j = json.loads(line[line.index("{"):]) if "{" in line else {}
 wallet = {"no-wallet", "wallet-unread", "wallet-busy", "wallet-other-network", "wallet-watch-only"}
 checks = [("Share my Monero address reached the module and was refused for want of a wallet", j.get("error") in wallet),
           ("…naming monero.wallet.unlock and monero_wallet_ui", j.get("request") == "monero.wallet.unlock"

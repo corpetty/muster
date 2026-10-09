@@ -1972,7 +1972,7 @@ proc musterCoordinateProposeSettleUpAcross(chain, asset, rates, memo: string): s
   except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
   if gLpDebug: stderr.writeLine("MUSTER-LP settle-up across propose " & result)
 
-proc musterCoordinateShareAddress(chain: string): string =
+proc musterCoordinateShareAddressImpl(chain: string): string =
   ## Post MY address for `chain` as an author-signed address-share card: my Ethereum
   ## address, or the Bitcoin address of my own key on that network.
   if gSession == nil: return $(%*{"error": "not-joined"})
@@ -2001,6 +2001,11 @@ proc musterCoordinateShareAddress(chain: string): string =
   let (_, ev) = newMessageEvent(author, int64(epochTime()), $body, gMsgSeq)
   gSession.publishAuthored(moduleKeystore(), ev)
   $(%*{"address": body["address"].getStr()})
+
+proc musterCoordinateShareAddress(chain: string): string =
+  try: result = musterCoordinateShareAddressImpl(chain)
+  except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
+  if gLpDebug: stderr.writeLine("MUSTER-LP share-address " & chain.strip() & " " & result)
 
 proc musterCoordinateReportPaidImpl(intentId, tx: string): string =
   ## "I paid" for MY part of a Monero request (exo-dcc.5): my author-signed report, with the
