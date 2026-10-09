@@ -2225,3 +2225,8 @@
 {"type":"rename","timestamp":"2026-10-09T12:49:21.108809007Z","issue_id":"exo-1e2","payload":{"new_id":"exo-dcc.30"}}
 {"type":"dep_add","timestamp":"2026-10-09T12:49:21.108809007Z","issue_id":"exo-dcc.30","payload":{"dep_type":"parent-child","depends_on":"exo-dcc"}}
 {"type":"status_update","timestamp":"2026-10-09T12:53:28.577235097Z","issue_id":"exo-dcc.29","payload":{"status":"in_progress"}}
+{"type":"close","timestamp":"2026-10-09T14:07:29.896150508Z","issue_id":"exo-dcc.25","payload":{}}
+{"type":"close","timestamp":"2026-10-09T14:07:29.896150508Z","issue_id":"exo-dcc.28","payload":{}}
+{"type":"close","timestamp":"2026-10-09T14:07:29.896150508Z","issue_id":"exo-dcc.29","payload":{}}
+{"type":"close","timestamp":"2026-10-09T14:07:29.896150508Z","issue_id":"exo-dcc.30","payload":{}}
+{"type":"comment","timestamp":"2026-10-09T14:07:30.120629645Z","issue_id":"exo-dcc.26","payload":{"body":"2026-10-09: not reproduced between two standalone runners on logos.dev: invite-proof.sh green, and since exo-dcc.29 the invitee arrives a member with no ask. The Basecamp-side repro was cut short by a rate limit before it reported. Next: check in Basecamp 0.3.2 how the person got the other's chat id (an invite is sent only when the composer's 'who' is a 128-hex chat id; a pasted address sends none), and whether another module booted delivery on a different fleet first (exo-dcc.24)."}}
