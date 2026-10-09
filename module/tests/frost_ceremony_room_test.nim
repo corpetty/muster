@@ -175,8 +175,11 @@ block:
     if e.key == "intent/" & id3 & "/sig/" & aliceHost & "/1" and e.value != "00".repeat(64): realA = e
   doAssert realA.key.len > 0, "Alice's real round-1 contribution"
   var junk2: Event
-  for i in 1 .. 255:
-    junk2 = contributeEvent(id3, aliceHost, toHex(i, 2).toLowerAscii.repeat(64), round = 1, parents = realA.parents)
+  # Grind for junk whose id sorts before Alice's: her id is random, so with only 255
+  # candidates a small one beat them all about one run in 256 (exo-dcc.17). 65535
+  # candidates make that about one in 65536; a typical run still stops within a few.
+  for i in 1 .. 65535:
+    junk2 = contributeEvent(id3, aliceHost, toHex(i, 4).toLowerAscii.repeat(32), round = 1, parents = realA.parents)
     if eventId(junk2) < eventId(realA): break
   doAssert eventId(junk2) < eventId(realA), "no junk sorts first"
   r.bob.publish(junk2)
