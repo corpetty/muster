@@ -18,7 +18,7 @@
 ##                                (parts_xmr.nim, s3, s4, s7)
 ## Every wallet call goes through wallet/monero_backend's closed call set (s6).
 
-import std/[json, strutils, sequtils]
+import std/[json, strutils, sequtils, tables, times, options]
 import ../log/log
 import ../crypto/keystore
 import ../crypto/binding            # LinkContext
@@ -225,3 +225,96 @@ proc xmrConfirmByHand*(s: CoordinationSession, ks: Keystore, driverFor: DriverFo
 proc xmrShareBody*(chain, address: string): JsonNode =
   ## The address-share card a member posts so a request can be proposed on their behalf.
   %*{"kind": "address-share", "asset": XmrAsset, "chain": chain, "address": address, "form": 1}
+
+# ── what the room shows around a request (exo-dcc.20) ───────────────────────────────
+const XmrShareLabel* = "muster:share"
+
+proc xmrShareAddress*(s: CoordinationSession, ks: Keystore, b: MoneroBackend, chain: string,
+                      msgSeq: uint64, nowSec = int64(epochTime())): tuple[ok: bool, address, why: string] =
+  ## "Share my Monero address": a FRESH subaddress THIS member's own open wallet mints
+  ## (create_subaddress, labelled muster:share), held to the chain's network and payTo
+  ## rules (xmrMintPayTo, monero/address.nim), posted as their author-signed address-share
+  ## for `chain`. What a request proposed on their behalf pays them at — and their client
+  ## still checks their wallet lists it before they agree (s2). Refused, with nothing
+  ## minted or posted, when the wallet cannot vouch (no-wallet, wallet-other-network,
+  ## wallet-watch-only, wallet-unread, wallet-busy) or `chain` is not a Monero chain.
+  if networkOfChain(chain).isNone:
+    return (false, "", "unknown-chain: not a Monero chain muster knows: " & chain)
+  let m = xmrMintPayTo(b, chain, XmrShareLabel)
+  if not m.ok: return (false, "", m.why)
+  let (_, ev) = newMessageEvent("0x" & myIdentity(ks), nowSec, $xmrShareBody(chain, m.address), msgSeq)
+  s.publishAuthored(ks, ev)
+  (true, m.address, "")
+
+type XmrUnlockTarget* = object
+  ## Which wallet a remedy asks Monero Wallet to open: monero.wallet.unlock takes the
+  ## wallet's registry name, and answers bad_request without one.
+  read*: ReadState            ## rsAnswered once known; else the list did not answer — nothing named
+  detail*: string
+  wallet*: string             ## the one to name ("" = none to name)
+  wallets*: seq[string]       ## several could be the one: the person picks
+  none*: bool                 ## no wallet on the network at all: create or restore one (monero.accounts.manage)
+
+proc xmrUnlockTarget*(b: MoneroBackend, chain: string, mode = cmNow): XmrUnlockTarget =
+  ## The wallet to unlock for a request on `chain`: the open one when it is on the chain's
+  ## network and can spend; else, from list_wallets, the one registered on that network
+  ## that can spend (a file never opened, network "", only when none is known to be on
+  ## it); several, all of them, for the person to pick; none, `none`. A list that did not
+  ## answer names nothing and never says "none": it is not known. Reads wallet_status and
+  ## list_wallets only — never a request's own step (s6).
+  let want = networkOfChain(chain)
+  if want.isNone: return XmrUnlockTarget(read: rsUnread, detail: "not a Monero chain: " & chain)
+  let net = $want.get
+  let st = b.walletStatus(mode)
+  if st.read == rsAnswered and st.wallet.len > 0 and st.network == net and not st.watchOnly and
+     st.state in ["ready", "syncing", "opening"]:
+    return XmrUnlockTarget(read: rsAnswered, wallet: st.wallet)
+  let l = b.listWallets(mode)
+  if l.read != rsAnswered: return XmrUnlockTarget(read: l.read, detail: l.detail)
+  var exact, unknown: seq[string]
+  for w in l.wallets:
+    if w.viewOnly: continue
+    if w.network == net: exact.add w.name
+    elif w.network.len == 0: unknown.add w.name
+  let c = (if exact.len > 0: exact else: unknown)
+  if c.len == 1: XmrUnlockTarget(read: rsAnswered, wallet: c[0])
+  elif c.len > 1: XmrUnlockTarget(read: rsAnswered, wallets: c)
+  else: XmrUnlockTarget(read: rsAnswered, none: true,
+                        detail: "no " & net & " wallet that can spend is registered in Monero Wallet")
+
+proc unlockJson*(t: XmrUnlockTarget): JsonNode =
+  ## What a hosted remedy carries beside request: "monero.wallet.unlock": the wallet to
+  ## name, the ones to pick from, and whether there is none (then monero.accounts.manage).
+  %*{"wallet": t.wallet, "wallets": t.wallets, "noWallet": t.none}
+
+proc xmrSeenConfirmations*(events: seq[Event], driverFor: DriverFor, seam: MoneroPartSeam,
+                           me: string): Table[string, int] =
+  ## "<intent>/<part>" → confirmations (0–9) of the transfer of exactly that share THIS
+  ## creditor's own wallet history shows at payTo, below the 10 a part is confirmed at —
+  ## for every unconfirmed part of an agreed Monero request `me` confirms. Only what a
+  ## read showed: a busy or unanswered read, another network, or no such transfer adds
+  ## nothing (never an invented count). On a debtor's client it is empty.
+  let claimed = confirmedRefs(events, driverFor)
+  for v in reduceIntentViews(events, driverFor):
+    if not isXmrPolicy(v.policy) or v.state notin ["executable", "submitted", "settling"]: continue
+    let drv = driverFor(v.policy)
+    let effect = effectFromJson(v.effectJson)
+    for p in v.parts:
+      if p.confirmed: continue
+      if drv.partAuthor(effect, p.part, "confirmed").toLowerAscii() != me.toLowerAscii(): continue
+      let t = drv.partTransfer(effect, p.part)
+      if not t.ok: continue
+      let m = seam.readMatch(t, claimed)
+      if m.verdict == xvPending and m.seen: result[v.id & "/" & p.part] = int(m.confirmations)
+
+proc xmrOwedOn*(events: seq[Event], driverFor: DriverFor, me: string): seq[string] =
+  ## The Monero chains `me` is owed on: every request not yet final (nor dropped or
+  ## expired) that names them as its creditor. Their own wallet vouches for and confirms
+  ## those; on any other chain they at most pay, from any wallet.
+  let mine = me.toLowerAscii().replace("0x", "")
+  for v in reduceIntentViews(events, driverFor):
+    if not isXmrPolicy(v.policy) or v.state in ["final", "dropped", "expired"]: continue
+    try:
+      let sp = splitOf(effectFromJson(v.effectJson))
+      if sp.creditor == mine and sp.chain notin result: result.add sp.chain
+    except ValueError: discard

@@ -457,6 +457,8 @@ type
     title*: string       ## the plain-language headline
     detail*: string      ## a supporting line (may be "")
     attestation*: string ## approve entries: "committed" | "unattested" (exo-ef1); "" otherwise
+    claim*: bool         ## part-settled: the payer's word only, which nothing has confirmed yet —
+                         ## a Monero payment, paid from any wallet outside muster (exo-dcc.20)
 
 proc shortId(s: string): string =
   ## A short, stable handle for a long hex id (an owner address / identity).
@@ -472,7 +474,8 @@ proc activityTitle*(a: ActivityEntry, label: proc (who: string): string): string
   of "decline": (if a.account.len > 0: "Declined by " & label(a.account) else: a.title)
   of "part-settled":
     let who = label(a.subject)
-    if who == "you": "You settled your part" else: cap(who) & " settled their part"
+    if a.claim: (if who == "you": "You said you paid" else: cap(who) & " says they paid")
+    elif who == "you": "You settled your part" else: cap(who) & " settled their part"
   of "part-confirmed":
     let by = label(a.account)
     let whose = label(a.subject)
@@ -626,9 +629,16 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
         author = j{"author"}.getStr(); tx = j{"tx"}.getStr()
       except CatchableError: discard
       if p[4] == "settled":
+        # a Monero debtor pays from any wallet outside muster, so their report is their
+        # word until the creditor's own wallet confirms the part (exo-dcc.5, exo-dcc.20)
+        let claim = driverFor(intentPolicyOf(events, id)).profile().settlement == "monero" and
+                    not partsAt[id].hasKey(p[3] & "/confirmed")
         result.add ActivityEntry(seq: i, order: 0, kind: "part-settled", intentId: id,
-          account: author, subject: p[3], title: shortId(p[3]) & " settled their part",
-          detail: (if tx.len > 0: "reported " & shortId(tx) & " on the chain" else: ""))
+          account: author, subject: p[3], claim: claim,
+          title: shortId(p[3]) & (if claim: " says they paid" else: " settled their part"),
+          detail: (if claim: (if tx.len > 0: "gave the transaction id " & shortId(tx) & " — " else: "") &
+                             "only the creditor's own wallet confirms it"
+                   elif tx.len > 0: "reported " & shortId(tx) & " on the chain" else: ""))
       else:
         result.add ActivityEntry(seq: i, order: 0, kind: "part-confirmed", intentId: id,
           account: author, subject: p[3], title: shortId(author) & " confirmed " & shortId(p[3]) & "'s part",

@@ -122,7 +122,7 @@ proc partViewOf(v: IntentView, part: string): tuple[found: bool, p: PartView] =
   for p in v.parts:
     if p.part == part: return (true, p)
 
-proc confirmedRefs(events: seq[Event], driverFor: DriverFor): HashSet[string] =
+proc confirmedRefs*(events: seq[Event], driverFor: DriverFor): HashSet[string] =
   ## Every transaction reference already confirmed for some part in this room.
   for v in reduceIntentViews(events, driverFor):
     for p in v.parts:

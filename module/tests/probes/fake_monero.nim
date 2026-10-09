@@ -27,6 +27,9 @@ type
     status*, info*, hist*: Answer   ## how wallet_status / receive_info / history answer
     subs*: seq[Subaddress]       ## minted subaddresses (index ≥ 1)
     rows*: seq[JsonNode]         ## history rows, as the backend writes them
+    listing*: Answer             ## how list_wallets answers (exo-dcc.20)
+    registry*: seq[Registered]   ## the wallets list_wallets names; empty = the open one alone
+  Registered* = tuple[name, network: string, viewOnly: bool]
 
 proc keyOf(tag: string): array[32, byte] =
   var b: seq[byte]
@@ -119,6 +122,21 @@ method invoke*(f: FakeMoneroBackend, meth: string, args: JsonNode, mode: CallMod
   of "caller_identity":
     tstr(%*{"approvers": ["monero_wallet_ui"], "custodians": ["monero_wallet_ui"], "identity": "muster_module",
             "kind": "module", "ok": true})
+  of "list_wallets":
+    # ungated: every wallet file the registry knows, open or not (glue.rs list_wallets);
+    # a file never opened shows network "" (atlas monero-wallet §5)
+    case f.listing
+    of anUnreachable: return ""
+    of anBusy: return tstr(%*{"ok": false, "busy": true})
+    of anAnswered: discard
+    var ws = newJArray()
+    let reg = (if f.registry.len > 0: f.registry
+               elif f.network.len > 0: @[(name: f.seed, network: f.network, viewOnly: f.watchOnly)]
+               else: @[])
+    for r in reg:
+      ws.add %*{"name": r.name, "network": r.network, "label": "", "viewOnly": r.viewOnly,
+                "restoreHeight": 0, "address": ""}
+    tstr(%*{"ok": true, "wallets": ws})
   of "list_networks":
     tstr(%*{"active": (if f.network.len > 0: f.network else: "stagenet"),
             "networks": ["mainnet", "stagenet", "testnet", "regtest"], "ok": true})
@@ -129,6 +147,9 @@ method invoke*(f: FakeMoneroBackend, meth: string, args: JsonNode, mode: CallMod
 
 const AllowedCalls* = ["wallet_status", "receive_info", "create_subaddress", "history",
                        "caller_identity", "list_networks", "address_valid"]
+  ## What a request's steps may ask (s6). list_wallets is a read muster makes only to name
+  ## the wallet a remedy asks Monero Wallet to open (xmrUnlockTarget, exo-dcc.20) — never
+  ## on a request's own steps, so it stays off this set and a step that asks it fails here.
 const ForbiddenCalls* = ["prepare_send", "confirm_send", "cancel_send", "configure", "open_wallet",
                          "close_wallet"]
 const ForbiddenPrefixes* = ["set_", "reveal_", "restore_"]

@@ -26,10 +26,13 @@ const
   MoneroWalletApp* = "monero_wallet_ui"        ## the package that installs the stack and holds its roles
   MoneroUnlockIntent* = "monero.wallet.unlock" ## the wallet app's intent: it opens a wallet, the person types the password there
   MoneroReadMethods* = ["wallet_status", "receive_info", "create_subaddress", "history",
-                        "caller_identity", "list_networks", "address_valid"]
+                        "caller_identity", "list_networks", "address_valid", "list_wallets"]
     ## Everything muster may ask the wallet backend: reads, and one mint
     ## (create_subaddress, which needs no role). Nothing that builds, signs or broadcasts
     ## a transfer, and nothing that changes the wallet's roles or opens a wallet.
+    ## list_wallets (ungated: names and networks, no key) is read only to name the wallet a
+    ## remedy asks Monero Wallet to open (monero.wallet.unlock needs {wallet}, exo-dcc.20) —
+    ## never on a request's own steps.
   XmrConfirmDepth* = 10
     ## CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE (monero src/cryptonote_config.h): a received
     ## output unlocks after 10 blocks, and that is the depth a part is confirmed at.
@@ -86,6 +89,16 @@ type
     read*: ReadState
     detail*: string
     rows*: seq[HistoryRow]
+
+  RegisteredWallet* = object
+    name*: string             ## the registry name monero.wallet.unlock takes
+    network*: string          ## mainnet | stagenet | testnet | regtest | "" (a file never opened)
+    viewOnly*: bool
+
+  WalletList* = object
+    read*: ReadState
+    detail*: string
+    wallets*: seq[RegisteredWallet]
 
   Minted* = object
     ok*: bool
@@ -228,6 +241,21 @@ proc history*(b: MoneroBackend, mode = cmNow): History =
                                amount: atomicOf(row{"amount"}), confirmations: intOf(row{"confirmations"}),
                                pending: row{"pending"}.getBool(false), failed: row{"failed"}.getBool(false),
                                account: int(intOf(row{"account"})), subaddrIndex: indicesOf(row{"subaddrIndex"}))
+
+proc listWallets*(b: MoneroBackend, mode = cmNow): WalletList =
+  ## list_wallets(): every wallet the backend's registry knows, open or not
+  ## ({wallets:[{name, network, label, viewOnly, restoreHeight, address}]}). Ungated.
+  let j = b.call("list_wallets", newJArray(), mode)
+  if j != nil and j.kind == JObject and not j.hasKey("ok") and not j.hasKey("busy") and
+     j{"wallets"} != nil and j["wallets"].kind == JArray:
+    j["ok"] = %true                     # the registry's own shape: a list is an answer
+  let (r, why) = unread(j, "list_wallets")
+  if r != rsAnswered: return WalletList(read: r, detail: why)
+  result = WalletList(read: rsAnswered)
+  for w in j{"wallets"}.getElems():
+    if w.kind != JObject or w{"name"}.getStr().len == 0: continue
+    result.wallets.add RegisteredWallet(name: w{"name"}.getStr(), network: w{"network"}.getStr(),
+                                        viewOnly: w{"viewOnly"}.getBool(false))
 
 proc createSubaddress*(b: MoneroBackend, label: string): Minted =
   ## create_subaddress(0, label): a fresh subaddress of account 0, stored at once. Needs
