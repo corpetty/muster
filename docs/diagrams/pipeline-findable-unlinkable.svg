@@ -3,17 +3,20 @@
   <desc>Shielded receiving keys handed over in band against an on-chain label registered publicly. Both are in the execution zone's contract; only the first is wired into this build, so the comparison is an argument in prose rather than a screenshot.</desc>
 <!-- provenance
      serves:   POST
-     shows:    Two discovery models the same stack ships: shielded receiving keys handed
-               over in band, against an on-chain label anyone can resolve — with which
-               one is actually wired into the build marked on its face.
+     shows:    Two ways to be found: shielded receiving keys handed over in band (wired
+               into the build), against a public on-chain name anyone resolves, a pattern
+               no part of the stack ships. Each column names its cost.
      sources:  docs/posts/01-discovery-supporting-material.md
                demo/GAPS.md
      evidence: [measured] The shielded-keys column describes what the build does: an
                    address handed over in band, nothing resolved, no third party involved
-               [from-source] add_label and resolve_label are present in the generated
-                   contract and NOT exercised in this build. The figure marks that on the
-                   column itself rather than in a footnote, because the earlier prose draft
-                   implied a UI that does not exist
+               [from-source] Corrected 2026-10-09: lez_core's add_label / resolve_label
+                   go through wallet_ffi_add_label on the wallet's own handle (logos-
+                   execution-zone-module src/lez_core_module.cpp @549cf115): names kept in
+                   the wallet's own storage, not on chain, and Muster uses them to name its
+                   own accounts (exo-884). No on-chain name registry ships in the stack
+                   (logos-module-atlas gaps.md), so the right column is a pattern, said in
+                   prose.
      recheck:  If the label system is ever wired in. Until then the right-hand column
                stays dashed and the caption stays honest about it.
 -->
@@ -21,7 +24,7 @@
   <rect width="880" height="496" fill="#E4E6E0"/>
 
   <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">Findable, or unlinkable</text>
-  <text x="40" y="64" font-size="13.5" fill="#656E66">The same stack ships both discovery models. The costs are real on both sides, and they are not the same cost.</text>
+  <text x="40" y="64" font-size="13.5" fill="#656E66">Two ways to be found. The costs are real on both sides, and they are not the same cost.</text>
 
   <!-- column headers -->
   <rect x="225" y="86" width="310" height="42" rx="5" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.4"/>
@@ -30,7 +33,7 @@
 
   <rect x="545" y="86" width="295" height="42" rx="5" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1" stroke-dasharray="5 4"/>
   <text x="559" y="105" font-size="12" font-weight="600" fill="#1A1F1C">An on-chain label</text>
-  <text x="559" y="120" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#A32D1E">IN THE CONTRACT, NOT IN THE APP</text>
+  <text x="559" y="120" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" fill="#A32D1E">A PATTERN, NOT IN THE STACK</text>
 
   <!-- ── row 1 ── -->
   <text x="40" y="152" font-size="10.5" font-weight="600" fill="#1A1F1C">How you are found</text>
@@ -66,16 +69,16 @@
   <text x="239" y="318" font-size="10" fill="#3F4742">Lower. Somebody has to hand you</text>
   <text x="239" y="332" font-size="10" fill="#3F4742">something, over a channel you trust.</text>
   <rect x="545" y="298" width="295" height="46" rx="4" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
-  <text x="559" y="318" font-size="10" font-weight="600" fill="#1A1F1C">Genuinely nicer.</text>
-  <text x="559" y="332" font-size="10" fill="#3F4742">That is not a small thing, and saying so</text>
-  <text x="559" y="344" font-size="10" fill="#3F4742">costs the argument nothing.</text>
+  <text x="559" y="314" font-size="10" font-weight="600" fill="#1A1F1C">Genuinely nicer.</text>
+  <text x="559" y="327" font-size="10" fill="#3F4742">That is not a small thing, and saying so</text>
+  <text x="559" y="339" font-size="10" fill="#3F4742">costs the argument nothing.</text>
 
   <!-- ── the honest status ── -->
   <rect x="40" y="366" width="800" height="106" rx="6" fill="#F7F8F5" stroke="#A32D1E" stroke-width="1.2"/>
-  <text x="56" y="388" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#A32D1E">BOTH ARE IN THE STACK. ONE IS IN THE APP.</text>
+  <text x="56" y="388" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#A32D1E">ONE IS IN THE STACK. THE OTHER IS A PATTERN.</text>
 
-  <text x="56" y="410" font-size="10.5" fill="#3F4742"><tspan font-family="'DM Mono',ui-monospace,Menlo,monospace">lez_core</tspan> exposes <tspan font-family="'DM Mono',ui-monospace,Menlo,monospace">add_label</tspan> and <tspan font-family="'DM Mono',ui-monospace,Menlo,monospace">resolve_label</tspan> — read off the generated contract, and <tspan font-weight="600">not exercised in this build</tspan>.</text>
-  <text x="56" y="426" font-size="10.5" font-weight="600" fill="#A32D1E">So this fork is an argument in prose, not a screenshot. Say that rather than implying a UI that is not there.</text>
+  <text x="56" y="410" font-size="10.5" fill="#3F4742">Corrected 2026-10-09: <tspan font-family="'DM Mono',ui-monospace,Menlo,monospace">lez_core</tspan>'s <tspan font-family="'DM Mono',ui-monospace,Menlo,monospace">add_label</tspan> / <tspan font-family="'DM Mono',ui-monospace,Menlo,monospace">resolve_label</tspan> name accounts in the wallet's <tspan font-weight="600">own storage, not on chain</tspan>.</text>
+  <text x="56" y="426" font-size="10.5" font-weight="600" fill="#A32D1E">No on-chain name registry ships in the stack, so this column is an argument in prose, not a screenshot.</text>
 
   <text x="56" y="452" font-size="10.5" fill="#3F4742">Which one is right depends entirely on whether you would rather be <tspan font-style="italic">findable</tspan> or <tspan font-style="italic">unlinkable</tspan>. There is no universal answer —</text>
   <text x="56" y="466" font-size="10.5" fill="#3F4742">which is exactly why it is worth showing as a fork, with both costs named, rather than settled quietly in a default.</text>

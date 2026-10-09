@@ -23,13 +23,23 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "3400756031b918fde9f48f226d60d6ca7f450b78ad841fd682b451255382e067",
+          "sha256": "ff148d17eb317ede7e4f8f6401e533e432fd0d2e42a8c27a5635104ff2b4c608",
           "note": "the specified build, the three hosts, ADR-008"
         },
         {
           "path": "docs/00-vision.md",
           "sha256": "76403cf3cdb0f8bf9b062270c5f1f929dda6015a63570306f0a248c62d5af619",
           "note": "the mixnet status this diagram refuses to overstate"
+        },
+        {
+          "path": "module/metadata.json",
+          "sha256": "22bcbe4f72b61c795b59524d994816c1400ad0a51681ce334beed2b2d8a2e136",
+          "note": "muster_module's required and optional dependencies, the edges and the dashed optional nodes"
+        },
+        {
+          "path": "docs/labbook/mixnet-on-delivery-03.md",
+          "sha256": "d259e24675cc92b50ee8b2e9f6991ca56f5f75726c35a1228ccc646804bffd19",
+          "note": "the mixnet's status: opt-in, sends only, not who reads"
         }
       ],
       "evidence": [
@@ -55,7 +65,7 @@
         "substrate-stack-spec-build.svg",
         "substrate-stack-beyond.svg"
       ],
-      "recheck": "Every phase. P0 landing makes muster-module real and it stops being dashed; ADR-010's resolution may remove the chat_module box entirely; any movement on LOGOS-MIXNET changes the network layer."
+      "recheck": "Every phase. A change to muster_module's dependencies (module/metadata.json: required, optional, ranges) changes its edges; any movement on the mixnet (send-only today, opt-in) changes the network layer; the demo view stays as the frozen demo/ build."
     },
     {
       "file": "substrate-pipeline.html",
@@ -64,7 +74,7 @@
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
+          "sha256": "05b524b114311d5755f7457c476e70587205bf809070d055393a54fecbc9df24",
           "note": "§1 the seven stages and their leak descriptions; §2 the scoring and the cell-by-cell justification"
         },
         {
@@ -79,8 +89,8 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "3400756031b918fde9f48f226d60d6ca7f450b78ad841fd682b451255382e067",
-          "note": "F-4/FS-6 as specified-and-unbuilt, behind the contracting row's gap"
+          "sha256": "ff148d17eb317ede7e4f8f6401e533e432fd0d2e42a8c27a5635104ff2b4c608",
+          "note": "F-4/FS-6: built in Muster's own client since the demo build, which never re-derived; the contracting row says so"
         }
       ],
       "evidence": [
@@ -112,7 +122,7 @@
         "substrate-pipeline-obs-nobody.svg",
         "substrate-pipeline-unassessed.svg"
       ],
-      "recheck": "Every phase, and before any post using it publishes. The two unassessed cells become assessable only when the zone answers on mempool visibility and the production sequencer model; the contracting row changes when F-4/FS-6 land."
+      "recheck": "Every phase, and before any post using it publishes. The middle column is the September 2026 demo build, a dated snapshot; the two unassessed cells become assessable only when the zone answers on mempool visibility and the production sequencer model. Today's link-by-link status lives in docs/runbooks/explaining-muster.md §4c, not here."
     },
     {
       "file": "pipeline-private-transfer-flow.svg",
@@ -137,7 +147,7 @@
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
           "note": "the pipeline framing the steps map onto, and the 'send a friend' instance the figure draws",
-          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e"
+          "sha256": "05b524b114311d5755f7457c476e70587205bf809070d055393a54fecbc9df24"
         },
         {
           "path": "docs/00-vision.md",
@@ -146,8 +156,8 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "note": "F-4/FS-6 and F-20 as specified-and-unbuilt, behind the step-04 approval flag and the footer",
-          "sha256": "3400756031b918fde9f48f226d60d6ca7f450b78ad841fd682b451255382e067"
+          "note": "F-4/FS-6 and F-20: built in Muster's own client, not in the demo build this figure walks",
+          "sha256": "ff148d17eb317ede7e4f8f6401e533e432fd0d2e42a8c27a5635104ff2b4c608"
         }
       ],
       "evidence": [
@@ -164,7 +174,7 @@
           "note": "The step-04 flag (room authenticates, zone does not authorize; single-key account) and the footer (signs no log, re-derives nothing it signs) describe the demo build, which has none of F-4/FS-6 or F-20; the footer says these are built in Muster's own client, not in this one. 'No mixnet here' is the transfer's path: the mixnet Muster offers since 2026-10-08 carries room sends only. Ordering/mempool is marked NOT ASSESSED in the figure itself, not omitted"
         }
       ],
-      "recheck": "P3 and P4, and before any post using it publishes. F-4/FS-6 and F-20 landing removes the step-04 flag and the footer's 're-derives nothing it signs'; ADR-010 may change which module mints identity; the mempool cell becomes assessable only when the zone answers; libchat#28 (chat_module state not persisted) changes what steps 01 and 06 survive across a restart."
+      "recheck": "Before any post using it publishes. It is the demo build's private transfer; Muster's own client re-derives (F-4/FS-6) and refuses the unaccountable (F-20), and the footer says the demo did not. The mempool cell becomes assessable only when the zone answers; libchat#28 (chat_module state not persisted) changes what steps 01 and 06 survive across a restart."
     },
     {
       "file": "arch-instance-topology.svg",
@@ -216,21 +226,21 @@
       "sources": [
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "3400756031b918fde9f48f226d60d6ca7f450b78ad841fd682b451255382e067",
+          "sha256": "ff148d17eb317ede7e4f8f6401e533e432fd0d2e42a8c27a5635104ff2b4c608",
           "note": "ADR-008, the LIDL contract layer, the Nim gap and the four bridge functions"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
+          "sha256": "4d8ba9ff1a9e8903711a8e230dce1c6794bf0bdc6b801c077509929a85bc21ed",
           "note": "the two rules the C header states, and the never-hand-write-what-the-contract-generates rule"
         },
         {
           "path": "module/metadata.json",
-          "sha256": "3342756eebdb429fa874e1ab00868b0e48060ccf0ea6f6bcc0f5c98e5c6d6394"
+          "sha256": "22bcbe4f72b61c795b59524d994816c1400ad0a51681ce334beed2b2d8a2e136"
         },
         {
           "path": "ui/metadata.json",
-          "sha256": "cc470acf28fa70040e7f0cd69f9c74f0186697d2fb3feeff4736217aebc974f9",
+          "sha256": "3d4959c0e83a9fb23affe7e6efedffbd5a0e88820953120c132fc03d72655cd4",
           "note": "the one codegen key — rep"
         },
         {
@@ -240,7 +250,7 @@
         },
         {
           "path": "ui/src/muster_ui_backend.h",
-          "sha256": "3bdeefaa2d1c9e3f1c5e3663d034f1d0ea2595e5476ac2a161d44887799a9d93",
+          "sha256": "0aeb48f1b464475307853057093ad8dff54af4206137fd9293468f2f6bcd6f36",
           "note": "MusterUiBackend, the hand-written backend class"
         }
       ],
@@ -314,7 +324,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "3400756031b918fde9f48f226d60d6ca7f450b78ad841fd682b451255382e067",
+          "sha256": "ff148d17eb317ede7e4f8f6401e533e432fd0d2e42a8c27a5635104ff2b4c608",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -351,17 +361,17 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "3400756031b918fde9f48f226d60d6ca7f450b78ad841fd682b451255382e067",
+          "sha256": "ff148d17eb317ede7e4f8f6401e533e432fd0d2e42a8c27a5635104ff2b4c608",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
+          "sha256": "4d8ba9ff1a9e8903711a8e230dce1c6794bf0bdc6b801c077509929a85bc21ed",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
           "path": "module/src/intents/materialization.nim",
-          "sha256": "d26198259f4735b666309eeaccad2287c5650b6656848d80658c34671d4a9ed0",
+          "sha256": "62e74f0b199a4045996f8af999cc953128781feadde3b84093b7be83a872c1a1",
           "note": "reviewAndCheck, canonicalize as a Driver method, signProposal consulting no config"
         }
       ],
@@ -393,7 +403,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "3400756031b918fde9f48f226d60d6ca7f450b78ad841fd682b451255382e067",
+          "sha256": "ff148d17eb317ede7e4f8f6401e533e432fd0d2e42a8c27a5635104ff2b4c608",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -403,7 +413,7 @@
         },
         {
           "path": "module/src/coordination/attest.nim",
-          "sha256": "d8bcd9adeccb90bb4ef2275e9e73a161f08489557295995cb0b6a8284915cafb",
+          "sha256": "56b82ae88a3dbbfaf2c531458515171ca7c444607b3e295937c377a09bcd14f2",
           "note": "the live attestation P = signedBytes(payload, provenance record), exo-ef1"
         }
       ],
@@ -443,7 +453,7 @@
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
+          "sha256": "4d8ba9ff1a9e8903711a8e230dce1c6794bf0bdc6b801c077509929a85bc21ed",
           "note": "invariant 10, and invariant 1 whose blind spot the figure draws"
         },
         {
@@ -458,7 +468,7 @@
         },
         {
           "path": "module/src/coordination/attest.nim",
-          "sha256": "d8bcd9adeccb90bb4ef2275e9e73a161f08489557295995cb0b6a8284915cafb",
+          "sha256": "56b82ae88a3dbbfaf2c531458515171ca7c444607b3e295937c377a09bcd14f2",
           "note": "the live path: log-derived inputs, the unaccountable-input refusal, approval grades"
         }
       ],
@@ -494,12 +504,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "3400756031b918fde9f48f226d60d6ca7f450b78ad841fd682b451255382e067",
+          "sha256": "ff148d17eb317ede7e4f8f6401e533e432fd0d2e42a8c27a5635104ff2b4c608",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
+          "sha256": "4d8ba9ff1a9e8903711a8e230dce1c6794bf0bdc6b801c077509929a85bc21ed",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -514,12 +524,12 @@
         },
         {
           "path": "module/src/coordination/session.nim",
-          "sha256": "e808aeeb40f29a44be58b2d959416eb0de4e0e361715589a0b8cbbeb40ed3478",
+          "sha256": "1f9c33739eb3c18d3424c080ad0b22e04ecac006e5468b878fe1658ef48d40fa",
           "note": "each event sealed to the room under the epoch key"
         },
         {
           "path": "module/src/coordination/authorship.nim",
-          "sha256": "dde4421c98c83c1ffdc6980688acd6ab27d682f79d2a62475ad6dd22dc298610",
+          "sha256": "f0d5d7ad0707d94672105ecca0d382bf867ddbb56ed4a6f0ee13a900d63f6c50",
           "note": "which kinds are author-signed, and the room's authentic read path (exo-f76)"
         }
       ],
@@ -551,12 +561,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "3400756031b918fde9f48f226d60d6ca7f450b78ad841fd682b451255382e067",
+          "sha256": "ff148d17eb317ede7e4f8f6401e533e432fd0d2e42a8c27a5635104ff2b4c608",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "module/src/crypto/epoch_crypto.nim",
-          "sha256": "d33054892b31a8465b3ff9ef3c39f2b9bfc2496d932693e1075a9070496576bd",
+          "sha256": "ea1509214e591fb6a2b782d72c7b3fb662ddc5bb28129e82ac842048b2ff83ac",
           "note": "EpochCrypto: sealed-box key wrap; add, admit and removal each open a new epoch"
         }
       ],
@@ -588,28 +598,38 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "3400756031b918fde9f48f226d60d6ca7f450b78ad841fd682b451255382e067",
+          "sha256": "ff148d17eb317ede7e4f8f6401e533e432fd0d2e42a8c27a5635104ff2b4c608",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
+          "sha256": "4d8ba9ff1a9e8903711a8e230dce1c6794bf0bdc6b801c077509929a85bc21ed",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
           "path": "module/src/drivers/driver.nim",
-          "sha256": "dc9573ca287c435fb960660d32c17908a9d588b8b241ff5c1bfcf35b64830f74",
+          "sha256": "1137ab8ea7361d48f7fcbec97988b6816464640ee213a4986c0508ba24060c34",
           "note": "describe, verifyContribution, environment, the Collection"
         },
         {
           "path": "module/src/drivers/registry.nim",
-          "sha256": "2e2b7430bbed8dd8798f2355dd70912c9042ef80b730dc765f88032914315986",
+          "sha256": "668308c5da749a2a308ec9d4c1d9620fbf0f5dfbdf5166535b71961e22db43a2",
           "note": "the registered driver kinds"
         },
         {
           "path": "module/src/settlement/settlement.nim",
-          "sha256": "7d2ee042af5cf0a209eb297f56e34360f3d83aaebedc9ba755547df7f244ec1a",
+          "sha256": "579d6b9a859ece110821a239c430caddf87c3ecfb3c3cf313dacfeeca42c82a6",
           "note": "assemble, submit and watch on the Settlement seam"
+        },
+        {
+          "path": "module/src/intents/materialization.nim",
+          "sha256": "62e74f0b199a4045996f8af999cc953128781feadde3b84093b7be83a872c1a1",
+          "note": "the Driver's base methods: describeFor, settlementParts, partTransfer, covers"
+        },
+        {
+          "path": "module/src/coordination/parts.nim",
+          "sha256": "91c772960391b7282505ce098a27ab469db9be2ee608cc680c57fa4aa96b67d5",
+          "note": "settlement in parts: the PartSeam a split settles through"
         }
       ],
       "evidence": [
@@ -622,7 +642,7 @@
           "note": "The split, read from the build: driver.nim (describe, verifyContribution, environment, Collection), intents/materialization.nim (canonicalize and the fold hooks), drivers/manifest.nim and profile.nim, settlement/settlement.nim (assemble, submit, watch; settlementFor gives a split none), intents/materialization.nim's describeFor and the part hooks with coordination/parts.nim's PartSeam (a split settles in parts); the sixteen kinds from drivers/registry.nim. F-8's queue is not in the code"
         }
       ],
-      "recheck": "When a driver kind is added to registry.nim, the Driver's methods change, or F-8's queue lands."
+      "recheck": "When a driver kind is added to registry.nim, the Driver's methods change (describeFor, settlement in parts), or F-8's queue lands."
     },
     {
       "file": "mech-two-identities.svg",
@@ -636,7 +656,7 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "3400756031b918fde9f48f226d60d6ca7f450b78ad841fd682b451255382e067",
+          "sha256": "ff148d17eb317ede7e4f8f6401e533e432fd0d2e42a8c27a5635104ff2b4c608",
           "note": "which phase builds it, and the accept criteria"
         },
         {
@@ -673,12 +693,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "3400756031b918fde9f48f226d60d6ca7f450b78ad841fd682b451255382e067",
+          "sha256": "ff148d17eb317ede7e4f8f6401e533e432fd0d2e42a8c27a5635104ff2b4c608",
           "note": "which phase builds it, and the accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
+          "sha256": "4d8ba9ff1a9e8903711a8e230dce1c6794bf0bdc6b801c077509929a85bc21ed",
           "note": "the invariant this figure draws, in its shortest form"
         },
         {
@@ -710,7 +730,7 @@
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
+          "sha256": "05b524b114311d5755f7457c476e70587205bf809070d055393a54fecbc9df24",
           "note": "T5 and §11 — the framing, named there as the most reusable idea in the post and until now prose only"
         },
         {
@@ -812,7 +832,7 @@
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
+          "sha256": "05b524b114311d5755f7457c476e70587205bf809070d055393a54fecbc9df24",
           "note": "§1 — the stage names and their order, which is what the strip indicates position in"
         }
       ],
@@ -840,7 +860,7 @@
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
+          "sha256": "05b524b114311d5755f7457c476e70587205bf809070d055393a54fecbc9df24",
           "note": "§5 — every number, with its provenance and the do-not-state-as-typical caveat"
         },
         {
@@ -901,11 +921,11 @@
     {
       "file": "pipeline-findable-unlinkable.svg",
       "serves": "POST",
-      "shows": "Two discovery models the same stack ships: shielded receiving keys handed over in band, against an on-chain label anyone can resolve — with which one is actually wired into the build marked on its face.",
+      "shows": "Two ways to be found: shielded receiving keys handed over in band (wired into the build), against a public on-chain name anyone resolves, a pattern no part of the stack ships. Each column names its cost.",
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
+          "sha256": "05b524b114311d5755f7457c476e70587205bf809070d055393a54fecbc9df24",
           "note": "§4 — the fork, its four comparison rows, and the honesty point that the label system is not wired in"
         },
         {
@@ -921,7 +941,7 @@
         },
         {
           "grade": "from-source",
-          "note": "add_label and resolve_label are present in the generated contract and NOT exercised in this build. The figure marks that on the column itself rather than in a footnote, because the earlier prose draft implied a UI that does not exist"
+          "note": "Corrected 2026-10-09: lez_core's add_label / resolve_label go through wallet_ffi_add_label on the wallet's own handle (logos-execution-zone-module src/lez_core_module.cpp @549cf115): names kept in the wallet's own storage, not on chain, and Muster uses them to name its own accounts (exo-884). No on-chain name registry ships in the stack (logos-module-atlas gaps.md), so the right column is a pattern, said in prose."
         }
       ],
       "recheck": "If the label system is ever wired in. Until then the right-hand column stays dashed and the caption stays honest about it."
@@ -933,7 +953,7 @@
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
+          "sha256": "05b524b114311d5755f7457c476e70587205bf809070d055393a54fecbc9df24",
           "note": "§1 carries the stage names and leak descriptions verbatim from the PriFi competitor matrix cross-check"
         }
       ],
@@ -956,7 +976,7 @@
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
+          "sha256": "05b524b114311d5755f7457c476e70587205bf809070d055393a54fecbc9df24",
           "note": "§2 holds the scoring scheme and the cell-by-cell justification"
         },
         {
@@ -989,7 +1009,7 @@
         },
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
+          "sha256": "05b524b114311d5755f7457c476e70587205bf809070d055393a54fecbc9df24",
           "note": "§3, discovery in Muster"
         }
       ],
@@ -1036,7 +1056,7 @@
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
-          "sha256": "73a6c80ac82b0e39203083eeb451a9d9d64aeb804a7a106b6187268fab1cb58e",
+          "sha256": "05b524b114311d5755f7457c476e70587205bf809070d055393a54fecbc9df24",
           "note": "§5, numbers with provenance"
         },
         {
@@ -1069,28 +1089,38 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "3400756031b918fde9f48f226d60d6ca7f450b78ad841fd682b451255382e067",
+          "sha256": "ff148d17eb317ede7e4f8f6401e533e432fd0d2e42a8c27a5635104ff2b4c608",
           "note": "where the wallet is built and its accept criteria"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
+          "sha256": "4d8ba9ff1a9e8903711a8e230dce1c6794bf0bdc6b801c077509929a85bc21ed",
           "note": "the src/wallet layout and the reuse posture"
         },
         {
           "path": "module/src/wallet/lez_adapter.nim",
-          "sha256": "882e482e39836d2f44e0fef7196dddca1ab4c0741b2e26a6467d4520bde87df6",
+          "sha256": "bc630209d25801c880b9452d8d6e1e5e693822d0606b9320e12be28fd0a47188",
           "note": "the real LEZ adapter"
         },
         {
           "path": "module/src/wallet/btc_adapter.nim",
-          "sha256": "33440552f0465e426fb7f1a776748850ecd81a2601ab4fcf2040f4079a01f5ac",
+          "sha256": "0b7d2ba199b5ba223d776547010f0d24c258fbe2083a087b133981c5ee94cc94",
           "note": "BitcoindAdapter"
         },
         {
           "path": "module/src/lez/multisig_chain.nim",
-          "sha256": "0daaa5056271a62f834cc9c4da77037024d6f3b180285805b159fbcbe1b78245",
+          "sha256": "fb33f120afff69dc60f61887e76e032cf3c772e475561eb7226aee61ff40ead5",
           "note": "LezMultisigChain, the LEZ multisig program's chain"
+        },
+        {
+          "path": "module/src/wallet/evm_adapter.nim",
+          "sha256": "68b7c68954fc0a808eccc2828c93d65027567392abdad8b24700ca10c4ec4bad",
+          "note": "EVM reads and sends, and the platform path under Basecamp (submitThroughPlatform)"
+        },
+        {
+          "path": "module/src/wallet/monero_backend.nim",
+          "sha256": "4526c27b816a6d6c33df32820c23b65da0fd6f6231857f4b7f4f1ccba6980c45",
+          "note": "the Monero seam: read and mint only over monero_wallet_backend, never a send"
         }
       ],
       "evidence": [
@@ -1111,7 +1141,7 @@
           "note": "Five ChainAdapter impls: EvmAdapter, MockChain, LezAdapter (wallet/lez_adapter.nim), LezMultisigChain (lez/multisig_chain.nim) and BitcoindAdapter (wallet/btc_adapter.nim)"
         }
       ],
-      "recheck": "When a ChainAdapter impl is added or removed, or the seam's methods change."
+      "recheck": "When a ChainAdapter impl is added or removed, the seam's methods change, a send's signer changes (muster's keystore, lez_core's wallet, the platform's signer), or the Monero read-and-mint seam grows a send."
     },
     {
       "file": "mech-verified-reads.svg",
@@ -1125,12 +1155,12 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "3400756031b918fde9f48f226d60d6ca7f450b78ad841fd682b451255382e067",
+          "sha256": "ff148d17eb317ede7e4f8f6401e533e432fd0d2e42a8c27a5635104ff2b4c608",
           "note": "the verified-reads work and its status"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
+          "sha256": "4d8ba9ff1a9e8903711a8e230dce1c6794bf0bdc6b801c077509929a85bc21ed",
           "note": "verify.nim reuse of nim-eth and the deferred sidecar"
         }
       ],
@@ -1157,22 +1187,22 @@
       "sources": [
         {
           "path": "module/metadata.json",
-          "sha256": "3342756eebdb429fa874e1ab00868b0e48060ccf0ea6f6bcc0f5c98e5c6d6394",
+          "sha256": "22bcbe4f72b61c795b59524d994816c1400ad0a51681ce334beed2b2d8a2e136",
           "note": "the pinned codegen.nim.packages closure"
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "3400756031b918fde9f48f226d60d6ca7f450b78ad841fd682b451255382e067",
+          "sha256": "ff148d17eb317ede7e4f8f6401e533e432fd0d2e42a8c27a5635104ff2b4c608",
           "note": "ADR-014: the decision, the hook, reused vs kept-ours"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
+          "sha256": "4d8ba9ff1a9e8903711a8e230dce1c6794bf0bdc6b801c077509929a85bc21ed",
           "note": "the reuse note and the src/wallet layout"
         },
         {
           "path": "module/flake.nix",
-          "sha256": "5356bb685af31ef432435dbc5bae9a5236229692bd7c9742e909b196845922db",
+          "sha256": "5d21cb2249b1b31005d3e4b7682e15eff5f1d6b79eafb54e48e9363d3fff2fbf",
           "note": "the builder pin: corpetty/logos-module-builder@codegen-on-basecamp"
         }
       ],
@@ -1208,37 +1238,37 @@
         },
         {
           "path": "docs/02-implementation-plan.md",
-          "sha256": "3400756031b918fde9f48f226d60d6ca7f450b78ad841fd682b451255382e067",
+          "sha256": "ff148d17eb317ede7e4f8f6401e533e432fd0d2e42a8c27a5635104ff2b4c608",
           "note": "the conformance suite, and the drivers the contract invites (FROST, LEZ)"
         },
         {
           "path": "CLAUDE.md",
-          "sha256": "43c91f8f42e18c29cbe9811915b9f434b46a2077174d72ca869721bb17a445f7",
+          "sha256": "4d8ba9ff1a9e8903711a8e230dce1c6794bf0bdc6b801c077509929a85bc21ed",
           "note": "the working agreement and the Driver seam methods"
         },
         {
           "path": "module/src/drivers/conformance.nim",
-          "sha256": "a424c8f1cb3fdcb43eb8af3804fac5f4413e60242220a9b5b5927b4d180d58c0",
+          "sha256": "b7ab84ca8f2f61ded5edaef4b14d6ca88dc81ce84b432aa018ff2bbf1e2089a9",
           "note": "checkConformance and checkProfileConformance"
         },
         {
           "path": "module/src/drivers/manifest.nim",
-          "sha256": "ad2c4a4766b1540eb8d9e33d896dfdbe7abc0aea3527f3e67aebbb9f0f1e7387",
+          "sha256": "ebedd55dde2cb48d2cc96407dd97d8c3927e2750c7d97450a29df7f5ddff7d8e",
           "note": "manifest(effect), UNDECLARED by default"
         },
         {
           "path": "module/src/drivers/profile.nim",
-          "sha256": "bb4673b0891ba54b7fc6f9c759ba21bdb44fcf431dfa2faac6cc312ce3072bc8",
+          "sha256": "55734a051176cc85e9ac1f019cb28727ce824ac4182dc5323fb9997f4fc87ea5",
           "note": "profile(), UNDECLARED by default"
         },
         {
           "path": "module/tests/conformance_test.nim",
-          "sha256": "ae69f3a929bc351939a03b3a9678251416a54121d2e0a8720fd398e117f808b3",
+          "sha256": "7c4354d2c3dec03694ec919e3b81a706eb862d5a381d50ae4cba7b18751b38ac",
           "note": "the drivers graded by checkConformance"
         },
         {
           "path": "module/tests/profile_test.nim",
-          "sha256": "535c6eb861f19c45d340af59abb39561bf17f9301e1fe6158bb605169452909a",
+          "sha256": "0d3854c7a1f7321a740cd61317637a7f7cc32c79f6f1efe8da66e5d5c9656ea8",
           "note": "the profile check over every registered kind"
         }
       ],

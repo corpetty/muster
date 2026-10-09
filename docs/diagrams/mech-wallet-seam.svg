@@ -13,6 +13,8 @@
                module/src/wallet/lez_adapter.nim
                module/src/wallet/btc_adapter.nim
                module/src/lez/multisig_chain.nim
+               module/src/wallet/evm_adapter.nim
+               module/src/wallet/monero_backend.nim
      evidence: [from-source] F-Design: settlement chain-agnostic, the app never becomes
                    the settlement layer; invariant 8: untrusted user-configurable RPC
                [from-source] FS-4: no adapter holds a key. A send is signed behind a
@@ -28,8 +30,9 @@
                [from-source] Five ChainAdapter impls: EvmAdapter, MockChain, LezAdapter
                    (wallet/lez_adapter.nim), LezMultisigChain (lez/multisig_chain.nim) and
                    BitcoindAdapter (wallet/btc_adapter.nim)
-     recheck:  When a ChainAdapter impl is added or removed, or the seam's methods
-               change.
+     recheck:  When a ChainAdapter impl is added or removed, the seam's methods change, a
+               send's signer changes (muster's keystore, lez_core's wallet, the
+               platform's signer), or the Monero read-and-mint seam grows a send.
 -->
 
   <defs>

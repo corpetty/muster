@@ -281,7 +281,7 @@ None of this produces a publishable figure. All of it makes every later tranche 
 
 | | |
 |---|---|
-| `substrate-stack.html` | The forked engine, re-skinned, six views. Mix and `muster-module` both shown as not shipped; a dark *beyond your device* band naming the observers |
+| `substrate-stack.html` | The forked engine, re-skinned, seven views. `muster-module` built (0.2.0 in its own Basecamp catalogue) with its EVM modules, the optional Monero backend and `modules_state` dashed; mix opt-in for sends only (2026-10-09); a dark *beyond your device* band naming the observers |
 | `manifest.json` | Provenance per figure, source hashes stamped |
 | `tools/check-manifest.py` | `--update` re-stamps hashes, `--stamp` writes provenance blocks into the SVGs. All four failure modes verified to fire |
 | `tools/export-frames.mjs` | Frames out of a substrate, no dependencies, idempotent |
