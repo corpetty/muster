@@ -955,10 +955,17 @@ proc musterCoordinateInvite(peerChatIdHex, roomTopic, note: string): string =
   var pt: seq[byte] = @[]
   for c in payload: pt.add byte(c)
   let sealed = sealTo(peerEnc.x, pt)
+  # Inviting someone into a room you are in admits them (exo-dcc.29): you named their
+  # identity, so they arrive a member and never ask to join. Admitted before the invite
+  # is sent, so the grant is in the store before they can look for it.
+  let room = toContentTopic(roomTopic)
+  var admitted = false
+  if room in gSessions and room notin gInboxTopics:
+    admitted = gSessions[room].admitInvited(peerEnc)
   let ctopic = inboxTopicFor(peerChatIdHex)
   let s = inboxSessionFor(ctopic)
   s.sendInvite(sealed)
-  $(%*{"ok": true, "inbox": ctopic})
+  $(%*{"ok": true, "inbox": ctopic, "admitted": admitted})
 
 proc musterCoordinateInvites(): string =
   ## The room invites this identity has received, newest-first, as [{topic, from,

@@ -55,7 +55,7 @@ Item {
     // exchange, so the room opens with an address-request naming the intent; whoever
     // holds the needed address answers it with address-share (the card's button).
     // "talk" primes nothing. Re-opening an existing room passes no verb → no priming.
-    function enterRoom(topic, verb, policy, draftJson) {
+    function enterRoom(topic, verb, policy, draftJson, invitee) {
         if (!root.backend || !topic)
             return;
         // Reset per-room auto-admit state on every entry; onCreateRoom re-sets the
@@ -64,6 +64,14 @@ Item {
         roomSurface.expectedMember = "";
         roomSurface.autoAdmitted = ({});
         root.backend.joinRoom(topic);
+        // A person named in the composer (their 64-byte chat id, 128 hex chars) is invited
+        // now, before the room says anything: the invite admits them (exo-dcc.29), so they
+        // arrive a member, never ask to join, and read the room's opening lines. Pass the
+        // RAW topic; both sides normalize it to the same content topic on join. A pasted
+        // address (not a chat id) is skipped.
+        var inv = String(invitee || "").replace(/^0x/i, "");
+        if (inv.length >= 128)
+            root.backend.sendInvite(invitee, topic, String(verb || ""));
         root.view = "room";
         // Set the room to coordinate under the intent's chosen policy (its driver).
         var p = String(policy || "");
@@ -423,20 +431,12 @@ Item {
         backend: root.backend
         onCreateRoom: {
             root.labelRoom(topic, String(verb || "room") + (peer ? " · with " + root.shortId(peer) : ""));
-            root.enterRoom(topic, verb, policy, draftJson);
-            // If a specific person was chosen (their 64-byte chat id, 128 hex chars), invite
-            // them: seal this room's topic to their inbox so it appears on their instance —
-            // no telling them a name out-of-band. Pass the RAW topic; both sides normalize it
-            // to the same content topic on join. A pasted address (not a chat id) is skipped.
+            // the invite (and with it their admission) goes out inside enterRoom
+            root.enterRoom(topic, verb, policy, draftJson, peer);
+            // Should a join request from them still arrive (an inviter on an older Muster,
+            // which did not admit on invite), admit it without a manual Admit.
             var p = String(peer || "").replace(/^0x/i, "");
-            if (root.backend && p.length >= 128) {
-                root.backend.sendInvite(peer, topic, verb);
-                // Key the room to them: when their join-request arrives, admit it
-                // automatically — you named them, so no manual Admit / ask-to-join.
-                roomSurface.expectedMember = String(peer);
-            } else {
-                roomSurface.expectedMember = "";
-            }
+            roomSurface.expectedMember = p.length >= 128 ? String(peer) : "";
         }
     }
 

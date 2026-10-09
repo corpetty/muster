@@ -298,6 +298,27 @@ void MusterUiBackend::loadInvites()
     // coordinate_invites → the invites received on our inbox, [{topic, from, fromAlias,
     // note, ts}]. The home surface lists them with Join / Dismiss.
     setInvitesJson(modules().muster_module.coordinate_invites());
+    // Invite self-test (exo-dcc.29): MUSTER_AUTOACCEPT_INVITE=1 joins the first invited
+    // room as Home's Join does, but sends NO join request — so a run shows the invite
+    // alone made this identity a member. Off unless the env var is set.
+    static bool accepted = false;
+    if (!accepted && !qgetenv("MUSTER_AUTOACCEPT_INVITE").isEmpty()) {
+        const QJsonArray a = QJsonDocument::fromJson(invitesJson().toUtf8()).array();
+        if (!a.isEmpty()) {
+            accepted = true;
+            const QString topic = a.first().toObject().value("topic").toString();
+            qInfo() << "[muster_ui] AUTOACCEPT_INVITE ->" << topic;
+            joinRoom(topic);
+            // drive the room as its open view would, so the module logs its roster
+            auto *t = new QTimer(this);
+            auto *n = new int(0);
+            connect(t, &QTimer::timeout, this, [this, t, n]() {
+                loadPending();
+                if (++*n >= 60) { t->stop(); delete n; }
+            });
+            t->start(1000);
+        }
+    }
 }
 
 void MusterUiBackend::dismissInvite(const QString &roomTopic)
