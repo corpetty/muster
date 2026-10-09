@@ -34,6 +34,7 @@ import ./invoker               # Invoker.methodsOf (is the module loaded?)
 import ./module_registry       # modules_state's answer: installed? running? (exo-dcc.10)
 import ../wallet/btc_adapter   # probeBitcoind (exo-a50.2.6)
 import ../wallet/redact        # an endpoint as it may be shown (exo-14f.2)
+import ../wallet/monero_backend # a Monero wallet's status, graded (exo-dcc.20)
 export manifest, driver, module_registry
 
 type
@@ -277,6 +278,27 @@ type
                                    ## read FROM THE CHAIN (F-10), never the configured set:
                                    ## without a chain read we do not KNOW the real owners, so
                                    ## the grade is unknown, never a fabricated met (rule s4/s5).
+
+proc moneroWalletGrade*(st: WalletStatus, chain: string, creditor: bool): Grade =
+  ## A "monero:<ref>" environment, graded from THIS member's wallet_status (exo-dcc.5,
+  ## exo-dcc.20): as the creditor of a request on `chain`, met while their open wallet can
+  ## vouch for payTo and confirm (open, on the chain's network, not view-only), unknown
+  ## while the status is unread or busy (not yet known — never a false green or red),
+  ## missing otherwise with walletRefusal's reason. A debtor pays from any wallet of
+  ## theirs, which muster never reads: met.
+  if not creditor:
+    return (rdMet, "you pay from any Monero wallet of yours with the request's monero: link; muster reads none of yours")
+  let why = walletRefusal(st, chain)
+  if why.len == 0: (rdMet, "your " & st.network & " wallet is open: it confirms each part from its own history")
+  elif why.startsWith("wallet-unread") or why.startsWith("wallet-busy"): (rdUnknown, why)
+  else: (rdMissing, why)
+
+proc moneroWalletProbe*(st: WalletStatus, owedOn: seq[string]): proc(chain: string): Grade {.gcsafe.} =
+  ## HostFacts.moneroWallet over one wallet_status read: a creditor's grade on the chains
+  ## this member is owed on (`owedOn`), a debtor's on any other.
+  let st = st
+  let owed = owedOn
+  result = proc(chain: string): Grade {.gcsafe.} = moneroWalletGrade(st, chain, chain in owed)
 
 proc probeFromFacts*(f: HostFacts): ReadinessProbe =
   let facts = f

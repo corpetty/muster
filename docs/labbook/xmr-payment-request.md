@@ -85,7 +85,11 @@ The payee's own wallet confirms the payment: a subaddress per request, the exact
 - `monero_backend.call` is the only way to reach a backend. It raises `MoneroRefused` for any
   method outside `MoneroReadMethods`, before anything is sent:
   - `wallet_status`, `receive_info`, `create_subaddress`, `history`;
-  - `caller_identity`, `list_networks`, `address_valid`.
+  - `caller_identity`, `list_networks`, `address_valid`;
+  - `list_wallets` (exo-dcc.20), ungated: names and networks, no key. It is read only by
+    `xmrUnlockTarget`, to name the wallet a remedy asks Monero Wallet to open, never on a
+    request's own steps. The probe's allowed set stays the seven above, so a step that
+    asked it would fail s6.
 - `MoneroPartSeam.sendPart` refuses.
 - Probe `probe_xmr_no_spend_stepper`: 11 cumulative steps, each through the hosted paths,
   with every member's backend recording.
@@ -110,6 +114,7 @@ receive_info(0)          {ok, address, subaddresses: [{index, address, label}]} 
 create_subaddress(0, l)  {ok, index, address}
 history()                {ok, rows: [{txid, direction, amount (atomic, string), confirmations, pending, failed,
                                       account, subaddrIndex ("3" | "1,4"), …}]}
+list_wallets()           {wallets: [{name, network ("" = never opened), label, viewOnly, restoreHeight, address}]}
 ```
 
 ## The lp half (`monero_backend_lp.nim`)
@@ -128,6 +133,15 @@ only while the wallet `wallet_status` named when they were asked is still the on
 only after a status reply read after them says so too. A status naming another wallet or
 network drops them all.
 
+**Confirmed, then served (exo-dcc.20).** The binding lives in `WalletBoundCache`
+(`monero_backend.nim`, pure, tested). A new reply waits as `fresh` until a later status
+names its wallet; meanwhile the reply confirmed before it is served. The first version
+replaced the served reply with each new one. Each tick reads the status, then
+`receive_info`, and both are re-asked every 2 s, so the two arrived in lockstep: every
+reply was replaced before a status could confirm it, and nothing was ever served. On
+display, a request proposed on the creditor's behalf never offered them Agree, and the
+confirm pump would never have read a history.
+
 **Residual risk.** Switching A → B → A within about 2 s could pass B's history as A's.
 Each switch needs a password in the wallet app.
 
@@ -141,15 +155,20 @@ Each switch needs a password in the wallet app.
   shares are made distinct.
 - No `fiat` and no `asset` other than XMR.
 - On success it mints payTo, labelled `muster:req-<16 hex>`, and returns the intent id.
-- On failure it returns `{error, detail}`. Wallet errors add `request:"monero.wallet.unlock"`
-  and `install:"monero_wallet_ui"`. The error codes:
+- On failure it returns `{error, detail, chain}`. Wallet errors add
+  `request:"monero.wallet.unlock"` and `install:"monero_wallet_ui"`, and, except while the
+  wallet is unread or busy, which wallet to open (`xmrUnlockTarget`, exo-dcc.20):
+  `wallet` (the one to name, or ""), `wallets` (several to pick from) and `noWallet` (none
+  exists on the network: the UI raises `monero.accounts.manage`). The error codes:
   - `no-wallet`, `wallet-other-network`, `wallet-watch-only`, `wallet-unread`, `wallet-busy`;
   - `payto-not-mine`, `refused` (the driver's rule, e.g. equal shares);
   - `no-shared-address`, `not-admitted`, `bad-shares`, `bad-asset`.
 
-**`coordinate_share_address("monero:<ref>")`** mints a fresh subaddress, labelled
-`muster:share`, and posts `{kind:"address-share", asset:"XMR", chain, address, form:1}`. It
-returns `{address}`, or `{error, detail, request}`.
+**`coordinate_share_address("monero:<ref>")`** is "Share my Monero address"
+(`xmrShareAddress`). It mints a fresh subaddress, labelled `muster:share`, held to the
+chain's network and payTo rules, and posts `{kind:"address-share", asset:"XMR", chain,
+address, form:1}`, author-signed. It returns `{address, asset, chain}`, or the refusal shape
+above, with nothing minted or posted.
 
 **`coordinate_settle_part(intent_id)`** on a Monero request sends nothing. It returns
 `{payFrom:"your-wallet", uri, amount, to, chain, detail}`, or
@@ -172,13 +191,18 @@ split: {total, asset:"XMR", payTo, memo, decimals: 12, symbol:"XMR", creditor, i
         payToMine, creditorShare, expired, …,
         xmr: {network: "stagenet", chainLabel: "Monero stagenet", confirmDepth: 10,
               payment: null | {part, ok, uri, amount, payTo, why, reported, confirmed},   // MY share, if I owe one
-              wallet:  null | {ready, detail, code, request}}}                             // on the creditor's client
-parts: [{part, who, name, amount, settled, confirmed, tx, mine, …, uri}]                   // uri "" until agreed
+              wallet:  null | {ready, detail, code, request, wallet?, wallets?, noWallet?}}} // on the creditor's client
+parts: [{part, who, name, amount, settled, confirmed, tx, mine, …, uri, confirmations?}]   // uri "" until agreed
 ```
 
 - `payment.why` is `not-agreed: …` until every party agreed.
 - `wallet.request` is `monero.wallet.unlock` when opening a wallet would help; the code is
-  `no-wallet`, `wallet-other-network` or `wallet-watch-only`.
+  `no-wallet`, `wallet-other-network` or `wallet-watch-only`. Then `wallet`, `wallets` and
+  `noWallet` say which wallet (read on the tick, cached).
+- `parts[].confirmations` (0–9), on the creditor's client only: the confirmations of the
+  history row of exactly that share at payTo, while it is below depth
+  (`xmrSeenConfirmations`). Absent when nothing is seen, the read is busy or unanswered, the
+  wallet is on another network, or the part is confirmed. A count is never invented.
 - `parts[].tx` is the confirming txid once confirmed, or the debtor's reported one before.
 - `effect_summary` reads XMR in 12 decimals.
 
@@ -188,8 +212,11 @@ parts: [{part, who, name, amount, settled, confirmed, tx, mine, …, uri}]      
   - For the creditor it is met while their wallet is open on that network. It is missing
     with the `walletRefusal` reason otherwise, or unknown while unread.
   - For a debtor it is met: they pay from any wallet.
-  - Not met, it carries `request: "monero.wallet.unlock"` and the remedy "open your Monero
-    wallet … in Monero Wallet".
+  - Not met, it carries `request: "monero.wallet.unlock"`, the remedy "open your Monero
+    wallet … in Monero Wallet", and `wallet` / `wallets` / `noWallet`.
+- The Connections panel grades the same environment with the same rule
+  (`moneroWalletGrade`): the creditor's wallet on the chains they are owed on
+  (`xmrOwedOn`), and met for a debtor. An unread or busy status is unknown.
 
 **Settle-up** refuses a Monero chain with `{error: "not-netted"}`. It no longer treats any
 non-LEZ, non-Bitcoin chain as EVM.
@@ -229,13 +256,14 @@ non-LEZ, non-Bitcoin chain as EVM.
   carrying `request: "monero.wallet.unlock"` shows Open Monero Wallet instead of Open
   settings.
 - **Which intent opens the wallet.** `monero.wallet.unlock` needs `{wallet: <registry
-  name>}`; Monero Wallet answers `bad_request` without one. No projection names a wallet
-  (muster cannot list them: `list_wallets` is outside `MoneroReadMethods`), so the UI raises
-  `monero.accounts.manage`, which brings Monero Wallet up to open one, and raises
-  `monero.wallet.unlock {wallet}` only when a projection carries `wallet`. Both are in
-  `ui/metadata.json`'s `uses`.
-- **Not shown: n/10 confirmations.** The projection says reported or confirmed, never how
-  many confirmations a seen transfer has; the card says "confirms it at 10 confirmations".
+  name>}`; Monero Wallet answers `bad_request` without one. Since exo-dcc.20 the module
+  names it (above). The UI raises `monero.wallet.unlock {wallet}`; with several, the card
+  and the room's remedy show one **Open <name>** button each; with none at all, **Set up a
+  wallet in Monero Wallet** raises `monero.accounts.manage`, as does a list that did not
+  answer. Both are in `ui/metadata.json`'s `uses`.
+- **n of 10.** The creditor's card shows "seen, n of 10 confirmations" for a part their
+  wallet sees below depth, and "says they paid (…) — seen, n of 10 confirmations" once
+  reported.
 - **Seen on display (2026-10-09, Basecamp 0.3.2 on Xvfb, with the Monero stack and a fresh
   stagenet wallet; the second member a standalone runner window on the same local
   network).** Home's verb opens the room on Request and Split (Monero). With the wallet
@@ -250,12 +278,60 @@ non-LEZ, non-Bitcoin chain as EVM.
   RPC's chain and refused (`splitChainFor` now defaults a Monero kind to stagenet), and the
   room snapped a fresh request room back to "Split (Ethereum)" before the module's answer
   arrived (`Room.requestedPolicy`).
-- **Seen, not fixed here (module copy and projections):** the Connections panel lists the
-  Monero chain as "this host cannot read a Monero wallet" even while the wallet is open,
-  and the room history says "settled their part" for an "I paid" report.
-- **Still not built: "Share my Monero address"**, for a request proposed on someone's
-  behalf. `coordinate_share_address("monero:…")` exists, but the address-request card asks
-  only for ETH and BTC, and the composer offers no "who paid" on Monero.
+- **The rough edges the display found, fixed in exo-dcc.20** (module test
+  `xmr_request_edges_test`, the offscreen harness 129/129):
+  - The wallet to unlock is named (above).
+  - n of 10 (above).
+  - **"Share my Monero address."** The address-request card asks for a Monero address on its
+    chain and its button reads Share my Monero address; the module mints it. A refusal says
+    why under the room, with Open Monero Wallet naming the wallet. A Monero address-share
+    offers no "Use as recipient", since muster never sends Monero. The Split composer on
+    Monero offers "Who paid the bill?". For someone else it is paid at the Monero address
+    they shared for the room's chain, with **Ask <name> for a Monero address** (an
+    address-request of them alone) until they have, and Propose off meanwhile. Their client
+    agrees only while their wallet lists it (`payto-not-mine`), as the EVM and BTC splits do.
+  - The Connections panel's Monero row is graded from `wallet_status` (above), not "this
+    host cannot read a Monero wallet".
+  - Room history: a Monero debtor's report reads "Bob says they paid" ("You said you paid")
+    until the creditor's wallet confirms the part, then "settled their part". Another
+    family's report is unchanged.
+  - The wallet note ("Monero Wallet is open: …") expires. A newer split or share answer, or
+    a change in a request's wallet state, makes it stale, and an answer over two minutes
+    old is not shown. A wallet refusal is over once Monero Wallet answers that the wallet it
+    named is open: the room then says "Your Monero wallet is open. Try again."
+- **Seen on display (2026-10-09, Basecamp 0.3.2 on Xvfb, the stagenet wallet `musterxmr`,
+  the second member a standalone runner on the same local network):**
+  - With the wallet closed, Propose is refused naming `"wallet":"musterxmr"`. Open Monero
+    Wallet raises `monero.wallet.unlock`, and Monero Wallet's sheet reads "Another app asked
+    to unlock this wallet. musterxmr". After the password the wallet was open, but the
+    intent answered `failed`. That is Monero Wallet's answer, not muster's; still open.
+  - Bob's Split composer on Monero offered "Who paid the bill?". Choosing Alice gave "hasn't
+    shared a Monero address on Monero stagenet" and Ask. The ask reached Alice as "Share my
+    Monero address". It minted the stagenet subaddress `72dM5…FwPN` from her open wallet and
+    posted it. Bob's Paid-to line named it, and Propose sent `{parties, creditorShares,
+    creditor}`.
+  - The Connections panel's Monero row read "your stagenet wallet is open: it confirms each
+    part from its own history".
+  - Three faults were found and fixed: the lockstep cache above; a shared subaddress
+    described as a "public account … anyone reading the chain can see"; and a cut-off Ask
+    button.
+  - **After the fixes (same setup, a fresh room).**
+    - Share with the wallet closed: "Your Monero address was not shared — no Monero wallet
+      is open", and Open Monero Wallet naming `musterxmr`. Monero Wallet again answered
+      `failed` once it had opened the wallet.
+    - Share again: the subaddress `75kXN…PXxpt` was minted. Its card read "Monero
+      subaddress" and "The chain shows no payer, payee or amount".
+    - Bob proposed on Alice's behalf. Her card stayed on "Agree — I paid, and 75kXN… is
+      mine", with no warning. She agreed, and the request was executable on both.
+    - Bob's "I paid" reads in Alice's history as "36b3d457… says they paid — only the
+      creditor's own wallet confirms it".
+- **Still open from the display:**
+  - Monero Wallet answers `monero.wallet.unlock` with `failed` after opening the wallet it
+    was asked for. This is upstream. Until it is fixed, the refusal does not clear on that
+    answer; acting again clears it.
+  - Under `MUSTER_AUTOPAYSPLIT` (a test hook), the debtor's card shows "Sent 0.1 XMR from
+    your wallet", from the `pay` op's generic copy. No person can reach it: the Monero
+    card has no Pay button.
 
 ## Not built yet
 

@@ -117,10 +117,36 @@ Item {
     // {intent, wallet, state: asking|open|unavailable|failed|cancelled|error, error, at}.
     signal moneroWalletRequested(string wallet)
     property var moneroWallet: ({})
-    // What the last Monero wallet request answered, in words ("" = nothing asked yet).
+    // When the state a wallet note describes last changed (exo-dcc.20): a newer split or
+    // share answer, or a Monero request's wallet state in the projection. A note older
+    // than that is about something that is over, and one answered over two minutes ago
+    // has done its job: neither is shown. moneroNow is the clock it is read against.
+    property double moneroStateAt: 0
+    property double moneroNow: Date.now()
+    Timer {
+        interval: 5000
+        repeat: true
+        running: String((room.moneroWallet || {}).state || "").length > 0
+        onTriggered: room.moneroNow = Date.now()
+    }
+    // every Monero request's wallet state, as the projection says it (its changes date the note)
+    readonly property string xmrWalletSig: {
+        var out = [];
+        var its = room.intents || [];
+        for (var i = 0; i < its.length; ++i) {
+            var w = its[i] && its[i].split && its[i].split.xmr ? its[i].split.xmr.wallet : null;
+            if (w) out.push(String(its[i].id || "") + ":" + (w.ready ? "ready" : String(w.code || "")));
+        }
+        return out.join(",");
+    }
+    onXmrWalletSigChanged: room.moneroStateAt = Date.now()
+    // What the last Monero wallet request answered, in words ("" = nothing asked yet, or
+    // the answer is stale).
     function moneroWalletNote() {
         var r = room.moneroWallet || {};
         var st = String(r.state || "");
+        var at = Number(r.at || 0);
+        if (st !== "asking" && (room.moneroStateAt > at || room.moneroNow - at > 120000)) return "";
         if (st === "asking") return qsTr("Asking Monero Wallet to open…");
         if (st === "open")
             return String(r.intent || "") === "monero.wallet.unlock"
@@ -815,8 +841,13 @@ Item {
     // A private split is proposed only by whoever fronted it (their shielded key node is
     // not shared in the room).
     property string splitCreditor: ""
-    readonly property string splitFor: (room.splitPrivate || room.splitBitcoin || room.splitMonero || room.splitRequest)
+    readonly property string splitFor: (room.splitPrivate || room.splitBitcoin || room.splitRequest)
                                        ? "" : room.splitCreditor
+    // where the split for someone else is paid: the address they shared — on Monero, the
+    // subaddress their own wallet minted for this chain (exo-dcc.20)
+    readonly property string splitForAddress: room.splitFor.length === 0 ? ""
+                                            : room.splitMonero ? room.sharedMoneroAddressOf(room.splitFor, room.splitMoneroChain)
+                                            : room.sharedAddressOf(room.splitFor)
     function memberLabel(identity) {
         var id = String(identity || "").toLowerCase();
         for (var i = 0; i < room.members.length; ++i) {
@@ -864,6 +895,22 @@ Item {
         }
         return out;
     }
+    // The Monero address a member last shared for `chain` (an address-share card of asset
+    // XMR on that chain), exactly as written — a Monero address is case-sensitive. The
+    // module reads the same share from the log, and their own client checks it is theirs.
+    function sharedMoneroAddressOf(identity, chain) {
+        var bare = function (s) { return String(s || "").toLowerCase().replace(/^0x/, ""); };
+        var id = bare(identity), out = "";
+        for (var i = 0; i < room.messages.length; ++i) {
+            var msg = room.messages[i];
+            if (!msg || bare(msg.author) !== id) continue;
+            var o = null;
+            try { o = JSON.parse(msg.body); } catch (e) { o = null; }
+            if (o && String(o.kind || "") === "address-share" && String(o.asset || "") === "XMR"
+                && String(o.chain || "") === String(chain) && String(o.address || "").length > 0) out = String(o.address);
+        }
+        return out;
+    }
     function sharedBtcAddressOf(identity) {
         // the Bitcoin address a member last shared (the address-share card's asset BTC)
         var bare = function (s) { return String(s || "").toLowerCase().replace(/^0x/, ""); };
@@ -890,6 +937,20 @@ Item {
     // other currency, never netted, and only whoever is owed proposes it here.
     readonly property bool splitMonero: room.policyKind === "monero-split"
     onSplitMoneroChanged: if (room.splitMonero) room.splitFiat = false
+    // the Monero chain the next request names: the policy's, else stagenet (ADR-018)
+    readonly property string splitMoneroChain: {
+        var a = room.policyAccount, pol = String((room.policy && room.policy.policy) || "");
+        if (a.indexOf("monero:") === 0) return a;
+        var at = pol.indexOf("@");
+        if (at > 0 && pol.slice(at + 1).indexOf("monero:") === 0) return pol.slice(at + 1);
+        return "monero:76ee3cc98646292206cd3e86f74d88b4";
+    }
+    function moneroChainLabel(chain) {
+        var c = String(chain || "");
+        return c === "monero:418015bb9ae982a1975da7d79277c270" ? qsTr("Monero mainnet")
+             : c === "monero:48ca7cd3c8de5b6a4d53d2861fbdaedc" ? qsTr("Monero testnet")
+             : c === "monero:76ee3cc98646292206cd3e86f74d88b4" ? qsTr("Monero stagenet") : c;
+    }
     // "Request a payment" (exo-dcc.5): a split with ONE person who pays and you not in it.
     property bool splitRequest: false
     property string splitPayer: ""           // who pays, when more than one could
@@ -916,7 +977,19 @@ Item {
     property bool acrossPending: false      // proposed; the box closes only once it is accepted
     property var acrossRates: ({})          // "chain|asset" → the typed rate, per ONE unit
     // A refusal keeps the box and its rates; success closes it (exo-a90.17).
+    property double splitResultAt: 0
+    // A Monero wallet refusal is over once Monero Wallet answered that the wallet it named
+    // is open — after the refusal (exo-dcc.20, seen on display): its words and its Open
+    // Monero Wallet give way to that answer and "Try again".
+    readonly property bool moneroRefusalResolved: {
+        var r = room.splitResult || {}, w = room.moneroWallet || {};
+        return String(r.request || "") === "monero.wallet.unlock"
+               && String(w.intent || "") === "monero.wallet.unlock" && String(w.state || "") === "open"
+               && Number(w.at || 0) >= room.splitResultAt;
+    }
     onSplitResultChanged: {
+        room.splitResultAt = Date.now();
+        room.moneroStateAt = Date.now();     // a newer answer: an older wallet note is stale (exo-dcc.20)
         if (!room.acrossPending || !room.splitResult || room.splitResult.op !== "settle-up") return;
         room.acrossPending = false;
         if (!room.splitResult.error) { room.acrossOpen = false; room.composing = false; }
@@ -1075,7 +1148,7 @@ Item {
         var who = room.splitDebtors();
         if (total.length === 0 || who.length === 0) return;
         if (room.splitTokenPending) return;
-        if (room.splitFor.length > 0 && room.sharedAddressOf(room.splitFor).length === 0) return;
+        if (room.splitFor.length > 0 && room.splitForAddress.length === 0) return;
         var spec = { parties: who, creditorShares: room.splitCreditorIn };
         if (room.splitFor.length > 0) spec.creditor = room.splitFor;   // on their behalf (exo-770)
         if (room.splitTokenInfo) spec.asset = String(room.splitTokenInfo.asset);   // exo-5ab
@@ -1808,7 +1881,7 @@ Item {
                             onShareAddress: {
                                 // a Bitcoin address is my own key's on that network: the module
                                 // knows it, not this view (exo-a90.17)
-                                if (room.backend && String((msg.parsedCard || {}).asset || "ETH") === "BTC") {
+                                if (room.backend && ["BTC", "XMR"].indexOf(String((msg.parsedCard || {}).asset || "ETH")) >= 0) {
                                     room.backend.shareAddress(String((msg.parsedCard || {}).chain || ""));
                                     return;
                                 }
@@ -2705,14 +2778,14 @@ Item {
                     // who fronted it (exo-770): you, or someone else — then it is paid at the
                     // address they shared, and nobody pays until they agree it is theirs
                     LogosText {
-                        visible: !room.splitPrivate && !room.splitBitcoin && !room.splitMonero && !room.splitRequest
+                        visible: !room.splitPrivate && !room.splitBitcoin && !room.splitRequest
                                  && room.members.length > 1 && !room.acrossOpen
                         text: qsTr("Who paid the bill?")
                         color: Theme.palette.textTertiary
                         font.pixelSize: Theme.typography.badgeText
                     }
                     Flow {
-                        visible: !room.splitPrivate && !room.splitBitcoin && !room.splitMonero && !room.splitRequest
+                        visible: !room.splitPrivate && !room.splitBitcoin && !room.splitRequest
                                  && room.members.length > 1 && !room.acrossOpen
                         Layout.fillWidth: true
                         spacing: Theme.spacing.tiny
@@ -2735,14 +2808,37 @@ Item {
                         Layout.fillWidth: true
                         Layout.preferredWidth: 0
                         wrapMode: Text.WordWrap
-                        readonly property string addr: room.sharedAddressOf(room.splitFor)
+                        readonly property string addr: room.splitForAddress
                         text: addr.length > 0
-                              ? qsTr("Paid to %1, the address %2 shared. Nobody pays until %2 agrees it is theirs.")
+                              ? (room.splitMonero
+                                 ? qsTr("Paid to %1, the Monero address %2 shared from their own wallet. Nobody pays until %2 agrees it is theirs.")
+                                 : qsTr("Paid to %1, the address %2 shared. Nobody pays until %2 agrees it is theirs."))
                                     .arg(addr).arg(room.memberLabel(room.splitFor))
+                              : room.splitMonero
+                              ? qsTr("⚠ %1 hasn't shared a Monero address on %2: ask them for one, then split it for them.")
+                                    .arg(room.memberLabel(room.splitFor)).arg(room.moneroChainLabel(room.splitMoneroChain))
                               : qsTr("⚠ %1 hasn't shared an address in this room: ask them to share one (the Pay composer's “Ask the room”), then split it for them.")
                                     .arg(room.memberLabel(room.splitFor))
                         color: addr.length > 0 ? Theme.palette.textSecondary : Theme.palette.warning
                         font.pixelSize: Theme.typography.badgeText
+                    }
+                    // ask them for one (exo-dcc.20): an address-request of them alone, for a
+                    // Monero address on this chain — answered by "Share my Monero address"
+                    LogosButton {
+                        objectName: "roomAskMoneroAddress"
+                        visible: room.splitMonero && room.splitFor.length > 0 && room.splitForAddress.length === 0 && !room.acrossOpen
+                        Layout.preferredWidth: 360
+                        text: qsTr("Ask %1 for a Monero address").arg(room.memberLabel(room.splitFor))
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: {
+                            if (!room.backend) return;
+                            var label = room.moneroChainLabel(room.splitMoneroChain);
+                            room.backend.postMessage(JSON.stringify({
+                                kind: "address-request", intent: "split", asset: "XMR",
+                                chain: room.splitMoneroChain, chainLabel: label, "for": room.splitFor,
+                                purpose: qsTr("A Monero split to be paid to you: an address on %1").arg(label)
+                            }));
+                        }
                     }
 
                     LogosText {
@@ -2814,6 +2910,12 @@ Item {
                                        .arg(room.memberLabel(room.splitDebtors()[0])).arg(room.weiToEth(pv.each))
                                  : qsTr("%1 pays you %2 %3 from their own wallet — the payment is public on the chain.")
                                        .arg(room.memberLabel(room.splitDebtors()[0])).arg(room.weiToEth(pv.each)).arg(room.splitUnit))
+                              : room.splitMonero && room.splitFor.length > 0
+                              ? (pv.n === 1
+                                 ? qsTr("1 person owes %3 %1 XMR; %3's own share is %2 XMR (it absorbs any rounding). They pay from any Monero wallet, with a link the room gives them.")
+                                       .arg(room.weiToEth(pv.each)).arg(room.weiToEth(pv.mine)).arg(room.memberLabel(room.splitFor))
+                                 : qsTr("%1 people owe %3 about %2 XMR each — every share a few piconero apart, so %3's wallet can tell whose payment arrived; %3's own share absorbs the rest. Each pays from any Monero wallet, with a link the room gives them.")
+                                       .arg(pv.n).arg(room.weiToEth(pv.each)).arg(room.memberLabel(room.splitFor)))
                               : room.splitMonero
                               ? (pv.n === 1
                                  ? qsTr("1 person owes you %1 XMR; your own share is %2 XMR (it absorbs any rounding). They pay from any Monero wallet, with a link the room gives them.")
@@ -2854,7 +2956,11 @@ Item {
                         Layout.fillWidth: true
                         Layout.preferredWidth: 0
                         wrapMode: Text.WordWrap
-                        text: qsTr("On Monero stagenet. Proposing asks your open Monero wallet for a new address for this request; your wallet confirms each payment at 10 confirmations. Muster never sends Monero.")
+                        text: room.splitFor.length > 0
+                              ? qsTr("On %1. Paid at the address %2 shared; %2's own wallet confirms each payment at 10 confirmations. Muster never sends Monero.")
+                                    .arg(room.moneroChainLabel(room.splitMoneroChain)).arg(room.memberLabel(room.splitFor))
+                              : qsTr("On %1. Proposing asks your open Monero wallet for a new address for this request; your wallet confirms each payment at 10 confirmations. Muster never sends Monero.")
+                                    .arg(room.moneroChainLabel(room.splitMoneroChain))
                         color: Theme.palette.textTertiary
                         font.pixelSize: Theme.typography.badgeText
                     }
@@ -2982,7 +3088,7 @@ Item {
                                  room.composeType === "split" ? room.splitPreview(splitTotal.text) !== null && !room.splitTokenPending
                                                                 && !room.splitDust(room.splitPreview(splitTotal.text))
                                                                 && (!room.splitFiat || String(room.splitFiatSource).trim().length > 0)
-                                                                && (room.splitFor.length === 0 || room.sharedAddressOf(room.splitFor).length > 0)
+                                                                && (room.splitFor.length === 0 || room.splitForAddress.length > 0)
                                : room.enoughToPropose && (
                                  room.composeType === "statement" ? proposeText.text.length > 0
                                : room.composeType === "action" ? room.chosenAction !== null
@@ -3039,12 +3145,14 @@ Item {
             // a split action that did nothing says why — never a silent no-op (exo-a90)
             LogosText {
                 objectName: "roomSplitFeedback"
-                visible: !!(room.splitResult && room.splitResult.error)
+                visible: !!(room.splitResult && room.splitResult.error) && !room.moneroRefusalResolved
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: {
                     var r = room.splitResult || {};
                     var what = r.op === "pay" ? qsTr("Your share was not paid")
+                             : r.op === "share" ? (String(r.chain || "").indexOf("monero:") === 0 || String(r.request || "") === "monero.wallet.unlock"
+                                                   ? qsTr("Your Monero address was not shared") : qsTr("Your address was not shared"))
                              : r.op === "confirm" ? qsTr("The share was not confirmed")
                              : r.op === "settle-up" ? qsTr("Nothing was settled up")
                              : qsTr("The split was not proposed");
@@ -3073,14 +3181,30 @@ Item {
                 objectName: "roomMoneroRemedy"
                 readonly property var r: room.splitResult || ({})
                 visible: String(r.request || "") === "monero.wallet.unlock" && String(r.error || "") !== "wallet-busy"
+                         && !room.moneroRefusalResolved
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
+                // which wallet (exo-dcc.20): the one the module names, else one button per
+                // wallet that could be it, else none at all — set one up in Monero Wallet
+                readonly property var choices: Array.isArray(r.wallets) ? r.wallets : []
                 LogosButton {
                     objectName: "roomOpenMoneroWallet"
-                    text: qsTr("Open Monero Wallet")
+                    visible: parent.choices.length < 2
+                    text: parent.r.noWallet ? qsTr("Set up a wallet in Monero Wallet") : qsTr("Open Monero Wallet")
                     variant: LogosButton.Variant.Secondary
                     enabled: String((room.moneroWallet || {}).state || "") !== "asking"
                     onClicked: room.moneroWalletRequested(String((room.splitResult || {}).wallet || ""))
+                }
+                Repeater {
+                    model: parent.choices.length > 1 ? parent.choices : []
+                    delegate: LogosButton {
+                        required property var modelData
+                        objectName: "roomOpenMoneroWallet_" + String(modelData)
+                        text: qsTr("Open %1").arg(String(modelData))
+                        variant: LogosButton.Variant.Secondary
+                        enabled: String((room.moneroWallet || {}).state || "") !== "asking"
+                        onClicked: room.moneroWalletRequested(String(modelData))
+                    }
                 }
                 LogosButton {
                     objectName: "roomInstallMoneroWallet"
@@ -3098,7 +3222,7 @@ Item {
                 visible: String((room.splitResult || {}).request || "") === "monero.wallet.unlock" && room.moneroWalletNote().length > 0
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: room.moneroWalletNote()
+                text: room.moneroWalletNote() + (room.moneroRefusalResolved ? qsTr(" Try again.") : "")
                 color: String((room.moneroWallet || {}).state || "") === "open" ? Theme.palette.textSecondary : Theme.palette.warning
                 font.pixelSize: Theme.typography.badgeText
             }

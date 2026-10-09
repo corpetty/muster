@@ -26,10 +26,13 @@ const
   MoneroWalletApp* = "monero_wallet_ui"        ## the package that installs the stack and holds its roles
   MoneroUnlockIntent* = "monero.wallet.unlock" ## the wallet app's intent: it opens a wallet, the person types the password there
   MoneroReadMethods* = ["wallet_status", "receive_info", "create_subaddress", "history",
-                        "caller_identity", "list_networks", "address_valid"]
+                        "caller_identity", "list_networks", "address_valid", "list_wallets"]
     ## Everything muster may ask the wallet backend: reads, and one mint
     ## (create_subaddress, which needs no role). Nothing that builds, signs or broadcasts
     ## a transfer, and nothing that changes the wallet's roles or opens a wallet.
+    ## list_wallets (ungated: names and networks, no key) is read only to name the wallet a
+    ## remedy asks Monero Wallet to open (monero.wallet.unlock needs {wallet}, exo-dcc.20) —
+    ## never on a request's own steps.
   XmrConfirmDepth* = 10
     ## CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE (monero src/cryptonote_config.h): a received
     ## output unlocks after 10 blocks, and that is the depth a part is confirmed at.
@@ -87,11 +90,65 @@ type
     detail*: string
     rows*: seq[HistoryRow]
 
+  RegisteredWallet* = object
+    name*: string             ## the registry name monero.wallet.unlock takes
+    network*: string          ## mainnet | stagenet | testnet | regtest | "" (a file never opened)
+    viewOnly*: bool
+
+  WalletList* = object
+    read*: ReadState
+    detail*: string
+    wallets*: seq[RegisteredWallet]
+
   Minted* = object
     ok*: bool
     index*: int
     address*: string
     detail*: string
+
+  BoundReply* = object
+    raw*: string              ## the reply as it arrived ("" = none)
+    at*: float                ## when it arrived
+    key*: string              ## the wallet ("<wallet>|<network>|<state>") it was asked about
+    seq*: int                 ## how many wallet_status replies had been read when it arrived
+
+  WalletBoundCache* = object
+    ## A pump's cached history or receive_info (exo-dcc.5 s7): neither names a wallet, so a
+    ## reply is served only while the wallet the status named when it was asked is still the
+    ## one named, and only once a status reply read AFTER it says so too.
+    served*: BoundReply       ## the newest reply a later status confirmed
+    fresh*: BoundReply        ## the newest reply, not yet confirmed
+
+proc put*(c: var WalletBoundCache, raw: string, at: float, walletKey: string, statusSeq: int) =
+  ## A reply asked now (cmNow): as current as the status read just before it.
+  c.served = BoundReply(raw: raw, at: at, key: walletKey, seq: statusSeq - 1)
+  c.fresh = BoundReply()
+
+proc promote(c: var WalletBoundCache, walletKey: string, statusSeq: int) =
+  ## The fresh reply becomes the served one once a status read after it names its wallet.
+  if c.fresh.raw.len > 0 and c.fresh.key == walletKey and statusSeq > c.fresh.seq:
+    c.served = c.fresh
+    c.fresh = BoundReply()
+
+proc offer*(c: var WalletBoundCache, raw: string, at: float, firedKey, walletKey: string, statusSeq: int) =
+  ## A pump reply arrived. One asked about another wallet than the one named now is dropped.
+  ## It waits as `fresh` until a later status confirms it; meanwhile the reply confirmed
+  ## before it is still served (exo-dcc.20: replacing it unconfirmed starved the pump when
+  ## the status and the reply arrived in lockstep, every tick).
+  if raw.len == 0 or firedKey != walletKey: return
+  c.promote(walletKey, statusSeq)
+  c.fresh = BoundReply(raw: raw, at: at, key: walletKey, seq: statusSeq)
+
+proc read*(c: var WalletBoundCache, walletKey: string, statusSeq: int, now, staleS: float): string =
+  ## What may be served now ("" = nothing yet): confirmed by a later status, about the
+  ## wallet named now, and no older than staleS. A fresh reply a later status confirms
+  ## is promoted first.
+  c.promote(walletKey, statusSeq)
+  let r = c.served
+  if r.raw.len == 0 or now - r.at > staleS or r.key != walletKey or statusSeq <= r.seq: return ""
+  r.raw
+
+proc clear*(c: var WalletBoundCache) = c = WalletBoundCache()
 
 method invoke*(b: MoneroBackend, meth: string, args: JsonNode, mode: CallMode): string {.base, gcsafe.} =
   ## One raw call: lp's reply string as it arrives ("" = no answer). The base answers
@@ -228,6 +285,21 @@ proc history*(b: MoneroBackend, mode = cmNow): History =
                                amount: atomicOf(row{"amount"}), confirmations: intOf(row{"confirmations"}),
                                pending: row{"pending"}.getBool(false), failed: row{"failed"}.getBool(false),
                                account: int(intOf(row{"account"})), subaddrIndex: indicesOf(row{"subaddrIndex"}))
+
+proc listWallets*(b: MoneroBackend, mode = cmNow): WalletList =
+  ## list_wallets(): every wallet the backend's registry knows, open or not
+  ## ({wallets:[{name, network, label, viewOnly, restoreHeight, address}]}). Ungated.
+  let j = b.call("list_wallets", newJArray(), mode)
+  if j != nil and j.kind == JObject and not j.hasKey("ok") and not j.hasKey("busy") and
+     j{"wallets"} != nil and j["wallets"].kind == JArray:
+    j["ok"] = %true                     # the registry's own shape: a list is an answer
+  let (r, why) = unread(j, "list_wallets")
+  if r != rsAnswered: return WalletList(read: r, detail: why)
+  result = WalletList(read: rsAnswered)
+  for w in j{"wallets"}.getElems():
+    if w.kind != JObject or w{"name"}.getStr().len == 0: continue
+    result.wallets.add RegisteredWallet(name: w{"name"}.getStr(), network: w{"network"}.getStr(),
+                                        viewOnly: w{"viewOnly"}.getBool(false))
 
 proc createSubaddress*(b: MoneroBackend, label: string): Minted =
   ## create_subaddress(0, label): a fresh subaddress of account 0, stored at once. Needs

@@ -419,6 +419,9 @@ Rectangle {
     // theirs — made at propose when they proposed it, else asked of them here.
     readonly property bool creditorAgreed: !!(cardRoot.split && cardRoot.split.creditorAgreed)
     readonly property bool payToMine: !!(cardRoot.split && cardRoot.split.payToMine)
+    // a Monero creditor whose wallet has not yet listed its addresses (exo-dcc.20): not known —
+    // never "not yours"; their client checks payTo against the wallet when they agree
+    readonly property bool payToMineUnknown: !!(cardRoot.split && cardRoot.split.payToMineKnown === false)
     // Proposed by someone other than the creditor, on the creditor's behalf: named from
     // signed claims only — an unattributed proposal (an older room) says nothing.
     readonly property string onBehalfBy: {
@@ -461,13 +464,19 @@ Rectangle {
                                        : qsTr("✓ received — %1's wallet saw it at %2 confirmations").arg(cardRoot.creditorName).arg(cardRoot.xmrDepth))
                                     : (cardRoot.iAmCreditor ? qsTr("✓ you marked it received")
                                        : qsTr("✓ marked received by %1").arg(cardRoot.creditorName));
+            // n of 10 (exo-dcc.20): what the creditor's own wallet history shows, on their
+            // client only — absent when nothing was seen or the read did not answer
+            var seen = (p.confirmations !== undefined && p.confirmations !== null)
+                       ? qsTr("seen, %1 of %2 confirmations").arg(Number(p.confirmations)).arg(cardRoot.xmrDepth) : "";
             if (p.settled) {
                 var ref = String(p.tx || "").length > 0 ? " (" + String(p.tx).slice(0, 10) + "…)" : "";
+                if (seen.length > 0) return qsTr("says they paid%1 — %2").arg(ref).arg(seen);
                 return cardRoot.iAmCreditor
                        ? qsTr("says they paid%1 — your wallet confirms it at %2 confirmations").arg(ref).arg(cardRoot.xmrDepth)
                        : qsTr("says they paid%1 — waiting for %3's wallet to see it at %2 confirmations")
                              .arg(ref).arg(cardRoot.xmrDepth).arg(cardRoot.creditorName);
             }
+            if (seen.length > 0) return seen;
         }
         if (p.confirmed) return String(p.tx || "").indexOf("note:") === 0 ? qsTr("✓ received — a private note of exactly this share")
                               : String(p.tx || "").length > 0 ? qsTr("✓ received")
@@ -623,12 +632,17 @@ Rectangle {
             }
             LogosText {
                 // the ask, while it is still yours to answer
+                objectName: "cardAddressAsk"
                 visible: cardRoot.askedOfMe && !cardRoot.answeredByMe
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: String((cardRoot.card && cardRoot.card.asset) || "ETH") === "BTC"
-                      ? qsTr("This room needs a Bitcoin address on %1 to pay you at. Sharing gives your own key's address there.")
-                            .arg(String((cardRoot.card && (cardRoot.card.chainLabel || cardRoot.card.chain)) || ""))
+                readonly property string askAsset: String((cardRoot.card && cardRoot.card.asset) || "ETH")
+                readonly property string askChain: String((cardRoot.card && (cardRoot.card.chainLabel || cardRoot.card.chain)) || "")
+                text: askAsset === "BTC"
+                      ? qsTr("This room needs a Bitcoin address on %1 to pay you at. Sharing gives your own key's address there.").arg(askChain)
+                      // exo-dcc.20: a fresh subaddress your own open wallet makes for the room
+                      : askAsset === "XMR"
+                      ? qsTr("This room needs a Monero address on %1 to pay you at. Sharing asks your own open Monero wallet for a new address; your client checks it is yours before you agree to anything paid there.").arg(askChain)
                       : qsTr("This room needs somewhere to send funds. Share an address to continue.")
                 color: Theme.palette.textSecondary
                 font.family: Theme.typography.publicSans
@@ -686,6 +700,7 @@ Rectangle {
             // getting this wrong is the exact lie a labelled address must not
             // tell, so an absent form reads as the safer "shielded".
             LogosText {
+                objectName: "cardShareForm"
                 Layout.fillWidth: true
                 wrapMode: Text.WrapAnywhere
                 elide: Text.ElideRight
@@ -695,7 +710,10 @@ Rectangle {
                     var addr = cardRoot.card && cardRoot.card.address
                         ? String(cardRoot.card.address).replace(/\s+/g, "") : "";
                     var shown = addr.slice(0, 48) + (addr.length > 48 ? "…" : "");
-                    return (form === 1 ? qsTr("public account") : qsTr("shielded"))
+                    // a Monero subaddress is no public account (exo-dcc.20): the chain shows no
+                    // payer, payee or amount for what lands there
+                    var xmr = String((cardRoot.card && cardRoot.card.asset) || "") === "XMR";
+                    return (xmr ? qsTr("Monero subaddress") : form === 1 ? qsTr("public account") : qsTr("shielded"))
                         + (shown.length > 0 ? "  ·  " + shown : "");
                 }
                 color: Theme.palette.textTertiary
@@ -707,11 +725,14 @@ Rectangle {
             // destination is readable before choosing how to pay. "Zone" is the
             // LEZ's word; on Ethereum or Bitcoin it is the chain (exo-4d4).
             LogosText {
+                objectName: "cardShareReadable"
                 Layout.fillWidth: true
                 visible: cardRoot.card && cardRoot.card.form !== undefined
                     && Number(cardRoot.card.form) === 1
                 wrapMode: Text.WordWrap
-                text: (String((cardRoot.card && cardRoot.card.chain) || "").indexOf("lez:") === 0
+                text: String((cardRoot.card && cardRoot.card.asset) || "") === "XMR"
+                      ? qsTr("The chain shows no payer, payee or amount: only the wallet that holds this address sees what lands here.")
+                      : (String((cardRoot.card && cardRoot.card.chain) || "").indexOf("lez:") === 0
                        || String((cardRoot.card && cardRoot.card.asset) || "") === "LEZ")
                       ? qsTr("Anyone reading the zone can see what lands here.")
                       : qsTr("Anyone reading the chain can see what lands here.")
@@ -726,6 +747,7 @@ Rectangle {
             LogosButton {
                 objectName: "cardUseAddress"
                 visible: cardRoot.card && !cardRoot.postedByMe && Number(cardRoot.card.form || 0) === 1
+                    && String(cardRoot.card.asset || "") !== "XMR"     // muster never sends Monero
                     && String((cardRoot.card && cardRoot.card.address) || "").replace(/\s+/g, "").length > 0
                 Layout.fillWidth: true
                 text: qsTr("Use as recipient")
@@ -1079,7 +1101,7 @@ Rectangle {
                     wrapMode: Text.WordWrap
                     visible: cardRoot.split !== null
                     text: cardRoot.isRequest
-                          ? qsTr("Paid to %1%2.").arg(cardRoot.shortPayTo(String(cardRoot.split.payTo || "")))
+                          ? qsTr("Paid to %1%2.").arg(cardRoot.shortPayTo(String((cardRoot.split && cardRoot.split.payTo) || "")))
                                 .arg(!cardRoot.isXmr ? ""
                                      : cardRoot.iAmCreditor ? qsTr(", a subaddress of your own Monero wallet on %1")
                                                                   .arg(String(cardRoot.xmr.chainLabel || ""))
@@ -1089,7 +1111,7 @@ Rectangle {
                           ? qsTr("%1 own share: %2 %3 (it absorbs any rounding). Paid to %4.")
                                 .arg(cardRoot.iAmCreditor ? qsTr("Your") : cardRoot.creditorName + qsTr("'s"))
                                 .arg(cardRoot.eth(cardRoot.split.creditorShare)).arg(cardRoot.unit)
-                                .arg(cardRoot.shortPayTo(String(cardRoot.split.payTo || "")))
+                                .arg(cardRoot.shortPayTo(String((cardRoot.split && cardRoot.split.payTo) || "")))
                           : ""
                     color: Theme.palette.textTertiary
                     font.pixelSize: Theme.typography.badgeText
@@ -1141,13 +1163,13 @@ Rectangle {
                     visible: cardRoot.onBehalfBy.length > 0
                     text: cardRoot.creditorAgreed && cardRoot.iAmCreditor
                           ? qsTr("Proposed by %1 on your behalf. ✓ You agreed that %2 is yours.")
-                                .arg(cardRoot.onBehalfBy).arg(cardRoot.shortPayTo(String(cardRoot.split.payTo || "")))
+                                .arg(cardRoot.onBehalfBy).arg(cardRoot.shortPayTo(String((cardRoot.split && cardRoot.split.payTo) || "")))
                           : cardRoot.creditorAgreed
                           ? qsTr("Proposed by %1 on %2's behalf. ✓ %2 agreed the address is theirs.")
                                 .arg(cardRoot.onBehalfBy).arg(cardRoot.creditorName)
                           : cardRoot.iAmCreditor
                           ? qsTr("Proposed by %1 on your behalf. Nobody pays until you agree that %2 is yours.")
-                                .arg(cardRoot.onBehalfBy).arg(cardRoot.shortPayTo(String(cardRoot.split.payTo || "")))
+                                .arg(cardRoot.onBehalfBy).arg(cardRoot.shortPayTo(String((cardRoot.split && cardRoot.split.payTo) || "")))
                           : qsTr("Proposed by %1 on %2's behalf. Nobody pays until %2 agrees the address is theirs.")
                                 .arg(cardRoot.onBehalfBy).arg(cardRoot.creditorName)
                     color: cardRoot.creditorAgreed ? Theme.palette.textSecondary : Theme.palette.warning
@@ -1158,7 +1180,7 @@ Rectangle {
                     objectName: "cardSplitPayToNotMine"
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    visible: cardRoot.iAmCreditor && !cardRoot.creditorAgreed && !cardRoot.payToMine
+                    visible: cardRoot.iAmCreditor && !cardRoot.creditorAgreed && !cardRoot.payToMine && !cardRoot.payToMineUnknown
                     text: qsTr("⚠ %1 is not an address this client holds, so muster will not agree for you: payments would go to whoever holds it. Share your own address and ask for the split again.")
                               .arg(cardRoot.shortPayTo(String(cardRoot.split ? cardRoot.split.payTo || "" : "")))
                     color: Theme.palette.warning
@@ -1314,12 +1336,40 @@ Rectangle {
                              : String(xmrWalletBox.w.request || "").length > 0 ? Theme.palette.warning : Theme.palette.textTertiary
                         font.pixelSize: Theme.typography.badgeText
                     }
+                    // which wallet Monero Wallet opens (exo-dcc.20): the one the module names;
+                    // several that could be it, one button each; none at all, set one up there
+                    readonly property var choices: Array.isArray(xmrWalletBox.w.wallets) ? xmrWalletBox.w.wallets : []
+                    readonly property bool asks: !xmrWalletBox.w.ready && String(xmrWalletBox.w.request || "") === "monero.wallet.unlock"
                     LogosButton {
                         objectName: "cardXmrOpenWallet"
-                        visible: !xmrWalletBox.w.ready && String(xmrWalletBox.w.request || "") === "monero.wallet.unlock"
-                        text: qsTr("Open Monero Wallet")
+                        visible: xmrWalletBox.asks && xmrWalletBox.choices.length < 2
+                        text: xmrWalletBox.w.noWallet ? qsTr("Set up a wallet in Monero Wallet") : qsTr("Open Monero Wallet")
                         variant: LogosButton.Variant.Secondary
                         onClicked: cardRoot.openMoneroWallet(String(xmrWalletBox.w.wallet || ""))
+                    }
+                    LogosText {
+                        objectName: "cardXmrPickWallet"
+                        visible: xmrWalletBox.asks && xmrWalletBox.choices.length > 1
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: qsTr("Which wallet is this request's? Open it in Monero Wallet:")
+                        color: Theme.palette.textSecondary
+                        font.pixelSize: Theme.typography.badgeText
+                    }
+                    Flow {
+                        visible: xmrWalletBox.asks && xmrWalletBox.choices.length > 1
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.tiny
+                        Repeater {
+                            model: xmrWalletBox.asks && xmrWalletBox.choices.length > 1 ? xmrWalletBox.choices : []
+                            delegate: LogosButton {
+                                required property var modelData
+                                objectName: "cardXmrOpenWallet_" + String(modelData)
+                                text: qsTr("Open %1").arg(String(modelData))
+                                variant: LogosButton.Variant.Secondary
+                                onClicked: cardRoot.openMoneroWallet(String(modelData))
+                            }
+                        }
                     }
                     LogosText {
                         objectName: "cardXmrWalletNote"
@@ -2313,6 +2363,7 @@ Rectangle {
             visible: cardRoot.kind === "address-request" && cardRoot.askedOfMe && !cardRoot.answeredByMe
             Layout.fillWidth: true
             text: String((cardRoot.card && cardRoot.card.asset) || "ETH") === "BTC" ? qsTr("Share my Bitcoin address")
+                  : String((cardRoot.card && cardRoot.card.asset) || "ETH") === "XMR" ? qsTr("Share my Monero address")
                   : qsTr("Share an address")
             onClicked: cardRoot.shareAddress()
         }
@@ -2330,7 +2381,7 @@ Rectangle {
                 && !cardRoot.ready
                 // a split: only who it names agrees — each debtor, and the creditor to payTo
                 // being theirs (exo-770), never to an address this client does not hold
-                && (!cardRoot.isSplit || cardRoot.iAmDebtor || (cardRoot.iAmCreditor && cardRoot.payToMine))
+                && (!cardRoot.isSplit || cardRoot.iAmDebtor || (cardRoot.iAmCreditor && (cardRoot.payToMine || cardRoot.payToMineUnknown)))
                 && (!cardRoot.isSettleUp || !!cardRoot.settleUp.iAmParty)
                 && !cardRoot.vouchedNotMine    // never vouch for an address this client does not hold
                 && !cardRoot.splitExpired      // past its expiry an agreement is refused (inv 2)
@@ -2338,7 +2389,7 @@ Rectangle {
             text: cardRoot.isSettleUp ? qsTr("Agree to settle up")
                 : !cardRoot.isSplit ? qsTr("Approve")
                 : cardRoot.iAmDebtor ? qsTr("Agree to my share")
-                : qsTr("Agree — I paid, and %1 is mine").arg(cardRoot.shortPayTo(String(cardRoot.split.payTo || "")))
+                : qsTr("Agree — I paid, and %1 is mine").arg(cardRoot.shortPayTo(String((cardRoot.split && cardRoot.split.payTo) || "")))
             onClicked: cardRoot.approve()
         }
 

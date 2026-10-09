@@ -33,6 +33,8 @@ type
     verdict*: XmrVerdict
     reference*: string          ## the txid that confirms it (xvConfirmed)
     detail*: string
+    seen*: bool                 ## xvPending: a transfer of exactly the share is at payTo, below depth
+    confirmations*: int64       ## …with this many confirmations, as the history row says (0–9)
 
   MoneroPartSeam* = ref object of PartSeam
     chain*: string              ## CAIP-2, "monero:<genesis prefix>"
@@ -71,6 +73,8 @@ proc matchXmrPayment*(t: PartTransfer, status: WalletStatus, info: ReceiveInfo, 
   of rsAnswered: discard
   else: return XmrMatch(verdict: xvPending, detail: hist.detail)
   var nearest = ""
+  var seen = false
+  var depth = 0'i64
   for r in hist.rows:
     if r.direction != "in" or r.failed: continue
     if r.account != 0 or r.subaddrIndex != @[idx]: continue
@@ -83,11 +87,16 @@ proc matchXmrPayment*(t: PartTransfer, status: WalletStatus, info: ReceiveInfo, 
       if nearest.len == 0: nearest = "the transfer " & r.txid[0 ..< 12] & "… already settled another part"
       continue
     if r.pending or r.confirmations < XmrConfirmDepth:
-      nearest = "a transfer of exactly the share arrived (" & r.txid[0 ..< 12] & "…), " & $max(0'i64, r.confirmations) &
-                " of " & $XmrConfirmDepth & " confirmations"
+      # what the row says, held below depth (a pending row is 0 deep); the deepest seen wins
+      let c = (if r.pending: 0'i64 else: min(max(0'i64, r.confirmations), XmrConfirmDepth - 1))
+      if not seen or c > depth:
+        depth = c
+        nearest = "a transfer of exactly the share arrived (" & r.txid[0 ..< 12] & "…), " & $c &
+                  " of " & $XmrConfirmDepth & " confirmations"
+      seen = true
       continue
     return XmrMatch(verdict: xvConfirmed, reference: r.txid.toLowerAscii())
-  XmrMatch(verdict: xvPending,
+  XmrMatch(verdict: xvPending, seen: seen, confirmations: depth,
            detail: (if nearest.len > 0: nearest
                     else: "no incoming transfer of exactly " & t.amount & " atomic units at subaddress " & $idx &
                           " yet — the creditor's own wallet history is what confirms it"))

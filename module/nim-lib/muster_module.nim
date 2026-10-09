@@ -1535,6 +1535,21 @@ proc splitPump() =
         gSplitLogged[v.id] = line
         stderr.writeLine("MUSTER-LP split " & line)
 
+proc xmrRefusalJson(why, chain: string): JsonNode =
+  ## A Monero wallet refusal as the UI reads it (exo-dcc.5, exo-dcc.20): the code before
+  ## the first ':' and the whole reason; where opening a wallet would help, request
+  ## monero.wallet.unlock, the package that installs Monero Wallet, and WHICH wallet to
+  ## name (xmrUnlockTarget: the one, several to pick from, or none — then the UI asks
+  ## monero.accounts.manage). A busy or unread wallet names none: there is nothing to open.
+  let code = why.split(':')[0]
+  result = %*{"error": code, "detail": why, "chain": chain}
+  if code in ["no-wallet", "wallet-other-network", "wallet-watch-only", "wallet-unread", "wallet-busy",
+              "payto-not-mine"]:
+    result["request"] = %MoneroUnlockIntent
+    result["install"] = %MoneroWalletApp
+    if code notin ["wallet-unread", "wallet-busy"]:
+      for k, v in unlockJson(xmrUnlockTarget(moneroBackend(), chain, cmNow)): result[k] = v
+
 proc proposeXmrRequest(chain, total, sharesJson, memo: string): string =
   ## A Monero request (exo-dcc.5, ADR-018): XMR in atomic units on `chain`. Shares as any
   ## split takes them; even shares are distinct (the i-th debtor owes i atomic units less),
@@ -1584,9 +1599,7 @@ proc proposeXmrRequest(chain, total, sharesJson, memo: string): string =
       effectFromJson(splitEffectJson(chain, "XMR", total, creditor, stand, shares, memo)))
     if pre.len > 0: return $(%*{"error": "refused", "detail": pre})
     let m = xmrMintPayTo(moneroBackend(), chain, xmrRequestLabel(chain, total, memo, gMsgSeq))
-    if not m.ok:
-      return $(%*{"error": m.why.split(':')[0], "detail": m.why, "request": MoneroUnlockIntent,
-                  "install": MoneroWalletApp})
+    if not m.ok: return $xmrRefusalJson(m.why, chain)
     payTo = m.address
   let effect = splitEffectJson(chain, "XMR", total, creditor, payTo, shares, memo)
   var ttl = DefaultIntentTtl
@@ -1595,7 +1608,7 @@ proc proposeXmrRequest(chain, total, sharesJson, memo: string): string =
   inc gMsgSeq
   let id = xmrPropose(gSession, moduleKeystore(), driverFor, moneroBackend(), chain, effect,
                       int64(epochTime()), gMsgSeq, ttl)
-  if id.startsWith("0x"): id else: $(%*{"error": id.split(':')[0], "detail": id})
+  if id.startsWith("0x"): id else: $xmrRefusalJson(id, chain)
 
 proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): string =
   ## Propose splitting a bill THIS member fronted: they are the creditor, paid at their own
@@ -1959,7 +1972,7 @@ proc musterCoordinateProposeSettleUpAcross(chain, asset, rates, memo: string): s
   except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
   if gLpDebug: stderr.writeLine("MUSTER-LP settle-up across propose " & result)
 
-proc musterCoordinateShareAddress(chain: string): string =
+proc musterCoordinateShareAddressImpl(chain: string): string =
   ## Post MY address for `chain` as an author-signed address-share card: my Ethereum
   ## address, or the Bitcoin address of my own key on that network.
   if gSession == nil: return $(%*{"error": "not-joined"})
@@ -1972,12 +1985,14 @@ proc musterCoordinateShareAddress(chain: string): string =
     body = %*{"kind": "address-share", "asset": "BTC", "chain": c,
               "address": p2wpkhAddress(hrp, moduleKeystore().btcPubKey()), "form": 1}
   elif c.startsWith("monero:"):
-    # a fresh subaddress of my own open wallet, minted for the room (exo-dcc.5): what a
-    # request proposed on my behalf pays me at — my client still checks it before I agree
+    # "Share my Monero address" (exo-dcc.5, exo-dcc.20): a fresh subaddress of my own open
+    # wallet, minted for the room and posted as my address-share — what a request proposed
+    # on my behalf pays me at; my client still checks it before I agree
     if xmraddr.networkOfChain(c).isNone: return $(%*{"error": "unknown-network", "chain": c})
-    let m = xmrMintPayTo(moneroBackend(), c, "muster:share")
-    if not m.ok: return $(%*{"error": m.why.split(':')[0], "detail": m.why, "request": MoneroUnlockIntent})
-    body = xmrShareBody(c, m.address)
+    inc gMsgSeq
+    let r = xmrShareAddress(gSession, moduleKeystore(), moneroBackend(), c, gMsgSeq, int64(epochTime()))
+    if not r.ok: return $xmrRefusalJson(r.why, c)
+    return $(%*{"address": r.address, "asset": XmrAsset, "chain": c})
   elif c.len == 0 or c.startsWith("eip155:"):
     body = %*{"kind": "address-share", "asset": "ETH", "address": myEvmPayAddress().toLowerAscii(), "form": 1}
   else: return $(%*{"error": "no-shared-address", "detail": "nothing is paid to a shared address on " & c})
@@ -1986,6 +2001,11 @@ proc musterCoordinateShareAddress(chain: string): string =
   let (_, ev) = newMessageEvent(author, int64(epochTime()), $body, gMsgSeq)
   gSession.publishAuthored(moduleKeystore(), ev)
   $(%*{"address": body["address"].getStr()})
+
+proc musterCoordinateShareAddress(chain: string): string =
+  try: result = musterCoordinateShareAddressImpl(chain)
+  except CatchableError as e: result = $(%*{"error": "failed", "detail": e.msg})
+  if gLpDebug: stderr.writeLine("MUSTER-LP share-address " & chain.strip() & " " & result)
 
 proc musterCoordinateReportPaidImpl(intentId, tx: string): string =
   ## "I paid" for MY part of a Monero request (exo-dcc.5): my author-signed report, with the
@@ -2558,6 +2578,14 @@ proc musterCoordinateIntents(): string =
     try:
       for c in driverFor(w.policy).covers(effectFromJson(w.effectJson)): pendingCover.incl c.intent
     except CatchableError: discard
+  # n of 10 (exo-dcc.20): what MY wallet's history shows for each part I am owed on a
+  # Monero request, below depth — cached reads on this tick, never a wait
+  var xmrSeen = initTable[string, int]()
+  for chain in xmrOwedOn(events, driverFor, myEncHex):
+    try:
+      for k, n in xmrSeenConfirmations(events, driverFor, newMoneroPartSeam(chain, moneroBackend(), cmPump),
+                                       myIdentity(moduleKeystore())): xmrSeen[k] = n
+    except CatchableError: discard
   var arr = newJArray()
   for v in views:
     # Each intent renders under ITS OWN driver — the policy it was proposed with
@@ -2728,6 +2756,11 @@ proc musterCoordinateIntents(): string =
           if xmr:
             let l = links.getOrDefault(pv.part)
             parts[^1]["uri"] = %(if l.ok: l.uri else: "")
+            # n of 10 (exo-dcc.20): on MY client, as the creditor, the confirmations my own
+            # wallet's history shows for a transfer of exactly this share below depth —
+            # absent when nothing is seen or the read did not answer (never invented)
+            let k = v.id & "/" & pv.part
+            if k in xmrSeen: parts[^1]["confirmations"] = %xmrSeen[k]
         o["parts"] = parts
         # a token says its own symbol and decimals (display only, exo-5ab); ETH and LEZ are known
         let tok = (if isErc20Asset(sp.asset): tokenInfo(sp.chain, sp.asset[6 .. ^1]) else: ("", -1))
@@ -2768,9 +2801,15 @@ proc musterCoordinateIntents(): string =
           var wallet = newJNull()
           if sp.creditor == myEncHex:
             let why = walletRefusal(moneroBackend().walletStatus(cmPump), sp.chain)
+            let opens = not (why.len == 0 or why.startsWith("wallet-unread") or why.startsWith("wallet-busy"))
             wallet = %*{"ready": why.len == 0, "detail": why, "code": why.split(':')[0],
-                        "request": (if why.len == 0 or why.startsWith("wallet-unread") or why.startsWith("wallet-busy"): ""
-                                    else: MoneroUnlockIntent)}
+                        "request": (if opens: MoneroUnlockIntent else: "")}
+            # whether payToMine is known (exo-dcc.20): an address list not read yet is not
+            # "not yours" — the card keeps Agree, and the agreement itself reads it now
+            o["split"]["payToMineKnown"] = %(moneroBackend().receiveInfo(cmPump).read == rsAnswered)
+            # which wallet Open Monero Wallet names (exo-dcc.20): read on the tick, cached
+            if opens:
+              for k, val in unlockJson(xmrUnlockTarget(moneroBackend(), sp.chain, cmPump)): wallet[k] = val
           o["split"]["xmr"] = %*{"network": $xmraddr.networkOfChain(sp.chain).get(xmrStagenet),
                                  "chainLabel": chainLabel(sp.chain), "confirmDepth": XmrConfirmDepth,
                                  "payment": mine, "wallet": wallet}
@@ -3091,19 +3130,19 @@ proc musterCoordinateReadiness(intentId: string): string =
   if drv.profile().family == MoneroSplitFamily:
     # a Monero request (exo-dcc.5): the creditor's own open wallet vouches for payTo and
     # confirms each part; a debtor pays from any wallet of theirs, which muster never reads
-    var creditor = false
-    try: creditor = splitOf(effect).creditor == myIdentity(moduleKeystore())
+    var creditorOn: seq[string]
+    try:
+      let sp = splitOf(effect)
+      if sp.creditor == myIdentity(moduleKeystore()): creditorOn.add sp.chain
     except ValueError: discard
-    let st = (if creditor: moneroBackend().walletStatus(cmPump) else: WalletStatus())
-    facts.moneroWallet = proc(chain: string): Grade {.gcsafe.} =
-      if not creditor:
-        return (rdMet, "you pay from any Monero wallet of yours with the request's monero: link; muster reads none of yours")
-      let why = walletRefusal(st, chain)
-      if why.len == 0: (rdMet, "your " & st.network & " wallet is open: it confirms each part from its own history")
-      elif why.startsWith("wallet-unread") or why.startsWith("wallet-busy"): (rdUnknown, why)
-      else: (rdMissing, why)
+    let st = (if creditorOn.len > 0: moneroBackend().walletStatus(cmPump) else: WalletStatus())
+    facts.moneroWallet = moneroWalletProbe(st, creditorOn)
   let r = assessReadiness(m, probeFromFacts(facts))
   var o = r.toJson()
+  # an environment item that asks Monero Wallet to open a wallet names WHICH one (exo-dcc.20)
+  for it in o{"items"}.getElems():
+    if it{"request"}.getStr() == MoneroUnlockIntent and it{"name"}.getStr().startsWith("monero:"):
+      for k, val in unlockJson(xmrUnlockTarget(moneroBackend(), it["name"].getStr(), cmPump)): it[k] = val
   o["intentId"] = %intentId
   o["policy"] = %policy
   o["kind"] = %kindOf(policy)
@@ -3306,7 +3345,15 @@ proc musterConnectivity(): string =
     let r = n.requirement
     if (r.kind == rqInfra and r.name == "rpc") or
        (r.kind == rqEnvironment and r.name.startsWith("eip155:")): continue
-    if not probed: (probe = probeFromFacts(hostFacts()); probed = true)
+    if not probed:
+      var facts = hostFacts()
+      # a Monero request's chain (exo-dcc.20): graded from THIS member's wallet_status —
+      # their wallet on the chains they are owed on, any wallet where they only pay
+      let owed = xmrOwedOn(gSession.roomEvents(), driverFor, toHex(moduleKeystore().encIdentity().toBytes()))
+      facts.moneroWallet = moneroWalletProbe((if owed.len > 0: moneroBackend().walletStatus(cmPump)
+                                              else: WalletStatus()), owed)
+      probe = probeFromFacts(facts)
+      probed = true
     let f = if r.kind == rqInfra: probe.infraConfigured else: probe.environmentReachable
     var g: Grade = (rdUnknown, "this host cannot check " & r.name)
     if f != nil:

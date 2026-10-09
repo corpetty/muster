@@ -13,12 +13,14 @@
 ##     750 ms or says busy; create_subaddress and receive_info take the wallet lock without
 ##     that deadline and can wait ~15 s behind a send being built (atlas monero-wallet §6a).
 ## Whatever a call answers is cached for cmPump too. History and receive_info name no wallet
-## or network, so a cached one is bound to the wallet_status replies around it: it is used
-## only while the wallet the status named when it was asked is still the one named, and
-## only once a status reply received AFTER it says so too — a reply about the wallet that
-## was open before is never read as one about the wallet open now (s7). A wallet_status
-## naming another wallet or network drops them all. A successful create_subaddress drops
-## the cached receive_info (it lists the new address).
+## or network, so a cached one is bound to the wallet_status replies around it
+## (monero_backend.WalletBoundCache): it is used only while the wallet the status named when
+## it was asked is still the one named, and only once a status reply received AFTER it says
+## so too — a reply about the wallet that was open before is never read as one about the
+## wallet open now (s7). Until a newer reply is confirmed, the one confirmed before it is
+## served (exo-dcc.20: the status and the reply arrive in lockstep, every tick). A
+## wallet_status naming another wallet or network drops them all. A successful
+## create_subaddress drops the cached receive_info (it lists the new address).
 
 import std/[json, strutils, tables, times]
 import logos_sdk/ffi
@@ -38,11 +40,10 @@ type
     q: InboundQueue
     inFlight: bool
     sentAt: float
-    last: string             ## the newest raw reply that parsed ("" = none)
+    last: string             ## the newest raw reply that parsed ("" = none), a method bound to no wallet
     lastAt: float
     firedKey: string         ## the wallet the status named when the call went out
-    lastKey: string          ## …and when its reply was drained ("" = not usable)
-    lastSeq: int             ## the status replies seen when it was drained
+    bound: WalletBoundCache  ## history and receive_info: served only once a later status confirms
   LpMoneroBackend* = ref object of MoneroBackend
     client: ptr LpClient
     cache: Table[string, Cached]
@@ -71,12 +72,14 @@ proc entry(b: LpMoneroBackend, key: string): Cached =
     GC_ref(result)            # the callback holds a pointer into it
     b.cache[key] = result
 
+const Bound = ["history", "receive_info"]   ## replies that name no wallet
+
 proc forget(b: LpMoneroBackend, meth: string) =
   for k, c in b.cache:
     if k.startsWith(meth):
       c.last = ""
       c.lastAt = 0
-      c.lastKey = ""
+      c.bound.clear()
 
 proc noted(b: LpMoneroBackend, meth, raw: string) =
   ## A reply came back: a wallet_status that names another wallet or network than the last
@@ -99,10 +102,10 @@ proc drain(b: LpMoneroBackend, meth: string, c: Cached, now: float) =
     var s = newString(raw.len)
     if raw.len > 0: copyMem(addr s[0], unsafeAddr raw[0], raw.len)
     if moneroReply(s) != nil:
-      c.last = s
-      c.lastAt = now
-      c.lastKey = (if c.firedKey == b.walletKey: b.walletKey else: "")
-      c.lastSeq = b.statusSeq
+      if meth in Bound: c.bound.offer(s, now, c.firedKey, b.walletKey, b.statusSeq)
+      else:
+        c.last = s
+        c.lastAt = now
       b.noted(meth, s)
   if c.inFlight and now - c.sentAt > AsyncMs.float / 1000 + 5: c.inFlight = false
 
@@ -128,10 +131,10 @@ method invoke*(b: LpMoneroBackend, meth: string, args: JsonNode, mode: CallMode)
       b.noted(meth, result)
       if meth != "create_subaddress":
         let c = b.entry(key)
-        c.last = result
-        c.lastAt = now
-        c.lastKey = b.walletKey
-        c.lastSeq = b.statusSeq - 1   # asked now: as current as the status read just before it
+        if meth in Bound: c.bound.put(result, now, b.walletKey, b.statusSeq)   # as current as the status before it
+        else:
+          c.last = result
+          c.lastAt = now
     return
   let c = b.entry(key)
   b.drain(meth, c, now)
@@ -140,9 +143,8 @@ method invoke*(b: LpMoneroBackend, meth: string, args: JsonNode, mode: CallMode)
     c.firedKey = b.walletKey
     if lp_invoke_async(b.client, meth.cstring, ($args).cstring, AsyncMs, onReply, addr c.q) == LP_OK:
       c.inFlight = true
+  # bound to the wallet: the one named when it was asked, still named, and named again by a
+  # status reply read after it
+  if meth in Bound: return c.bound.read(b.walletKey, b.statusSeq, now, StaleS)
   if c.last.len == 0 or now - c.lastAt > StaleS: return ""
-  if meth in ["history", "receive_info"]:
-    # bound to the wallet: the one named when it was asked, still named, and named again
-    # by a status reply read after it
-    if c.lastKey.len == 0 or c.lastKey != b.walletKey or b.statusSeq <= c.lastSeq: return ""
   c.last
