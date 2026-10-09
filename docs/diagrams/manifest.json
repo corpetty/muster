@@ -60,7 +60,7 @@
     {
       "file": "substrate-pipeline.html",
       "serves": "BOTH",
-      "shows": "The keystone: seven pipeline stages against what runs each conventionally and who operates that, what runs it here, and who still sees what. Nine views — per-use-case retellings, three that select by observer rather than by stage, and one that marks the two stages left unassessed.",
+      "shows": "The keystone: seven pipeline stages against what runs each conventionally and who operates that, what ran it in Muster's September 2026 demo build (labelled in the figure as a dated status of that build, not Muster's scope), and who still sees what. Nine views — per-use-case retellings, three that select by observer rather than by stage, and one that marks the two stages left unassessed.",
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
@@ -94,7 +94,7 @@
         },
         {
           "grade": "from-source",
-          "note": "Contracting and settlement rows read off the build and the consumed contracts. Ordering and enforcement are marked NOT ASSESSED in the figure itself, not merely omitted, because a diagram is where an unscored cell gets quietly filled in"
+          "note": "Contracting and settlement rows read off the build and the consumed contracts. The contracting observer cell's 'Muster's own client re-derives since' and the ordering cell's note that the mixnet (opt-in since 2026-10-08) carries room sends, not the transfer, are today's facts, read off docs/02-implementation-plan.md and docs/labbook/mixnet-on-delivery-03.md. Ordering and enforcement are marked NOT ASSESSED in the figure itself, not merely omitted, because a diagram is where an unscored cell gets quietly filled in"
         },
         {
           "grade": "illustrative",
@@ -161,7 +161,7 @@
         },
         {
           "grade": "from-source",
-          "note": "The step-04 flag (room authenticates, zone does not authorize; single-key account) and the footer (signs no log, re-derives nothing it signs) are F-4/FS-6 and F-20 as specified-and-unbuilt, not observed properties. Ordering/mempool is marked NOT ASSESSED in the figure itself, not omitted"
+          "note": "The step-04 flag (room authenticates, zone does not authorize; single-key account) and the footer (signs no log, re-derives nothing it signs) describe the demo build, which has none of F-4/FS-6 or F-20; the footer says these are built in Muster's own client, not in this one. 'No mixnet here' is the transfer's path: the mixnet Muster offers since 2026-10-08 carries room sends only. Ordering/mempool is marked NOT ASSESSED in the figure itself, not omitted"
         }
       ],
       "recheck": "P3 and P4, and before any post using it publishes. F-4/FS-6 and F-20 landing removes the step-04 flag and the footer's 're-derives nothing it signs'; ADR-010 may change which module mints identity; the mempool cell becomes assessable only when the zone answers; libchat#28 (chat_module state not persisted) changes what steps 01 and 06 survive across a restart."
@@ -731,7 +731,7 @@
         },
         {
           "grade": "from-source",
-          "note": "Class 02's one-topic-per-conversation shape, and LOGOS-MIXNET at status raw, send-only, off the near-term roadmap. Dated 2026-08"
+          "note": "Class 02's one-topic-per-conversation shape, and LOGOS-MIXNET at status raw, send-only, off the near-term roadmap, printed as dated 2026-08. Beside it, today's status: since 2026-10-08 a Muster room's sends can go over the mixnet, opt-in and off by default, while reading a room still leaves from the reader's own address (docs/labbook/mixnet-on-delivery-03.md)"
         },
         {
           "grade": "measured",
@@ -952,7 +952,7 @@
     {
       "file": "pipeline-self-assessment.svg",
       "serves": "POST",
-      "shows": "Muster scored closed/partial/leaks on its own seven-stage matrix, with Ordering and Enforcement deliberately left unassessed.",
+      "shows": "The September 2026 demo build scored closed/partial/leaks on Muster's own seven-stage matrix, with Ordering and Enforcement deliberately left unassessed. A dated status of that build, labelled as such in the figure, not Muster's scope or today's status; contracting's ◑→● marks F-4 re-derivation built since in Muster's own client.",
       "sources": [
         {
           "path": "docs/posts/01-discovery-supporting-material.md",
@@ -972,7 +972,7 @@
         },
         {
           "grade": "from-source",
-          "note": "Contracting and Settlement cells — read off the build and the consumed contracts, not separately exercised"
+          "note": "Contracting and Settlement cells — read off the build and the consumed contracts, not separately exercised. Contracting's → ● is §2's ◑→●: F-4 re-derivation as built in Muster's own client, not a property of the demo build"
         }
       ],
       "recheck": "Every phase. This figure scores the demo as it runs; it goes stale the moment the build gains or loses a protection. The two unassessed cells must stay unassessed until the zone's mempool and sequencer models are confirmed."

@@ -1,4 +1,4 @@
-<svg class="bc-svg" width="960" height="700" viewBox="0 0 960 700" data-view="neglected-middle" xmlns="http://www.w3.org/2000/svg"
+<svg class="bc-svg" width="960" height="716" viewBox="0 0 960 716" data-view="neglected-middle" xmlns="http://www.w3.org/2000/svg"
            role="img" aria-labelledby="bc-svg-title bc-svg-desc">
   <style><![CDATA[
   /* Tokens are declared on .bc-svg as well as .bc so that an <svg> lifted out of
@@ -189,9 +189,9 @@
   .bc-dim path { opacity: 0.18; }
   .bc-flow-arrow path { animation: none; }
 ]]></style>
-  <rect width="960" height="700" fill="#F7F8F5"/>
-        <title id="bc-svg-title">One stage of seven, closed by default — and it is the neglected one</title>
-        <desc id="bc-svg-desc">Terms are agreed inside an end-to-end encrypted room with no coordination service anywhere in it: no RPC, no quote infrastructure, no operator who sees the proposal, the approvals or the timing. Closed by architecture, not opt-in. That is a defensible result for a two-week prototype whose thesis is that the middle of the pipeline is neglected — it closes the neglected middle and leaves the well-trodden end open.</desc>
+  <rect width="960" height="716" fill="#F7F8F5"/>
+        <title id="bc-svg-title">One stage of seven, closed by default in that build — and it is the neglected one</title>
+        <desc id="bc-svg-desc">A dated score of the September 2026 demo build, not Muster's scope: all seven stages are Muster's to cover. Terms are agreed inside an end-to-end encrypted room with no coordination service anywhere in it: no RPC, no quote infrastructure, no operator who sees the proposal, the approvals or the timing. Closed by architecture, not opt-in. That is a defensible result for a two-week prototype whose thesis is that the middle of the pipeline is neglected — it closes the neglected middle and leaves the well-trodden end open.</desc>
 
         <!-- The observer column sits on the dark ground the rest of the figure set
              uses for "outside": it is not a third opinion, it is the other side. -->
@@ -201,7 +201,7 @@
         <!-- Header text is unwrapped, so it has to fit its column: at 9.5px mono
              with this letter-spacing, ~41 characters in 282px. -->
         <text class="bc-col-head" x="174" y="40">CONVENTIONALLY, AND WHO RUNS IT</text>
-        <text class="bc-col-head" x="462" y="40">WHAT RUNS IT HERE</text>
+        <text class="bc-col-head" x="462" y="40">THE DEMO BUILD, SEPT 2026</text>
         <text class="bc-col-head bc-col-head-out" x="714" y="40">WHO STILL SEES, AND WHAT</text>
 
         <!-- ═══ 01 DISCOVERY (y=56) ═══ -->
@@ -303,16 +303,16 @@
           <text x="474" y="340" class="bc-lead">A native, local-first client.</text>
           <text x="474" y="354">No web frontend, no ambient</text>
           <text x="474" y="368">leakage. But the signing context</text>
-          <text x="474" y="386" class="bc-flag">is not verifiable — the client</text>
-          <text x="474" y="398" class="bc-flag">does not re-derive what it signs.</text>
+          <text x="474" y="386" class="bc-flag">was not verifiable — the client</text>
+          <text x="474" y="398" class="bc-flag">did not re-derive what it signed.</text>
         </g>
         <g class="bc-node bc-node-out bc-dim" data-id="obs-contracting">
           <rect x="708" y="320" width="224" height="84" rx="4"/>
           <text x="720" y="340">Nothing new leaves the room here.</text>
-          <text x="720" y="358">The gap points inward: you cannot</text>
-          <text x="720" y="372">check what you are agreeing to.</text>
-          <text x="720" y="390">F-4 and FS-6 specify the check;</text>
-          <text x="720" y="404">it is not built.</text>
+          <text x="720" y="356">The gap points inward: you could</text>
+          <text x="720" y="369">not check what you were agreeing to.</text>
+          <text x="720" y="385">Muster's own client re-derives</text>
+          <text x="720" y="397">since (F-4, FS-6); this build never did.</text>
         </g>
 
         <!-- ═══ 05 ORDERING (y=408) ═══ -->
@@ -336,10 +336,10 @@
         </g>
         <g class="bc-node bc-node-out bc-dim" data-id="obs-ordering">
           <rect x="708" y="408" width="224" height="84" rx="4"/>
-          <text x="720" y="428">Known: no network-origin</text>
-          <text x="720" y="442">protection, because there is no</text>
-          <text x="720" y="456">mixnet. The zone learns that a</text>
-          <text x="720" y="470">transfer happened, and when.</text>
+          <text x="720" y="428">Known: no network-origin protection</text>
+          <text x="720" y="442">for the transfer. (Since Oct 2026 the</text>
+          <text x="720" y="456">mixnet carries room sends only.) The</text>
+          <text x="720" y="470">zone learns it happened, and when.</text>
           <text x="720" y="488" class="bc-flag">The rest is not established.</text>
         </g>
 
@@ -399,6 +399,9 @@
           <text x="720" y="650" class="bc-flag">so left blank rather than filled</text>
           <text x="720" y="662" class="bc-flag">in with something plausible.</text>
         </g>
+
+        <!-- Dated label. The middle column scores one build; it is not Muster's scope. -->
+        <text class="bc-col-head" x="20" y="704">MIDDLE COLUMN: THE SEPTEMBER 2026 DEMO BUILD, AS IT RAN. A DATED STATUS, NOT MUSTER'S SCOPE.</text>
 
         <g class="bc-flow-arrows"></g>
       </svg>

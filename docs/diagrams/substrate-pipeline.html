@@ -230,7 +230,7 @@
 <body>
 
 <h1>The pipeline, against the infrastructure that runs it</h1>
-<h2 class="subtitle">Seven stages. For each: what runs it on a conventional stack and who operates that, what runs it here, and who still sees something. Pick a use case — the pipeline is not one shape.</h2>
+<h2 class="subtitle">Seven stages. For each: what runs it on a conventional stack and who operates that, what ran it in Muster's September 2026 demo build, and who still sees something. Pick a use case — the pipeline is not one shape. The middle column is that build's dated status, not Muster's scope: all seven stages are Muster's to cover, and today's status, link by link, is in <code>docs/runbooks/explaining-muster.md</code> §4c.</h2>
 
 <div class="bc">
   <div class="bc-panel">
@@ -243,10 +243,10 @@
     <div class="bc-tabs" role="tablist" aria-label="Ways of reading the pipeline" id="bc-tabs"></div>
 
     <div class="bc-stage">
-      <svg class="bc-svg" viewBox="0 0 960 700" data-view="overview" xmlns="http://www.w3.org/2000/svg"
+      <svg class="bc-svg" viewBox="0 0 960 716" data-view="overview" xmlns="http://www.w3.org/2000/svg"
            role="img" aria-labelledby="bc-svg-title bc-svg-desc">
         <title id="bc-svg-title">The transaction pipeline against the infrastructure that runs each stage</title>
-        <desc id="bc-svg-desc">Seven stages — discovery, diligence, negotiation, contracting, ordering, settlement, enforcement — each against what runs it conventionally, what runs it in Muster, and who still observes something. Ordering and enforcement are left unassessed.</desc>
+        <desc id="bc-svg-desc">Seven stages — discovery, diligence, negotiation, contracting, ordering, settlement, enforcement — each against what runs it conventionally, what ran it in Muster's September 2026 demo build, and who still observes something. Ordering and enforcement are left unassessed. The middle column is a dated status of that build, not Muster's scope.</desc>
 
         <!-- The observer column sits on the dark ground the rest of the figure set
              uses for "outside": it is not a third opinion, it is the other side. -->
@@ -256,7 +256,7 @@
         <!-- Header text is unwrapped, so it has to fit its column: at 9.5px mono
              with this letter-spacing, ~41 characters in 282px. -->
         <text class="bc-col-head" x="174" y="40">CONVENTIONALLY, AND WHO RUNS IT</text>
-        <text class="bc-col-head" x="462" y="40">WHAT RUNS IT HERE</text>
+        <text class="bc-col-head" x="462" y="40">THE DEMO BUILD, SEPT 2026</text>
         <text class="bc-col-head bc-col-head-out" x="714" y="40">WHO STILL SEES, AND WHAT</text>
 
         <!-- ═══ 01 DISCOVERY (y=56) ═══ -->
@@ -358,16 +358,16 @@
           <text x="474" y="340" class="bc-lead">A native, local-first client.</text>
           <text x="474" y="354">No web frontend, no ambient</text>
           <text x="474" y="368">leakage. But the signing context</text>
-          <text x="474" y="386" class="bc-flag">is not verifiable — the client</text>
-          <text x="474" y="398" class="bc-flag">does not re-derive what it signs.</text>
+          <text x="474" y="386" class="bc-flag">was not verifiable — the client</text>
+          <text x="474" y="398" class="bc-flag">did not re-derive what it signed.</text>
         </g>
         <g class="bc-node bc-node-out" data-id="obs-contracting">
           <rect x="708" y="320" width="224" height="84" rx="4"/>
           <text x="720" y="340">Nothing new leaves the room here.</text>
-          <text x="720" y="358">The gap points inward: you cannot</text>
-          <text x="720" y="372">check what you are agreeing to.</text>
-          <text x="720" y="390">F-4 and FS-6 specify the check;</text>
-          <text x="720" y="404">it is not built.</text>
+          <text x="720" y="356">The gap points inward: you could</text>
+          <text x="720" y="369">not check what you were agreeing to.</text>
+          <text x="720" y="385">Muster's own client re-derives</text>
+          <text x="720" y="397">since (F-4, FS-6); this build never did.</text>
         </g>
 
         <!-- ═══ 05 ORDERING (y=408) ═══ -->
@@ -391,10 +391,10 @@
         </g>
         <g class="bc-node bc-node-out" data-id="obs-ordering">
           <rect x="708" y="408" width="224" height="84" rx="4"/>
-          <text x="720" y="428">Known: no network-origin</text>
-          <text x="720" y="442">protection, because there is no</text>
-          <text x="720" y="456">mixnet. The zone learns that a</text>
-          <text x="720" y="470">transfer happened, and when.</text>
+          <text x="720" y="428">Known: no network-origin protection</text>
+          <text x="720" y="442">for the transfer. (Since Oct 2026 the</text>
+          <text x="720" y="456">mixnet carries room sends only.) The</text>
+          <text x="720" y="470">zone learns it happened, and when.</text>
           <text x="720" y="488" class="bc-flag">The rest is not established.</text>
         </g>
 
@@ -455,6 +455,9 @@
           <text x="720" y="662" class="bc-flag">in with something plausible.</text>
         </g>
 
+        <!-- Dated label. The middle column scores one build; it is not Muster's scope. -->
+        <text class="bc-col-head" x="20" y="704">MIDDLE COLUMN: THE SEPTEMBER 2026 DEMO BUILD, AS IT RAN. A DATED STATUS, NOT MUSTER'S SCOPE.</text>
+
         <g class="bc-flow-arrows"></g>
       </svg>
     </div>
@@ -499,9 +502,9 @@
   },
   {
     "id": "neglected-middle",
-    "label": "What this build closes",
-    "title": "One stage of seven, closed by default — and it is the neglected one",
-    "body": "Terms are agreed inside an end-to-end encrypted room with <strong>no coordination service anywhere in it</strong>: no RPC, no quote infrastructure, no operator who sees the proposal, the approvals or the timing. Closed by architecture, not opt-in. That is a defensible result for a two-week prototype whose thesis is that the middle of the pipeline is neglected — it closes the neglected middle and leaves the well-trodden end open.",
+    "label": "What the demo build closed",
+    "title": "One stage of seven, closed by default in that build — and it is the neglected one",
+    "body": "A dated score of the September 2026 demo build, not Muster's scope: all seven stages are Muster's to cover. Terms are agreed inside an end-to-end encrypted room with <strong>no coordination service anywhere in it</strong>: no RPC, no quote infrastructure, no operator who sees the proposal, the approvals or the timing. Closed by architecture, not opt-in. That is a defensible result for a two-week prototype whose thesis is that the middle of the pipeline is neglected — it closes the neglected middle and leaves the well-trodden end open.",
     "entry": null,
     "paths": [],
     "extras": ["stage-negotiation", "obs-negotiation"]
@@ -551,7 +554,7 @@
     "id": "obs-zone",
     "label": "Seen by: the zone",
     "title": "What the execution zone learns",
-    "body": "That a transfer happened, and when. On the private rail it does not learn the amount or either account — but the floor holds on every rail, and on a testnet with two users the anonymity set is as small as an anonymity set gets. There is no network-origin protection, because there is no mixnet. What the zone's mempool exposes before confirmation is <strong>not established</strong>, which is why ordering stays unscored.",
+    "body": "That a transfer happened, and when. On the private rail it does not learn the amount or either account — but the floor holds on every rail, and on a testnet with two users the anonymity set is as small as an anonymity set gets. The transfer has no network-origin protection: the Logos mixnet, opt-in in Muster since October 2026, carries a room's sends, not the transfer. What the zone's mempool exposes before confirmation is <strong>not established</strong>, which is why ordering stays unscored.",
     "entry": null,
     "paths": [],
     "extras": ["stage-ordering", "obs-ordering", "stage-settlement", "obs-settlement"]

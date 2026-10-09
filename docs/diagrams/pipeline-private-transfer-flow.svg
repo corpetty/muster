@@ -25,9 +25,11 @@
                    cells are carried from GAPS.md
                [from-source] The step-04 flag (room authenticates, zone does not
                    authorize; single-key account) and the footer (signs no log, re-derives
-                   nothing it signs) are F-4/FS-6 and F-20 as specified-and-unbuilt, not
-                   observed properties. Ordering/mempool is marked NOT ASSESSED in the figure
-                   itself, not omitted
+                   nothing it signs) describe the demo build, which has none of F-4/FS-6 or
+                   F-20; the footer says these are built in Muster's own client, not in this
+                   one. 'No mixnet here' is the transfer's path: the mixnet Muster offers
+                   since 2026-10-08 carries room sends only. Ordering/mempool is marked NOT
+                   ASSESSED in the figure itself, not omitted
      recheck:  P3 and P4, and before any post using it publishes. F-4/FS-6 and F-20
                landing removes the step-04 flag and the footer's 're-derives nothing it
                signs'; ADR-010 may change which module mints identity; the mempool cell
@@ -176,7 +178,7 @@
   <text x="592" y="645" font-size="9" fill="#DCE2DE">happened, and when — not the amount, nor</text>
   <text x="592" y="658" font-size="9" fill="#DCE2DE">either account, on the private rail.</text>
   <text x="592" y="672" font-size="9" fill="#E8A79B">Floor: that it happened, and when, is</text>
-  <text x="592" y="685" font-size="9" fill="#E8A79B">never hidden. No mixnet; anon set of two;</text>
+  <text x="592" y="685" font-size="9" fill="#E8A79B">never hidden. No mixnet here; anon set of two;</text>
   <text x="592" y="698" font-size="9" fill="#E8A79B">mempool visibility not assessed.</text>
 
   <!-- ═══ 06 RECEIVE & SETTLE (y=708) ═══ -->
@@ -201,7 +203,7 @@
   <!-- ══ FOOTER ══ -->
   <text x="40" y="834" font-size="11" font-weight="600" fill="#1A1F1C">The floor, on every step: nothing hides that a transfer happened, or when.</text>
   <text x="40" y="854" font-size="10" fill="#656E66">This is the demo speed build — composed upstream modules, measured Aug 2026, not the specified Muster client. It signs</text>
-  <text x="40" y="868" font-size="10" fill="#656E66">no log and re-derives nothing it signs (F-4/FS-6 and F-20 are specified, not built), and there is no offline mode:</text>
+  <text x="40" y="868" font-size="10" fill="#656E66">no log and re-derives nothing it signs (F-4/FS-6 and F-20 are built in Muster's own client, not in this one), and there is no offline mode:</text>
   <text x="40" y="882" font-size="10" fill="#656E66">the logos.test messaging fleet and the LEZ testnet sequencer are both live, remote, and outside the room.</text>
 
   <!-- ══ LEGEND ══ -->
