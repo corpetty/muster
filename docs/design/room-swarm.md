@@ -87,7 +87,7 @@ default catalogue, on all four platforms.
 | The index | the tracker's database, readable by its operator | `file/…` events in the room log, sealed to the room |
 | Who holds what | the tracker's peer list, built from every client's announce: IP, port, infohash, bytes up and down | `seed/…` events, each signed by the member who seeds (invariant 9): their storage peer id and addresses |
 | The secret | a passkey in every announce URL; it leaks with the `.torrent` | the room's epoch keys and a key per file; the file names no secret |
-| Peer discovery | the tracker only; DHT and PEX off by the private flag | the storage DHT finds providers, and the room's seed events add a direct `connect` so a listed seeder can be dialled. Until asks U1 and U6 land, the DHT sees the ciphertext CID, its providers and each lookup (§3, §6) |
+| Peer discovery | the tracker only; DHT and PEX off by the private flag | the storage DHT finds providers, and the room's seed events add a direct `connect` so a listed seeder can be dialled. Until asks 1 and 2 land, the DHT sees the ciphertext CID, its providers and each lookup (§3, §6) |
 | What a stranger with the hash gets | the plaintext pieces, if they reach a peer | ciphertext; the key is only in the room |
 | A late joiner | the whole catalogue | files shared from their epoch on; earlier ones only if a member shares them again (invariant 7) |
 | Ratio | enforced by the tracker from self-reported stats | not enforced. Muster cannot see bytes served. Pledges (S7) are motivational and say so |
@@ -199,37 +199,28 @@ Two new observer classes in `intents/disclosure.nim`, and the rows `flow.nim` sh
 
 The claims registry (ADR-012) gets the matching entries with credibility: content
 confidentiality **imperative**; seeder IPs to room members and to storage peers
-**exposed**; "only room members can fetch the ciphertext" a **gap** until ask U1 lands.
+**exposed**; "only room members can fetch the ciphertext" a **gap** until asks 1 and 2 land.
 
 ## 6. Asks of the Storage team
 
-Jarrad says Storage was already thinking about a delivery-bounded peer network. These are
-what would make the room swarm the thing they had in mind rather than a workaround. U1 and
-U6 are the ones that matter.
+The shareable version is `docs/design/storage-asks.md`, rewritten 2026-10-19 after Giuliano
+(Storage lead) read the first one. His reading: **we want a permissioned tracker.** He was
+right that "serve to named peers, fetch from named peers" (the first U1/U6) would wire the
+overlay by hand and leave Muster doing peer selection and failure recovery. What we want is
+our own peer **lookup** feeding Storage's swarm, which keeps sampling, scheduling and
+recovery. The seam exists: `Discovery.find`/`provide` (`storage/discovery.nim`). It is
+node-wide today, and the node also serves Basecamp's package downloader on the DHT.
 
-- **U1 — serve without announcing, to a set of peers.** Split `advertise` into *announce*
-  (DHT) and *serve*, and let *serve* take an allowlist of peer ids (or an SPR set).
-  Muster fills the list from the room's seed events. Then a stranger with the CID gets
-  NotFound (S0 Q2 confirmed the gate is all-or-nothing today). With U6 as well, the blobs
-  never touch the DHT.
-- **U2 — a node per consumer, or a namespace.** One shared node and one
-  `~/.logos_storage/config.json` mean Muster's choices (network, quota, Mix) are whatever
-  the downloader picked, and Muster's `init` would rewrite everyone's config.
-- **U3 — events addressed to their caller**, or at least a caller id on each, so a module
-  does not parse other modules' sessions.
-- **U4 — `fetch` completion**, and `uploadChunk` as `bstr`.
-- **U5 — a manifest with no filename/mimetype** (or caller-set), so an upload does not
-  need a temp-file rename to stay quiet.
-- **U6 — fetch from named peers** (from S0). A download or manifest call that takes peer
-  ids or SPRs and asks them directly; the block engine already asks connected peers, and
-  only `fetchManifest` insists on the DHT. Or: accept a manifest block the caller supplies,
-  which the room could carry in `file/<fid>`. **With U1 and U6 the swarm needs no DHT at
-  all**: no CID or provider record ever leaves the room, which is the private tracker done
-  properly.
-
-S0 adds evidence to U2: `network()` names the default preset on a custom network, and
-`init` rewrites the shared config file. U4 stands: a `tstr` carries JSON text, so
-non-UTF-8 bytes cannot pass.
+1. **A peer lookup the consumer supplies, per dataset** (replaces U1 + U6): for a room's
+   CIDs, `find` asks the room (the seeders who announced, as SPRs) and `provide` tells the
+   room; the DHT never sees them.
+2. **Serve without announcing:** `advertise` is one bit for both today, so a seeder that
+   stays off the DHT serves no one. Admission (serve only to the room's peers) is optional
+   defence in depth: with ask 1 nobody outside can look the CID up, and the blob is sealed.
+3. **A node or namespace per consumer** (was U2), which also gives ask 1 its scope.
+4. **Events addressed to their caller** (was U3).
+5. **`fetch` completion; `uploadChunk` as `bstr`** (was U4).
+6. **A manifest with no filename or mimetype** (was U5).
 
 ## 7. Order of work
 
@@ -277,8 +268,8 @@ agreement). S3's spec goes through `discuss-issue` first.
 - **S8 — Later, each its own decision.** (a) Room log backup: members upload the room's
   sealed envelopes (already per-epoch ciphertext) as a dataset and keep its CID beside
   `joined_rooms`, so a room outlives the fleet's store (exo-dcc.14). (b) Files on cards:
-  an invoice attached to a split, its digest in the effect, F-20's external read. (c) Ask
-  U1 adopted once Storage ships it: the DHT rows in §5.5 go away.
+  an invoice attached to a split, its digest in the effect, F-20's external read. (c) Asks 1
+  and 2 adopted once Storage ships them: the DHT rows in §5.5 go away.
 
 ## 8. Invariants, checked
 
@@ -301,7 +292,7 @@ Decided by the operator:
 - **Seeding after a fetch is on by default** (2026-10-15). A member can choose a private
   fetch instead (§5.4 step 3): over Mix, nothing served afterwards, no seed event.
 - **Seed events carry the seeder's network addresses** for now (2026-10-15). Storage's own
-  privacy features (Mix-routed serving, ask U1) come later and change the §5.5 rows when
+  privacy features (Mix-routed serving, asks 1 and 2) come later and change the §5.5 rows when
   they do.
 
 Still open:
