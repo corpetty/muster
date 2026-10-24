@@ -2825,3 +2825,5 @@
 {"type":"dep_add","timestamp":"2026-10-24T14:49:40.293574864Z","issue_id":"exo-833.4","payload":{"dep_type":"parent-child","depends_on":"exo-833"}}
 {"type":"dep_add","timestamp":"2026-10-24T14:49:40.57288824Z","issue_id":"exo-833.3","payload":{"dep_type":"blocks","depends_on":"exo-833.4"}}
 {"type":"title_updated","timestamp":"2026-10-24T14:49:40.855038721Z","issue_id":"exo-833","payload":{"title":"Ed25519 identity keys for Muster through logos.signer/1, in keystore_module (the phrase stays in one place)"}}
+{"type":"close","timestamp":"2026-10-24T14:49:50.077913945Z","issue_id":"exo-833.1","payload":{}}
+{"type":"comment","timestamp":"2026-10-24T14:49:50.347056952Z","issue_id":"exo-833.1","payload":{"body":"Closed: the standalone signer is now the reference, not the shipping module. It builds and loads (tools/logoscore-smoke.sh); the keystore branch (exo-833.4) took the same check."}}
