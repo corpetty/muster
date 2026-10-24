@@ -1,0 +1,2 @@
+ui-host [ "muster_ui" ]: "[muster_ui] VOICE {\"ready\":{\"capture\":\"ok\",\"playback\":\"unknown\",\"codec\":\"libopus 1.5.2\",\"note\":\"\"},\"recording\":{\"state\":\"idle\",\""
+ui-host [ "muster_ui" ]: "elapsedMs\":0,\"capMs\":60000,\"peak\":0,\"capped\":false,\"silent\":false,\"error\":\"\"},\"playing\":null}"

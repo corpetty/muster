@@ -12,7 +12,7 @@
 ## This is the join point: swap LocalTransport→delivery for a real network, or
 ## EpochCrypto→native chat, and this layer is unchanged (both are interfaces).
 
-import std/[json, sequtils, sets, tables, times]
+import std/[json, sequtils, sets, strutils, tables, times]
 import ../transport/transport
 import ../crypto/conversation
 import ../crypto/binding
@@ -56,6 +56,14 @@ const
   FrameBeaconRequest = 0x05'u8 ## body = a random 16-byte nonce: a would-be joiner has no join key to seal its request to yet
   MaxBeacons = 8               ## join keys a would-be joiner keeps (and seals each request to)
   BeaconMinInterval = 2.0      ## seconds between answers to beacon requests, per session, for an unchanged key
+  VoiceFrameBytes* = 90_112    ## the padded plaintext of every `voice/` frame, so each is 1 + 24 + 16 +
+                               ## 90,112 = 90,153 B on the wire whatever the note's length
+                               ## (docs/design/voice-notes.md §3.4, §4, §5). A new value strands
+                               ## notes already sent: it is a `v: 2`, never an edit
+
+type FrameTooLarge* = object of CatchableError
+  ## An event whose JSON does not fit the pad its frame must have (voice-notes.md §4). Raised
+  ## by `publish` before the event is ingested, journalled or sent, so nothing of it is left.
 
 proc toBytes(s: string): seq[byte] = (for c in s: result.add byte(c))
 proc toStr(b: openArray[byte]): string = (for x in b: result.add char(x))
@@ -78,6 +86,39 @@ proc encodeEvent(e: Event): seq[byte] =
     j["after"] = af
   if e.afterSig.len > 0: j["afterSig"] = %e.afterSig
   toBytes($j)
+
+proc isVoiceKey*(key: string): bool =
+  ## A voice note's part (voice-notes.md §3.3), by the key's first segment, as `authorOf`
+  ## classifies a kind: so nothing a fold reads as a voice part leaves unpadded. Whether a
+  ## room holds a note, which a log proof is refused for, is the fold's (voice_live.roomProof,
+  ## §10).
+  key.split('/', maxsplit = 1)[0] == "voice"
+
+proc padFor(key: string, padTo: int): int =
+  ## The pad a frame for `key` gets. The key decides for a voice part, never the caller:
+  ## `publish` has two send paths for one event (a new one, and the stored copy re-sealed),
+  ## and a pad each call site had to pass would leave a path that forgot it sending a frame
+  ## whose size shows the note's length, with nothing failing (§4).
+  if padTo < 0: raise newException(ValueError, "a negative pad: " & $padTo)
+  if not isVoiceKey(key): return padTo
+  if padTo != 0 and padTo != VoiceFrameBytes:
+    raise newException(ValueError, "a voice/ frame is padded to " & $VoiceFrameBytes & " B, never " & $padTo)
+  VoiceFrameBytes
+
+proc padded(e: Event, pad: int): seq[byte] =
+  ## The plaintext a frame seals: the event's JSON, then ASCII spaces up to exactly `pad`
+  ## bytes (none for 0, today's frame byte for byte). The spaces are transport framing, as
+  ## the JSON is: outside `value`, so the event id (parents, key, value) and every signature
+  ## are unchanged, and `decodeEvent` reads the frame unchanged, an older client's included,
+  ## since parseJson at the builder's Nim pin (2.2.4) accepts trailing whitespace
+  ## (session_pad_test §2). Raises FrameTooLarge when the JSON alone is over `pad`.
+  result = encodeEvent(e)
+  let n = result.len
+  if pad == 0: return
+  if n > pad:
+    raise newException(FrameTooLarge, "an event of " & $n & " B does not fit a " & $pad & " B frame")
+  result.setLen(pad)
+  for i in n ..< pad: result[i] = byte(' ')
 
 proc decodeEvent(b: seq[byte]): Event =
   let j = parseJson(toStr(b))
@@ -165,23 +206,50 @@ proc replay*(s: CoordinationSession, frames: seq[seq[byte]]) =
 proc topic*(s: CoordinationSession): string = s.topic
   ## The room's content topic — what an author signature binds to (authorship.nim).
 
-proc publish*(s: CoordinationSession, ev: Event) =
+proc sealFrame(s: CoordinationSession, ev: Event, padTo: int, asGiven: bool): seq[byte] =
+  ## Everything `publish` does but the send: the copy chosen, padded, recorded (the log,
+  ## `sealedIn`, the journal) and sealed. The frame it returns is for the transport.
+  var e = ev
+  let id = eventId(e)
+  if not asGiven:
+    let held = s.log.find(id)
+    if held.found: e = held.event
+    elif e.after.len == 0: e.after = s.log.heads()
+  let plain = padded(e, padFor(e.key, padTo))
+  s.log.ingest(e)
+  let ep = (try: s.crypto.epoch() except CatchableError: -1)
+  if ep >= 0 and (id notin s.sealedIn or ep < s.sealedIn[id]): s.sealedIn[id] = ep
+  result = @[FrameData] & s.crypto.seal(plain)
+  if s.journal != nil: s.journal(result)
+
+proc publish*(s: CoordinationSession, ev: Event, padTo = 0, asGiven = false) =
   ## Record locally, then broadcast the sealed event to the room. A new event names the
   ## log's heads in `after` (what this member had seen; never part of the id, never read
   ## by a fold). An event the log already holds — a re-announce, a second submit — is
   ## re-sealed as the stored copy, so it carries its original order, not a fresh one
-  ## (docs/design/causal-parents.md §3.2).
-  var e = ev
-  let id = eventId(e)
-  let held = s.log.find(id)
-  if held.found: e = held.event
-  elif e.after.len == 0: e.after = s.log.heads()
-  s.log.ingest(e)
-  let ep = (try: s.crypto.epoch() except CatchableError: -1)
-  if ep >= 0 and (id notin s.sealedIn or ep < s.sealedIn[id]): s.sealedIn[id] = ep
-  let frame = @[FrameData] & s.crypto.seal(encodeEvent(e))
-  if s.journal != nil: s.journal(frame)
-  discard s.transport.publish(s.topic, frame)
+  ## (docs/design/causal-parents.md §3.2). `asGiven` seals `ev` as it is, its `after` and
+  ## `afterSig` included, on either path: authorship.publishAuthored passes the copy this
+  ## member signed, never one another member planted in the log (voice-notes.md §4).
+  ##
+  ## `padTo` > 0 pads the sealed plaintext to exactly that many bytes (`padded`); 0 is
+  ## today's frame. A `voice/` key is padded to VoiceFrameBytes on either path with no pad
+  ## passed, and any other non-zero pad for one raises ValueError, as a negative pad does
+  ## (`padFor`; docs/design/voice-notes.md §4). An event whose JSON is over its pad
+  ## raises FrameTooLarge before the log, the journal or the transport see it.
+  discard s.transport.publish(s.topic, s.sealFrame(ev, padTo, asGiven))
+
+proc publishTogether*(s: CoordinationSession, n: int, next: proc (i: int): Event) =
+  ## Publish `n` events, each sealed as given (`publish`'s `asGiven`), as one burst: event
+  ## `i` is made by `next(i)` once event `i - 1` is in the log (so the heads it names
+  ## include it), padded, recorded and sealed, and only once all `n` are does any frame go
+  ## out, then every frame back to back. So nothing whose cost depends on the events'
+  ## contents runs between two sends: a voice note's two frames leave at a spacing its
+  ## length does not set (voice-notes.md §10). FrameTooLarge from any event is raised
+  ## before any frame of the burst is sent; the events before it stay recorded, as after a
+  ## send that raised.
+  var frames: seq[seq[byte]]
+  for i in 0 ..< n: frames.add s.sealFrame(next(i), 0, true)
+  for f in frames: discard s.transport.publish(s.topic, f)
 
 # ── membership handshake ───────────────────────────────────────────────────────
 

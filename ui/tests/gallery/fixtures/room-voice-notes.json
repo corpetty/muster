@@ -1,0 +1,273 @@
+{
+  "about": "A voice note in the thread (docs/design/voice-notes.md §7): its author, its length, Play and Stop, its place while it plays; one still arriving says so, and one whose parts disagree says it arrived damaged (words true of every note the module calls broken); neither plays. The 250 ms read of voice_status runs while a note plays and stops once nothing does. The rows and voiceJson are copied from the shapes voice_live_test §22 and voice_status pin (no runner records one until S9).",
+  "snapshot": "data/statement-proposed.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "props": {
+    "messagesJson": [
+      {
+        "id": "6f1d0c2b9a8e7d6c5b4a39281706f5e4",
+        "author": "4d613c133e2e7557b28b9a827ad7493cf8b137c160ad3f33ec9cc49b4b1eb58fc40ff65ca733a1d0bb541e716692f151bed3d8b6c7a608eb0928a446ad5a8866",
+        "ts": 1791573100,
+        "body": "",
+        "alias": "Bob",
+        "self": false,
+        "voice": {
+          "v": 1,
+          "note": "6f1d0c2b9a8e7d6c5b4a39281706f5e4",
+          "durationMs": 7000,
+          "state": "complete"
+        }
+      },
+      {
+        "id": "0a1b2c3d4e5f60718293a4b5c6d7e8f9",
+        "author": "4d613c133e2e7557b28b9a827ad7493cf8b137c160ad3f33ec9cc49b4b1eb58fc40ff65ca733a1d0bb541e716692f151bed3d8b6c7a608eb0928a446ad5a8866",
+        "ts": 1791573130,
+        "body": "",
+        "alias": "Bob",
+        "self": false,
+        "voice": {
+          "v": 1,
+          "note": "0a1b2c3d4e5f60718293a4b5c6d7e8f9",
+          "durationMs": 12000,
+          "state": "arriving"
+        }
+      },
+      {
+        "id": "f0e1d2c3b4a5968778695a4b3c2d1e0f",
+        "author": "589ab01dfc6c60f2fb6f4f14136607d939882cf6b65e5aa37e11f79233705f584b351ba34d3be62e787b12cc146dfaf09b9c3df21ae438383aaede5f32cb107b",
+        "ts": 1791573160,
+        "body": "",
+        "alias": "",
+        "self": true,
+        "voice": {
+          "v": 1,
+          "note": "f0e1d2c3b4a5968778695a4b3c2d1e0f",
+          "durationMs": 3000,
+          "state": "broken"
+        }
+      },
+      {
+        "id": "0xc72e96ee051bbf91a9382a87",
+        "author": "0x589ab01dfc6c60f2fb6f4f14136607d939882cf6b65e5aa37e11f79233705f584b351ba34d3be62e787b12cc146dfaf09b9c3df21ae438383aaede5f32cb107b",
+        "ts": 1791573236,
+        "body": "{\"kind\":\"intent-ref\",\"intentId\":\"0xf82713a97f076e35\"}",
+        "alias": "",
+        "self": true
+      }
+    ],
+    "voiceJson": {
+      "ready": {
+        "capture": "unknown",
+        "playback": "unknown",
+        "codec": "libopus 1.5.2",
+        "note": ""
+      },
+      "recording": {
+        "state": "idle",
+        "elapsedMs": 0,
+        "capMs": 60000,
+        "peak": 0,
+        "capped": false,
+        "silent": false,
+        "error": ""
+      },
+      "playing": null
+    }
+  },
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "expectProp": [
+        "voiceNoteCard_6f1d0c2b9a8e7d6c5b4a39281706f5e4",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNoteAuthor_6f1d0c2b9a8e7d6c5b4a39281706f5e4",
+        "text",
+        "Bob"
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNoteTime_6f1d0c2b9a8e7d6c5b4a39281706f5e4",
+        "text",
+        "0:07"
+      ]
+    },
+    {
+      "expectProp": [
+        "voicePlay_6f1d0c2b9a8e7d6c5b4a39281706f5e4",
+        "enabled",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voicePlay_6f1d0c2b9a8e7d6c5b4a39281706f5e4",
+        "label",
+        "Play"
+      ]
+    },
+    {
+      "click": "voicePlay_6f1d0c2b9a8e7d6c5b4a39281706f5e4"
+    },
+    {
+      "expect": {
+        "slot": "playVoiceNote",
+        "args": [
+          "6f1d0c2b9a8e7d6c5b4a39281706f5e4"
+        ]
+      }
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "unknown",
+            "playback": "ok",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "idle",
+            "elapsedMs": 0,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": {
+            "note": "6f1d0c2b9a8e7d6c5b4a39281706f5e4",
+            "positionMs": 3000,
+            "durationMs": 7000,
+            "starting": false
+          }
+        }
+      }
+    },
+    {
+      "expectProp": [
+        "voicePlay_6f1d0c2b9a8e7d6c5b4a39281706f5e4",
+        "label",
+        "Stop"
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNoteTime_6f1d0c2b9a8e7d6c5b4a39281706f5e4",
+        "text",
+        "0:03 / 0:07"
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNoteProgress_6f1d0c2b9a8e7d6c5b4a39281706f5e4",
+        "value",
+        0.42857142857142855
+      ]
+    },
+    {
+      "expectProp": [
+        "voicePlay_0a1b2c3d4e5f60718293a4b5c6d7e8f9",
+        "enabled",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "voicePoll",
+        "running",
+        true
+      ]
+    },
+    {
+      "shot": "playing"
+    },
+    {
+      "click": "voicePlay_6f1d0c2b9a8e7d6c5b4a39281706f5e4"
+    },
+    {
+      "expect": {
+        "slot": "stopVoicePlayback"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNoteState_0a1b2c3d4e5f60718293a4b5c6d7e8f9",
+        "text",
+        "~Still arriving"
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNoteState_f0e1d2c3b4a5968778695a4b3c2d1e0f",
+        "text",
+        "This voice note can't be played: it arrived damaged."
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNoteAuthor_f0e1d2c3b4a5968778695a4b3c2d1e0f",
+        "text",
+        "you"
+      ]
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "unknown",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "idle",
+            "elapsedMs": 0,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": null
+        }
+      }
+    },
+    {
+      "expectProp": [
+        "voicePoll",
+        "running",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "voicePlay_0a1b2c3d4e5f60718293a4b5c6d7e8f9",
+        "enabled",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "voicePlay_f0e1d2c3b4a5968778695a4b3c2d1e0f",
+        "enabled",
+        false
+      ]
+    },
+    {
+      "shot": "states"
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}

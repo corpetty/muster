@@ -119,6 +119,11 @@ import ../src/storage/storage_lp       # FileShare: storage_module over lp_* (ex
 import ../src/storage/storage_readiness # FileShare: where storage_module stands, registry first
 import ../src/coordination/swarm       # FileShare: the room as tracker (exo-4d0.4)
 import ../src/coordination/swarm_live  # FileShare: share, fetch and seed from a pump (exo-4d0.5)
+import ../src/coordination/voice_live  # voice notes' hosted half (docs/design/voice-notes.md §8)
+import ../src/coordination/voice       # …the thread's rows, a note's included (§7)
+import ../src/audio/audio_io           # …the device seam it codes against (§9)
+import ../src/audio/miniaudio          # …and its devices: miniaudio, on the platform's backends (§9)
+import std/exitprocs                   # the voice devices are released at exit (§9)
 import std/mimetypes
 import ../src/wallet/summary         # what the Wallet page shows: what this instance was given (exo-f37)
 import ../src/monero/address as xmraddr # the payTo rules and the CAIP-2 map (ADR-018)
@@ -1074,6 +1079,8 @@ proc roomTitlesPath(): string =
   if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
   dir / "room_titles.json"
 
+proc voiceForgetRoom(topic: string)   ## forward — drop a left room's voice memo (the voice glue, below)
+
 proc musterCoordinateLeave(roomTopic: string): string =
   ## Leave a room (exo-dcc.28): stop following it here, forget it so a relaunch does not
   ## re-enter it, and drop its name. Its session takes no more of the room's traffic;
@@ -1086,6 +1093,7 @@ proc musterCoordinateLeave(roomTopic: string): string =
   gSessions.del ctopic
   discard forgetJoinedRoom(joinedRoomsPath(), ctopic)
   forget(roomJournalPath(ctopic))          # its own copy goes with it (exo-dcc.14)
+  voiceForgetRoom(ctopic)                  # and its memo of voice part headers and verdicts
   discard setRoomTitle(roomTitlesPath(), ctopic, "")
   if gTopic == ctopic:
     gSession = nil
@@ -2827,6 +2835,71 @@ proc musterFileshareRetract(fileId: string): string =
       return "ok"
   $(%*{"error": "no such file in this room"})
 
+# ── Voice notes (docs/design/voice-notes.md) ───────────────────────────────────────────
+# Capture, playback and Opus live in this module, and audio never crosses IPC (§9). The voice
+# recorder is made on the first voice call (or thread read), over the AudioIo voiceIoChoice
+# picks: MUSTER_VOICE_SOURCE / MUSTER_VOICE_SINK give FileAudioIo (the offscreen self-test),
+# MUSTER_VOICE_BACKEND=null miniaudio's null device, anything else miniaudio on this
+# platform's own backends. Making it opens nothing: only voice_record_start or voice_play opens
+# a device, and with the access policy off any caller can make those calls (§13). Each stream
+# releases its device when it ends (the AudioIo closed: for miniaudio, the device and the
+# context), and the generated surface has no unload hook, so an exit proc closes whatever
+# still runs before the process, or this plugin's image, goes (§9). The recorder also holds
+# each joined room's memo of voice part headers and note verdicts, so a poll parses no part
+# and decodes no clip it has read before (§6); leaving a room drops its memo.
+
+var gVoice: VoiceRecorder = nil
+
+proc newVoiceIo(): AudioIo =
+  let c = voiceIoChoice(getEnv("MUSTER_VOICE_SOURCE"), getEnv("MUSTER_VOICE_SINK"),
+                        getEnv("MUSTER_VOICE_BACKEND"))
+  case c.kind
+  of vkFile: newFileAudioIo(c.source, c.sink)
+  of vkNull: newMiniaudioIo(abNull)
+  of vkSystem: newMiniaudioIo(abSystem)
+
+proc hostVoice(): VoiceRecorder =
+  if gVoice == nil:
+    gVoice = newVoiceRecorder(newVoiceIo())
+    # A device starts on a thread of its own, so close never waits on a start in flight: it
+    # lets it go, and the start thread closes what it opens. The exit proc then waits up to
+    # 2 s for start threads to return, so a start that lands just after close is closed
+    # while this image is still mapped; one that never returns (a microphone prompt nobody
+    # answers) costs those 2 s, never a hang, and ends with the process (voice-notes.md §9).
+    addExitProc(proc() {.noconv.} =
+      if gVoice != nil:
+        discard gVoice.close()
+        discard waitStarts(2_000))
+  gVoice
+
+proc voicePump() =
+  ## Drain and encode a recording, end one the cap filled, end a playback heard to the end,
+  ## and release their devices (voice_live.pump). Nothing to do before the first voice call.
+  if gVoice != nil: discard gVoice.pump()
+
+proc voiceForgetRoom(topic: string) =
+  ## A room left takes its memo with it (voice_live.forgetRoom), so the recorder's memos are
+  ## the joined rooms' alone, each bounded by its room's log.
+  if gVoice != nil: gVoice.forgetRoom(topic)
+
+proc musterVoiceStatus(): string = $hostVoice().voiceStatus()
+
+proc musterVoiceRecordStart(): string = $hostVoice().recordStart(gSession)
+
+proc musterVoiceRecordStop(): string = $hostVoice().recordStop()
+
+proc musterVoiceDraftSend(): string =
+  if gSession == nil: return $hostVoice().draftSend(nil, nil, 0)
+  $hostVoice().draftSend(gSession, moduleKeystore(), int64(epochTime()))
+
+proc musterVoiceDraftDiscard(): string = hostVoice().draftDiscard()
+
+proc musterVoicePlay(noteId: string): string =
+  if gSession != nil: gSession.poll()
+  $hostVoice().play(gSession, noteId)
+
+proc musterVoicePlayStop(): string = hostVoice().playStop()
+
 proc musterCoordinateIntents(): string =
   ## The room's proposals, folded from the shared log and projected to what a card
   ## renders: the lifecycle state, the effect it carries, the driver threshold, and
@@ -2843,6 +2916,7 @@ proc musterCoordinateIntents(): string =
   splitPump()                          # report my landed payments; confirm what paid me (exo-a90)
   keystorePump()                       # publish what a human approved in keystore_module (exo-149.2)
   fileSharePump()                      # finish uploads and fetches the storage node completed (exo-4d0)
+  voicePump()                          # encode a recording, end one at the cap or a playback heard (voice notes §8)
   let events = gSession.roomEvents()
   let myEnc = moduleKeystore().encIdentity()
   let myEncHex = toHex(myEnc.toBytes()).toLowerAscii()
@@ -3212,7 +3286,9 @@ proc musterCoordinateProvenance(): string =
   if gSession == nil: return "[]"
   gSession.poll()
   var arr = newJArray()
-  for it in logProvenance(gSession.roomEvents(), driverFor, gSession.sealedIn):
+  # through the room's voice memo: a poll parses no voice part it has read before
+  # (voice_live.provenanceOf, docs/design/voice-notes.md §6)
+  for it in hostVoice().provenanceOf(gSession, gSession.roomEvents(), driverFor):
     let alias = (if it.account.len > 0: contactBook().nameFor(it.account) else: "")
     arr.add %*{"seq": it.seq, "class": $it.cls, "kind": it.kind, "intentId": it.intentId,
                "account": it.account, "alias": alias, "accountable": it.accountable,
@@ -3221,13 +3297,14 @@ proc musterCoordinateProvenance(): string =
 
 proc musterCoordinateProof(): string =
   ## An exportable, self-verifying proof of the room's log (M4). Epoch-scoped: the
-  ## range is the founding epoch to the current one; only holders can read it.
+  ## range is the founding epoch to the current one; only holders can read it. A proof
+  ## carries every raw value whole, so a room whose view holds a part the voice fold stands
+  ## exports none (`voice-notes-present`): a note's audio never leaves the module; an entry
+  ## under voice/ that is no note's part refuses nothing (voice_live.roomProof,
+  ## docs/design/voice-notes.md §10, §18).
   if gSession == nil: return $(%*{"error": "not-joined"})
   gSession.poll()
-  var epochTo = 0
-  try: epochTo = gSession.epoch()
-  except CatchableError: discard
-  $buildProof(gSession.log.allEvents(), 0, epochTo).toJson()   # the raw log: a proof accounts for every entry, forgeries included (exo-f76)
+  $roomProof(gSession)
 
 proc musterCoordinateVerifyProof(proofJson: string): string =
   ## Refuse-on-mismatch verification of a log proof — pure, reads only the proof.
@@ -3290,7 +3367,8 @@ proc musterCoordinateFlow(): string =
   if gSession == nil: return $(%*{"rows": [], "matrix": {}})
   gSession.poll()
   let events = gSession.roomEvents()
-  let rows = reduceFlow(events, driverFor, gSession.roomFounders(events), gSession.sealedIn)
+  # through the room's voice memo, on the room's 5 s tick (voice_live.flowRows, voice-notes.md §6)
+  let rows = hostVoice().flowRows(gSession, events, driverFor, gSession.roomFounders(events))
   result = $(%*{"rows": rows.toJson(),
                  "matrix": rows.observerMatrix(introducedObservers(events, driverFor))})
   if gLpDebug: stderr.writeLine("MUSTER-LP flow " & result)
@@ -3307,7 +3385,8 @@ proc musterCoordinateGraph(roomTopic: string): string =
   s.poll()
   let events = s.roomEvents()
   let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
-  var j = reduceRoomGraph(events, driverFor, s.roomFounders(events), me, s.sealedIn).toJson()
+  # through the room's voice memo, every 2 s while the map is open (voice_live.graphOf, voice-notes.md §6)
+  var j = hostVoice().graphOf(s, events, driverFor, s.roomFounders(events), me).toJson()
   # what the room's views refused to read: entries whose author signature failed (exo-f76),
   # kept in the raw log, never in a fold — so a member can see the room dropped something
   j["dropped"] = %max(0, s.log.allEvents().len - events.len)
@@ -4564,18 +4643,15 @@ proc musterCoordinatePostMessage(body: string): string =
   id
 
 proc musterCoordinateMessages(): string =
-  ## The room's authored messages, oldest-first, folded from the shared log. Each
+  ## The room's thread, oldest-first, folded from the shared log: its authored messages and
+  ## one row per voice note (voice.threadRows, with the room's memo of note verdicts). Each
   ## carries its author's contact alias (so the chat log reads "Alice", not raw hex —
-  ## the same resolution the roster/pending use) and a `self` flag for our own lines.
+  ## the same resolution the roster/pending use) and a `self` flag for our own lines. A
+  ## note's row has an empty body and the note in `voice`, metadata only, which no message
+  ## can set (docs/design/voice-notes.md §7).
   if gSession == nil: return "[]"
   gSession.poll()
-  let meHex = toHex(gSession.selfIdentity().toBytes())
-  var arr = newJArray()
-  for m in reduceMessages(gSession.roomEvents()):
-    arr.add %*{"id": m.id, "author": m.author, "ts": m.ts, "body": m.body,
-               "alias": contactBook().aliasOf(m.author),
-               "self": (normId(m.author) == normId(meHex))}
-  $arr
+  $hostVoice().messagesJson(gSession, proc (author: string): string = contactBook().aliasOf(author))
 
 proc musterCoordinateMembers(): string =
   ## The ADMITTED members of the joined room (the current roster), each flagged
@@ -4603,7 +4679,8 @@ proc musterCoordinateConversations(): string =
   ## Every joined room, as {topic, title, address, lastTs, people, active, needs, waiting,
   ## settled} — people: the other members' names (exo-ef6);
   ## the home surface's room list. The active room is flagged; lastTs is each room's
-  ## latest message ts (0 if none yet), so home can order by recency. Multi-room: one
+  ## latest thread row's ts, a message's or a voice note's (0 if none yet), so home can
+  ## order by recency. Multi-room: one
   ## entry per session. The home surface is a query over intents (F-18, exo-ed5): `needs`
   ## lists what waits on THIS member in that room ({id, what, text}), and `waiting` /
   ## `settled` count the rest, each classed from the room's log and this member's keys.
@@ -4621,8 +4698,9 @@ proc musterCoordinateConversations(): string =
     if topic in gInboxTopics: continue      # an inbox is a drop-box, not a room to list
     s.poll()
     let events = s.roomEvents()
-    let msgs = reduceMessages(events)
-    let lastTs = if msgs.len > 0: msgs[^1].ts else: 0'i64
+    # the newest row's, a voice note's included (§7), through the room's memo: a poll parses
+    # no voice part it has read before (voice_live.lastTs, voice-notes.md §6)
+    let lastTs = hostVoice().lastTs(s, events)
     # each room's intents resolve under THAT room's roster and disclosed accounts, which
     # the resolver reads from the active session: swap it in for the fold
     var items: seq[HomeItem]

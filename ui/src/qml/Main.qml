@@ -55,6 +55,7 @@ Item {
     onViewChanged: {
         if (view === "room" && backend) backend.loadAccount();
         root.noteSeen();            // leaving or opening a room marks it read (exo-773)
+        if (view === "room") root.micAnswer = ({});   // the room's banner speaks there
     }
 
     // Enter a room by topic: join it in the module, then show the room surface.
@@ -538,10 +539,178 @@ Item {
         }
     }
 
-    // Every surface fills this, beside the sidebar (or under the strip).
+    // ── the microphone, said on every page (docs/design/voice-notes.md §13) ─────────────
+    // With Basecamp's access checks off, any module loaded beside Muster can start a
+    // recording, and the room's own banner (RoomVoiceNote) shows only in a room's view. So
+    // voice_status is read here every second, whether or not a room is open, and while it
+    // says starting or recording a strip above every page says Muster is using the
+    // microphone, with Stop and Discard. It cannot say who started it, nor for which room:
+    // voice_status names neither. A room's view reads it faster while the microphone
+    // records or a note plays (Room.qml's voicePoll); this is the ordinary tick, a held
+    // draft's too. voice_status also drives the module's voice pump.
+    readonly property var voiceRec: {
+        try {
+            var v = JSON.parse(root.backend ? (root.backend.voiceJson || "{}") : "{}");
+            return (v && v.recording) ? v.recording : ({});
+        } catch (e) { return ({}); }
+    }
+    readonly property string micState: String(root.voiceRec.state || "idle")
+    readonly property bool micOn: root.micState === "starting" || root.micState === "recording"
+    onMicOnChanged: if (root.micOn) root.micAnswer = ({});   // a new recording: the last answer is over
+    // What the strip's own Stop or Discard got back, said on the page it was pressed on. In a
+    // room's view the room's banner says it, through the room's own calls; on any other page
+    // nothing did, and the strip just went. A recording kept or discarded is said once, in
+    // the toast; a refusal (a Stop while the microphone was still starting, a start that
+    // failed) stays in the strip's place until it is dismissed, the microphone comes on
+    // again, or a room's view opens. The call's answer is the first one after it
+    // (Room.voiceAnswers moves), as the room reads its own.
+    property string micOp: ""
+    property int micOpAnswers: -1
+    property var micAnswer: ({})
+    function micCall(op) {
+        root.micAnswer = ({});
+        root.micOp = op;
+        root.micOpAnswers = roomSurface.voiceAnswers;
+        if (op === "stop") roomSurface.stopVoice(); else roomSurface.discardVoice();
+    }
+    Connections {
+        target: roomSurface
+        function onVoiceAnswersChanged() {
+            if (root.micOp.length === 0 || roomSurface.voiceAnswers === root.micOpAnswers) return;
+            var op = root.micOp;
+            root.micOp = "";
+            if (root.view === "room") return;
+            var o = ({});
+            try { o = JSON.parse(String(root.backend ? (root.backend.voiceResultJson || "") : "")); }
+            catch (e) { o = ({}); }          // "ok", Discard's answer, is not JSON
+            var err = String((o && o.error) || "");
+            if (err.length === 0) {
+                newsToast.show(op === "stop" ? qsTr("Stopped. The recording is kept, unsent: you send it from its room.")
+                                             : qsTr("Discarded. Nothing was sent."));
+                return;
+            }
+            root.micAnswer = ({ op: op, error: err, detail: String(o.detail || ""), seq: roomSurface.voiceAnswers });
+        }
+    }
+    function micClock(ms) {
+        var s = Math.floor(Math.max(0, Number(ms) || 0) / 1000);
+        return Math.floor(s / 60) + ":" + (s % 60 < 10 ? "0" : "") + (s % 60);
+    }
+    Timer {
+        objectName: "appVoicePoll"
+        interval: 1000
+        repeat: true
+        running: root.backend !== null
+        onTriggered: if (root.backend) root.backend.loadVoice()
+    }
+    Rectangle {
+        id: voiceIndicator
+        objectName: "voiceIndicator"
+        visible: root.micOn
+        anchors.top: drawerStrip.visible ? drawerStrip.bottom : parent.top
+        anchors.left: root.sideMode === "drawer" ? parent.left : sidebar.right
+        anchors.right: parent.right
+        height: visible ? micRow.implicitHeight + 2 * Theme.spacing.small : 0
+        z: 5
+        color: MusterStyle.refusedSoft
+        Accessible.role: Accessible.AlertMessage
+        Accessible.name: micTitle.text
+        Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: MusterStyle.tint(MusterStyle.refused, 0.42) }
+        RowLayout {
+            id: micRow
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: Theme.spacing.large
+            anchors.rightMargin: Theme.spacing.medium
+            spacing: Theme.spacing.medium
+            Rectangle {
+                implicitWidth: 10; implicitHeight: 10; radius: 5
+                // hollow while the microphone starts: nothing is recorded yet
+                color: root.micState === "starting" ? "transparent" : MusterStyle.refused
+                border.width: root.micState === "starting" ? 2 : 0
+                border.color: MusterStyle.refused
+            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 2
+                RowLayout {
+                    spacing: Theme.spacing.small
+                    LogosText {
+                        id: micTitle
+                        objectName: "voiceIndicatorTitle"
+                        text: root.micState === "starting" ? qsTr("Muster is starting the microphone…")
+                                                           : qsTr("Muster is using the microphone")
+                        color: Theme.palette.text
+                        font.pixelSize: MusterStyle.body
+                        font.weight: Theme.typography.weightBold
+                    }
+                    LogosText {
+                        objectName: "voiceIndicatorTime"
+                        visible: root.micState === "recording"
+                        text: qsTr("%1 of %2").arg(root.micClock(root.voiceRec.elapsedMs))
+                                              .arg(root.micClock(root.voiceRec.capMs || 60000))
+                        color: Theme.palette.textSecondary
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
+                    }
+                }
+                LogosText {
+                    objectName: "voiceIndicatorLine"
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: root.micState === "starting"
+                          ? qsTr("Nothing is recorded until it starts. If you did not start this, press Discard.")
+                          : qsTr("A voice note is recording. Stop keeps it unsent; you send it from its room. If you did not start it, press Discard.")
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                }
+            }
+            // through the room, so in a room's view its answer shows there as if pressed in
+            // the room's banner; on any other page, here (micAnswer)
+            ActionButton {
+                objectName: "voiceIndicatorStop"
+                compact: true
+                text: qsTr("Stop")
+                onClicked: root.micCall("stop")
+            }
+            ActionButton {
+                objectName: "voiceIndicatorDiscard"
+                compact: true
+                quiet: true
+                text: qsTr("Discard")
+                onClicked: root.micCall("discard")
+            }
+        }
+    }
+    // the strip's refusal, in its place, on a page with no room view
+    InlineNotice {
+        id: micNotice
+        objectName: "voiceIndicatorAnswer"
+        readonly property string err: String(root.micAnswer.error || "")
+        visible: !root.micOn && root.view !== "room" && micNotice.err.length > 0 && !micNotice.dismissed
+        anchors.top: voiceIndicator.bottom
+        anchors.left: root.sideMode === "drawer" ? parent.left : sidebar.right
+        anchors.right: parent.right
+        anchors.topMargin: visible ? Theme.spacing.medium : 0
+        anchors.leftMargin: Theme.spacing.large
+        anchors.rightMargin: Theme.spacing.large
+        height: visible ? implicitHeight : 0
+        z: 5
+        dismissible: true
+        // a refusal is one answer: dismissed, it stays hidden until a new one
+        occasion: String(root.micAnswer.seq || "")
+        tone: "error"
+        text: micNotice.err.length === 0 ? ""
+            : MusterStyle.voiceRefusalWords(micNotice.err, String(root.micAnswer.op || ""))
+              + (String(root.micAnswer.detail || "").length > 0 ? " " + String(root.micAnswer.detail) : "")
+    }
+
+    // Every surface fills this, beside the sidebar (or under the strip), below the microphone.
     Item {
         id: contentArea
-        anchors.top: drawerStrip.visible ? drawerStrip.bottom : parent.top
+        anchors.top: micNotice.visible ? micNotice.bottom : voiceIndicator.bottom
+        anchors.topMargin: micNotice.visible ? Theme.spacing.medium : 0
         anchors.left: root.sideMode === "drawer" ? parent.left : sidebar.right
         anchors.right: parent.right
         anchors.bottom: parent.bottom

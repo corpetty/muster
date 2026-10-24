@@ -92,6 +92,7 @@ var
   joinAttempts = 0
   inviteAccepted = false
   lezFunding = false    ## MUSTER_AUTOLEZFUND is still funding: MUSTER_AUTOPAYSPLIT waits
+  voiceAnswers = 0      ## the voice answers so far, fed to voiceResultSeq
 
 # ── reads: each sets one PROP ───────────────────────────────────────────────────
 
@@ -145,6 +146,34 @@ proc fileShareDone(o: MusterUi, r: string) =
   # A FileShare operation's answer: fileShareResultJson, then the list re-reads.
   o.setFileShareResultJson(r)
   o.loadFileShareDo()
+
+proc loadVoiceDo(o: MusterUi, d: Done = nil) =
+  # Voice notes (docs/design/voice-notes.md §8): voice_status, which also drives the
+  # module's voice pump. No audio crosses this backend in either direction.
+  ask mm.voice_statusAsync(proc (r: string) = o.setVoiceJson(r); fin(d, r))
+
+proc voiceDone(o: MusterUi, r: string, d: Done = nil) =
+  # A voice call's answer: voiceResultJson, then voiceResultSeq one more (an answer
+  # identical to the last changes only the count), then voice_status re-reads.
+  o.setVoiceResultJson(r)
+  inc voiceAnswers
+  o.setVoiceResultSeq($voiceAnswers)
+  o.loadVoiceDo(d)
+
+proc startVoiceRecordingDo(o: MusterUi, d: Done = nil) =
+  ask mm.voice_record_startAsync(proc (r: string) = o.voiceDone(r, d))
+
+proc stopVoiceRecordingDo(o: MusterUi, d: Done = nil) =
+  ask mm.voice_record_stopAsync(proc (r: string) = o.voiceDone(r, d))
+
+proc sendVoiceDraftDo(o: MusterUi, d: Done = nil) =
+  ask mm.voice_draft_sendAsync(proc (r: string) =
+    info "muster_module.voice_draft_send() -> " & qs(r)
+    o.voiceDone(r, d)
+    o.loadMessagesDo())      # the note's row, at once
+
+proc playVoiceNoteDo(o: MusterUi, noteId: string, d: Done = nil) =
+  ask mm.voice_playAsync(noteId, proc (r: string) = o.voiceDone(r, d))
 
 proc loadPendingDo(o: MusterUi, d: Done = nil) =
   # Identities that asked to join and are not admitted yet.
@@ -801,6 +830,7 @@ proc retryStartup(o: MusterUi, attemptsLeft: int) =
       o.startInboxDo()))
 
 proc autopayTick(o: MusterUi)
+proc autovoiceTick(o: MusterUi)
 proc autoLezFund(o: MusterUi)
 
 proc autojoin(o: MusterUi, topic: string) =
@@ -884,6 +914,7 @@ proc autojoin(o: MusterUi, topic: string) =
       busy = true
       let loaded = barrier(4, proc () =
         o.autopayTick()
+        o.autovoiceTick()
         busy = false)
       o.loadPendingDo(then(loaded))
       o.loadMembersDo(then(loaded))
@@ -1001,6 +1032,65 @@ proc autopayTick(o: MusterUi) =
           else: paid.incl id)
   info "SELFTEST pending= " & qs(o.pendingJson) & " members= " & qs(o.membersJson) &
     " intents= " & qs(o.intentsJson)
+
+var
+  voiceStarted, voiceTimed, voiceAsking: bool
+  voicePlayed: HashSet[string]
+  voiceTries: Table[string, int]
+
+proc autovoicePlay(o: MusterUi, id: string) =
+  # The card's Play, for the voice self-test; no voice read or other Play overlaps it.
+  voiceTries[id] = voiceTries.getOrDefault(id, 0) + 1
+  voiceAsking = true
+  o.playVoiceNoteDo(id, proc (r: string) =
+    voiceAsking = false
+    info "VOICE-RESULT play " & id & " " & o.voiceResultJson
+    if not o.voiceResultJson.contains("\"error\""): voicePlayed.incl id)
+
+proc autovoiceTick(o: MusterUi) =
+  # Voice self-test (docs/design/voice-notes.md S9): MUSTER_AUTOVOICE=<seconds> records that
+  # long once someone else is in the room, then sends the draft: the mic's Start, Stop and
+  # Send. The module answers Start at once and starts the device on a thread of its own
+  # (§9), so the seconds count from the first voice_status that says recording, not from
+  # the call. MUSTER_AUTOVOICEPLAY=1 plays a complete note another member sent, while nothing
+  # plays, as the card's Play does; a refused Play is tried again on the next tick, up to
+  # five times. Each tick logs voice_status as VOICE and the thread's notes as VOICE-NOTES,
+  # and each call's answer as VOICE-RESULT <call>.
+  let secs = try: parseInt(getEnv("MUSTER_AUTOVOICE", "0")) except ValueError: 0
+  let play = getEnv("MUSTER_AUTOVOICEPLAY").len > 0
+  if (secs <= 0 and not play) or voiceAsking: return
+  voiceAsking = true
+  o.loadVoiceDo(proc (r: string) =
+    voiceAsking = false
+    info "VOICE " & o.voiceJson
+    var notes = newJArray()
+    for row in arr(o.messagesJson):
+      let v = row{"voice"}
+      if v == nil or v.kind != JObject: continue
+      let n = v.copy()
+      n["self"] = %row{"self"}.getBool(false)
+      notes.add n
+    info "VOICE-NOTES " & $notes
+    if secs > 0 and not voiceStarted and o.membersJson.contains("\"self\":false"):
+      voiceStarted = true
+      o.startVoiceRecordingDo(proc (r: string) =
+        info "VOICE-RESULT start " & o.voiceResultJson)
+    let recState = obj(o.voiceJson){"recording"}{"state"}.getStr("")
+    if secs > 0 and voiceStarted and not voiceTimed and recState == "recording":
+      voiceTimed = true
+      after(secs * 1000, proc () =
+        o.stopVoiceRecordingDo(proc (r: string) =
+          info "VOICE-RESULT stop " & o.voiceResultJson
+          o.sendVoiceDraftDo(proc (r: string) =
+            info "VOICE-RESULT send " & o.voiceResultJson)))
+    let playing = obj(o.voiceJson){"playing"}
+    if play and playing != nil and playing.kind == JNull:
+      for n in notes:
+        let id = n{"note"}.getStr("")
+        if id.len == 0 or n{"self"}.getBool(false) or id in voicePlayed or
+           n{"state"}.getStr("") != "complete" or voiceTries.getOrDefault(id, 0) >= 5: continue
+        o.autovoicePlay(id)
+        break)
 
 proc autoLezFund(o: MusterUi) =
   # LEZ self-test (exo-14d): MUSTER_AUTOLEZFUND funds THIS instance's private balance as
@@ -1141,6 +1231,15 @@ proc seedFileImpl(o: MusterUi, fileId, on: string) =
   ask mm.fileshare_seedAsync(fileId, on, proc (r: string) = o.fileShareDone(r))
 proc retractFileImpl(o: MusterUi, fileId: string) =
   ask mm.fileshare_retractAsync(fileId, proc (r: string) = o.fileShareDone(r))
+proc loadVoiceImpl(o: MusterUi) = o.loadVoiceDo()
+proc startVoiceRecordingImpl(o: MusterUi) = o.startVoiceRecordingDo()
+proc stopVoiceRecordingImpl(o: MusterUi) = o.stopVoiceRecordingDo()
+proc sendVoiceDraftImpl(o: MusterUi) = o.sendVoiceDraftDo()
+proc discardVoiceDraftImpl(o: MusterUi) =
+  ask mm.voice_draft_discardAsync(proc (r: string) = o.voiceDone(r))
+proc playVoiceNoteImpl(o: MusterUi, noteId: string) = o.playVoiceNoteDo(noteId)
+proc stopVoicePlaybackImpl(o: MusterUi) =
+  ask mm.voice_play_stopAsync(proc (r: string) = o.voiceDone(r))
 proc addContactImpl(o: MusterUi, identityHex, alias: string) = o.addContactDo(identityHex, alias)
 proc setContactAliasImpl(o: MusterUi, identityHex, alias: string) = o.setContactAliasDo(identityHex, alias)
 proc removeContactImpl(o: MusterUi, identityHex: string) = o.removeContactDo(identityHex)

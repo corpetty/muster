@@ -11,8 +11,9 @@ import Logos.Controls
 // proposals are cards IN the conversation, not a side list. A message whose
 // body is an `intent-ref` card resolves to the live proposal from the
 // verified fold (state + verify + provenance), rendered inline with its own
-// approve affordance; address-share / receipt cards render in place; anything
-// else is plain text.
+// approve affordance; address-share / receipt cards render in place; a voice note
+// draws from its row's `voice` field alone (CardVoiceNote, docs/design/voice-notes.md
+// §7); anything else is plain text, a card kind this thread does not draw included.
 Rectangle {
     required property var room   // the Room this piece belongs to (Room.qml's roomItem)
 
@@ -71,13 +72,28 @@ Rectangle {
             // A body that parses to an object with a `kind` is a typed card.
             // `intent-ref` points at a proposal in the verified fold; other
             // kinds (address-share / receipt) are peer data rendered in place;
-            // anything else is plain chat text.
+            // anything else is plain chat text. `voice-note` is reserved: a voice
+            // note comes only from the row's `voice` field, which only the module's
+            // fold of the note's signed parts sets, so a message whose body claims
+            // that kind is the poster's own words, drawn as text under their name
+            // (docs/design/voice-notes.md §7).
             readonly property var parsedCard: {
                 try {
                     var o = JSON.parse(modelData.body);
+                    if (o && String(o.kind || "") === "voice-note") return null;
                     return (o && (o.kind || o.type)) ? o : null;
                 } catch (e) { return null; }
             }
+            // A voice note's row: its `voice` field ({v, note, durationMs, state}), set by
+            // the module's fold alone, and the note's author the one that fold verified.
+            readonly property var voice: (modelData && modelData.voice && typeof modelData.voice === "object")
+                                         ? modelData.voice : null
+            readonly property bool isVoice: msg.voice !== null
+            // Plain text: a voice row never is; a card the thread draws never is; and a card
+            // kind it does not draw falls back to its text, so a newer client's card shows as
+            // what was posted, never as nothing.
+            readonly property bool isText: !msg.isVoice
+                                           && (msg.parsedCard === null || (!msg.isIntentRef && !otherCard.known))
             readonly property bool isIntentRef:
                 msg.parsedCard && String(msg.parsedCard.kind || "") === "intent-ref"
             readonly property var liveIntent:
@@ -119,10 +135,11 @@ Rectangle {
                                                || MusterStyle.dayKey(msg.prev.ts) !== MusterStyle.dayKey(modelData.ts))
             function who(a) { return String(a || "").replace(/^0x/, "").toLowerCase(); }
             function isChat(m) {
+                if (m && m.voice) return false;     // a voice note names its author itself
                 try { var o = JSON.parse(m.body); return !(o && (o.kind || o.type)); }
                 catch (e) { return true; }
             }
-            readonly property bool continues: !msg.newDay && !!msg.prev && msg.parsedCard === null
+            readonly property bool continues: !msg.newDay && !!msg.prev && msg.parsedCard === null && msg.isText
                                               && msg.isChat(msg.prev)
                                               && msg.who(msg.prev.author) === msg.who(modelData.author)
                                               && MusterStyle.msOf(modelData.ts) - MusterStyle.msOf(msg.prev.ts) < 5 * 60 * 1000
@@ -690,9 +707,30 @@ Rectangle {
                     font.pixelSize: MusterStyle.caption
                 }
 
+                // ── a voice note (CardVoiceNote): from the row's `voice` field only ──
+                // The module plays it; this thread only asks, and polls where it is.
+                CardVoiceNote {
+                    id: voiceCard
+                    visible: msg.isVoice
+                    voice: msg.voice || ({})
+                    rowId: String(modelData.id || "")
+                    authorName: msg.authorName
+                    ts: modelData.ts || 0
+                    playing: msg.isVoice && !!room.voicePlaying
+                             && String(room.voicePlaying.note || "") === String((msg.voice || {}).note || "")
+                    positionMs: voiceCard.playing ? Number(room.voicePlaying.positionMs || 0) : 0
+                    starting: voiceCard.playing && !!room.voicePlaying.starting
+                    // one stream at a time: nothing plays over a recording (or one starting)
+                    // or another note
+                    canPlay: (room.voiceState === "idle" || room.voiceState === "draft") && !room.voicePlaying
+                    onPlayVoice: function (note) { room.playVoice(note); }
+                    onStopVoice: room.stopVoicePlay()
+                }
+
                 // ── other typed cards (address-share / receipt) ────────────
                 MusterCard {
-                    visible: msg.parsedCard !== null && !msg.isIntentRef
+                    id: otherCard
+                    visible: msg.parsedCard !== null && !msg.isIntentRef && otherCard.known
                     Layout.fillWidth: true
                     card: msg.parsedCard || ({})
                     // an address-request knows who answered it, and whom it asked (exo-8e2)
@@ -721,7 +759,7 @@ Rectangle {
 
                 // ── plain chat text ────────────────────────────────────────
                 ColumnLayout {
-                    visible: msg.parsedCard === null
+                    visible: msg.isText
                     Layout.fillWidth: true
                     spacing: 2
 
@@ -732,6 +770,7 @@ Rectangle {
                         Layout.topMargin: msg.index > 0 && !msg.newDay ? Theme.spacing.small : 0
                         spacing: Theme.spacing.small
                         LogosText {
+                            objectName: "messageAuthor_" + String(modelData.id || "")
                             text: msg.authorName
                             color: modelData.self ? Theme.palette.textSecondary : Theme.palette.text
                             font.pixelSize: MusterStyle.caption
@@ -748,6 +787,7 @@ Rectangle {
                         }
                     }
                     LogosText {
+                        objectName: "messageText_" + String(modelData.id || "")
                         Layout.fillWidth: true
                         text: String(modelData.body || "")
                         color: modelData.pending || modelData.failed ? Theme.palette.textSecondary : Theme.palette.text

@@ -13,9 +13,16 @@
 # Each test runs on the live Logos fleet (MUSTER_FLEET, logos.dev by default), or with
 # MUSTER_FLEET=local on a network the instances make on this host, which checks the code
 # while the fleet is down. split also starts a throwaway anvil, split-btc a
-# fresh Bitcoin Core regtest (bitcoind via nix shell). The LEZ
+# fresh Bitcoin Core regtest (bitcoind via nix shell); voice records from a WAV it writes and
+# plays into a file, no audio device (docs/design/voice-notes.md S9). The LEZ
 # testnet split (~25 min, real proofs) is not in the suite: run it by hand.
 set -uo pipefail
+# The suite's tables are associative arrays (bash 4). macOS's /bin/bash is 3.2, which fails
+# on them and, before this check, exited 0 having run nothing.
+[ "${BASH_VERSINFO[0]}" -ge 4 ] || {
+  echo "scripts/ui-parity.sh needs bash 4 or later, not $BASH_VERSION; on a Mac: nix shell nixpkgs#bash -c scripts/ui-parity.sh"
+  exit 2
+}
 cd "$(dirname "$0")/.."
 export MUSTER_UI="${MUSTER_UI:-cpp}"
 if [ "$MUSTER_UI" = dev ]; then
@@ -50,8 +57,9 @@ declare -A SUITE=(
   [room-copy]="scripts/room-copy-self-test.sh"
   [split]="scripts/split-self-test.sh"
   [split-btc]="nix shell nixpkgs#bitcoind -c scripts/split-btc-self-test.sh"
+  [voice]="scripts/voice-self-test.sh"
 )
-ORDER=(card install infra-safe infra-threshold audit invite two-instance relaunch leave room-copy split split-btc)
+ORDER=(card install infra-safe infra-threshold audit invite two-instance relaunch leave room-copy split split-btc voice)
 [ $# -gt 0 ] && ORDER=("$@")
 
 LOGS=$(mktemp -d)

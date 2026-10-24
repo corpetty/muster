@@ -137,8 +137,19 @@ Rectangle {
         "decline": qsTr("decline"), "submit": qsTr("submitted"), "final": qsTr("final"), "admit": qsTr("admission"),
         "material": qsTr("shared material"), "proposer": qsTr("proposer"), "account": qsTr("account"),
         "part-settled": qsTr("paid a part"), "part-confirmed": qsTr("confirmed a part"), "join": qsTr("ceremony join"),
-        "open": qsTr("ceremony"), "pmsg1": qsTr("ceremony step"), "pmsg2": qsTr("ceremony step")
+        "open": qsTr("ceremony"), "pmsg1": qsTr("ceremony step"), "pmsg2": qsTr("ceremony step"),
+        "file": qsTr("shared file"), "voice": qsTr("voice note")
     })
+    // a voice note's two envelopes are each one fixed size, which the store node sees: it
+    // marks a voice note, never its length (docs/design/voice-notes.md §10). Up to the replay
+    // position, as what the store node learned is: before the first voice entry it has seen none
+    readonly property bool holdsVoice: {
+        for (var i = 0; i < map.allNodes.length; i++) {
+            var n = map.allNodes[i];
+            if (n.kind === "entry" && String((n.attrs || {}).kind || "") === "voice" && map.rank(n.seq) <= map.k) return true;
+        }
+        return false;
+    }
     function kindWord(k) { return map.kindWords[k] || String(k || ""); }
     function basisWords(b) {
         return b === "author-signed" ? qsTr("Signed by its author, bound to this room")
@@ -801,7 +812,9 @@ Rectangle {
                             readonly property bool big: map.lens === "leaks"
                             readonly property var fields: node.kind === "observer" && node.modelData.id !== "o:store-node"
                                                          ? map.learned(node.modelData.id)
-                                                         : node.modelData.id === "o:store-node" ? [qsTr("timing"), qsTr("topic")] : []
+                                                         : node.modelData.id === "o:store-node"
+                                                           ? (map.holdsVoice ? [qsTr("timing"), qsTr("topic"), qsTr("one fixed size")]
+                                                                             : [qsTr("timing"), qsTr("topic")]) : []
                             readonly property real w: big ? 210 : 150
                             readonly property real h: big ? 64 + fieldText.implicitHeight : 46
                             Rectangle {
@@ -824,6 +837,7 @@ Rectangle {
                             }
                             LogosText {
                                 id: fieldText
+                                objectName: "roomMapFields_" + node.modelData.id
                                 visible: parent.big
                                 x: -parent.w / 2 + 10; y: -parent.h / 2 + 42
                                 width: parent.w - 20
@@ -1223,6 +1237,7 @@ Rectangle {
                             font.pixelSize: MusterStyle.caption
                         }
                         LogosText {
+                            objectName: "roomMapRow_" + modelData[0]
                             Layout.fillWidth: true
                             text: modelData[1]
                             wrapMode: Text.WrapAtWordBoundaryOrAnywhere
@@ -1541,6 +1556,8 @@ Rectangle {
             d.title = map.obsWord(n.id, 0);
             d.lead = map.obsWord(n.id, 2);
             if (n.id === "o:store-node") d.rows.push([qsTr("Learned"), qsTr("timing and topic of %n envelopes", "", map.heldCount), "out"]);
+            if (n.id === "o:store-node" && map.holdsVoice)
+                d.rows.push([qsTr("Voice notes"), qsTr("each one's two envelopes, of one fixed size: that one was sent, never how long it is"), "out"]);
             for (i = 0; i < allEdges.length; i++) {
                 e = allEdges[i];
                 if (e.dst === n.id && e.kind === "leaves" && map.rank(e.seq) <= map.k)
@@ -1553,7 +1570,8 @@ Rectangle {
         if (n.kind === "entry") {
             d.kicker = qsTr("LOG ENTRY #%1 · EPOCH %2").arg(n.seq).arg(n.epoch);
             d.title = map.kindWord(String(a.kind || "")) + (a.account ? qsTr(" by %1").arg(map.actorName(a.account)) : "");
-            if (!a.counted) d.lead = qsTr("Not counted: the fold refused this entry, so it names no one.");
+            if (!a.counted) d.lead = a.account ? qsTr("Not counted: this entry counts for nothing, though its author signed it.")
+                                               : qsTr("Not counted: the fold refused this entry, so it names no one.");
             d.rows.push([qsTr("Class"), String(a.cls || qsTr("not classed"))]);
             d.rows.push([qsTr("Attribution"), map.basisWords(String(a.basis || ""))]);
             if (a.attestation) d.rows.push([qsTr("Attestation"), String(a.attestation)]);

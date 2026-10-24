@@ -53,7 +53,8 @@
       "main": "muster_module.nim",
       "staticlib": "muster_module",
       "link": [
-        "sodium"
+        "sodium",
+        "opus"
       ],
       "packages": [
         {
@@ -162,6 +163,13 @@
           "repo": "nim-http-utils",
           "rev": "1e11ab929058e43c825d92006660c84caea9b1c0",
           "hash": "sha256-/uup0Pen1ncXeD0bJFO6IQu1iR4skdvqQrITGCq/ANY="
+        },
+        {
+          "owner": "mackron",
+          "repo": "miniaudio",
+          "rev": "f40cf03f80cdb7e741d43e53b7e706e8c1394bcf",
+          "hash": "sha256-ZrfKw5a3AtIER2btCKWhuvygasNaHNf9EURf1Kv96Vc=",
+          "_note": "miniaudio 0.11.23 (Unlicense OR MIT-0), the voice notes' audio devices (docs/design/voice-notes.md §9). C source only, no .nim: src/audio/miniaudio.nim finds miniaudio.h on the --path this entry adds and {.compile.}s miniaudio.c into the staticlib, so no C is tracked here (scripts/check-no-cpp.py). The hash is nixpkgs' miniaudio.src at the builder's pin e9f00bd; its fetchFromGitHub gives the same store path."
         }
       ]
     }
@@ -171,7 +179,8 @@
     "packages": {
       "build": [],
       "runtime": [
-        "libsodium"
+        "libsodium",
+        "libopus"
       ]
     },
     "cmake": {

@@ -185,6 +185,11 @@ block:
   for n in g.nodes:
     if n.kind == "entry" and n.attrs{"kind"}.getStr() == "file":
       doAssert n.attrs{"basis"}.getStr() == "author-signed", $n.attrs
+      # uncounted by the map, yet its signer's: its facet says both, never "names no one"
+      let last = n.attrs["facets"][^1]
+      doAssert not n.attrs["counted"].getBool() and last["about"].getStr() == "this entry" and
+               last["mechanism"].getStr() == "the fold counts it for nothing; its author signed it, bound to this room",
+               $last
       inc credited
   doAssert credited >= 4, "every file entry is credited to its signer (" & $credited & ")"
   var toDht, toPeers = 0

@@ -115,6 +115,20 @@ Rectangle {
             Loading {}
             Toast { id: toast; Component.onCompleted: { toast.duration = 600000; toast.show("Agreed — your room key signed it") } }
         }
+
+        SectionHeader { text: "CardVoiceNote · complete, playing, arriving, broken (voice-notes.md §7)" }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Theme.spacing.large
+            CardVoiceNote { Layout.fillWidth: false; Layout.preferredWidth: 300; rowId: "c"; authorName: "Alice"
+                voice: ({ v: 1, note: "c", durationMs: 7000, state: "complete" }) }
+            CardVoiceNote { Layout.fillWidth: false; Layout.preferredWidth: 300; rowId: "p"; authorName: "you"; playing: true; positionMs: 3000
+                voice: ({ v: 1, note: "p", durationMs: 7000, state: "complete" }) }
+            CardVoiceNote { Layout.fillWidth: false; Layout.preferredWidth: 300; rowId: "a"; authorName: "Bob"
+                voice: ({ v: 1, note: "a", durationMs: 42000, state: "arriving" }) }
+            CardVoiceNote { Layout.fillWidth: false; Layout.preferredWidth: 300; rowId: "b"; authorName: "Bob"
+                voice: ({ v: 1, note: "b", durationMs: 3000, state: "broken" }) }
+        }
         Item { Layout.fillHeight: true }
     }
 }

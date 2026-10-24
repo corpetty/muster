@@ -13,11 +13,23 @@
 ##  * The content, all of it: the map is local, read by this member's own client, so each
 ##    entry carries its value, parsed — message text, the effect, context, read values,
 ##    signatures, chain references, payment reports, shared material, account details —
-##    beside its structure. It carries nothing the member's client did not decrypt.
+##    beside its structure. It carries nothing the member's client did not decrypt. One kind
+##    is the exception: an entry under voice/ carries a voice note's metadata alone, never
+##    its half of the clip (docs/design/voice-notes.md §10; voice.voiceContentOf, read off
+##    the header the room's voice memo holds for a part), since any caller can read the map
+##    (coordinate_graph; with the access policy off, any module). So no hosted method returns
+##    a note's audio from this member's view: coordinate_proof, whose proof would carry every
+##    value whole, refuses a room whose view holds a part of a note (voice-notes-present)
+##    until the maintainer decides (§10, §18). An entry under voice/ that is no note's part
+##    leaves with a proof whole, and so does junk that copies a note's bytes when this
+##    member's view holds none of that note's parts (§10, "What is left").
 ##  * An actor is named only where the log proves it: an author-signed kind's author
 ##    (authorship.nim), a driver-counted approval's signer, a binding's verified link.
 ##    An entry the fold refused (an uncounted approval, a substitute proposal) stays in
-##    the graph, unattributed and marked so (invariant 9).
+##    the graph, unattributed and marked so (invariant 9). An uncounted entry of an
+##    author-signed kind (an account disclosure, a ceremony join or a file/ entry, which
+##    provenance never lists; a voice/ entry the voice fold does not stand) is still its
+##    signer's, since authorship proved who signed it, and its facet says both.
 ##  * Nothing here is per-viewer but `viewer` and `readFrom`: two members' graphs of the
 ##    same log differ only there. The input is what the viewer's client could open, so a
 ##    later joiner's graph holds nothing from before its admission (invariant 7, F-16).
@@ -33,6 +45,7 @@ import ./intents
 import ./flow
 import ./accounts
 import ./attest
+from ./voice import VoiceMemo, voiceContentOf   # a voice/ entry's content, off the room's memo (voice-notes.md §6, §10)
 
 type
   GraphNode* = object
@@ -67,7 +80,7 @@ type
     fingerprints*: seq[JsonNode]  ## per epoch: {fromEpoch, entries, digest} (exo-26a)
 
 const AuthorSigned = ["message", "decline", "material", "account", "join", "part-settled",
-                      "part-confirmed", "proposer"]
+                      "part-confirmed", "proposer", "voice"]
   ## kinds whose author signed the event (authorship.nim): the room may name them
 
 proc norm(s: string): string =
@@ -95,19 +108,30 @@ proc rawKind(p: seq[string]): string =
 proc facet(about, class, party, mechanism: string): JsonNode =
   %*{"about": about, "class": class, "party": party, "mechanism": mechanism}
 
-proc facetsFor(kind, attestation, source: string, counted: bool, epoch: int): JsonNode =
+proc facetsFor(kind, attestation, source: string, counted, attributed: bool, epoch: int): JsonNode =
+  ## `attributed`: the map names the entry's signer (an author-signed kind, by authorship.nim)
   result = newJArray()
   result.add facet("who could read it", "imperative", "",
     "sealed under epoch " & $epoch & "'s key: only the members of that epoch could open it")
-  result.add facet("that it exists", "exposed", "the store node",
-    "it keeps every envelope, so it sees when this one arrived and which topic it is on, never what it says")
+  if kind == "voice":
+    # every voice/ frame a client sends is padded to one size (voice-notes.md §4, §10)
+    result.add facet("that it exists", "exposed", "the store node",
+      "it keeps every envelope, so it sees when this one arrived, which topic it is on and its one fixed size, " &
+      "which marks a voice note but not its length; never what it says")
+  else:
+    result.add facet("that it exists", "exposed", "the store node",
+      "it keeps every envelope, so it sees when this one arrived and which topic it is on, never what it says")
   if not counted:
     result.add facet("this entry", "not-applicable", "",
-      "the fold refused it, so it counts for nothing and names no one")
+      (if attributed: "the fold counts it for nothing; its author signed it, bound to this room"
+       else: "the fold refused it, so it counts for nothing and names no one"))
     return
   case kind
   of "message":
     result.add facet("who wrote it", "imperative", "", "its author signed it, bound to this room; the room's views drop one whose signature fails")
+    result.add facet("what it says", "motivational", "its author", "a member's word, as any message is")
+  of "voice":
+    result.add facet("who sent it", "imperative", "", "its author signed each part, bound to this room; the room's views drop a part whose signature fails")
     result.add facet("what it says", "motivational", "its author", "a member's word, as any message is")
   of "propose":
     result.add facet("who could place it", "imperative", "", "sealed under the epoch key: only a member could have placed it")
@@ -187,10 +211,13 @@ proc parseOrEmpty(s: string): JsonNode =
   ## a value parsed as JSON, or a JSON string of it when it is not JSON
   try: parseJson(s) except CatchableError: %s
 
-proc contentOf(e: Event, p: seq[string]): JsonNode =
+proc contentOf(e: Event, p: seq[string], id: EventId, memo: VoiceMemo): JsonNode =
   ## An entry's content: its value parsed (a JSON object as is, anything else under
   ## "value"), with what its key says spelled out — the read's field, the part and step,
-  ## the requirement a material fills, the admitted member and epoch.
+  ## the requirement a material fills, the admitted member and epoch. An entry under voice/
+  ## is the exception, a part or not: a note's metadata alone (voice.voiceContentOf, which
+  ## reads a part's off the header the room's memo holds).
+  if p.len > 0 and p[0] == "voice": return voiceContentOf(e.value, id, memo)
   result = newJObject()
   try:
     let j = parseJson(e.value)
@@ -219,11 +246,14 @@ proc contentOf(e: Event, p: seq[string]): JsonNode =
     result["ceremony"] = %p[1]; result["step"] = %p[2]
 
 proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[string],
-                      viewer: string, sealedIn = initTable[string, int]()): RoomGraph =
+                      viewer: string, sealedIn = initTable[string, int](),
+                      memo: VoiceMemo = nil): RoomGraph =
   ## `sealedIn` is the session's record of which epoch's key opened each event
   ## (CoordinationSession.sealedIn). An entry's epoch comes from it; only an event it does
   ## not name falls back to the admissions before it in canonical order, which is right
-  ## only for a log whose events carry their parents.
+  ## only for a log whose events carry their parents. `memo` is the room's VoiceMemo
+  ## (voice_live.graphOf passes it): its provenance, its flow and each voice part's content
+  ## read through it, so a poll parses no part it has read before (voice-notes.md §6).
   # Positions are CAUSAL (log.causalOrder: parents, then the `after` each publisher
   # stamped), so a view replays the room in the order it happened, up to concurrency
   # (docs/design/causal-parents.md §4). The folds this joins index the CANONICAL order;
@@ -297,7 +327,7 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
     "k:" & a
 
   # ── entries: every event the client holds, attributed where the log proves it ──
-  let prov = logProvenance(events, driverFor, sealedIn)
+  let prov = logProvenance(events, driverFor, sealedIn, memo)
   var provAt = initTable[int, LogProvItem]()
   for it in prov:
     var item = it
@@ -307,7 +337,8 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
   for i, e in ordered: idAt[eventId(e)] = "e:" & eventId(e)
   for i, e in ordered:
     let p = e.key.split('/')
-    let id = idAt[eventId(e)]
+    let eid = eventId(e)
+    let id = idAt[eid]
     var attrs = newJObject()
     var author = ""
     var basis = "sealed"
@@ -344,15 +375,22 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
           except CatchableError: discard
       elif p.len >= 4 and p[0] == "intent" and p[2] == "proposer":
         basis = "author-signed"; author = p[3]; attrs["counted"] = %true
+      elif p.len >= 3 and p[0] == "voice":
+        # an entry under voice/ that is no note's part (voice-notes.md §6 rules 2 to 4:
+        # provenance lists only the parts the fold stands, so a key or value of the wrong
+        # shape, an equivocating later copy or a squatted note id lands here): it counts for
+        # nothing, but authorship proved the member its key names signed it
+        basis = "author-signed"; author = p[2]
     attrs["basis"] = %basis
-    attrs["content"] = contentOf(e, p)
+    attrs["content"] = contentOf(e, p, eid, memo)
     var source = ""
     if attrs["kind"].getStr() == "read":
       try: source = parseJson(e.value){"source"}.getStr()
       except CatchableError: discard
       if source.len > 0: attrs["source"] = %source
     attrs["facets"] = facetsFor(attrs["kind"].getStr(), attrs{"attestation"}.getStr(), source,
-                                attrs["counted"].getBool(), epochAt[i])
+                                attrs["counted"].getBool(), basis == "author-signed" and author.len > 0,
+                                epochAt[i])
     addNode(id, "entry", i, epochAt[i], attrs)
     for par in e.parents:
       if par in idAt: addEdge(idAt[par], id, "parent", i)
@@ -461,7 +499,7 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
   # ── what left, and to whom (reduceFlow, outside rows only) ───────────────────
   addNode("o:" & $obStoreNode, "observer", -1, 0, newJObject())   # every envelope reaches it (FS-9)
   var leaves = initOrderedTable[string, tuple[src, obs: string, seq: int, fields: seq[string], declared: bool]]()
-  for r in reduceFlow(events, driverFor, founders, sealedIn):
+  for r in reduceFlow(events, driverFor, founders, sealedIn, memo):
     if r.to in {obRoomMember, obStoreNode}: continue
     let at = pos(r.seq)
     var src = ""
