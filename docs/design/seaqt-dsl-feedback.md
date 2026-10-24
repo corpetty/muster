@@ -9,7 +9,7 @@
 - it gets an inventory of the C++ constructs it can translate to C, which are then supported one by one;
 - templates are pre-instantiated for a known set of types, such as `QList<int>`.
 
-He did not answer Q5. The PRs are tracked as `exo-ea5` (nimside) and `exo-b71d` (seaqt-gen), and the standalone design as `exo-0e3`.
+He did not answer Q5. The PRs are tracked as `exo-ea5` (nimside) and `exo-b71d` (seaqt-gen), and the standalone design as `exo-0e3` ([`seaqt-gen-standalone.md`](seaqt-gen-standalone.md)). Its trial read the Logos SDK's token through `LogosAPI*` from Nim, using bindings generated from the SDK's headers.
 
 ## The short version
 
