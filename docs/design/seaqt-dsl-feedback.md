@@ -4,6 +4,17 @@
 **Status:** written 2026-10-15, after T1b–T7 landed ([corpetty/muster#298](https://github.com/corpetty/muster/pull/298)). Q5 below is still open, and its experiment waits on your answer.
 **Reads with:** `docs/design/seaqt-ui.md` (the plan and the evidence, slice by slice), ADR-019 in `docs/02-implementation-plan.md` (the decision).
 
+**Jacek's reply (2026-10-21).** The DSL items are "opinion territory", so each should come as a PR with a working draft and an example. Each seaqt-gen patch should also be its own PR, and he takes them from there. On running seaqt-gen over the Logos C++ modules, he would first like seaqt-gen made standalone:
+- it takes a library configuration instead of hardcoding Qt;
+- it gets an inventory of the C++ constructs it can translate to C, which are then supported one by one;
+- templates are pre-instantiated for a known set of types, such as `QList<int>`.
+
+He did not answer Q5. The PRs opened on 2026-10-24:
+- nimside: [seaqt/nimside#1–#11](https://github.com/seaqt/nimside/pulls). #1–#6, #8 and #9 are drafts of the DSL suggestions. #7 documents what a `qobject:` block passes through and fixes four ordering bugs. #10 and #11 fix bugs on master.
+- seaqt-gen: [seaqt/seaqt-gen#18–#23](https://github.com/seaqt/seaqt-gen/pulls). These are muster's four patches, a `nim check` fix, and a `go test` fix. When they merge, `ui-nim/nix/seaqt-gen-patches/` can go.
+
+They are tracked as `exo-ea5` (nimside) and `exo-b71d` (seaqt-gen). The standalone design is `exo-0e3`, filed as [seaqt/seaqt-gen#17](https://github.com/seaqt/seaqt-gen/issues/17) ([`seaqt-gen-standalone.md`](seaqt-gen-standalone.md)). Its trial read the Logos SDK's token through `LogosAPI*` from Nim, using bindings generated from the SDK's headers.
+
 ## The short version
 
 Muster's whole UI backend now runs on nim-seaqt and nimside: 79 slots and 55 properties, every call to the core asynchronous. It passes the same eleven offscreen self-tests as the C++ backend, on the live Logos fleet, and its QML draws and clicks on a display. The DSL carried it. Nothing in nimside had to be forked. One patch went into nimside for a probe, and four into seaqt-gen for RemoteObjects.
