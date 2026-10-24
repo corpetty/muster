@@ -189,7 +189,7 @@ proc signAuthored*(ks: Keystore, room: string, e: Event): Event =
   if normHex(author) != hexOf(ks.encIdentity().toBytes()):
     raise newException(AuthorshipError, "an event can only be signed by the member it names")
   var body = bodyOf(e)
-  body[AuthorSigField] = %hexOf(ks.edSign(digest(claimOf(room, e, author, body))))
+  body[AuthorSigField] = %hexOf(ks.edSignRecord(claimOf(room, e, author, body)))
   Event(parents: e.parents, key: e.key, value: $body)
 
 proc authorVerified*(room: string, e: Event): bool =
@@ -221,18 +221,22 @@ proc authorVerified*(room: string, e: Event): bool =
 
 const AfterDomain* = "muster.event.after-claim.v1"
 
-proc afterClaim*(room: string, e: Event): array[32, byte] =
+proc afterClaimRecord*(room: string, e: Event): HashInput =
   var a = e.after
   sort(a)
   var arr: seq[CborValue]
   for x in a: arr.add cbText(x)
-  digest(hashInput(AfterDomain, @[("room", cbText(room)), ("id", cbText(eventId(e))),
-                                  ("after", cbArray(arr))]))
+  hashInput(AfterDomain, @[("room", cbText(room)), ("id", cbText(eventId(e))),
+                           ("after", cbArray(arr))])
+
+proc afterClaim*(room: string, e: Event): array[32, byte] =
+  ## What an after-claim's signature covers: SHA-256 of `afterClaimRecord`.
+  digest(afterClaimRecord(room, e))
 
 proc signAfter*(ks: Keystore, room: string, e: Event): Event =
   ## `e` with its author's signature over its `after`.
   result = e
-  result.afterSig = hexOf(ks.edSign(afterClaim(room, e)))
+  result.afterSig = hexOf(ks.edSignRecord(afterClaimRecord(room, e)))
 
 proc afterVerified*(room: string, e: Event): bool =
   ## An author-bearing event's `after` is signed by the author it names, in this room.

@@ -26,15 +26,19 @@ type
 
   JoinRequestError* = object of CatchableError
 
-proc joinDigest*(enc: EncIdentity, room: string, expiry: uint64): array[32, byte] =
-  ## The bytes the encryption identity signs: both halves of the identity, the room and the
+proc joinRecord*(enc: EncIdentity, room: string, expiry: uint64): HashInput =
+  ## The record the encryption identity signs: both halves of the identity, the room and the
   ## expiry. Change any of them and the signature no longer verifies.
-  digest(hashInput("muster.join-request.v1", @[
+  hashInput("muster.join-request.v1", @[
     ("ed25519", cbBytes(@(enc.ed))),
     ("x25519", cbBytes(@(enc.x))),
     ("room", cbText(room)),
     ("expiry", cbUint(expiry)),
-  ]))
+  ])
+
+proc joinDigest*(enc: EncIdentity, room: string, expiry: uint64): array[32, byte] =
+  ## What is signed: SHA-256 of `joinRecord`.
+  digest(joinRecord(enc, room, expiry))
 
 proc issueJoinRequest*(edSign: proc(msg: seq[byte]): Ed25519Sig {.closure.},
                        enc: EncIdentity, room: string, expiry: uint64): JoinRequest =

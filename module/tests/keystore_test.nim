@@ -9,6 +9,9 @@ import ../src/crypto/keystore
 import ../src/crypto/secp256k1
 import ../src/crypto/curve25519
 import ../src/crypto/binding
+import ../src/dcbor/dcbor
+import ../src/hashing/hash_input
+import ../src/crypto/join_request
 
 let dir = getTempDir() / "muster-keystore-test"
 removeDir(dir)
@@ -136,6 +139,28 @@ block:
   doAssert refused, "a founding key names its room"
   removeDir(d3)
   echo "10. foundingKey: per room and identity, the same after a restart (exo-7b3) OK"
+
+block:
+  # 11. edSignRecord (exo-833): the routine signatures take the record, so a backend whose signer
+  #     reads records can show it. Every local keystore signs exactly what those call sites signed
+  #     before: Ed25519 over SHA-256 of the record.
+  var s1, s2: array[32, byte]
+  s1[0] = 1
+  s2[0] = 2
+  let ik = newInMemoryKeystore(s1, s2)
+  let hi = hashInput("muster.event.author.v1", @[("room", cbText("/muster/1/r/proto")), ("n", cbUint(3))])
+  doAssert ik.edSignRecord(hi) == ik.edSign(digest(hi)), "the record's signature is the digest's, byte for byte"
+  doAssert edVerify(ik.encIdentity().ed, digest(hi), ik.edSignRecord(hi))
+  let d4 = getTempDir() / "muster_ks_record_test"
+  removeDir(d4)
+  createDir(d4)
+  let fk = openFileKeystore(d4 / "k.mks", pass)
+  doAssert fk.edSignRecord(hi) == fk.edSign(digest(hi))
+  let jr = fk.joinRequestFor("/muster/1/r/proto", 1_000)
+  doAssert joinRequestValid(jr, "/muster/1/r/proto", 0), "a join request signed through the record still verifies"
+  doAssert jr.sig == fk.edSign(joinDigest(jr.enc, jr.room, jr.expiry))
+  removeDir(d4)
+  echo "11. edSignRecord signs what edSign signed over the digest (exo-833) OK"
 
 removeDir(dir)
 echo "keystore_test: all OK"
