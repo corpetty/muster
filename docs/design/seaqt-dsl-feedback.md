@@ -9,7 +9,11 @@
 - it gets an inventory of the C++ constructs it can translate to C, which are then supported one by one;
 - templates are pre-instantiated for a known set of types, such as `QList<int>`.
 
-He did not answer Q5. The PRs are tracked as `exo-ea5` (nimside) and `exo-b71d` (seaqt-gen), and the standalone design as `exo-0e3` ([`seaqt-gen-standalone.md`](seaqt-gen-standalone.md)). Its trial read the Logos SDK's token through `LogosAPI*` from Nim, using bindings generated from the SDK's headers.
+He did not answer Q5. The PRs opened on 2026-10-24:
+- nimside: [seaqt/nimside#1–#11](https://github.com/seaqt/nimside/pulls). #1–#6, #8 and #9 are drafts of the DSL suggestions. #7 documents what a `qobject:` block passes through and fixes four ordering bugs. #10 and #11 fix bugs on master.
+- seaqt-gen: [seaqt/seaqt-gen#18–#23](https://github.com/seaqt/seaqt-gen/pulls). These are muster's four patches, a `nim check` fix, and a `go test` fix. When they merge, `ui-nim/nix/seaqt-gen-patches/` can go.
+
+They are tracked as `exo-ea5` (nimside) and `exo-b71d` (seaqt-gen). The standalone design is `exo-0e3`, filed as [seaqt/seaqt-gen#17](https://github.com/seaqt/seaqt-gen/issues/17) ([`seaqt-gen-standalone.md`](seaqt-gen-standalone.md)). Its trial read the Logos SDK's token through `LogosAPI*` from Nim, using bindings generated from the SDK's headers.
 
 ## The short version
 
