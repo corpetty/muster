@@ -31,6 +31,8 @@ on:
       - 'docs/design/multisig-atlas.html'
       - 'scripts/build-site.sh'
       - 'scripts/check-site-links.py'
+      - 'scripts/gen-support-page.py'
+      - 'module/src/wallet/support.json'   # the /support/ page: the addresses every build pins (exo-168)
       - 'contracts/actions/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
