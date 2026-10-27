@@ -576,6 +576,28 @@ Item {
         anchors.bottom: parent.bottom
     }
 
+    // A room identity held by the wallet (exo-833) refuses room messages once Muster's unlock
+    // runs out: say so once, when it locks, and where to unlock it. Reading the status is a
+    // flag read in the module; it asks the wallet nothing unless an ask is in flight.
+    property bool identityLocked: false
+    Timer {
+        interval: 5000
+        repeat: true
+        running: root.ready && root.backend !== null && root.view !== "settings"
+        onTriggered: root.backend.loadIdentityPlatform()
+    }
+    Connections {
+        target: root.backend
+        ignoreUnknownSignals: true
+        function onIdentityPlatformJsonChanged() {
+            var locked = false;
+            try { locked = (JSON.parse(root.backend.identityPlatformJson) || {}).locked === true; } catch (e) {}
+            if (locked && !root.identityLocked)
+                MusterStyle.notify(qsTr("Your room identity is locked, so your messages aren't sent. Settings → You → Unlock it for Muster."));
+            root.identityLocked = locked;
+        }
+    }
+
     // news from the room and other rooms (exo-773), said once and let go
     Toast {
         id: newsToast

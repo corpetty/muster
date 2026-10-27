@@ -214,6 +214,22 @@ proc loadKeystoreStatusDo(o: MusterUi, d: Done = nil) =
 proc loadKeystoreRequestsDo(o: MusterUi, d: Done = nil) =
   ask mm.keystore_requestsAsync(proc (r: string) = o.setKeystoreRequestsJson(r); fin(d, r))
 
+proc loadIdentityPlatformDo(o: MusterUi, d: Done = nil) =
+  # Where the room identity lives, and the ask in flight (exo-833); reading collects a decided one.
+  ask mm.identity_platform_statusAsync(proc (r: string) = o.setIdentityPlatformJson(r); fin(d, r))
+
+proc identityPlatformRequestDo(o: MusterUi) =
+  ask mm.identity_platform_requestAsync(proc (r: string) =
+    info "IDENTITY-REQUEST " & r
+    o.setIdentityAskJson(r)
+    o.loadIdentityPlatformDo())
+
+proc identityPlatformUnlockDo(o: MusterUi) =
+  ask mm.identity_platform_unlockAsync(proc (r: string) =
+    info "IDENTITY-UNLOCK " & r
+    o.setIdentityAskJson(r)
+    o.loadIdentityPlatformDo())
+
 proc loadSecurityLevelsDo(o: MusterUi, d: Done = nil) =
   ask mm.security_levelsAsync(proc (r: string) = o.setSecurityLevelsJson(r); fin(d, r))
 
@@ -1266,3 +1282,6 @@ proc loadRlnStatusImpl(o: MusterUi) = o.loadRlnStatusDo()
 proc loadKeystoreStatusImpl(o: MusterUi) = o.loadKeystoreStatusDo()
 proc keystoreSelectImpl(o: MusterUi, address: string) = o.keystoreSelectDo(address)
 proc loadKeystoreRequestsImpl(o: MusterUi) = o.loadKeystoreRequestsDo()
+proc loadIdentityPlatformImpl(o: MusterUi) = o.loadIdentityPlatformDo()
+proc identityPlatformRequestImpl(o: MusterUi) = o.identityPlatformRequestDo()
+proc identityPlatformUnlockImpl(o: MusterUi) = o.identityPlatformUnlockDo()

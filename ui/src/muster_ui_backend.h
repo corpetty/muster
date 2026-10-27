@@ -84,6 +84,9 @@ public:
     void loadKeystoreStatus() override;
     void keystoreSelect(const QString &address) override;
     void loadKeystoreRequests() override;
+    void loadIdentityPlatform() override;
+    void identityPlatformRequest() override;
+    void identityPlatformUnlock() override;
     void loadSecurityLevels() override;
     void loadRoomAccount() override;
     void loadReadiness(const QString &intentId) override;

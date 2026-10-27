@@ -35,6 +35,7 @@ type
     port: ManagerPort
     identity: EncIdentity
     publicKey: string         ## hex, as the manager names the identity
+    locked*: bool             ## the last request was refused unsettled: muster's unlock is gone
 
 const LockedRemedy* =
   "identity-locked: unlock muster's room identity in the keys app (signer_manager_module " &
@@ -73,12 +74,63 @@ proc ask(p: PlatformIdentityKeystore, purpose: string, legs: seq[JsonNode]): seq
   let (handle, receipt) = (r{"handle"}.getStr(), r{"receipt"}.getStr())
   if r{"state"}.getStr() != "settled":
     discard p.port("cancel_approval", %*[handle, receipt])
+    p.locked = true
     raise newException(KeystoreError, LockedRemedy)
+  p.locked = false
   let f = p.call("fetch_result", %*[handle, receipt])
   discard p.port("ack_result", %*[handle, receipt])
   if not f{"ok"}.getBool(false) or f{"signed"}.kind != JArray or f{"signed"}.len != legs.len:
     raise newException(KeystoreError, "platform identity: no result for " & purpose)
   for x in f{"signed"}: result.add x.getStr()
+
+# ── asking the person, through the keys app ─────────────────────────────────────
+# Getting the key and opening it again for muster are the manager's access requests, which the
+# person decides in the keys app (keystore.accounts.open {handle}). Muster holds the receipt,
+# reads where the request stands, and collects the result once; it never waits on the person.
+
+type PlatformAsk* = object
+  kind*: string               ## "identity" (a key of muster's own) or "unlock" (open it for muster)
+  handle*, receipt*: string
+
+proc unlockForMuster*(): JsonNode = %*{"apps": ["muster_module"], "confirm": false}
+  ## Routine records signed without a prompt, for muster alone (rule 5 of the wallet/signer spec).
+
+proc asked(port: ManagerPort, kind, meth: string, params: JsonNode): PlatformAsk =
+  let r = port(meth, %*[$params])
+  if r == nil: raise newException(KeystoreError, "platform identity: signer_manager_module did not answer " & meth)
+  if not r{"ok"}.getBool(false):
+    raise newException(KeystoreError, "platform identity: " & r{"error"}.getStr("refused"))
+  PlatformAsk(kind: kind, handle: r{"handle"}.getStr(), receipt: r{"receipt"}.getStr())
+
+proc askIdentity*(port: ManagerPort, context: string): PlatformAsk =
+  ## An identity key of muster's own, derived for muster_module/<context> and unlocked for muster.
+  var params = %*{"purpose": "room-identity", "context": context,
+                  "reason": "Muster signs your room messages with it and opens what rooms seal to you"}
+  params["unlock"] = unlockForMuster()
+  asked(port, "identity", "request_identity", params)
+
+proc askUnlock*(port: ManagerPort, account: string): PlatformAsk =
+  ## The identity key muster already has, opened for muster again once its unlock ran out.
+  var params = %*{"account": account,
+                  "reason": "Muster signs your room messages with it and opens what rooms seal to you"}
+  for k, v in unlockForMuster(): params[k] = v
+  asked(port, "unlock", "request_unlock", params)
+
+proc pollAsk*(port: ManagerPort, a: PlatformAsk): JsonNode =
+  ## Where an ask stands: {state: "waiting", step} while the person has not decided,
+  ## {state: "done", result} once (the result is collected and acknowledged), or
+  ## {state: "ended", reason} when it settled with nothing to collect (rejected, cancelled,
+  ## expired_no_ack) or the manager no longer knows it.
+  let st = port("approval_status", %*[a.handle, a.receipt])
+  if st == nil: return %*{"state": "waiting", "step": "unknown"}
+  if not st{"ok"}.getBool(false): return %*{"state": "ended", "reason": "unknown-request"}
+  let step = st{"state"}.getStr()
+  if step != "settled": return %*{"state": "waiting", "step": step}
+  let f = port("fetch_result", %*[a.handle, a.receipt])
+  if f == nil or not f{"ok"}.getBool(false) or f{"result"}.isNil or f{"result"}.kind == JNull:
+    return %*{"state": "ended", "reason": st{"reason"}.getStr("settled")}
+  discard port("ack_result", %*[a.handle, a.receipt])
+  %*{"state": "done", "result": f{"result"}}
 
 method edSignRecord*(p: PlatformIdentityKeystore, hi: HashInput): Ed25519Sig =
   let got = p.ask("sign a muster record (" & hi.domain & ")",

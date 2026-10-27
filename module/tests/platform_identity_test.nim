@@ -104,7 +104,10 @@ block:
   except KeystoreError as e: msg = e.msg
   doAssert msg.startsWith("identity-locked"), msg
   doAssert mgr.calls == @["request_approval", "cancel_approval"]
+  doAssert ks.locked, "the refusal is remembered, so the status can offer the unlock"
   mgr.unlocked = true
+  discard ks.edSignRecord(hashInput("muster.event.author.v1", @[("n", cbUint(5))]))
+  doAssert not ks.locked, "a request that settles again clears it"
   echo "5. a locked identity is refused with its remedy, its request cancelled OK"
 
 block:
@@ -120,5 +123,63 @@ block:
   except KeystoreError: refused = true
   doAssert refused
   echo "6. raw bytes and a silent manager are refused OK"
+
+block:
+  # 7. Asking the person: the key and the unlock are the manager's access requests, decided in
+  # the keys app. Muster asks for its own key, unlocked for muster alone without a prompt, and
+  # reads where the ask stands without waiting: waiting, done once (collected and acknowledged),
+  # or ended with nothing to collect.
+  var calls: seq[string]
+  var asked: JsonNode
+  var step = "offered"
+  var answer = newJNull()
+  let access = proc(meth: string, args: JsonNode): JsonNode =
+    calls.add meth
+    case meth
+    of "request_identity", "request_unlock":
+      asked = parseJson(args[0].getStr())
+      %*{"ok": true, "handle": "acc_1", "receipt": "rcp_1", "state": "offered"}
+    of "approval_status":
+      if args[1].getStr() != "rcp_1": return %*{"ok": false, "error": "not_authorized"}
+      %*{"ok": true, "state": step, "reason": (if step == "settled" and answer.kind == JNull: %"rejected" else: newJNull())}
+    of "fetch_result":
+      if answer.kind == JNull: %*{"ok": false, "error": "no result for this handle"}
+      else: %*{"ok": true, "result": answer}
+    of "ack_result": %*{"ok": true}
+    else: nil
+
+  let a = askIdentity(access, "default")
+  doAssert a.kind == "identity" and a.handle == "acc_1" and a.receipt == "rcp_1"
+  doAssert asked["purpose"].getStr() == "room-identity" and asked["context"].getStr() == "default"
+  doAssert asked["unlock"]["apps"] == %["muster_module"] and not asked["unlock"]["confirm"].getBool(true)
+  doAssert pollAsk(access, a)["state"].getStr() == "waiting"
+  step = "rendered"
+  doAssert pollAsk(access, a)["step"].getStr() == "rendered"
+  step = "settled"
+  answer = %*{"account": "kr_00", "publicKey": pk, "context": "muster_module/default"}
+  calls = @[]
+  let done = pollAsk(access, a)
+  doAssert done["state"].getStr() == "done" and done["result"]["publicKey"].getStr() == pk
+  doAssert calls == @["approval_status", "fetch_result", "ack_result"], "collected once, then acknowledged"
+
+  # The unlock names the account it was given, for muster alone, without a prompt.
+  let u = askUnlock(access, "kr_00")
+  doAssert u.kind == "unlock" and asked["account"].getStr() == "kr_00"
+  doAssert asked["apps"] == %["muster_module"] and not asked["confirm"].getBool(true)
+  # Rejected: settled with nothing to collect, and nothing acknowledged.
+  answer = newJNull()
+  calls = @[]
+  let ended = pollAsk(access, u)
+  doAssert ended["state"].getStr() == "ended" and ended["reason"].getStr() == "rejected", $ended
+  doAssert "ack_result" notin calls
+  # A request the manager no longer knows has ended; a manager that does not answer is waited on.
+  doAssert pollAsk(access, PlatformAsk(kind: "unlock", handle: "acc_1", receipt: "other"))["reason"].getStr() == "unknown-request"
+  let silent = proc(m: string, a: JsonNode): JsonNode = nil
+  doAssert pollAsk(silent, u)["state"].getStr() == "waiting"
+  var refused = false
+  try: discard askIdentity(silent, "default")
+  except KeystoreError: refused = true
+  doAssert refused, "an ask the manager does not answer is an error, never a handle"
+  echo "7. the key and its unlock are asked in the keys app, collected once, ended when refused OK"
 
 echo "platform_identity_test: all OK"

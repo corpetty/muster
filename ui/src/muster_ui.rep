@@ -526,6 +526,18 @@ class MusterUi
     // reading it also advances them (the module's keystore pump).
     SLOT(void loadKeystoreRequests())
     PROP(QString keystoreRequestsJson="{}" READONLY)
+    // The room identity held by the person's wallet (identity_platform_status, exo-833):
+    // {backend, locked, changeable, publicKey?, account?, state: none|waiting|ended|ready,
+    // kind?, handle?, reason?, applied?, detail?}. Settings polls it while open and raises
+    // keystore.accounts.open {handle} for each new waiting ask.
+    SLOT(void loadIdentityPlatform())
+    PROP(QString identityPlatformJson="{}" READONLY)
+    // Ask for the key (identity_platform_request) or for muster's unlock again
+    // (identity_platform_unlock); the reply {ok, handle, kind} or {ok:false, error, install?}
+    // lands in identityAskJson, then the status is re-read.
+    SLOT(void identityPlatformRequest())
+    SLOT(void identityPlatformUnlock())
+    PROP(QString identityAskJson="{}" READONLY)
     // The Wallet page (wallet_summary, exo-f37): the wallets this instance has been given,
     // never a default — {wallets:[{id, name, account, via, dev?, network?, wallet?, state?,
     // balances:[{chain, asset, grade, display?, unlocked?, pending?, error?}]}],

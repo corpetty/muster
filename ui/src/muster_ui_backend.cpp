@@ -651,6 +651,32 @@ void MusterUiBackend::loadKeystoreRequests()
     setKeystoreRequestsJson(modules().muster_module.keystore_requests());
 }
 
+void MusterUiBackend::loadIdentityPlatform()
+{
+    // identity_platform_status (exo-833): where the room identity lives, whether muster's
+    // unlock ran out, and the ask in flight. Reading it also collects a decided ask.
+    setIdentityPlatformJson(modules().muster_module.identity_platform_status());
+}
+
+void MusterUiBackend::identityPlatformRequest()
+{
+    // identity_platform_request: the person's wallet makes muster a key of its own, once
+    // they approve it in the keys app, which the view opens on the handle.
+    const QString r = modules().muster_module.identity_platform_request();
+    qInfo().noquote() << "[muster_ui] IDENTITY-REQUEST" << r;
+    setIdentityAskJson(r);
+    loadIdentityPlatform();
+}
+
+void MusterUiBackend::identityPlatformUnlock()
+{
+    // identity_platform_unlock: open that key for muster again once its unlock ran out.
+    const QString r = modules().muster_module.identity_platform_unlock();
+    qInfo().noquote() << "[muster_ui] IDENTITY-UNLOCK" << r;
+    setIdentityAskJson(r);
+    loadIdentityPlatform();
+}
+
 void MusterUiBackend::loadSecurityLevels()
 {
     // security_levels → the room's active null-ladder level on the three axes (exo-1ec.5),

@@ -259,6 +259,14 @@ Item {
                         chatId: settings.chatId
                     }
 
+                    // ── where your room identity is kept (exo-833) ──
+                    RoomIdentityHolder {
+                        objectName: "settingsRoomIdentity"
+                        Layout.fillWidth: true
+                        backend: settings.backend
+                        advanced: settings.advanced
+                    }
+
                     ColumnLayout {
                         objectName: "advancedBtcKey"
                         visible: settings.advanced
