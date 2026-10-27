@@ -1,0 +1,32 @@
+{
+ "about": "Settings → You → Your room identity (exo-833.6), as a member who has joined a room sees it: kept by Muster on this device, and movable to the Basecamp wallet only before any room is joined (recorded from scripts/split-self-test.sh).",
+ "snapshot": "data/settings-room-identity.json",
+ "sizes": [
+  "1440x900"
+ ],
+ "steps": [
+  {
+   "view": "settings"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "expectProp": [
+    "settingsRoomIdentity",
+    "visible",
+    true
+   ]
+  },
+  {
+   "expectProp": [
+    "identityHolderMove",
+    "visible",
+    false
+   ]
+  },
+  {
+   "shot": ""
+  }
+ ]
+}
