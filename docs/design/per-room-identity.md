@@ -1,11 +1,14 @@
 # One identity per room: a proposal, and what it does to contacts (exo-833 C)
 
-Status: **proposal, for discussion with the Logos Messaging team (2026-10-27).** Nothing
-here is built. It is part of exo-833 (the room identity held by the platform), whose other
-pieces are the identity in the person's Basecamp wallet (built, opt-in) and approval
-signatures through the wallet (B, not started). We want Muster's identity model to agree
-with how Logos Messaging thinks about identity before we build it, so §8 is a list of
-questions for that team.
+Status: **decided 2026-10-28, after the Logos Messaging team replied (§10): option 3, one
+identity per installation, endorsed by a λAccount.** Per-room keys (§4) are not built.
+Cross-room unlinkability, when wanted, is a throwaway account per room, not a mechanism of
+Muster's own. §11 is the work this leads to; §12 the questions still open with that team.
+§1–§9 are the proposal as it was sent on 2026-10-27, kept for the record.
+
+It is part of exo-833 (the room identity held by the platform), whose other pieces are the
+identity in the person's Basecamp wallet (built, opt-in) and approval signatures through
+the wallet (B, not started).
 
 ## 1. The question
 
@@ -197,3 +200,133 @@ would rather follow your model than invent a second one:
    signer interface for a standing grant?
 3. Existing rooms keep their key; new rooms get fresh ones. Or, later, a "re-key this room"
    action that re-admits the member under a new key?
+
+## 10. What Logos Messaging replied (Jazz, 2026-10-28)
+
+Their reply, in short, with what we read to check it (their ADR 0003, the AccountLog and
+Account Profile specs, and `logos-co/logos-accounts-ui` at `026565e`, the commit
+`accounts_ui` 0.3.0 is built from):
+
+- **Priorities.** λChat puts sender authenticity first: a group can be sure only its rightful
+  members read it, and that it is talking to the same person as before. Identity is never
+  revealed without consent, and a small group is assumed to trust its members. Anonymity is
+  done with **throwaway accounts** (per chat, week or message), not by weakening membership.
+- **Per-room identity is "a product decision".** Their model favours one key, with "stealth
+  members" as later research.
+- **Two layers since `74265e6e`.** The directory is gone.
+  - An **account** is an Ed25519 key; its address (`AccountId` / `ParticipantId`) is what
+    a person hands out to be reached.
+  - Its **AccountLog** is public, append-only and signed by the account key. It endorses keys
+    under a context and revokes one by appending a tombstone. It has no rotation or recovery
+    of the account key itself.
+  - Each **installation** (one app on one device) is one SignerKey, generated at random and
+    endorsed by the account. Each installation has its own inbox; there is no account inbox.
+- **Conversations reuse the installation key,** so a member is linkable across conversations,
+  but only by fellow members. Cross-conversation unlinkability ("pseudonym SignerKeys") is
+  discussed, at the bottom of their list.
+- **Group credentials could carry a per-group key,** if it is scoped to one signer; dropping
+  the credential entirely gives anonymous chat at the cost of authentication.
+- **Keys derived from a fixed source are not safe:** recovering from a compromise is
+  catastrophic, which is why they moved away from them. Chat should generate installation
+  keys and bind them.
+- **Provisioning happens once per app on a device,** through the Accounts app, "think
+  WalletConnect". Revocation is on the installation key.
+- **Their questions to us:** must the primary identity be wallet-based, and should a wallet
+  be bound to the account?
+
+**The Accounts app (`accounts_ui` 0.3.0, in Basecamp 0.3.2's Logos Official catalogue).**
+
+- **What it does:**
+  - creates, imports or observes an account;
+  - endorses or revokes installation keys under `chat.signer`, and sets
+    `profile.displayname`;
+  - stages edits and publishes them as one signed update.
+- **Where keys live:** each account key is in its own vault (`module_data/accounts_ui/vault`,
+  one scrypt-sealed file per account), apart from `keystore_module` and its phrase.
+- **Where logs go:** over HTTP to chat-store's `/v1/account/{address}` on devnet
+  (`https://devnet.chat-kc.logos.co`), readable by anyone with the address and permanent.
+  Moving them to λDelivery and an Execution Zone is planned (logos-chat#268).
+- **Other modules can't reach it:** it is a UI app only, with no core module and no `provides`.
+  Another module cannot call it, or raise it with a key filled in.
+
+## 11. Decision, and what it changes
+
+**Option 3 (§5): one identity per installation, endorsed by the person's λAccount.** Muster
+follows λChat rather than inventing a second model:
+
+| λChat / λAccounts | Muster |
+|---|---|
+| account address | your contact link, what you hand out |
+| installation SignerKey, random, endorsed under `chat.signer` | your room identity: one random Ed25519 key per install, as the local keyfile already makes |
+| a sender no longer endorsed is dropped | a room drops a member's events once their key is revoked in their log |
+| a new installation, endorsed; the old one revoked | recovery after a reinstall or a compromise: the room re-admits the new key because the same account stands behind it |
+| a throwaway account | a room you want unlinkable from your others |
+
+What this changes in work already done or planned:
+
+- **C (per-room keys, §4) is not built.** §4–§7 stand only as the record of what was weighed.
+- **exo-833's phrase-derived identity is set aside.** The room identity becomes an installation
+  key: generated at random, never derived. It is held in Muster's keyfile, or by
+  `keystore_module` as a random key, and endorsed by the person's account.
+  - **What carries over:** the record signing kind, signatures through the signer manager,
+    approvals in the keys app, and the keys app's identity request.
+  - **What goes:** the derivation (`m/7432'/…`, a key per purpose and context from the
+    phrase) comes out of the proposal, or becomes optional.
+  - **The upstream drafts (exo-833.2) are paused** until that is settled.
+  - **The founder relaunch (exo-6dc.1)** derives a room's first epoch key from the identity.
+    It needs a replacement that does not depend on re-deriving the same key, such as the
+    room's own copy on the member's machine (exo-dcc.14).
+- **What shipped stays.** 0.3.4's "Keep it in my Basecamp wallet" is opt-in, in Advanced, and
+  needs forks no catalogue ships.
+- **B (approvals through the wallet) is unaffected.**
+- **Invariant 9 holds.** Endorsements are public, so anyone with your address can recognise
+  your installation key wherever they see it: in a room log, in an audit file. That matches
+  λChat's model (linkable by those who can see you), and it is a reason not to publish more
+  than the installation key. Chain accounts stay disclosed in the room only.
+
+**Our answers to their questions:**
+
+1. **No, the primary identity need not be wallet-based.** What Muster needs is:
+   - the key held outside Muster's own process, by the platform's keystore and Signer;
+   - a way back after a reinstall.
+
+   An installation key held by the keystore and endorsed by a λAccount gives both.
+2. **No public wallet binding, at least not by default.** Muster binds a member's Ethereum,
+   Bitcoin and LEZ accounts to them inside the room where they use them (F-14, shared
+   accounts), and only there (invariant 9). A binding in the public AccountLog would publish
+   what Muster keeps in the room. An extension the person chooses for themselves would be
+   fine.
+
+**The first slice (exo-833.8):**
+
+1. **Settings shows your installation key,** with "Endorse it in Accounts". Copy and paste
+   for now, since the app takes no request from another app.
+2. **Muster reads and verifies AccountLogs.**
+   - It fetches a member's log from a store the person configures. The default is chat-store
+     on devnet, treated like an RPC: untrusted, user-configurable, signed data (invariant 8).
+   - It checks the log's signatures and its live set under `chat.signer`, per the AccountLog
+     spec, with vectors from the account crate.
+3. **Rosters show a member by their account** where their key is endorsed in the log
+   Muster read, and say so where it is not, or no log was found.
+4. **A contact link can name an account address.** An invite then goes to the endorsed
+   installation's inbox, as λChat does.
+
+Later, once the slice holds: drop a revoked member's events, re-admit a new installation of
+the same account, and the replacement for the founder relaunch.
+
+## 12. Open with Logos Messaging
+
+1. **Context.** Should Muster's room keys be endorsed under `chat.signer`, since Muster's room
+   layer is meant to become native chat (ADR-010), or under a context of Muster's own?
+2. **Reaching the Accounts app.** Would it take an intent from another app, such as
+   `accounts.installation.endorse {key}`, like the keys app's `keystore.accounts.open
+   {handle}`? And would a core module with a LIDL contract for reading and verifying logs be
+   welcome, so each app does not re-implement the AccountLog format?
+3. **The account key.** It sits in the Accounts app's own vault, apart from the phrase
+   `keystore_module` keeps, and the spec has no recovery for it. Where should it live long
+   term, and is recovery planned?
+4. **Private endorsements.** Is an endorsement only a room can see, rather than the whole
+   world, on the list with stealth accounts?
+5. **The store.** Until logs move to λDelivery, every lookup tells chat-store whose log is
+   read. Is there a plan for reads that do not, such as a store per community, or logs carried
+   in the room itself?
