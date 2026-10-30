@@ -10,12 +10,12 @@ were not re-read then. The pebbles win over this table.
 
 | Phase | Pebble | State |
 |---|---|---|
-| 0 Ground truth | `exo-dcc.1` | **Done** (2026-10-08). Basecamp 0.3.2 and delivery 0.3.2; Muster reaches `monero_wallet_backend`, attested as `muster_module`; ADR-018 accepted. Two spike questions are still open, because they need a funded stagenet wallet: whether an incoming transfer shows in `history()` before it confirms, and how long a first sync takes. `exo-dcc.19` answers them |
+| 0 Ground truth | `exo-dcc.1` | **Done** (2026-10-08). Basecamp 0.3.2 and delivery 0.3.2; Muster reaches `monero_wallet_backend`, attested as `muster_module`; ADR-018 accepted. Two spike questions are still open until `exo-dcc.19`'s run is recorded: whether an incoming transfer shows in `history()` before it confirms, and how long a first sync takes. `exo-dcc.19` answers them |
 | 1 Messaging with no LEZ | `exo-dcc.2` | **Decided, not built.** The target is `logos.test` with a room gifter we run. Slices R2, R3, R4 (`rln-membership.md` §7). **Waits on funds**: native LEZ on LEZ classic for the gifter. Meanwhile (2026-10-09) the demo and live testing run on `logos.dev`, the default |
 | 1 An installable Muster | `exo-dcc.3` | **Published.** Version ranges and 0.2.0; `catalog/` and `scripts/catalog-release.sh`; a fresh Basecamp 0.3.2 installed Muster from a locally served copy; release `muster-v0.2.0` published 2026-10-09 with `catalog/index.json` on `main`. Ahead: CI builds, the fork exit, macOS |
 | 1 The mixnet | `exo-dcc.4` | **Done** (2026-10-08). An opt-in `mix` setting, off by default, sends only. Untested on `logos.test` |
 | 1 Install what's missing | `exo-dcc.10`, `.11` | **Done** (2026-10-08). Seen on display in Basecamp 0.3.2 |
-| 2 The XMR payment request | `exo-dcc.5`, `.20` | **Done, except the live payment** (2026-10-09). Spec `derived-exo-dcc.5`, 7/7. The UI was seen on display in Basecamp 0.3.2 with a real stagenet wallet, up to the payment. The live two-machine run is `exo-dcc.19`, which **waits on funds**: stagenet XMR for the payer. Detail: `docs/labbook/xmr-payment-request.md` |
+| 2 The XMR payment request | `exo-dcc.5`, `.20` | **Done** (2026-10-09); a live stagenet payment ran on a Logos Dev Club stream in October 2026. Spec `derived-exo-dcc.5`, 7/7. The UI was seen on display in Basecamp 0.3.2 with a real stagenet wallet, up to the payment. Its record against `exo-dcc.19`'s checklist (two machines, 10 confirmations, final on both, the spike questions) is still open. Detail: `docs/labbook/xmr-payment-request.md` |
 | 2 Send Monero (and every asset) | `exo-dcc.32`, `.33` | **Done** (2026-10-15). A request on the payee's behalf with the sender its only payer: paid at the address they shared, never one already backing a payment; proposing is the sender's agreement, the payee accepts, the sender pays from any wallet, the payee's wallet confirms. `xmr_send_test`. Since `.33` the same Send works in ETH or a token, BTC and LEZ (`send_any_asset_test`) |
 | 2 A room treasury: Monero multisig, coordinated (added 2026-10-30) | `exo-dcc.34` | **Built, and run on stagenet through the UI** (2026-10-17; ADR-020). Each member's own `monero-wallet-rpc` holds their key; the room carries the setup, the sync data and the partly signed transactions, and each signer's wallet checks the spend against the agreement before signing. Stagenet only, labelled experimental and pre-FCMP++; shipped since Muster 0.3.3. Design `monero-multisig-coordination.md`, runbook `docs/runbooks/xmr-multisig.md` |
 | 3 Pay from Basecamp's own wallet | `exo-dcc.6` | **Interim done** (2026-10-09): Pay with Monero Wallet copies the address and opens the wallet. The review intent `monero.wallet.review_send` is drafted for the wallet app and builds; it waits on being published upstream |
@@ -24,8 +24,7 @@ were not re-read then. The pebbles win over this table.
 
 Smaller follow-ups, all open: a local copy of each room's log (`exo-dcc.14`, P2); a 0.3.2 catalogue file for the Basecamp harness (`.15`); readiness under `--access-policy enforce` (`.16`); the `frost_ceremony_room_test` flake (`.17`); upstream asks from the catalogue run (`.18`), the mix path (`.13`) and Monero Wallet's `failed` answer to `monero.wallet.unlock` (`.21`); a grader leftover (`.22`); a spec wording fix (`.23`).
 
-**Waiting on funds.** Both are the operator's to fund. The public addresses are in `docs/06-session-handoff-2026-10-09.md` §4; the wallets themselves live outside the repo.
-- **`exo-dcc.19`, the live XMR payment:** stagenet XMR for the payer's wallet, from a stagenet faucet.
+**Waiting on funds.** The operator funds it. Its public address is in `docs/06-session-handoff-2026-10-09.md` §4; the wallets themselves live outside the repo.
 - **`exo-dcc.2`, the gifter:** native LEZ on LEZ classic (`209.38.241.182:3240`), about 7.5×10⁷ per membership, for the gifter's RLN payer.
 
 ## 1. The goal

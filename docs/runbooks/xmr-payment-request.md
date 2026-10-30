@@ -2,7 +2,7 @@
 
 **As of 2026-10-16, Muster 0.3.1** (exo-dcc.5, .19, .20, .32). One person asks another for XMR inside a Muster room, or one person sends XMR to another. The payer pays from any Monero wallet. The payment counts only when the payee's own wallet sees it. Every label below was read from the code on 2026-10-16; the code wins over this page. Detail and sources: [`docs/labbook/xmr-payment-request.md`](../labbook/xmr-payment-request.md).
 
-> **No payment has been made through this yet.** Requesting, agreeing, asking for an address, and the Wallet listing a real stagenet wallet were all seen on display in Basecamp 0.3.2. Paying and confirming have not been, because they need stagenet XMR. That run is `exo-dcc.19`. What you see there is the finding: the checklist at the end says what to send back.
+> **A live stagenet payment was made through this on a Logos Dev Club stream in October 2026.** Before that, requesting, agreeing, asking for an address, and the Wallet listing a real stagenet wallet were seen on display in Basecamp 0.3.2. That run is not yet written up against the checklist at the end (`exo-dcc.19`), so this page does not yet show paying and confirming as they look on screen. If you run it, the checklist says what to send back.
 
 **Stagenet only.** Mainnet waits on the Monero stack's threat model (`exo-dcc.8`).
 

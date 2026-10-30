@@ -295,7 +295,7 @@
       ],
       "unverified": [
         "whether an incoming transfer appears in history() before it is confirmed (mempool visibility; the 10-block depth does not depend on it)",
-        "a live stagenet payment end to end: a payment from another wallet and 10 confirmations, read through lp at size (split-xmr-self-test.sh runs with no wallet; the display runs minted payTo from a real stagenet wallet but no payment was made)"
+        "a live stagenet payment end to end: a payment from another wallet and 10 confirmations, read through lp at size (split-xmr-self-test.sh runs with no wallet; the display runs minted payTo from a real stagenet wallet; a live stagenet payment ran on a Logos Dev Club stream in October 2026, not yet recorded against this check)"
       ],
       "generated": "monero-split/request",
       "hosted": [
@@ -568,7 +568,7 @@
       ],
       "unverified": [
         "whether an incoming transfer appears in history() before it is confirmed (mempool visibility; the 10-block depth does not depend on it)",
-        "a live stagenet payment end to end: a payment from another wallet and 10 confirmations, read through lp at size (split-xmr-self-test.sh runs with no wallet; the display runs minted payTo from a real stagenet wallet but no payment was made)"
+        "a live stagenet payment end to end: a payment from another wallet and 10 confirmations, read through lp at size (split-xmr-self-test.sh runs with no wallet; the display runs minted payTo from a real stagenet wallet; a live stagenet payment ran on a Logos Dev Club stream in October 2026, not yet recorded against this check)"
       ],
       "generated": "monero-split/request",
       "hosted": [

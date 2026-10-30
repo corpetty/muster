@@ -38,7 +38,8 @@ address); the requester's own wallet, reached through `monero_wallet_backend` ov
 (`src/wallet/monero_backend{,_lp}.nim`, a closed set of read and mint calls, never a
 spend), mints the subaddress and confirms the part from its own history at 10
 confirmations (`src/coordination/parts_xmr.nim`, `xmr_request.nim`). Spec
-`derived-exo-dcc.5`, 7/7, over a recording fake backend; no live stagenet payment yet.
+`derived-exo-dcc.5`, 7/7, over a recording fake backend; a live stagenet payment ran on a
+Logos Dev Club stream in October 2026 (not yet recorded against `exo-dcc.19`'s checklist).
 `monero_wallet_backend` is an optional dependency in `metadata.json`, so a missing
 Monero stack never fails the module's load. Readiness grades a needed module as not
 installed, installed but not running, or running, from Basecamp's `modules_state`
@@ -148,4 +149,4 @@ tests/          unit tests · run-suite.sh (all of them, one command) · vectors
 - Invariant tests are append-only. Extend, don't weaken.
 - The module imports nothing from `../ui/`; it reaches other modules only through logos-core.
 
-<!-- rot-check: current-phase=CLAUDE.md sha256=dabc23069590aa5fd7905874c7c19a1c4be0f4466a660e48dedd54796240834f -->
+<!-- rot-check: current-phase=CLAUDE.md sha256=86d32f0a5fa4b9778f238da64a2fcaa6bd85bdf9b543e8084a02bcc2f7e45ec2 -->

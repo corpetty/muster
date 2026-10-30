@@ -236,12 +236,12 @@ It cuts across the phases rather than adding one:
 
 | Phase | Pebble | State |
 |---|---|---|
-| 0 Ground truth: Basecamp 0.3.2, the lp_* spike, the ADR | `exo-dcc.1` | ✅ done 2026-10-08. Two spike questions wait on a funded stagenet wallet (`exo-dcc.19`) |
+| 0 Ground truth: Basecamp 0.3.2, the lp_* spike, the ADR | `exo-dcc.1` | ✅ done 2026-10-08. Two spike questions wait on `exo-dcc.19`'s record of the live payment |
 | 1 Messaging with no LEZ | `exo-dcc.2` | Decided 2026-10-08: `logos.test` with a room gifter we run. Not built; waits on native LEZ to fund the gifter. For now (2026-10-09) the demo and live testing run on `logos.dev`, the default |
 | 1 An installable Muster | `exo-dcc.3` | Done: release `muster-v0.2.0` published 2026-10-09, installable from the catalogue |
 | 1 The mixnet | `exo-dcc.4` | ✅ opt-in `mix` setting, off by default |
 | 1 Install what's missing | `exo-dcc.10`, `.11` | ✅ seen on display in Basecamp 0.3.2 |
-| 2 The XMR payment request | `exo-dcc.5`, `.20` | ✅ module and UI, seen on display up to the payment. The live two-machine payment is `exo-dcc.19`, waiting on stagenet XMR |
+| 2 The XMR payment request | `exo-dcc.5`, `.20` | ✅ module and UI, seen on display up to the payment. A live stagenet payment ran on a Logos Dev Club stream (October 2026); its record against `exo-dcc.19`'s checklist is still open |
 | 3 Pay from Basecamp's own Monero wallet | `exo-dcc.6` | Waits on an upstream review intent |
 | 4 The deal-desk demo | `exo-dcc.7` | Not started; needs `.2`, `.3`, `.19` |
 | 5 The mainnet gate | `exo-dcc.8` | Not started |

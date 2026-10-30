@@ -753,8 +753,8 @@ here, and `scripts/split-xmr-self-test.sh` checks it.
 
 To make a request for real, run the payee in Basecamp 0.3.2 with Monero Wallet and a
 stagenet wallet, and pay from any stagenet wallet: [`xmr-payment-request.md`](xmr-payment-request.md).
-The payer can stay in the runner. No payment has been made through it yet, so steps 3 and 4
-there are first on screen.
+The payer can stay in the runner. A live stagenet payment was made on a Logos Dev Club stream
+in October 2026, but steps 3 and 4 there are not yet written up from that run.
 
 ---
 
