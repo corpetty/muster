@@ -27,6 +27,8 @@
 ##                                        set, from that member's wallet (exo-dcc.34.3)
 ##   file/<fid>[/…]                      the room swarm (exo-4d0.4): a seed names the member
 ##                                        in its key, a share or retract the value's "author"
+##   voice/<nid>/<author>/<i>/<n>        a voice note's part (voice-notes.md §3.3): the
+##                                        author is the key's third segment, never the value
 ##
 ## Each of those carries `authorSig`: the named author's Ed25519 signature (the
 ## encryption identity's signing half, F-14) over a domain-separated hash-input record
@@ -104,6 +106,12 @@ proc authorOf*(e: Event): tuple[authored: bool, author: string] =
   ## Whether this event's kind names an author, and the author it names ("" when the
   ## key is too short to name one — still author-bearing, so it can never verify).
   let p = e.key.split('/')
+  if p[0] == "voice":
+    # a voice note's part (voice-notes.md §3.3): its value is about 84 KB of base64, so
+    # the author is read off the key, never by parsing the value on every hosted read. Any
+    # shape under `voice` is author-bearing, so one too short to name an author never
+    # verifies; the fold (voice.nim) checks the rest of the key
+    return (true, (if p.len >= 3: p[2] else: ""))
   if p[0] == "message":
     var author = ""
     try:
@@ -280,6 +288,13 @@ proc authenticEvents*(events: seq[Event], room: string): seq[Event] =
     proc(e: Event): bool = authorVerified(room, e),
     proc(e: Event): bool = afterVerified(room, e))
 
+proc afterOk(s: CoordinationSession, e: Event): bool =
+  ## `afterVerified` in this session's room, cached by id, signature and `after`.
+  if e.after.len == 0: return false
+  let k = eventId(e) & "|" & e.afterSig & "|" & e.after.join(",")
+  if k notin s.afterChecked: s.afterChecked[k] = afterVerified(s.topic, e)
+  s.afterChecked[k]
+
 proc roomEvents*(s: CoordinationSession): seq[Event] =
   ## The session's log as the room's views read it: `authenticEvents` over the raw log,
   ## each verdict cached (a pure function of the room and what it covers): the author
@@ -291,18 +306,39 @@ proc roomEvents*(s: CoordinationSession): seq[Event] =
       let id = eventId(e)
       if id notin s.authorChecked: s.authorChecked[id] = authorVerified(room, e)
       s.authorChecked[id],
-    proc(e: Event): bool =
-      if e.after.len == 0: return false
-      let k = eventId(e) & "|" & e.afterSig & "|" & e.after.join(",")
-      if k notin s.afterChecked: s.afterChecked[k] = afterVerified(room, e)
-      s.afterChecked[k])
+    proc(e: Event): bool = s.afterOk(e))
+
+proc copyToSeal(s: CoordinationSession, ks: Keystore, e: Event): Event =
+  ## The copy of author-bearing `e` this member seals. A new event: signed, with the heads
+  ## this member had seen in `after`, signed too (C5). One the log already holds: the copy
+  ## this member signed the `after` of (the smallest by afterDigest, as the room's view
+  ## picks, if there are several), so its order stays the one first published; with none,
+  ## the event with no ordering claim, which is what the room's view makes of any copy
+  ## whose `after` its author did not sign. Never the copy the log keeps for its own sake:
+  ## any member who received the event can plant a copy that sorts first, with an `after`
+  ## of any length, and re-sealing that one would make a voice part's retried Send raise
+  ## FrameTooLarge for good (voice-notes.md §4, §8).
+  result = signAuthored(ks, s.topic, e)
+  let id = eventId(result)
+  if not s.log.find(id).found:
+    result.after = s.heads()
+    return signAfter(ks, s.topic, result)
+  var have = false
+  for v in s.log.variantsOf(id):
+    if s.afterOk(v) and (not have or afterDigest(v) < afterDigest(result)):
+      result = v
+      have = true
 
 proc publishAuthored*(s: CoordinationSession, ks: Keystore, e: Event) =
-  ## Sign an author-bearing event as this member, for this room, and publish it — with
-  ## the heads this member had seen in `after`, signed too (C5). One it already holds is
-  ## re-sealed as held (publish), so its order stays the one first published.
-  var signed = signAuthored(ks, s.topic, e)
-  if not s.log.find(eventId(signed)).found:
-    signed.after = s.heads()
-    signed = signAfter(ks, s.topic, signed)
-  s.publish(signed)
+  ## Sign an author-bearing event as this member, for this room, and publish it: a new one
+  ## with the heads this member had seen in `after`, signed too (C5); one it already holds
+  ## as this member first sealed it (`copyToSeal`). That holds for every author-signed
+  ## kind: a re-announced account disclosure as a retried voice part (authorship_test §12).
+  s.publish(s.copyToSeal(ks, e), asGiven = true)
+
+proc publishAuthoredTogether*(s: CoordinationSession, ks: Keystore, events: seq[Event]) =
+  ## `publishAuthored` for each of `events`, in order, as one burst (session
+  ## `publishTogether`): every one signed, recorded and sealed before the first frame goes
+  ## out, then the frames back to back. A voice note's two parts go this way, so the gap
+  ## between its frames does not grow with its length (voice-notes.md §10).
+  s.publishTogether(events.len, proc (i: int): Event = s.copyToSeal(ks, events[i]))

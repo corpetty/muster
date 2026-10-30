@@ -224,6 +224,61 @@ void MusterUiBackend::retractFile(const QString &fileId)
     loadFileShare();
 }
 
+// ── Voice notes (docs/design/voice-notes.md §8) ────────────────────────────────────
+// The module records, holds the draft, sends and plays; no audio crosses this backend in
+// either direction. Each action puts the module's answer in voiceResultJson, counts it in
+// voiceResultSeq, and re-reads voice_status, which also drives the module's voice pump.
+void MusterUiBackend::loadVoice()
+{
+    setVoiceJson(modules().muster_module.voice_status());
+}
+
+void MusterUiBackend::voiceAnswer(const QString &answer)
+{
+    // the answer first, then the count: an answer identical to the last changes only the count
+    setVoiceResultJson(answer);
+    setVoiceResultSeq(QString::number(++m_voiceAnswers));
+}
+
+void MusterUiBackend::startVoiceRecording()
+{
+    voiceAnswer(modules().muster_module.voice_record_start());
+    loadVoice();
+}
+
+void MusterUiBackend::stopVoiceRecording()
+{
+    voiceAnswer(modules().muster_module.voice_record_stop());
+    loadVoice();
+}
+
+void MusterUiBackend::sendVoiceDraft()
+{
+    const QString r = modules().muster_module.voice_draft_send();
+    qInfo() << "[muster_ui] muster_module.voice_draft_send() ->" << r;
+    voiceAnswer(r);
+    loadVoice();
+    loadMessages();     // the note's row, at once
+}
+
+void MusterUiBackend::discardVoiceDraft()
+{
+    voiceAnswer(modules().muster_module.voice_draft_discard());
+    loadVoice();
+}
+
+void MusterUiBackend::playVoiceNote(const QString &noteId)
+{
+    voiceAnswer(modules().muster_module.voice_play(noteId));
+    loadVoice();
+}
+
+void MusterUiBackend::stopVoicePlayback()
+{
+    voiceAnswer(modules().muster_module.voice_play_stop());
+    loadVoice();
+}
+
 void MusterUiBackend::loadWalletAccounts()
 {
     // Every account across chains, with a LEZ account's shareable address (the `share`
@@ -1548,6 +1603,67 @@ void MusterUiBackend::onContextReady()
                         }
                     }
                     qInfo().noquote() << "[muster_ui] FILESHARE" << fileShareJson() << "result=" << fileShareResultJson();
+                }
+                // Voice self-test (docs/design/voice-notes.md S9): MUSTER_AUTOVOICE=<seconds>
+                // records that long once someone else is in the room, then sends the draft:
+                // the mic's Start, Stop and Send. The module answers Start at once and starts
+                // the device on a thread of its own (§9), so the seconds count from the first
+                // voice_status that says recording, not from the call. MUSTER_AUTOVOICEPLAY=1
+                // plays a complete note another member sent, while nothing plays, as the
+                // card's Play does; a refused Play is tried again on the next tick, up to five
+                // times. Each tick logs
+                // voice_status as VOICE and the thread's notes as VOICE-NOTES, and each call's
+                // answer as VOICE-RESULT <call>.
+                const int voiceSecs = qgetenv("MUSTER_AUTOVOICE").toInt();
+                const bool voicePlay = !qgetenv("MUSTER_AUTOVOICEPLAY").isEmpty();
+                if (voiceSecs > 0 || voicePlay) {
+                    static bool voiceStarted = false;
+                    static bool voiceTimed = false;
+                    static QSet<QString> voicePlayed;
+                    static QHash<QString, int> voiceTries;
+                    loadVoice();
+                    qInfo().noquote() << "[muster_ui] VOICE" << voiceJson();
+                    QJsonArray notes;
+                    for (const auto &v : QJsonDocument::fromJson(messagesJson().toUtf8()).array()) {
+                        const QJsonObject row = v.toObject();
+                        if (!row.value("voice").isObject()) continue;
+                        QJsonObject n = row.value("voice").toObject();
+                        n.insert("self", row.value("self").toBool());
+                        notes.append(n);
+                    }
+                    qInfo().noquote() << "[muster_ui] VOICE-NOTES"
+                                      << QString::fromUtf8(QJsonDocument(notes).toJson(QJsonDocument::Compact));
+                    if (voiceSecs > 0 && !voiceStarted && membersJson().contains("\"self\":false")) {
+                        voiceStarted = true;
+                        startVoiceRecording();
+                        qInfo().noquote() << "[muster_ui] VOICE-RESULT start" << voiceResultJson();
+                    }
+                    const QString recState = QJsonDocument::fromJson(voiceJson().toUtf8()).object()
+                                                 .value("recording").toObject().value("state").toString();
+                    if (voiceSecs > 0 && voiceStarted && !voiceTimed && recState == "recording") {
+                        voiceTimed = true;
+                        QTimer::singleShot(voiceSecs * 1000, this, [this]() {
+                            stopVoiceRecording();
+                            qInfo().noquote() << "[muster_ui] VOICE-RESULT stop" << voiceResultJson();
+                            sendVoiceDraft();
+                            qInfo().noquote() << "[muster_ui] VOICE-RESULT send" << voiceResultJson();
+                        });
+                    }
+                    const QJsonValue playing = QJsonDocument::fromJson(voiceJson().toUtf8()).object().value("playing");
+                    if (voicePlay && playing.isNull()) {
+                        for (const auto &v : notes) {
+                            const QJsonObject n = v.toObject();
+                            const QString id = n.value("note").toString();
+                            if (id.isEmpty() || n.value("self").toBool() || voicePlayed.contains(id)
+                                || n.value("state").toString() != "complete" || voiceTries.value(id) >= 5)
+                                continue;
+                            voiceTries[id] += 1;
+                            playVoiceNote(id);
+                            qInfo().noquote() << "[muster_ui] VOICE-RESULT play" << id << voiceResultJson();
+                            if (!voiceResultJson().contains("\"error\"")) voicePlayed.insert(id);
+                            break;
+                        }
+                    }
                 }
                 // lez-msig self-test (exo-0d3): MUSTER_AUTOMSIG_OPEN=<M> opens a creation
                 // ceremony once someone else is in the room — the accounts panel's "Create a

@@ -568,4 +568,25 @@ class MusterUi
     SLOT(void retractFile(const QString &fileId))
     PROP(QString fileShareJson="{}" READONLY)
     PROP(QString fileShareResultJson="" READONLY)
+
+    // Voice notes (docs/design/voice-notes.md §8): a short clip recorded, held, sent and
+    // played inside muster_module. No audio crosses this contract in either direction:
+    // the view only triggers and polls. loadVoice reads voice_status into voiceJson
+    // ({ready, recording, playing}); the rest call voice_record_start / _stop,
+    // voice_draft_send / _discard, voice_play(noteId: a note id or "draft") and
+    // voice_play_stop, each answer in voiceResultJson ({ok} | {draft} | {note} | {error,
+    // detail?} | "ok") and then one more in voiceResultSeq (a decimal count of answers, so
+    // one identical to the last still reads as a new answer), then re-read voiceJson. A
+    // note itself reaches the thread as a row of messagesJson with a `voice` field, which
+    // only the module's fold sets.
+    SLOT(void loadVoice())
+    SLOT(void startVoiceRecording())
+    SLOT(void stopVoiceRecording())
+    SLOT(void sendVoiceDraft())
+    SLOT(void discardVoiceDraft())
+    SLOT(void playVoiceNote(const QString &noteId))
+    SLOT(void stopVoicePlayback())
+    PROP(QString voiceJson="{}" READONLY)
+    PROP(QString voiceResultJson="" READONLY)
+    PROP(QString voiceResultSeq="0" READONLY)
 }

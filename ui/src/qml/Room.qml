@@ -202,7 +202,10 @@ Item {
     property string openingTopic: ""
     readonly property bool opening: room.openingTopic.length > 0 && room.openingTopic !== room.topic
     function beginOpening(t) { room.openingTopic = String(t || ""); openingGiveUp.restart(); }
-    onTopicChanged: if (room.topic === room.openingTopic) room.openingTopic = ""
+    onTopicChanged: {
+        if (room.topic === room.openingTopic) room.openingTopic = "";
+        room.voiceOpTopic = "";     // a voice call's answer stays with the room it was made in
+    }
     Timer { id: openingGiveUp; interval: 45000; onTriggered: room.openingTopic = "" }
     property bool openingSlow: false
     onOpeningChanged: room.openingSlow = false
@@ -303,6 +306,62 @@ Item {
         try { return JSON.parse(backend ? backend.membersJson : "[]"); }
         catch (e) { return []; }
     }
+
+    // ── voice notes (docs/design/voice-notes.md §8) ──────────────────────
+    // The module records, holds the draft, sends and plays; no audio reaches this view.
+    // voice_status ({ready, recording, playing}) and the last voice call's answer, each
+    // parsed once here for the composer's voice surface and the thread's cards.
+    readonly property var voice: {
+        try {
+            var v = JSON.parse(backend ? (backend.voiceJson || "{}") : "{}");
+            return (v && typeof v === "object") ? v : ({});
+        } catch (e) { return ({}); }
+    }
+    readonly property string voiceState: String(((room.voice && room.voice.recording) || {}).state || "idle")
+    readonly property var voicePlaying: (room.voice && room.voice.playing) ? room.voice.playing : null
+    // where voice_status stands: the recording's state and the note playing, if any
+    readonly property string voiceAt: room.voiceState + "/" + (room.voicePlaying ? String(room.voicePlaying.note || "") : "")
+    // which voice call that answer is to (record, stop, send, discard, play, stopPlay), so
+    // a refusal can say what was refused: the module's words are the same for each; and
+    // the room it was made in and where voice_status stood then. A refusal describes that
+    // state, so it shows only while it holds: once another room opens, or voice_status moves
+    // on (the other recording ended, the note stopped playing), the answer is not shown
+    // again, even if voice_status comes back to where it was (an idle busy is still stale).
+    property string voiceOp: ""
+    property string voiceOpTopic: ""
+    property string voiceOpAt: ""
+    // how many voice answers the backend has given (voiceResultSeq: one more per answer, one
+    // identical to the last too), and that count when this room made its last voice call.
+    // Until the count moves the call is in flight, and the last answer, to an earlier call,
+    // is not shown. RoomVoiceNote keys a dismissed refusal by the count: it stays dismissed
+    // until a new answer, and shows again if that answer refuses in the same words.
+    readonly property int voiceAnswers: backend ? (parseInt(String(backend.voiceResultSeq || "0"), 10) || 0) : 0
+    property int voiceCallAnswers: -1
+    readonly property bool voicePending: room.voiceCallAnswers >= 0 && room.voiceAnswers === room.voiceCallAnswers
+    // One move is the call's own, and its answer is about that move: a Stop while the device
+    // was still starting drops the recording (starting → idle) and answers not-started,
+    // "nothing was recorded", so that answer follows voice_status to idle instead of going
+    // stale with it, whichever of the two arrives first (voice-notes.md §8).
+    onVoiceAtChanged: {
+        if (room.voiceAt === room.voiceOpAt) return;
+        var stopWhileStarting = room.voiceOp === "stop" && room.voiceOpAt.indexOf("starting/") === 0
+                                && room.voiceAt.indexOf("idle/") === 0;
+        room.voiceOpAt = stopWhileStarting ? room.voiceAt : "";
+    }
+    readonly property var voiceResult: {
+        if (room.voicePending || room.voiceOpTopic !== room.topic || room.voiceOpAt !== room.voiceAt) return ({});
+        var r = backend ? String(backend.voiceResultJson || "") : "";
+        if (r.length === 0 || r === "ok") return ({});
+        try { var o = JSON.parse(r); return (o && typeof o === "object") ? o : ({}); }
+        catch (e) { return ({}); }
+    }
+    function voiceCall(op) { room.voiceOp = op; room.voiceOpTopic = room.topic; room.voiceOpAt = room.voiceAt; room.voiceCallAnswers = room.voiceAnswers; }
+    function startVoice() { if (!room.backend) return; room.voiceCall("record"); room.backend.startVoiceRecording(); }
+    function stopVoice() { if (!room.backend) return; room.voiceCall("stop"); room.backend.stopVoiceRecording(); }
+    function sendVoice() { if (!room.backend) return; room.voiceCall("send"); room.backend.sendVoiceDraft(); }
+    function discardVoice() { if (!room.backend) return; room.voiceCall("discard"); room.backend.discardVoiceDraft(); }
+    function playVoice(note) { if (!room.backend) return; room.voiceCall("play"); room.backend.playVoiceNote(String(note || "")); }
+    function stopVoicePlay() { if (!room.backend) return; room.voiceCall("stopPlay"); room.backend.stopVoicePlayback(); }
     // This instance's own encryption identity (the roster row flagged self) — the id
     // a decline is keyed by, so the card knows "you declined".
     readonly property string myIdentity: {
@@ -1940,7 +1999,24 @@ Item {
             room.backend.loadMembers();
             room.backend.loadMessages();
             room.backend.loadIntents();
+            // voice_status is read by Main's appVoicePoll every second, room or none: a
+            // recording shows whoever started it, since with the access policy off any module
+            // loaded beside Muster can turn the microphone on (docs/design/voice-notes.md §13)
         }
+    }
+
+    // While the microphone starts or records, or a note plays, voice_status is read four
+    // times a second, for the time, the level and the place (voice-notes.md §8). A draft
+    // only held, which can wait for hours, and idle are read on Main's 1 s tick (PR 340's
+    // review). voice_status also drives the module's voice pump, as fileshare_files drives
+    // FileShare's.
+    Timer {
+        objectName: "voicePoll"
+        interval: 250
+        running: room.joined && (room.voiceState === "starting" || room.voiceState === "recording"
+                                 || room.voicePlaying !== null)
+        repeat: true
+        onTriggered: if (room.backend) room.backend.loadVoice()
     }
 
     // Accounts other members (or the LEZ create / FROST ceremony pumps) disclose, on a slow

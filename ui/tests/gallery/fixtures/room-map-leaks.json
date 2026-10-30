@@ -38,6 +38,13 @@
     },
     {
       "expectProp": [
+        "roomMapFields_o:store-node",
+        "text",
+        "timing, topic"
+      ]
+    },
+    {
+      "expectProp": [
         "roomMapNode_o:chain-observer",
         "visible",
         true

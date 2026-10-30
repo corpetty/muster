@@ -15,6 +15,44 @@ QtObject {
     signal notified(string text)
     function notify(t) { if (String(t || "").length > 0) style.notified(String(t)); }
 
+    // ── a voice call's refusal, in words (docs/design/voice-notes.md §8) ──────
+    // What the module's word means, for the room's voice banner (RoomVoiceNote) and for the
+    // microphone strip above every page (Main), so both say one thing. `op` is the call:
+    // record, stop, send, discard, play or stopPlay.
+    function voiceRefusalWords(e, op) {
+        var play = op === "play" || op === "stopPlay";
+        if (e === "not-joined") return qsTr("Join the room first.");
+        if (e === "busy") return qsTr("Something is already recording or playing. Stop it first.");
+        // Play decodes, Start encodes: the module says codec for either
+        if (e === "codec")
+            return play ? qsTr("The voice decoder could not start on this device.") : qsTr("The voice encoder could not start on this device.");
+        if (e === "no-device")
+            return play ? qsTr("No speaker was found on this device.") : qsTr("No microphone was found on this device.");
+        if (e === "device-format")
+            return play ? qsTr("The speaker would not play sound in the form voice notes use.")
+                        : qsTr("The microphone would not record in the form voice notes use.");
+        if (e === "device-start-slow")
+            return play ? qsTr("The speaker took too long to start. Try again in a moment.")
+                        : qsTr("The microphone took too long to start. If you were asked whether to allow it, answer that, then try again.");
+        if (e === "not-started") return qsTr("Nothing was recorded: the microphone had not started yet.");
+        if (e === "not-recording") return qsTr("Nothing is recording.");
+        if (e === "no-draft") return qsTr("There is no recording to send or play.");
+        if (e === "too-short") return qsTr("Too short to send: record at least half a second.");
+        if (e === "silent") return qsTr("The recording is silent: no sound reached the microphone.");
+        if (e === "room-changed") return qsTr("This recording belongs to another room. Send it from there, or discard it.");
+        if (e === "too-large") return qsTr("It was too large to send. Discard it and record it again.");
+        if (e === "unknown-note") return qsTr("That voice note is not in this room.");
+        if (e === "incomplete") return qsTr("That voice note has not fully arrived yet.");
+        // the module says broken for parts that disagree, a record that fails its checks, and
+        // a clip the decoder refuses: words true of each
+        if (e === "broken") return qsTr("That voice note can't be played: it arrived damaged.");
+        // any other word is the device's or the encoder's: what failed, in words, and the
+        // module's own word after it, for a report
+        return play ? qsTr("The speaker did not work (%1).").arg(e)
+             : op === "record" ? qsTr("The microphone did not work (%1).").arg(e)
+             : qsTr("It did not work (%1).").arg(e);
+    }
+
     // ── a contact link (exo-899) ──────────────────────────────────────────
     // "muster:contact/<chat id>?name=Alice": the chat id (128 hex, the 64-byte identity an
     // invite is sealed to) with the name its owner suggests. It names nothing else and is

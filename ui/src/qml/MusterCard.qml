@@ -11,9 +11,12 @@ import Logos.Controls
 // `card`, and the only things that leave are the four action signals. It calls
 // no backend and holds no state; the thread that hosts it owns both.
 //
-// An unknown kind renders nothing (implicitHeight 0, visible false), so the
-// thread can fall back to a plain-text bubble. Every field is guarded, because
-// a card is peer JSON: a missing field is normal, never an error.
+// An unknown kind renders nothing (implicitHeight 0, visible false), and the
+// thread, which reads `known`, shows the message as plain text instead. A voice
+// note is not one of these kinds: no message body may carry one, and the thread
+// draws it from its row's own field (CardVoiceNote, docs/design/voice-notes.md §7).
+// Every field is guarded, because a card is peer JSON: a missing field is normal,
+// never an error.
 //
 // NB (ADR-011): nix build does not evaluate QML; a bad type name here blanks
 // the whole view invisibly. Restricted to Theme keys and the Logos.Controls
@@ -715,7 +718,8 @@ Rectangle {
     }
 
     // The kinds this component knows how to draw. Anything else is not ours to
-    // render, so we disappear and let the thread show plain text.
+    // render, so we disappear and the thread shows plain text. `voice-note` is never
+    // added here: a message cannot pose as a voice note (voice-notes.md §7).
     readonly property bool known:
         cardRoot.kind === "address-request"
         || cardRoot.kind === "address-share"
