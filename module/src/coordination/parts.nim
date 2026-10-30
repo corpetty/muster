@@ -21,7 +21,7 @@
 ## driver allows. One transaction settles at most one part: the creditor's client refuses
 ## a reference it already confirmed for another part in this room.
 
-import std/[json, strutils, sets, tables]
+import std/[json, sequtils, strutils, sets, tables]
 import ../log/log
 import ../crypto/keystore
 import ../crypto/curve25519
@@ -97,6 +97,13 @@ method confirmsUnreported*(s: PartSeam): bool {.base.} =
   ## rail looks up the transaction the payer reported.
   false
 
+method observe*(s: PartSeam, events: seq[Event], driverFor: DriverFor) {.base.} =
+  ## What the room's log says that this seam's reads depend on, given before a confirm reads.
+  ## A seam that confirms from its own wallet history overrides it to learn which receive
+  ## addresses more than one part is paid at (Monero, where a part alone at its subaddress
+  ## may arrive in several transfers). Default: nothing.
+  discard
+
 method payDeadlineS*(s: PartSeam): float {.base.} =
   ## How long an in-flight payment may take to land before the host stops waiting for it.
   ## A seam that proves (minutes) overrides it with more than its proving budget.
@@ -114,6 +121,13 @@ proc myPartName*(ks: Keystore): string = "ed:" & hx(ks.encIdentity().ed)
 
 proc normRef(tx: string): string = tx.strip().toLowerAscii()
 
+proc refsOf*(reference: string): seq[string] =
+  ## The transfers one confirmation reference names: one, or several comma-joined, as a
+  ## Monero part that arrived in more than one transfer is confirmed by all of them.
+  for r in reference.split(','):
+    let n = normRef(r)
+    if n.len > 0: result.add n
+
 proc viewOf(events: seq[Event], driverFor: DriverFor, intentId: string): tuple[found: bool, v: IntentView] =
   for v in reduceIntentViews(events, driverFor):
     if v.id == intentId: return (true, v)
@@ -126,7 +140,8 @@ proc confirmedRefs*(events: seq[Event], driverFor: DriverFor): HashSet[string] =
   ## Every transaction reference already confirmed for some part in this room.
   for v in reduceIntentViews(events, driverFor):
     for p in v.parts:
-      if p.confirmed and p.tx.len > 0: result.incl normRef(p.tx)
+      if p.confirmed and p.tx.len > 0:
+        for r in refsOf(p.tx): result.incl r
 
 # ── paying my part ─────────────────────────────────────────────────────────────
 proc effectMemo(effectJson: string): string =
@@ -239,14 +254,15 @@ proc liveConfirmPart*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor
   var reference = ""                   # "" = received outside muster: my word, shown as such
   if tx.len > 0 or fromRead:
     let claimed = confirmedRefs(events, driverFor)
-    if tx.len > 0 and normRef(tx) in claimed:
+    if tx.len > 0 and refsOf(tx).anyIt(it in claimed):
       return "refused: that payment already settled another share"
     let t = drv.partTransfer(effect, part)
     if not t.ok: return "refused: " & t.error
+    seam.observe(events, driverFor)
     let got = seam.matchReceived(t, tx, claimed)
     if not got.ok: return "unconfirmed: " & got.detail
     # one reference settles one part: whatever the seam found, never one already claimed
-    if got.reference.len == 0 or normRef(got.reference) in claimed:
+    if got.reference.len == 0 or refsOf(got.reference).anyIt(it in claimed):
       return "refused: that payment already settled another share"
     reference = got.reference
   s.publishAuthored(ks, partEvent(intentId, part, "confirmed", myIdentity(ks), reference))

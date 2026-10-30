@@ -1172,7 +1172,14 @@ proc loadFileShareImpl(o: MusterUi) = o.loadFileShareDo()
 proc shareFileImpl(o: MusterUi, path: string) =
   ask mm.fileshare_shareAsync(path, proc (r: string) = o.fileShareDone(r))
 proc fetchFileImpl(o: MusterUi, fileId, folder, privately: string) =
-  ask mm.fileshare_fetchAsync(fileId, folder, privately, proc (r: string) = o.fileShareDone(r))
+  # An empty folder is the person's own Downloads, resolved here as the audit download does:
+  # the module's process may not run with the person's HOME.
+  var dir = folder.strip()
+  if dir.len == 0: dir = QStandardPaths.writableLocation(DownloadLocation.cint)
+  if dir.len == 0: dir = getHomeDir()
+  try: createDir(dir) except OSError: discard
+  ask mm.fileshare_fetchAsync(fileId, dir, privately, proc (r: string) =
+    o.fileShareDone(if r.len == 0: """{"error":"the module did not answer"}""" else: r))
 proc seedFileImpl(o: MusterUi, fileId, on: string) =
   ask mm.fileshare_seedAsync(fileId, on, proc (r: string) = o.fileShareDone(r))
 proc retractFileImpl(o: MusterUi, fileId: string) =

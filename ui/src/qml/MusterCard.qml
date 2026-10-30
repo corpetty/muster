@@ -541,6 +541,13 @@ Rectangle {
         var whole = s.slice(0, s.length - dec), frac = s.slice(s.length - dec).replace(/0+$/, "");
         return frac.length > 0 ? whole + "." + frac : whole;
     }
+    // Two amounts in base units, as decimal strings: -1, 0 or 1. Strings, because an atomic
+    // amount can be past what a JS number holds exactly.
+    function compareAtomic(a, b) {
+        a = String(a || "0").replace(/^0+/, ""); b = String(b || "0").replace(/^0+/, "");
+        if (a.length !== b.length) return a.length < b.length ? -1 : 1;
+        return a === b ? 0 : (a < b ? -1 : 1);
+    }
     // Where one person's share stands — only what they disclosed (their agreement, their
     // payment report) and what the creditor confirmed (invariant 9).
     function partState(p) {
@@ -556,6 +563,15 @@ Rectangle {
             // client only — absent when nothing was seen or the read did not answer
             var seen = (p.confirmations !== undefined && p.confirmations !== null)
                        ? qsTr("seen, %1 of %2 confirmations").arg(Number(p.confirmations)).arg(cardRoot.xmrDepth) : "";
+            // a payer who sent too little (or too much): what the creditor's own wallet has
+            // received at payTo so far, on their client only — further transfers add to it
+            if (seen.length === 0 && p.received !== undefined && p.received !== null && String(p.received).length > 0) {
+                var cmp = cardRoot.compareAtomic(String(p.received), String(p.amount || "0"));
+                if (cmp < 0) seen = qsTr("received %1 of %2 XMR so far — the rest tops it up")
+                                    .arg(cardRoot.eth(p.received)).arg(cardRoot.eth(p.amount));
+                else if (cmp > 0) seen = qsTr("received %1 XMR, more than the %2 share — it never adds up to exactly the share")
+                                         .arg(cardRoot.eth(p.received)).arg(cardRoot.eth(p.amount));
+            }
             if (p.settled) {
                 var ref = String(p.tx || "").length > 0 ? " (" + String(p.tx).slice(0, 10) + "…)" : "";
                 if (seen.length > 0) return qsTr("says they paid%1 — %2").arg(ref).arg(seen);

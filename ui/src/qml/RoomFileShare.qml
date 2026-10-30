@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 import Logos.Theme
 import Logos.Controls
@@ -61,6 +62,24 @@ ColumnLayout {
             if (fs.ops[i].file === fileId && fs.ops[i].kind === "fetch") return fs.ops[i];
         return null;
     }
+    // a picked file or folder, as the module reads a path: file:///a%20b → /a b
+    function localPath(url) {
+        var s = String(url || "");
+        if (s.indexOf("file://") === 0) s = decodeURIComponent(s.substring(7));
+        return s;
+    }
+
+    FileDialog {
+        id: filePicker
+        title: qsTr("Choose a file to share")
+        fileMode: FileDialog.OpenFile
+        onAccepted: pathField.text = fs.localPath(selectedFile)
+    }
+    FolderDialog {
+        id: folderPicker
+        title: qsTr("Choose where to save")
+        onAccepted: folderField.text = fs.localPath(selectedFolder)
+    }
 
     Timer {
         interval: 2000; repeat: true; triggeredOnStart: true
@@ -104,7 +123,13 @@ ColumnLayout {
             id: pathField
             objectName: "fileSharePath"
             Layout.fillWidth: true
-            placeholderText: qsTr("/path/to/a/file to share")
+            placeholderText: qsTr("Choose a file, or paste its path")
+        }
+        ActionButton {
+            objectName: "fileShareChoose"
+            text: qsTr("Choose a file…")
+            variant: LogosButton.Variant.Secondary
+            onClicked: filePicker.open()
         }
         ActionButton {
             objectName: "fileShareShare"
@@ -142,12 +167,21 @@ ColumnLayout {
         font.pixelSize: MusterStyle.caption
         text: qsTr("No files yet.")
     }
-    LogosTextField {
-        id: folderField
-        objectName: "fileShareFolder"
+    RowLayout {
         Layout.fillWidth: true
         visible: fs.files.length > 0
-        placeholderText: qsTr("Save to (empty: your Downloads folder)")
+        LogosTextField {
+            id: folderField
+            objectName: "fileShareFolder"
+            Layout.fillWidth: true
+            placeholderText: qsTr("Save to your Downloads folder, or choose another")
+        }
+        ActionButton {
+            objectName: "fileShareChooseFolder"
+            text: qsTr("Choose folder…")
+            variant: LogosButton.Variant.Secondary
+            onClicked: folderPicker.open()
+        }
     }
     Repeater {
         model: fs.files
@@ -205,17 +239,20 @@ ColumnLayout {
             RowLayout {
                 Layout.fillWidth: true
                 enabled: fs.ready
+                readonly property bool busy: row.op !== null && row.op.state === "running"
+                readonly property bool failed: row.op !== null && row.op.state === "failed"
+                // held: save another copy wherever; not yet: fetch, or try again after a failure
                 ActionButton {
                     objectName: "fileShareFetch_" + row.index
-                    visible: !row.modelData.held
-                    text: qsTr("Fetch")
+                    visible: !parent.busy
+                    text: row.modelData.held ? qsTr("Save a copy") : parent.failed ? qsTr("Try again") : qsTr("Fetch")
                     variant: LogosButton.Variant.Secondary
                     onClicked: fs.backend.fetchFile(row.modelData.id, folderField.text, "false")
                 }
                 ActionButton {
                     objectName: "fileShareFetchPrivate_" + row.index
-                    visible: !row.modelData.held
-                    text: qsTr("Fetch privately")
+                    visible: !row.modelData.held && !parent.busy
+                    text: parent.failed && row.op.private ? qsTr("Try again privately") : qsTr("Fetch privately")
                     variant: LogosButton.Variant.Secondary
                     onClicked: fs.backend.fetchFile(row.modelData.id, folderField.text, "true")
                 }
