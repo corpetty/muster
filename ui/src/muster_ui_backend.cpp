@@ -208,7 +208,15 @@ void MusterUiBackend::shareFile(const QString &path)
 
 void MusterUiBackend::fetchFile(const QString &fileId, const QString &folder, const QString &privately)
 {
-    setFileShareResultJson(modules().muster_module.fileshare_fetch(fileId, folder, privately));
+    // An empty folder is the person's own Downloads, resolved here as the audit download does:
+    // the module's process may not run with the person's HOME (inside Basecamp it need not).
+    QString dir = folder.trimmed();
+    if (dir.isEmpty()) dir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+    if (dir.isEmpty()) dir = QDir::homePath();
+    QDir().mkpath(dir);
+    const QString r = modules().muster_module.fileshare_fetch(fileId, dir, privately);
+    // a call that raised answers nothing: say so, rather than show nothing at all
+    setFileShareResultJson(r.isEmpty() ? QStringLiteral("{\"error\":\"the module did not answer\"}") : r);
     loadFileShare();
 }
 
