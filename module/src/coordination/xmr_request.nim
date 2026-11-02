@@ -337,14 +337,20 @@ proc unlockJson*(t: XmrUnlockTarget): JsonNode =
   ## name, the ones to pick from, and whether there is none (then monero.accounts.manage).
   %*{"wallet": t.wallet, "wallets": t.wallets, "noWallet": t.none}
 
-proc xmrSeenConfirmations*(events: seq[Event], driverFor: DriverFor, seam: MoneroPartSeam,
-                           me: string): Table[string, int] =
-  ## "<intent>/<part>" → confirmations (0–9) of the transfer of exactly that share THIS
-  ## creditor's own wallet history shows at payTo, below the 10 a part is confirmed at —
-  ## for every unconfirmed part of an agreed Monero request `me` confirms. Only what a
-  ## read showed: a busy or unanswered read, another network, or no such transfer adds
-  ## nothing (never an invented count). On a debtor's client it is empty.
+type XmrSeenPart* = object
+  confirmations*: int   ## the share is at payTo this many deep, below the agreed depth; -1 = not yet
+  received*: string     ## atomic units at payTo so far, for a part alone at its subaddress; "" = none
+
+proc xmrSeenParts*(events: seq[Event], driverFor: DriverFor, seam: MoneroPartSeam,
+                   me: string): Table[string, XmrSeenPart] =
+  ## "<intent>/<part>" → what THIS creditor's own wallet history shows at payTo for every
+  ## unconfirmed part of an agreed Monero request `me` confirms: the share below the depth
+  ## it is confirmed at, and — for a part alone at its subaddress — how much has arrived so
+  ## far, a payer who sent too little included. Only what a read showed: a busy or
+  ## unanswered read, another network, or nothing at payTo adds nothing (never invented).
+  ## On a debtor's client it is empty.
   let claimed = confirmedRefs(events, driverFor)
+  seam.observe(events, driverFor)
   for v in reduceIntentViews(events, driverFor):
     if not isXmrPolicy(v.policy) or v.state notin ["executable", "submitted", "settling"]: continue
     let drv = driverFor(v.policy)
@@ -355,7 +361,17 @@ proc xmrSeenConfirmations*(events: seq[Event], driverFor: DriverFor, seam: Moner
       let t = drv.partTransfer(effect, p.part)
       if not t.ok: continue
       let m = seam.readMatch(t, claimed)
-      if m.verdict == xvPending and m.seen: result[v.id & "/" & p.part] = int(m.confirmations)
+      if m.verdict != xvPending: continue
+      if m.seen or m.received.len > 0:
+        result[v.id & "/" & p.part] = XmrSeenPart(confirmations: (if m.seen: int(m.confirmations) else: -1),
+                                                  received: m.received)
+
+proc xmrSeenConfirmations*(events: seq[Event], driverFor: DriverFor, seam: MoneroPartSeam,
+                           me: string): Table[string, int] =
+  ## "<intent>/<part>" → confirmations (0–9) of the share THIS creditor's own wallet history
+  ## shows at payTo, below the depth a part is confirmed at (xmrSeenParts, the count alone).
+  for k, s in xmrSeenParts(events, driverFor, seam, me):
+    if s.confirmations >= 0: result[k] = s.confirmations
 
 proc xmrOwedOn*(events: seq[Event], driverFor: DriverFor, me: string): seq[string] =
   ## The Monero chains `me` is owed on: every request not yet final (nor dropped or

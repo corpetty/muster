@@ -21,6 +21,23 @@ proc hex(b: openArray[byte]): string =
   const d = "0123456789abcdef"
   for x in b: (result.add d[int(x shr 4)]; result.add d[int(x and 0x0F)])
 
+# A node whose downloads never move while `stuck`: what no seeder online looks like (§9).
+type StuckStore = ref object of BlobStore
+  inner: BlobStore
+  stuck: bool
+method reach(b: StuckStore): PeerReach = b.inner.reach()
+method upload(b: StuckStore, path: string): string = b.inner.upload(path)
+method download(b: StuckStore, cid, dest: string, private, serve: bool): string =
+  if b.stuck: "stuck" else: b.inner.download(cid, dest, private, serve)
+method job(b: StuckStore, id: string): BlobJob =
+  if id == "stuck": BlobJob(id: id, state: jsRunning) else: b.inner.job(id)
+method poll(b: StuckStore) = b.inner.poll()
+method has(b: StuckStore, cid: string): bool = b.inner.has(cid)
+method serving(b: StuckStore, cid: string): bool = b.inner.serving(cid)
+method setServing(b: StuckStore, cid: string, on: bool) = b.inner.setServing(cid, on)
+method connect(b: StuckStore, peer: PeerReach) = b.inner.connect(peer)
+method remove(b: StuckStore, cid: string) = b.inner.remove(cid)
+
 let root = getTempDir() / ("muster-swarm-live-" & $getCurrentProcessId())
 createDir(root)
 
@@ -156,6 +173,27 @@ block:
   doAssert not nodes[bob].store.has(cid), "a refused blob is not kept"
   doAssert ids[bob] notin seeders(reduceSwarm(sessions[bob].roomEvents()).filterIt(it.fid == badFid)[0])
 echo "7. a blob that is not what its sharer committed is refused and dropped OK"
+
+# 9. A fetch where nothing arrives fails after FetchStallS, so it can be tried again — and
+# the second try, once a seeder answers, saves the file. Never "Fetching…" for good.
+block:
+  let stuck = StuckStore(inner: nodes[carol].store, stuck: true)
+  nodes[carol].store = stuck
+  let outDir = root / "stall"
+  createDir(outDir)
+  let o = nodes[carol].fetch(sessions[carol], fid, outDir, private = false)
+  nodes[carol].pump(sessions[carol])
+  doAssert op(carol, o).state == opRunning, "still waiting before the stall time"
+  clock += FetchStallS
+  nodes[carol].pump(sessions[carol])
+  doAssert op(carol, o).state == opFailed and "Try again" in op(carol, o).error, op(carol, o).error
+  stuck.stuck = false
+  let again = nodes[carol].fetch(sessions[carol], fid, outDir, private = false)
+  pumpAll()
+  doAssert op(carol, again).state == opDone, op(carol, again).error
+  doAssert toSeq(walkDir(outDir)).len == 1, "the second try saved it, once"
+  nodes[carol].store = stuck.inner
+echo "9. a fetch where nothing arrives fails, and trying again saves it OK"
 
 # 8. Refusals before any network: an unknown file, a retracted one.
 block:

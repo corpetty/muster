@@ -44,6 +44,7 @@ type
     # fetch
     blobPath: string
     file: SwarmFile
+    movedAt: int64          ## when its bytes last moved (or it started): a fetch that stalls fails
 
   SwarmNode* = ref object
     store*: BlobStore
@@ -53,6 +54,10 @@ type
     now: proc(): int64
     ops: OrderedTable[string, SwarmOp]
     next: int
+
+const FetchStallS* = 120'i64
+  ## How long a fetch may go with no byte arriving before it fails, so it can be tried again:
+  ## no seeder online, or none reachable, never answers, and a fetch has no other end.
 
 proc hexOf(b: openArray[byte]): string =
   const d = "0123456789abcdef"
@@ -135,6 +140,7 @@ proc fetch*(n: SwarmNode, s: CoordinationSession, fid, destDir: string, private:
   o.blobPath = n.work / neutralName()
   o.job = n.store.download(f.cid, o.blobPath, private = private, serve = not private)
   o.state = opRunning
+  o.movedAt = n.now()
   n.add(o)
 
 proc setSeeding*(n: SwarmNode, s: CoordinationSession, fid: string, on: bool): string =
@@ -183,10 +189,13 @@ proc pump*(n: SwarmNode, s: CoordinationSession) =
     var o = n.ops[id]
     if o.state != opRunning: continue
     let j = n.store.job(o.job)
+    if j.bytes != o.bytes: o.movedAt = n.now()
     o.bytes = j.bytes
     if j.total > 0: o.total = j.total
     case j.state
-    of jsRunning: discard
+    of jsRunning:
+      if o.kind == opFetch and n.now() - o.movedAt >= FetchStallS:
+        o.fail("nothing arrived for " & $(FetchStallS div 60) & " minutes: no seeder may be online. Try again later")
     of jsFailed:
       o.fail(j.error)
     of jsDone:
