@@ -1,11 +1,85 @@
 {
   "schemaVersion": 2,
   "repositoryName": "muster",
-  "generatedAt": "2026-10-28T00:44:35Z",
+  "generatedAt": "2026-11-04T14:59:57Z",
   "packages": [
     {
       "name": "muster_module",
       "versions": [
+        {
+          "releasedAt": "2026-11-04T14:59:49Z",
+          "publisherRef": "muster_module-v0.3.5",
+          "url": "https://github.com/corpetty/muster/releases/download/muster-v0.3.5/muster_module-0.3.5.lgx",
+          "size": 26341955,
+          "sha256": "b531553e9312916bf642161d341ed726b94c557579514d804ace49a74439c02a",
+          "rootHash": "ed0aaa46399fd9e5edae20336c8a01d938e1cfae1b8ef5dcf66ab55420194917",
+          "manifest": {
+            "author": "Muster",
+            "category": "general",
+            "dependencies": [
+              {
+                "name": "delivery_module",
+                "version": ">=0.3.2"
+              },
+              {
+                "name": "lez_core",
+                "version": "~0.5.0"
+              },
+              {
+                "name": "keystore_module",
+                "version": "~0.1.0"
+              },
+              {
+                "name": "eth_rpc_module",
+                "version": "~0.1.0"
+              },
+              {
+                "name": "tx_sender_module",
+                "version": "~0.1.0"
+              }
+            ],
+            "description": "Muster's core: people agree on a transaction inside an end-to-end encrypted room, then each part settles on its own chain. It keeps the room's log and keys, re-derives what it signs, and asks the platform's wallets to sign and send.",
+            "display_name": "Muster Module",
+            "hashes": {
+              "root": "ed0aaa46399fd9e5edae20336c8a01d938e1cfae1b8ef5dcf66ab55420194917",
+              "variants": "46c8c2920a9ace11742a508b572529578fce92623b7bb93b687185b6e071b25f",
+              "variants/darwin-arm64": "cef556ff8af2aa48fde902cf8c2cfb69210c2ad95c6f982597caa4a9744b4745",
+              "variants/linux-amd64": "76d39ca844b2612be9c6e73732e605bfc0c0a1b9276aee2a31a21545dbccad0c",
+              "variants/linux-arm64": "df5546f5535b881eaeca84799ca8d60293cd0adad99c95e14d3d0da8c06188fb"
+            },
+            "icon": "",
+            "main": {
+              "darwin-arm64": "muster_module_plugin.dylib",
+              "linux-amd64": "muster_module_plugin.so",
+              "linux-arm64": "muster_module_plugin.so"
+            },
+            "manifestVersion": "0.6.0",
+            "name": "muster_module",
+            "optional_dependencies": [
+              {
+                "name": "monero_wallet_backend",
+                "version": "~0.1.0"
+              },
+              {
+                "name": "modules_state",
+                "version": "~0.1.0"
+              },
+              {
+                "name": "storage_module",
+                "version": "~3.0.2"
+              },
+              {
+                "name": "lez_msig_module",
+                "version": "~0.1.0"
+              }
+            ],
+            "type": "core",
+            "version": "0.3.5"
+          },
+          "urls": [
+            "https://github.com/corpetty/muster/releases/download/muster-v0.3.5/muster_module-0.3.5.lgx"
+          ]
+        },
         {
           "releasedAt": "2026-10-28T00:44:27Z",
           "publisherRef": "muster_module-v0.3.4",
@@ -527,6 +601,58 @@
     {
       "name": "muster_ui",
       "versions": [
+        {
+          "releasedAt": "2026-11-04T14:59:49Z",
+          "publisherRef": "muster_ui-v0.3.5",
+          "url": "https://github.com/corpetty/muster/releases/download/muster-v0.3.5/muster_ui-0.3.5.lgx",
+          "size": 13573234,
+          "sha256": "07d23d6dec9c4bea4087a5c22c47c04d5e6244b22de68260624a71f02001e190",
+          "rootHash": "8faefbcdb36ce71862612148ef83b751a776bb1ae1430b87f4b3f97bd0a4244e",
+          "manifest": {
+            "author": "",
+            "category": "general",
+            "dependencies": [
+              "muster_module",
+              "delivery_module",
+              "lez_core",
+              "keystore_module",
+              "eth_rpc_module",
+              "tx_sender_module",
+              "fee_module",
+              "liblogos_lez_rln_module",
+              "liblogos_rln_module",
+              "storage_module"
+            ],
+            "description": "Muster: rooms where people agree on a payment, a bill split or a decision together, then settle it. Every card shows what is needed, who can see what, and what you are signing.",
+            "display_name": "Muster",
+            "hashes": {
+              "root": "8faefbcdb36ce71862612148ef83b751a776bb1ae1430b87f4b3f97bd0a4244e",
+              "variants": "98311c7fc19a6ca38da56bc247a80f6265c1353383da8940d60dbd94a9259c4c",
+              "variants/darwin-arm64": "053cd551dc4fce0a02ba19d8eba595866237af0fa0393a96faec49787866ba76",
+              "variants/linux-amd64": "de643953220608471e5e4f9f9771f383f343495fb48408fad21bf53a647210ee",
+              "variants/linux-arm64": "c676fef9ba9e954252fcfad8241a1d88c28589ce91d5324566b2be6718c72061"
+            },
+            "icon": "icon.png",
+            "main": {
+              "darwin-arm64": "muster_ui_plugin.dylib",
+              "linux-amd64": "muster_ui_plugin.so",
+              "linux-arm64": "muster_ui_plugin.so"
+            },
+            "manifestVersion": "0.3.0",
+            "name": "muster_ui",
+            "type": "ui_qml",
+            "version": "0.3.5",
+            "view": "qml/Main.qml"
+          },
+          "icon": {
+            "path": "icons/91c3f5c9ae2be8b34efb9de6397257b2442b6bb9887ab2c0c61031a3f9156873.png",
+            "sha256": "91c3f5c9ae2be8b34efb9de6397257b2442b6bb9887ab2c0c61031a3f9156873",
+            "size": 4676
+          },
+          "urls": [
+            "https://github.com/corpetty/muster/releases/download/muster-v0.3.5/muster_ui-0.3.5.lgx"
+          ]
+        },
         {
           "releasedAt": "2026-10-28T00:44:27Z",
           "publisherRef": "muster_ui-v0.3.4",
