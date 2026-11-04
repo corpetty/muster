@@ -116,15 +116,19 @@ ColumnLayout {
     }
 
     // ── share ───────────────────────────────────────────────────────────────
-    RowLayout {
+    // the field on its own line, its buttons under it: the panel beside a room is narrow
+    LogosTextField {
+        id: pathField
+        objectName: "fileSharePath"
         Layout.fillWidth: true
+        Layout.preferredWidth: 1     // fill the panel, never widen it to fit the placeholder
         enabled: fs.ready
-        LogosTextField {
-            id: pathField
-            objectName: "fileSharePath"
-            Layout.fillWidth: true
-            placeholderText: qsTr("Choose a file, or paste its path")
-        }
+        placeholderText: qsTr("Choose a file, or paste its path")
+    }
+    Flow {
+        Layout.fillWidth: true
+        spacing: Theme.spacing.small
+        enabled: fs.ready
         ActionButton {
             objectName: "fileShareChoose"
             text: qsTr("Choose a file…")
@@ -167,21 +171,20 @@ ColumnLayout {
         font.pixelSize: MusterStyle.caption
         text: qsTr("No files yet.")
     }
-    RowLayout {
+    LogosTextField {
+        id: folderField
+        objectName: "fileShareFolder"
         Layout.fillWidth: true
+        Layout.preferredWidth: 1
         visible: fs.files.length > 0
-        LogosTextField {
-            id: folderField
-            objectName: "fileShareFolder"
-            Layout.fillWidth: true
-            placeholderText: qsTr("Save to your Downloads folder, or choose another")
-        }
-        ActionButton {
-            objectName: "fileShareChooseFolder"
-            text: qsTr("Choose folder…")
-            variant: LogosButton.Variant.Secondary
-            onClicked: folderPicker.open()
-        }
+        placeholderText: qsTr("Save to your Downloads folder, or choose another")
+    }
+    ActionButton {
+        objectName: "fileShareChooseFolder"
+        visible: fs.files.length > 0
+        text: qsTr("Choose folder…")
+        variant: LogosButton.Variant.Secondary
+        onClicked: folderPicker.open()
     }
     Repeater {
         model: fs.files
@@ -236,8 +239,10 @@ ColumnLayout {
                     return (o.private ? qsTr("Fetching privately over Mix… %1") : qsTr("Fetching… %1")).arg(pct);
                 }
             }
-            RowLayout {
+            // wraps, so three or four buttons never run past the panel's edge
+            Flow {
                 Layout.fillWidth: true
+                spacing: Theme.spacing.small
                 enabled: fs.ready
                 readonly property bool busy: row.op !== null && row.op.state === "running"
                 readonly property bool failed: row.op !== null && row.op.state === "failed"
