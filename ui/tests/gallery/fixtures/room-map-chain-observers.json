@@ -1,0 +1,83 @@
+{
+  "about": "The room map's Where it left lens with one observer per chain (exo-dde.20): the split's readers are anyone reading local chain 31337, with what that chain shows, and its RPC provider is that chain's (recorded from scripts/split-self-test.sh).",
+  "snapshot": "data/split-alice-map-chains.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomMapButton",
+        "triggered"
+      ]
+    },
+    {
+      "expect": {
+        "slot": "loadGraph"
+      }
+    },
+    {
+      "set": [
+        "roomMap",
+        "lens",
+        "leaks"
+      ]
+    },
+    {
+      "wait": 800
+    },
+    {
+      "expectProp": [
+        "roomMapNode_o:store-node",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "roomMapNode_o:chain-observer@eip155:31337",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "roomMapNode_o:rpc-provider@eip155:31337",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    },
+    {
+      "set": [
+        "roomMap",
+        "selected",
+        "o:chain-observer@eip155:31337"
+      ]
+    },
+    {
+      "wait": 400
+    },
+    {
+      "shot": "observer"
+    },
+    {
+      "set": [
+        "roomMap",
+        "lens",
+        "crossings"
+      ]
+    },
+    {
+      "wait": 600
+    },
+    {
+      "shot": "crossings"
+    }
+  ]
+}
