@@ -29,6 +29,8 @@ import ../log/log
 import ../dcbor/dcbor
 import ../hashing/hash_input
 import ../intents/disclosure
+import ../drivers/driver
+import ../drivers/profile       # a chain's exposure surface comes from its family profile
 import ./intents
 import ./flow
 import ./accounts
@@ -161,6 +163,36 @@ proc facetsFor(kind, attestation, source: string, counted: bool, epoch: int): Js
     result.add facet("the ceremony step", "imperative", "", "public ceremony data every member checks and computes from the log")
   else:
     result.add facet("what it means", "not-applicable", "", "no guarantee is declared for this kind of entry")
+
+type ChainSurface* = object
+  ## Where an intent leaves the room, and how much a reader of that chain sees: from its
+  ## driver's family profile, never guessed. One chain's public is not another's — anyone
+  ## reading Sepolia sees an EVM split's payer, payee and amount; anyone reading Monero
+  ## sees only that a transaction happened.
+  chain*: string        ## CAIP-2; "" for a room family, which reaches no chain
+  label*: string        ## the chain as a person reads it ("Sepolia", "Monero stagenet")
+  effect*: string       ## public · shielded · room-only · target-module
+  signers*: string      ## never · at-creation · at-settle · per-approval
+
+proc chainSurface*(driverFor: DriverFor, policy: string): ChainSurface =
+  try:
+    let p = driverFor(policy).profile()
+    if not p.declared: return
+    ChainSurface(chain: p.chain, label: (if p.chain.len > 0: chainLabel(p.chain) else: ""),
+                 effect: $p.revealsEffect, signers: $p.revealsSigners)
+  except CatchableError: ChainSurface()
+
+proc surfaceWords*(s: ChainSurface): string =
+  ## What a reader of the chain learns, in words: the map's observer and crossing say it.
+  if s.chain.len == 0: return ""
+  case s.effect
+  of "shielded":
+    "Anyone reading " & s.label & " sees that a transaction happened, never its payer, payee or amount" &
+      (if s.signers == "never": ", and nothing of who signed it." else: ".")
+  of "public":
+    "Anyone reading " & s.label & " sees what it pays, from whom and to whom, for good" &
+      (if s.signers in ["at-settle", "per-approval", "at-creation"]: ", and who signed it." else: ".")
+  else: ""
 
 proc edgeCredibility(e: GraphEdge, obsLabel: proc (id: string): string): tuple[class, party, mechanism: string] =
   case e.kind
@@ -396,8 +428,10 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
       if v.id notin steps: steps[v.id] = newJArray()
       steps[v.id].add %*{"seq": i, "state": v.state, "approvals": v.approvals}
   var effectOf = initTable[string, JsonNode]()
+  var surfaceOf = initTable[string, ChainSurface]()   # where each intent leaves the room, and how much shows
   for v in reduceIntentViews(events, driverFor):
     if v.effectJson.len == 0: continue
+    surfaceOf[v.id] = chainSurface(driverFor, v.policy)
     let s = firstSeq.getOrDefault(v.id, -1)
     var parts = newJArray()
     for pv in v.parts:
@@ -473,11 +507,34 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
       src = "e:" & eventId(ordered[at])
       if src notin nodeAt: continue
     else: continue
-    let k = src & "|" & $r.to & "|" & $at
-    if k notin leaves: leaves[k] = (src, "o:" & $r.to, at, @[], r.declared)
+    # a chain's readers, and the RPC that carries a transaction to it, are one observer per
+    # chain: Sepolia's public is not Monero's, and neither sees what the other does
+    var obs = "o:" & $r.to
+    if r.chain.len > 0: obs &= "@" & r.chain
+    let k = src & "|" & obs & "|" & $at
+    if k notin leaves: leaves[k] = (src, obs, at, @[], r.declared)
     if r.field notin leaves[k].fields: leaves[k].fields.add r.field
+  # what each per-chain observer is told: one surface when every proposal reaching it
+  # agrees (a Monero chain is always shielded), else each crossing says its own
+  var surfacesAt = initTable[string, seq[ChainSurface]]()
   for _, l in leaves:
-    addNode(l.obs, "observer", l.seq, epochAt[l.seq], newJObject())
+    if l.obs.find('@') > 0 and l.src.startsWith("i:"):
+      let sf = surfaceOf.getOrDefault(l.src[2 .. ^1])
+      if sf notin surfacesAt.mgetOrPut(l.obs, @[]): surfacesAt[l.obs].add sf
+  for _, l in leaves:
+    var attrs = newJObject()
+    let at = l.obs.find('@')
+    if at > 0:
+      let chain = l.obs[at + 1 .. ^1]
+      let sfs = surfacesAt.getOrDefault(l.obs)
+      let one = sfs.len == 1
+      attrs = %*{"class": l.obs[2 ..< at], "chain": chain, "chainLabel": chainLabel(chain),
+                 "surface": (if one: sfs[0].effect else: "mixed"),
+                 "sees": (if not l.obs.startsWith("o:" & $obChainObserver): ""
+                          elif one: surfaceWords(sfs[0])
+                          else: "Anyone reading " & chainLabel(chain) & " sees what each proposal's rail shows there: " &
+                                "some of them public, some shielded. Each crossing says which.")}
+    addNode(l.obs, "observer", l.seq, epochAt[l.seq], attrs)
     var fs = l.fields
     fs.sort()
     addEdge(l.src, l.obs, "leaves", l.seq, %*{"fields": fs, "declared": l.declared})
@@ -488,6 +545,12 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
 
   # ── every connection's credibility (exo-f2d) ──────────────────────────────────
   proc obsLabel(id: string): string =
+    # a per-chain observer ("o:chain-observer@<caip2>") names its chain
+    let at = id.find('@')
+    if at > 0:
+      let label = chainLabel(id[at + 1 .. ^1])
+      return (if id.startsWith("o:" & $obChainObserver): "anyone reading " & label
+              else: "the RPC provider for " & label)
     case id
     of "o:store-node": "the store node"
     of "o:rpc-provider": "the RPC provider"
@@ -501,6 +564,11 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
     e.attrs["credibility"] = %c.class
     e.attrs["party"] = %c.party
     e.attrs["mechanism"] = %c.mechanism
+    # a crossing to a chain says what that chain shows, not what every chain does
+    if e.kind == "leaves" and e.dst.startsWith("o:" & $obChainObserver & "@") and e.src.startsWith("i:"):
+      let words = surfaceWords(surfaceOf.getOrDefault(e.src[2 .. ^1]))
+      if words.len > 0:
+        e.attrs["mechanism"] = %(words & " It leaves when the room settles, and cannot be taken back.")
 
   # ── crossings: what left the room, what came in, who joined (exo-737) ────────────
   result.crossings.add %*{"seq": -1, "dir": "out", "kind": "envelopes", "observer": "o:store-node",
@@ -523,10 +591,13 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
       if sent.kind == JObject and sent.hasKey("tx"): sent["tx"].getStr()
       elif sent.kind != JObject: ordered[e.seq].value
       else: ""
+    let sf = (if e.dst.find('@') > 0: surfaceOf.getOrDefault(intentId) else: ChainSurface())
     result.crossings.add %*{"seq": e.seq, "dir": "out", "kind": "leaves", "observer": e.dst,
       "fields": e.attrs["fields"], "values": values, "chainRef": chainRef,
       "intent": intentId, "entry": "e:" & eventId(ordered[e.seq]),
       "declared": e.attrs{"declared"}.getBool(true),
+      # the chain it reached, and how much that chain shows (public · shielded)
+      "chain": sf.chain, "chainLabel": sf.label, "surface": sf.effect,
       "credibility": "exposed", "party": obsLabel(e.dst), "mechanism": e.attrs["mechanism"]}
   for n in result.nodes:
     if n.kind != "entry" or not n.attrs["counted"].getBool(): continue

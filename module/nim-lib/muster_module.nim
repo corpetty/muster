@@ -3406,8 +3406,26 @@ proc musterCoordinateFlow(): string =
   gSession.poll()
   let events = gSession.roomEvents()
   let rows = reduceFlow(events, driverFor, gSession.roomFounders(events), gSession.sealedIn)
+  # each per-chain observer ("chain-observer@<caip2>") in words: which chain, and what a
+  # reader of it sees — one surface when every proposal reaching it agrees (exo-dde)
+  var surfaces = initOrderedTable[string, seq[ChainSurface]]()
+  for r in rows:
+    if r.chain.len == 0 or r.intentId.len == 0: continue
+    let sf = chainSurface(driverFor, intentPolicyOf(events, r.intentId))
+    if sf notin surfaces.mgetOrPut(r.observerKey, @[]): surfaces[r.observerKey].add sf
+  var observers = newJObject()
+  for key, sfs in surfaces:
+    let at = key.find('@')
+    let (cls, chain) = (key[0 ..< at], key[at + 1 .. ^1])
+    observers[key] = %*{"class": cls, "chain": chain, "chainLabel": chainLabel(chain),
+      "label": (if cls == $obChainObserver: "anyone reading " & chainLabel(chain)
+                else: "your RPC provider for " & chainLabel(chain)),
+      "sees": (if cls != $obChainObserver: ""
+               elif sfs.len == 1: surfaceWords(sfs[0])
+               else: "Anyone reading " & chainLabel(chain) & " sees what each proposal's rail shows there: some of them public, some shielded.")}
   result = $(%*{"rows": rows.toJson(),
-                 "matrix": rows.observerMatrix(introducedObservers(events, driverFor))})
+                 "matrix": rows.observerMatrix(introducedObservers(events, driverFor)),
+                 "observers": observers})
   if gLpDebug: stderr.writeLine("MUSTER-LP flow " & result)
 
 proc musterCoordinateGraph(roomTopic: string): string =
