@@ -2873,3 +2873,6 @@
 {"type":"dep_add","timestamp":"2026-10-30T16:25:37.635160682Z","issue_id":"exo-4d0.10","payload":{"dep_type":"parent-child","depends_on":"exo-4d0"}}
 {"type":"rename","timestamp":"2026-10-30T16:25:38.485829746Z","issue_id":"exo-c04","payload":{"new_id":"exo-dcc.38"}}
 {"type":"dep_add","timestamp":"2026-10-30T16:25:38.485829746Z","issue_id":"exo-dcc.38","payload":{"dep_type":"parent-child","depends_on":"exo-dcc"}}
+{"type":"close","timestamp":"2026-11-04T13:11:16.540280019Z","issue_id":"exo-dcc.37","payload":{}}
+{"type":"close","timestamp":"2026-11-04T13:11:16.540280019Z","issue_id":"exo-4d0.10","payload":{}}
+{"type":"close","timestamp":"2026-11-04T13:11:16.540280019Z","issue_id":"exo-dcc.38","payload":{}}
