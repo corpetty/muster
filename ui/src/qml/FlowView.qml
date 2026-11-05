@@ -63,6 +63,16 @@ Item {
              : o === "storage-peer" ? qsTr("storage nodes that serve or fetch it")
              : o === "storage-dht" ? qsTr("anyone reading the storage network") : String(o);
     }
+    // A field or a kind the module names in its own words, said in ours where it has a
+    // hyphen in it (a voice note's, docs/design/voice-notes.md §10); any other as it comes.
+    function fieldWord(f) {
+        return f === "voice-note" ? qsTr("voice note")
+             : f === "voice-note-length" ? qsTr("voice note length")
+             : f === "fixed-size" ? qsTr("one fixed size") : String(f);
+    }
+    function kindWord(k) {
+        return k === "voice" ? qsTr("voice note") : k === "file" ? qsTr("shared file") : String(k);
+    }
     function matrixEntries() {
         var out = [];
         for (var i = 0; i < flowView.observerOrder.length; ++i) {
@@ -75,7 +85,7 @@ Item {
                 var o = keys[j], fields = flowView.matrix[o] || [];   // absent: not introduced by any proposal
                 var info = flowView.observerInfo[o] || {};
                 out.push({ to: o, label: flowView.observerLabel(o),
-                           fields: fields.length > 0 ? fields.join(", ") : qsTr("nothing yet"),
+                           fields: fields.length > 0 ? fields.map(flowView.fieldWord).join(", ") : qsTr("nothing yet"),
                            sees: String(info.sees || "") });
             }
         }
@@ -156,6 +166,7 @@ Item {
                             Layout.fillWidth: true
                             spacing: 2
                             LogosText {
+                                objectName: "flowFields_" + String(modelData.to)
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
                                 text: modelData.fields
@@ -191,9 +202,9 @@ Item {
                         required property var modelData
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: "#" + String(modelData.seq) + " " + String(modelData.kind)
+                        text: "#" + String(modelData.seq) + " " + flowView.kindWord(String(modelData.kind))
                             + (modelData.intentId ? " " + flowView.shortId(modelData.intentId) : "")
-                            + " · " + String(modelData.field) + " → " + flowView.observerLabel(modelData.to, modelData.chain)
+                            + " · " + flowView.fieldWord(String(modelData.field)) + " → " + flowView.observerLabel(modelData.to, modelData.chain)
                             + (modelData.to === "room-member" && modelData.members && modelData.members.length > 0
                                  ? " (" + modelData.members.map(flowView.shortId).join(", ") + ")" : "")
                             + " · epoch " + String(modelData.epoch)

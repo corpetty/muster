@@ -1248,6 +1248,9 @@ ColumnLayout {
         text: MusterStyle.plain(raw)
     }
 
+    // a voice note recording, its draft, and what the module said of either (RoomVoiceNote)
+    RoomVoiceNote { room: composerRoot.room }
+
     // ── the message row (exo-720.9): "+" opens the action picker; Enter sends ──────
     function sendMessage() {
         if (room.backend && composer.text.length > 0) {
@@ -1304,6 +1307,20 @@ ColumnLayout {
         Connections {
             target: composer.textInput
             function onAccepted() { composerRoot.sendMessage(); }
+        }
+
+        // record a voice note (docs/design/voice-notes.md §8, §14): a message in another
+        // medium, so here in the message row, not among the proposals the "+" offers. The
+        // module records; nothing is sent until the draft's own Send.
+        IconAction {
+            objectName: "voiceRecordButton"
+            visible: room.voiceState === "idle"
+            label: qsTr("Record a voice note")
+            icon: MusterStyle.icon("mic")
+            enabled: !room.voicePlaying
+            opacity: enabled ? 1 : 0.4
+            size: 40
+            onClicked: room.startVoice()
         }
 
         IconAction {

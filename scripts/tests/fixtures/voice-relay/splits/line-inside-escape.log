@@ -1,0 +1,2 @@
+ui-host [ "muster_ui" ]: "RemoteTransportConnection: Successfully connected to registry: \"local:logos_keystore_module_voiceB\"\[2026-10-22 19:21:53.548] [info] [logos] [liblogos_rln_module] RemoteTransportConnection: Registry connect attempt started (no peer contact yet): "local:logos_capability_module_voiceB"
+nRemoteTransportConnection: Connected to registry at \"19:21:53.549\""

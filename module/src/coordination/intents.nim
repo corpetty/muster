@@ -36,6 +36,7 @@ from ./effect_summary import inDecimals   # a split's total in its asset's own d
 export intent_events
 import ./effect_summary           # one reading of an effect for the card and the history (exo-59c)
 import ./attest                   # live attestations: the fold's gate + every surface's grade (exo-ef1)
+from ./voice import voiceStanding, VoiceParts, VoiceMemo   # a voice note's part, as the fold stands it (voice-notes.md §6)
 export attest
 
 proc hexToBytes(s: string): seq[byte] =
@@ -811,8 +812,8 @@ proc intentProvenance*(events: seq[Event], driverFor: DriverFor, intentId: strin
 type LogProvItem* = object
   seq*: int               ## canonical log position
   cls*: InputClass
-  kind*: string           ## message · propose · sig · decline · policy · submit · final · admit
-  intentId*: string       ## "" for a message / membership entry
+  kind*: string           ## message · propose · sig · decline · policy · submit · final · admit · voice
+  intentId*: string       ## "" for a message / membership / voice entry
   account*: string        ## who: a verified signer, or the author/sharer a sealed entry claims
   accountable*: bool
   what*: string
@@ -827,10 +828,12 @@ proc membershipEvent*(epoch: int, joinerHex: string, parents: seq[EventId] = @[]
   Event(parents: parents, key: "membership/" & $epoch & "/admit/" & joinerHex, value: "1")
 
 proc logProvenance*(events: seq[Event], driverFor: DriverFor,
-                    sealedIn = initTable[string, int]()): seq[LogProvItem] =
+                    sealedIn = initTable[string, int](), memo: VoiceMemo = nil): seq[LogProvItem] =
   ## `sealedIn` (CoordinationSession.sealedIn) names the epoch whose key opened each
   ## event; an item's epoch comes from it, else from the admissions before it in
   ## canonical order — right only for a log whose events carry their parents (exo-dde.9).
+  ## `memo` is the room's VoiceMemo (voice_live.provenanceOf passes it), so a poll parses no
+  ## voice part it has read before (voice-notes.md §6).
   let ordered = canonicalOrder(events)
   let gradeOf = gradeLookup(events, driverFor)
   let partsAt = countedPartsAt(ordered, reduceIntents(events, driverFor), driverFor, events)
@@ -838,6 +841,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor,
   var seenSig = initHashSet[string]()
   var seenDecline = initHashSet[string]()
   var proposals = initTable[string, IntentProposal]()
+  let standing = voiceStanding(events, memo)   # the voice fold's parts, by event id, through the room's memo
   proc ownProposal(id: string, e: Event): bool =
     ## a propose or policy is the intent's only as the pair its id commits to (exo-dbd)
     if id notin proposals: proposals[id] = proposalOf(events, id)
@@ -862,6 +866,21 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor,
       except CatchableError: discard
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "message", account: author,
         accountable: true, what: "a message",
+        detail: "",
+        guarantee: "sealed to the room's epoch and signed by its author, bound to this room — the room's views read it only if that signature verifies",
+        epoch: sealedIn.getOrDefault(eventId(e), epoch))
+      continue
+    if p[0] == "voice":
+      # a voice note's part (docs/design/voice-notes.md §10): a peer message in the name
+      # its key gives, which the room's view verified signed it. A part is one the fold
+      # stands (voiceStanding, its header pass: §6 rules 2 to 4, which decodes no clip),
+      # so an entry under voice/ that is no note's part, whether by its key, its value, an
+      # equivocating later copy or a squatted note id, is none, and the room map, which
+      # counts what this lists, agrees with the fold.
+      if eventId(e) notin standing: continue
+      let k = standing[eventId(e)]
+      result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "voice", account: k.author,
+        accountable: true, what: "a voice note (part " & $(k.i + 1) & " of " & $VoiceParts & ")",
         detail: "",
         guarantee: "sealed to the room's epoch and signed by its author, bound to this room — the room's views read it only if that signature verifies",
         epoch: sealedIn.getOrDefault(eventId(e), epoch))

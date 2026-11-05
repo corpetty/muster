@@ -61,7 +61,7 @@ The room map, its replay and the activity feed move to `causalOrder`. Folds, sig
 `publish` stamps `after` and keeps everything else:
 
 - **A new event:** `after` = the heads of the log, meaning events no other held event names through `parents` or `after` (`Log.heads`). At most 8; past that, the 8 latest in causal order, which in practice never happens. Callers keep setting `parents` exactly as now.
-- **An event the log already holds** (same id): re-seal the **stored** copy, with its original `after`. Re-announce then carries the true order to a joiner instead of a fresh one. This also covers the second submit and re-proposing the same effect.
+- **An event the log already holds** (same id): re-seal the **stored** copy, with its original `after`. Re-announce then carries the true order to a joiner instead of a fresh one. This also covers the second submit and re-proposing the same effect. For an author-bearing event, `publishAuthored` re-seals the copy whose `after` its author signed, not whichever copy the log keeps, which any member who received the event can plant (`authorship.copyToSeal`, docs/design/voice-notes.md §4).
 - **Author-signed events:** `claimOf` signs `parents`, not `after`. So `publishAuthored` signs as now and `publish` stamps `after` afterwards, without breaking the signature. §5 covers whether `after` should be signed.
 
 ### 3.3 The wire

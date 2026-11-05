@@ -223,6 +223,13 @@ proc find*(log: Log, id: EventId): tuple[found: bool, event: Event] =
   ## The copy the log holds under `id`, if any.
   if id in log.events: (true, log.events[id]) else: (false, Event())
 
+proc variantsOf*(log: Log, id: EventId): seq[Event] =
+  ## Every copy of `id` the log holds, each distinct (after, afterSig) in the order first
+  ## seen, up to MaxVariants; none when it holds no such event.
+  if id notin log.events: return
+  let vs = log.variants.getOrDefault(id)
+  if vs.len == 0: @[log.events[id]] else: vs
+
 const MaxHeads* = 8   ## at most this many ids in a new event's `after`
 
 proc heads*(log: Log): seq[EventId] =

@@ -23,6 +23,15 @@
 # (`journalctl --user _PID=<ui-host pid>`), not to the runner's log. exo-ca3 was
 # diagnosed from the journal that way.
 #
+# Even then those lines are not in the log bare. ui-host relays the plugin's output a chunk
+# at a time, each chunk one line, QDebug-quoted, `ui-host [ "muster_ui" ]: "<chunk>"`, often
+# several of the plugin's lines to a chunk, and now and then a line is cut across two chunks
+# or another process's line lands inside one (seen on Linux CI, run 39836679442). The Nim
+# build writes its lines bare. Read a [muster_ui] line with `ui_log <log>`, which prints the
+# log with each of the UI's lines whole on a line of its own, and every other line unchanged
+# (scripts/lib/ui_log.py says what it undoes); grep -o over the raw log finds only what the
+# relay's quoting and cuts happen to leave alone.
+#
 # Cleanup is per instance: each launch runs in its own session (setsid) and
 # ui_cleanup kills exactly those sessions (the runner and the logos_host_qt
 # children it spawned), so a self-test never takes down another session's runners.
@@ -114,6 +123,11 @@ print(m.group(2) + "/p2p/" + m.group(1) if m else "")')
   ui_local_config "$addr"
 }
 
+# ui_log <log> — the log with the UI's own lines as it wrote them, one to a line (above);
+# nothing for a log that is not there yet.
+UI_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ui_log() { python3 -I "$UI_LIB_DIR/ui_log.py" "$1" 2>/dev/null; }
+
 # ui_require_runner — exit 1 (red) with the reason when the selected build is absent.
 ui_require_runner() {
   if [ ! -x "$RUNNER" ]; then
@@ -127,21 +141,29 @@ ui_require_runner() {
 }
 
 UI_PIDS=()
+# A session of its own for each instance: util-linux's setsid, or on macOS, which has none,
+# the same call from python3. Either way the runner keeps its pid, which names its session
+# and its process group.
+if command -v setsid >/dev/null 2>&1; then UI_SETSID=(setsid)
+else UI_SETSID=(python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])'); fi
 
 # ui_launch <user-dir> <log> [VAR=value …] — one offscreen instance in its own session.
 ui_launch() {
   local dir="$1" log="$2"; shift 2
-  env "$@" QT_QPA_PLATFORM="${MUSTER_QPA:-offscreen}" setsid "$RUNNER" --user-dir "$dir" >"$log" 2>&1 &
+  env "$@" QT_QPA_PLATFORM="${MUSTER_QPA:-offscreen}" "${UI_SETSID[@]}" "$RUNNER" --user-dir "$dir" >"$log" 2>&1 &
   UI_PIDS+=("$!")
   disown "$!"
 }
 
-# ui_cleanup — kill every session ui_launch started, and nothing else.
+# ui_cleanup — kill every session ui_launch started, and nothing else. macOS's ps has no
+# session id, so there it kills the instance's process group, which setsid made its pid.
 ui_cleanup() {
   local pid sid
-  for pid in "${UI_PIDS[@]}"; do
+  for pid in ${UI_PIDS[@]+"${UI_PIDS[@]}"}; do
     sid=$(ps -o sid= -p "$pid" 2>/dev/null | tr -d ' ')
+    case "$sid" in *[!0-9]*) sid="" ;; esac   # macOS's ps prints its keyword list instead
     [ -n "$sid" ] && pkill -9 -s "$sid" 2>/dev/null
+    [ -n "$sid" ] || pkill -9 -g "$pid" 2>/dev/null
     kill -9 "$pid" 2>/dev/null
   done
   UI_PIDS=()
