@@ -865,7 +865,7 @@ the notes it keeps (§6 rules 2 to 4), by event id: exactly the ids `reduceVoice
 in `parts`, whatever each note's state. So the flow, provenance and the room map agree with
 the fold on what is a part, and an entry under `voice/` that is none, by its key, its value,
 an equivocating later copy or a squatted note id, is no part in any of them.
-- **A `voice/` branch in `flow.nim`** (`:126-138` on this branch). On `main` an unknown
+- **A `voice/` branch in `flow.nim`** (`:133-145` on this branch). On `main` an unknown
   prefix falls through to envelope-only rows (`flow.nim:121-124`), which would show the room
   nothing about its own content. With the branch, each part shows:
   - room-member: `voice-note`, `voice-note-length`;
@@ -876,15 +876,15 @@ an equivocating later copy or a squatted note id, is no part in any of them.
   Ingest does not check the size of a frame another member sent, so `fixed-size` on another
   member's entry is what an honest client sends. Pinned by `voice_test` §13.
 - **The room map.** An entry of kind `voice`, its basis author-signed and its account the
-  member its key names (`AuthorSigned`, `room_graph.nim:69`, `:82-83` on this branch). It is
+  member its key names (`AuthorSigned`, `room_graph.nim:69`, `:84-85` on this branch). It is
   counted exactly when provenance lists it, so exactly when the fold stands it. An entry under
   `voice/` that is no note's part is still its signer's, since authorship proved who signed
-  it, but uncounted (`room_graph.nim:378-383` on this branch), and its facet says so: "the
+  it, but uncounted (`room_graph.nim:410-415` on this branch), and its facet says so: "the
   fold counts it for nothing; its author signed it, bound to this room". The map's `file/`
   entries, account disclosures and ceremony joins, which provenance never lists and the map
   has always named by their signer, now say the same. The store node's facet
   names the one fixed size, which marks a voice note but not its length
-  (`room_graph.nim:116-120` on this branch). Its `content` carries no `part` (above). Pinned
+  (`room_graph.nim:118-122` on this branch). Its `content` carries no `part` (above). Pinned
   by `voice_test` §14, the `file/` facet by `swarm_test` §8.
 - **Provenance.** A `logProvenance` item (`intents.nim:829`, `:830` on this branch) for each
   standing part, as a peer message in its author's name at the epoch whose key opened it
