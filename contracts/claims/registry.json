@@ -430,7 +430,7 @@
       "step": "open-room",
       "kind": "gap",
       "title": "A Muster from before voice notes hands them to the modules beside it",
-      "body": "A member on a Muster from before voice notes (0.3.4 or earlier) opens every voice note sealed with a room key they hold. Their room map and their log proof return each note's audio, encoded, to any module loaded beside them while their access checks are off. A Muster with voice notes keeps audio out of the room map and refuses a proof of a room holding a voice note, but nothing reaches an older member's code.",
+      "body": "A member on a Muster from before voice notes (0.3.5 or earlier) opens every voice note sealed with a room key they hold. Their room map and their log proof return each note's audio, encoded, to any module loaded beside them while their access checks are off. A Muster with voice notes keeps audio out of the room map and refuses a proof of a room holding a voice note, but nothing reaches an older member's code.",
       "fix": "that member upgrading to a Muster with voice notes, which keeps audio out of everything it answers other modules with, or running Basecamp with its access checks enforced on their machine. Keeping voice notes out of a room until every member has upgraded would need the room to know which version each member runs, which nothing says today",
       "status": "partial",
       "credibility": "exposed",

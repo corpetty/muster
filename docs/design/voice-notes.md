@@ -237,7 +237,7 @@ and `session_pad_test` fails a NUL pad (`docs/labbook/voice-notes-audio-stack.md
 - no new frame kind;
 - no `room_journal` change: journal frames are opaque, with `MaxFrame` 16 MiB
   (`room_journal.nim:24`);
-- a peer on a Muster from before voice notes (0.3.4 or earlier) reads a padded frame as an
+- a peer on a Muster from before voice notes (0.3.5 or earlier) reads a padded frame as an
   ordinary event, and its thread ignores the `voice/` key (§7).
 
 **What does not fit, raises.** An event whose JSON exceeds `padTo` raises `FrameTooLarge`
@@ -478,7 +478,7 @@ What this means for each kind of reader:
   (`RoomThread.qml:692-695`). `MusterCard.known` (`MusterCard.qml:712`) does not gain
   `voice-note`, because no body may carry it. `CardVoiceNote.qml` is pure render: it emits
   `play` and `stop`, and RoomThread owns the backend calls, as for every card.
-- **A peer from before voice notes** (0.3.4 or earlier) shows nothing for a note in its
+- **A peer from before voice notes** (0.3.5 or earlier) shows nothing for a note in its
   thread: it never synthesizes the row, and `reduceMessages` skips the `voice/` events. That
   is better than its unknown-card render: an
   unknown kind draws nothing, or a stray heading, never a text fallback
@@ -805,7 +805,7 @@ seven `logos_module_*` entry points and a constructor). So S7 does two things (b
 | relay-mesh peers | the publishing node of each frame, as for any send, unless `mix` is on | the content, the member |
 | mix node (`mix` on) | a hop of each frame, if mix carries frames this size: **untested** | the endpoints together |
 | a module loaded beside Muster (access policy off) | the voice state and peak level; it can start a recording, in any room it makes the current one, send or discard the draft, play the draft or a note aloud (§13) | the audio, through any method: no voice method returns it, S6 closed `coordinate_graph`, and `coordinate_proof` refuses a room holding a voice note (below; a member's copy of a note this member's view does not hold is "What is left" there) |
-| a module loaded beside another member's Muster from before voice notes (0.3.4 or earlier) (access policy off) | every note's clip, through that member's `coordinate_graph` and `coordinate_proof`, which return each part's value whole (§7; "What still leaks", item 6) | nothing of a note sealed in an epoch that member never held |
+| a module loaded beside another member's Muster from before voice notes (0.3.5 or earlier) (access policy off) | every note's clip, through that member's `coordinate_graph` and `coordinate_proof`, which return each part's value whole (§7; "What still leaks", item 6) | nothing of a note sealed in an epoch that member never held |
 
 **Two methods that returned raw log content.** No voice method returns audio. But a part's
 value holds its half of the clip as base64 Opus, and two existing methods handed event values
@@ -855,7 +855,7 @@ differ:
   for this one explicit export. The other is a proof form that carries a voice part as a
   committed digest. Because today's id hashes the value itself, that means a new proof
   format, and perhaps a new id derivation, not a filter on today's.
-- **Neither on an older client.** A member on a Muster from before voice notes (0.3.4 or
+- **Neither on an older client.** A member on a Muster from before voice notes (0.3.5 or
   earlier) holds the same parts and returns them whole through both methods; nothing in this
   PR reaches their code ("What still leaks", item 6).
 
@@ -955,8 +955,8 @@ sixth. Each stays true after this PR:
    - Voice notes make no mix claim, and the gap *The store node still sees the conversation
      graph* (`contracts/claims/registry.json:83`) stays partial.
 6. **An older client in the room returns the audio over IPC.** A member on a Muster from
-   before voice notes (0.3.4 or earlier: every release so far, the published `muster-v0.3.0`,
-   `muster-v0.3.2`, `muster-v0.3.3` and `muster-v0.3.4` among them; §18 asks that the
+   before voice notes (0.3.5 or earlier: every release so far, the published `muster-v0.3.0`,
+   `muster-v0.3.2`, `muster-v0.3.4` and `muster-v0.3.5` among them; §18 asks that the
    release with voice notes be numbered so the line stays clear) opens every voice frame
    sealed in an epoch they hold, and serves each part's value whole, the base64 Opus
    included, to any
@@ -990,7 +990,7 @@ existing gap the claim names, and item 5 makes no claim:
   top of the same step half true (§18);
 - "A Muster from before voice notes hands them to the modules beside it" (`partial`: a
   member who runs a Muster with voice notes serves no audio, and nothing here reaches an
-  older member's code; the line is drawn by the feature, with "0.3.4 or earlier" as today's
+  older member's code; the line is drawn by the feature, with "0.3.5 or earlier" as today's
   releases; the party is the modules loaded beside an older member's Muster, on that
   member's machine).
 
@@ -1153,7 +1153,7 @@ the first. The second refuses a room holding a voice note until the maintainer d
 an exception and a new proof form (§10, §18); an entry under `voice/` that is no note's part
 leaves with the proof, so a member's copy of a note this member's view does not hold leaves
 too (§10, "What is left"). On the machine of a member
-who runs a Muster from before voice notes (0.3.4 or earlier), both still return it, and
+who runs a Muster from before voice notes (0.3.5 or earlier), both still return it, and
 nothing here reaches that code (§10, "What still leaks", item 6).
 
 **The mitigations:**
@@ -1397,7 +1397,7 @@ unverified, built or planned:
   it sits in a half; a shorter one, or the clip in another encoding than its base64, is not
   looked for.
 - **Audio over an older client's IPC** (§10, "What still leaks", item 6). A member on a
-  Muster from before voice notes (0.3.4 or earlier) returns every part whole through their
+  Muster from before voice notes (0.3.5 or earlier) returns every part whole through their
   `coordinate_graph` and `coordinate_proof`, to any module loaded beside them. This PR cannot
   change that code, and no test here runs such a client against a voice note: what it does
   is read from `main`'s source.
@@ -1975,19 +1975,19 @@ Still open:
   draft in whichever room is open, and says so only when Send is refused (`room-changed`:
   "This recording belongs to another room. Send it from there, or discard it.");
 - **for the maintainer: an older client in the room** (§10, "What still leaks", item 6). A
-  member on a Muster from before voice notes (0.3.4 or earlier) serves every note's Opus to
+  member on a Muster from before voice notes (0.3.5 or earlier) serves every note's Opus to
   the modules loaded beside them, through `coordinate_graph` and `coordinate_proof`, and
   nothing in this PR can change that. Accept it as a stated gap (S10's registry entry), or
   keep voice notes out of a room until every member runs a version that strips them (nothing
   in the room says today which version a member runs);
 - **for the maintainer: the version that carries voice notes.** This PR bumps no version:
-  `module/metadata.json` and `ui/metadata.json` read 0.3.4, the released `muster-v0.3.4`,
-  which `main` published on 2026-10-28 without voice notes and this branch has since merged,
+  `module/metadata.json` and `ui/metadata.json` read 0.3.5, the released `muster-v0.3.5`,
+  which `main` published on 2026-11-04 without voice notes and this branch has since merged,
   and `RELEASING.md` step 1 bumps at release time. Until then a build of this branch reports
-  0.3.4, the number of a release that has no voice notes. The registry gap and this doc draw
-  the line by the feature, "a Muster from before voice notes", with "0.3.4 or earlier" as the
+  0.3.5, the number of a release that has no voice notes. The registry gap and this doc draw
+  the line by the feature, "a Muster from before voice notes", with "0.3.5 or earlier" as the
   releases of today. So the release that first carries voice notes should be numbered above
-  every 0.3.x, 0.4.0 say, and a release cut from `main` before this PR merges moves "0.3.4"
+  every 0.3.x, 0.4.0 say, and a release cut from `main` before this PR merges moves "0.3.5"
   in the gap's body and here;
 - **for the maintainer: the F-16 claim's last sentence.** The protects claim "A later joiner
   cannot read earlier messages" (`open-room`, the registry's first claim) ends "Removal
