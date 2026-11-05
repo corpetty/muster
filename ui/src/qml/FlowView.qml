@@ -34,9 +34,11 @@ Item {
     readonly property var matrix: {
         if (flowView.intentFilter.length === 0) return flowView.roomMatrix;
         var m = {};
-        for (var o in flowView.roomMatrix) m[o] = [];
+        // the room's observers, but of the per-chain ones only those this proposal reaches
+        for (var o in flowView.roomMatrix) if (o.indexOf("@") < 0) m[o] = [];
         for (var i = 0; i < flowView.rows.length; ++i) {
-            var r = flowView.rows[i], to = String(r.to || ""), f = String(r.field || "");
+            var r = flowView.rows[i], f = String(r.field || "");
+            var to = String(r.to || "") + (String(r.chain || "").length > 0 ? "@" + String(r.chain) : "");
             if (!(to in m)) m[to] = [];
             if (f.length > 0 && m[to].indexOf(f) < 0) m[to].push(f);
         }
@@ -46,7 +48,13 @@ Item {
 
     readonly property var observerOrder: ["room-member", "store-node", "rpc-provider", "chain-observer", "target-module",
                                           "storage-peer", "storage-dht"]
-    function observerLabel(o) {
+    // A chain's readers and its RPC provider are one observer per chain ("chain-observer@
+    // eip155:11155111"); the module names each and says what that chain shows (`observers`).
+    readonly property var observerInfo: (flowView.flow && flowView.flow.observers) ? flowView.flow.observers : ({})
+    function observerLabel(o, chain) {
+        o = String(o || "");
+        var key = (chain && String(chain).length > 0 && o.indexOf("@") < 0) ? o + "@" + chain : o;
+        if (flowView.observerInfo[key]) return String(flowView.observerInfo[key].label);
         return o === "room-member" ? qsTr("the room")
              : o === "store-node" ? qsTr("the store node")
              : o === "rpc-provider" ? qsTr("your RPC provider")
@@ -58,11 +66,18 @@ Item {
     function matrixEntries() {
         var out = [];
         for (var i = 0; i < flowView.observerOrder.length; ++i) {
-            var o = flowView.observerOrder[i];
-            if (!(o in flowView.matrix)) continue;   // not introduced by any proposal
-            var fields = flowView.matrix[o] || [];
-            out.push({ to: o, label: flowView.observerLabel(o),
-                       fields: fields.length > 0 ? fields.join(", ") : qsTr("nothing yet") });
+            var cls = flowView.observerOrder[i], keys = [];
+            // the class itself, then each chain it reaches ("chain-observer@<caip2>")
+            for (var k in flowView.matrix)
+                if (k === cls || k.indexOf(cls + "@") === 0) keys.push(k);
+            keys.sort();
+            for (var j = 0; j < keys.length; ++j) {
+                var o = keys[j], fields = flowView.matrix[o] || [];   // absent: not introduced by any proposal
+                var info = flowView.observerInfo[o] || {};
+                out.push({ to: o, label: flowView.observerLabel(o),
+                           fields: fields.length > 0 ? fields.join(", ") : qsTr("nothing yet"),
+                           sees: String(info.sees || "") });
+            }
         }
         return out;
     }
@@ -137,13 +152,27 @@ Item {
                             font.pixelSize: MusterStyle.caption
                             font.weight: Theme.typography.weightMedium
                         }
-                        LogosText {
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            wrapMode: Text.WordWrap
-                            text: modelData.fields
-                            color: Theme.palette.text
-                            font.family: MusterStyle.mono
-                            font.pixelSize: MusterStyle.caption
+                            spacing: 2
+                            LogosText {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: modelData.fields
+                                color: Theme.palette.text
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
+                            }
+                            // what this chain shows: a public ledger, or only that a transaction happened
+                            LogosText {
+                                objectName: "flowObserverSees_" + String(modelData.to)
+                                Layout.fillWidth: true
+                                visible: String(modelData.sees || "").length > 0
+                                wrapMode: Text.WordWrap
+                                text: String(modelData.sees || "")
+                                color: Theme.palette.textSecondary
+                                font.pixelSize: MusterStyle.caption
+                            }
                         }
                     }
                 }
@@ -164,7 +193,7 @@ Item {
                         wrapMode: Text.WordWrap
                         text: "#" + String(modelData.seq) + " " + String(modelData.kind)
                             + (modelData.intentId ? " " + flowView.shortId(modelData.intentId) : "")
-                            + " · " + String(modelData.field) + " → " + flowView.observerLabel(modelData.to)
+                            + " · " + String(modelData.field) + " → " + flowView.observerLabel(modelData.to, modelData.chain)
                             + (modelData.to === "room-member" && modelData.members && modelData.members.length > 0
                                  ? " (" + modelData.members.map(flowView.shortId).join(", ") + ")" : "")
                             + " · epoch " + String(modelData.epoch)

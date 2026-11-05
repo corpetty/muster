@@ -17,6 +17,7 @@ import ../src/crypto/keystore
 import ../src/crypto/binding
 import ../src/crypto/curve25519
 import ../src/drivers/driver
+import ../src/drivers/profile
 import ../src/log/log
 import ../src/coordination/intents
 import ../src/coordination/room_graph
@@ -104,11 +105,11 @@ block:
 block:
   let lv = g.edgesOf("leaves")
   let submitSeq = g.entryOf("intent/" & idA & "/submit", story).seq
-  doAssert lv.anyIt(it.src == "i:" & idA and it.dst == "o:chain-observer" and it.seq == submitSeq)
+  doAssert lv.anyIt(it.src == "i:" & idA and it.dst == "o:chain-observer@stub:0" and it.seq == submitSeq)
   doAssert lv.allIt(it.seq >= submitSeq or it.src != "i:" & idA), "nothing of A leaves before submit"
   # the split: bob's counted settle leaves with the manifest's fields; the forged one does not
   let bobPaid = canonicalOrder(story).mapIt(it.key).find("intent/" & idB & "/part/" & bob & "/settled")
-  let splitOut = lv.filterIt(it.src == "i:" & idB and it.dst == "o:chain-observer")
+  let splitOut = lv.filterIt(it.src == "i:" & idB and it.dst == "o:chain-observer")   # an undeclared profile names no chain
   doAssert splitOut.len == 1, $splitOut
   doAssert splitOut[0].attrs["fields"].getElems().mapIt(it.getStr()) == @["amount", "payer"]
   doAssert splitOut[0].seq > bobPaid, "the counted report is the later one, by bob himself"
@@ -333,5 +334,49 @@ block:
   doAssert sent < plain, "interning makes the nodes smaller: " & $sent & " vs " & $plain
   doAssert $g.toJson() == $j, "the same graph gives the same bytes"
   echo "15. shared facets and guarantees are sent once and expand back exactly OK"
+
+# 16. One chain's public is not another's (exo-dde): each chain an intent settles on is its
+# own observer, and the crossing says what that chain shows — from the driver's profile.
+type ChainStub = ref object of StubDriver
+  chain: string
+  effect: EffectVisibility
+  signers: Reveal
+method profile(d: ChainStub): FamilyProfile =
+  FamilyProfile(declared: true, chain: d.chain, revealsEffect: d.effect, revealsSigners: d.signers)
+proc chainStub(chain: string, effect: EffectVisibility, signers: Reveal): ChainStub =
+  let s = newStubDriver(rounds = 1, threshold = 1, finality = finExternal, verifyResult = true)
+  ChainStub(descriptor: s.descriptor, verifyResult: true, chain: chain, effect: effect, signers: signers)
+
+block:
+  let sepolia = chainStub("eip155:11155111", evPublic, rvAtSettle)
+  let monero = chainStub("monero:76ee3cc9", evShielded, rvNever)
+  let chains: DriverFor = proc(kind: string): Driver =
+    (if kind == "pub": Driver(sepolia) elif kind == "xmr": Driver(monero) else: stub(kind))
+  let pubFx = """{"to":"0x5e9011a","value":1}"""
+  let xmrFx = """{"to":"57VTxmr","value":2}"""
+  let (idP, idX) = (intentIdFor(pubFx, "pub"), intentIdFor(xmrFx, "xmr"))
+  var evs: seq[Event] = @[msg]
+  for (id, fx, pol) in [(idP, pubFx, "pub"), (idX, xmrFx, "xmr")]:
+    evs.add @[policyDeclEvent(id, pol), proposerEvent(id, alice), proposeEvent(id, fx),
+              contributeEvent(id, aliceKey, "sa"), submitEvent(id, chainRef = "0x" & pol),
+              finalEvent(id, chainRef = "0x" & pol)]
+  let gc = reduceRoomGraph(chain(evs), chains, founders, alice)
+  let pubObs = "o:chain-observer@eip155:11155111"
+  let xmrObs = "o:chain-observer@" & monero.chain
+  doAssert gc.hasNode(pubObs) and gc.hasNode(xmrObs), "one observer per chain"
+  doAssert not gc.hasNode("o:chain-observer@stub:0"), "only the chains these intents settle on"
+  doAssert gc.edgesOf("leaves").anyIt(it.src == "i:" & idP and it.dst == pubObs)
+  doAssert gc.edgesOf("leaves").anyIt(it.src == "i:" & idX and it.dst == xmrObs)
+  doAssert not gc.edgesOf("leaves").anyIt(it.src == "i:" & idX and it.dst == pubObs), "Monero's leaves never reach Sepolia's readers"
+  doAssert gc.node(pubObs).attrs["surface"].getStr() == "public" and gc.node(pubObs).attrs["chainLabel"].getStr() == "Sepolia"
+  doAssert gc.node(xmrObs).attrs["surface"].getStr() == "shielded"
+  doAssert "never its payer, payee or amount" in gc.node(xmrObs).attrs["sees"].getStr()
+  doAssert "from whom and to whom" in gc.node(pubObs).attrs["sees"].getStr()
+  let outs = gc.crossings.filterIt(it["dir"].getStr() == "out" and it["kind"].getStr() == "leaves")
+  let xc = outs.filterIt(it["intent"].getStr() == idX)
+  doAssert xc.len > 0 and xc.allIt(it["surface"].getStr() == "shielded" and it["chain"].getStr() == monero.chain)
+  doAssert xc.allIt("never its payer" in it["mechanism"].getStr()), $xc
+  doAssert outs.filterIt(it["intent"].getStr() == idP).allIt(it["party"].getStr() == "anyone reading Sepolia")
+  echo "16. each chain is its own observer, and says what it shows (public · shielded) OK"
 
 echo "room_graph_test: all OK"

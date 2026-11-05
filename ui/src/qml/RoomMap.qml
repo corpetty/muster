@@ -130,7 +130,41 @@ Rectangle {
         "o:outside": [qsTr("Outside sources"), qsTr("what the room took in"),
             qsTr("Reads the room took in: a chain's answer, a nonce, a rate, a creditor's own check of a payment. Each is recorded as an external read, so its origin is accountable. It is not proof the world agrees.")]
     })
-    function obsWord(id, i) { var w = map.observerWords[id]; return w ? w[i] : id.replace(/^o:/, ""); }
+    // A chain's readers and its RPC provider are one observer per chain ("o:chain-observer@
+    // eip155:11155111"): Sepolia's public is not Monero's. The words name the chain, and a
+    // chain observer says what that chain shows, from the driver's profile (the node's attrs).
+    function obsWord(id, i) {
+        id = String(id || "");
+        var at = id.indexOf("@");
+        if (at > 0) {
+            var cls = id.slice(0, at), node = map.nodeById[id], a = (node && node.attrs) || {};
+            var label = String(a.chainLabel || id.slice(at + 1));
+            if (cls === "o:chain-observer")
+                return [qsTr("Chain observer · %1").arg(label), qsTr("anyone reading %1").arg(label),
+                        String(a.sees || "").length > 0
+                            ? String(a.sees) + " " + qsTr("It learns this when the room settles, never before: nothing leaves at propose or approve.")
+                            : map.observerWords[cls][2]][i];
+            var base = map.observerWords[cls];
+            if (base) return [base[0] + " · " + label, qsTr("each sender's own endpoint for %1").arg(label), base[2]][i];
+        }
+        var w = map.observerWords[id];
+        return w ? w[i] : id.replace(/^o:/, "");
+    }
+    // The observers outside the room this graph names that a proposal reached (RPC
+    // providers, chain observers per chain, a target module), in a stable order.
+    function proposalObservers() {
+        var classes = ["o:rpc-provider", "o:chain-observer", "o:target-module"], out = [];
+        for (var c = 0; c < classes.length; c++) {
+            var ids = [];
+            for (var i = 0; i < map.allNodes.length; i++) {
+                var id = String(map.allNodes[i].id);
+                if (map.allNodes[i].kind === "observer" && (id === classes[c] || id.indexOf(classes[c] + "@") === 0)) ids.push(id);
+            }
+            ids.sort();
+            out = out.concat(ids);
+        }
+        return out;
+    }
     readonly property var kindWords: ({
         "message": qsTr("message"), "propose": qsTr("proposal"), "policy": qsTr("policy"), "context": qsTr("context"),
         "read": qsTr("outside read"), "sig": qsTr("approval"), "attest": qsTr("commitment"), "binding": qsTr("key binding"),
@@ -430,20 +464,31 @@ Rectangle {
             }
         }
         pos["sealed"] = polar(165, 150 * scale, cx, cy);
+        // a chain observer or RPC provider per chain ("…@<caip2>"), each class's in id order
+        function perChain(cls) {
+            var ids = [];
+            for (var j = 0; j < allNodes.length; j++) {
+                var id = String(allNodes[j].id);
+                if (allNodes[j].kind === "observer" && (id === cls || id.indexOf(cls + "@") === 0)) ids.push(id);
+            }
+            return ids.sort();
+        }
         if (lens === "leaks") {
-            var obs = ["o:store-node", "o:rpc-provider", "o:chain-observer", "o:target-module",
-                       "o:storage-peer", "o:storage-dht", "o:outside"], present = [], row = 0;
+            var obs = ["o:store-node"].concat(perChain("o:rpc-provider"), perChain("o:chain-observer"),
+                       ["o:target-module", "o:storage-peer", "o:storage-dht", "o:outside"]), present = [], row = 0;
             for (i = 0; i < obs.length; i++) if (nodeById[obs[i]]) present.push(obs[i]);
             var step = present.length > 1 ? Math.min(135, 560 / (present.length - 1)) : 0;
             for (i = 0; i < present.length; i++) pos[present[i]] = { x: 790, y: 90 + (row++) * step };
         } else {
             pos["o:store-node"] = { x: 470, y: 42 };
-            pos["o:rpc-provider"] = { x: 875, y: 230 };
-            pos["o:chain-observer"] = { x: 875, y: 450 };
+            // one chain keeps the old places; more stack up (RPC) and down (readers) beside them
+            var rpcs = perChain("o:rpc-provider"), readers = perChain("o:chain-observer");
+            for (i = 0; i < rpcs.length; i++) pos[rpcs[i]] = { x: 875, y: 230 - i * 62 };
+            for (i = 0; i < readers.length; i++) pos[readers[i]] = { x: 875, y: 450 + i * 62 };
             pos["o:target-module"] = { x: 80, y: 230 };
             pos["o:storage-peer"] = { x: 80, y: 450 };
             pos["o:storage-dht"] = { x: 80, y: 625 };
-            pos["o:outside"] = { x: 860, y: 625 };
+            pos["o:outside"] = { x: 860, y: Math.max(625, 450 + readers.length * 62 + 51) };
         }
         // entries out of view sit on their intent, so they open out of it in the Log lens
         for (i = 0; i < allNodes.length; i++) {
@@ -1423,7 +1468,7 @@ Rectangle {
             }
             for (var p2 in exp)
                 d.links.push({ cred: "exposed", text: qsTr("%1 saw when %n entries arrived, and their topic", "", exp[p2]).arg(p2), party: "" });
-            var outs = ["o:rpc-provider", "o:chain-observer", "o:target-module"];
+            var outs = map.proposalObservers();
             for (i = 0; i < outs.length; i++) {
                 var lf = map.learned(outs[i]);
                 if (lf.length > 0) d.links.push({ cred: "exposed", text: qsTr("%1 learned %2").arg(map.obsWord(outs[i], 0)).arg(lf.join(", ")), party: "" });
@@ -1447,7 +1492,7 @@ Rectangle {
             d.rows.push([qsTr("Proposals"), String(map.intentIds.length)]);
             d.rows.push([qsTr("You read from"), map.readFrom > 0 ? qsTr("epoch %1, nothing before your admission").arg(map.readFrom) : qsTr("epoch 0, as a founder")]);
             d.rows.push([qsTr("Store node"), qsTr("timing and topic of %n envelopes", "", map.heldCount), "out"]);
-            var obs = ["o:rpc-provider", "o:chain-observer", "o:target-module"];
+            var obs = map.proposalObservers();
             for (i = 0; i < obs.length; i++) {
                 var f = map.learned(obs[i]);
                 if (f.length > 0) d.rows.push([map.obsWord(obs[i], 0), f.join(", "), "out"]);
