@@ -5,7 +5,8 @@ Status: **planned 2026-10-07. ADR-018 accepted 2026-10-08; the target network is
 
 ## 0. Where it stands (2026-10-09)
 
-Read from the pebbles on 2026-10-09. The pebbles win over this table.
+Read from the pebbles on 2026-10-09; the multisig row was added on 2026-10-30, and the other rows
+were not re-read then. The pebbles win over this table.
 
 | Phase | Pebble | State |
 |---|---|---|
@@ -16,6 +17,7 @@ Read from the pebbles on 2026-10-09. The pebbles win over this table.
 | 1 Install what's missing | `exo-dcc.10`, `.11` | **Done** (2026-10-08). Seen on display in Basecamp 0.3.2 |
 | 2 The XMR payment request | `exo-dcc.5`, `.20` | **Done, except the live payment** (2026-10-09). Spec `derived-exo-dcc.5`, 7/7. The UI was seen on display in Basecamp 0.3.2 with a real stagenet wallet, up to the payment. The live two-machine run is `exo-dcc.19`, which **waits on funds**: stagenet XMR for the payer. Detail: `docs/labbook/xmr-payment-request.md` |
 | 2 Send Monero (and every asset) | `exo-dcc.32`, `.33` | **Done** (2026-10-15). A request on the payee's behalf with the sender its only payer: paid at the address they shared, never one already backing a payment; proposing is the sender's agreement, the payee accepts, the sender pays from any wallet, the payee's wallet confirms. `xmr_send_test`. Since `.33` the same Send works in ETH or a token, BTC and LEZ (`send_any_asset_test`) |
+| 2 A room treasury: Monero multisig, coordinated (added 2026-10-30) | `exo-dcc.34` | **Built, and run on stagenet through the UI** (2026-10-17; ADR-020). Each member's own `monero-wallet-rpc` holds their key; the room carries the setup, the sync data and the partly signed transactions, and each signer's wallet checks the spend against the agreement before signing. Stagenet only, labelled experimental and pre-FCMP++; shipped since Muster 0.3.3. Design `monero-multisig-coordination.md`, runbook `docs/runbooks/xmr-multisig.md` |
 | 3 Pay from Basecamp's own wallet | `exo-dcc.6` | **Interim done** (2026-10-09): Pay with Monero Wallet copies the address and opens the wallet. The review intent `monero.wallet.review_send` is drafted for the wallet app and builds; it waits on being published upstream |
 | 4 The deal-desk demo | `exo-dcc.7` | **Not started.** Needs `.2`, `.3` and `.19`. `audit.nim` still refuses the split families |
 | 5 The mainnet gate | `exo-dcc.8` | **Not started** |
@@ -95,12 +97,13 @@ a wallet is open, the core is ungated.
    ([rfp#124](https://github.com/logos-co/rfp/issues/124), gateway-fm, open, after M3).
    Its code talks to `monero-wallet-rpc`, not to the Logos modules. Muster integrates the
    swap; it does not build one.
-3. **Monero multisig stays `reject`** (`contracts/families/registry.json`). Upstream calls it
-   experimental, and the platform backend does not expose it anyway. Re-assessed 2026-10-16 against
-   the multisig docs, the MMS guide and monero-multisig-gui: unchanged. The room as the
-   coordination layer for members' own multisig wallets is a candidate,
-   `monero.multisig-coordinated` (`monero-multisig-coordination.md`, exo-dcc.34). Every Monero action
-   starts on the `each` locus, the split's model: each person pays their own part.
+3. **Muster does not run Monero multisig itself: `monero.multisig` stays `reject`**
+   (`contracts/families/registry.json`). Upstream calls it experimental, and the platform backend
+   does not expose it anyway. Re-assessed 2026-10-16 against the multisig docs, the MMS guide and
+   monero-multisig-gui: unchanged. **Instead the room coordinates the members' own multisig
+   wallets:** `monero.multisig-coordinated`, accepted as ADR-020 on 2026-10-16, built, and run on
+   stagenet through the UI on 2026-10-17 (`monero-multisig-coordination.md`, exo-dcc.34). Every
+   other Monero action is on the `each` locus, the split's model: each person pays their own part.
 4. **Muster never enrols itself as approver.** This is the posture `exo-149` set for
    `keystore_module`. Paying from the Basecamp wallet therefore waits on an upstream review
    intent, and Phase 2 must not need one.

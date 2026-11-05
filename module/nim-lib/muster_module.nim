@@ -2913,10 +2913,12 @@ proc musterFileshareFetch(fileId, folder, privately: string): string =
   if gSession == nil: return $(%*{"error": "not-joined"})
   let (ready, note) = fileShareReady()
   if not ready: return $(%*{"error": "not-ready", "detail": note})
-  var dir = folder
-  if dir.len == 0:
-    dir = getHomeDir() / "Downloads"
-    createDir(dir)
+  # the UI resolves an empty folder to the person's own Downloads; this is the fallback for
+  # a host that does not, and a folder that cannot be made says why instead of raising
+  var dir = folder.strip()
+  if dir.len == 0: dir = getHomeDir() / "Downloads"
+  try: createDir(dir)
+  except OSError as e: return $(%*{"error": "cannot use the folder " & dir & ": " & e.msg})
   let node = swarmNode(gTopic)
   let op = node.fetch(gSession, fileId, dir, private = privately == "true")
   for o in node.ops():
@@ -3039,13 +3041,13 @@ proc musterCoordinateIntents(): string =
     try:
       for c in driverFor(w.policy).covers(effectFromJson(w.effectJson)): pendingCover.incl c.intent
     except CatchableError: discard
-  # n of 10 (exo-dcc.20): what MY wallet's history shows for each part I am owed on a
-  # Monero request, below depth — cached reads on this tick, never a wait
-  var xmrSeen = initTable[string, int]()
+  # n of 10 (exo-dcc.20), and how much has arrived so far: what MY wallet's history shows
+  # for each part I am owed on a Monero request — cached reads on this tick, never a wait
+  var xmrSeen = initTable[string, XmrSeenPart]()
   for chain in xmrOwedOn(events, driverFor, myEncHex):
     try:
-      for k, n in xmrSeenConfirmations(events, driverFor, newMoneroPartSeam(chain, moneroBackend(), cmPump),
-                                       myIdentity(moduleKeystore())): xmrSeen[k] = n
+      for k, s in xmrSeenParts(events, driverFor, newMoneroPartSeam(chain, moneroBackend(), cmPump),
+                               myIdentity(moduleKeystore())): xmrSeen[k] = s
     except CatchableError: discard
   var arr = newJArray()
   for v in views:
@@ -3223,10 +3225,13 @@ proc musterCoordinateIntents(): string =
             let l = links.getOrDefault(pv.part)
             parts[^1]["uri"] = %(if l.ok: l.uri else: "")
             # n of 10 (exo-dcc.20): on MY client, as the creditor, the confirmations my own
-            # wallet's history shows for a transfer of exactly this share below depth —
-            # absent when nothing is seen or the read did not answer (never invented)
+            # wallet's history shows for this share below depth, and — a payer who sent too
+            # little — the atomic units received so far at payTo; each absent when nothing
+            # is seen or the read did not answer (never invented)
             let k = v.id & "/" & pv.part
-            if k in xmrSeen: parts[^1]["confirmations"] = %xmrSeen[k]
+            if k in xmrSeen:
+              if xmrSeen[k].confirmations >= 0: parts[^1]["confirmations"] = %xmrSeen[k].confirmations
+              if xmrSeen[k].received.len > 0: parts[^1]["received"] = %xmrSeen[k].received
         o["parts"] = parts
         # a token says its own symbol and decimals (display only, exo-5ab); ETH and LEZ are known
         let tok = (if isErc20Asset(sp.asset): tokenInfo(sp.chain, sp.asset[6 .. ^1]) else: ("", -1))
@@ -3479,8 +3484,26 @@ proc musterCoordinateFlow(): string =
   let events = gSession.roomEvents()
   # through the room's voice memo, on the room's 5 s tick (voice_live.flowRows, voice-notes.md §6)
   let rows = hostVoice().flowRows(gSession, events, driverFor, gSession.roomFounders(events))
+  # each per-chain observer ("chain-observer@<caip2>") in words: which chain, and what a
+  # reader of it sees — one surface when every proposal reaching it agrees (exo-dde)
+  var surfaces = initOrderedTable[string, seq[ChainSurface]]()
+  for r in rows:
+    if r.chain.len == 0 or r.intentId.len == 0: continue
+    let sf = chainSurface(driverFor, intentPolicyOf(events, r.intentId))
+    if sf notin surfaces.mgetOrPut(r.observerKey, @[]): surfaces[r.observerKey].add sf
+  var observers = newJObject()
+  for key, sfs in surfaces:
+    let at = key.find('@')
+    let (cls, chain) = (key[0 ..< at], key[at + 1 .. ^1])
+    observers[key] = %*{"class": cls, "chain": chain, "chainLabel": chainLabel(chain),
+      "label": (if cls == $obChainObserver: "anyone reading " & chainLabel(chain)
+                else: "your RPC provider for " & chainLabel(chain)),
+      "sees": (if cls != $obChainObserver: ""
+               elif sfs.len == 1: surfaceWords(sfs[0])
+               else: "Anyone reading " & chainLabel(chain) & " sees what each proposal's rail shows there: some of them public, some shielded.")}
   result = $(%*{"rows": rows.toJson(),
-                 "matrix": rows.observerMatrix(introducedObservers(events, driverFor))})
+                 "matrix": rows.observerMatrix(introducedObservers(events, driverFor)),
+                 "observers": observers})
   if gLpDebug: stderr.writeLine("MUSTER-LP flow " & result)
 
 proc musterCoordinateGraph(roomTopic: string): string =

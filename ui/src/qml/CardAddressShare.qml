@@ -52,6 +52,14 @@ ColumnLayout {
         font.pixelSize: MusterStyle.cardCaption
     }
 
+    // The whole address, however the line above clipped it: what someone pays to from a
+    // wallet of their own.
+    CopyButton {
+        objectName: "cardShareCopy"
+        label: qsTr("Copy address")
+        value: cardRoot.card && cardRoot.card.address ? String(cardRoot.card.address).replace(/\s+/g, "") : ""
+    }
+
     // A public account is worth a word: the payer should know the
     // destination is readable before choosing how to pay. "Zone" is the
     // LEZ's word; on Ethereum or Bitcoin it is the chain (exo-4d4).

@@ -18,6 +18,7 @@
 import std/[json, tables, strutils, algorithm, sets]
 import ../log/log
 import ../drivers/manifest
+import ../drivers/profile      # the chain a row reaches comes from the driver's profile
 import ../intents/disclosure
 import ./intents
 from ./voice import voiceStanding, VoiceMemo   # what a voice note's part is: the fold's header pass
@@ -33,6 +34,9 @@ type
     members*: seq[string]  ## for room-member rows: who held the key at that point (sorted)
     epoch*: int
     declared*: bool        ## false when the action's driver has not declared its disclosure
+    chain*: string         ## a chain-observer or RPC-provider row: the CAIP-2 chain it reaches,
+                           ## from the driver's profile ("" when it names none). One chain's
+                           ## public is not another's, so the matrix keeps them apart.
 
 proc foundersOf*(events: seq[Event], roster: seq[string]): seq[string] =
   ## The members present at epoch 0: the roster minus every joiner the log admits. The
@@ -67,6 +71,7 @@ proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
         admittedAt[p[3]] = min(admittedAt.getOrDefault(p[3], ep), ep)
       except ValueError: discard
   var manifests = initTable[string, ActionManifest]()   # intent id → manifest
+  var chains = initTable[string, string]()              # intent id → the chain its driver settles on
   let partsAt = countedPartIndexes(events, driverFor)
   proc membersAt(ep: int): seq[string] =
     var present = initHashSet[string]()
@@ -77,10 +82,12 @@ proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
   var entryEpoch = 0
   proc addRows(res: var seq[FlowRow], i: int, kind, intentId: string,
                rows: seq[DisclosureRow], declared: bool) =
+    let chain = chains.getOrDefault(intentId)
     for d in rows:
       res.add FlowRow(seq: i, kind: kind, intentId: intentId, field: d.field, to: d.to,
                       members: (if d.to == obRoomMember: membersAt(entryEpoch) else: @[]),
-                      epoch: entryEpoch, declared: declared)
+                      epoch: entryEpoch, declared: declared,
+                      chain: (if d.to in {obChainObserver, obRpcProvider}: chain else: ""))
   let envelope = @[row("timing", obStoreNode), row("topic", obStoreNode)]
   let standing = voiceStanding(events, memo)   # the voice fold's parts, by event id, through the room's memo
   for i in 0 ..< ordered.len:
@@ -144,6 +151,11 @@ proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
     if id notin manifests:
       let drv = driverFor(intentPolicyOf(events, id))
       manifests[id] = drv.manifest(effectFromJson(effectJsonOf(events, id)))
+      chains[id] = ""
+      try:
+        let pf = drv.profile()
+        if pf.declared: chains[id] = pf.chain
+      except CatchableError: discard
     let m = manifests[id]
     proc outside(m: ActionManifest): seq[DisclosureRow] =
       if m.declared: m.discloses else: @[row("undeclared", obChainObserver)]
@@ -186,7 +198,13 @@ proc toJson*(rows: seq[FlowRow]): JsonNode =
     var ms = newJArray()
     for m in r.members: ms.add %m
     result.add %*{"seq": r.seq, "kind": r.kind, "intentId": r.intentId, "field": r.field,
-                  "to": $r.to, "members": ms, "epoch": r.epoch, "declared": r.declared}
+                  "to": $r.to, "members": ms, "epoch": r.epoch, "declared": r.declared,
+                  "chain": r.chain}
+
+proc observerKey*(r: FlowRow): string =
+  ## The matrix's key for a row's observer: its class, or for a chain's readers and the
+  ## RPC that carries to it, the class and the chain ("chain-observer@eip155:11155111").
+  if r.chain.len > 0: $r.to & "@" & r.chain else: $r.to
 
 proc observerMatrix*(rows: seq[FlowRow], introduced: seq[Observer] = @[]): JsonNode =
   ## The summary the view leads with: per observer class, the distinct fields it
@@ -200,7 +218,14 @@ proc observerMatrix*(rows: seq[FlowRow], introduced: seq[Observer] = @[]): JsonN
             obStoragePeer, obStorageDht]:
     if o in {obRoomMember, obStoreNode} or o in introduced:
       byObs[$o] = initHashSet[string]()
-  for r in rows: byObs.mgetOrPut($r.to, initHashSet[string]()).incl r.field
+  for r in rows: byObs.mgetOrPut(r.observerKey, initHashSet[string]()).incl r.field
+  # an introduced class with nothing of its own, where its chains each have a row, is
+  # those chains: listing it too would show "nothing" beside what each chain saw
+  for cls in [$obRpcProvider, $obChainObserver]:
+    var perChain = false
+    for k in byObs.keys:
+      if k.startsWith(cls & "@"): perChain = true
+    if perChain and cls in byObs and byObs[cls].len == 0: byObs.del cls
   result = newJObject()
   for o, fs in byObs:
     var arr: seq[string]

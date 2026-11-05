@@ -1,6 +1,6 @@
 # Runbook: a Monero multisig the room runs, with your own wallets
 
-**As of 2026-10-16** (ADR-020, exo-dcc.34). Three people set up a 2-of-3 Monero multisig wallet in a Muster room, fund it, and spend from it. Each person's own `monero-wallet-rpc` holds their key and does the multisig. Muster carries the messages between the wallets and asks each wallet to take part. It holds no Monero key. Design: [`docs/design/monero-multisig-coordination.md`](../design/monero-multisig-coordination.md).
+**As of 2026-10-30** (ADR-020, exo-dcc.34). Three people set up a 2-of-3 Monero multisig wallet in a Muster room, fund it, and spend from it. Each person's own `monero-wallet-rpc` holds their key and does the multisig. Muster carries the messages between the wallets and asks each wallet to take part. It holds no Monero key. Design: [`docs/design/monero-multisig-coordination.md`](../design/monero-multisig-coordination.md).
 
 > **Read first.**
 > - The wallet is your own `monero-wallet-rpc`, not Basecamp's Monero Wallet.
@@ -12,7 +12,7 @@
 
 ## 0. Set up, on each of three machines
 
-1. **Muster:** a build with ADR-020's S4 or later (the release after 0.3.1). Open Muster before any other messaging app (see [`xmr-payment-request.md`](xmr-payment-request.md) §0.2).
+1. **Muster 0.3.3 or later:** the [latest release](https://github.com/corpetty/muster/releases/latest)'s AppImage, or Muster installed in Basecamp from its catalogue ([`install-from-catalogue.md`](install-from-catalogue.md)). Open Muster before any other messaging app (see [`xmr-payment-request.md`](xmr-payment-request.md) §0.2).
 2. **`monero-wallet-rpc` on stagenet, with a fresh, empty wallet.** A wallet that has been used before cannot become a multisig wallet.
    ```sh
    # binaries: https://www.getmonero.org/downloads/ or `nix shell nixpkgs#monero-cli`

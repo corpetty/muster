@@ -78,7 +78,7 @@ The mock shows each of these. One picture, five lenses, one timeline.
 
 ### 5.1 The picture
 
-- **The boundary is the centre of the composition.** The room is a large soft membrane. Inside it: members on an inner ring, accounts and shared material between them, proposals in the middle. Outside it: the observer classes at fixed bearings (store node above, RPC provider and chain observer to the right, a target module to the left).
+- **The boundary is the centre of the composition.** The room is a large soft membrane. Inside it: members on an inner ring, accounts and shared material between them, proposals in the middle. Outside it: the observer classes at fixed bearings (store node above, RPC provider and chain observer to the right, a target module to the left). A chain's readers, and the RPC provider that carries to it, are **one observer per chain** (`o:chain-observer@<CAIP-2>`, `o:rpc-provider@<CAIP-2>`; since 2026-11-04, exo-dde.20), stacked at those bearings: Sepolia's public is not Monero's. Each says what its chain shows, from the driver's family profile (§10.1).
 - **Crossing the membrane is the event the map exists to show.** An edge that leaves is drawn in the primary orange with particles moving outward. An input that enters is drawn in info blue, dashed, moving inward. Everything inside is quiet.
 - **The store node sees every envelope.** A faint strand bundle from the membrane to the store node thickens with each entry. Its label says what the code says: timing and topic, for every entry; it cannot open one (FS-9).
 - **Epochs are rings of time, not space.** On the timeline they are bands; on the map, an admission is a pulse across the membrane and the joiner's node arriving.
@@ -161,6 +161,20 @@ Three questions a member should be able to answer without reading code:
 - **Do I hold the same room as you?** The graph carries a **fingerprint** per epoch: a digest of the ids of the entries held from that epoch on. It is offered only from an epoch whose entries are held, so it depends on what is held, never on who looks. Two members who read the fingerprint from an epoch they both held aloud, and get the same value, hold the same entries from then on. In the recorded split, Alice and Bob both read `8132 aec2 06c6 a030…` from epoch 1. The panel also counts the entries the room **dropped** because their author signature failed (raw log minus the authenticated view). A member can paste another's fingerprint and the panel says whether it matches one held, and from which epoch.
 - **One proposal at a time.** Privacy's "See where this proposal's information went" opens Crossings filtered to that proposal, with a chip back to the whole room; a proposal's panel says what it relies on, by party, before anyone approves it.
 - **What is new since you looked.** The map remembers, per room and on this device only, how many entries it showed when it closed; new entries are marked and can be replayed on their own.
+
+### 10.1 Each chain is its own observer (exo-dde.20, 2026-11-04)
+
+Found in use: the map drew one "anyone reading the chain" for every chain, so a room with an Ethereum split and a Monero request showed one observer that learned "payer, payee, amount, transaction-exists". The fields differed per driver all along (each manifest declares its own rows), but the observer did not. The two chains' publics are different people, and they see different things:
+
+- **One observer per chain.** `reduceFlow` gives each chain-observer and RPC-provider row the CAIP-2 chain of its driver's profile (`FlowRow.chain`). The matrix keys them `chain-observer@<chain>` (`observerKey`), and the map has a node per chain. A driver whose profile names no chain stays on the class's own key.
+- **What that chain shows, from the profile, never guessed.** `ChainSurface` reads the family profile's `revealsEffect` and `revealsSigners`:
+  - a **public** chain: anyone reading it sees what it pays, from whom and to whom, for good, and who signed if the profile says signers show;
+  - a **shielded** one (Monero, the LEZ private rail): anyone reading it sees that a transaction happened, never its payer, payee or amount.
+
+  The observer says it when every proposal reaching that chain agrees. When they don't (a private split and a public multisig both on `lez:testnet`), the observer says the chain is mixed, and **each crossing says its own** proposal's surface.
+- **Who sees what** (`FlowView`) lists the same per-chain observers, each with what its chain shows (`coordinate_flow`'s `observers`), and a proposal's own view lists only the chains it reaches.
+
+Held by `room_graph_test` §16 (a public chain and a shielded one: two observers, two surfaces, nothing of Monero's reaching Sepolia's readers) and `flow_test` §2.
 
 ## 11. Open questions
 

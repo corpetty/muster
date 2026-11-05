@@ -333,6 +333,29 @@ non-LEZ, non-Bitcoin chain as EVM.
     your wallet", from the `pay` op's generic copy. No person can reach it: the Monero
     card has no Pay button.
 
+## A partial payment, and topping it up (exo-dcc.37, 2026-10-30)
+
+Found in use: a payer sent less than the share. The part waited for one transfer of exactly
+the share, so the smaller transfer was never shown and the share never settled.
+
+- **Top-ups add up, for a part alone at its subaddress.** Every request and every send is
+  alone at its subaddress, since a request's is minted for it and a shared address is never
+  reused (exo-dcc.32). The creditor's wallet confirms the part when its unclaimed incoming
+  transfers there come to **exactly** the share, each at the agreed depth. The part's
+  reference is every one of those txids, sorted and comma-joined, and each is then claimed,
+  so none confirms another part.
+- **A split whose debtors pay one subaddress is unchanged.** Its parts are told apart by
+  their exact amounts (s4), and a transfer there could be anyone's, so transfers never add up
+  across them (`sharedPayTos`, `PartSeam.observe`).
+- **Exactly, not "at least".** An overpayment never settles: a single transfer of share + 1
+  stays pending, as before, so the existing probes are unchanged. The card says "received X
+  XMR, more than the Y share".
+- **The creditor's card shows what has arrived:** "received 0.1 of 0.5 XMR so far". This is
+  read from the creditor's own wallet, on their client only. The payer's client has no view
+  of it.
+- **Held by** `probe_xmr_topup_stepper` (spec `derived-exo-dcc.5` s3, extended): alone or
+  shared, every row deep or the last one shallow, and six row patterns.
+
 ## Not built yet
 
 - **A live stagenet run**: two runners in Basecamp, a stagenet

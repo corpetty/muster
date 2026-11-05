@@ -55,8 +55,12 @@ block:
   doAssert after == @["alice", "bob", "carol"], $after
   let m = rows.observerMatrix()
   var chainFields: seq[string]
-  for f in m["chain-observer"]: chainFields.add f.getStr()
+  # one chain's readers are one observer: the stub's chain (stub:0), not every chain's
+  for f in m["chain-observer@stub:0"]: chainFields.add f.getStr()
   doAssert "effect" in chainFields, $m
+  doAssert not m.hasKey("chain-observer"), "no chain-less observer when the driver names its chain: " & $m
+  doAssert rows.filterIt(it.to == obChainObserver).allIt(it.chain == "stub:0")
+  doAssert rows.filterIt(it.to == obRoomMember).allIt(it.chain == ""), "only rows bound for a chain name one"
   doAssert m["store-node"].len == 2 and m["room-member"].len >= 2
   echo "2. members who held the key at each point; the observer matrix summarises OK"
 

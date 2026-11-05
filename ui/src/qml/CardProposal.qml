@@ -353,6 +353,14 @@ ColumnLayout {
             color: Theme.palette.textTertiary
             font.pixelSize: MusterStyle.cardCaption
         }
+        // the whole payTo, however the line above shortened it: what a payer pays to from a
+        // wallet of their own, in any asset
+        CopyButton {
+            objectName: "cardPayToCopy"
+            label: qsTr("Copy address")
+            visible: value.length > 0 && cardRoot.split !== null && (cardRoot.isRequest || cardRoot.detailsOpen)
+            value: String((cardRoot.split && cardRoot.split.payTo) || "")
+        }
 
         // a bill in fiat (exo-3a4): the quote everyone agreeing is trusting — named, sourced,
         // timed — so it is checked before anyone agrees, not after
@@ -517,6 +525,13 @@ ColumnLayout {
                     }
                     TextEdit { id: clip; visible: false; width: 0; height: 0 }
                     Timer { id: copiedReset; interval: 1500; onTriggered: copyLink.copied = false }
+                }
+                // the address alone, for a wallet that takes an address and an amount
+                // rather than a monero: link
+                CopyButton {
+                    objectName: "cardXmrCopyAddress"
+                    label: qsTr("Copy address")
+                    value: String(xmrPayBox.pay.payTo || "")
                 }
                 // Pay with Basecamp's own Monero Wallet: ask it to fill its Send tab with the
                 // agreed address and amount (monero.wallet.send); the person checks them and

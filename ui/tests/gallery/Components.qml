@@ -78,6 +78,13 @@ Rectangle {
             ActionButton { text: "Propose"; enabled: false }
         }
 
+        SectionHeader { text: "CopyButton · copies the whole value, however the view shortened it" }
+        Row {
+            spacing: Theme.spacing.small
+            CopyButton { label: "Copy address"; value: "57VTGxT3AW727aC8Df1WfxfkhrxwknsrZe8Wp2zvwCzt6CJvGjjtiW7Wiei8Y6XmGJjeQMHbZ4S5iFF7DbRqwc7dBsJnXeW" }
+            CopyButton { label: "Copy link"; value: "monero:57VT…?tx_amount=0.5"; copied: true }
+        }
+
         SectionHeader { text: "InlineNotice · the outcome, the cause, the remedy" }
         InlineNotice {
             Layout.fillWidth: true

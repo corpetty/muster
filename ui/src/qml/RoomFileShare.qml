@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 import Logos.Theme
 import Logos.Controls
@@ -61,6 +62,24 @@ ColumnLayout {
             if (fs.ops[i].file === fileId && fs.ops[i].kind === "fetch") return fs.ops[i];
         return null;
     }
+    // a picked file or folder, as the module reads a path: file:///a%20b → /a b
+    function localPath(url) {
+        var s = String(url || "");
+        if (s.indexOf("file://") === 0) s = decodeURIComponent(s.substring(7));
+        return s;
+    }
+
+    FileDialog {
+        id: filePicker
+        title: qsTr("Choose a file to share")
+        fileMode: FileDialog.OpenFile
+        onAccepted: pathField.text = fs.localPath(selectedFile)
+    }
+    FolderDialog {
+        id: folderPicker
+        title: qsTr("Choose where to save")
+        onAccepted: folderField.text = fs.localPath(selectedFolder)
+    }
 
     Timer {
         interval: 2000; repeat: true; triggeredOnStart: true
@@ -97,14 +116,24 @@ ColumnLayout {
     }
 
     // ── share ───────────────────────────────────────────────────────────────
-    RowLayout {
+    // the field on its own line, its buttons under it: the panel beside a room is narrow
+    LogosTextField {
+        id: pathField
+        objectName: "fileSharePath"
         Layout.fillWidth: true
+        Layout.preferredWidth: 1     // fill the panel, never widen it to fit the placeholder
         enabled: fs.ready
-        LogosTextField {
-            id: pathField
-            objectName: "fileSharePath"
-            Layout.fillWidth: true
-            placeholderText: qsTr("/path/to/a/file to share")
+        placeholderText: qsTr("Choose a file, or paste its path")
+    }
+    Flow {
+        Layout.fillWidth: true
+        spacing: Theme.spacing.small
+        enabled: fs.ready
+        ActionButton {
+            objectName: "fileShareChoose"
+            text: qsTr("Choose a file…")
+            variant: LogosButton.Variant.Secondary
+            onClicked: filePicker.open()
         }
         ActionButton {
             objectName: "fileShareShare"
@@ -146,8 +175,16 @@ ColumnLayout {
         id: folderField
         objectName: "fileShareFolder"
         Layout.fillWidth: true
+        Layout.preferredWidth: 1
         visible: fs.files.length > 0
-        placeholderText: qsTr("Save to (empty: your Downloads folder)")
+        placeholderText: qsTr("Save to your Downloads folder, or choose another")
+    }
+    ActionButton {
+        objectName: "fileShareChooseFolder"
+        visible: fs.files.length > 0
+        text: qsTr("Choose folder…")
+        variant: LogosButton.Variant.Secondary
+        onClicked: folderPicker.open()
     }
     Repeater {
         model: fs.files
@@ -202,20 +239,25 @@ ColumnLayout {
                     return (o.private ? qsTr("Fetching privately over Mix… %1") : qsTr("Fetching… %1")).arg(pct);
                 }
             }
-            RowLayout {
+            // wraps, so three or four buttons never run past the panel's edge
+            Flow {
                 Layout.fillWidth: true
+                spacing: Theme.spacing.small
                 enabled: fs.ready
+                readonly property bool busy: row.op !== null && row.op.state === "running"
+                readonly property bool failed: row.op !== null && row.op.state === "failed"
+                // held: save another copy wherever; not yet: fetch, or try again after a failure
                 ActionButton {
                     objectName: "fileShareFetch_" + row.index
-                    visible: !row.modelData.held
-                    text: qsTr("Fetch")
+                    visible: !parent.busy
+                    text: row.modelData.held ? qsTr("Save a copy") : parent.failed ? qsTr("Try again") : qsTr("Fetch")
                     variant: LogosButton.Variant.Secondary
                     onClicked: fs.backend.fetchFile(row.modelData.id, folderField.text, "false")
                 }
                 ActionButton {
                     objectName: "fileShareFetchPrivate_" + row.index
-                    visible: !row.modelData.held
-                    text: qsTr("Fetch privately")
+                    visible: !row.modelData.held && !parent.busy
+                    text: parent.failed && row.op.private ? qsTr("Try again privately") : qsTr("Fetch privately")
                     variant: LogosButton.Variant.Secondary
                     onClicked: fs.backend.fetchFile(row.modelData.id, folderField.text, "true")
                 }

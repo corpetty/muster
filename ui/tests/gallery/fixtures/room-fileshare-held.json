@@ -1,0 +1,54 @@
+{
+  "about": "Room details at FileShare, as the member who shared a file and holds it sees it: the file and folder pickers, Save a copy, Stop seeding and Remove from list, every row inside the panel's width (exo-4d0.10; recorded from scripts/fileshare-self-test.sh).",
+  "snapshot": "data/room-fileshare-held.json",
+  "sizes": [
+    "1024x700",
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsTab",
+        "files"
+      ]
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsOpen",
+        true
+      ]
+    },
+    {
+      "wait": 600
+    },
+    {
+      "expectProp": [
+        "fileShareChoose",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "fileShareChooseFolder",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "fileShareFetch_0",
+        "text",
+        "Save a copy"
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}
