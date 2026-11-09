@@ -1,0 +1,9 @@
+[package]
+name = "quest_program"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+quest_core = { path = "../quest_core" }
+lee_core.workspace = true
+borsh.workspace = true

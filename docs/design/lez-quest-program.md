@@ -1,7 +1,12 @@
 # The quest record program (exo-267.7)
 
-Status: **design, 2026-11-09.** Nothing is built. This note settles the program's shape before
-code, as exo-267.7 asks. The room side is exo-267.8, and the plan is
+Status: **built and run on a local v0.3.0 chain, 2026-11-09.** The program is
+`programs/lez-quest` (its rules tested in process), muster reads it in `module/src/lez/quest.nim`
+(held to the crate's vectors), and `quest_e2e` ran it on a local zone beside the multisig
+port: a quest a person issued and closed, and one a 2-of-3 issued and closed by vote, the
+vault's grant carrying into the bounty's transfer as §4 read from the executor. Its record
+holds the bounty itself (no separate escrow PDA), and Close carries the taker and bounty it
+pays, since plan cannot read the record; apply checks both. The room side is exo-267.8, and the plan is
 [logos-world-plan.md](logos-world-plan.md) Phase 1.
 
 ## 1. What it is for
@@ -43,11 +48,11 @@ effect on it (lez-multisig-v03.md §8).
 
 | instruction | who must be authorized | record before → after | moves |
 | --- | --- | --- | --- |
-| `Open { quest_id, terms_hash, bounty, confirmer, taker }` | the issuer (the vault, granted by the multisig's Execute) | empty → Open | `bounty` from the vault to the record's escrow (§4) |
+| `Open { quest_id, terms_hash, bounty, confirmer, taker }` | the issuer (the vault, granted by the multisig's Execute) | empty → Open | `bounty` from the issuer's account to the record account (§4) |
 | `Accept { issuer, quest_id }` | the taker (their own transaction) | Open → Accepted; must equal the named taker if one was named | — |
 | `Confirm { issuer, quest_id }` | the confirmer (their own transaction) | Accepted → Confirmed | — |
-| `Close { issuer, quest_id }` | the issuer (a second vote) | Confirmed → Closed | escrow to the taker |
-| `Cancel { issuer, quest_id }` | the issuer | Open or Accepted → Cancelled | escrow back to the vault |
+| `Close { quest_id, taker, bounty }` | the issuer (a second vote) | Confirmed → Closed; apply checks the taker and bounty | the record account's bounty to the taker |
+| `Cancel { quest_id, bounty }` | the issuer | Open or Accepted → Cancelled | the bounty back to the issuer |
 
 What the chain refuses, and the program's tests must show:
 
@@ -68,10 +73,10 @@ A chained call carries its caller's grants: LEZ v0.3.0's executor
 Execute calls `Q` with the vault's seed, `Q` is granted the vault, and `Q`'s own chained call to the
 native program may move it. So:
 
-- **Open** takes the bounty out of the vault into an escrow PDA of `Q` (`for_public_pda(Q,
-  escrow seed)`) in the same transaction. The bounty is set aside at issue, visibly, and a taker
+- **Open** takes the bounty out of the issuer's account into the record account's own
+  native shard, in the same transaction. The bounty is set aside at issue, visibly, and a taker
   can see it before accepting.
-- **Close** pays the escrow to the taker. **Cancel** returns it to the vault. Both move `Q`'s own
+- **Close** pays the bounty to the taker. **Cancel** returns it to the issuer. Both move `Q`'s own
   PDA, which `Q` authorizes with its own seed.
 
 Each quest step is therefore one multisig vote, or one member's own transaction, and paying is
@@ -94,7 +99,7 @@ decision for Jarrad (plan §Decisions); escrow is the default here.
 - **`quest_id`**: SHA-256 over a domain tag, the issuer, the terms hash, and the room intent id that
   proposed the quest. It is unique per issuer and links to nothing outside the room.
 - **The S5 re-read**: before a member votes on Open or Close, muster reads the record (and the
-  escrow balance) and refuses on any difference from what the room reviewed.
+  record account's balance) and refuses on any difference from what the room reviewed.
 - **Readiness**: each of Accept and Confirm is a public transaction, paid by its signer in native
   LEZ. The card names this before a newcomer is asked to confirm a welcomer's quest.
 
@@ -115,6 +120,6 @@ decision for Jarrad (plan §Decisions); escrow is the default here.
 ## 7. Acceptance
 
 - The program's own tests on a local v0.3 zone (`infra/lez/localnet.sh`): every refusal in §3, the
-  escrow moving on Open, Close and Cancel, and a Closed record that nothing changes.
+  bounty moving on Open, Close and Cancel, and a Closed record that nothing changes.
 - Vectors from the program's crate (the borsh of a record in each status, every instruction, the
   PDAs). Muster decodes them byte for byte, as it does `tests/vectors/lez-multisig-v030`.
