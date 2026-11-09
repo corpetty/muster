@@ -102,6 +102,7 @@ proc remedyFor*(r: Requirement): string =
     else: "point the RPC setting at a node on " & r.name & " (set_setting rpc)"
   of rqAuthority:
     if r.name == "split-party": "only the people a split names agree to it — if you owe a share, ask for the split to be proposed with you in it"
+    elif r.name == "charter-elector": "only the members a charter names decide it — a founding asks every one of them, an amendment the charter's own rule"
     else: "use a key that is a recognized " & r.name & " — or take part without signing"
   of rqInfra:
     if r.name == "lez-account": "set up a funded LEZ account in the LEZ Wallet App"
@@ -405,6 +406,12 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
       of elYes: (rdMet, "the split names you: your agreement counts")
       of elNo: (rdMissing, "the split does not name you: your agreement would not count")
       of elUnknown: (rdUnknown, "cannot tell whether the split names you")
+    of "charter-elector":
+      # a charter names who decides it (exo-267.1): the driver's own answer, as a split's
+      case facts.contributes
+      of elYes: (rdMet, "the charter names you among those who decide it")
+      of elNo: (rdMissing, "the charter does not name you among those who decide it")
+      of elUnknown: (rdUnknown, "cannot tell whether the charter names you")
     else: (rdUnknown, "unrecognized authority requirement: " & name)
   let declaredBy = (if facts.declared != nil: facts.declared else: facts.callableWithoutRegistry)
   result.moduleDeclared = declaredBy

@@ -37,6 +37,20 @@ proc effectFromJson*(effectJson: string): Effect =
         var fields: seq[(string, CborValue)]
         if j.hasKey("text"): fields.add ("text", cbText(j["text"].getStr()))
         return Effect(schemaId: "muster.effect.statement.v1", fields: fields)
+      of "charter":
+        # GOVERNANCE — the room's charter (exo-267.1, drivers/charter.nim): the charter it
+        # amends ("" to found), who decides it and how many, and the body as its verbatim
+        # JSON text (every member folds the same propose event, so the materialization is
+        # identical across the room). Its own schema: a charter signature is never a
+        # statement's or a payment's (F-5).
+        var fields: seq[(string, CborValue)]
+        fields.add ("prev", cbText(j{"prev"}.getStr()))
+        var electorate: seq[CborValue]
+        for m in j{"electorate"}.getElems(): electorate.add cbText(m.getStr())
+        fields.add ("electorate", cbArray(electorate))
+        if j{"k"}.kind == JInt and j["k"].getInt() >= 0: fields.add ("k", cbUint(uint64(j["k"].getInt())))
+        if j.hasKey("body"): fields.add ("body", cbText($j["body"]))
+        return Effect(schemaId: "muster.effect.charter.v1", fields: fields)
       of "add-driver":
         # GOVERNANCE — driver-as-proposal: a proposal that INTRODUCES a driver kind
         # into the room's capability set. What a group can do evolves by proposal, not
@@ -308,6 +322,7 @@ proc effectSchema*(effectJson: string): tuple[id: string, known: bool] =
     of "settle-up": return ("muster.effect.settle-up.v1", true)   # net several splits (exo-3c6)
     of "monero-multisig-spend": return ("muster.effect.monero.multisig-spend.v0", true)   # a room treasury (ADR-020)
     of "add-driver": return ("muster.effect.governance.add-driver.v1", true)
+    of "charter": return ("muster.effect.charter.v1", true)
     of "invoke":
       let m = j{"module"}.getStr()
       let meth = j{"method"}.getStr()
