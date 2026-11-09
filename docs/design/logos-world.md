@@ -157,6 +157,16 @@ proposal. System 13 asks for more, and most of it fits "the room's capabilities 
 
 ### D. Thresholds and mutual stake: the circle itself
 
+**Revised 2026-11-09, after Jarrad's note.** The circle's base is the LEZ multisig
+(`lez.multisig-program`, the v0.3 port): the vault is the pot, members pay in from their own
+accounts, and each payout is a vault transfer the members vote on with their own transactions, which
+the chain counts. The program also adds and removes members and changes its threshold by proposal,
+counting only current members' votes. That puts membership and threshold on chain, and it allows a
+savings group (a pot that grows, lends and shares out), which the split-based circle below cannot,
+since it never holds funds. The cost is public books: every payment, payout and vote is visible by
+account. The split-based circle stays as the variant with no shared custody. The plan
+(`logos-world-plan.md`, Phase 1) has the pieces.
+
 A ROSCA is already almost a Muster primitive. One round is a split with the `each` locus: the
 round's recipient is the creditor, every other member owes an equal share, each pays their own
 part, and the recipient's own chain read confirms each part. A circle is a charter with a rotation
@@ -177,6 +187,14 @@ chronicle feed. This needs A and C.6 first. The operator-neutrality rule (the fo
 picks) becomes a charter property anyone can read.
 
 ### F. Quests
+
+**Revised 2026-11-09: quests move into the first slice, issued and attested through the circle's
+LEZ multisig.** A small LEZ program keeps a quest record. Only the issuing multisig's vault opens and
+closes a record, only the taker's own signature accepts it, and only the named confirmer's signature
+marks it confirmed. The record holds the terms' hash, not the terms, so the task stays in the room
+until its members publish it. A closed record is public, attributed and permanent, so for a circle
+on LEZ it is the deed (slice A): the issuer proves a real group by the chain's threshold, a taker
+signs under an account they choose, and nothing withdraws it.
 
 A person-given quest is an intent. The giver proposes the task. The taker accepts it (their
 agreement, as in a split). Completion is confirmed by a named confirmer, and the deed follows. The
@@ -202,7 +220,10 @@ once. Inside a room Muster already settles this: membership is named and persist
 encryption identity is bound to the authorization key by a signed link statement (F-14). Outside the
 room the open question is which public pseudonym a deed is signed under. If it is the room key,
 every deed links every room the member is in. If it is a fresh key per deed, deeds bind nothing.
-The likely answer is personas the member chooses: one or more public signing identities, each bound
+On LEZ part of this already exists: a multisig needs fresh member accounts, so Muster gives a member
+a new keystore-derived LEZ account for each multisig they join, a public name scoped to that one
+circle. Funding it is what can link it, since every vote pays a fee. The likely general answer is
+personas the member chooses: one or more public signing identities, each bound
 to the member's room identity by a statement that is disclosed only inside the room where the deed
 was made. The member then decides which deeds accumulate under which name. Sybil resistance under
 privacy (RLN membership is the platform's nearest tool) is a platform question that Muster can use
@@ -222,6 +243,15 @@ but should not try to answer alone.
 
 ## A first vertical slice
 
+**Revised 2026-11-09: a savings circle on a LEZ multisig that issues quests and attests to them.**
+A charter template that names the circle's multisig. Rounds paid from the vault by the members'
+votes. Member and threshold changes proposed from the room, with a removal on chain also removing
+the member from the room's encryption. A quest record program, and the issue, accept, confirm and
+attest flow in the room. The exit: three members, three rounds, a quest attested, checked by an
+outsider from the chain alone. It needs the v0.3 multisig program upstream and on the LEZ testnet
+(exo-eb6.4.4.5), and every member's account funded with native LEZ. The off-chain deed and the
+threshold predicate move to the next phase. The first draft's slice follows, kept for the record.
+
 **A savings circle in a room, ending in a deed.** A charter template (members, rotation, share,
 cadence, the rule for changing rules). Rotating rounds as `each`-locus splits. At completion, a deed
 the members agree to publish: "this circle of N completed M rounds", with each name on it only by
@@ -231,6 +261,10 @@ charter (C.1), the threshold predicate (D) and the deed (A). It also puts BRAC's
 story Jarrad wants circles to carry, into running code.
 
 ## Questions to bring back to Jarrad
+
+Added 2026-11-09, with the circle on the LEZ multisig: are public books acceptable for a circle
+(every payment, payout, vote and quest record visible by account)? Who closes a quest: the circle's
+vote, the named confirmer, or both? Is a bounty set aside at issue or paid from the pot at attest?
 
 1. Which fields of a circle's deed should be publishable by default, and which only by opt-in? This
    is the consent-granularity fork the UI page flags as "the load-bearing Logos-vs-ANVIL delta."
