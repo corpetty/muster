@@ -19,6 +19,7 @@ import ./lez_multisig      # the LEZ multisig program (exo-6cbe)
 import ./btc_frost         # FROST: the aggregate locus (Phase D)
 import ./lez_frost         # a FROST group acting on LEZ (exo-55e)
 import ./split             # a split: each pays their own share (exo-a90.3)
+import ./charter           # a room's charter: its electorate named per proposal (exo-267.1)
 import ../bitcoin/tx       # hexToBytes
 import ../crypto/secp256k1    # Address
 import ../crypto/curve25519   # Ed25519Pub (the roster)
@@ -116,6 +117,12 @@ proc newDriver*(kind: string, config: JsonNode): Driver =
     # only by an approved add-driver, see kinds.nim).
     let roster = parseRoster(config)
     newThresholdDriver(roster, max(1, roster.len))
+  of "charter":
+    # A room's charter (exo-267.1): its electorate and k are named in each charter's
+    # effect; the roster is the room's members, for the sign-path check only.
+    var members: seq[string]
+    for m in config{"roster"}.getElems(): members.add m.getStr().toLowerAscii().replace("0x", "")
+    newCharterDriver(members)
   of "frost":
     # 2-round Schnorr-threshold structure over an Ed25519 roster. Same roster/k
     # config shape as "threshold"; the difference is describe().rounds = 2, so the

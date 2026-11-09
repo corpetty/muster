@@ -35,6 +35,7 @@ import ../src/drivers/btc_frost
 import ../src/drivers/lez_multisig
 import ../src/drivers/lez_frost
 import ../src/drivers/split                  # evenShares / splitEffectJson (exo-a90.3)
+import ../src/drivers/charter                # circleTemplate / foundingEffect (exo-267.1)
 import ../src/coordination/readiness        # toJson(ActionManifest), toJson(DriverDescriptor)
 import ../src/coordination/intent_events    # effectFromJson — the hosted propose path's parser
 import ../src/lez/multisig                  # vaultPda / vaultSeed / LezAction
@@ -108,6 +109,7 @@ proc configOf(kind: string): JsonNode =
   of "safe": %*{"chainId": 31337, "safe": SafeAddr, "owners": owners, "threshold": 2}
   of "threshold", "frost", "invoke": %*{"roster": roster, "k": 2}
   of "unanimous": %*{"roster": roster}
+  of "charter": %*{"roster": [SplitCreditor, SplitDebtors[0], SplitDebtors[1]]}
   of "eip191": %*{"signers": owners, "threshold": 1}
   of "btc-p2wsh", "btc-tapscript": %*{"network": "regtest", "k": 2, "keys": BtcKeys}
   of "lez-multisig": lezMultisigCfg
@@ -164,6 +166,12 @@ proc effectJsonFor(kind, variant: string, d: Driver): string =
          "data": multiSendOf(Erc20Token, erc20Transfer()), "operation": 1})
   of "threshold/statement", "unanimous/statement", "frost/statement", "eip191/statement":
     $(%*{"effect": "statement", "text": "The room approves the Q4 budget."})
+  of "charter/found":
+    # a savings circle's founding charter (exo-267.1): every member it names decides it
+    foundingEffect(circleTemplate("Tuesday circle", "save together, pay out in turn",
+                                  @[SplitCreditor, SplitDebtors[0], SplitDebtors[1]], amendK = 2,
+                                  account = "lez:local:" & repeat("ab", 32), share = "100",
+                                  asset = "LEZ", cadenceSec = 604_800))
   of "threshold/add-driver":
     # governance: admit the unanimous kind into the room (governance_test)
     $(%*{"effect": "add-driver", "kind": "unanimous"})
@@ -254,7 +262,7 @@ proc effectJsonFor(kind, variant: string, d: Driver): string =
 const Variants* = [
   ("safe", "transfer"), ("safe", "contract-call"), ("safe", "delegatecall"),
   ("threshold", "statement"), ("threshold", "add-driver"), ("unanimous", "statement"),
-  ("frost", "statement"), ("eip191", "statement"),
+  ("frost", "statement"), ("eip191", "statement"), ("charter", "found"),
   ("invoke", "module-call"), ("invoke", "lez-transfer"),
   ("btc-p2wsh", "spend"), ("btc-tapscript", "spend"), ("btc-frost", "spend"),
   ("lez-multisig", "transfer"), ("lez-multisig", "vault-init"), ("lez-frost", "transfer"),

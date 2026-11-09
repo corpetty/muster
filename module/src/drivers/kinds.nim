@@ -23,7 +23,7 @@ type
     kind*: string             ## the policy word recorded on each intent
     family*: string           ## the registry family it instantiates
     label*: string            ## what a person calls it on the picker
-    composes*: seq[string]    ## the proposals it serves: "payment" | "statement" | "action" | "split"
+    composes*: seq[string]    ## the proposals it serves: "payment" | "statement" | "action" | "split" | "charter"
     founding*: bool           ## admitted in every room from the start; else only by an approved add-driver
     accountFamilies*: seq[string]
       ## non-empty = the kind acts FROM an account a member disclosed into the room
@@ -43,6 +43,7 @@ const Kinds*: seq[KindInfo] = @[
   KindInfo(kind: "eip191", family: "room.eip191-attest", label: "Attest", composes: @["statement"], founding: true,
            accountFamilies: @["evm.safe"]),
   KindInfo(kind: "unanimous", family: "room.threshold", label: "Unanimous", composes: @["statement"], founding: false),
+  KindInfo(kind: "charter", family: "room.threshold", label: "Charter", composes: @["charter"], founding: true),
   KindInfo(kind: "btc-p2wsh", family: "btc.p2wsh-sortedmulti", label: "Bitcoin (P2WSH)", composes: @["payment"],
            founding: true, accountFamilies: @["btc.p2wsh-sortedmulti"]),
   KindInfo(kind: "btc-tapscript", family: "btc.tapscript-multi-a", label: "Bitcoin (taproot)", composes: @["payment"],

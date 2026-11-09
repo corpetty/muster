@@ -852,6 +852,100 @@
       },
       "signRefusal": ""
     },
+    "charter/found": {
+      "kind": "charter",
+      "variant": "found",
+      "family": "room.threshold",
+      "effectExample": {
+        "schema": "muster.effect.charter.v1",
+        "fields": {
+          "prev": "",
+          "electorate": [
+            "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+            "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+            "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2"
+          ],
+          "k": 3,
+          "body": "{\"name\":\"Tuesday circle\",\"purpose\":\"save together, pay out in turn\",\"members\":[\"c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1\",\"d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1\",\"d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2\"],\"amend\":{\"k\":2},\"roles\":[],\"rules\":{\"amend-charter\":\"charter\",\"payout\":\"lez-multisig@lez:local:abababababababababababababababababababababababababababababababab\",\"member-change\":\"lez-multisig@lez:local:abababababababababababababababababababababababababababababababab\"},\"account\":\"lez:local:abababababababababababababababababababababababababababababababab\",\"schedule\":{\"cadence\":604800,\"share\":\"100\",\"asset\":\"LEZ\",\"order\":[\"c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1\",\"d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1\",\"d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2\"]}}"
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 3,
+        "finality": "immediate",
+        "domain": "muster.charter.v1"
+      },
+      "environment": "room",
+      "profile": {
+        "declared": true,
+        "family": "room.threshold",
+        "settlement": "none",
+        "locus": "room",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "room",
+        "ordering": "none",
+        "expiry": "optional",
+        "setup": "none",
+        "membershipChange": "in-place",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "never",
+          "signers": "never",
+          "effect": "room-only"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "production",
+        "chain": "",
+        "account": "",
+        "k": 1,
+        "n": 0,
+        "bypassesKnown": true,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 3,
+          "finality": "immediate",
+          "domain": "muster.charter.v1"
+        },
+        "requirements": [
+          {
+            "kind": "authority",
+            "name": "charter-elector",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "charter-elector",
+              "field": ""
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          }
+        ],
+        "touches": []
+      },
+      "signRefusal": ""
+    },
     "eip191/statement": {
       "kind": "eip191",
       "variant": "statement",

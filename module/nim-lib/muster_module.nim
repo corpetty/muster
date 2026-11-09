@@ -18,6 +18,7 @@ import ../src/drivers/threshold      # a second coordination policy (Ed25519 k-o
 import ../src/drivers/frost          # 2-round FROST-style — the multi-round policy
 import ../src/drivers/invoke         # the generic module-action driver (P-D1/P-D2)
 import ../src/drivers/eip191         # EIP-191 personal-sign attestation (Tier-1, P-D6)
+import ../src/drivers/charter        # a room's charter: its electorate named per proposal (exo-267.1)
 import ../src/drivers/registry
 import ../src/drivers/profile         # the family profile each driver declares (exo-a50.1.1)
 import ../src/drivers/kinds           # the one list of driver kinds; unknown → unsupported (exo-a50.1.2)
@@ -236,6 +237,10 @@ proc roomDriver(kind: string): Driver =
     return newSplitDriver((if bare == "lez-split": LezSplitFamily elif bare == "btc-split": BtcSplitFamily
                            elif bare == "monero-split": MoneroSplitFamily
                            else: EvmSplitFamily), chain, roomIdentities())
+  if bare == "charter":
+    # the room's charter (exo-267.1): each charter names who decides it; the room's members
+    # here only for the sign-path check that every one it names is in the room
+    return newCharterDriver(roomIdentities())
   let roster = currentRoster()
   let n = max(1, roster.len)
   case kind

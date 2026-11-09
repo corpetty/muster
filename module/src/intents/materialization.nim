@@ -90,6 +90,12 @@ method describeFor*(d: Driver, e: Effect): DriverDescriptor {.base, gcsafe.} =
   ## the collection, the card's "M of N", the activity feed, the audit file.
   d.describe()
 
+method electorateFor*(d: Driver, e: Effect): int {.base, gcsafe.} =
+  ## How many may agree to ONE proposal, when the effect names them (a charter's
+  ## electorate, exo-267.1) — the n a decline is counted against. 0 = not named per
+  ## proposal: the family profile's n, else the threshold.
+  0
+
 method agreesByProposing*(d: Driver, e: Effect, proposer: string): bool {.base, gcsafe.} =
   ## Whether the member proposing `e` (their room identity, hex) is a party whose own
   ## agreement the proposal should carry — made then, by their key, as any other
