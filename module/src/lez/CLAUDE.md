@@ -22,6 +22,10 @@ The LEZ *wallet* rails (public / shield / deshield / private transfers) live in
   `programs/lez-quest`, design `docs/design/lez-quest-program.md`): `QuestRecord` in its borsh
   layout, every instruction, and the record's PDA (psLee02). Held to vectors from the
   program's own crate (`tests/vectors/lez-quest-v010`).
+- `quest_fake.nim`: the quest program's rules in process, plugged into `FakeLezMultisig`
+  (`addProgram`), which carries an Execute's vault grant into the program's transfers as
+  v0.3's executor does; `submitCall` / `readShard` are the seam's member call and another
+  program's shard (exo-267.8).
 - `tx.nim`: a LEZ v0.2.4 public transaction as bytes.
   - The multisig instruction in risc0 serde words.
   - The borsh message and its domain-separated hash.

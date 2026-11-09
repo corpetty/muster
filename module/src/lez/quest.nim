@@ -140,3 +140,44 @@ proc questCancel*(questId: seq[byte], bounty: UInt128): seq[byte] =
   result = @[4'u8]
   result.put32(questId)
   result.putU128(bounty)
+
+type
+  QuestInstructionKind* = enum
+    qiOpen = "open", qiAccept = "accept", qiConfirm = "confirm", qiClose = "close", qiCancel = "cancel"
+
+  QuestInstruction* = object
+    kind*: QuestInstructionKind
+    questId*: seq[byte]
+    issuer*: seq[byte]          ## accept / confirm
+    termsHash*: seq[byte]       ## open
+    bounty*: UInt128            ## open / close / cancel
+    confirmer*: seq[byte]       ## open
+    taker*: seq[byte]           ## open (named, or empty) / close
+
+proc decodeQuestInstruction*(b: openArray[byte]): QuestInstruction =
+  ## An instruction's borsh, decoded whole (what a proposal's call carries, read back).
+  var r = Rd(b: @b)
+  let k = r.u8()
+  if k > ord(high(QuestInstructionKind)): bad("unknown quest instruction " & $k)
+  result.kind = QuestInstructionKind(k)
+  case result.kind
+  of qiOpen:
+    result.questId = r.take(32)
+    result.termsHash = r.take(32)
+    result.bounty = r.u128()
+    result.confirmer = r.take(32)
+    case r.u8()
+    of 0: discard
+    of 1: result.taker = r.take(32)
+    else: bad("a named taker is Option<[u8; 32]>")
+  of qiAccept, qiConfirm:
+    result.issuer = r.take(32)
+    result.questId = r.take(32)
+  of qiClose:
+    result.questId = r.take(32)
+    result.taker = r.take(32)
+    result.bounty = r.u128()
+  of qiCancel:
+    result.questId = r.take(32)
+    result.bounty = r.u128()
+  if r.p != r.b.len: bad("a quest instruction carries " & $(r.b.len - r.p) & " bytes too many")
