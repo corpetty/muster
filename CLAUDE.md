@@ -87,6 +87,7 @@ ui/prototype/    coordination-prototype-v2.html — the standalone HTML referenc
 catalog/         Muster's own Basecamp catalogue (exo-dcc.3): logos-repo.json, and index.json + icons/ once a release is up; publishes only muster_module and muster_ui, every dependency from Logos Official; `.lgx` files are `muster-v<version>` release assets (catalog/README.md)
 site/            index.html — the Pages landing page (https://corpetty.github.io/muster/); scripts/build-site.sh assembles it with docs/diagrams/ at /diagrams/ and the atlas at /atlas/, and checks every relative link
 ui-nim/          the UI in Nim on nim-seaqt + nimside (epic exo-607, docs/design/seaqt-ui.md): flake.nix pins seaqt qt-6.11 on nixos-unstable's Qt 6.11.2 and rebuilds liblogos_core + liblogos_protocol on it (T1b, ADR-019; nix/nixpkgs-app — the module processes keep Logos's Qt 6.9.2) · nix/seaqt-app.nix · hello/ (T1) · contract/ (T2: repContract, the .rep → nimside qobject: macro, checked index for index against repc) · app/ + headless/ (T4a–T7: muster-app, the standalone Nim UI — the real QML, every SLOT and the autopilot in backend.nim, muster_module through the client generated from muster.lidl, async; parity 11/11) · nix/seaqt-ro.nix + nix/seaqt-gen-patches/ + ro/ (T3: QtRemoteObjects bindings generated at build time, never committed)
+programs/        LEZ programs muster authors: lez-quest/ (the quest record program on LEZ v0.3.0, exo-267.7 — Rust, plan/apply, a risc0 guest, an e2e on a local zone; read by module/src/lez/quest.nim)
 scripts/         git hooks
 ```
 

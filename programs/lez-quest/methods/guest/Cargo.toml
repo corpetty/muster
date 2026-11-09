@@ -1,0 +1,13 @@
+[package]
+name = "quest-guest"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "quest"
+path = "src/bin/quest.rs"
+
+[dependencies]
+quest_program = { path = "../../quest_program" }
+lee_core.workspace = true
+risc0-zkvm = { version = "=3.0.5", default-features = false, features = ["std"] }

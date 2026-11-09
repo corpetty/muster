@@ -18,6 +18,10 @@ The LEZ *wallet* rails (public / shield / deshield / private transfers) live in
   - It is also a `ChainAdapter`, so the settlement seam can hold it.
   - `FakeLezMultisig` reproduces the program handlers with the program messages, over borsh
     accounts at their PDAs. A refused transaction changes and charges nothing.
+- `quest.nim`: the quest record program's on-chain objects (exo-267.7, its source in
+  `programs/lez-quest`, design `docs/design/lez-quest-program.md`): `QuestRecord` in its borsh
+  layout, every instruction, and the record's PDA (psLee02). Held to vectors from the
+  program's own crate (`tests/vectors/lez-quest-v010`).
 - `tx.nim`: a LEZ v0.2.4 public transaction as bytes.
   - The multisig instruction in risc0 serde words.
   - The borsh message and its domain-separated hash.
