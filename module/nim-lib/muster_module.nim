@@ -51,6 +51,8 @@ import ../src/lez/multisig as lezms    # its on-chain objects + PDAs
 import ../src/lez/multisig_chain       # the chain seam
 import ../src/lez/tx as leztx          # base58 ids, public account ids
 import ../src/wallet/lez_multisig_live # the live chain: the member's own transactions (exo-3c9)
+import ../src/lez/quest as lezquest    # the quest record program's objects (exo-267.7)
+import ../src/coordination/quest as roomquest   # quests in the room (exo-267.8)
 import ../src/coordination/vote        # a vote-locus approval = the member's own on-chain vote
 import ../src/drivers/btc_frost        # FROST: the aggregate locus (Phase D)
 import ../src/coordination/aggregate   # the ChillDKG ceremony + the two rounds over the log
@@ -315,6 +317,7 @@ var gLezRpc = getEnv("MUSTER_LEZ_RPC", "https://testnet.lez.logos.co")
 var gLezChain = getEnv("MUSTER_LEZ_CHAIN", "lez:testnet")
 var gLezProgram = getEnv("MUSTER_LEZ_MULTISIG_PROGRAM", LezDeployedMultisig)
 var gLezMsigProgram = getEnv("MUSTER_LEZ_MSIG_PROGRAM", "")   ## the lez-msig program's account id (exo-0d3); "" = none deployed
+var gLezQuestProgram = getEnv("MUSTER_LEZ_QUEST_PROGRAM", "")   ## the quest record program (exo-267.8), hex or base58; "" = none
   ## who sends a settling transaction and pays its fee (exo-a50.1.5): "self" = this
   ## instance's own key, signed locally and sent raw; "unlocked:<0x…>" = an account the
   ## node itself unlocks (anvil's dev accounts) via eth_sendTransaction.
@@ -405,6 +408,7 @@ proc loadSettingsFile() =
       if j.hasKey("lezChain"): gLezChain = j["lezChain"].getStr()
       if j.hasKey("lezMultisigProgram"): gLezProgram = j["lezMultisigProgram"].getStr()
       if j.hasKey("lezMsigProgram"): gLezMsigProgram = j["lezMsigProgram"].getStr()
+      if j.hasKey("lezQuestProgram"): gLezQuestProgram = j["lezQuestProgram"].getStr()
       if j.hasKey("keystoreBackend"): gKeystoreBackend = j["keystoreBackend"].getStr("auto")
       if j.hasKey("keystoreAccount"): gKeystoreAccount = j["keystoreAccount"].getStr()
       if j.hasKey("keystoreBinding"): gKeystoreBinding = j["keystoreBinding"].getStr()
@@ -442,7 +446,7 @@ proc saveSettingsFile() =
                                    # only a level the user chose: one from MUSTER_MIX stays the runner's
                                    "mix": (if gMixSaved: $gMix else: ""), "relayer": gRelayer,
                                    "evmChains": gEvmChains, "btcRpc": gBtcRpc, "xmrMsigRpc": gXmrMsigRpc, "lezRpc": gLezRpc, "lezChain": gLezChain,
-                                   "lezMultisigProgram": gLezProgram, "lezMsigProgram": gLezMsigProgram,
+                                   "lezMultisigProgram": gLezProgram, "lezMsigProgram": gLezMsigProgram, "lezQuestProgram": gLezQuestProgram,
                                    "keystoreBackend": gKeystoreBackend,
                                    "keystoreAccount": gKeystoreAccount,
                                    "keystoreBinding": gKeystoreBinding,
@@ -1238,7 +1242,8 @@ proc lezIdOf(s: string): seq[byte] =
 # published before the chain has it: no intent before the proposal, no receipt before
 # the vote, nothing final before Executed.
 type
-  LezPendingKind = enum lpCreate = "create", lpPropose = "propose", lpVote = "vote", lpSettle = "settle"
+  LezPendingKind = enum lpCreate = "create", lpPropose = "propose", lpVote = "vote", lpSettle = "settle",
+                        lpQuest = "quest"   ## a quest's Accept or Confirm, the member's own (exo-267.8)
   LezPending = object
     kind: LezPendingKind
     session: CoordinationSession  ## the room the step belongs to; it completes only there
@@ -1251,6 +1256,12 @@ type
     created: JsonNode              ## a create's disclosure, published once the state is on chain
     started: float
     submitted: bool                ## a settle through the platform: "submitted" published (with the hash)
+    questChain: LezMultisigChain   ## lpQuest: where it was sent
+    questProgram: seq[byte]
+    questRecord: seq[byte]
+    questWant: lezquest.QuestStatusKind
+    questTx: string
+    questId: string
 
 const LezPendingDeadlineS = 600.0
 var gLezPending: seq[LezPending]
@@ -1287,6 +1298,14 @@ proc lezPump() =
       of lpVote:
         let r = liveVoteComplete(p.session, moduleKeystore(), driverFor, p.seam, p.vote)
         if not r.startsWith("unconfirmed"): outcome = r
+      of lpQuest:
+        # judged by the record it should have changed (v0.3 includes a refusal, and pays)
+        let r = p.questChain.readShard(p.questRecord, p.questProgram)
+        if r.found and decodeQuestRecord(r.data).status == p.questWant:
+          outcome = $p.questWant
+          p.session.publish(Event(key: "quest/" & p.questId & "/" & $p.questWant, value: p.questTx))
+        elif p.questChain.txIncluded(p.questTx).known:
+          outcome = "refused: the chain included it and the record did not change"
       of lpSettle:
         let f = p.settle.watch(p.txRef)
         # through the platform the room hears of it only once the sender broadcast: the
@@ -4693,6 +4712,166 @@ proc musterCoordinateProposeLezVaultInit(definition: string): string =
   if not tok: return terr
   lezProposeAction(action)
 
+# ── quests (exo-267.8): issued and closed by the room's LEZ multisig, taken and confirmed
+#    by a person's own transaction (coordination/quest.nim, programs/lez-quest) ─────────
+proc questProgram(): tuple[ok: bool, q: seq[byte], err: string] =
+  if gLezQuestProgram.len == 0:
+    return (false, @[], $(%*{"error": "no-quest-program",
+      "detail": "set Settings → lez-quest-program to the quest program's account on this zone"}))
+  try: (true, lezIdOf(gLezQuestProgram), "")
+  except CatchableError as e: (false, @[], $(%*{"error": "no-quest-program", "detail": e.msg}))
+
+proc questComposeV03(): tuple[ok: bool, acct: LezMultisigAccount, q: seq[byte], err: string] =
+  if gSession == nil: return (false, LezMultisigAccount(), @[], $(%*{"error": "not-joined"}))
+  let (ok, acct, err) = lezComposeAccount()
+  if not ok: return (false, acct, @[], err)
+  if acct.layout != plV03:
+    return (false, acct, @[], $(%*{"error": "not-an-action", "detail": "quests need the LEZ multisig's v0.3 port"}))
+  let (qok, q, qerr) = questProgram()
+  if not qok: return (false, acct, @[], qerr)
+  (true, acct, q, "")
+
+proc withQuestId(r: string, qid: seq[byte]): string =
+  try:
+    var j = parseJson(r)
+    j["questId"] = %lezHx(qid)
+    $j
+  except CatchableError: r
+
+proc musterCoordinateProposeQuest(termsJson: string): string =
+  ## Issue a quest from the room's LEZ multisig: its terms go into the room, and the
+  ## multisig's Open proposal goes on chain (the proposer's own Propose; the room votes).
+  let (ok, acct, q, err) = questComposeV03()
+  if not ok: return err
+  var j: JsonNode
+  try: j = parseJson(termsJson)
+  except CatchableError: return $(%*{"error": "bad-terms", "detail": "terms are JSON {task, bounty, confirmer, taker?}"})
+  if j.kind != JObject: return $(%*{"error": "bad-terms", "detail": "terms are a JSON object"})
+  var salt = ""
+  for b in urandom(8): salt.add lezHx(@[b])
+  j["salt"] = %salt
+  for k in ["confirmer", "taker"]:
+    if j{k}.getStr().len > 0:
+      try: j[k] = %lezHx(lezIdOf(j[k].getStr()))
+      except CatchableError: return $(%*{"error": "bad-terms", "detail": k & " is a LEZ account, hex or base58"})
+  let (tok, terms, why) = parseQuestTerms($j)
+  if not tok: return $(%*{"error": "bad-terms", "detail": why})
+  let vault = vaultPda(acct.scheme, acct.program, acct.createKey)
+  let qid = questIdFor(vault, questTermsHash(terms))
+  gSession.publish(questTermsEvent(qid, questTermsJson(terms)))
+  withQuestId(lezProposeAction(questOpenCall(q, acct.program, acct.scheme, acct.createKey, terms)), qid)
+
+proc questRecordOn(acct: LezMultisigAccount, q, qid: seq[byte]): tuple[ok: bool, rec: lezquest.QuestRecord, err: string] =
+  let vault = vaultPda(acct.scheme, acct.program, acct.createKey)
+  let r = lezLiveOf(acct).readShard(questRecordPda(acct.scheme, q, vault, qid), q)
+  if not r.found: return (false, lezquest.QuestRecord(), $(%*{"error": "no-quest", "detail": "no record of that quest on chain yet"}))
+  (true, decodeQuestRecord(r.data), "")
+
+proc questCloseOrCancel(questId: string, cancel: bool): string =
+  ## Close a confirmed quest, paying its taker — or cancel one not yet confirmed, returning
+  ## its bounty — by the multisig's proposal. What the record holds is read from the chain.
+  let (ok, acct, q, err) = questComposeV03()
+  if not ok: return err
+  try:
+    let qid = lezIdOf(questId)
+    let (rok, rec, rerr) = questRecordOn(acct, q, qid)
+    if not rok: return rerr
+    if cancel:
+      if rec.status notin {qsOpen, qsAccepted}:
+        return $(%*{"error": "not-an-action", "detail": "the quest is " & $rec.status & ": it can no longer be cancelled"})
+      return withQuestId(lezProposeAction(questCancelCall(q, acct.program, acct.scheme, acct.createKey, qid, rec.bounty)), qid)
+    if rec.status != qsConfirmed:
+      return $(%*{"error": "not-an-action", "detail": "the quest is " & $rec.status & ": only a confirmed quest closes"})
+    withQuestId(lezProposeAction(questCloseCall(q, acct.program, acct.scheme, acct.createKey, qid, rec.statusTaker,
+                                                rec.bounty)), qid)
+  except CatchableError as e: $(%*{"error": "sequencer-unreachable", "detail": e.msg})
+
+proc questAct(questId, account: string, confirm: bool): string =
+  ## Accept (as its taker) or confirm (as its confirmer) a quest the room issued, with
+  ## THIS member's own LEZ account — one of its keystore's member accounts, which signs and
+  ## pays. Sends and returns; a later tick reads the record back (lez_pending).
+  let (ok, acct, q, err) = questComposeV03()
+  if not ok: return err
+  try:
+    let qid = lezIdOf(questId)
+    var view: QuestView
+    var found = false
+    for v in questsOf(gSession.roomEvents(), q):
+      if v.questId == qid: (view, found) = (v, true)
+    if not found: return $(%*{"error": "no-quest", "detail": "this room issued no quest with that id"})
+    let me = lezIdOf(account)
+    let ks = moduleKeystore()
+    var label = ""
+    for i in 0 ..< LezMemberSlots:
+      if publicAccountId(ks.lezMemberKey(lezMemberLabel(i))) == me: label = lezMemberLabel(i)
+    if label.len == 0:
+      return $(%*{"error": "not-mine", "detail": "that LEZ account is not one of this keystore's (lez_member_account)"})
+    let c = lezLiveOf(acct)
+    discard c.addMember(label)
+    c.waitForInclusion = false
+    let call = (if confirm: questConfirmCall(q, acct.scheme, view.issuer, qid, me)
+                else: questAcceptCall(q, acct.scheme, view.issuer, qid, me))
+    let tx = c.submitCall(me, call)
+    if not tx.ok: return $(%*{"error": "refused", "detail": tx.error})
+    gLezPending.add LezPending(kind: lpQuest, session: gSession, questChain: c, questProgram: q,
+                               questRecord: view.record, questTx: tx.hash, questId: lezHx(qid),
+                               questWant: (if confirm: qsConfirmed else: qsAccepted), started: epochTime())
+    $(%*{"pending": (if confirm: "confirm" else: "accept"), "tx": tx.hash, "questId": lezHx(qid),
+         "detail": "sent; the quest reads " & (if confirm: "confirmed" else: "accepted") & " once the chain includes it"})
+  except CatchableError as e: $(%*{"error": "sequencer-unreachable", "detail": e.msg})
+
+proc musterCoordinateProposeQuestClose(questId: string): string = questCloseOrCancel(questId, false)
+proc musterCoordinateProposeQuestCancel(questId: string): string = questCloseOrCancel(questId, true)
+proc musterCoordinateQuestAccept(questId, account: string): string = questAct(questId, account, false)
+proc musterCoordinateQuestConfirm(questId, account: string): string = questAct(questId, account, true)
+
+proc musterCoordinateQuests(): string =
+  ## The quests this room proposed to issue, with their terms when the room holds text that
+  ## hashes to the record's, and each record as the chain reads now.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let (qok, q, qerr) = questProgram()
+  if not qok: return qerr
+  let (aok, acct, _) = lezComposeAccount()
+  var mine: seq[seq[byte]]
+  let ks = moduleKeystore()
+  for i in 0 ..< LezMemberSlots: mine.add publicAccountId(ks.lezMemberKey(lezMemberLabel(i)))
+  var res = newJArray()
+  for v in questsOf(gSession.roomEvents(), q):
+    var o = %*{"questId": lezHx(v.questId), "issuer": lezHx(v.issuer), "record": lezHx(v.record),
+               "bounty": $v.bounty, "openIntent": v.openIntent, "termsFound": v.termsFound}
+    if v.termsFound: o["terms"] = parseJson(questTermsJson(v.terms))
+    o["chain"] = %"unknown"
+    if aok:
+      try:
+        let r = lezLiveOf(acct).readShard(v.record, q)
+        if r.found:
+          let rec = decodeQuestRecord(r.data)
+          o["chain"] = %($rec.status)
+          o["confirmer"] = %lezHx(rec.confirmer)
+          o["taker"] = %(if rec.statusTaker.len > 0: lezHx(rec.statusTaker) else: lezHx(rec.namedTaker))
+          o["iConfirm"] = %(rec.confirmer in mine)
+          o["iMayAccept"] = %(rec.status == qsOpen and
+                              (if rec.namedTaker.len > 0: rec.namedTaker in mine else: true))
+        else: o["chain"] = %"not on chain"
+      except CatchableError: discard
+    res.add o
+  $res
+
+proc musterCoordinateVerifyQuest(refJson: string): string =
+  ## Verify a quest's attestation from the chain alone, needing no room key:
+  ## {record, createKey, closeIndex, multisigProgram?}.
+  let (qok, q, qerr) = questProgram()
+  if not qok: return qerr
+  try:
+    let j = parseJson(refJson)
+    let ms = (if j{"multisigProgram"}.getStr().len > 0: j["multisigProgram"].getStr() else: gLezProgram)
+    let c = lezLiveFor(gLezChain, psLee02, lezIdOf(ms), plV03)
+    let a = verifyQuestAttestation(c, q, lezIdOf(j["record"].getStr()), lezIdOf(j["createKey"].getStr()),
+                                   uint64(j["closeIndex"].getBiggestInt()))
+    $(%*{"ok": a.ok, "why": a.why, "issuer": lezHx(a.issuer), "taker": lezHx(a.taker), "confirmer": lezHx(a.confirmer),
+         "termsHash": lezHx(a.termsHash), "bounty": $a.bounty, "approvals": a.approvals, "threshold": a.threshold})
+  except CatchableError as e: $(%*{"error": "bad-reference", "detail": e.msg})
+
 proc musterFrostCeremonyOpen(ceremonyId, network, t, n: string): string =
   ## Open a FROST ceremony in the joined room and join it.
   if gSession == nil: return $(%*{"error": "not-joined"})
@@ -5610,7 +5789,7 @@ proc musterSettings(): string =
     "btcRpc": gBtcRpc, "btcRpcMasked": redactUrl(gBtcRpc),
     "xmrMsigRpc": gXmrMsigRpc, "xmrMsigRpcMasked": redactUrl(gXmrMsigRpc),
     "lez": {"rpc": gLezRpc, "rpcMasked": redactUrl(gLezRpc), "chain": gLezChain,
-            "multisigProgram": gLezProgram, "msigProgram": gLezMsigProgram},
+            "multisigProgram": gLezProgram, "msigProgram": gLezMsigProgram, "questProgram": gLezQuestProgram},
     "delivery": gDeliveryConfig,
     # the mix setting, and the level the next node is asked for: a delivery config that
     # names its own level (or turns mix off) wins over the setting (exo-dcc.4)
@@ -5699,6 +5878,15 @@ proc musterSetSetting(key, value: string): string =
       gIdentityBackend = v
       if v == "local": gIdentityAccount = ""
       gKeystore = nil       # the next use opens the keyfile again and wraps it as set
+  of "lez-quest-program":
+    # the quest record program (exo-267.8, programs/lez-quest): its account id on the zone,
+    # hex or base58; "" turns quests off
+    let v = value.strip()
+    if v.len > 0:
+      try: discard lezIdOf(v)
+      except CatchableError:
+        return $(%*{"error": "lez-quest-program is the program's account id: hex (64) or base58"})
+    gLezQuestProgram = v
   of "keystore-backend":
     # exo-149.2: whether a keystore_module account may approve in-room. "interim" carries
     # muster's attestation as an opaque digest leg the signer cannot read (the card says
