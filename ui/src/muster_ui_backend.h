@@ -43,6 +43,15 @@ public:
     void fetchFile(const QString &fileId, const QString &folder, const QString &privately) override;
     void seedFile(const QString &fileId, const QString &on) override;
     void retractFile(const QString &fileId) override;
+
+    // Quests (exo-267.8): through muster_module's coordinate_*quest* methods.
+    void loadQuests() override;
+    void proposeQuest(const QString &termsJson) override;
+    void proposeQuestClose(const QString &questId) override;
+    void proposeQuestCancel(const QString &questId) override;
+    void questAccept(const QString &questId, const QString &account) override;
+    void questConfirm(const QString &questId, const QString &account) override;
+    void verifyQuest(const QString &refJson) override;
     void previewLezSend(const QString &fromId, const QString &to, const QString &raw) override;
     void sendLez(const QString &fromId, const QString &to, const QString &raw) override;
 

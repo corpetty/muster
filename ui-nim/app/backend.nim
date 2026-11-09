@@ -146,6 +146,15 @@ proc fileShareDone(o: MusterUi, r: string) =
   o.setFileShareResultJson(r)
   o.loadFileShareDo()
 
+proc loadQuestsDo(o: MusterUi, d: Done = nil) =
+  # Quests (exo-267.8): the room's quests, each with its record as the chain reads now.
+  ask mm.coordinate_questsAsync(proc (r: string) = o.setQuestsJson(r); fin(d, r))
+
+proc questDone(o: MusterUi, r: string) =
+  # A quest step's answer: questResultJson, then the list re-reads.
+  o.setQuestResultJson(r)
+  o.loadQuestsDo()
+
 proc loadPendingDo(o: MusterUi, d: Done = nil) =
   # Identities that asked to join and are not admitted yet.
   ask mm.coordinate_pendingAsync(proc (r: string) = o.setPendingJson(r); fin(d, r))
@@ -1109,6 +1118,19 @@ proc seedFileImpl(o: MusterUi, fileId, on: string) =
   ask mm.fileshare_seedAsync(fileId, on, proc (r: string) = o.fileShareDone(r))
 proc retractFileImpl(o: MusterUi, fileId: string) =
   ask mm.fileshare_retractAsync(fileId, proc (r: string) = o.fileShareDone(r))
+proc loadQuestsImpl(o: MusterUi) = o.loadQuestsDo()
+proc proposeQuestImpl(o: MusterUi, termsJson: string) =
+  ask mm.coordinate_propose_questAsync(termsJson, proc (r: string) = o.questDone(r))
+proc proposeQuestCloseImpl(o: MusterUi, questId: string) =
+  ask mm.coordinate_propose_quest_closeAsync(questId, proc (r: string) = o.questDone(r))
+proc proposeQuestCancelImpl(o: MusterUi, questId: string) =
+  ask mm.coordinate_propose_quest_cancelAsync(questId, proc (r: string) = o.questDone(r))
+proc questAcceptImpl(o: MusterUi, questId, account: string) =
+  ask mm.coordinate_quest_acceptAsync(questId, account, proc (r: string) = o.questDone(r))
+proc questConfirmImpl(o: MusterUi, questId, account: string) =
+  ask mm.coordinate_quest_confirmAsync(questId, account, proc (r: string) = o.questDone(r))
+proc verifyQuestImpl(o: MusterUi, refJson: string) =
+  ask mm.coordinate_verify_questAsync(refJson, proc (r: string) = o.setQuestResultJson(r))
 proc addContactImpl(o: MusterUi, identityHex, alias: string) = o.addContactDo(identityHex, alias)
 proc setContactAliasImpl(o: MusterUi, identityHex, alias: string) = o.setContactAliasDo(identityHex, alias)
 proc removeContactImpl(o: MusterUi, identityHex: string) = o.removeContactDo(identityHex)

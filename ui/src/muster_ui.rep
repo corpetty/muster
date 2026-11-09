@@ -493,4 +493,19 @@ class MusterUi
     SLOT(void retractFile(const QString &fileId))
     PROP(QString fileShareJson="{}" READONLY)
     PROP(QString fileShareResultJson="" READONLY)
+
+    // Quests (exo-267.8, docs/design/lez-quest-program.md): issued and closed by the room's
+    // LEZ multisig (a proposal the room votes on), taken and confirmed by a person's own LEZ
+    // account. loadQuests reads coordinate_quests into questsJson; the rest start a step
+    // and put its answer in questResultJson ({pending} | {error} | a proposal's pending JSON);
+    // verifyQuest puts coordinate_verify_quest's answer there too.
+    SLOT(void loadQuests())
+    SLOT(void proposeQuest(const QString &termsJson))
+    SLOT(void proposeQuestClose(const QString &questId))
+    SLOT(void proposeQuestCancel(const QString &questId))
+    SLOT(void questAccept(const QString &questId, const QString &account))
+    SLOT(void questConfirm(const QString &questId, const QString &account))
+    SLOT(void verifyQuest(const QString &refJson))
+    PROP(QString questsJson="[]" READONLY)
+    PROP(QString questResultJson="" READONLY)
 }

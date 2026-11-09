@@ -209,6 +209,7 @@ proc roomIdentities(): seq[string]       ## forward — every member's room iden
 proc myAddress(): Address                ## forward — this instance's secp account, defined below
 
 proc roomAccounts(): seq[RoomAccount]   ## forward — the room's disclosed accounts, folded from the log
+proc questProgram(): tuple[ok: bool, q: seq[byte], err: string]   ## forward — the quest program setting (exo-267.8)
 proc evmPlatform(): bool               ## forward — EVM chains read through eth_rpc_module (exo-d4d.3)
 proc platformRegistry(): tuple[ok: bool, scope: string, chains: seq[PlatformChain]]   ## forward — its registry
 proc rpcChainCaip2(): tuple[ok: bool, chain, detail: string]   ## forward — the chain a split settles on
@@ -2891,6 +2892,16 @@ proc musterCoordinateIntents(): string =
     # members named as the card names them ("1 person owes you", not a short id)
     let sm = effectSummary(v.effectJson, proc(who: string): string = memberName(who, mine))
     o["summary"] = %*{"kind": sm.kind, "amount": sm.amount, "unit": sm.unit, "to": sm.to, "text": sm.text}
+    # A LEZ multisig proposal whose call is the quest program's reads as the quest step it is
+    # (exo-267.8): issue, close or withdraw, with the task when the room holds its terms.
+    if gLezQuestProgram.len > 0 and sm.kind in ["lez-call", "lez-proposal"]:
+      let (qpok, qp, _) = questProgram()
+      if qpok:
+        let (qrok, qtext, qobj) = questReadingOf(events, v.effectJson, qp)
+        if qrok:
+          o["summary"]["kind"] = %"quest"
+          o["summary"]["text"] = %qtext
+          o["quest"] = qobj
     # Who approved, named from the address book (or "you"), and whether I did — read
     # from the log + my keys (attest.approvedByMe), or an in-app approval made here.
     var whos: seq[string]
@@ -4196,7 +4207,12 @@ proc musterCoordinateQuests(): string =
   var res = newJArray()
   for v in questsOf(gSession.roomEvents(), q):
     var o = %*{"questId": lezHx(v.questId), "issuer": lezHx(v.issuer), "record": lezHx(v.record),
-               "bounty": $v.bounty, "openIntent": v.openIntent, "termsFound": v.termsFound}
+               "bounty": $v.bounty, "openIntent": v.openIntent, "termsFound": v.termsFound,
+               "closeIntent": v.closeIntent, "closeIndex": v.closeIndex}
+    # what a verifier outside the room names: the record, this multisig, the closing proposal
+    if aok and v.issuer == vaultPda(acct.scheme, acct.program, acct.createKey):
+      o["createKey"] = %lezHx(acct.createKey)
+      o["multisigProgram"] = %lezHx(acct.program)
     if v.termsFound: o["terms"] = parseJson(questTermsJson(v.terms))
     o["chain"] = %"unknown"
     if aok:

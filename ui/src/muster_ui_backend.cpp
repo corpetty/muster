@@ -207,6 +207,49 @@ void MusterUiBackend::retractFile(const QString &fileId)
     loadFileShare();
 }
 
+// ── Quests (exo-267.8, docs/design/lez-quest-program.md) ───────────────────────────
+// The module builds every call and reads every record; the backend only carries answers.
+// Each step re-reads the list.
+void MusterUiBackend::loadQuests()
+{
+    setQuestsJson(modules().muster_module.coordinate_quests());
+}
+
+void MusterUiBackend::proposeQuest(const QString &termsJson)
+{
+    setQuestResultJson(modules().muster_module.coordinate_propose_quest(termsJson));
+    loadQuests();
+}
+
+void MusterUiBackend::proposeQuestClose(const QString &questId)
+{
+    setQuestResultJson(modules().muster_module.coordinate_propose_quest_close(questId));
+    loadQuests();
+}
+
+void MusterUiBackend::proposeQuestCancel(const QString &questId)
+{
+    setQuestResultJson(modules().muster_module.coordinate_propose_quest_cancel(questId));
+    loadQuests();
+}
+
+void MusterUiBackend::questAccept(const QString &questId, const QString &account)
+{
+    setQuestResultJson(modules().muster_module.coordinate_quest_accept(questId, account));
+    loadQuests();
+}
+
+void MusterUiBackend::questConfirm(const QString &questId, const QString &account)
+{
+    setQuestResultJson(modules().muster_module.coordinate_quest_confirm(questId, account));
+    loadQuests();
+}
+
+void MusterUiBackend::verifyQuest(const QString &refJson)
+{
+    setQuestResultJson(modules().muster_module.coordinate_verify_quest(refJson));
+}
+
 void MusterUiBackend::loadWalletAccounts()
 {
     // Every account across chains, with a LEZ account's shareable address (the `share`

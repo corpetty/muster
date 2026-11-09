@@ -124,6 +124,12 @@ block:
   let qs = questsOf(r.bob.roomEvents(), Q)
   doAssert qs.len == 1 and qs[0].questId == qid and qs[0].issuer == vault and qs[0].openIntent == id
   doAssert qs[0].termsFound and qs[0].terms == terms, "the fold finds the terms only under their hash"
+  doAssert qs[0].closeIntent == "", "no close proposed yet"
+  let (rok, rtext, rq) = questReadingOf(r.bob.roomEvents(), effectJsonOf(r.bob.roomEvents(), id), Q)
+  doAssert rok and "issue a quest" in rtext and "Walk a newcomer" in rtext and "bounty 200" in rtext, rtext
+  doAssert rq["step"].getStr() == "open" and rq["termsFound"].getBool()
+  doAssert not questReadingOf(r.bob.roomEvents(), effectJsonOf(r.bob.roomEvents(), id), id32("other-program")).ok,
+           "read as a quest only when it is the quest program's"
   echo "2. issued by vote: the record is open, the pot paid 200 into it; the room's fold shows the terms OK"
 
 # ── 3. the taker and the confirmer, with their own transactions ───────────────
@@ -149,7 +155,12 @@ block:
   settle(id)
   doAssert decodeQuestRecord(f.readAccount(record).data).status == qsClosed
   doAssert f.balanceOf(taker) == before + 200 and f.balanceOf(record) == 0
-  echo "4. closed by a second vote: the taker holds the 200 OK"
+  r.bob.poll()
+  let qs = questsOf(r.bob.roomEvents(), Q)
+  doAssert qs[0].closeIntent == id and qs[0].closeIndex == 2, "the room knows which proposal closed it"
+  let (cok, ctext, _) = questReadingOf(r.bob.roomEvents(), effectJsonOf(r.bob.roomEvents(), id), Q)
+  doAssert cok and "close the quest" in ctext and "Walk a newcomer" in ctext, ctext
+  echo "4. closed by a second vote: the taker holds the 200; the card reads the close in words OK"
 
 # ── 5. outside the room: the attestation from the chain alone ─────────────────
 block:
