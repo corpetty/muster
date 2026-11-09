@@ -11,6 +11,8 @@ import Logos.Icons
 //   People    who is in the room, who asks to join, the room's security level (ScopePanel)
 //   Accounts  the accounts members disclosed into the room, and the forms to add one
 //   FileShare files shared in the room, sealed, moved by Logos Storage (exo-4d0)
+//   Quests    quests the room's LEZ multisig issues and closes, taken and confirmed by
+//             people's own accounts (exo-267.8)
 //   History   how the room reached its state (ActivityFeed)
 //   Privacy   who can see what (FlowView); the store node is always listed (FS-9)
 // Its connections moved to the header's dot (RoomHeader). The Room decides where the drawer
@@ -20,7 +22,7 @@ Rectangle {
     id: details
     required property var room   // the Room this piece belongs to (Room.qml's roomItem)
 
-    readonly property var tabs: ["people", "accounts", "files", "history", "privacy"]
+    readonly property var tabs: ["people", "accounts", "files", "quests", "history", "privacy"]
     color: Theme.palette.backgroundTertiary
 
     Rectangle {      // the edge against the thread
@@ -63,6 +65,7 @@ Rectangle {
             LogosTabButton { objectName: "roomDetailsPeople"; text: qsTr("People") }
             LogosTabButton { objectName: "roomDetailsAccounts"; text: qsTr("Accounts") }
             LogosTabButton { objectName: "roomDetailsFiles"; text: qsTr("FileShare") }
+            LogosTabButton { objectName: "roomDetailsQuests"; text: qsTr("Quests") }
             LogosTabButton { objectName: "roomDetailsHistory"; text: qsTr("History") }
             LogosTabButton { objectName: "roomDetailsPrivacy"; text: qsTr("Privacy") }
         }
@@ -187,6 +190,21 @@ Rectangle {
                 RoomFileShare {
                     id: fileShare
                     objectName: "roomFileShare"
+                    width: parent.width
+                    backend: details.room.backend
+                    room: details.room
+                }
+            }
+
+            // ── Quests: issued and closed by the room's LEZ multisig (exo-267.8) ──
+            Flickable {
+                clip: true
+                contentWidth: width
+                contentHeight: quests.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                RoomQuests {
+                    id: quests
+                    objectName: "roomQuests"
                     width: parent.width
                     backend: details.room.backend
                     room: details.room
