@@ -248,7 +248,8 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
     let driver = driverOf(id)
     let desc = describeFor(driver, result[id].effect)
     let prof = driver.profile()
-    let n = (if prof.n > 0: prof.n else: desc.threshold)
+    let named = driver.electorateFor(result[id].effect)
+    let n = (if named > 0: named elif prof.n > 0: prof.n else: desc.threshold)
     var gone = 0
     for names in decliners:
       if driver.mayContribute(result[id].effect, names) == elYes: inc gone
@@ -739,6 +740,9 @@ proc summarizeEffect*(effectJson: string): string =
     of "statement":  return "a statement: \"" & j{"text"}.getStr() & "\""
     of "invoke":     return "call " & j{"module"}.getStr() & "." & j{"method"}.getStr() & "(…)"
     of "add-driver": return "admit the driver kind: " & j{"kind"}.getStr()
+    of "charter":
+      return (if j{"prev"}.getStr().len == 0: "found the charter \"" else: "amend the charter \"") &
+             j{"body"}{"name"}.getStr() & "\""
     of "split":
       let n = j{"shares"}.getElems().len
       let asset = j{"asset"}.getStr()

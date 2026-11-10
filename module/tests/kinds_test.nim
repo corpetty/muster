@@ -74,7 +74,7 @@ block:
       k.kind & " builds a " & d.profile().family & " driver, the list says " & k.family
     doAssert status(k.family) in ["built", "partial"],
       k.kind & "'s family " & k.family & " is " & status(k.family) & " in the registry"
-    doAssert k.composes.len > 0 and k.composes.allIt(it in ["payment", "statement", "action", "split"]),
+    doAssert k.composes.len > 0 and k.composes.allIt(it in ["payment", "statement", "action", "split", "charter"]),
       k.kind & " must say which proposals it serves"
     doAssert k.label.len > 0
   let u = newDriver("unanimous", configFor("unanimous"))
@@ -83,7 +83,7 @@ block:
 
 # ── 2. founding set + the composer's mapping come from the list ───────────────
 block:
-  doAssert foundingKinds() == @["safe", "threshold", "frost", "invoke", "eip191", "btc-p2wsh", "btc-tapscript",
+  doAssert foundingKinds() == @["safe", "threshold", "frost", "invoke", "eip191", "charter", "btc-p2wsh", "btc-tapscript",
                                "lez-multisig", "lez-msig", "btc-frost", "lez-frost", "evm-split", "lez-split", "btc-split",
                                "monero-split"],
            $foundingKinds()
@@ -93,6 +93,7 @@ block:
   doAssert kindsFor("action") == @["invoke"], $kindsFor("action")
   doAssert kindsFor("statement") == @["threshold", "frost", "eip191", "unanimous"], $kindsFor("statement")
   doAssert kindsFor("split") == @["evm-split", "lez-split", "btc-split", "monero-split"], $kindsFor("split")   # the each locus (exo-a90.3, .9, exo-d17, exo-dcc.5)
+  doAssert kindsFor("charter") == @["charter"], $kindsFor("charter")   # a room's charter (exo-267.1)
   let j = kindsJson(@["safe", "threshold"])
   doAssert j.len == Kinds.countIt(not it.pending)
   # a pending kind (built, conforming, not yet run by the room) is offered nowhere (exo-dcc.34)
