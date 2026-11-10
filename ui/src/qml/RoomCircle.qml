@@ -156,7 +156,7 @@ ColumnLayout {
         LogosTextField {
             id: thresholdField
             objectName: "circleThreshold"
-            Layout.preferredWidth: 160
+            Layout.fillWidth: true      // the row's free width: its placeholder wants ~175 px
             placeholderText: qsTr("How many must approve")
         }
         ActionButton {
