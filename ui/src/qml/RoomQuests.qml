@@ -31,7 +31,7 @@ ColumnLayout {
     }
     readonly property bool onMultisig: qv.room !== null && String(qv.room.policyKind || "") === "lez-multisig"
 
-    function short(h) { h = String(h || ""); return h.length > 16 ? h.slice(0, 8) + "…" + h.slice(-6) : h; }
+    function shortHex(h) { h = String(h || ""); return h.length > 16 ? h.slice(0, 8) + "…" + h.slice(-6) : h; }
     function statusText(s) {
         if (s === "open") return qsTr("Open: waiting for its taker");
         if (s === "accepted") return qsTr("Taken: waiting for its confirmer");
@@ -142,7 +142,7 @@ ColumnLayout {
             if (r.error !== undefined) return String(r.error) + (r.detail ? ": " + r.detail : "");
             if (r.ok === true)
                 return qsTr("Issued by %1, taken by %2, confirmed by %3; %4 of %5 current members approved the close.")
-                       .arg(qv.short(r.issuer)).arg(qv.short(r.taker)).arg(qv.short(r.confirmer))
+                       .arg(qv.shortHex(r.issuer)).arg(qv.shortHex(r.taker)).arg(qv.shortHex(r.confirmer))
                        .arg(r.approvals).arg(r.threshold);
             if (r.ok === false) return String(r.why || "");
             return String(r.detail || "");
@@ -200,8 +200,8 @@ ColumnLayout {
                 font.pixelSize: MusterStyle.caption
                 text: qsTr("%1 · bounty %2 · confirmer %3%4")
                       .arg(qv.statusText(row.st)).arg(row.modelData.bounty)
-                      .arg(qv.short(row.modelData.confirmer || (row.modelData.terms ? row.modelData.terms.confirmer : "")))
-                      .arg(row.modelData.taker ? " · taker " + qv.short(row.modelData.taker) : "")
+                      .arg(qv.shortHex(row.modelData.confirmer || (row.modelData.terms ? row.modelData.terms.confirmer : "")))
+                      .arg(row.modelData.taker ? " · taker " + qv.shortHex(row.modelData.taker) : "")
             }
             RowLayout {
                 Layout.fillWidth: true

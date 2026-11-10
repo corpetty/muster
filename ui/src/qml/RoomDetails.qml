@@ -55,19 +55,23 @@ Rectangle {
                 onClicked: details.room.closeDetails()
             }
         }
+        // each tab is its label's width (a TabBar otherwise splits the width evenly, and at
+        // six tabs the side panel's ~60 px a tab overlapped "Accounts" and "FileShare"); past
+        // the panel's width the bar flicks sideways
         LogosTabBar {
             id: tabBar
             objectName: "roomDetailsTabs"
+            clip: true           // a scrolled bar stays inside the panel
             Layout.fillWidth: true
             Layout.leftMargin: Theme.spacing.small
             currentIndex: Math.max(0, details.tabs.indexOf(details.room.detailsTab))
             onCurrentIndexChanged: details.room.detailsTab = details.tabs[currentIndex]
-            LogosTabButton { objectName: "roomDetailsPeople"; text: qsTr("People") }
-            LogosTabButton { objectName: "roomDetailsAccounts"; text: qsTr("Accounts") }
-            LogosTabButton { objectName: "roomDetailsFiles"; text: qsTr("FileShare") }
-            LogosTabButton { objectName: "roomDetailsQuests"; text: qsTr("Quests") }
-            LogosTabButton { objectName: "roomDetailsHistory"; text: qsTr("History") }
-            LogosTabButton { objectName: "roomDetailsPrivacy"; text: qsTr("Privacy") }
+            LogosTabButton { objectName: "roomDetailsPeople"; text: qsTr("People"); width: implicitWidth }
+            LogosTabButton { objectName: "roomDetailsAccounts"; text: qsTr("Accounts"); width: implicitWidth }
+            LogosTabButton { objectName: "roomDetailsFiles"; text: qsTr("FileShare"); width: implicitWidth }
+            LogosTabButton { objectName: "roomDetailsQuests"; text: qsTr("Quests"); width: implicitWidth }
+            LogosTabButton { objectName: "roomDetailsHistory"; text: qsTr("History"); width: implicitWidth }
+            LogosTabButton { objectName: "roomDetailsPrivacy"; text: qsTr("Privacy"); width: implicitWidth }
         }
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.palette.borderSubtle }
 
