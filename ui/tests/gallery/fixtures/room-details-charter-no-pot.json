@@ -1,0 +1,37 @@
+{
+  "about": "Room details › Charter (exo-267.3), recorded by scripts/charter-self-test.sh with CHARTER_FOUND=,\"share\":\"100\",\"asset\":\"LEZ\",\"cadence\":604800: a circle charter that sets rounds but names no account to hold the pot, so the Rounds section says why it runs none.",
+  "snapshot": "data/charter-circle-no-pot.json",
+  "sizes": [
+    "1024x700",
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsTab",
+        "charter"
+      ]
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsOpen",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "circleNotRunning",
+        "text",
+        "No rounds from the pot yet: the charter names no account to hold the pot."
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

@@ -31,7 +31,8 @@ ui_require_runner
 
 NAME="Tuesday circle"
 RENAMED="Wednesday circle"
-FOUND="{\"template\":\"circle\",\"name\":\"$NAME\",\"amendK\":1}"
+# CHARTER_FOUND adds to the founding spec, e.g. ,"share":"100","asset":"LEZ","cadence":604800
+FOUND="{\"template\":\"circle\",\"name\":\"$NAME\",\"amendK\":1${CHARTER_FOUND:-}}"
 AMEND="{\"template\":\"circle\",\"name\":\"$RENAMED\",\"amendK\":1}"
 CFG=$(ui_fleet_config)
 TOPIC="/muster/1/charter-$(date +%s)/proto"

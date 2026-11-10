@@ -992,6 +992,9 @@ proc charterTick(o: MusterUi) =
   o.loadCharterDo(proc (cj: string) =
     charterBusy = false
     let cv = obj(cj)
+    # a charter that sets rounds: its circle too, as the Charter tab shows it (exo-267.3)
+    if cv{"body"}{"schedule"} != nil:
+      ask mm.coordinate_circleAsync(proc (r: string) = o.setCircleJson(r))
     if amend.len > 0 and not charterAmended and cv{"found"}.getBool(false):
       charterAmended = true
       o.proposeCharterDo(amend, proc (r: string) = info "CHARTER amend -> " & r)

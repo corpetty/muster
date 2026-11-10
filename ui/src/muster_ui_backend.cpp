@@ -1610,6 +1610,8 @@ void MusterUiBackend::onContextReady()
                     static QHash<QString, qint64> charterAgainAt, charterGiveUpAt;
                     loadCharter();
                     const QJsonObject cv = QJsonDocument::fromJson(charterJson().toUtf8()).object();
+                    // a charter that sets rounds: its circle too, as the Charter tab shows it (exo-267.3)
+                    if (cv.value("body").toObject().contains("schedule")) loadCircle();
                     if (!charterAmend.isEmpty() && !charterAmended && cv.value("found").toBool()) {
                         charterAmended = true;
                         proposeCharter(charterAmend);
