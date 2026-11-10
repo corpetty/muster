@@ -150,6 +150,10 @@ proc loadQuestsDo(o: MusterUi, d: Done = nil) =
   # Quests (exo-267.8): the room's quests, each with its record as the chain reads now.
   ask mm.coordinate_questsAsync(proc (r: string) = o.setQuestsJson(r); fin(d, r))
 
+proc loadCharterDo(o: MusterUi, d: Done = nil) =
+  # The room's charter (exo-267.1): in force, its history, each proposal's standing.
+  ask mm.coordinate_charterAsync(proc (r: string) = o.setCharterJson(r); fin(d, r))
+
 proc questDone(o: MusterUi, r: string) =
   # A quest step's answer: questResultJson, then the list re-reads.
   o.setQuestResultJson(r)
@@ -1206,6 +1210,11 @@ proc questConfirmImpl(o: MusterUi, questId, account: string) =
   ask mm.coordinate_quest_confirmAsync(questId, account, proc (r: string) = o.questDone(r))
 proc verifyQuestImpl(o: MusterUi, refJson: string) =
   ask mm.coordinate_verify_questAsync(refJson, proc (r: string) = o.setQuestResultJson(r))
+proc loadCharterImpl(o: MusterUi) = o.loadCharterDo()
+proc proposeCharterImpl(o: MusterUi, specJson: string) =
+  ask mm.coordinate_propose_charterAsync(specJson, proc (r: string) =
+    o.setCharterResultJson(r)
+    o.loadCharterDo())
 proc addContactImpl(o: MusterUi, identityHex, alias: string) = o.addContactDo(identityHex, alias)
 proc setContactAliasImpl(o: MusterUi, identityHex, alias: string) = o.setContactAliasDo(identityHex, alias)
 proc removeContactImpl(o: MusterUi, identityHex: string) = o.removeContactDo(identityHex)

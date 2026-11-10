@@ -9,6 +9,7 @@ import Logos.Icons
 // meta-state, which used to be a 320 px column always on screen, now a drawer closed by
 // default. Four tabs, the same components and the same folds of the sealed log as before:
 //   People    who is in the room, who asks to join, the room's security level (ScopePanel)
+//   Charter   the room's charter: who decides what, and how it changes (exo-267.1)
 //   Accounts  the accounts members disclosed into the room, and the forms to add one
 //   FileShare files shared in the room, sealed, moved by Logos Storage (exo-4d0)
 //   Quests    quests the room's LEZ multisig issues and closes, taken and confirmed by
@@ -22,7 +23,7 @@ Rectangle {
     id: details
     required property var room   // the Room this piece belongs to (Room.qml's roomItem)
 
-    readonly property var tabs: ["people", "accounts", "files", "quests", "history", "privacy"]
+    readonly property var tabs: ["people", "charter", "accounts", "files", "quests", "history", "privacy"]
     color: Theme.palette.backgroundTertiary
 
     Rectangle {      // the edge against the thread
@@ -67,6 +68,7 @@ Rectangle {
             currentIndex: Math.max(0, details.tabs.indexOf(details.room.detailsTab))
             onCurrentIndexChanged: details.room.detailsTab = details.tabs[currentIndex]
             LogosTabButton { objectName: "roomDetailsPeople"; text: qsTr("People"); width: implicitWidth }
+            LogosTabButton { objectName: "roomDetailsCharter"; text: qsTr("Charter"); width: implicitWidth }
             LogosTabButton { objectName: "roomDetailsAccounts"; text: qsTr("Accounts"); width: implicitWidth }
             LogosTabButton { objectName: "roomDetailsFiles"; text: qsTr("FileShare"); width: implicitWidth }
             LogosTabButton { objectName: "roomDetailsQuests"; text: qsTr("Quests"); width: implicitWidth }
@@ -91,6 +93,21 @@ Rectangle {
                 securityLevels: details.room.securityLevels
                 onRequestJoin: if (details.room.backend) details.room.backend.requestJoin()
                 onAdmit: function (identityHex) { details.room.admitMember(identityHex); }
+            }
+
+            // ── Charter: who decides what, and how that changes (exo-267.1) ──
+            Flickable {
+                clip: true
+                contentWidth: width
+                contentHeight: charter.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                RoomCharter {
+                    id: charter
+                    objectName: "roomCharter"
+                    width: parent.width
+                    backend: details.room.backend
+                    room: details.room
+                }
             }
 
             // ── Accounts ──────────────────────────────────────────────────

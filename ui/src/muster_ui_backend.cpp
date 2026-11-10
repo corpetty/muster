@@ -275,6 +275,18 @@ void MusterUiBackend::verifyQuest(const QString &refJson)
     setQuestResultJson(modules().muster_module.coordinate_verify_quest(refJson));
 }
 
+// ── The room's charter (exo-267.1, coordination/room_charter.nim) ──────────────────
+void MusterUiBackend::loadCharter()
+{
+    setCharterJson(modules().muster_module.coordinate_charter());
+}
+
+void MusterUiBackend::proposeCharter(const QString &specJson)
+{
+    setCharterResultJson(modules().muster_module.coordinate_propose_charter(specJson));
+    loadCharter();
+}
+
 void MusterUiBackend::loadWalletAccounts()
 {
     // Every account across chains, with a LEZ account's shareable address (the `share`

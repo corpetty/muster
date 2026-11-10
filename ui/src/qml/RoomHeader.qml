@@ -344,6 +344,7 @@ ColumnLayout {
                 LogosMenuItem { text: qsTr("Room details"); onTriggered: header.room.openDetails("people") }
                 LogosMenuItem { text: qsTr("Room history"); onTriggered: header.room.openDetails("history") }
                 LogosMenuItem { objectName: "roomFileShareButton"; text: qsTr("FileShare"); onTriggered: header.room.openDetails("files") }
+                LogosMenuItem { objectName: "roomCharterButton"; text: qsTr("Charter"); onTriggered: header.room.openDetails("charter") }
                 LogosMenuItem { objectName: "roomQuestsButton"; text: qsTr("Quests"); onTriggered: header.room.openDetails("quests") }
                 LogosMenuItem { objectName: "roomMapButton"; text: qsTr("Room map"); onTriggered: header.room.openMap("room", "") }
                 LogosMenuSeparator {}

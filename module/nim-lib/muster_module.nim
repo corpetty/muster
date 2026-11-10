@@ -53,6 +53,7 @@ import ../src/lez/tx as leztx          # base58 ids, public account ids
 import ../src/wallet/lez_multisig_live # the live chain: the member's own transactions (exo-3c9)
 import ../src/lez/quest as lezquest    # the quest record program's objects (exo-267.7)
 import ../src/coordination/quest as roomquest   # quests in the room (exo-267.8)
+import ../src/coordination/room_charter   # the charter in force, and each proposal's standing (exo-267.1)
 import ../src/coordination/vote        # a vote-locus approval = the member's own on-chain vote
 import ../src/drivers/btc_frost        # FROST: the aggregate locus (Phase D)
 import ../src/coordination/aggregate   # the ChillDKG ceremony + the two rounds over the log
@@ -2984,6 +2985,7 @@ proc musterCoordinateIntents(): string =
   let nowS = uint64(epochTime())
   let views = reduceIntentViews(events, driverFor)
   let coveredNow = coverIndex(events, driverFor, views, nowS)
+  var charterView: JsonNode = nil      # computed once, if any card is a charter (exo-267.1)
   # intents a proposal not yet agreed would settle part of (a renewal waiting for everyone):
   # not offered for renewal again meanwhile (exo-a90.15)
   var pendingCover: HashSet[string]
@@ -3079,6 +3081,15 @@ proc musterCoordinateIntents(): string =
           o["summary"]["kind"] = %"quest"
           o["summary"]["text"] = %qtext
           o["quest"] = qobj
+    # A charter proposal says where it stands before anyone signs (exo-267.1): pending, in
+    # force, out of the rule of the charter it amends, stale, superseded or contested.
+    if v.policy == CharterKind:
+      if charterView.isNil: charterView = charterJson(events, driverFor, roomAccounts())
+      for p in charterView["proposals"]:
+        if p["id"].getStr() == v.id:
+          var c = p.copy()
+          c["electorateNames"] = %p["electorate"].getElems().mapIt(memberName(it.getStr(), mine))
+          o["charter"] = c
     # Who approved, named from the address book (or "you"), and whether I did — read
     # from the log + my keys (attest.approvedByMe), or an in-app approval made here.
     var whos: seq[string]
@@ -4835,6 +4846,48 @@ proc musterCoordinateProposeQuestClose(questId: string): string = questCloseOrCa
 proc musterCoordinateProposeQuestCancel(questId: string): string = questCloseOrCancel(questId, true)
 proc musterCoordinateQuestAccept(questId, account: string): string = questAct(questId, account, false)
 proc musterCoordinateQuestConfirm(questId, account: string): string = questAct(questId, account, true)
+
+proc musterCoordinateCharter(): string =
+  ## The room's charter (exo-267.1): the one in force, how it came to be, whether its
+  ## account is one the room was shown, and every charter proposal with its standing.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  let events = gSession.roomEvents()
+  var res = charterJson(events, driverFor, roomAccounts())
+  let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
+  let mine = @[me] & myNames()
+  var names = newJObject()
+  for id in roomIdentities(): names[id] = %memberName(id, mine)
+  if res.hasKey("body"):
+    for id in res["body"]["members"]: names[id.getStr()] = %memberName(id.getStr(), mine)
+  res["memberNames"] = names
+  res["me"] = %me
+  res["roomMembers"] = %roomIdentities()
+  res["iDecide"] = %(res.hasKey("body") and res["body"]["members"].getElems().anyIt(it.getStr() == me))
+  $res
+
+proc musterCoordinateProposeCharter(specJson: string): string =
+  ## Propose a charter for the room (exo-267.1): a founding when none is in force, else an
+  ## amendment of the one in force under its rule. specJson is a charter body or
+  ## {template: "circle", …} (coordination/room_charter.charterProposal).
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  if CharterKind notin roomKinds():
+    return $(%*{"error": "not-admitted", "detail": "this room has not admitted the charter kind"})
+  var spec: JsonNode
+  try: spec = parseJson(specJson)
+  except CatchableError: return $(%*{"error": "bad-spec", "detail": "not JSON"})
+  gSession.poll()
+  let events = gSession.roomEvents()
+  let p = charterProposal(charterInForce(events, driverFor), spec, roomIdentities())
+  if not p.ok: return $(%*{"error": "bad-charter", "detail": p.why})
+  inc gMsgSeq
+  var ttl = DefaultIntentTtl
+  try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
+  except ValueError: discard
+  let id = liveProposeIntent(gSession, moduleKeystore(), driverFor, CharterKind, p.effectJson,
+                             int64(epochTime()), gMsgSeq, account = gTopic, ttlSec = ttl)
+  if not id.startsWith("0x"): return $(%*{"error": "refused", "detail": id})
+  $(%*{"intentId": id, "founding": p.founding})
 
 proc musterCoordinateQuests(): string =
   ## The quests this room proposed to issue, with their terms when the room holds text that

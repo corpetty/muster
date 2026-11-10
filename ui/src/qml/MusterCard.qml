@@ -408,6 +408,8 @@ Rectangle {
     readonly property var xmrMsig: (cardRoot.card && cardRoot.card.xmrMsig) ? cardRoot.card.xmrMsig : null
     // a lez-msig proposal, decoded by the module from the bytes its approvals sign (exo-0d3)
     readonly property var msig: (cardRoot.card && cardRoot.card.msig) ? cardRoot.card.msig : null
+    // a charter proposal and where it stands: pending, in force, out of rule, stale… (exo-267.1)
+    readonly property var charter: (cardRoot.card && cardRoot.card.charter) ? cardRoot.card.charter : null
     readonly property bool isXmr: cardRoot.xmr !== null
     // MY share's link, if I owe one: {part, ok, uri, amount, payTo, why, reported, confirmed}
     readonly property var xmrPay: (cardRoot.xmr && cardRoot.xmr.payment) ? cardRoot.xmr.payment : null

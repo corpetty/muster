@@ -1127,6 +1127,8 @@ Item {
                              && it.decliners.indexOf(room.myIdentity) >= 0),
             // a lez-msig proposal, decoded from the bytes its approvals sign (RFP U.6)
             msig: (isMsig && it && it.msig) ? it.msig : null,
+            // a charter proposal's standing, before anyone signs (exo-267.1)
+            charter: (it && it.charter) ? it.charter : null,
             // a Monero multisig spend's progress (ADR-020), null for any other intent
             xmrMsig: room.xmrMsigSpendOf(it && it.id),
             // the five questions + your readiness, once asked for

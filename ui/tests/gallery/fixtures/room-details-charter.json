@@ -1,0 +1,29 @@
+{
+  "about": "Room details \u203a Charter (exo-267.1): the tab with no charter yet, and the form that founds one from the circle template.",
+  "snapshot": "data/split-bob-final.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsTab",
+        "charter"
+      ]
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsOpen",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

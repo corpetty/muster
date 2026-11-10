@@ -583,4 +583,13 @@ class MusterUi
     SLOT(void verifyQuest(const QString &refJson))
     PROP(QString questsJson="[]" READONLY)
     PROP(QString questResultJson="" READONLY)
+
+    // The room's charter (exo-267.1, coordinate_charter): the one in force, its history,
+    // and every charter proposal with its standing. proposeCharter sends a body or a
+    // {template: "circle", …} (coordinate_propose_charter) and puts its answer in
+    // charterResultJson ({intentId, founding} | {error, detail}).
+    SLOT(void loadCharter())
+    SLOT(void proposeCharter(const QString &specJson))
+    PROP(QString charterJson="{}" READONLY)
+    PROP(QString charterResultJson="" READONLY)
 }
