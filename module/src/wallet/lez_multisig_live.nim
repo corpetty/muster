@@ -152,6 +152,15 @@ method readAccount*(c: LezMultisigLive, id: seq[byte]): LezRead =
   LezRead(found: a.owner.len > 0 or a.data.len > 0, data: a.data, owner: a.owner, height: h, nonce: a.nonce,
           balance: a.balance)
 
+method readShard*(c: LezMultisigLive, id, program: seq[byte]): LezRead =
+  ## `program`'s shard of an account, on v0.3 (a quest record, exo-267.8).
+  let h = c.rpc.lastBlockId()
+  let a = c.rpc.getAccount(id)
+  for (prog, data) in a.shards:
+    if prog == program and data.len > 0:
+      return LezRead(found: true, data: data, owner: program, height: h, nonce: a.nonce, balance: a.balance)
+  LezRead(found: false, height: h, nonce: a.nonce, balance: a.balance)
+
 method txIncluded*(c: LezMultisigLive, hash: string): tuple[known: bool, height: uint64] =
   c.rpc.getTransaction(hash)
 
@@ -252,6 +261,21 @@ proc submitV03(c: LezMultisigLive, signer: seq[byte], op: MultisigOp): LezTx =
                     nonces: @[c.rpc.getAccount(signer).nonce], instruction: instructionBorsh(op),
                     fee: some defaultFee(signer))
   except ValueError as e: return LezTx(ok: false, error: "not a v0.3 multisig op: " & e.msg)
+  let ws = @[LezWitness(signature: c.ks.lezMemberSign(label, messageHash(m)), xonly: c.ks.lezMemberKey(label))]
+  c.sendBuilt(leeTxPublic(m, ws), publicTxHash(m, ws))
+
+method submitCall*(c: LezMultisigLive, signer: seq[byte], call: LezAction): LezTx =
+  ## A member's own v0.3 transaction to any program (a quest's Accept or Confirm,
+  ## exo-267.8), signed by the keystore's key for `signer`, which pays its own fee. A refusal
+  ## is included and pays: callers read the state back.
+  if not c.signs(signer): return LezTx(ok: false, error: "this keystore holds no key for account " & hx(signer))
+  let label = c.labels[hx(signer)]
+  var m: LezMessage3
+  try:
+    m = LezMessage3(programAccount: call.target,
+                    shards: call.shards.mapIt(LezShard(account: it.account, program: it.program)),
+                    nonces: @[c.rpc.getAccount(signer).nonce], instruction: call.data, fee: some defaultFee(signer))
+  except ValueError as e: return LezTx(ok: false, error: "not a v0.3 call: " & e.msg)
   let ws = @[LezWitness(signature: c.ks.lezMemberSign(label, messageHash(m)), xonly: c.ks.lezMemberKey(label))]
   c.sendBuilt(leeTxPublic(m, ws), publicTxHash(m, ws))
 

@@ -1,0 +1,29 @@
+{
+  "about": "Room details \u203a Quests (exo-267.8): the tab with no quests yet, the room acting from no LEZ multisig.",
+  "snapshot": "data/split-bob-final.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsTab",
+        "quests"
+      ]
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsOpen",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}
