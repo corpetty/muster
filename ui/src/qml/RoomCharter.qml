@@ -167,6 +167,14 @@ ColumnLayout {
         }
     }
 
+    // ── a savings circle's rounds, when the charter sets them (exo-267.3) ──────
+    RoomCircle {
+        objectName: "roomCircle"
+        Layout.fillWidth: true
+        visible: cv.found && cv.body.schedule !== undefined
+        backend: cv.backend
+    }
+
     // ── charter proposals not yet settled ─────────────────────────────────────
     SectionHeader { Layout.fillWidth: true; visible: cv.proposals.length > 0; text: qsTr("Proposed"); count: String(cv.proposals.length) }
     Repeater {

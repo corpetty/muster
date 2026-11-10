@@ -110,15 +110,44 @@ proc charterProposal*(current: CharterView, spec: JsonNode, roomMembers: seq[str
   ## The effect a member proposes under the `charter` kind: a founding when no charter is
   ## in force, else an amendment of the one in force, decided under its rule. spec is a
   ## charter body, or {template: "circle", name, purpose?, amendK?, members?, account?,
-  ## share?, asset?, cadence?} — members default to the charter in force's, else to the
-  ## room's. Refused, with the reason, when the body would not parse: nothing malformed is
+  ## share?, asset?, cadence?}. Founding from the template, members default to the room's;
+  ## amending from it, every field it does not name carries over from the charter in force. Refused, with the reason, when the body would not parse: nothing malformed is
   ## ever proposed for anyone to sign.
   template no(msg: string) = return (false, "", false, msg)
   if spec.kind != JObject: no("a charter proposal is a body or a template")
   var body = spec
-  if spec.hasKey("template"):
+  if spec.hasKey("template") and current.found:
+    # an amendment from the template changes only what it names: the rest — the schedule,
+    # the account and the rules that act from it, the roles — carries over from the charter
+    # in force, so a rename never silently ends a circle
     if spec["template"].getStr() != "circle": no("unknown template: " & spec["template"].getStr() & " (circle)")
-    var members = (if current.found: current.body.members else: roomMembers)
+    body = current.body.toJson()
+    for k in ["name", "purpose"]:
+      if spec.hasKey(k): body[k] = %spec[k].getStr()
+    if spec.hasKey("members"):
+      var ms: seq[string]
+      for m in spec["members"].getElems(): ms.add m.getStr()
+      body["members"] = %ms
+      if body.hasKey("schedule"): body["schedule"]["order"] = %ms
+      for r in body["roles"]: r["holders"] = %r["holders"].getElems().filterIt(it.getStr() in ms)
+    if spec.hasKey("amendK"): body["amend"] = %*{"k": spec["amendK"].getInt()}
+    if spec.hasKey("account"):
+      let a = spec["account"].getStr()
+      let fresh = circleTemplate("x", "", @[], 1, account = a)
+      for cls in ["payout", "member-change"]:
+        if body["rules"].hasKey(cls): body["rules"].delete(cls)
+        if fresh["rules"].hasKey(cls): body["rules"][cls] = fresh["rules"][cls]
+      if a.len > 0: body["account"] = %a
+      elif body.hasKey("account"): body.delete("account")
+    if spec.hasKey("share") or spec.hasKey("asset") or spec.hasKey("cadence"):
+      if not body.hasKey("schedule"):
+        body["schedule"] = %*{"cadence": 0, "share": "", "asset": "", "order": body["members"]}
+      if spec.hasKey("share"): body["schedule"]["share"] = %spec["share"].getStr()
+      if spec.hasKey("asset"): body["schedule"]["asset"] = %spec["asset"].getStr()
+      if spec.hasKey("cadence"): body["schedule"]["cadence"] = %spec["cadence"].getBiggestInt()
+  elif spec.hasKey("template"):
+    if spec["template"].getStr() != "circle": no("unknown template: " & spec["template"].getStr() & " (circle)")
+    var members = roomMembers
     if spec.hasKey("members"):
       members = @[]
       for m in spec["members"].getElems(): members.add m.getStr()

@@ -57,6 +57,10 @@ public:
     // The room's charter (exo-267.1): coordinate_charter / coordinate_propose_charter.
     void loadCharter() override;
     void proposeCharter(const QString &specJson) override;
+    // The room's savings circle (exo-267.3): coordinate_circle / _circle_pay_in / _propose_circle_payout.
+    void loadCircle() override;
+    void circlePayIn(const QString &round) override;
+    void proposeCirclePayout(const QString &round) override;
     void previewLezSend(const QString &fromId, const QString &to, const QString &raw) override;
     void sendLez(const QString &fromId, const QString &to, const QString &raw) override;
 

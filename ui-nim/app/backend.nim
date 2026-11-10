@@ -992,6 +992,9 @@ proc charterTick(o: MusterUi) =
   o.loadCharterDo(proc (cj: string) =
     charterBusy = false
     let cv = obj(cj)
+    # a charter that sets rounds: its circle too, as the Charter tab shows it (exo-267.3)
+    if cv{"body"}{"schedule"} != nil:
+      ask mm.coordinate_circleAsync(proc (r: string) = o.setCircleJson(r))
     if amend.len > 0 and not charterAmended and cv{"found"}.getBool(false):
       charterAmended = true
       o.proposeCharterDo(amend, proc (r: string) = info "CHARTER amend -> " & r)
@@ -1265,6 +1268,18 @@ proc questConfirmImpl(o: MusterUi, questId, account: string) =
 proc verifyQuestImpl(o: MusterUi, refJson: string) =
   ask mm.coordinate_verify_questAsync(refJson, proc (r: string) = o.setQuestResultJson(r))
 proc loadCharterImpl(o: MusterUi) = o.loadCharterDo()
+proc loadCircleDo(o: MusterUi) =
+  # The room's savings circle (exo-267.3): its rounds, pay-ins and payouts.
+  ask mm.coordinate_circleAsync(proc (r: string) = o.setCircleJson(r))
+proc loadCircleImpl(o: MusterUi) = o.loadCircleDo()
+proc circlePayInImpl(o: MusterUi, round: string) =
+  ask mm.coordinate_circle_pay_inAsync(round, proc (r: string) =
+    o.setCircleResultJson(r)
+    o.loadCircleDo())
+proc proposeCirclePayoutImpl(o: MusterUi, round: string) =
+  ask mm.coordinate_propose_circle_payoutAsync(round, proc (r: string) =
+    o.setCircleResultJson(r)
+    o.loadCircleDo())
 proc proposeCharterImpl(o: MusterUi, specJson: string) = o.proposeCharterDo(specJson)
 proc addContactImpl(o: MusterUi, identityHex, alias: string) = o.addContactDo(identityHex, alias)
 proc setContactAliasImpl(o: MusterUi, identityHex, alias: string) = o.setContactAliasDo(identityHex, alias)

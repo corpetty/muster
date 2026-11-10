@@ -25,6 +25,8 @@
 ##   xmsig/<cid>/kex/<r>/<who>            that member's wallet's round r of the key exchange
 ##   intent/<id>/xsync|xtx/<who>/<i>/<n> a Monero multisig spend's sync data or transaction
 ##                                        set, from that member's wallet (exo-dcc.34.3)
+##   circle/<caip10>/<round>/paid/<who>  a circle member's pay-in report, naming its transaction
+##                                        (exo-267.3)
 ##   file/<fid>[/…]                      the room swarm (exo-4d0.4): a seed names the member
 ##                                        in its key, a share or retract the value's "author"
 ##
@@ -147,6 +149,7 @@ proc authorOf*(e: Event): tuple[authored: bool, author: string] =
     if p[0] == "intent" and p[2] == "proposer": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "lmsig" and p[2] == "key": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "member" and p[2] == "account": return (true, p[1])
+    if p[0] == "circle" and p.len >= 5 and p[3] == "paid": return (true, p[4])
     if p[0] == "xmsig" and p[2] == "join": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "xmsig" and p[2] == "kex": return (true, (if p.len >= 5: p[4] else: ""))
     if p[0] == "intent" and p[2] in ["xsync", "xtx"]: return (true, (if p.len >= 4: p[3] else: ""))

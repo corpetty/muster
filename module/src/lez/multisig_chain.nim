@@ -122,6 +122,16 @@ method readShard*(c: LezMultisigChain, id, program: seq[byte]): LezRead {.base.}
   let r = c.readAccount(id)
   if r.found and r.owner == program: r else: LezRead(found: false, height: r.height, nonce: r.nonce, balance: r.balance)
 
+type TxRead* = tuple[known: bool, height: uint64, signer: seq[byte], call: LezAction]
+  ## A public transaction as the chain holds it: its block, the account that signed it, the
+  ## call it carries (exo-267.3). On v0.3 an included call may have been refused — inclusion
+  ## is not effect; what it changed is read from state.
+
+method readTx*(c: LezMultisigChain, hash: string): TxRead {.base.} =
+  ## The transaction `hash` names, or known = false when the chain holds none (or this
+  ## chain's reads cannot decode it).
+  (false, 0'u64, newSeq[byte](), LezAction())
+
 method submitCall*(c: LezMultisigChain, signer: seq[byte], call: LezAction): LezTx {.base.} =
   ## A member's own v0.3 transaction to ANY program (a quest's Accept or Confirm, exo-267.8):
   ## the call's program, its rows as (account, program shard) pairs, its borsh instruction.
@@ -229,6 +239,7 @@ type
     feePerTx*: uint64
     chainedCalls*: seq[ChainedCallRecord]
     lastRefusal*: string          ## v0.3: why the last included transaction changed nothing ("" = it took)
+    memberCalls: Table[string, tuple[signer: seq[byte], call: LezAction]]   ## hash → a member call's body
 
   Refused = object of CatchableError
 
@@ -346,7 +357,14 @@ method submitCall*(f: FakeLezMultisig, signer: seq[byte], call: LezAction): LezT
   try: f.runCall(next, @[signer], call)
   except Refused as e: refusal = e.msg
   except LezDecodeError as e: refusal = "not a call this program reads: " & e.msg
-  f.includeTx(sk, next, refusal, @[], "call")
+  result = f.includeTx(sk, next, refusal, @[], "call")
+  f.memberCalls[result.hash] = (signer, call)
+
+method readTx*(f: FakeLezMultisig, hash: string): TxRead =
+  ## A member call the fake included, as getTransaction returns it: refused or not.
+  if hash notin f.memberCalls or hash notin f.txs: return (false, 0'u64, newSeq[byte](), LezAction())
+  let (signer, call) = f.memberCalls[hash]
+  (true, f.txs[hash], signer, call)
 
 proc submitV03(f: FakeLezMultisig, signer: seq[byte], op: MultisigOp): LezTx =
   ## The v0.3 port's plan and apply checks, with its messages (multisig_program/src/lib.rs).

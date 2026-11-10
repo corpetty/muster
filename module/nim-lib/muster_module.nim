@@ -54,6 +54,7 @@ import ../src/wallet/lez_multisig_live # the live chain: the member's own transa
 import ../src/lez/quest as lezquest    # the quest record program's objects (exo-267.7)
 import ../src/coordination/quest as roomquest   # quests in the room (exo-267.8)
 import ../src/coordination/room_charter   # the charter in force, and each proposal's standing (exo-267.1)
+import ../src/coordination/circle         # a circle's rounds from the pot (exo-267.3)
 import ../src/coordination/vote        # a vote-locus approval = the member's own on-chain vote
 import ../src/drivers/btc_frost        # FROST: the aggregate locus (Phase D)
 import ../src/coordination/aggregate   # the ChillDKG ceremony + the two rounds over the log
@@ -232,6 +233,8 @@ proc msigMyNames(): seq[string]         ## forward — this member's lez-msig ap
 proc msigLiveOf(a: LezMsigAccount): MsigLive   ## forward — the lez-msig chain seam for an account
 proc msigPrivFor(chain: string, program, createKey: seq[byte]): MsigPrivate   ## forward — a private one's, for this member (exo-efa)
 proc questProgram(): tuple[ok: bool, q: seq[byte], err: string]   ## forward — the quest program setting (exo-267.8)
+proc circleNow(): tuple[ok: bool, setup: CircleSetup, view: CircleView, chain: LezMultisigLive,
+                        acct: LezMultisigAccount, err: string]   ## forward — the room's circle (exo-267.3)
 proc evmPlatform(): bool               ## forward — EVM chains read through eth_rpc_module (exo-d4d.3)
 proc platformRegistry(): tuple[ok: bool, scope: string, chains: seq[PlatformChain]]   ## forward — its registry
 proc rpcChainCaip2(): tuple[ok: bool, chain, detail: string]   ## forward — the chain a split settles on
@@ -2986,6 +2989,8 @@ proc musterCoordinateIntents(): string =
   let views = reduceIntentViews(events, driverFor)
   let coveredNow = coverIndex(events, driverFor, views, nowS)
   var charterView: JsonNode = nil      # computed once, if any card is a charter (exo-267.1)
+  var circleTried = false              # the circle's rounds, read once, if any card is a vault payout (exo-267.3)
+  var circleV: CircleView
   # intents a proposal not yet agreed would settle part of (a renewal waiting for everyone):
   # not offered for renewal again meanwhile (exo-a90.15)
   var pendingCover: HashSet[string]
@@ -3086,6 +3091,19 @@ proc musterCoordinateIntents(): string =
           o["quest"] = qobj
     # A charter proposal says where it stands before anyone signs (exo-267.1): pending, in
     # force, out of the rule of the charter it amends, stale, superseded or contested.
+    # A payout from a circle's vault says whether it is the schedule's (exo-267.3): the round
+    # it pays, who has not paid in, or why it is off the schedule — before anyone votes.
+    if sm.kind in ["lez-call", "lez-proposal"] and splitPolicy(v.policy).kind == "lez-multisig":
+      if not circleTried:
+        circleTried = true
+        let cn = circleNow()
+        if cn.ok: circleV = cn.view
+      if circleV.setup.ok and splitPolicy(v.policy).account.toLowerAscii() == circleV.setup.account:
+        let (cok, reading) = circleReadingOf(circleV, v.id)
+        if cok:
+          reading["recipientName"] = %(if reading.hasKey("recipient"): memberName(reading["recipient"].getStr(), mine) else: "")
+          reading["missingNames"] = %reading["missing"].getElems().mapIt(memberName(it.getStr(), mine))
+          o["circle"] = reading
     if v.policy == CharterKind:
       if charterView.isNil: charterView = charterJson(events, driverFor, roomAccounts())
       for p in charterView["proposals"]:
@@ -4891,6 +4909,108 @@ proc musterCoordinateProposeCharter(specJson: string): string =
                              int64(epochTime()), gMsgSeq, account = gTopic, ttlSec = ttl)
   if not id.startsWith("0x"): return $(%*{"error": "refused", "detail": id})
   $(%*{"intentId": id, "founding": p.founding})
+
+# ── a circle's rounds from the pot (exo-267.3, coordination/circle.nim) ──────────────
+var gCircleTxs = initTable[string, TxRead]()   ## an included transaction never changes: read once
+
+proc circleNow(): tuple[ok: bool, setup: CircleSetup, view: CircleView, chain: LezMultisigLive,
+                        acct: LezMultisigAccount, err: string] =
+  ## The room's circle: its terms from the charter in force, its rounds from the log, each
+  ## pay-in read from the user's own sequencer.
+  if gSession == nil: return (false, CircleSetup(), CircleView(), nil, LezMultisigAccount(), $(%*{"error": "not-joined"}))
+  gSession.poll()
+  let events = gSession.roomEvents()
+  let setup = circleSetupOf(charterInForce(events, driverFor), roomAccounts())
+  if not setup.ok:
+    return (false, setup, CircleView(setup: setup), nil, LezMultisigAccount(), $(%*{"error": "no-circle", "detail": setup.why}))
+  let (found, a) = findAccount(roomAccounts(), setup.account)
+  let (aok, acct, detail) = (if found: lezMultisigAccountOf(a) else: (false, LezMultisigAccount(), "not disclosed"))
+  if not aok: return (false, setup, CircleView(setup: setup), nil, acct, $(%*{"error": "no-circle", "detail": detail}))
+  let c = lezLiveOf(acct)
+  let reader: TxReader = proc(h: string): TxRead =
+    if h in gCircleTxs: return gCircleTxs[h]
+    try:
+      result = c.readTx(h)
+      if result.known: gCircleTxs[h] = result
+    except CatchableError: result = (false, 0'u64, newSeq[byte](), LezAction())
+  (true, setup, circleView(events, driverFor, gTopic, setup, reader), c, acct, "")
+
+proc musterCoordinateCircle(): string =
+  ## The room's circle (exo-267.3): each round, who receives, who has paid in, every payout
+  ## asked of the vault and whether it is the schedule's, and the vault's balance now.
+  let (ok, _, view, c, _, err) = circleNow()
+  if not ok: return err
+  var res = circleJson(view)
+  try: res["vaultBalance"] = %($c.readAccount(view.setup.vault).balance)
+  except CatchableError as e: res["vaultBalance"] = %""; res["vaultError"] = %e.msg
+  let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
+  let mine = @[me] & myNames()
+  var names = newJObject()
+  for id in view.setup.order: names[id] = %memberName(id, mine)
+  res["memberNames"] = names
+  res["me"] = %me
+  # the LEZ accounts I shared on the circle's chain and hold the key to: where a pay-in comes from
+  var mineAccts = newJArray()
+  for a in accountsOf(gSession.roomEvents(), gTopic, me, KindLezKey, view.setup.chain):
+    if ownLabelOf(moduleKeystore(), a.key).isSome: mineAccts.add %a.id
+  res["myAccounts"] = mineAccts
+  $res
+
+proc musterCoordinateCirclePayIn(round: string): string =
+  ## Pay this member's share into the circle's vault for `round`, from a LEZ account of their
+  ## own that they shared with the room (which signs and pays its fee), then report it. The
+  ## report is a claim: every member checks it from the chain (coordination/circle.nim).
+  let (ok, setup, view, c, _, err) = circleNow()
+  if not ok: return err
+  var r: int
+  try: r = parseInt(round.strip())
+  except ValueError: return $(%*{"error": "bad-round", "detail": "a round number"})
+  if r < 1 or r > setup.n: return $(%*{"error": "bad-round", "detail": "the circle has rounds 1 to " & $setup.n})
+  let ks = moduleKeystore()
+  let me = toHex(ks.encIdentity().toBytes()).toLowerAscii()
+  if me notin setup.order: return $(%*{"error": "not-in-circle", "detail": "the charter's schedule does not name you"})
+  if me notin view.rounds[r - 1].missing:
+    return $(%*{"error": "already-paid", "detail": "your pay-in for round " & $r & " is already counted"})
+  var label = ""
+  var payer: seq[byte]
+  for a in accountsOf(gSession.roomEvents(), gTopic, me, KindLezKey, setup.chain):
+    let l = ownLabelOf(ks, a.key)
+    if l.isSome:
+      (label, payer) = (l.get, a.address)
+      break
+  if label.len == 0:
+    return $(%*{"error": "no-shared-account", "detail": "share a LEZ account of your own with the room first (Accounts → your accounts); a pay-in counts only from one"})
+  try:
+    discard c.addMember(label)
+    c.waitForInclusion = false
+    let tx = c.submitCall(payer, payInCall(setup, payer))
+    if not tx.ok: return $(%*{"error": "refused", "detail": tx.error})
+    gSession.publishAuthored(ks, payInEvent(setup.account, r, me, tx.hash))
+    $(%*{"round": r, "tx": tx.hash, "payer": lezHx(payer), "share": $setup.share,
+         "detail": "sent and reported; it counts once the chain includes it"})
+  except CatchableError as e: $(%*{"error": "sequencer-unreachable", "detail": e.msg})
+
+proc musterCoordinateProposeCirclePayout(round: string): string =
+  ## Propose round `round`'s payout: the pot (n × share) from the vault to the account the
+  ## round's recipient shared, voted on like any LEZ multisig proposal. The room must be acting
+  ## from the circle's multisig.
+  let (ok, setup, view, _, _, err) = circleNow()
+  if not ok: return err
+  var r: int
+  try: r = parseInt(round.strip())
+  except ValueError: return $(%*{"error": "bad-round", "detail": "a round number"})
+  if r < 1 or r > setup.n: return $(%*{"error": "bad-round", "detail": "the circle has rounds 1 to " & $setup.n})
+  if splitPolicy(gCoordKind).account.toLowerAscii() != setup.account:
+    return $(%*{"error": "not-the-circle", "detail": "act from the circle's multisig (" & setup.account & ") to propose its payout"})
+  let who = setup.order[r - 1]
+  let theirs = accountsOf(gSession.roomEvents(), gTopic, who, KindLezKey, setup.chain)
+  if theirs.len == 0:
+    return $(%*{"error": "no-recipient-account", "detail": "round " & $r & "'s recipient has shared no LEZ account to be paid at"})
+  var res = parseJson(lezProposeAction(payoutCall(setup, theirs[0].address, setup.share * uint64(setup.n))))
+  if res.kind == JObject:
+    res["round"] = %r
+    if view.current != r: res["warning"] = %("round " & $view.current & " is the one due")
+  $res
 
 proc musterCoordinateQuests(): string =
   ## The quests this room proposed to issue, with their terms when the room holds text that
