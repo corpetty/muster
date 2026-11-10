@@ -1,0 +1,37 @@
+{
+  "about": "Room details › Charter (exo-267.1), recorded by scripts/charter-self-test.sh: \"Tuesday circle\" in force, founded by both members, and Bob's amendment renaming it, pending under the charter's own rule (one of two).",
+  "snapshot": "data/charter-bob-amending.json",
+  "sizes": [
+    "1024x700",
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsTab",
+        "charter"
+      ]
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsOpen",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "charterInForce",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

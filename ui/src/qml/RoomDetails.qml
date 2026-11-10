@@ -7,7 +7,7 @@ import Logos.Icons
 
 // Room details, on demand (exo-720.8, docs/design/ui-modernization.md §4 U4): the room's
 // meta-state, which used to be a 320 px column always on screen, now a drawer closed by
-// default. Four tabs, the same components and the same folds of the sealed log as before:
+// default. Seven tabs, the same components and the same folds of the sealed log as before:
 //   People    who is in the room, who asks to join, the room's security level (ScopePanel)
 //   Charter   the room's charter: who decides what, and how it changes (exo-267.1)
 //   Accounts  the accounts members disclosed into the room, and the forms to add one
@@ -67,6 +67,14 @@ Rectangle {
             Layout.leftMargin: Theme.spacing.small
             currentIndex: Math.max(0, details.tabs.indexOf(details.room.detailsTab))
             onCurrentIndexChanged: details.room.detailsTab = details.tabs[currentIndex]
+            // the style's list keeps the current tab 40 px off each edge, so choosing the
+            // second tab scrolled the first under the edge; keep it merely in view instead
+            Component.onCompleted: {
+                var list = contentItem;   // the style's ListView, typed only as an Item
+                if (list.preferredHighlightBegin === undefined) return;
+                list.preferredHighlightBegin = 0;
+                list.preferredHighlightEnd = Qt.binding(function () { return list.width; });
+            }
             LogosTabButton { objectName: "roomDetailsPeople"; text: qsTr("People"); width: implicitWidth }
             LogosTabButton { objectName: "roomDetailsCharter"; text: qsTr("Charter"); width: implicitWidth }
             LogosTabButton { objectName: "roomDetailsAccounts"; text: qsTr("Accounts"); width: implicitWidth }
