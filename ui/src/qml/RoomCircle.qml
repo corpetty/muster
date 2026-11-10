@@ -120,6 +120,67 @@ ColumnLayout {
             }
         }
     }
+    // ── the pot's members (exo-267.6): a change is a proposal of the multisig itself ──
+    SectionHeader { Layout.fillWidth: true; visible: rc.running; text: qsTr("The pot's members") }
+    LogosText {
+        visible: rc.running
+        Layout.fillWidth: true
+        wrapMode: Text.WordWrap
+        color: Theme.palette.textSecondary
+        font.pixelSize: MusterStyle.caption
+        text: qsTr("Removing a member is a vote of the multisig: once it executes they can no longer vote, and they are removed from the room too. The charter still names them until it is amended.")
+    }
+    Repeater {
+        model: rc.running ? (rc.view.order || []).filter(function (m) { return m !== rc.view.me; }) : []
+        delegate: RowLayout {
+            required property var modelData
+            Layout.fillWidth: true
+            LogosText {
+                Layout.fillWidth: true
+                elide: Text.ElideRight
+                color: Theme.palette.text
+                font.pixelSize: MusterStyle.caption
+                text: rc.nameOf(modelData)
+            }
+            ActionButton {
+                objectName: "circleRemove_" + String(modelData).slice(0, 8)
+                text: qsTr("Propose removing")
+                variant: LogosButton.Variant.Secondary
+                onClicked: rc.backend.proposeLezConfig(JSON.stringify({ change: "remove", member: modelData }))
+            }
+        }
+    }
+    RowLayout {
+        visible: rc.running
+        Layout.fillWidth: true
+        LogosTextField {
+            id: thresholdField
+            objectName: "circleThreshold"
+            Layout.preferredWidth: 160
+            placeholderText: qsTr("How many must approve")
+        }
+        ActionButton {
+            objectName: "circleThresholdPropose"
+            enabled: /^[0-9]+$/.test(thresholdField.text.trim())
+            text: qsTr("Propose this threshold")
+            variant: LogosButton.Variant.Secondary
+            onClicked: rc.backend.proposeLezConfig(JSON.stringify({ change: "threshold", threshold: Number(thresholdField.text.trim()) }))
+        }
+    }
+    InlineNotice {
+        objectName: "lezConfigResult"
+        readonly property var r: {
+            var t = rc.backend ? String(rc.backend.lezConfigResultJson || "") : "";
+            if (t.length === 0) return {};
+            try { return JSON.parse(t); } catch (e) { return {}; }
+        }
+        Layout.fillWidth: true
+        visible: r.error !== undefined || r.pending !== undefined
+        tone: r.error !== undefined ? "error" : "waiting"
+        title: r.error !== undefined ? qsTr("Not proposed") : qsTr("On its way to the chain")
+        text: r.error !== undefined ? String(r.detail || r.error) : String(r.detail || "")
+    }
+
     LogosText {
         visible: rc.running && (rc.view.myAccounts || []).length === 0 && !rc.view.complete
         Layout.fillWidth: true

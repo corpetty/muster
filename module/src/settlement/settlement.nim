@@ -210,6 +210,39 @@ method assemble*(s: LezMultisigSettlement, drv: Driver, effect: Effect,
   let d = LezMultisigDriver(drv)
   let chain = LezMultisigChain(s.adapter)
   let a = d.account
+  if effect.schemaId == ConfigSchema:
+    # a config change (exo-267.6): re-read it (S5), count current members' approvals on
+    # chain, and ExecuteConfig naming them and the change
+    var ci: uint64
+    var cc: ConfigAction
+    try: (ci, cc) = lezConfigOf(effect)
+    except ValueError as e: return Assembled(ok: false, error: "not-settleable", detail: e.msg)
+    let cp = chain.readAccount(proposalPda(a.scheme, a.program, a.createKey, ci))
+    if not cp.found: return Assembled(ok: false, error: "not-settleable", detail: "no proposal #" & $ci & " on " & a.chain)
+    let cwhy = d.checkRead(effect, "proposal", cp.data)
+    if cwhy.len > 0: return Assembled(ok: false, error: "not-settleable", detail: cwhy)
+    try:
+      let st = chain.readAccount(a.statePda)
+      if not st.found: return Assembled(ok: false, error: "not-settleable", detail: "no multisig state on " & a.chain)
+      let state = decodeState(st.data)
+      let approvers = decodeProposal(cp.data, a.layout).approved.filterIt(it in state.members)
+      if approvers.len < state.threshold:
+        return Assembled(ok: false, error: "insufficient-approvals", have: approvers.len, need: state.threshold,
+                         detail: $approvers.len & " of the " & $state.threshold & " approvals are on chain")
+      var change = %*{"change": (case cc.kind
+                                 of caAddMember: "add"
+                                 of caRemoveMember: "remove"
+                                 of caChangeThreshold: "threshold")}
+      case cc.kind
+      of caAddMember, caRemoveMember: change["member"] = %lhx(cc.member)
+      of caChangeThreshold: change["threshold"] = %cc.threshold
+      return Assembled(ok: true, have: approvers.len, need: state.threshold,
+        tx: PreparedTx(chain: a.chain, frm: s.relayer, to: lhx(a.statePda),
+                       payload: $(%*{"op": "execute-config", "lez": "v0.3", "createKey": lhx(a.createKey), "index": ci,
+                                     "approvers": approvers.mapIt(lhx(it)), "config": change,
+                                     "proposal": lhx(proposalPda(a.scheme, a.program, a.createKey, ci))})))
+    except LezDecodeError as e:
+      return Assembled(ok: false, error: "not-settleable", detail: "the chain's accounts do not decode: " & e.msg)
   var idx: uint64
   var action: LezAction
   try: (idx, action) = lezActionOf(effect)

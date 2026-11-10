@@ -1136,6 +1136,8 @@ Item {
             charter: (it && it.charter) ? it.charter : null,
             // a payout from a savings circle's vault: its round, or why it is off schedule (exo-267.3)
             circle: (it && it.circle) ? it.circle : null,
+            // a change of the multisig's members or threshold, in words (exo-267.6)
+            lezConfig: (it && it.config) ? it.config : null,
             // a Monero multisig spend's progress (ADR-020), null for any other intent
             xmrMsig: room.xmrMsigSpendOf(it && it.id),
             // the five questions + your readiness, once asked for

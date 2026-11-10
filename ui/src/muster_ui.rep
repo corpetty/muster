@@ -602,4 +602,9 @@ class MusterUi
     SLOT(void proposeCirclePayout(const QString &round))
     PROP(QString circleJson="{}" READONLY)
     PROP(QString circleResultJson="" READONLY)
+
+    // A change of the room's LEZ multisig: add or remove a member, or its threshold
+    // (exo-267.6, coordinate_propose_lez_config). Its answer goes in lezConfigResultJson.
+    SLOT(void proposeLezConfig(const QString &specJson))
+    PROP(QString lezConfigResultJson="" READONLY)
 }

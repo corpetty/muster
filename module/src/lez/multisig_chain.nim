@@ -186,8 +186,18 @@ method submit*(c: LezMultisigChain, tx: PreparedTx, ks: Keystore): TxRef =
   var op: MultisigOp
   try:
     let p = parseJson(tx.payload)
-    if p{"op"}.getStr() != "execute": raise newException(WalletError, "only a prepared execute is submitted here")
-    if p{"lez"}.getStr() == "v0.3":
+    if p{"op"}.getStr() notin ["execute", "execute-config"]:
+      raise newException(WalletError, "only a prepared execute is submitted here")
+    if p{"op"}.getStr() == "execute-config":
+      # a config change (exo-267.6): ExecuteConfig naming the approvals and the change
+      let c = p["config"]
+      let cfg = (case c{"change"}.getStr()
+                 of "add": ConfigAction(kind: caAddMember, member: unhx(c["member"].getStr()))
+                 of "remove": ConfigAction(kind: caRemoveMember, member: unhx(c["member"].getStr()))
+                 else: ConfigAction(kind: caChangeThreshold, threshold: c["threshold"].getInt()))
+      op = executeConfigOp(unhx(p{"createKey"}.getStr()), uint64(p{"index"}.getBiggestInt()),
+                           p["approvers"].getElems().mapIt(unhx(it.getStr())), cfg)
+    elif p{"lez"}.getStr() == "v0.3":
       let c = p["call"]
       var shards: seq[tuple[account, program: seq[byte]]]
       for x in c["shards"]: shards.add (unhx(x["account"].getStr()), unhx(x["program"].getStr()))

@@ -206,6 +206,15 @@ method admit*(cc: EpochCrypto, joiner: Member): seq[seq[byte]] =
   for m in cc.memberSets[ne]:
     result.add sealTo(m.x, plain)
 
+method expel*(cc: EpochCrypto, member: Member): seq[seq[byte]] =
+  ## Re-key forward without the member, then wrap the new epoch key to every member who
+  ## remains — the removed one receives no frame it can open (F-16 removal).
+  cc.removeMember(member)
+  let ne = cc.cur
+  let plain = encodeGrantPlain(ne, cc.memberSets[ne], cc.keys[ne])
+  for m in cc.memberSets[ne]:
+    result.add sealTo(m.x, plain)
+
 method ingestControl*(cc: EpochCrypto, frame: seq[byte]): bool =
   ## Try to open a grant addressed to us. A frame sealed to someone else fails to
   ## open through our keystore (a raise) and is reported as "not for me".

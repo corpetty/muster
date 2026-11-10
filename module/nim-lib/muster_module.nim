@@ -55,6 +55,7 @@ import ../src/lez/quest as lezquest    # the quest record program's objects (exo
 import ../src/coordination/quest as roomquest   # quests in the room (exo-267.8)
 import ../src/coordination/room_charter   # the charter in force, and each proposal's standing (exo-267.1)
 import ../src/coordination/circle         # a circle's rounds from the pot (exo-267.3)
+import ../src/coordination/member_changes # a multisig's members and threshold from the room (exo-267.6)
 import ../src/coordination/vote        # a vote-locus approval = the member's own on-chain vote
 import ../src/drivers/btc_frost        # FROST: the aggregate locus (Phase D)
 import ../src/coordination/aggregate   # the ChillDKG ceremony + the two rounds over the log
@@ -235,6 +236,7 @@ proc msigPrivFor(chain: string, program, createKey: seq[byte]): MsigPrivate   ##
 proc questProgram(): tuple[ok: bool, q: seq[byte], err: string]   ## forward — the quest program setting (exo-267.8)
 proc circleNow(): tuple[ok: bool, setup: CircleSetup, view: CircleView, chain: LezMultisigLive,
                         acct: LezMultisigAccount, err: string]   ## forward — the room's circle (exo-267.3)
+proc memberChangePump()   ## forward — removals the chain executed, carried into the room (exo-267.6)
 proc evmPlatform(): bool               ## forward — EVM chains read through eth_rpc_module (exo-d4d.3)
 proc platformRegistry(): tuple[ok: bool, scope: string, chains: seq[PlatformChain]]   ## forward — its registry
 proc rpcChainCaip2(): tuple[ok: bool, chain, detail: string]   ## forward — the chain a split settles on
@@ -2977,6 +2979,7 @@ proc musterCoordinateIntents(): string =
   xmrMsigPump()                        # advance joined Monero multisig setups (ADR-020)
   xmrSpendPump()                       # …and agreed spends from them: sync, build, sign, submit, confirm
   roundsPump()                         # a multi-round room decision's next round, approved once (exo-720)
+  memberChangePump()                   # a removal the chain executed, carried into the room's encryption (exo-267.6)
   splitPump()                          # report my landed payments; confirm what paid me (exo-a90)
   keystorePump()                       # publish what a human approved in keystore_module (exo-149.2)
   fileSharePump()                      # finish uploads and fetches the storage node completed (exo-4d0)
@@ -3104,6 +3107,15 @@ proc musterCoordinateIntents(): string =
           reading["recipientName"] = %(if reading.hasKey("recipient"): memberName(reading["recipient"].getStr(), mine) else: "")
           reading["missingNames"] = %reading["missing"].getElems().mapIt(memberName(it.getStr(), mine))
           o["circle"] = reading
+    # A change of the multisig's members or threshold, read in words (exo-267.6): the member
+    # whose shared account it adds or removes, and whether they still read the room.
+    block:
+      let (cfgOk, cfgRead) = configReadingOf(events, v.effectJson, gTopic)
+      if cfgOk:
+        let who = cfgRead{"member"}.getStr()
+        cfgRead["memberName"] = %(if who.len > 0: memberName(who, mine) else: "")
+        cfgRead["inRoom"] = %(who.len > 0 and gSession.members().anyIt(toHex(it.toBytes()).toLowerAscii() == who))
+        o["config"] = cfgRead
     if v.policy == CharterKind:
       if charterView.isNil: charterView = charterJson(events, driverFor, roomAccounts())
       for p in charterView["proposals"]:
@@ -4630,6 +4642,72 @@ proc lezProposeAction(action: LezAction): string =
          "detail": "proposal #" & $pp.index & " is on its way to the chain; it appears in the room once included"})
   except CatchableError as e:
     $(%*{"error": "sequencer-unreachable", "detail": e.msg})
+
+proc musterCoordinateProposeLezConfig(specJson: string): string =
+  ## Propose a change of the room's LEZ multisig (exo-267.6): {change: add | remove |
+  ## threshold, member? (a room identity: their shared LEZ account), account? (a LEZ account,
+  ## hex or base58), threshold?}. The proposer's own ProposeConfig, voted and executed like
+  ## any proposal, counted by current members only. A removal the chain executes is also
+  ## carried into the room: the proposer's client re-keys the member out (memberChangePump).
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let (ok, acct, err) = lezComposeAccount()
+  if not ok: return err
+  if acct.layout != plV03:
+    return $(%*{"error": "not-an-action", "detail": "member and threshold changes from the room need the v0.3 multisig"})
+  var cfg: ConfigAction
+  try:
+    let j = parseJson(specJson)
+    let change = j{"change"}.getStr()
+    if change == "threshold":
+      let k = j{"threshold"}.getInt()
+      if k < 1 or k > acct.members.len:
+        return $(%*{"error": "bad-spec", "detail": "a threshold from 1 to " & $acct.members.len})
+      cfg = ConfigAction(kind: caChangeThreshold, threshold: k)
+    elif change in ["add", "remove"]:
+      var target: seq[byte]
+      if j.hasKey("account"): target = lezIdOf(j["account"].getStr())
+      elif j.hasKey("member"):
+        let shared = accountsOf(gSession.roomEvents(), gTopic, j["member"].getStr(), KindLezKey, acct.chain).mapIt(it.address)
+        let pick = (if change == "remove": shared.filterIt(it in acct.members) else: shared.filterIt(it notin acct.members))
+        if pick.len == 0:
+          return $(%*{"error": "no-account", "detail": (if change == "remove": "that member shared no account the multisig holds"
+                                                         else: "that member shared no LEZ account the multisig does not hold yet")})
+        target = pick[0]
+      else: return $(%*{"error": "bad-spec", "detail": "name the member or the account"})
+      cfg = (if change == "add": ConfigAction(kind: caAddMember, member: target)
+             else: ConfigAction(kind: caRemoveMember, member: target))
+    else: return $(%*{"error": "bad-spec", "detail": "change is add, remove or threshold"})
+  except CatchableError as e: return $(%*{"error": "bad-spec", "detail": e.msg})
+  var ttl = DefaultIntentTtl
+  try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
+  except ValueError: discard
+  try:
+    let c = lezLiveOf(acct)
+    let (mine, me) = c.lezOurMember(acct.members)
+    if not mine:
+      return $(%*{"error": "not-a-member", "detail": "none of your LEZ member accounts is a member of this multisig"})
+    c.waitForInclusion = false
+    inc gMsgSeq
+    let seam = newLezVoteSeam(c, me)
+    let (outcome, pp) = liveProposeConfigOnChainStart(gSession, moduleKeystore(), driverFor, gCoordKind, cfg, seam,
+                                                      int64(epochTime()), gMsgSeq, ttlSec = ttl)
+    if outcome.len > 0: return $(%*{"error": "refused", "detail": outcome})
+    gLezPending.add LezPending(kind: lpPropose, session: gSession, seam: seam, propose: pp, started: epochTime())
+    $(%*{"pending": "propose", "index": pp.index, "tx": pp.tx,
+         "detail": "proposal #" & $pp.index & " is on its way to the chain; it appears in the room once included"})
+  except CatchableError as e: $(%*{"error": "sequencer-unreachable", "detail": e.msg})
+
+proc memberChangePump() =
+  ## A removal the chain executed that THIS member proposed, of a member who still holds the
+  ## room's key: re-key them out of the room (exo-267.6), once, here and nowhere else.
+  if gSession == nil: return
+  let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
+  let holders = gSession.members().mapIt(toHex(it.toBytes()).toLowerAscii())
+  for (who, id) in removalsDue(gSession.roomEvents(), driverFor, gTopic, holders, me):
+    for m in gSession.members():
+      if toHex(m.toBytes()).toLowerAscii() == who:
+        gSession.expel(m)
+        echo "[muster] removed ", who[0 ..< 12], "… from the room's encryption after ", id, " executed"
 
 proc musterCoordinateProposeLez(actionJson: string): string =
   var action: LezAction
