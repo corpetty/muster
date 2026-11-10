@@ -48,6 +48,17 @@ ColumnLayout {
         onTriggered: rc.backend.loadCircle()
     }
 
+    // a schedule the room cannot run from a pot (no account named, one not shown the room,
+    // not a LEZ v0.3 multisig, not native LEZ): say why, rather than show nothing
+    LogosText {
+        objectName: "circleNotRunning"
+        visible: !rc.running && rc.view.error === "no-circle"
+        Layout.fillWidth: true
+        wrapMode: Text.WordWrap
+        color: Theme.palette.textSecondary
+        font.pixelSize: MusterStyle.caption
+        text: qsTr("No rounds from the pot yet: %1.").arg(String(rc.view.detail || ""))
+    }
     SectionHeader {
         Layout.fillWidth: true
         visible: rc.running
