@@ -165,6 +165,11 @@ proc loadActivityDo(o: MusterUi, d: Done = nil) =
 proc loadFrostCeremoniesDo(o: MusterUi, d: Done = nil) =
   ask mm.frost_ceremoniesAsync(proc (r: string) = o.setFrostCeremoniesJson(r); fin(d, r))
 
+proc loadWalletSummaryDo(o: MusterUi, d: Done = nil) =
+  # The Wallet page: only the wallets this instance was given (exo-f37). The module
+  # decides; the backend holds nothing.
+  ask mm.wallet_summaryAsync(proc (r: string) = o.setWalletSummaryJson(r); fin(d, r))
+
 proc loadIntentsDo(o: MusterUi, d: Done = nil) =
   # The room's proposals folded from the shared log. The FROST ceremonies advance on
   # the same tick, and the activity feed folds from the same log.
@@ -1189,6 +1194,7 @@ proc frostCeremonyOpenImpl(o: MusterUi, ceremonyId, network, t, n: string) =
   o.frostCeremonyOpenDo(ceremonyId, network, t, n)
 proc frostCeremonyJoinImpl(o: MusterUi, ceremonyId: string) = o.frostCeremonyJoinDo(ceremonyId)
 proc loadFrostCeremoniesImpl(o: MusterUi) = o.loadFrostCeremoniesDo()
+proc loadWalletSummaryImpl(o: MusterUi) = o.loadWalletSummaryDo()
 proc loadFlowImpl(o: MusterUi) = o.loadFlowDo()
 proc loadGraphImpl(o: MusterUi, roomTopic: string) = o.loadGraphDo(roomTopic)
 proc loadRlnStatusImpl(o: MusterUi) = o.loadRlnStatusDo()
