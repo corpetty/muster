@@ -1211,6 +1211,18 @@ proc questConfirmImpl(o: MusterUi, questId, account: string) =
 proc verifyQuestImpl(o: MusterUi, refJson: string) =
   ask mm.coordinate_verify_questAsync(refJson, proc (r: string) = o.setQuestResultJson(r))
 proc loadCharterImpl(o: MusterUi) = o.loadCharterDo()
+proc loadCircleDo(o: MusterUi) =
+  # The room's savings circle (exo-267.3): its rounds, pay-ins and payouts.
+  ask mm.coordinate_circleAsync(proc (r: string) = o.setCircleJson(r))
+proc loadCircleImpl(o: MusterUi) = o.loadCircleDo()
+proc circlePayInImpl(o: MusterUi, round: string) =
+  ask mm.coordinate_circle_pay_inAsync(round, proc (r: string) =
+    o.setCircleResultJson(r)
+    o.loadCircleDo())
+proc proposeCirclePayoutImpl(o: MusterUi, round: string) =
+  ask mm.coordinate_propose_circle_payoutAsync(round, proc (r: string) =
+    o.setCircleResultJson(r)
+    o.loadCircleDo())
 proc proposeCharterImpl(o: MusterUi, specJson: string) =
   ask mm.coordinate_propose_charterAsync(specJson, proc (r: string) =
     o.setCharterResultJson(r)

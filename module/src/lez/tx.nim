@@ -375,3 +375,50 @@ proc publicTxHash*(m: LezMessage3, witnesses: seq[LezWitness]): string =
 proc leeTxPublic*(m: LezMessage3, witnesses: seq[LezWitness]): seq[byte] =
   ## LeeTransaction::Public: what sendTransaction carries (base64 of these bytes).
   @[0'u8] & publicTxBorsh(m, witnesses)
+
+# ── reading a transaction back (getTransaction, exo-267.3) ─────────────────────
+type LeeTxDecodeError* = object of ValueError
+
+proc decodeLeeTxPublic*(b: seq[byte]): tuple[m: LezMessage3, witnesses: seq[LezWitness]] =
+  ## LeeTransaction::Public from its borsh — what getTransaction returns, base64 — the exact
+  ## inverse of leeTxPublic for a v0.3 public transaction. Anything else, partial or padded,
+  ## raises: a transaction is never read best-effort.
+  var p = 0
+  proc need(n: int) =
+    if p + n > b.len: raise newException(LeeTxDecodeError, "the transaction ends early")
+  proc take(n: int): seq[byte] =
+    need(n)
+    result = @(b[p ..< p + n])
+    p += n
+  proc u32(): int =
+    let x = take(4)
+    int(uint32(x[0]) or (uint32(x[1]) shl 8) or (uint32(x[2]) shl 16) or (uint32(x[3]) shl 24))
+  proc u64(): uint64 =
+    let x = take(8)
+    for i in 0 ..< 8: result = result or (uint64(x[i]) shl uint64(8*i))
+  if take(1) != @[0'u8]: raise newException(LeeTxDecodeError, "not a public transaction")
+  var m: LezMessage3
+  m.programAccount = take(32)
+  let ns = u32()
+  if ns > 64: raise newException(LeeTxDecodeError, "too many rows")
+  for _ in 0 ..< ns: m.shards.add LezShard(account: take(32), program: take(32))
+  let nn = u32()
+  if nn > 64: raise newException(LeeTxDecodeError, "too many nonces")
+  for _ in 0 ..< nn: m.nonces.add UInt128.fromBytesLE(take(16))
+  let il = u32()
+  m.instruction = take(il)
+  case take(1)[0]
+  of 0: m.fee = none(LezFee)
+  of 1:
+    var f = LezFee(payer: take(32))
+    f.gasLimit = u64()
+    f.tip = u64()
+    f.maxFee = UInt128.fromBytesLE(take(16))
+    m.fee = some(f)
+  else: raise newException(LeeTxDecodeError, "a fee is absent or present")
+  let nw = u32()
+  if nw > 64: raise newException(LeeTxDecodeError, "too many witnesses")
+  var ws: seq[LezWitness]
+  for _ in 0 ..< nw: ws.add LezWitness(signature: take(64), xonly: take(32))
+  if p != b.len: raise newException(LeeTxDecodeError, "trailing bytes after the transaction")
+  (m, ws)

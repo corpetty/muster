@@ -161,6 +161,26 @@ method readShard*(c: LezMultisigLive, id, program: seq[byte]): LezRead =
       return LezRead(found: true, data: data, owner: program, height: h, nonce: a.nonce, balance: a.balance)
   LezRead(found: false, height: h, nonce: a.nonce, balance: a.balance)
 
+method readTx*(c: LezMultisigLive, hash: string): TxRead =
+  ## The public transaction `hash` names, from the sequencer (getTransaction: its borsh,
+  ## base64, and its block), decoded and held to the hash it was asked for — a sequencer
+  ## answering with another transaction is read as none. The signer is the first witness's
+  ## account. Included is not effect on v0.3: a refused call is included too.
+  let j = c.rpc.call("getTransaction", %*[hash])
+  if j.kind != JArray or j.len < 2 or j[0].kind != JString: return (false, 0'u64, newSeq[byte](), LezAction())
+  var want = hash.toLowerAscii().strip()
+  if want.startsWith("0x"): want = want[2 .. ^1]
+  var raw: seq[byte]
+  try:
+    for ch in base64.decode(j[0].getStr()): raw.add byte(ch)
+    let (m, ws) = decodeLeeTxPublic(raw)
+    if ws.len == 0 or publicTxHash(m, ws) != want:
+      return (false, 0'u64, newSeq[byte](), LezAction())
+    (true, uint64(j[1].getBiggestInt()), publicAccountId(ws[0].xonly),
+     lezCallV03(m.programAccount, m.shards.mapIt((it.account, it.program)), m.instruction, @[]))
+  except CatchableError:
+    (false, 0'u64, newSeq[byte](), LezAction())
+
 method txIncluded*(c: LezMultisigLive, hash: string): tuple[known: bool, height: uint64] =
   c.rpc.getTransaction(hash)
 

@@ -287,6 +287,24 @@ void MusterUiBackend::proposeCharter(const QString &specJson)
     loadCharter();
 }
 
+// ── The room's savings circle (exo-267.3, coordination/circle.nim) ─────────────────
+void MusterUiBackend::loadCircle()
+{
+    setCircleJson(modules().muster_module.coordinate_circle());
+}
+
+void MusterUiBackend::circlePayIn(const QString &round)
+{
+    setCircleResultJson(modules().muster_module.coordinate_circle_pay_in(round));
+    loadCircle();
+}
+
+void MusterUiBackend::proposeCirclePayout(const QString &round)
+{
+    setCircleResultJson(modules().muster_module.coordinate_propose_circle_payout(round));
+    loadCircle();
+}
+
 void MusterUiBackend::loadWalletAccounts()
 {
     // Every account across chains, with a LEZ account's shareable address (the `share`

@@ -939,6 +939,36 @@ ColumnLayout {
         }
     }
 
+    // ── a savings circle's payout (exo-267.3): the schedule's, or off it, said before the vote ──
+    ColumnLayout {
+        objectName: "cardCircle"
+        Layout.fillWidth: true
+        visible: cardRoot.circle !== null
+        spacing: 2
+        readonly property var c: cardRoot.circle || ({})
+        LogosText {
+            objectName: "cardCircleRound"
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: parent.c.onSchedule
+                  ? qsTr("Round %1 of the circle: pays %2 the pot.").arg(Number(parent.c.round)).arg(String(parent.c.recipientName || ""))
+                  : qsTr("Off the circle's schedule: %1.").arg(String(parent.c.why || ""))
+            color: parent.c.onSchedule ? Theme.palette.text : Theme.palette.warning
+            font.pixelSize: MusterStyle.cardBody
+        }
+        LogosText {
+            objectName: "cardCircleMissing"
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            visible: Number(parent.c.round) > 0
+            text: (parent.c.missingNames || []).length === 0
+                  ? qsTr("Every member has paid in for round %1.").arg(Number(parent.c.round))
+                  : qsTr("Not paid in yet for round %1: %2.").arg(Number(parent.c.round)).arg((parent.c.missingNames || []).join(", "))
+            color: (parent.c.missingNames || []).length === 0 ? Theme.palette.textSecondary : Theme.palette.warning
+            font.pixelSize: MusterStyle.cardCaption
+        }
+    }
+
     // ── lez-msig (exo-0d3): what the approval signs, decoded from those very bytes (RFP U.6) ──
     ColumnLayout {
         objectName: "cardMsig"
