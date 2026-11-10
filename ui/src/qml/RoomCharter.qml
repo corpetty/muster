@@ -130,7 +130,7 @@ ColumnLayout {
             delegate: LogosText {
                 required property var modelData
                 Layout.fillWidth: true
-                wrapMode: Text.WrapAnywhere
+                wrapMode: Text.WrapAtWordBoundaryOrAnywhere   // words first; a long policy id still breaks
                 color: Theme.palette.textSecondary
                 font.pixelSize: MusterStyle.caption
                 text: cv.ruleText(modelData, cv.body.rules[modelData])
@@ -226,36 +226,34 @@ ColumnLayout {
         placeholderText: qsTr("Purpose")
         text: String(cv.body.purpose || "")
     }
-    RowLayout {
+    // two to a row, the account on its own: at the side panel's width, three fields to a
+    // row cut their placeholders short
+    GridLayout {
         Layout.fillWidth: true
+        columns: 2
+        columnSpacing: Theme.spacing.small
+        rowSpacing: Theme.spacing.small
         LogosTextField {
             id: amendField
             objectName: "charterAmendK"
-            Layout.preferredWidth: 150
+            Layout.fillWidth: true
+            Layout.preferredWidth: 1
             placeholderText: qsTr("Changes take (k)")
             text: cv.body.amend ? String(cv.body.amend.k) : ""
         }
         LogosTextField {
-            id: accountField
-            objectName: "charterAccount"
-            Layout.fillWidth: true
-            placeholderText: qsTr("The circle's account (CAIP-10), optional")
-            text: String(cv.body.account || (cv.accounts.length === 1 ? cv.accounts[0].id : ""))
-        }
-    }
-    RowLayout {
-        Layout.fillWidth: true
-        LogosTextField {
             id: shareField
             objectName: "charterShare"
-            Layout.preferredWidth: 150
+            Layout.fillWidth: true
+            Layout.preferredWidth: 1
             placeholderText: qsTr("Share per round")
             text: cv.body.schedule ? String(cv.body.schedule.share) : ""
         }
         LogosTextField {
             id: assetField
             objectName: "charterAsset"
-            Layout.preferredWidth: 90
+            Layout.fillWidth: true
+            Layout.preferredWidth: 1
             placeholderText: qsTr("Asset")
             text: cv.body.schedule ? String(cv.body.schedule.asset) : "LEZ"
         }
@@ -263,8 +261,17 @@ ColumnLayout {
             id: cadenceField
             objectName: "charterCadenceDays"
             Layout.fillWidth: true
-            placeholderText: qsTr("Every how many days")
+            Layout.preferredWidth: 1
+            placeholderText: qsTr("Days per round")
             text: cv.body.schedule ? cv.days(cv.body.schedule.cadence) : ""
+        }
+        LogosTextField {
+            id: accountField
+            objectName: "charterAccount"
+            Layout.fillWidth: true
+            Layout.columnSpan: 2
+            placeholderText: qsTr("The circle's account (CAIP-10), optional")
+            text: String(cv.body.account || (cv.accounts.length === 1 ? cv.accounts[0].id : ""))
         }
     }
     ActionButton {

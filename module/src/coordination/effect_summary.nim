@@ -125,7 +125,7 @@ proc effectSummary*(effectJson: string, label: proc (who: string): string = nil,
     return EffectSummary(kind: "policy", text: "a new policy: " & j{"kind"}.getStr("?"))
   of "charter":
     let name = j{"body"}{"name"}.getStr("?")
-    return EffectSummary(kind: "policy", text: (if j{"prev"}.getStr().len == 0: "found the charter: “"
+    return EffectSummary(kind: "charter", text: (if j{"prev"}.getStr().len == 0: "found the charter: “"
                                                 else: "amend the charter: “") & name & "”")
   of "invoke":
     let call = j{"module"}.getStr() & "." & j{"method"}.getStr()

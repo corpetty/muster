@@ -20,6 +20,7 @@ import ../src/log/log
 import ../src/coordination/intents
 import ../src/coordination/accounts
 import ../src/coordination/room_charter
+import ../src/coordination/effect_summary
 
 proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
 proc hx(b: openArray[byte]): string =
@@ -95,6 +96,12 @@ block:
   let c = charterInForce(evs, driverFor)
   doAssert c.id == amendId and c.body.name == "Tuesday savings circle"
   doAssert c.history == @[foundId, amendId]
+  # what the card counts against: the three it names, though two decide it
+  doAssert driverFor(CharterKind).electorateFor(effectFromJson(amendJson)) == 3
+  doAssert describeFor(driverFor(CharterKind), effectFromJson(amendJson)).threshold == 2
+  # and the room's summary names it a charter, not a policy
+  doAssert effectSummary(amendJson, proc(w: string): string = w).kind == "charter"
+  doAssert effectSummary(foundJson, proc(w: string): string = w).text == "found the charter: “Tuesday circle”"
   echo "3. amended by two of three, the founding charter's own rule OK"
 
 # ── 4. an amendment NOT under the rule never takes force ──────────────────────

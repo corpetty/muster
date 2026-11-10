@@ -3022,7 +3022,10 @@ proc musterCoordinateIntents(): string =
     # branching on the concrete driver type (exo-a50.1.1) — and the whole profile rides
     # along so the card's fixed rows can be drawn from it (exo-a50.1.6).
     var prof = drv.profile()
-    o["n"] = %(if prof.n > 0: prof.n else: desc.threshold)
+    # a family whose effect names who decides it (a charter's electorate, exo-267.1) counts
+    # against those it names: "1 of 2", never k of k
+    let named = drv.electorateFor(effectFromJson(v.effectJson))
+    o["n"] = %(if named > 0: named elif prof.n > 0: prof.n else: desc.threshold)
     # The ways around a Safe's threshold, as last READ from the chain (coordinate_accounts
     # caches them — no chain read on this 1s tick); unread stays unknown (exo-a50.1.6).
     if prof.account.len > 0 and prof.account in gBypassCache:
