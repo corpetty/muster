@@ -132,21 +132,54 @@ ColumnLayout {
     }
     Repeater {
         model: rc.running ? (rc.view.order || []).filter(function (m) { return m !== rc.view.me; }) : []
-        delegate: RowLayout {
+        // a proposal puts the proposer's own vote on chain, at their own fee: ask first
+        delegate: ColumnLayout {
+            id: memberRow
             required property var modelData
+            property bool confirming: false
             Layout.fillWidth: true
-            LogosText {
+            spacing: 2
+            RowLayout {
                 Layout.fillWidth: true
-                elide: Text.ElideRight
-                color: Theme.palette.text
-                font.pixelSize: MusterStyle.caption
-                text: rc.nameOf(modelData)
+                LogosText {
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                    color: Theme.palette.text
+                    font.pixelSize: MusterStyle.caption
+                    text: rc.nameOf(memberRow.modelData)
+                }
+                ActionButton {
+                    objectName: "circleRemove_" + String(memberRow.modelData).slice(0, 8)
+                    visible: !memberRow.confirming
+                    text: qsTr("Propose removing")
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: memberRow.confirming = true
+                }
             }
-            ActionButton {
-                objectName: "circleRemove_" + String(modelData).slice(0, 8)
-                text: qsTr("Propose removing")
-                variant: LogosButton.Variant.Secondary
-                onClicked: rc.backend.proposeLezConfig(JSON.stringify({ change: "remove", member: modelData }))
+            LogosText {
+                visible: memberRow.confirming
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                color: Theme.palette.warning
+                font.pixelSize: MusterStyle.caption
+                text: qsTr("Ask the multisig to remove %1? Your proposal goes on chain as your vote for it, and you pay its fee. The others still vote.")
+                      .arg(rc.nameOf(memberRow.modelData))
+            }
+            RowLayout {
+                visible: memberRow.confirming
+                ActionButton {
+                    objectName: "circleRemoveConfirm_" + String(memberRow.modelData).slice(0, 8)
+                    text: qsTr("Propose it")
+                    onClicked: {
+                        memberRow.confirming = false;
+                        rc.backend.proposeLezConfig(JSON.stringify({ change: "remove", member: memberRow.modelData }));
+                    }
+                }
+                ActionButton {
+                    text: qsTr("Cancel")
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: memberRow.confirming = false
+                }
             }
         }
     }
@@ -161,7 +194,9 @@ ColumnLayout {
         }
         ActionButton {
             objectName: "circleThresholdPropose"
-            enabled: /^[0-9]+$/.test(thresholdField.text.trim())
+            // 1 to the number of members, caught here rather than refused by the module
+            enabled: /^[0-9]+$/.test(thresholdField.text.trim()) && Number(thresholdField.text.trim()) >= 1
+                     && Number(thresholdField.text.trim()) <= (rc.view.order || []).length
             text: qsTr("Propose this threshold")
             variant: LogosButton.Variant.Secondary
             onClicked: rc.backend.proposeLezConfig(JSON.stringify({ change: "threshold", threshold: Number(thresholdField.text.trim()) }))
