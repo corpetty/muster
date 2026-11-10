@@ -10,7 +10,7 @@
 ## and among agreed amendments of the same charter, one, the same on every member.
 ## Pure Nim, no host: Ed25519 room keys sign the materialization directly.
 
-import std/[json, strutils, sequtils, random]
+import std/[json, strutils, sequtils, random, algorithm]
 import ../src/intents/materialization
 import ../src/drivers/driver
 import ../src/drivers/charter
@@ -20,6 +20,7 @@ import ../src/log/log
 import ../src/coordination/intents
 import ../src/coordination/accounts
 import ../src/coordination/room_charter
+import ../src/coordination/effect_summary
 
 proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
 proc hx(b: openArray[byte]): string =
@@ -95,6 +96,12 @@ block:
   let c = charterInForce(evs, driverFor)
   doAssert c.id == amendId and c.body.name == "Tuesday savings circle"
   doAssert c.history == @[foundId, amendId]
+  # what the card counts against: the three it names, though two decide it
+  doAssert driverFor(CharterKind).electorateFor(effectFromJson(amendJson)) == 3
+  doAssert describeFor(driverFor(CharterKind), effectFromJson(amendJson)).threshold == 2
+  # and the room's summary names it a charter, not a policy
+  doAssert effectSummary(amendJson, proc(w: string): string = w).kind == "charter"
+  doAssert effectSummary(foundJson, proc(w: string): string = w).text == "found the charter: “Tuesday circle”"
   echo "3. amended by two of three, the founding charter's own rule OK"
 
 # ── 4. an amendment NOT under the rule never takes force ──────────────────────
@@ -180,7 +187,44 @@ block:
   doAssert charterAccountProblems(body, @[short]).len == 1, "the multisig has fewer members than the charter names"
   echo "7. the charter's multisig is checked against the room's disclosure OK"
 
-# ── 8. the charter driver conforms ────────────────────────────────────────────
+# ── 8. a rival founding by fewer people never displaces the room's ────────────
+# Anyone may found a charter naming only themselves and agree to it alone; an intent id is
+# the proposer's to grind (vary the name until it sorts first). Which founding holds is
+# decided by whom it names, never by id.
+block:
+  var lower, higher = 0
+  for i in 0 ..< 24:
+    let solo = foundingEffect(circleTemplate(name = "carol's circle " & $i, purpose = "",
+                                             members = @[idOf(carol)], amendK = 1))
+    let (soloId, soloEvs) = propose(solo)
+    var evs = founded & soloEvs & @[sign(carol, soloId, solo)]
+    let c = charterInForce(evs, driverFor)
+    doAssert c.found and c.id == foundId and soloId in c.superseded, "rival " & $i & " displaced the room's charter"
+    if soloId < foundId: inc lower else: inc higher
+    # and in any order
+    var rng = initRand(i)
+    rng.shuffle(evs)
+    doAssert charterInForce(evs, driverFor).id == foundId
+  doAssert lower > 0, "some rival ids sort below the room's founding: the rule was exercised"
+  # a re-founding naming everyone the first named (and more) is agreed by all of them: it holds
+  let wider = foundingEffect(circleTemplate(name = "with dave", purpose = "",
+                                            members = members & @[idOf(dave)], amendK = 2))
+  let (widerId, widerEvs) = propose(wider)
+  let evs = founded & widerEvs & @[sign(alice, widerId, wider), sign(bob, widerId, wider),
+                                   sign(carol, widerId, wider), sign(dave, widerId, wider)]
+  doAssert charterInForce(evs, driverFor).id == widerId and foundId in charterInForce(evs, driverFor).superseded
+  # two foundings by groups neither of which includes the other: contested, none in force
+  let ab = foundingEffect(circleTemplate(name = "ab", purpose = "", members = @[idOf(alice), idOf(bob)], amendK = 1))
+  let cd = foundingEffect(circleTemplate(name = "cd", purpose = "", members = @[idOf(carol), idOf(dave)], amendK = 1))
+  let (abId, abEvs) = propose(ab)
+  let (cdId, cdEvs) = propose(cd)
+  let split = abEvs & cdEvs & @[sign(alice, abId, ab), sign(bob, abId, ab), sign(carol, cdId, cd), sign(dave, cdId, cd)]
+  let c = charterInForce(split, driverFor)
+  doAssert not c.found and sorted(c.contested) == sorted(@[abId, cdId]), $c.contested
+  echo "8. a rival founding by fewer never displaces the room's (", lower, " of 24 sorted first); ",
+       "a wider one agreed by all holds; disjoint ones are contested OK"
+
+# ── 9. the charter driver conforms ────────────────────────────────────────────
 block:
   let d = driverFor(CharterKind)
   let e = effectFromJson(foundJson)
@@ -188,6 +232,6 @@ block:
   let m = canonicalize(d, e)
   let r = checkConformance(d, e, t, Contribution(bytes: @(edSign(alice, m.bytes))))
   doAssert r.allPass(), "charter driver must conform: failed " & $r.failed()
-  echo "8. the charter driver conforms (", r.checks.len, " checks) OK"
+  echo "9. the charter driver conforms (", r.checks.len, " checks) OK"
 
 echo "charter_test: all OK"

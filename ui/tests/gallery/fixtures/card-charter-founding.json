@@ -1,0 +1,22 @@
+{
+  "about": "A charter founding's card (exo-267.1), recorded by scripts/charter-self-test.sh: the circle template, proposed by Alice and waiting on both members it names, the standing line said before anyone signs.",
+  "snapshot": "data/charter-alice-founding.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "expectProp": [
+        "cardCharterStanding",
+        "text",
+        "Founds the room's charter: every one of the 2 it names must agree."
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

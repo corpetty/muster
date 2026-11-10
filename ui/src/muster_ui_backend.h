@@ -54,6 +54,9 @@ public:
     void questAccept(const QString &questId, const QString &account) override;
     void questConfirm(const QString &questId, const QString &account) override;
     void verifyQuest(const QString &refJson) override;
+    // The room's charter (exo-267.1): coordinate_charter / coordinate_propose_charter.
+    void loadCharter() override;
+    void proposeCharter(const QString &specJson) override;
     void previewLezSend(const QString &fromId, const QString &to, const QString &raw) override;
     void sendLez(const QString &fromId, const QString &to, const QString &raw) override;
 

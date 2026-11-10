@@ -1050,6 +1050,8 @@ Item {
         // a payment request (exo-dcc.5): one share, the creditor's own share nothing
         var isRequest = isSplit && it && it.split && Array.isArray(it.parts) && it.parts.length === 1
                         && String(it.split.creditorShare || "") === "0";
+        // a charter (exo-267.1): who decides what in the room; an amendment names the one it amends
+        var isCharter = effKind === "charter";
         return {
             kind: "intent-propose",
             split: (isSplit && it && it.split) ? it.split : null,
@@ -1058,6 +1060,7 @@ Item {
             // who proposed it, by their signed claim (exo-770); [] = unattributed
             proposedBy: (it && Array.isArray(it.proposedBy)) ? it.proposedBy : [],
             label: isSettleUp ? qsTr("Settle up") : isRequest ? qsTr("Request") : isSplit ? qsTr("Split")
+                 : isCharter ? qsTr("Charter")
                  : isGovernance ? qsTr("A new way to agree")
                  : isLez ? qsTr("LEZ multisig")
                  : isMsig ? qsTr("LEZ multisig")
@@ -1084,6 +1087,8 @@ Item {
             // the heading, in the family's words (a Bitcoin payment, a LEZ transfer, a new policy…)
             heading: isSettleUp ? qsTr("Proposed to settle up") : isRequest ? qsTr("Requested a payment")
                    : isSplit ? qsTr("Proposed a split")
+                   : isCharter ? (String(eff.prev || "").length > 0 ? qsTr("Proposed a change to the charter")
+                                                                     : qsTr("Proposed the room's charter"))
                    : room.headingFor(it && it.summary ? String(it.summary.kind || "") : ""),
             // who approved, named (or "you"), and whether I did (exo-59c)
             approvers: (it && Array.isArray(it.approvers)) ? it.approvers : [],
@@ -1127,6 +1132,8 @@ Item {
                              && it.decliners.indexOf(room.myIdentity) >= 0),
             // a lez-msig proposal, decoded from the bytes its approvals sign (RFP U.6)
             msig: (isMsig && it && it.msig) ? it.msig : null,
+            // a charter proposal's standing, before anyone signs (exo-267.1)
+            charter: (it && it.charter) ? it.charter : null,
             // a Monero multisig spend's progress (ADR-020), null for any other intent
             xmrMsig: room.xmrMsigSpendOf(it && it.id),
             // the five questions + your readiness, once asked for
