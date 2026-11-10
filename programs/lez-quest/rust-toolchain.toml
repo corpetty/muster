@@ -1,0 +1,4 @@
+# Kept in sync with logos-execution-zone v0.3.0, which pins 1.98.1.
+[toolchain]
+channel = "1.98.1"
+profile = "default"

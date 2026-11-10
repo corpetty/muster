@@ -1,0 +1,14 @@
+# The quest record program on LEZ v0.3.0's plan/apply ABI (run_program), muster's
+# docs/design/lez-quest-program.md (exo-267.7). Built like the LEZ multisig's v0.3 port:
+# a core crate of types, a program crate of plan/apply with in-process tests, and a risc0
+# guest the zone runs.
+[workspace]
+resolver = "2"
+members = ["quest_core", "quest_program", "methods", "methods/guest", "e2e"]
+
+[workspace.dependencies]
+risc0-zkvm = { version = "=3.0.5", features = ['std'] }
+risc0-build = "=3.0.5"
+lee_core = { git = "https://github.com/logos-blockchain/logos-execution-zone.git", tag = "v0.3.0", package = "lee_core" }
+borsh = "1.5.7"
+sha2 = "0.10.8"
