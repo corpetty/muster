@@ -108,7 +108,21 @@ block:
     let v = view(who)
     doAssert v["id"].getStr() == amendId and v["body"]["name"].getStr() == "Tuesday savings circle", who
     doAssert v["history"].getElems().mapIt(it.getStr()) == @[foundId, amendId]
-  echo "3. amended by two of three, the charter in force's own rule, on every member OK"
+  # an amendment from the template changes only what it names: a rename keeps the circle's
+  # schedule, its account and the rules that act from it (bugger's render, exo-267.3)
+  let inForce = charterInForce(evs(), charterDriverFor)
+  let rename = charterProposal(inForce, %*{"template": "circle", "name": "Thursday circle"}, ids)
+  doAssert rename.ok and not rename.founding, rename.why
+  let rb = parseJson(rename.effectJson)["body"]
+  doAssert rb["name"].getStr() == "Thursday circle"
+  doAssert rb["schedule"]["share"].getStr() == "100" and rb["schedule"]["cadence"].getInt() == 604800, $rb
+  doAssert rb["account"].getStr() == account and rb["rules"]["payout"].getStr() == "lez-multisig@" & account, $rb
+  doAssert rb["purpose"].getStr() == inForce.body.purpose and rb["amend"]["k"].getInt() == 2
+  let reshare = charterProposal(inForce, %*{"template": "circle", "share": "250"}, ids)
+  doAssert reshare.ok and parseJson(reshare.effectJson)["body"]["schedule"]["share"].getStr() == "250"
+  doAssert parseJson(reshare.effectJson)["body"]["name"].getStr() == "Tuesday savings circle"
+  echo "3. amended by two of three, the charter in force's own rule, on every member; ",
+       "a template amendment changes only what it names OK"
 
 # ── 4. what can never take force is said so before anyone signs ───────────────────
 block:
