@@ -95,6 +95,12 @@ method admit*(cc: ConversationCrypto, joiner: Member): seq[seq[byte]] {.base.} =
   ## new epoch key. Opaque to the transport; each frame protects its own payload.
   raise newException(CatchableError, "ConversationCrypto.admit is abstract")
 
+method expel*(cc: ConversationCrypto, member: Member): seq[seq[byte]] {.base.} =
+  ## Remove a member (exo-267.6): re-key forward WITHOUT them, and return the control
+  ## frames that carry the new epoch key to every member who remains. The removed member
+  ## gets none, so nothing sent after this is readable to them (F-16 removal).
+  raise newException(CatchableError, "ConversationCrypto.expel is abstract")
+
 method ingestControl*(cc: ConversationCrypto, frame: seq[byte]): bool {.base.} =
   ## Consume a membership control frame addressed to us (a grant/welcome). Returns
   ## true if it advanced our membership (we now hold a key we did not before),

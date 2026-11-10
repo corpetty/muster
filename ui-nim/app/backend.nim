@@ -1276,6 +1276,9 @@ proc circlePayInImpl(o: MusterUi, round: string) =
   ask mm.coordinate_circle_pay_inAsync(round, proc (r: string) =
     o.setCircleResultJson(r)
     o.loadCircleDo())
+proc proposeLezConfigImpl(o: MusterUi, specJson: string) =
+  # A change of the room's LEZ multisig's members or threshold (exo-267.6).
+  ask mm.coordinate_propose_lez_configAsync(specJson, proc (r: string) = o.setLezConfigResultJson(r))
 proc proposeCirclePayoutImpl(o: MusterUi, round: string) =
   ask mm.coordinate_propose_circle_payoutAsync(round, proc (r: string) =
     o.setCircleResultJson(r)

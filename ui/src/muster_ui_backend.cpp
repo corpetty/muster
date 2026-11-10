@@ -305,6 +305,12 @@ void MusterUiBackend::proposeCirclePayout(const QString &round)
     loadCircle();
 }
 
+// ── A change of the room's LEZ multisig (exo-267.6, coordination/member_changes.nim) ──
+void MusterUiBackend::proposeLezConfig(const QString &specJson)
+{
+    setLezConfigResultJson(modules().muster_module.coordinate_propose_lez_config(specJson));
+}
+
 void MusterUiBackend::loadWalletAccounts()
 {
     // Every account across chains, with a LEZ account's shareable address (the `share`

@@ -969,6 +969,37 @@ ColumnLayout {
         }
     }
 
+    // ── a change of the multisig (exo-267.6): who it adds or removes, and the room's half ──
+    ColumnLayout {
+        objectName: "cardLezConfig"
+        Layout.fillWidth: true
+        visible: cardRoot.lezConfig !== null
+        spacing: 2
+        readonly property var c: cardRoot.lezConfig || ({})
+        readonly property string who: String(c.memberName || "") || qsTr("an account no member shared (%1…)").arg(String(c.account || "").slice(0, 8))
+        LogosText {
+            objectName: "cardLezConfigChange"
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: parent.c.change === "remove" ? qsTr("Removes %1 from the multisig: once it executes they can no longer vote or be counted.").arg(parent.who)
+                : parent.c.change === "add" ? qsTr("Adds %1 to the multisig: once it executes they vote and are counted.").arg(parent.who)
+                : qsTr("Changes how many must approve to %1.").arg(Number(parent.c.threshold))
+            color: Theme.palette.text
+            font.pixelSize: MusterStyle.cardBody
+        }
+        LogosText {
+            objectName: "cardLezConfigRoom"
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            visible: parent.c.change === "remove" && String(parent.c.member || "").length > 0
+            text: parent.c.inRoom
+                  ? qsTr("When it executes, the proposer's client also removes them from the room: they will not read anything sent after.")
+                  : qsTr("They are no longer in the room's encryption.")
+            color: Theme.palette.textSecondary
+            font.pixelSize: MusterStyle.cardCaption
+        }
+    }
+
     // ── lez-msig (exo-0d3): what the approval signs, decoded from those very bytes (RFP U.6) ──
     ColumnLayout {
         objectName: "cardMsig"

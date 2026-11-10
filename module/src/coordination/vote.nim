@@ -173,7 +173,7 @@ proc accountOf(d: Driver): LezMultisigAccount =
 method readPointer*(v: LezVoteSeam, d: Driver, e: Effect, name: string): tuple[ok: bool, bytes: seq[byte], source, detail: string] =
   try:
     let a = accountOf(d)
-    let (idx, _) = lezActionOf(e)
+    let idx = lezProposalIndexOf(e)
     let pda = proposalPda(a.scheme, a.program, a.createKey, idx)
     let r = v.chain.readAccount(pda)
     if not r.found:
@@ -185,7 +185,7 @@ method readPointer*(v: LezVoteSeam, d: Driver, e: Effect, name: string): tuple[o
 method castVote*(v: LezVoteSeam, d: Driver, e: Effect): tuple[ok: bool, tx, detail: string] =
   try:
     let a = accountOf(d)
-    let (idx, _) = lezActionOf(e)
+    let idx = lezProposalIndexOf(e)
     let t = v.chain.submit(v.voter, approveOp(a.createKey, idx), v.payer)
     if not t.ok: return (false, "", t.error)
     (true, t.hash, "")
@@ -203,11 +203,11 @@ proc confirmOnChain(v: LezVoteSeam, d: Driver, index: uint64): tuple[ok: bool, d
     (false, err.msg)
 
 method confirmVote*(v: LezVoteSeam, d: Driver, e: Effect): tuple[ok: bool, detail: string] =
-  try: v.confirmOnChain(d, lezActionOf(e).index)
+  try: v.confirmOnChain(d, lezProposalIndexOf(e))
   except CatchableError as err: (false, err.msg)
 
 method receiptFor*(v: LezVoteSeam, d: Driver, e: Effect, tx: string): Contribution =
-  voteReceipt(v.voter, lezActionOf(e).index, tx, canonicalize(d, e))
+  voteReceipt(v.voter, lezProposalIndexOf(e), tx, canonicalize(d, e))
 
 method landed*(v: LezVoteSeam, tx: string): bool =
   try: v.chain.txIncluded(tx).known
@@ -217,17 +217,19 @@ type PendingPropose* = object
   ## A Propose sent and not yet on chain: what completing it publishes.
   policy*: string
   action*: LezAction
+  hasConfig*: bool          ## a config change (exo-267.6) rather than a call
+  config*: ConfigAction
   index*: uint64
   tx*: string
   nowSec*: int64
   msgSeq*: uint64
   ttlSec*: int64
 
-proc liveProposeOnChainStart*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, policy: string,
-                              action: LezAction, seam: LezVoteSeam, nowSec: int64, msgSeq: uint64,
-                              ttlSec = DefaultIntentTtl): tuple[outcome: string, pending: PendingPropose] =
-  ## The proposer's own Propose transaction, as the next proposal. outcome "" = sent
-  ## (pending holds what completion needs), else a refusal; nothing is published here.
+proc proposeStart(s: CoordinationSession, driverFor: DriverFor, policy: string, action: LezAction,
+                  hasConfig: bool, config: ConfigAction, seam: LezVoteSeam, nowSec: int64, msgSeq: uint64,
+                  ttlSec: int64): tuple[outcome: string, pending: PendingPropose] =
+  ## The proposer's own Propose (a call) or ProposeConfig (a change of members or
+  ## threshold), as the next proposal. outcome "" = sent, else a refusal.
   let drv = driverFor(policy)
   if not drv.supported() or not (drv of LezMultisigDriver): return ("unsupported-driver", PendingPropose())
   let a = LezMultisigDriver(drv).account
@@ -237,10 +239,27 @@ proc liveProposeOnChainStart*(s: CoordinationSession, ks: Keystore, driverFor: D
     if not st.found: return ("refused: no multisig state on " & seam.chain.chain & " for this account", PendingPropose())
     index = decodeState(st.data).transactionIndex + 1
   except CatchableError as err: return ("refused: could not read the multisig state: " & err.msg, PendingPropose())
-  let t = seam.chain.submit(seam.voter, proposeOp(a.createKey, index, action), seam.payer)
+  if hasConfig and a.layout != plV03:
+    return ("refused: a config change from the room is the v0.3 port's ProposeConfig", PendingPropose())
+  let op = (if hasConfig: proposeConfigOp(a.createKey, index, config) else: proposeOp(a.createKey, index, action))
+  let t = seam.chain.submit(seam.voter, op, seam.payer)
   if not t.ok: return ("refused: the chain refused the proposal: " & t.error, PendingPropose())
-  ("", PendingPropose(policy: policy, action: action, index: index, tx: t.hash, nowSec: nowSec,
-                     msgSeq: msgSeq, ttlSec: ttlSec))
+  ("", PendingPropose(policy: policy, action: action, hasConfig: hasConfig, config: config, index: index,
+                     tx: t.hash, nowSec: nowSec, msgSeq: msgSeq, ttlSec: ttlSec))
+
+proc liveProposeOnChainStart*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, policy: string,
+                              action: LezAction, seam: LezVoteSeam, nowSec: int64, msgSeq: uint64,
+                              ttlSec = DefaultIntentTtl): tuple[outcome: string, pending: PendingPropose] =
+  ## The proposer's own Propose transaction, as the next proposal. outcome "" = sent
+  ## (pending holds what completion needs), else a refusal; nothing is published here.
+  proposeStart(s, driverFor, policy, action, false, ConfigAction(kind: caChangeThreshold), seam, nowSec, msgSeq, ttlSec)
+
+proc liveProposeConfigOnChainStart*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, policy: string,
+                                    config: ConfigAction, seam: LezVoteSeam, nowSec: int64, msgSeq: uint64,
+                                    ttlSec = DefaultIntentTtl): tuple[outcome: string, pending: PendingPropose] =
+  ## The proposer's own ProposeConfig (exo-267.6): add or remove a member, or change the
+  ## threshold — voted and executed like any proposal, counted by current members only.
+  proposeStart(s, driverFor, policy, LezAction(), true, config, seam, nowSec, msgSeq, ttlSec)
 
 proc liveProposeOnChainComplete*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, seam: LezVoteSeam,
                                  pp: PendingPropose): string =
@@ -257,7 +276,8 @@ proc liveProposeOnChainComplete*(s: CoordinationSession, ks: Keystore, driverFor
       return "refused: the chain included the Propose and holds no proposal #" & $pp.index & " from it (" &
              conf.detail & "): on LEZ v0.3 a refused transaction is included, and pays"
     return "pending"
-  let effectJson = lezProposalEffect(pp.index, pp.action, a.layout)
+  let effectJson = (if pp.hasConfig: lezConfigEffect(pp.index, pp.config)
+                    else: lezProposalEffect(pp.index, pp.action, a.layout))
   let id = liveProposeIntent(s, ks, driverFor, pp.policy, effectJson, pp.nowSec, pp.msgSeq,
                              account = hx(a.statePda), ttlSec = pp.ttlSec)
   if not id.startsWith("0x"): return id   # a refusal, not an intent id
@@ -276,6 +296,16 @@ proc liveProposeOnChain*(s: CoordinationSession, ks: Keystore, driverFor: Driver
   ## the content the room reviews, and the proposer's vote is reported like any other.
   ## Returns the intent id, or a refusal.
   let (outcome, pp) = liveProposeOnChainStart(s, ks, driverFor, policy, action, seam, nowSec, msgSeq, ttlSec)
+  if outcome.len > 0: return outcome
+  let id = liveProposeOnChainComplete(s, ks, driverFor, seam, pp)
+  if id == "pending": "refused: the chain does not show proposal #" & $pp.index & " after it was accepted" else: id
+
+proc liveProposeConfigOnChain*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, policy: string,
+                               config: ConfigAction, seam: LezVoteSeam, nowSec: int64, msgSeq: uint64,
+                               ttlSec = DefaultIntentTtl): string =
+  ## Propose a change of the multisig's members or threshold (exo-267.6), waiting for the
+  ## chain as liveProposeOnChain does. Returns the intent id, or a refusal.
+  let (outcome, pp) = liveProposeConfigOnChainStart(s, ks, driverFor, policy, config, seam, nowSec, msgSeq, ttlSec)
   if outcome.len > 0: return outcome
   let id = liveProposeOnChainComplete(s, ks, driverFor, seam, pp)
   if id == "pending": "refused: the chain does not show proposal #" & $pp.index & " after it was accepted" else: id

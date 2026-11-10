@@ -830,6 +830,11 @@ proc membershipEvent*(epoch: int, joinerHex: string, parents: seq[EventId] = @[]
   ## the NEW epoch, so the joiner reads its own admission and nothing before it (F-16).
   Event(parents: parents, key: "membership/" & $epoch & "/admit/" & joinerHex, value: "1")
 
+proc removalEvent*(epoch: int, memberHex: string, parents: seq[EventId] = @[]): Event =
+  ## Recorded by the member who removed someone from the room's encryption (exo-267.6),
+  ## sealed under the NEW epoch: the removed member never reads it.
+  Event(parents: parents, key: "membership/" & $epoch & "/remove/" & memberHex, value: "1")
+
 proc logProvenance*(events: seq[Event], driverFor: DriverFor,
                     sealedIn = initTable[string, int]()): seq[LogProvItem] =
   ## `sealedIn` (CoordinationSession.sealedIn) names the epoch whose key opened each

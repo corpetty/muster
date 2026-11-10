@@ -412,6 +412,8 @@ Rectangle {
     readonly property var charter: (cardRoot.card && cardRoot.card.charter) ? cardRoot.card.charter : null
     // a payout from a savings circle's pot: the round it pays, or why it is off schedule (exo-267.3)
     readonly property var circle: (cardRoot.card && cardRoot.card.circle) ? cardRoot.card.circle : null
+    // a change of the multisig's members or threshold (exo-267.6)
+    readonly property var lezConfig: (cardRoot.card && cardRoot.card.lezConfig) ? cardRoot.card.lezConfig : null
     readonly property bool isXmr: cardRoot.xmr !== null
     // MY share's link, if I owe one: {part, ok, uri, amount, payTo, why, reported, confirmed}
     readonly property var xmrPay: (cardRoot.xmr && cardRoot.xmr.payment) ? cardRoot.xmr.payment : null

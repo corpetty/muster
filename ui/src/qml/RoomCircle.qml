@@ -120,6 +120,102 @@ ColumnLayout {
             }
         }
     }
+    // ── the pot's members (exo-267.6): a change is a proposal of the multisig itself ──
+    SectionHeader { Layout.fillWidth: true; visible: rc.running; text: qsTr("The pot's members") }
+    LogosText {
+        visible: rc.running
+        Layout.fillWidth: true
+        wrapMode: Text.WordWrap
+        color: Theme.palette.textSecondary
+        font.pixelSize: MusterStyle.caption
+        text: qsTr("Removing a member is a vote of the multisig: once it executes they can no longer vote, and they are removed from the room too. The charter still names them until it is amended.")
+    }
+    Repeater {
+        model: rc.running ? (rc.view.order || []).filter(function (m) { return m !== rc.view.me; }) : []
+        // a proposal puts the proposer's own vote on chain, at their own fee: ask first
+        delegate: ColumnLayout {
+            id: memberRow
+            required property var modelData
+            property bool confirming: false
+            Layout.fillWidth: true
+            spacing: 2
+            RowLayout {
+                Layout.fillWidth: true
+                LogosText {
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                    color: Theme.palette.text
+                    font.pixelSize: MusterStyle.caption
+                    text: rc.nameOf(memberRow.modelData)
+                }
+                ActionButton {
+                    objectName: "circleRemove_" + String(memberRow.modelData).slice(0, 8)
+                    visible: !memberRow.confirming
+                    text: qsTr("Propose removing")
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: memberRow.confirming = true
+                }
+            }
+            LogosText {
+                visible: memberRow.confirming
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                color: Theme.palette.warning
+                font.pixelSize: MusterStyle.caption
+                text: qsTr("Ask the multisig to remove %1? Your proposal goes on chain as your vote for it, and you pay its fee. The others still vote.")
+                      .arg(rc.nameOf(memberRow.modelData))
+            }
+            RowLayout {
+                visible: memberRow.confirming
+                ActionButton {
+                    objectName: "circleRemoveConfirm_" + String(memberRow.modelData).slice(0, 8)
+                    text: qsTr("Propose it")
+                    onClicked: {
+                        memberRow.confirming = false;
+                        rc.backend.proposeLezConfig(JSON.stringify({ change: "remove", member: memberRow.modelData }));
+                    }
+                }
+                ActionButton {
+                    text: qsTr("Cancel")
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: memberRow.confirming = false
+                }
+            }
+        }
+    }
+    RowLayout {
+        visible: rc.running
+        Layout.fillWidth: true
+        LogosTextField {
+            id: thresholdField
+            objectName: "circleThreshold"
+            Layout.fillWidth: true      // the row's free width: its placeholder wants ~175 px
+            placeholderText: qsTr("How many must approve")
+        }
+        ActionButton {
+            objectName: "circleThresholdPropose"
+            // 1 to the number of members, caught here rather than refused by the module
+            enabled: /^[0-9]+$/.test(thresholdField.text.trim()) && Number(thresholdField.text.trim()) >= 1
+                     && Number(thresholdField.text.trim()) <= (rc.view.order || []).length
+            text: qsTr("Propose this threshold")
+            variant: LogosButton.Variant.Secondary
+            onClicked: rc.backend.proposeLezConfig(JSON.stringify({ change: "threshold", threshold: Number(thresholdField.text.trim()) }))
+        }
+    }
+    InlineNotice {
+        objectName: "lezConfigResult"
+        readonly property var r: {
+            var t = rc.backend ? String(rc.backend.lezConfigResultJson || "") : "";
+            if (t.length === 0) return {};
+            try { return JSON.parse(t); } catch (e) { return {}; }
+        }
+        Layout.fillWidth: true
+        visible: r.error !== undefined || r.pending !== undefined
+        tone: r.error !== undefined ? "error" : "waiting"
+        title: r.error !== undefined ? qsTr("Not proposed") : qsTr("On its way to the chain")
+        text: r.error !== undefined ? String(r.detail || r.error) : String(r.detail || "")
+    }
+
     LogosText {
         visible: rc.running && (rc.view.myAccounts || []).length === 0 && !rc.view.complete
         Layout.fillWidth: true

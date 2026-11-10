@@ -61,6 +61,8 @@ public:
     void loadCircle() override;
     void circlePayIn(const QString &round) override;
     void proposeCirclePayout(const QString &round) override;
+    // A change of the room's LEZ multisig's members or threshold (exo-267.6).
+    void proposeLezConfig(const QString &specJson) override;
     void previewLezSend(const QString &fromId, const QString &to, const QString &raw) override;
     void sendLez(const QString &fromId, const QString &to, const QString &raw) override;
 

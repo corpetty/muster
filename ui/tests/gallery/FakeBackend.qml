@@ -5,7 +5,7 @@ import QtQuick
 
 QtObject {
     // the contract's PROP names, in .rep order (the recorder snapshots exactly these)
-    readonly property var contractProps: ["health", "settingsJson", "accountJson", "intentId", "intentEffect", "intentTxhash", "intentState", "lastError", "balancesJson", "walletAccountsJson", "lezPreviewJson", "lezSendJson", "roomTopic", "messagesJson", "membersJson", "contactsJson", "intentsJson", "invitesJson", "activityJson", "connectivityJson", "securityLevelsJson", "roomAccountJson", "roomSubmitJson", "readinessJson", "offersJson", "composeOffersJson", "declineJson", "auditJson", "outsideJson", "outsideImportJson", "btcProposeJson", "splitJson", "tokenInfoJson", "openAssetsJson", "lezProposeJson", "lezMemberJson", "lezCreateJson", "frostCeremoniesJson", "frostCeremonyJson", "xmrMsigSetupsJson", "xmrMsigSetupJson", "xmrMsigSpendsJson", "xmrMsigProposeJson", "lezMsigCeremoniesJson", "lezMsigOpenJson", "lezMsigProposeJson", "lezMsigFundJson", "lezMsigRecoverJson", "memberAccountsJson", "discloseAccountJson", "lezMsigStateJson", "flowJson", "graphJson", "policyJson", "policyErrorJson", "accountsJson", "accountDiscloseJson", "driversJson", "availableActionsJson", "executeJson", "contributeJson", "conversationsJson", "pendingJson", "joinStatus", "rlnStatusJson", "keystoreStatusJson", "keystoreRequestsJson", "identityPlatformJson", "identityAskJson", "walletSummaryJson", "supportJson", "supportSendJson", "fileShareJson", "fileShareResultJson", "questsJson", "questResultJson", "charterJson", "charterResultJson", "circleJson", "circleResultJson"]
+    readonly property var contractProps: ["health", "settingsJson", "accountJson", "intentId", "intentEffect", "intentTxhash", "intentState", "lastError", "balancesJson", "walletAccountsJson", "lezPreviewJson", "lezSendJson", "roomTopic", "messagesJson", "membersJson", "contactsJson", "intentsJson", "invitesJson", "activityJson", "connectivityJson", "securityLevelsJson", "roomAccountJson", "roomSubmitJson", "readinessJson", "offersJson", "composeOffersJson", "declineJson", "auditJson", "outsideJson", "outsideImportJson", "btcProposeJson", "splitJson", "tokenInfoJson", "openAssetsJson", "lezProposeJson", "lezMemberJson", "lezCreateJson", "frostCeremoniesJson", "frostCeremonyJson", "xmrMsigSetupsJson", "xmrMsigSetupJson", "xmrMsigSpendsJson", "xmrMsigProposeJson", "lezMsigCeremoniesJson", "lezMsigOpenJson", "lezMsigProposeJson", "lezMsigFundJson", "lezMsigRecoverJson", "memberAccountsJson", "discloseAccountJson", "lezMsigStateJson", "flowJson", "graphJson", "policyJson", "policyErrorJson", "accountsJson", "accountDiscloseJson", "driversJson", "availableActionsJson", "executeJson", "contributeJson", "conversationsJson", "pendingJson", "joinStatus", "rlnStatusJson", "keystoreStatusJson", "keystoreRequestsJson", "identityPlatformJson", "identityAskJson", "walletSummaryJson", "supportJson", "supportSendJson", "fileShareJson", "fileShareResultJson", "questsJson", "questResultJson", "charterJson", "charterResultJson", "circleJson", "circleResultJson", "lezConfigResultJson"]
     // every SLOT call, in order: [{slot, args}]
     property var calls: []
     function record(slot, args) { calls.push({ slot: slot, args: Array.prototype.slice.call(args) }); }
@@ -90,6 +90,7 @@ QtObject {
     property string charterResultJson: ""
     property string circleJson: "{}"
     property string circleResultJson: ""
+    property string lezConfigResultJson: ""
 
     function checkHealth() { record("checkHealth", arguments); }
     function loadAccount() { record("loadAccount", arguments); }
@@ -204,4 +205,5 @@ QtObject {
     function loadCircle() { record("loadCircle", arguments); }
     function circlePayIn(round) { record("circlePayIn", arguments); }
     function proposeCirclePayout(round) { record("proposeCirclePayout", arguments); }
+    function proposeLezConfig(specJson) { record("proposeLezConfig", arguments); }
 }

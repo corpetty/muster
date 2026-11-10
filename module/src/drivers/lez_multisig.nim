@@ -180,9 +180,73 @@ method describe*(d: LezMultisigDriver): DriverDescriptor =
 
 method environment*(d: LezMultisigDriver): string = d.account.chain
 
+# ── a config proposal: who is a member, how many decide (exo-267.6) ─────────────
+const
+  ConfigSchema* = "muster.effect.lez-multisig-config.v1"
+  ConfigDomain = "muster.lez-multisig.config.v1"
+
+proc changeName(c: ConfigAction): string =
+  case c.kind
+  of caAddMember: "add"
+  of caRemoveMember: "remove"
+  of caChangeThreshold: "threshold"
+
+proc lezConfigEffect*(index: uint64, c: ConfigAction): string =
+  ## The room's effect for on-chain config proposal #index (the v0.3 port's ProposeConfig):
+  ## add or remove a member, or change the threshold.
+  case c.kind
+  of caAddMember, caRemoveMember:
+    $(%*{"effect": "lez-multisig-config", "lez": "v0.3", "index": index, "change": changeName(c), "member": hx(c.member)})
+  of caChangeThreshold:
+    $(%*{"effect": "lez-multisig-config", "lez": "v0.3", "index": index, "change": "threshold", "threshold": c.threshold})
+
+proc lezConfigOf*(e: Effect): tuple[index: uint64, config: ConfigAction] =
+  ## The pointer and the change a config effect carries; raises ValueError on anything malformed.
+  if e.schemaId != ConfigSchema: raise newException(ValueError, "not a LEZ multisig config proposal")
+  let idx = e.fieldOf("index")
+  let change = e.fieldOf("change")
+  if idx.kind != ckUint or idx.u == 0: raise newException(ValueError, "a proposal index is 1 or more")
+  if change.kind != ckText: raise newException(ValueError, "a config proposal names its change")
+  case change.t
+  of "add", "remove":
+    let m = e.fieldOf("member")
+    if m.kind != ckBytes or m.b.len != 32: raise newException(ValueError, "a member is a 32-byte LEZ account")
+    (idx.u, (if change.t == "add": ConfigAction(kind: caAddMember, member: m.b)
+             else: ConfigAction(kind: caRemoveMember, member: m.b)))
+  of "threshold":
+    let k = e.fieldOf("threshold")
+    if k.kind != ckUint or k.u == 0 or k.u > 255'u64: raise newException(ValueError, "a threshold is 1 or more")
+    (idx.u, ConfigAction(kind: caChangeThreshold, threshold: int(k.u)))
+  else: raise newException(ValueError, "a change is add, remove or threshold")
+
+proc lezProposalIndexOf*(e: Effect): uint64 =
+  ## The on-chain proposal a LEZ multisig effect points at: a call or a config change.
+  if e.schemaId == ConfigSchema: lezConfigOf(e).index else: lezActionOf(e).index
+
+proc sameConfig(a, b: ConfigAction): bool =
+  if a.kind != b.kind: return false
+  case a.kind
+  of caAddMember, caRemoveMember: a.member == b.member
+  of caChangeThreshold: a.threshold == b.threshold
+
 method canonicalize*(d: LezMultisigDriver, e: Effect): Materialization =
   ## The pointer and the content the room reviews there, under this account. A malformed
   ## effect canonicalizes to a sentinel no receipt can name.
+  if e.schemaId == ConfigSchema:
+    var ci: uint64
+    var cc: ConfigAction
+    try: (ci, cc) = lezConfigOf(e)
+    except ValueError as err:
+      return Materialization(bytes: encode(cbArray(@[cbText(ConfigDomain), cbText("invalid: " & err.msg)])))
+    if d.account.layout != plV03:
+      return Materialization(bytes: encode(cbArray(@[cbText(ConfigDomain), cbText("invalid: a v0.3 config change for a " &
+                                                     $d.account.layout & " account")])))
+    let what = (case cc.kind
+                of caAddMember, caRemoveMember: cbBytes(cc.member)
+                of caChangeThreshold: cbUint(uint64(cc.threshold)))
+    return Materialization(bytes: encode(cbArray(@[
+      cbText(ConfigDomain), cbText(d.account.chain), cbText($d.account.scheme),
+      cbBytes(d.account.program), cbBytes(d.account.createKey), cbUint(ci), cbText(changeName(cc)), what])))
   var idx: uint64
   var a: LezAction
   try: (idx, a) = lezActionOf(e)
@@ -242,6 +306,12 @@ method identifyContributor*(d: LezMultisigDriver, m: Materialization, c: Contrib
   d.receiptVoter(m.bytes, c)
 
 method signRefusal*(d: LezMultisigDriver, e: Effect): string =
+  if e.schemaId == ConfigSchema:
+    try:
+      discard lezConfigOf(e)
+      return (if d.account.layout != plV03: "a config change is the v0.3 port's ProposeConfig; this account is " &
+                                            $d.account.layout else: "")
+    except ValueError as err: return "not a LEZ multisig config proposal: " & err.msg
   try:
     discard lezActionOf(e)
     if (e.schemaId == "muster.effect.lez-multisig-proposal.v2") != (d.account.layout == plV03):
@@ -254,6 +324,21 @@ method reads*(d: LezMultisigDriver, e: Effect): seq[string] = @["proposal"]
 
 method checkRead*(d: LezMultisigDriver, e: Effect, name: string, value: seq[byte]): string =
   if name != "proposal": return "this driver declares no read named " & name
+  if e.schemaId == ConfigSchema:
+    # a config change: the on-chain proposal must change exactly what the room reviewed
+    var ci: uint64
+    var cc: ConfigAction
+    try: (ci, cc) = lezConfigOf(e)
+    except ValueError as err: return "not a LEZ multisig config proposal: " & err.msg
+    var p: Proposal
+    try: p = decodeProposal(value, d.account.layout)
+    except LezDecodeError as err: return "the on-chain proposal does not decode: " & err.msg
+    if p.index != ci: return "the on-chain proposal is #" & $p.index & "; the room reviewed #" & $ci & " (index)"
+    if p.createKey != d.account.createKey: return "the on-chain proposal belongs to another multisig"
+    if not p.hasConfig: return "the on-chain proposal is a call, not the config change the room reviewed"
+    if not sameConfig(p.config, cc): return "the on-chain proposal makes a different change than the room reviewed"
+    if p.status != psActive: return "the on-chain proposal is " & $p.status & " — no longer open to votes"
+    return ""
   var idx: uint64
   var a: LezAction
   try: (idx, a) = lezActionOf(e)
@@ -312,6 +397,11 @@ method manifest*(d: LezMultisigDriver, effect: Effect): ActionManifest =
   var touches = @[touch(chain, tmWrite)]
   proc add(t: Touch) =
     if not touches.anyIt(it.target == t.target): touches.add t
+  if effect.schemaId == ConfigSchema:
+    try:
+      add touch(chain & ":" & hx(proposalPda(d.account.scheme, d.account.program, d.account.createKey,
+                                             lezConfigOf(effect).index)), tmWrite)
+    except ValueError: discard
   try:
     let (idx, a) = lezActionOf(effect)
     add touch(chain & ":" & hx(proposalPda(d.account.scheme, d.account.program,

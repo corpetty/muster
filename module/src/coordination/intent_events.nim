@@ -108,6 +108,19 @@ proc effectFromJson*(effectJson: string): Effect =
           try: raw.add byte(parseHexInt(h[2*i .. 2*i+1]))
           except ValueError: discard
         return Effect(schemaId: "muster.effect.lez-msig.v1", fields: @[("proposal", cbBytes(raw))])
+      of "lez-multisig-config":
+        # A pointer to on-chain config proposal #index of a LEZ multisig (exo-267.6): add or
+        # remove a member (a 32-byte LEZ account), or change the threshold.
+        var h = j{"member"}.getStr()
+        if h.len >= 2 and h[0] == '0' and h[1] in {'x', 'X'}: h = h[2 .. ^1]
+        var member: seq[byte]
+        for i in 0 ..< h.len div 2:
+          try: member.add byte(parseHexInt(h[2*i .. 2*i+1]))
+          except ValueError: discard
+        var fields = @[("index", cbUint(uint64(j{"index"}.getBiggestInt(0)))), ("change", cbText(j{"change"}.getStr()))]
+        if j.hasKey("member"): fields.add ("member", cbBytes(member))
+        if j.hasKey("threshold"): fields.add ("threshold", cbUint(uint64(j{"threshold"}.getBiggestInt(0))))
+        return Effect(schemaId: "muster.effect.lez-multisig-config.v1", fields: fields)
       of "lez-multisig-proposal":
         # A pointer to on-chain proposal #index of a LEZ multisig, with the content the
         # room reviews there (exo-6cbe): the target program, its instruction words, the
@@ -314,6 +327,7 @@ proc effectSchema*(effectJson: string): tuple[id: string, known: bool] =
     of "lez-multisig-proposal":                              # v2: the LEZ v0.3 port (exo-eb6.4.4)
       return ((if j{"lez"}.getStr() == "v0.3": "muster.effect.lez-multisig-proposal.v2"
                else: "muster.effect.lez-multisig-proposal.v1"), true)
+    of "lez-multisig-config": return ("muster.effect.lez-multisig-config.v1", true)   # exo-267.6
     of "lez-call":                                           # a LEZ FROST group's call (exo-55e)
       # v2 is the LEZ v0.3.0 line (exo-eb6.4 L3); v1 the v0.2.4 one
       return ((if j{"lez"}.getStr() == "v0.3": "muster.effect.lez-call.v2" else: "muster.effect.lez-call.v1"), true)
