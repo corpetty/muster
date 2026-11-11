@@ -116,6 +116,29 @@ method sendBuilt*(c: LezMultisigChain, leeTx: seq[byte], hash: string): LezTx {.
   ## message lez/tx.nim builds. The live chain sends it and awaits it.
   raise newException(WalletError, "LezMultisigChain.sendBuilt is abstract")
 
+method readShard*(c: LezMultisigChain, id, program: seq[byte]): LezRead {.base.} =
+  ## Another program's shard of an account (a quest record is the quest program's shard,
+  ## exo-267.8). Default: the account as readAccount sees it, when that program owns it.
+  let r = c.readAccount(id)
+  if r.found and r.owner == program: r else: LezRead(found: false, height: r.height, nonce: r.nonce, balance: r.balance)
+
+type TxRead* = tuple[known: bool, height: uint64, signer: seq[byte], call: LezAction]
+  ## A public transaction as the chain holds it: its block, the account that signed it, the
+  ## call it carries (exo-267.3). On v0.3 an included call may have been refused — inclusion
+  ## is not effect; what it changed is read from state.
+
+method readTx*(c: LezMultisigChain, hash: string): TxRead {.base.} =
+  ## The transaction `hash` names, or known = false when the chain holds none (or this
+  ## chain's reads cannot decode it).
+  (false, 0'u64, newSeq[byte](), LezAction())
+
+method submitCall*(c: LezMultisigChain, signer: seq[byte], call: LezAction): LezTx {.base.} =
+  ## A member's own v0.3 transaction to ANY program (a quest's Accept or Confirm, exo-267.8):
+  ## the call's program, its rows as (account, program shard) pairs, its borsh instruction.
+  ## `signer` signs and pays its own fee. Included even when the program refuses it (v0.3):
+  ## callers read the state back.
+  raise newException(WalletError, "LezMultisigChain.submitCall is abstract")
+
 proc readState*(c: LezMultisigChain, createKey: seq[byte]): tuple[found: bool, state: MultisigState, height: uint64] =
   ## The multisig's state, decoded from its PDA; raises LezDecodeError on a malformed account.
   let r = c.readAccount(statePda(c.scheme, c.program, createKey))
@@ -163,8 +186,18 @@ method submit*(c: LezMultisigChain, tx: PreparedTx, ks: Keystore): TxRef =
   var op: MultisigOp
   try:
     let p = parseJson(tx.payload)
-    if p{"op"}.getStr() != "execute": raise newException(WalletError, "only a prepared execute is submitted here")
-    if p{"lez"}.getStr() == "v0.3":
+    if p{"op"}.getStr() notin ["execute", "execute-config"]:
+      raise newException(WalletError, "only a prepared execute is submitted here")
+    if p{"op"}.getStr() == "execute-config":
+      # a config change (exo-267.6): ExecuteConfig naming the approvals and the change
+      let c = p["config"]
+      let cfg = (case c{"change"}.getStr()
+                 of "add": ConfigAction(kind: caAddMember, member: unhx(c["member"].getStr()))
+                 of "remove": ConfigAction(kind: caRemoveMember, member: unhx(c["member"].getStr()))
+                 else: ConfigAction(kind: caChangeThreshold, threshold: c["threshold"].getInt()))
+      op = executeConfigOp(unhx(p{"createKey"}.getStr()), uint64(p{"index"}.getBiggestInt()),
+                           p["approvers"].getElems().mapIt(unhx(it.getStr())), cfg)
+    elif p{"lez"}.getStr() == "v0.3":
       let c = p["call"]
       var shards: seq[tuple[account, program: seq[byte]]]
       for x in c["shards"]: shards.add (unhx(x["account"].getStr()), unhx(x["program"].getStr()))
@@ -195,13 +228,28 @@ type
     nonce: uint64
     balance: uint64
 
+  FakeCallResult* = object
+    ## What an in-process program's call does: its own shard of each account written, native
+    ## transfers it chains, or why it refuses (then nothing of it lands).
+    writes*: seq[tuple[id, data: seq[byte]]]
+    transfers*: seq[tuple[src, dst: seq[byte], amount: uint64]]
+    refusal*: string
+
+  FakeProgram* = proc (read: proc (id: seq[byte]): LezRead, grants: seq[seq[byte]], call: LezAction): FakeCallResult
+    ## Another program on the fake zone (the quest program, lez/quest_fake.nim). `grants` are
+    ## the accounts authorized for the call: the transaction's signer, or the vault a
+    ## multisig's Execute grants — carried into the program's own chained calls, as v0.3's
+    ## executor does (execution_state.rs: every chained call takes grants.clone()).
+
   FakeLezMultisig* = ref object of LezMultisigChain
+    programs: Table[string, FakeProgram]
     accts: Table[string, FakeAccount]
     txs: Table[string, uint64]
     tip: uint64
     feePerTx*: uint64
     chainedCalls*: seq[ChainedCallRecord]
     lastRefusal*: string          ## v0.3: why the last included transaction changed nothing ("" = it took)
+    memberCalls: Table[string, tuple[signer: seq[byte], call: LezAction]]   ## hash → a member call's body
 
   Refused = object of CatchableError
 
@@ -217,6 +265,10 @@ proc fund*(f: FakeLezMultisig, acct: seq[byte], amount: uint64) =
   f.accts[hx(acct)] = a
 
 proc balanceOf*(f: FakeLezMultisig, acct: seq[byte]): uint64 = f.accts.getOrDefault(hx(acct)).balance
+
+proc addProgram*(f: FakeLezMultisig, program: seq[byte], p: FakeProgram) =
+  ## Deploy another program on the fake zone, at `program`.
+  f.programs[hx(program)] = p
 
 proc isFresh(a: FakeAccount): bool =
   a.data.len == 0 and a.owner.len == 0 and a.nonce == 0 and a.balance == 0
@@ -249,6 +301,80 @@ proc nativeTransferAmount(a: LezAction): tuple[ok: bool, amount: uint64] =
   var x: uint64
   for i in 0 ..< 8: x = x or (uint64(a.data[1 + i]) shl uint64(8*i))
   (true, x)
+
+proc runCall(f: FakeLezMultisig, next: var Table[string, FakeAccount], grants: seq[seq[byte]],
+             call: LezAction) =
+  ## One call on the fake zone, against the working copy: a native transfer, whose sender
+  ## must be granted, or a deployed program's (addProgram), whose writes land in its own
+  ## shard and whose transfers move from a granted account or from one the program owns
+  ## (its own PDA, which it authorizes with its seed). Raises Refused, changing nothing kept.
+  let (native, amount) = nativeTransferAmount(call)
+  var res: FakeCallResult
+  if native:
+    res.transfers.add (call.shards[0].account, call.shards[1].account, amount)
+  elif hx(call.target) in f.programs:
+    let snapshot = next
+    let read = proc (id: seq[byte]): LezRead =
+      let a = snapshot.getOrDefault(hx(id))
+      LezRead(found: a.data.len > 0 or a.owner.len > 0, data: a.data, owner: a.owner, height: f.tip,
+              nonce: u128(a.nonce), balance: a.balance.stuint(128))
+    res = f.programs[hx(call.target)](read, grants, call)
+    if res.refusal.len > 0: refuse(res.refusal)
+    for (id, data) in res.writes:
+      var a = next.getOrDefault(hx(id))
+      check(a.owner.len == 0 or a.owner == call.target, "a program writes only its own shard")
+      a.data = data
+      a.owner = call.target
+      next[hx(id)] = a
+  else:
+    return      # a program the fake does not model: recorded as a chained call, nothing moves
+  for (src, dst, amt) in res.transfers:
+    let owned = next.getOrDefault(hx(src)).owner == call.target and not native
+    check(src in grants or owned, "native transfer sender is not authorized")
+    var a = next.getOrDefault(hx(src))
+    check(a.balance >= amt, "sender holds less than the transferred amount")
+    a.balance -= amt
+    next[hx(src)] = a
+    var b = next.getOrDefault(hx(dst))
+    b.balance += amt
+    next[hx(dst)] = b
+
+proc includeTx(f: FakeLezMultisig, sk: string, next: var Table[string, FakeAccount], refusal: string,
+               calls: seq[ChainedCallRecord], tag: string): LezTx =
+  ## v0.3: included either way. The signer pays its fee and its nonce advances; a refusal
+  ## keeps nothing else ("a failed action is ordinary execution semantics").
+  if refusal.len > 0: next = f.accts
+  var sa = next.getOrDefault(sk)
+  sa.balance -= f.feePerTx
+  inc sa.nonce
+  next[sk] = sa
+  f.accts = next
+  f.lastRefusal = refusal
+  inc f.tip
+  if refusal.len == 0: f.chainedCalls.add calls
+  var h: seq[byte]
+  for b in sk & ":v0.3:" & tag & ":" & $f.tip & ":" & $sa.nonce: h.add byte(b)
+  let hash = hx(@(sha256(h)))
+  f.txs[hash] = f.tip
+  LezTx(ok: true, hash: hash, height: f.tip)
+
+method submitCall*(f: FakeLezMultisig, signer: seq[byte], call: LezAction): LezTx =
+  let sk = hx(signer)
+  if f.accts.getOrDefault(sk).balance < f.feePerTx:
+    return LezTx(ok: false, error: "the payer cannot cover the fee (" & $f.feePerTx & ")")
+  var next = f.accts
+  var refusal = ""
+  try: f.runCall(next, @[signer], call)
+  except Refused as e: refusal = e.msg
+  except LezDecodeError as e: refusal = "not a call this program reads: " & e.msg
+  result = f.includeTx(sk, next, refusal, @[], "call")
+  f.memberCalls[result.hash] = (signer, call)
+
+method readTx*(f: FakeLezMultisig, hash: string): TxRead =
+  ## A member call the fake included, as getTransaction returns it: refused or not.
+  if hash notin f.memberCalls or hash notin f.txs: return (false, 0'u64, newSeq[byte](), LezAction())
+  let (signer, call) = f.memberCalls[hash]
+  (true, f.txs[hash], signer, call)
 
 proc submitV03(f: FakeLezMultisig, signer: seq[byte], op: MultisigOp): LezTx =
   ## The v0.3 port's plan and apply checks, with its messages (multisig_program/src/lib.rs).
@@ -326,17 +452,9 @@ proc submitV03(f: FakeLezMultisig, signer: seq[byte], op: MultisigOp): LezTx =
       saveProposal(p)
       calls.add ChainedCallRecord(program: op.action.target, accounts: op.action.shards.mapIt(it.account),
                                   pdaSeeds: op.action.pdaSeeds, data: op.action.data)
-      let (native, amount) = nativeTransferAmount(op.action)
-      if native:
-        let (src, dst) = (op.action.shards[0].account, op.action.shards[1].account)
-        check(src == vaultPda(f.scheme, f.program, op.createKey), "native transfer sender is not authorized")
-        var a = acct(src)
-        check(a.balance >= amount, "sender holds less than the transferred amount")
-        a.balance -= amount
-        put(src, a)
-        var b = acct(dst)
-        b.balance += amount
-        put(dst, b)
+      # the call runs with the vault granted (the proposal's seeds are its own vault's),
+      # carried into whatever the called program chains (v0.3's executor)
+      f.runCall(next, @[vaultPda(f.scheme, f.program, op.createKey)], op.action)
     of moExecuteConfig:
       var s = loadState()
       quorum(s, op.approvers)
@@ -361,22 +479,7 @@ proc submitV03(f: FakeLezMultisig, signer: seq[byte], op: MultisigOp): LezTx =
       saveProposal(p)
   except Refused as e: refusal = e.msg
   except LezDecodeError as e: refusal = "not a multisig account: " & e.msg
-  # included either way: the signer pays its fee and its nonce advances; a refusal keeps
-  # nothing else (v0.3: "a failed action is ordinary execution semantics")
-  if refusal.len > 0: next = f.accts
-  var sa = next.getOrDefault(sk)
-  sa.balance -= f.feePerTx
-  inc sa.nonce
-  next[sk] = sa
-  f.accts = next
-  f.lastRefusal = refusal
-  inc f.tip
-  if refusal.len == 0: f.chainedCalls.add calls
-  var h: seq[byte]
-  for b in sk & ":v0.3:" & $op.kind & ":" & $op.index & ":" & $f.tip & ":" & $sa.nonce: h.add byte(b)
-  let hash = hx(@(sha256(h)))
-  f.txs[hash] = f.tip
-  LezTx(ok: true, hash: hash, height: f.tip)
+  f.includeTx(sk, next, refusal, calls, $op.kind & ":" & $op.index)
 
 method submit*(f: FakeLezMultisig, signer: seq[byte], op: MultisigOp, payer: seq[byte] = @[]): LezTx =
   let payerKey = hx(if payer.len > 0: payer else: signer)

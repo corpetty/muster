@@ -123,6 +123,21 @@ proc effectSummary*(effectJson: string, label: proc (who: string): string = nil,
     return EffectSummary(kind: "statement", text: "a statement: “" & j{"text"}.getStr() & "”")
   of "add-driver":
     return EffectSummary(kind: "policy", text: "a new policy: " & j{"kind"}.getStr("?"))
+  of "lez-multisig-config":
+    # a multisig's members or threshold (exo-267.6)
+    let idx = numText(j{"index"})
+    let who = j{"member"}.getStr()
+    let named = (if label != nil: label(who) else: short(who))
+    return EffectSummary(kind: "lez-config", to: who, text: "on-chain proposal #" & idx & ": " &
+      (case j{"change"}.getStr()
+       of "add": "add " & named & " to the multisig"
+       of "remove": "remove " & named & " from the multisig"
+       of "threshold": "change the multisig's threshold to " & numText(j{"threshold"})
+       else: "change the multisig"))
+  of "charter":
+    let name = j{"body"}{"name"}.getStr("?")
+    return EffectSummary(kind: "charter", text: (if j{"prev"}.getStr().len == 0: "found the charter: “"
+                                                else: "amend the charter: “") & name & "”")
   of "invoke":
     let call = j{"module"}.getStr() & "." & j{"method"}.getStr()
     let n = argCount(j{"args"})

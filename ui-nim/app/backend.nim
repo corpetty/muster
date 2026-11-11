@@ -175,6 +175,25 @@ proc sendVoiceDraftDo(o: MusterUi, d: Done = nil) =
 proc playVoiceNoteDo(o: MusterUi, noteId: string, d: Done = nil) =
   ask mm.voice_playAsync(noteId, proc (r: string) = o.voiceDone(r, d))
 
+proc loadQuestsDo(o: MusterUi, d: Done = nil) =
+  # Quests (exo-267.8): the room's quests, each with its record as the chain reads now.
+  ask mm.coordinate_questsAsync(proc (r: string) = o.setQuestsJson(r); fin(d, r))
+
+proc loadCharterDo(o: MusterUi, d: Done = nil) =
+  # The room's charter (exo-267.1): in force, its history, each proposal's standing.
+  ask mm.coordinate_charterAsync(proc (r: string) = o.setCharterJson(r); fin(d, r))
+
+proc proposeCharterDo(o: MusterUi, specJson: string, d: Done = nil) =
+  # Propose a charter (exo-267.1): its answer in charterResultJson, then the charter re-reads.
+  ask mm.coordinate_propose_charterAsync(specJson, proc (r: string) =
+    o.setCharterResultJson(r)
+    o.loadCharterDo(proc (c: string) = fin(d, r)))
+
+proc questDone(o: MusterUi, r: string) =
+  # A quest step's answer: questResultJson, then the list re-reads.
+  o.setQuestResultJson(r)
+  o.loadQuestsDo()
+
 proc loadPendingDo(o: MusterUi, d: Done = nil) =
   # Identities that asked to join and are not admitted yet.
   ask mm.coordinate_pendingAsync(proc (r: string) = o.setPendingJson(r); fin(d, r))
@@ -963,6 +982,8 @@ var
   admitting: HashSet[string]
   agreed, agreeing, paid, paying: HashSet[string]
   payAgainAt, agreeAgainAt, agreeGiveUpAt: Table[string, int64]
+  charterBusy, charterAmended: bool
+  charterAgainAt, charterGiveUpAt: Table[string, int64]
 
 proc agree(o: MusterUi, id: string) =
   # Agree to `id`. A refusal that can be transient (a proposal's context or reads not yet
@@ -982,6 +1003,48 @@ proc agree(o: MusterUi, id: string) =
       info "SELFTEST agree " & qs(id) & " refused " & qs(why) & " - again in 2s"
     else:
       agreed.incl id)   # agreed, or refused for good: stop asking
+
+proc approveCharter(o: MusterUi, id: string) =
+  # its own proc, so the log names this id: a closure made in a loop shares the loop's
+  o.contributeInRoomDo(id, "", "", proc (r: string) = info "CHARTER approved " & id & " -> " & r)
+
+proc charterTick(o: MusterUi) =
+  # Charter self-test (exo-267.1): MUSTER_AUTOCHARTER_AMEND=<spec> proposes that amendment
+  # once a charter is in force (the Charter tab's "Propose this change");
+  # MUSTER_AUTOCHARTER_APPROVE approves, on its card, every pending charter proposal that
+  # names this member among those who decide it — =founding approves foundings only, so an
+  # amendment takes force by the other member's approval alone. A refusal is tried again
+  # every 3 s, for up to 60 s: a proposal's context can land a tick after it (exo-ca3).
+  let amend = getEnv("MUSTER_AUTOCHARTER_AMEND")
+  let approve = getEnv("MUSTER_AUTOCHARTER_APPROVE")
+  if getEnv("MUSTER_AUTOCHARTER").len == 0 and amend.len == 0 and approve.len == 0: return
+  if charterBusy: return
+  charterBusy = true
+  o.loadCharterDo(proc (cj: string) =
+    charterBusy = false
+    let cv = obj(cj)
+    # a charter that sets rounds: its circle too, as the Charter tab shows it (exo-267.3)
+    if cv{"body"}{"schedule"} != nil:
+      ask mm.coordinate_circleAsync(proc (r: string) = o.setCircleJson(r))
+    if amend.len > 0 and not charterAmended and cv{"found"}.getBool(false):
+      charterAmended = true
+      o.proposeCharterDo(amend, proc (r: string) = info "CHARTER amend -> " & r)
+    let me = cv{"me"}.getStr("")
+    let now = nowS()
+    for iv in arr(o.intentsJson):
+      let c = iv{"charter"}
+      let id = iv{"id"}.getStr("")
+      if approve.len == 0 or c.isNil or c{"standing"}.getStr("") != "pending" or
+         iv{"approvedByMe"}.getBool(false) or
+         %me notin c{"electorate"}.getElems() or
+         (approve == "founding" and not c{"founding"}.getBool(false)) or
+         now < charterAgainAt.getOrDefault(id, 0) or now > charterGiveUpAt.getOrDefault(id, now + 60):
+        continue
+      if id notin charterGiveUpAt: charterGiveUpAt[id] = now + 60
+      charterAgainAt[id] = now + 3
+      o.approveCharter(id)
+    info "CHARTER found=" & $cv{"found"}.getBool(false) & " name=" &
+      cv{"body"}{"name"}.getStr("") & " history=" & $cv{"history"}.getElems().len)
 
 proc autopayTick(o: MusterUi) =
   let founder = getEnv("MUSTER_AUTOADMIT").len > 0
@@ -1034,6 +1097,12 @@ proc autopayTick(o: MusterUi) =
             doSplit())
         else:
           doSplit()
+      elif getEnv("MUSTER_AUTOCHARTER").len > 0:
+        # Charter self-test (exo-267.1): MUSTER_AUTOCHARTER=<spec> founds the room's charter
+        # once the other member is in, so the template's default members are both — the
+        # Charter tab's "Propose founding it"
+        o.proposeCharterDo(getEnv("MUSTER_AUTOCHARTER"), proc (r: string) =
+          info "CHARTER found -> " & r)
       else:
         o.proposeInRoomDo("{\"to\":\"0x1111111111111111111111111111111111111111\",\"value\":1000,\"nonce\":0}")
   # MUSTER_AUTOPAYSPLIT, the debtor's side: agree to MY share of any split that names
@@ -1066,6 +1135,7 @@ proc autopayTick(o: MusterUi) =
           paying.excl id
           if outcome.contains("\"error\""): payAgainAt[id] = nowS() + 10
           else: paid.incl id)
+  o.charterTick()
   info "SELFTEST pending= " & qs(o.pendingJson) & " members= " & qs(o.membersJson) &
     " intents= " & qs(o.intentsJson)
 
@@ -1283,6 +1353,36 @@ proc discardVoiceDraftImpl(o: MusterUi) =
 proc playVoiceNoteImpl(o: MusterUi, noteId: string) = o.playVoiceNoteDo(noteId)
 proc stopVoicePlaybackImpl(o: MusterUi) =
   ask mm.voice_play_stopAsync(proc (r: string) = o.voiceDone(r))
+proc loadQuestsImpl(o: MusterUi) = o.loadQuestsDo()
+proc proposeQuestImpl(o: MusterUi, termsJson: string) =
+  ask mm.coordinate_propose_questAsync(termsJson, proc (r: string) = o.questDone(r))
+proc proposeQuestCloseImpl(o: MusterUi, questId: string) =
+  ask mm.coordinate_propose_quest_closeAsync(questId, proc (r: string) = o.questDone(r))
+proc proposeQuestCancelImpl(o: MusterUi, questId: string) =
+  ask mm.coordinate_propose_quest_cancelAsync(questId, proc (r: string) = o.questDone(r))
+proc questAcceptImpl(o: MusterUi, questId, account: string) =
+  ask mm.coordinate_quest_acceptAsync(questId, account, proc (r: string) = o.questDone(r))
+proc questConfirmImpl(o: MusterUi, questId, account: string) =
+  ask mm.coordinate_quest_confirmAsync(questId, account, proc (r: string) = o.questDone(r))
+proc verifyQuestImpl(o: MusterUi, refJson: string) =
+  ask mm.coordinate_verify_questAsync(refJson, proc (r: string) = o.setQuestResultJson(r))
+proc loadCharterImpl(o: MusterUi) = o.loadCharterDo()
+proc loadCircleDo(o: MusterUi) =
+  # The room's savings circle (exo-267.3): its rounds, pay-ins and payouts.
+  ask mm.coordinate_circleAsync(proc (r: string) = o.setCircleJson(r))
+proc loadCircleImpl(o: MusterUi) = o.loadCircleDo()
+proc circlePayInImpl(o: MusterUi, round: string) =
+  ask mm.coordinate_circle_pay_inAsync(round, proc (r: string) =
+    o.setCircleResultJson(r)
+    o.loadCircleDo())
+proc proposeLezConfigImpl(o: MusterUi, specJson: string) =
+  # A change of the room's LEZ multisig's members or threshold (exo-267.6).
+  ask mm.coordinate_propose_lez_configAsync(specJson, proc (r: string) = o.setLezConfigResultJson(r))
+proc proposeCirclePayoutImpl(o: MusterUi, round: string) =
+  ask mm.coordinate_propose_circle_payoutAsync(round, proc (r: string) =
+    o.setCircleResultJson(r)
+    o.loadCircleDo())
+proc proposeCharterImpl(o: MusterUi, specJson: string) = o.proposeCharterDo(specJson)
 proc addContactImpl(o: MusterUi, identityHex, alias: string) = o.addContactDo(identityHex, alias)
 proc setContactAliasImpl(o: MusterUi, identityHex, alias: string) = o.setContactAliasDo(identityHex, alias)
 proc removeContactImpl(o: MusterUi, identityHex: string) = o.removeContactDo(identityHex)

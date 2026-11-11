@@ -146,6 +146,9 @@ FLAGS=(-d:release --threads:on --hints:off
 E2E+=(lez_frost_v030_e2e lez_frost_room_v030_e2e)    # on a local LEZ v0.3 zone (exo-eb6.4 L3)
 E2E+=(lez_multisig_live_v030_e2e)                    # the v0.3 multisig port, deployed on that zone (exo-eb6.4.4)
 E2E+=(voice_device_e2e)                              # the real microphone and speaker, only with MUSTER_VOICE_REAL (voice notes S11)
+E2E+=(quest_room_v030_e2e)                          # quests in the room: the multisig port and programs/lez-quest on that zone (exo-267.8)
+E2E+=(circle_rounds_v030_e2e)                       # a circle's rounds from the pot: the multisig port on that zone, pay-ins read back (exo-267.3)
+E2E+=(circle_exit_v030_e2e)                         # the circle slice's exit test: rounds, a member change, a quest, on that zone (exo-267.5)
 is_e2e() { local n; for n in "${E2E[@]}"; do [ "$n" = "$1" ] && return 0; done; return 1; }
 unit=(); probes=(); e2e=()
 for f in tests/*.nim; do

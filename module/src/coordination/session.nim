@@ -332,6 +332,19 @@ proc admit*(s: CoordinationSession, joiner: Member) =
   # every current member (the new one included) can open.
   s.announceBeacon()
 
+proc expel*(s: CoordinationSession, member: Member) =
+  ## Remove a member from the room's encryption (exo-267.6), a member's decision under the
+  ## room's rule: re-key forward without them and publish the grants to everyone who
+  ## remains. The removal is recorded IN the log under the new epoch, so every remaining
+  ## member's history and who-can-read view show it; the removed member cannot read it,
+  ## nor anything after it. What they held before stays theirs (F-16 is forward only).
+  if member notin s.crypto.members(): return
+  for frame in s.crypto.expel(member):
+    if s.journal != nil: s.journal(@[FrameControl] & frame)
+    discard s.transport.publish(s.topic, @[FrameControl] & frame)
+  s.publish(removalEvent(s.crypto.epoch(), hexOf(toBytes(member))))
+  s.announceBeacon()
+
 proc admitInvited*(s: CoordinationSession, invitee: Member): bool =
   ## Admit someone this member invites by name (exo-dcc.29): the invite IS the member's
   ## decision, and the identity is the one the member holds for them, so there is no

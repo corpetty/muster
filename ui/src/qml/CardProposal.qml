@@ -897,6 +897,109 @@ ColumnLayout {
         font.pixelSize: MusterStyle.cardCaption
     }
 
+    // ── a charter (exo-267.1): who decides it, and whether it can take force at all ──
+    // Said before anyone signs: an amendment not decided under the rule of the charter it
+    // amends, or of a charter no longer in force, never takes force however many agree.
+    ColumnLayout {
+        objectName: "cardCharter"
+        Layout.fillWidth: true
+        visible: cardRoot.charter !== null
+        spacing: 2
+        readonly property var c: cardRoot.charter || ({})
+        readonly property string standing: String(cardRoot.charter ? cardRoot.charter.standing : "")
+        readonly property bool never: ["out of rule", "stale", "superseded", "contested"].indexOf(standing) >= 0
+        LogosText {
+            objectName: "cardCharterStanding"
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: {
+                var c = parent.c, n = (c.electorate || []).length;
+                switch (parent.standing) {
+                case "in force": return qsTr("In force: this is the room's charter.");
+                case "replaced": return qsTr("Was the room's charter; amended since.");
+                case "superseded": return qsTr("Another charter took force instead.");
+                case "contested": return qsTr("Contested: another group founded a charter too, and neither names everyone the other does. No charter is in force until one naming them all is agreed.");
+                case "out of rule": return qsTr("Will never take force: it is not decided by the charter in force's members, as many as its amend rule asks.");
+                case "stale": return qsTr("Will never take force: it amends a charter that is no longer in force.");
+                default:
+                    return c.founding ? qsTr("Founds the room's charter: every one of the %1 it names must agree.").arg(n)
+                                      : qsTr("Amends the charter in force: takes force once %1 of its %2 members agree.").arg(Number(c.k)).arg(n);
+                }
+            }
+            color: parent.never ? Theme.palette.warning : Theme.palette.text
+            font.pixelSize: MusterStyle.cardBody
+        }
+        LogosText {
+            objectName: "cardCharterElectorate"
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: qsTr("Decided by: %1").arg((parent.c.electorateNames || []).join(", "))
+            color: Theme.palette.textSecondary
+            font.pixelSize: MusterStyle.cardCaption
+        }
+    }
+
+    // ── a savings circle's payout (exo-267.3): the schedule's, or off it, said before the vote ──
+    ColumnLayout {
+        objectName: "cardCircle"
+        Layout.fillWidth: true
+        visible: cardRoot.circle !== null
+        spacing: 2
+        readonly property var c: cardRoot.circle || ({})
+        LogosText {
+            objectName: "cardCircleRound"
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: parent.c.onSchedule
+                  ? qsTr("Round %1 of the circle: pays %2 the pot.").arg(Number(parent.c.round)).arg(String(parent.c.recipientName || ""))
+                  : qsTr("Off the circle's schedule: %1.").arg(String(parent.c.why || ""))
+            color: parent.c.onSchedule ? Theme.palette.text : Theme.palette.warning
+            font.pixelSize: MusterStyle.cardBody
+        }
+        LogosText {
+            objectName: "cardCircleMissing"
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            visible: Number(parent.c.round) > 0
+            text: (parent.c.missingNames || []).length === 0
+                  ? qsTr("Every member has paid in for round %1.").arg(Number(parent.c.round))
+                  : qsTr("Not paid in yet for round %1: %2.").arg(Number(parent.c.round)).arg((parent.c.missingNames || []).join(", "))
+            color: (parent.c.missingNames || []).length === 0 ? Theme.palette.textSecondary : Theme.palette.warning
+            font.pixelSize: MusterStyle.cardCaption
+        }
+    }
+
+    // ── a change of the multisig (exo-267.6): who it adds or removes, and the room's half ──
+    ColumnLayout {
+        objectName: "cardLezConfig"
+        Layout.fillWidth: true
+        visible: cardRoot.lezConfig !== null
+        spacing: 2
+        readonly property var c: cardRoot.lezConfig || ({})
+        readonly property string who: String(c.memberName || "") || qsTr("an account no member shared (%1…)").arg(String(c.account || "").slice(0, 8))
+        LogosText {
+            objectName: "cardLezConfigChange"
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: parent.c.change === "remove" ? qsTr("Removes %1 from the multisig: once it executes they can no longer vote or be counted.").arg(parent.who)
+                : parent.c.change === "add" ? qsTr("Adds %1 to the multisig: once it executes they vote and are counted.").arg(parent.who)
+                : qsTr("Changes how many must approve to %1.").arg(Number(parent.c.threshold))
+            color: Theme.palette.text
+            font.pixelSize: MusterStyle.cardBody
+        }
+        LogosText {
+            objectName: "cardLezConfigRoom"
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            visible: parent.c.change === "remove" && String(parent.c.member || "").length > 0
+            text: parent.c.inRoom
+                  ? qsTr("When it executes, the proposer's client also removes them from the room: they will not read anything sent after.")
+                  : qsTr("They are no longer in the room's encryption.")
+            color: Theme.palette.textSecondary
+            font.pixelSize: MusterStyle.cardCaption
+        }
+    }
+
     // ── lez-msig (exo-0d3): what the approval signs, decoded from those very bytes (RFP U.6) ──
     ColumnLayout {
         objectName: "cardMsig"

@@ -54,6 +54,24 @@ public:
     void discardVoiceDraft() override;
     void playVoiceNote(const QString &noteId) override;
     void stopVoicePlayback() override;
+
+    // Quests (exo-267.8): through muster_module's coordinate_*quest* methods.
+    void loadQuests() override;
+    void proposeQuest(const QString &termsJson) override;
+    void proposeQuestClose(const QString &questId) override;
+    void proposeQuestCancel(const QString &questId) override;
+    void questAccept(const QString &questId, const QString &account) override;
+    void questConfirm(const QString &questId, const QString &account) override;
+    void verifyQuest(const QString &refJson) override;
+    // The room's charter (exo-267.1): coordinate_charter / coordinate_propose_charter.
+    void loadCharter() override;
+    void proposeCharter(const QString &specJson) override;
+    // The room's savings circle (exo-267.3): coordinate_circle / _circle_pay_in / _propose_circle_payout.
+    void loadCircle() override;
+    void circlePayIn(const QString &round) override;
+    void proposeCirclePayout(const QString &round) override;
+    // A change of the room's LEZ multisig's members or threshold (exo-267.6).
+    void proposeLezConfig(const QString &specJson) override;
     void previewLezSend(const QString &fromId, const QString &to, const QString &raw) override;
     void sendLez(const QString &fromId, const QString &to, const QString &raw) override;
 

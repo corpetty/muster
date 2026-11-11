@@ -18,6 +18,7 @@ import ../src/drivers/threshold      # a second coordination policy (Ed25519 k-o
 import ../src/drivers/frost          # 2-round FROST-style — the multi-round policy
 import ../src/drivers/invoke         # the generic module-action driver (P-D1/P-D2)
 import ../src/drivers/eip191         # EIP-191 personal-sign attestation (Tier-1, P-D6)
+import ../src/drivers/charter        # a room's charter: its electorate named per proposal (exo-267.1)
 import ../src/drivers/registry
 import ../src/drivers/profile         # the family profile each driver declares (exo-a50.1.1)
 import ../src/drivers/kinds           # the one list of driver kinds; unknown → unsupported (exo-a50.1.2)
@@ -50,6 +51,11 @@ import ../src/lez/multisig as lezms    # its on-chain objects + PDAs
 import ../src/lez/multisig_chain       # the chain seam
 import ../src/lez/tx as leztx          # base58 ids, public account ids
 import ../src/wallet/lez_multisig_live # the live chain: the member's own transactions (exo-3c9)
+import ../src/lez/quest as lezquest    # the quest record program's objects (exo-267.7)
+import ../src/coordination/quest as roomquest   # quests in the room (exo-267.8)
+import ../src/coordination/room_charter   # the charter in force, and each proposal's standing (exo-267.1)
+import ../src/coordination/circle         # a circle's rounds from the pot (exo-267.3)
+import ../src/coordination/member_changes # a multisig's members and threshold from the room (exo-267.6)
 import ../src/coordination/vote        # a vote-locus approval = the member's own on-chain vote
 import ../src/drivers/btc_frost        # FROST: the aggregate locus (Phase D)
 import ../src/coordination/aggregate   # the ChillDKG ceremony + the two rounds over the log
@@ -232,6 +238,10 @@ proc msigTick()                         ## forward — lez-msig ceremonies on th
 proc msigMyNames(): seq[string]         ## forward — this member's lez-msig approval keys, as contributors
 proc msigLiveOf(a: LezMsigAccount): MsigLive   ## forward — the lez-msig chain seam for an account
 proc msigPrivFor(chain: string, program, createKey: seq[byte]): MsigPrivate   ## forward — a private one's, for this member (exo-efa)
+proc questProgram(): tuple[ok: bool, q: seq[byte], err: string]   ## forward — the quest program setting (exo-267.8)
+proc circleNow(): tuple[ok: bool, setup: CircleSetup, view: CircleView, chain: LezMultisigLive,
+                        acct: LezMultisigAccount, err: string]   ## forward — the room's circle (exo-267.3)
+proc memberChangePump()   ## forward — removals the chain executed, carried into the room (exo-267.6)
 proc evmPlatform(): bool               ## forward — EVM chains read through eth_rpc_module (exo-d4d.3)
 proc platformRegistry(): tuple[ok: bool, scope: string, chains: seq[PlatformChain]]   ## forward — its registry
 proc rpcChainCaip2(): tuple[ok: bool, chain, detail: string]   ## forward — the chain a split settles on
@@ -262,6 +272,10 @@ proc roomDriver(kind: string): Driver =
     return newSplitDriver((if bare == "lez-split": LezSplitFamily elif bare == "btc-split": BtcSplitFamily
                            elif bare == "monero-split": MoneroSplitFamily
                            else: EvmSplitFamily), chain, roomIdentities())
+  if bare == "charter":
+    # the room's charter (exo-267.1): each charter names who decides it; the room's members
+    # here only for the sign-path check that every one it names is in the room
+    return newCharterDriver(roomIdentities())
   let roster = currentRoster()
   let n = max(1, roster.len)
   case kind
@@ -315,6 +329,7 @@ var gLezRpc = getEnv("MUSTER_LEZ_RPC", "https://testnet.lez.logos.co")
 var gLezChain = getEnv("MUSTER_LEZ_CHAIN", "lez:testnet")
 var gLezProgram = getEnv("MUSTER_LEZ_MULTISIG_PROGRAM", LezDeployedMultisig)
 var gLezMsigProgram = getEnv("MUSTER_LEZ_MSIG_PROGRAM", "")   ## the lez-msig program's account id (exo-0d3); "" = none deployed
+var gLezQuestProgram = getEnv("MUSTER_LEZ_QUEST_PROGRAM", "")   ## the quest record program (exo-267.8), hex or base58; "" = none
   ## who sends a settling transaction and pays its fee (exo-a50.1.5): "self" = this
   ## instance's own key, signed locally and sent raw; "unlocked:<0x…>" = an account the
   ## node itself unlocks (anvil's dev accounts) via eth_sendTransaction.
@@ -405,6 +420,7 @@ proc loadSettingsFile() =
       if j.hasKey("lezChain"): gLezChain = j["lezChain"].getStr()
       if j.hasKey("lezMultisigProgram"): gLezProgram = j["lezMultisigProgram"].getStr()
       if j.hasKey("lezMsigProgram"): gLezMsigProgram = j["lezMsigProgram"].getStr()
+      if j.hasKey("lezQuestProgram"): gLezQuestProgram = j["lezQuestProgram"].getStr()
       if j.hasKey("keystoreBackend"): gKeystoreBackend = j["keystoreBackend"].getStr("auto")
       if j.hasKey("keystoreAccount"): gKeystoreAccount = j["keystoreAccount"].getStr()
       if j.hasKey("keystoreBinding"): gKeystoreBinding = j["keystoreBinding"].getStr()
@@ -442,7 +458,7 @@ proc saveSettingsFile() =
                                    # only a level the user chose: one from MUSTER_MIX stays the runner's
                                    "mix": (if gMixSaved: $gMix else: ""), "relayer": gRelayer,
                                    "evmChains": gEvmChains, "btcRpc": gBtcRpc, "xmrMsigRpc": gXmrMsigRpc, "lezRpc": gLezRpc, "lezChain": gLezChain,
-                                   "lezMultisigProgram": gLezProgram, "lezMsigProgram": gLezMsigProgram,
+                                   "lezMultisigProgram": gLezProgram, "lezMsigProgram": gLezMsigProgram, "lezQuestProgram": gLezQuestProgram,
                                    "keystoreBackend": gKeystoreBackend,
                                    "keystoreAccount": gKeystoreAccount,
                                    "keystoreBinding": gKeystoreBinding,
@@ -1241,7 +1257,8 @@ proc lezIdOf(s: string): seq[byte] =
 # published before the chain has it: no intent before the proposal, no receipt before
 # the vote, nothing final before Executed.
 type
-  LezPendingKind = enum lpCreate = "create", lpPropose = "propose", lpVote = "vote", lpSettle = "settle"
+  LezPendingKind = enum lpCreate = "create", lpPropose = "propose", lpVote = "vote", lpSettle = "settle",
+                        lpQuest = "quest"   ## a quest's Accept or Confirm, the member's own (exo-267.8)
   LezPending = object
     kind: LezPendingKind
     session: CoordinationSession  ## the room the step belongs to; it completes only there
@@ -1254,6 +1271,12 @@ type
     created: JsonNode              ## a create's disclosure, published once the state is on chain
     started: float
     submitted: bool                ## a settle through the platform: "submitted" published (with the hash)
+    questChain: LezMultisigChain   ## lpQuest: where it was sent
+    questProgram: seq[byte]
+    questRecord: seq[byte]
+    questWant: lezquest.QuestStatusKind
+    questTx: string
+    questId: string
 
 const LezPendingDeadlineS = 600.0
 var gLezPending: seq[LezPending]
@@ -1290,6 +1313,14 @@ proc lezPump() =
       of lpVote:
         let r = liveVoteComplete(p.session, moduleKeystore(), driverFor, p.seam, p.vote)
         if not r.startsWith("unconfirmed"): outcome = r
+      of lpQuest:
+        # judged by the record it should have changed (v0.3 includes a refusal, and pays)
+        let r = p.questChain.readShard(p.questRecord, p.questProgram)
+        if r.found and decodeQuestRecord(r.data).status == p.questWant:
+          outcome = $p.questWant
+          p.session.publish(Event(key: "quest/" & p.questId & "/" & $p.questWant, value: p.questTx))
+        elif p.questChain.txIncluded(p.questTx).known:
+          outcome = "refused: the chain included it and the record did not change"
       of lpSettle:
         let f = p.settle.watch(p.txRef)
         # through the platform the room hears of it only once the sender broadcast: the
@@ -3021,6 +3052,7 @@ proc musterCoordinateIntents(): string =
   xmrMsigPump()                        # advance joined Monero multisig setups (ADR-020)
   xmrSpendPump()                       # …and agreed spends from them: sync, build, sign, submit, confirm
   roundsPump()                         # a multi-round room decision's next round, approved once (exo-720)
+  memberChangePump()                   # a removal the chain executed, carried into the room's encryption (exo-267.6)
   splitPump()                          # report my landed payments; confirm what paid me (exo-a90)
   keystorePump()                       # publish what a human approved in keystore_module (exo-149.2)
   fileSharePump()                      # finish uploads and fetches the storage node completed (exo-4d0)
@@ -3033,6 +3065,9 @@ proc musterCoordinateIntents(): string =
   let nowS = uint64(epochTime())
   let views = reduceIntentViews(events, driverFor)
   let coveredNow = coverIndex(events, driverFor, views, nowS)
+  var charterView: JsonNode = nil      # computed once, if any card is a charter (exo-267.1)
+  var circleTried = false              # the circle's rounds, read once, if any card is a vault payout (exo-267.3)
+  var circleV: CircleView
   # intents a proposal not yet agreed would settle part of (a renewal waiting for everyone):
   # not offered for renewal again meanwhile (exo-a90.15)
   var pendingCover: HashSet[string]
@@ -3064,7 +3099,10 @@ proc musterCoordinateIntents(): string =
     # branching on the concrete driver type (exo-a50.1.1) — and the whole profile rides
     # along so the card's fixed rows can be drawn from it (exo-a50.1.6).
     var prof = drv.profile()
-    o["n"] = %(if prof.n > 0: prof.n else: desc.threshold)
+    # a family whose effect names who decides it (a charter's electorate, exo-267.1) counts
+    # against those it names: "1 of 2", never k of k
+    let named = drv.electorateFor(effectFromJson(v.effectJson))
+    o["n"] = %(if named > 0: named elif prof.n > 0: prof.n else: desc.threshold)
     # The ways around a Safe's threshold, as last READ from the chain (coordinate_accounts
     # caches them — no chain read on this 1s tick); unread stays unknown (exo-a50.1.6).
     if prof.account.len > 0 and prof.account in gBypassCache:
@@ -3118,6 +3156,47 @@ proc musterCoordinateIntents(): string =
       # the card decodes the proposal from the exact bytes the approvals sign (RFP U.6)
       try: o["msig"] = msigbytes.proposalJson(proposalOf(effectFromJson(v.effectJson)))
       except CatchableError as e: o["msig"] = %*{"error": "does not decode: " & e.msg}
+    # A LEZ multisig proposal whose call is the quest program's reads as the quest step it is
+    # (exo-267.8): issue, close or withdraw, with the task when the room holds its terms.
+    if gLezQuestProgram.len > 0 and sm.kind in ["lez-call", "lez-proposal"]:
+      let (qpok, qp, _) = questProgram()
+      if qpok:
+        let (qrok, qtext, qobj) = questReadingOf(events, v.effectJson, qp)
+        if qrok:
+          o["summary"]["kind"] = %"quest"
+          o["summary"]["text"] = %qtext
+          o["quest"] = qobj
+    # A charter proposal says where it stands before anyone signs (exo-267.1): pending, in
+    # force, out of the rule of the charter it amends, stale, superseded or contested.
+    # A payout from a circle's vault says whether it is the schedule's (exo-267.3): the round
+    # it pays, who has not paid in, or why it is off the schedule — before anyone votes.
+    if sm.kind in ["lez-call", "lez-proposal"] and splitPolicy(v.policy).kind == "lez-multisig":
+      if not circleTried:
+        circleTried = true
+        let cn = circleNow()
+        if cn.ok: circleV = cn.view
+      if circleV.setup.ok and splitPolicy(v.policy).account.toLowerAscii() == circleV.setup.account:
+        let (cok, reading) = circleReadingOf(circleV, v.id)
+        if cok:
+          reading["recipientName"] = %(if reading.hasKey("recipient"): memberName(reading["recipient"].getStr(), mine) else: "")
+          reading["missingNames"] = %reading["missing"].getElems().mapIt(memberName(it.getStr(), mine))
+          o["circle"] = reading
+    # A change of the multisig's members or threshold, read in words (exo-267.6): the member
+    # whose shared account it adds or removes, and whether they still read the room.
+    block:
+      let (cfgOk, cfgRead) = configReadingOf(events, v.effectJson, gTopic)
+      if cfgOk:
+        let who = cfgRead{"member"}.getStr()
+        cfgRead["memberName"] = %(if who.len > 0: memberName(who, mine) else: "")
+        cfgRead["inRoom"] = %(who.len > 0 and gSession.members().anyIt(toHex(it.toBytes()).toLowerAscii() == who))
+        o["config"] = cfgRead
+    if v.policy == CharterKind:
+      if charterView.isNil: charterView = charterJson(events, driverFor, roomAccounts())
+      for p in charterView["proposals"]:
+        if p["id"].getStr() == v.id:
+          var c = p.copy()
+          c["electorateNames"] = %p["electorate"].getElems().mapIt(memberName(it.getStr(), mine))
+          o["charter"] = c
     # Who approved, named from the address book (or "you"), and whether I did — read
     # from the log + my keys (attest.approvedByMe), or an in-app approval made here.
     var whos: seq[string]
@@ -4643,6 +4722,72 @@ proc lezProposeAction(action: LezAction): string =
   except CatchableError as e:
     $(%*{"error": "sequencer-unreachable", "detail": e.msg})
 
+proc musterCoordinateProposeLezConfig(specJson: string): string =
+  ## Propose a change of the room's LEZ multisig (exo-267.6): {change: add | remove |
+  ## threshold, member? (a room identity: their shared LEZ account), account? (a LEZ account,
+  ## hex or base58), threshold?}. The proposer's own ProposeConfig, voted and executed like
+  ## any proposal, counted by current members only. A removal the chain executes is also
+  ## carried into the room: the proposer's client re-keys the member out (memberChangePump).
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let (ok, acct, err) = lezComposeAccount()
+  if not ok: return err
+  if acct.layout != plV03:
+    return $(%*{"error": "not-an-action", "detail": "member and threshold changes from the room need the v0.3 multisig"})
+  var cfg: ConfigAction
+  try:
+    let j = parseJson(specJson)
+    let change = j{"change"}.getStr()
+    if change == "threshold":
+      let k = j{"threshold"}.getInt()
+      if k < 1 or k > acct.members.len:
+        return $(%*{"error": "bad-spec", "detail": "a threshold from 1 to " & $acct.members.len})
+      cfg = ConfigAction(kind: caChangeThreshold, threshold: k)
+    elif change in ["add", "remove"]:
+      var target: seq[byte]
+      if j.hasKey("account"): target = lezIdOf(j["account"].getStr())
+      elif j.hasKey("member"):
+        let shared = accountsOf(gSession.roomEvents(), gTopic, j["member"].getStr(), KindLezKey, acct.chain).mapIt(it.address)
+        let pick = (if change == "remove": shared.filterIt(it in acct.members) else: shared.filterIt(it notin acct.members))
+        if pick.len == 0:
+          return $(%*{"error": "no-account", "detail": (if change == "remove": "that member shared no account the multisig holds"
+                                                         else: "that member shared no LEZ account the multisig does not hold yet")})
+        target = pick[0]
+      else: return $(%*{"error": "bad-spec", "detail": "name the member or the account"})
+      cfg = (if change == "add": ConfigAction(kind: caAddMember, member: target)
+             else: ConfigAction(kind: caRemoveMember, member: target))
+    else: return $(%*{"error": "bad-spec", "detail": "change is add, remove or threshold"})
+  except CatchableError as e: return $(%*{"error": "bad-spec", "detail": e.msg})
+  var ttl = DefaultIntentTtl
+  try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
+  except ValueError: discard
+  try:
+    let c = lezLiveOf(acct)
+    let (mine, me) = c.lezOurMember(acct.members)
+    if not mine:
+      return $(%*{"error": "not-a-member", "detail": "none of your LEZ member accounts is a member of this multisig"})
+    c.waitForInclusion = false
+    inc gMsgSeq
+    let seam = newLezVoteSeam(c, me)
+    let (outcome, pp) = liveProposeConfigOnChainStart(gSession, moduleKeystore(), driverFor, gCoordKind, cfg, seam,
+                                                      int64(epochTime()), gMsgSeq, ttlSec = ttl)
+    if outcome.len > 0: return $(%*{"error": "refused", "detail": outcome})
+    gLezPending.add LezPending(kind: lpPropose, session: gSession, seam: seam, propose: pp, started: epochTime())
+    $(%*{"pending": "propose", "index": pp.index, "tx": pp.tx,
+         "detail": "proposal #" & $pp.index & " is on its way to the chain; it appears in the room once included"})
+  except CatchableError as e: $(%*{"error": "sequencer-unreachable", "detail": e.msg})
+
+proc memberChangePump() =
+  ## A removal the chain executed that THIS member proposed, of a member who still holds the
+  ## room's key: re-key them out of the room (exo-267.6), once, here and nowhere else.
+  if gSession == nil: return
+  let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
+  let holders = gSession.members().mapIt(toHex(it.toBytes()).toLowerAscii())
+  for (who, id) in removalsDue(gSession.roomEvents(), driverFor, gTopic, holders, me):
+    for m in gSession.members():
+      if toHex(m.toBytes()).toLowerAscii() == who:
+        gSession.expel(m)
+        echo "[muster] removed ", who[0 ..< 12], "… from the room's encryption after ", id, " executed"
+
 proc musterCoordinateProposeLez(actionJson: string): string =
   var action: LezAction
   try:
@@ -4766,6 +4911,315 @@ proc musterCoordinateProposeLezVaultInit(definition: string): string =
   let (tok, action, terr) = lezTokenAction(@[def, vault], @[3'u32], 1)
   if not tok: return terr
   lezProposeAction(action)
+
+# ── quests (exo-267.8): issued and closed by the room's LEZ multisig, taken and confirmed
+#    by a person's own transaction (coordination/quest.nim, programs/lez-quest) ─────────
+proc questProgram(): tuple[ok: bool, q: seq[byte], err: string] =
+  if gLezQuestProgram.len == 0:
+    return (false, @[], $(%*{"error": "no-quest-program",
+      "detail": "set Settings → lez-quest-program to the quest program's account on this zone"}))
+  try: (true, lezIdOf(gLezQuestProgram), "")
+  except CatchableError as e: (false, @[], $(%*{"error": "no-quest-program", "detail": e.msg}))
+
+proc questComposeV03(): tuple[ok: bool, acct: LezMultisigAccount, q: seq[byte], err: string] =
+  if gSession == nil: return (false, LezMultisigAccount(), @[], $(%*{"error": "not-joined"}))
+  let (ok, acct, err) = lezComposeAccount()
+  if not ok: return (false, acct, @[], err)
+  if acct.layout != plV03:
+    return (false, acct, @[], $(%*{"error": "not-an-action", "detail": "quests need the LEZ multisig's v0.3 port"}))
+  let (qok, q, qerr) = questProgram()
+  if not qok: return (false, acct, @[], qerr)
+  (true, acct, q, "")
+
+proc withQuestId(r: string, qid: seq[byte]): string =
+  try:
+    var j = parseJson(r)
+    j["questId"] = %lezHx(qid)
+    $j
+  except CatchableError: r
+
+proc musterCoordinateProposeQuest(termsJson: string): string =
+  ## Issue a quest from the room's LEZ multisig: its terms go into the room, and the
+  ## multisig's Open proposal goes on chain (the proposer's own Propose; the room votes).
+  let (ok, acct, q, err) = questComposeV03()
+  if not ok: return err
+  var j: JsonNode
+  try: j = parseJson(termsJson)
+  except CatchableError: return $(%*{"error": "bad-terms", "detail": "terms are JSON {task, bounty, confirmer, taker?}"})
+  if j.kind != JObject: return $(%*{"error": "bad-terms", "detail": "terms are a JSON object"})
+  var salt = ""
+  for b in urandom(8): salt.add lezHx(@[b])
+  j["salt"] = %salt
+  for k in ["confirmer", "taker"]:
+    if j{k}.getStr().len > 0:
+      try: j[k] = %lezHx(lezIdOf(j[k].getStr()))
+      except CatchableError: return $(%*{"error": "bad-terms", "detail": k & " is a LEZ account, hex or base58"})
+  let (tok, terms, why) = parseQuestTerms($j)
+  if not tok: return $(%*{"error": "bad-terms", "detail": why})
+  let vault = vaultPda(acct.scheme, acct.program, acct.createKey)
+  let qid = questIdFor(vault, questTermsHash(terms))
+  gSession.publish(questTermsEvent(qid, questTermsJson(terms)))
+  withQuestId(lezProposeAction(questOpenCall(q, acct.program, acct.scheme, acct.createKey, terms)), qid)
+
+proc questRecordOn(acct: LezMultisigAccount, q, qid: seq[byte]): tuple[ok: bool, rec: lezquest.QuestRecord, err: string] =
+  let vault = vaultPda(acct.scheme, acct.program, acct.createKey)
+  let r = lezLiveOf(acct).readShard(questRecordPda(acct.scheme, q, vault, qid), q)
+  if not r.found: return (false, lezquest.QuestRecord(), $(%*{"error": "no-quest", "detail": "no record of that quest on chain yet"}))
+  (true, decodeQuestRecord(r.data), "")
+
+proc questCloseOrCancel(questId: string, cancel: bool): string =
+  ## Close a confirmed quest, paying its taker — or cancel one not yet confirmed, returning
+  ## its bounty — by the multisig's proposal. What the record holds is read from the chain.
+  let (ok, acct, q, err) = questComposeV03()
+  if not ok: return err
+  try:
+    let qid = lezIdOf(questId)
+    let (rok, rec, rerr) = questRecordOn(acct, q, qid)
+    if not rok: return rerr
+    if cancel:
+      if rec.status notin {qsOpen, qsAccepted}:
+        return $(%*{"error": "not-an-action", "detail": "the quest is " & $rec.status & ": it can no longer be cancelled"})
+      return withQuestId(lezProposeAction(questCancelCall(q, acct.program, acct.scheme, acct.createKey, qid, rec.bounty)), qid)
+    if rec.status != qsConfirmed:
+      return $(%*{"error": "not-an-action", "detail": "the quest is " & $rec.status & ": only a confirmed quest closes"})
+    withQuestId(lezProposeAction(questCloseCall(q, acct.program, acct.scheme, acct.createKey, qid, rec.statusTaker,
+                                                rec.bounty)), qid)
+  except CatchableError as e: $(%*{"error": "sequencer-unreachable", "detail": e.msg})
+
+proc questAct(questId, account: string, confirm: bool): string =
+  ## Accept (as its taker) or confirm (as its confirmer) a quest the room issued, with
+  ## THIS member's own LEZ account — one of its keystore's member accounts, which signs and
+  ## pays. Sends and returns; a later tick reads the record back (lez_pending).
+  let (ok, acct, q, err) = questComposeV03()
+  if not ok: return err
+  try:
+    let qid = lezIdOf(questId)
+    var view: QuestView
+    var found = false
+    for v in questsOf(gSession.roomEvents(), q):
+      if v.questId == qid: (view, found) = (v, true)
+    if not found: return $(%*{"error": "no-quest", "detail": "this room issued no quest with that id"})
+    let me = lezIdOf(account)
+    let ks = moduleKeystore()
+    var label = ""
+    for i in 0 ..< LezMemberSlots:
+      if publicAccountId(ks.lezMemberKey(lezMemberLabel(i))) == me: label = lezMemberLabel(i)
+    if label.len == 0:
+      return $(%*{"error": "not-mine", "detail": "that LEZ account is not one of this keystore's (lez_member_account)"})
+    let c = lezLiveOf(acct)
+    discard c.addMember(label)
+    c.waitForInclusion = false
+    let call = (if confirm: questConfirmCall(q, acct.scheme, view.issuer, qid, me)
+                else: questAcceptCall(q, acct.scheme, view.issuer, qid, me))
+    let tx = c.submitCall(me, call)
+    if not tx.ok: return $(%*{"error": "refused", "detail": tx.error})
+    gLezPending.add LezPending(kind: lpQuest, session: gSession, questChain: c, questProgram: q,
+                               questRecord: view.record, questTx: tx.hash, questId: lezHx(qid),
+                               questWant: (if confirm: qsConfirmed else: qsAccepted), started: epochTime())
+    $(%*{"pending": (if confirm: "confirm" else: "accept"), "tx": tx.hash, "questId": lezHx(qid),
+         "detail": "sent; the quest reads " & (if confirm: "confirmed" else: "accepted") & " once the chain includes it"})
+  except CatchableError as e: $(%*{"error": "sequencer-unreachable", "detail": e.msg})
+
+proc musterCoordinateProposeQuestClose(questId: string): string = questCloseOrCancel(questId, false)
+proc musterCoordinateProposeQuestCancel(questId: string): string = questCloseOrCancel(questId, true)
+proc musterCoordinateQuestAccept(questId, account: string): string = questAct(questId, account, false)
+proc musterCoordinateQuestConfirm(questId, account: string): string = questAct(questId, account, true)
+
+proc musterCoordinateCharter(): string =
+  ## The room's charter (exo-267.1): the one in force, how it came to be, whether its
+  ## account is one the room was shown, and every charter proposal with its standing.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  let events = gSession.roomEvents()
+  var res = charterJson(events, driverFor, roomAccounts())
+  let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
+  let mine = @[me] & myNames()
+  var names = newJObject()
+  for id in roomIdentities(): names[id] = %memberName(id, mine)
+  if res.hasKey("body"):
+    for id in res["body"]["members"]: names[id.getStr()] = %memberName(id.getStr(), mine)
+  res["memberNames"] = names
+  res["me"] = %me
+  res["roomMembers"] = %roomIdentities()
+  res["iDecide"] = %(res.hasKey("body") and res["body"]["members"].getElems().anyIt(it.getStr() == me))
+  $res
+
+proc musterCoordinateProposeCharter(specJson: string): string =
+  ## Propose a charter for the room (exo-267.1): a founding when none is in force, else an
+  ## amendment of the one in force under its rule. specJson is a charter body or
+  ## {template: "circle", …} (coordination/room_charter.charterProposal).
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  if CharterKind notin roomKinds():
+    return $(%*{"error": "not-admitted", "detail": "this room has not admitted the charter kind"})
+  var spec: JsonNode
+  try: spec = parseJson(specJson)
+  except CatchableError: return $(%*{"error": "bad-spec", "detail": "not JSON"})
+  gSession.poll()
+  let events = gSession.roomEvents()
+  let p = charterProposal(charterInForce(events, driverFor), spec, roomIdentities())
+  if not p.ok: return $(%*{"error": "bad-charter", "detail": p.why})
+  inc gMsgSeq
+  var ttl = DefaultIntentTtl
+  try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
+  except ValueError: discard
+  let id = liveProposeIntent(gSession, moduleKeystore(), driverFor, CharterKind, p.effectJson,
+                             int64(epochTime()), gMsgSeq, account = gTopic, ttlSec = ttl)
+  if not id.startsWith("0x"): return $(%*{"error": "refused", "detail": id})
+  $(%*{"intentId": id, "founding": p.founding})
+
+# ── a circle's rounds from the pot (exo-267.3, coordination/circle.nim) ──────────────
+var gCircleTxs = initTable[string, TxRead]()   ## an included transaction never changes: read once
+
+proc circleNow(): tuple[ok: bool, setup: CircleSetup, view: CircleView, chain: LezMultisigLive,
+                        acct: LezMultisigAccount, err: string] =
+  ## The room's circle: its terms from the charter in force, its rounds from the log, each
+  ## pay-in read from the user's own sequencer.
+  if gSession == nil: return (false, CircleSetup(), CircleView(), nil, LezMultisigAccount(), $(%*{"error": "not-joined"}))
+  gSession.poll()
+  let events = gSession.roomEvents()
+  let setup = circleSetupOf(charterInForce(events, driverFor), roomAccounts())
+  if not setup.ok:
+    return (false, setup, CircleView(setup: setup), nil, LezMultisigAccount(), $(%*{"error": "no-circle", "detail": setup.why}))
+  let (found, a) = findAccount(roomAccounts(), setup.account)
+  let (aok, acct, detail) = (if found: lezMultisigAccountOf(a) else: (false, LezMultisigAccount(), "not disclosed"))
+  if not aok: return (false, setup, CircleView(setup: setup), nil, acct, $(%*{"error": "no-circle", "detail": detail}))
+  let c = lezLiveOf(acct)
+  let reader: TxReader = proc(h: string): TxRead =
+    if h in gCircleTxs: return gCircleTxs[h]
+    try:
+      result = c.readTx(h)
+      if result.known: gCircleTxs[h] = result
+    except CatchableError: result = (false, 0'u64, newSeq[byte](), LezAction())
+  (true, setup, circleView(events, driverFor, gTopic, setup, reader), c, acct, "")
+
+proc musterCoordinateCircle(): string =
+  ## The room's circle (exo-267.3): each round, who receives, who has paid in, every payout
+  ## asked of the vault and whether it is the schedule's, and the vault's balance now.
+  let (ok, _, view, c, _, err) = circleNow()
+  if not ok: return err
+  var res = circleJson(view)
+  try: res["vaultBalance"] = %($c.readAccount(view.setup.vault).balance)
+  except CatchableError as e: res["vaultBalance"] = %""; res["vaultError"] = %e.msg
+  let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
+  let mine = @[me] & myNames()
+  var names = newJObject()
+  for id in view.setup.order: names[id] = %memberName(id, mine)
+  res["memberNames"] = names
+  res["me"] = %me
+  # the LEZ accounts I shared on the circle's chain and hold the key to: where a pay-in comes from
+  var mineAccts = newJArray()
+  for a in accountsOf(gSession.roomEvents(), gTopic, me, KindLezKey, view.setup.chain):
+    if ownLabelOf(moduleKeystore(), a.key).isSome: mineAccts.add %a.id
+  res["myAccounts"] = mineAccts
+  $res
+
+proc musterCoordinateCirclePayIn(round: string): string =
+  ## Pay this member's share into the circle's vault for `round`, from a LEZ account of their
+  ## own that they shared with the room (which signs and pays its fee), then report it. The
+  ## report is a claim: every member checks it from the chain (coordination/circle.nim).
+  let (ok, setup, view, c, _, err) = circleNow()
+  if not ok: return err
+  var r: int
+  try: r = parseInt(round.strip())
+  except ValueError: return $(%*{"error": "bad-round", "detail": "a round number"})
+  if r < 1 or r > setup.n: return $(%*{"error": "bad-round", "detail": "the circle has rounds 1 to " & $setup.n})
+  let ks = moduleKeystore()
+  let me = toHex(ks.encIdentity().toBytes()).toLowerAscii()
+  if me notin setup.order: return $(%*{"error": "not-in-circle", "detail": "the charter's schedule does not name you"})
+  if me notin view.rounds[r - 1].missing:
+    return $(%*{"error": "already-paid", "detail": "your pay-in for round " & $r & " is already counted"})
+  var label = ""
+  var payer: seq[byte]
+  for a in accountsOf(gSession.roomEvents(), gTopic, me, KindLezKey, setup.chain):
+    let l = ownLabelOf(ks, a.key)
+    if l.isSome:
+      (label, payer) = (l.get, a.address)
+      break
+  if label.len == 0:
+    return $(%*{"error": "no-shared-account", "detail": "share a LEZ account of your own with the room first (Accounts → your accounts); a pay-in counts only from one"})
+  try:
+    discard c.addMember(label)
+    c.waitForInclusion = false
+    let tx = c.submitCall(payer, payInCall(setup, payer))
+    if not tx.ok: return $(%*{"error": "refused", "detail": tx.error})
+    gSession.publishAuthored(ks, payInEvent(setup.account, r, me, tx.hash))
+    $(%*{"round": r, "tx": tx.hash, "payer": lezHx(payer), "share": $setup.share,
+         "detail": "sent and reported; it counts once the chain includes it"})
+  except CatchableError as e: $(%*{"error": "sequencer-unreachable", "detail": e.msg})
+
+proc musterCoordinateProposeCirclePayout(round: string): string =
+  ## Propose round `round`'s payout: the pot (n × share) from the vault to the account the
+  ## round's recipient shared, voted on like any LEZ multisig proposal. The room must be acting
+  ## from the circle's multisig.
+  let (ok, setup, view, _, _, err) = circleNow()
+  if not ok: return err
+  var r: int
+  try: r = parseInt(round.strip())
+  except ValueError: return $(%*{"error": "bad-round", "detail": "a round number"})
+  if r < 1 or r > setup.n: return $(%*{"error": "bad-round", "detail": "the circle has rounds 1 to " & $setup.n})
+  if splitPolicy(gCoordKind).account.toLowerAscii() != setup.account:
+    return $(%*{"error": "not-the-circle", "detail": "act from the circle's multisig (" & setup.account & ") to propose its payout"})
+  let who = setup.order[r - 1]
+  let theirs = accountsOf(gSession.roomEvents(), gTopic, who, KindLezKey, setup.chain)
+  if theirs.len == 0:
+    return $(%*{"error": "no-recipient-account", "detail": "round " & $r & "'s recipient has shared no LEZ account to be paid at"})
+  var res = parseJson(lezProposeAction(payoutCall(setup, theirs[0].address, setup.share * uint64(setup.n))))
+  if res.kind == JObject:
+    res["round"] = %r
+    if view.current != r: res["warning"] = %("round " & $view.current & " is the one due")
+  $res
+
+proc musterCoordinateQuests(): string =
+  ## The quests this room proposed to issue, with their terms when the room holds text that
+  ## hashes to the record's, and each record as the chain reads now.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let (qok, q, qerr) = questProgram()
+  if not qok: return qerr
+  let (aok, acct, _) = lezComposeAccount()
+  var mine: seq[seq[byte]]
+  let ks = moduleKeystore()
+  for i in 0 ..< LezMemberSlots: mine.add publicAccountId(ks.lezMemberKey(lezMemberLabel(i)))
+  var res = newJArray()
+  for v in questsOf(gSession.roomEvents(), q):
+    var o = %*{"questId": lezHx(v.questId), "issuer": lezHx(v.issuer), "record": lezHx(v.record),
+               "bounty": $v.bounty, "openIntent": v.openIntent, "termsFound": v.termsFound,
+               "closeIntent": v.closeIntent, "closeIndex": v.closeIndex}
+    # what a verifier outside the room names: the record, this multisig, the closing proposal
+    if aok and v.issuer == vaultPda(acct.scheme, acct.program, acct.createKey):
+      o["createKey"] = %lezHx(acct.createKey)
+      o["multisigProgram"] = %lezHx(acct.program)
+    if v.termsFound: o["terms"] = parseJson(questTermsJson(v.terms))
+    o["chain"] = %"unknown"
+    if aok:
+      try:
+        let r = lezLiveOf(acct).readShard(v.record, q)
+        if r.found:
+          let rec = decodeQuestRecord(r.data)
+          o["chain"] = %($rec.status)
+          o["confirmer"] = %lezHx(rec.confirmer)
+          o["taker"] = %(if rec.statusTaker.len > 0: lezHx(rec.statusTaker) else: lezHx(rec.namedTaker))
+          o["iConfirm"] = %(rec.confirmer in mine)
+          o["iMayAccept"] = %(rec.status == qsOpen and
+                              (if rec.namedTaker.len > 0: rec.namedTaker in mine else: true))
+        else: o["chain"] = %"not on chain"
+      except CatchableError: discard
+    res.add o
+  $res
+
+proc musterCoordinateVerifyQuest(refJson: string): string =
+  ## Verify a quest's attestation from the chain alone, needing no room key:
+  ## {record, createKey, closeIndex, multisigProgram?}.
+  let (qok, q, qerr) = questProgram()
+  if not qok: return qerr
+  try:
+    let j = parseJson(refJson)
+    let ms = (if j{"multisigProgram"}.getStr().len > 0: j["multisigProgram"].getStr() else: gLezProgram)
+    let c = lezLiveFor(gLezChain, psLee02, lezIdOf(ms), plV03)
+    let a = verifyQuestAttestation(c, q, lezIdOf(j["record"].getStr()), lezIdOf(j["createKey"].getStr()),
+                                   uint64(j["closeIndex"].getBiggestInt()))
+    $(%*{"ok": a.ok, "why": a.why, "issuer": lezHx(a.issuer), "taker": lezHx(a.taker), "confirmer": lezHx(a.confirmer),
+         "termsHash": lezHx(a.termsHash), "bounty": $a.bounty, "approvals": a.approvals, "threshold": a.threshold})
+  except CatchableError as e: $(%*{"error": "bad-reference", "detail": e.msg})
 
 proc musterFrostCeremonyOpen(ceremonyId, network, t, n: string): string =
   ## Open a FROST ceremony in the joined room and join it.
@@ -5683,7 +6137,7 @@ proc musterSettings(): string =
     "btcRpc": gBtcRpc, "btcRpcMasked": redactUrl(gBtcRpc),
     "xmrMsigRpc": gXmrMsigRpc, "xmrMsigRpcMasked": redactUrl(gXmrMsigRpc),
     "lez": {"rpc": gLezRpc, "rpcMasked": redactUrl(gLezRpc), "chain": gLezChain,
-            "multisigProgram": gLezProgram, "msigProgram": gLezMsigProgram},
+            "multisigProgram": gLezProgram, "msigProgram": gLezMsigProgram, "questProgram": gLezQuestProgram},
     "delivery": gDeliveryConfig,
     # the mix setting, and the level the next node is asked for: a delivery config that
     # names its own level (or turns mix off) wins over the setting (exo-dcc.4)
@@ -5772,6 +6226,15 @@ proc musterSetSetting(key, value: string): string =
       gIdentityBackend = v
       if v == "local": gIdentityAccount = ""
       gKeystore = nil       # the next use opens the keyfile again and wraps it as set
+  of "lez-quest-program":
+    # the quest record program (exo-267.8, programs/lez-quest): its account id on the zone,
+    # hex or base58; "" turns quests off
+    let v = value.strip()
+    if v.len > 0:
+      try: discard lezIdOf(v)
+      except CatchableError:
+        return $(%*{"error": "lez-quest-program is the program's account id: hex (64) or base58"})
+    gLezQuestProgram = v
   of "keystore-backend":
     # exo-149.2: whether a keystore_module account may approve in-room. "interim" carries
     # muster's attestation as an opaque digest leg the signer cannot read (the card says

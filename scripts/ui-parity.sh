@@ -58,8 +58,9 @@ declare -A SUITE=(
   [split]="scripts/split-self-test.sh"
   [split-btc]="nix shell nixpkgs#bitcoind -c scripts/split-btc-self-test.sh"
   [voice]="scripts/voice-self-test.sh"
+  [charter]="scripts/charter-self-test.sh"
 )
-ORDER=(card install infra-safe infra-threshold audit invite two-instance relaunch leave room-copy split split-btc voice)
+ORDER=(card install infra-safe infra-threshold audit invite two-instance relaunch leave room-copy split split-btc voice charter)
 [ $# -gt 0 ] && ORDER=("$@")
 
 LOGS=$(mktemp -d)

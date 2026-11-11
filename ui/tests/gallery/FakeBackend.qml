@@ -5,7 +5,7 @@ import QtQuick
 
 QtObject {
     // the contract's PROP names, in .rep order (the recorder snapshots exactly these)
-    readonly property var contractProps: ["health", "settingsJson", "accountJson", "intentId", "intentEffect", "intentTxhash", "intentState", "lastError", "balancesJson", "walletAccountsJson", "lezPreviewJson", "lezSendJson", "roomTopic", "messagesJson", "membersJson", "contactsJson", "intentsJson", "invitesJson", "activityJson", "connectivityJson", "securityLevelsJson", "roomAccountJson", "roomSubmitJson", "readinessJson", "offersJson", "composeOffersJson", "declineJson", "auditJson", "outsideJson", "outsideImportJson", "btcProposeJson", "splitJson", "tokenInfoJson", "openAssetsJson", "lezProposeJson", "lezMemberJson", "lezCreateJson", "frostCeremoniesJson", "frostCeremonyJson", "xmrMsigSetupsJson", "xmrMsigSetupJson", "xmrMsigSpendsJson", "xmrMsigProposeJson", "lezMsigCeremoniesJson", "lezMsigOpenJson", "lezMsigProposeJson", "lezMsigFundJson", "lezMsigRecoverJson", "memberAccountsJson", "discloseAccountJson", "lezMsigStateJson", "flowJson", "graphJson", "policyJson", "policyErrorJson", "accountsJson", "accountDiscloseJson", "driversJson", "availableActionsJson", "executeJson", "contributeJson", "conversationsJson", "pendingJson", "joinStatus", "rlnStatusJson", "keystoreStatusJson", "keystoreRequestsJson", "identityPlatformJson", "identityAskJson", "walletSummaryJson", "supportJson", "supportSendJson", "fileShareJson", "fileShareResultJson", "voiceJson", "voiceResultJson", "voiceResultSeq"]
+    readonly property var contractProps: ["health", "settingsJson", "accountJson", "intentId", "intentEffect", "intentTxhash", "intentState", "lastError", "balancesJson", "walletAccountsJson", "lezPreviewJson", "lezSendJson", "roomTopic", "messagesJson", "membersJson", "contactsJson", "intentsJson", "invitesJson", "activityJson", "connectivityJson", "securityLevelsJson", "roomAccountJson", "roomSubmitJson", "readinessJson", "offersJson", "composeOffersJson", "declineJson", "auditJson", "outsideJson", "outsideImportJson", "btcProposeJson", "splitJson", "tokenInfoJson", "openAssetsJson", "lezProposeJson", "lezMemberJson", "lezCreateJson", "frostCeremoniesJson", "frostCeremonyJson", "xmrMsigSetupsJson", "xmrMsigSetupJson", "xmrMsigSpendsJson", "xmrMsigProposeJson", "lezMsigCeremoniesJson", "lezMsigOpenJson", "lezMsigProposeJson", "lezMsigFundJson", "lezMsigRecoverJson", "memberAccountsJson", "discloseAccountJson", "lezMsigStateJson", "flowJson", "graphJson", "policyJson", "policyErrorJson", "accountsJson", "accountDiscloseJson", "driversJson", "availableActionsJson", "executeJson", "contributeJson", "conversationsJson", "pendingJson", "joinStatus", "rlnStatusJson", "keystoreStatusJson", "keystoreRequestsJson", "identityPlatformJson", "identityAskJson", "walletSummaryJson", "supportJson", "supportSendJson", "fileShareJson", "fileShareResultJson", "voiceJson", "voiceResultJson", "voiceResultSeq", "questsJson", "questResultJson", "charterJson", "charterResultJson", "circleJson", "circleResultJson", "lezConfigResultJson"]
     // every SLOT call, in order: [{slot, args}]
     property var calls: []
     function record(slot, args) { calls.push({ slot: slot, args: Array.prototype.slice.call(args) }); }
@@ -87,6 +87,13 @@ QtObject {
     property string voiceJson: "{}"
     property string voiceResultJson: ""
     property string voiceResultSeq: "0"
+    property string questsJson: "[]"
+    property string questResultJson: ""
+    property string charterJson: "{}"
+    property string charterResultJson: ""
+    property string circleJson: "{}"
+    property string circleResultJson: ""
+    property string lezConfigResultJson: ""
 
     function checkHealth() { record("checkHealth", arguments); }
     function loadAccount() { record("loadAccount", arguments); }
@@ -196,4 +203,17 @@ QtObject {
     function discardVoiceDraft() { record("discardVoiceDraft", arguments); }
     function playVoiceNote(noteId) { record("playVoiceNote", arguments); }
     function stopVoicePlayback() { record("stopVoicePlayback", arguments); }
+    function loadQuests() { record("loadQuests", arguments); }
+    function proposeQuest(termsJson) { record("proposeQuest", arguments); }
+    function proposeQuestClose(questId) { record("proposeQuestClose", arguments); }
+    function proposeQuestCancel(questId) { record("proposeQuestCancel", arguments); }
+    function questAccept(questId, account) { record("questAccept", arguments); }
+    function questConfirm(questId, account) { record("questConfirm", arguments); }
+    function verifyQuest(refJson) { record("verifyQuest", arguments); }
+    function loadCharter() { record("loadCharter", arguments); }
+    function proposeCharter(specJson) { record("proposeCharter", arguments); }
+    function loadCircle() { record("loadCircle", arguments); }
+    function circlePayIn(round) { record("circlePayIn", arguments); }
+    function proposeCirclePayout(round) { record("proposeCirclePayout", arguments); }
+    function proposeLezConfig(specJson) { record("proposeLezConfig", arguments); }
 }

@@ -411,6 +411,12 @@ Rectangle {
     readonly property var xmrMsig: (cardRoot.card && cardRoot.card.xmrMsig) ? cardRoot.card.xmrMsig : null
     // a lez-msig proposal, decoded by the module from the bytes its approvals sign (exo-0d3)
     readonly property var msig: (cardRoot.card && cardRoot.card.msig) ? cardRoot.card.msig : null
+    // a charter proposal and where it stands: pending, in force, out of rule, stale… (exo-267.1)
+    readonly property var charter: (cardRoot.card && cardRoot.card.charter) ? cardRoot.card.charter : null
+    // a payout from a savings circle's pot: the round it pays, or why it is off schedule (exo-267.3)
+    readonly property var circle: (cardRoot.card && cardRoot.card.circle) ? cardRoot.card.circle : null
+    // a change of the multisig's members or threshold (exo-267.6)
+    readonly property var lezConfig: (cardRoot.card && cardRoot.card.lezConfig) ? cardRoot.card.lezConfig : null
     readonly property bool isXmr: cardRoot.xmr !== null
     // MY share's link, if I owe one: {part, ok, uri, amount, payTo, why, reported, confirmed}
     readonly property var xmrPay: (cardRoot.xmr && cardRoot.xmr.payment) ? cardRoot.xmr.payment : null

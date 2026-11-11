@@ -1,0 +1,8 @@
+vector.json: one getTransaction answer from a real LEZ v0.3.0 sequencer, for muster's decoder
+(lez/tx.nim decodeLeeTxPublic, exo-267.3).
+
+Recorded 2026-11-10 from infra/lez/localnet.sh (LEZ v0.3.0, logos-blockchain/logos-execution-zone
+@ v0.3.0, the line the public testnet runs): the zone's genesis funder sent 777 base units to the
+account 0x22…22 with `infra/lez/localnet.sh fund`, and getTransaction(hash) answered `result`
+verbatim: the base64 of LeeTransaction::Public's borsh, and the block that included it.
+`hash` is the funder wallet's own report; it equals SHA-256 of the transaction's borsh.

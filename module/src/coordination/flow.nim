@@ -15,7 +15,7 @@
 ## prefix names the store node, since every entry is an envelope it keeps.
 ## Nothing here is per-viewer; it is the room's shared truth (invariant 4).
 
-import std/[json, tables, strutils, algorithm, sets]
+import std/[json, tables, strutils, algorithm, sets, sequtils]
 import ../log/log
 import ../drivers/manifest
 import ../drivers/profile      # the chain a row reaches comes from the driver's profile
@@ -42,11 +42,17 @@ proc foundersOf*(events: seq[Event], roster: seq[string]): seq[string] =
   ## The members present at epoch 0: the roster minus every joiner the log admits. The
   ## log names admits, not the founding set, so the caller supplies the roster.
   var admitted = initHashSet[string]()
+  var removed: seq[string]
   for e in events:
     let p = e.key.split('/')
     if p.len >= 4 and p[0] == "membership" and p[2] == "admit": admitted.incl p[3].toLowerAscii()
+    if p.len >= 4 and p[0] == "membership" and p[2] == "remove": removed.add p[3].toLowerAscii()
   for m in roster:
     if m.toLowerAscii() notin admitted: result.add m
+  # someone removed since (exo-267.6) is off the roster, yet read the room until then: a
+  # founder unless the log admits them
+  for m in removed:
+    if m notin admitted and not result.anyIt(it.toLowerAscii() == m): result.add m
 
 proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
                  founders: seq[string], sealedIn = initTable[string, int](),
@@ -63,12 +69,18 @@ proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
   let ordered = canonicalOrder(events)
   var epoch = 0
   var admittedAt = initTable[string, int]()   # joiner → the epoch its admission opened
+  var removedAt = initTable[string, int]()    # member → the epoch their removal opened (exo-267.6)
   for e in ordered:
     let p = e.key.split('/')
     if p.len >= 4 and p[0] == "membership" and p[2] == "admit":
       try:
         let ep = parseInt(p[1])
         admittedAt[p[3]] = min(admittedAt.getOrDefault(p[3], ep), ep)
+      except ValueError: discard
+    if p.len >= 4 and p[0] == "membership" and p[2] == "remove":
+      try:
+        let ep = parseInt(p[1])
+        removedAt[p[3]] = min(removedAt.getOrDefault(p[3], ep), ep)
       except ValueError: discard
   var manifests = initTable[string, ActionManifest]()   # intent id → manifest
   var chains = initTable[string, string]()              # intent id → the chain its driver settles on
@@ -77,6 +89,7 @@ proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
     var present = initHashSet[string]()
     for f in founders: present.incl f
     for j, at in admittedAt: (if at <= ep: present.incl j)
+    for m, at in removedAt: (if at <= ep and admittedAt.getOrDefault(m, -1) < at: present.excl m)
     for m in present: result.add m
     result.sort()
   var entryEpoch = 0
@@ -93,11 +106,11 @@ proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
   for i in 0 ..< ordered.len:
     let e = ordered[i]
     let p = e.key.split('/')
-    if p.len >= 4 and p[0] == "membership" and p[2] == "admit":
+    if p.len >= 4 and p[0] == "membership" and p[2] in ["admit", "remove"]:
       try: epoch = max(epoch, parseInt(p[1]))
       except ValueError: discard
       entryEpoch = sealedIn.getOrDefault(eventId(e), epoch)
-      result.addRows(i, "admit", "", @[row("membership", obRoomMember)] & envelope, true)
+      result.addRows(i, p[2], "", @[row("membership", obRoomMember)] & envelope, true)
       continue
     entryEpoch = sealedIn.getOrDefault(eventId(e), epoch)
     if p.len >= 2 and p[0] == "message":

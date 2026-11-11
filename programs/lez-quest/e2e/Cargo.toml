@@ -1,0 +1,19 @@
+[package]
+name = "quest_e2e"
+version = "0.1.0"
+edition = "2024"
+
+# The quest program on a running LEZ v0.3.0 sequencer, issued by a person and by a LEZ
+# multisig. Not part of `cargo test`: it needs a chain, both programs deployed and a way to
+# fund accounts (see src/main.rs).
+[dependencies]
+quest_core = { path = "../quest_core" }
+lee = { git = "https://github.com/logos-blockchain/logos-execution-zone.git", tag = "v0.3.0", package = "lee" }
+lee_core = { workspace = true, features = ["host"] }
+common = { git = "https://github.com/logos-blockchain/logos-execution-zone.git", tag = "v0.3.0" }
+borsh.workspace = true
+sha2.workspace = true
+base64 = "0.22.1"
+serde_json = "1"
+ureq = { version = "2", features = ["json"] }
+rand = "0.8.5"

@@ -287,6 +287,85 @@ void MusterUiBackend::stopVoicePlayback()
     loadVoice();
 }
 
+// ── Quests (exo-267.8, docs/design/lez-quest-program.md) ───────────────────────────
+// The module builds every call and reads every record; the backend only carries answers.
+// Each step re-reads the list.
+void MusterUiBackend::loadQuests()
+{
+    setQuestsJson(modules().muster_module.coordinate_quests());
+}
+
+void MusterUiBackend::proposeQuest(const QString &termsJson)
+{
+    setQuestResultJson(modules().muster_module.coordinate_propose_quest(termsJson));
+    loadQuests();
+}
+
+void MusterUiBackend::proposeQuestClose(const QString &questId)
+{
+    setQuestResultJson(modules().muster_module.coordinate_propose_quest_close(questId));
+    loadQuests();
+}
+
+void MusterUiBackend::proposeQuestCancel(const QString &questId)
+{
+    setQuestResultJson(modules().muster_module.coordinate_propose_quest_cancel(questId));
+    loadQuests();
+}
+
+void MusterUiBackend::questAccept(const QString &questId, const QString &account)
+{
+    setQuestResultJson(modules().muster_module.coordinate_quest_accept(questId, account));
+    loadQuests();
+}
+
+void MusterUiBackend::questConfirm(const QString &questId, const QString &account)
+{
+    setQuestResultJson(modules().muster_module.coordinate_quest_confirm(questId, account));
+    loadQuests();
+}
+
+void MusterUiBackend::verifyQuest(const QString &refJson)
+{
+    setQuestResultJson(modules().muster_module.coordinate_verify_quest(refJson));
+}
+
+// ── The room's charter (exo-267.1, coordination/room_charter.nim) ──────────────────
+void MusterUiBackend::loadCharter()
+{
+    setCharterJson(modules().muster_module.coordinate_charter());
+}
+
+void MusterUiBackend::proposeCharter(const QString &specJson)
+{
+    setCharterResultJson(modules().muster_module.coordinate_propose_charter(specJson));
+    loadCharter();
+}
+
+// ── The room's savings circle (exo-267.3, coordination/circle.nim) ─────────────────
+void MusterUiBackend::loadCircle()
+{
+    setCircleJson(modules().muster_module.coordinate_circle());
+}
+
+void MusterUiBackend::circlePayIn(const QString &round)
+{
+    setCircleResultJson(modules().muster_module.coordinate_circle_pay_in(round));
+    loadCircle();
+}
+
+void MusterUiBackend::proposeCirclePayout(const QString &round)
+{
+    setCircleResultJson(modules().muster_module.coordinate_propose_circle_payout(round));
+    loadCircle();
+}
+
+// ── A change of the room's LEZ multisig (exo-267.6, coordination/member_changes.nim) ──
+void MusterUiBackend::proposeLezConfig(const QString &specJson)
+{
+    setLezConfigResultJson(modules().muster_module.coordinate_propose_lez_config(specJson));
+}
+
 void MusterUiBackend::loadWalletAccounts()
 {
     // Every account across chains, with a LEZ account's shareable address (the `share`
@@ -1502,6 +1581,12 @@ void MusterUiBackend::onContextReady()
                                     qInfo().noquote() << "[muster_ui] AUTOAWAY joined" << QString::fromUtf8(away);
                                 });
                             }
+                        } else if (!qgetenv("MUSTER_AUTOCHARTER").isEmpty()) {
+                            // Charter self-test (exo-267.1): MUSTER_AUTOCHARTER=<spec> founds the
+                            // room's charter once the other member is in, so the template's
+                            // default members are both — the Charter tab's "Propose founding it"
+                            proposeCharter(QString::fromUtf8(qgetenv("MUSTER_AUTOCHARTER")));
+                            qInfo().noquote() << "[muster_ui] CHARTER found ->" << charterResultJson();
                         } else {
                             proposeInRoom(QStringLiteral("{\"to\":\"0x1111111111111111111111111111111111111111\",\"value\":1000,\"nonce\":0}"));
                         }
@@ -1571,6 +1656,48 @@ void MusterUiBackend::onContextReady()
                                 paid.insert(id);
                         }
                     }
+                }
+                // Charter self-test (exo-267.1): MUSTER_AUTOCHARTER_AMEND=<spec> proposes that
+                // amendment once a charter is in force (the Charter tab's "Propose this
+                // change"); MUSTER_AUTOCHARTER_APPROVE approves, on its card, every pending
+                // charter proposal that names this member among those who decide it —
+                // =founding approves foundings only, so an amendment takes force by the other
+                // member's approval alone. A refusal is tried again every 3s, for up to 60s:
+                // a proposal's context can land a tick after it (exo-ca3). Logged each tick.
+                const QString charterAmend = QString::fromUtf8(qgetenv("MUSTER_AUTOCHARTER_AMEND"));
+                const QString charterApprove = QString::fromUtf8(qgetenv("MUSTER_AUTOCHARTER_APPROVE"));
+                if (!qgetenv("MUSTER_AUTOCHARTER").isEmpty() || !charterAmend.isEmpty() || !charterApprove.isEmpty()) {
+                    static bool charterAmended = false;
+                    static QHash<QString, qint64> charterAgainAt, charterGiveUpAt;
+                    loadCharter();
+                    const QJsonObject cv = QJsonDocument::fromJson(charterJson().toUtf8()).object();
+                    // a charter that sets rounds: its circle too, as the Charter tab shows it (exo-267.3)
+                    if (cv.value("body").toObject().contains("schedule")) loadCircle();
+                    if (!charterAmend.isEmpty() && !charterAmended && cv.value("found").toBool()) {
+                        charterAmended = true;
+                        proposeCharter(charterAmend);
+                        qInfo().noquote() << "[muster_ui] CHARTER amend ->" << charterResultJson();
+                    }
+                    const QString me = cv.value("me").toString();
+                    const qint64 now = QDateTime::currentSecsSinceEpoch();
+                    for (const auto &v : QJsonDocument::fromJson(intentsJson().toUtf8()).array()) {
+                        const QJsonObject it = v.toObject();
+                        const QJsonObject c = it.value("charter").toObject();
+                        const QString id = it.value("id").toString();
+                        if (charterApprove.isEmpty() || c.isEmpty() || c.value("standing").toString() != "pending"
+                            || it.value("approvedByMe").toBool() || !c.value("electorate").toArray().contains(me)
+                            || (charterApprove == "founding" && !c.value("founding").toBool())
+                            || now < charterAgainAt.value(id, 0) || now > charterGiveUpAt.value(id, now + 60))
+                            continue;
+                        if (!charterGiveUpAt.contains(id)) charterGiveUpAt[id] = now + 60;
+                        charterAgainAt[id] = now + 3;
+                        contributeInRoom(id, QString(), QString());
+                        qInfo().noquote() << "[muster_ui] CHARTER approved" << id << "->" << contributeJson();
+                    }
+                    qInfo().noquote() << QStringLiteral("[muster_ui] CHARTER found=%1 name=%2 history=%3")
+                                             .arg(cv.value("found").toBool() ? "true" : "false")
+                                             .arg(cv.value("body").toObject().value("name").toString())
+                                             .arg(cv.value("history").toArray().size());
                 }
                 // FileShare self-test (exo-4d0): MUSTER_AUTOFILESHARE=<path> shares that file
                 // once someone else is in the room; MUSTER_AUTOFILEFETCH=<folder> fetches every

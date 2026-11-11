@@ -7,10 +7,13 @@ import Logos.Icons
 
 // Room details, on demand (exo-720.8, docs/design/ui-modernization.md §4 U4): the room's
 // meta-state, which used to be a 320 px column always on screen, now a drawer closed by
-// default. Four tabs, the same components and the same folds of the sealed log as before:
+// default. Seven tabs, the same components and the same folds of the sealed log as before:
 //   People    who is in the room, who asks to join, the room's security level (ScopePanel)
+//   Charter   the room's charter: who decides what, and how it changes (exo-267.1)
 //   Accounts  the accounts members disclosed into the room, and the forms to add one
 //   FileShare files shared in the room, sealed, moved by Logos Storage (exo-4d0)
+//   Quests    quests the room's LEZ multisig issues and closes, taken and confirmed by
+//             people's own accounts (exo-267.8)
 //   History   how the room reached its state (ActivityFeed)
 //   Privacy   who can see what (FlowView); the store node is always listed (FS-9)
 // Its connections moved to the header's dot (RoomHeader). The Room decides where the drawer
@@ -20,7 +23,7 @@ Rectangle {
     id: details
     required property var room   // the Room this piece belongs to (Room.qml's roomItem)
 
-    readonly property var tabs: ["people", "accounts", "files", "history", "privacy"]
+    readonly property var tabs: ["people", "charter", "accounts", "files", "quests", "history", "privacy"]
     color: Theme.palette.backgroundTertiary
 
     Rectangle {      // the edge against the thread
@@ -53,18 +56,32 @@ Rectangle {
                 onClicked: details.room.closeDetails()
             }
         }
+        // each tab is its label's width (a TabBar otherwise splits the width evenly, and at
+        // six tabs the side panel's ~60 px a tab overlapped "Accounts" and "FileShare"); past
+        // the panel's width the bar flicks sideways
         LogosTabBar {
             id: tabBar
             objectName: "roomDetailsTabs"
+            clip: true           // a scrolled bar stays inside the panel
             Layout.fillWidth: true
             Layout.leftMargin: Theme.spacing.small
             currentIndex: Math.max(0, details.tabs.indexOf(details.room.detailsTab))
             onCurrentIndexChanged: details.room.detailsTab = details.tabs[currentIndex]
-            LogosTabButton { objectName: "roomDetailsPeople"; text: qsTr("People") }
-            LogosTabButton { objectName: "roomDetailsAccounts"; text: qsTr("Accounts") }
-            LogosTabButton { objectName: "roomDetailsFiles"; text: qsTr("FileShare") }
-            LogosTabButton { objectName: "roomDetailsHistory"; text: qsTr("History") }
-            LogosTabButton { objectName: "roomDetailsPrivacy"; text: qsTr("Privacy") }
+            // the style's list keeps the current tab 40 px off each edge, so choosing the
+            // second tab scrolled the first under the edge; keep it merely in view instead
+            Component.onCompleted: {
+                var list = contentItem;   // the style's ListView, typed only as an Item
+                if (list.preferredHighlightBegin === undefined) return;
+                list.preferredHighlightBegin = 0;
+                list.preferredHighlightEnd = Qt.binding(function () { return list.width; });
+            }
+            LogosTabButton { objectName: "roomDetailsPeople"; text: qsTr("People"); width: implicitWidth }
+            LogosTabButton { objectName: "roomDetailsCharter"; text: qsTr("Charter"); width: implicitWidth }
+            LogosTabButton { objectName: "roomDetailsAccounts"; text: qsTr("Accounts"); width: implicitWidth }
+            LogosTabButton { objectName: "roomDetailsFiles"; text: qsTr("FileShare"); width: implicitWidth }
+            LogosTabButton { objectName: "roomDetailsQuests"; text: qsTr("Quests"); width: implicitWidth }
+            LogosTabButton { objectName: "roomDetailsHistory"; text: qsTr("History"); width: implicitWidth }
+            LogosTabButton { objectName: "roomDetailsPrivacy"; text: qsTr("Privacy"); width: implicitWidth }
         }
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.palette.borderSubtle }
 
@@ -84,6 +101,21 @@ Rectangle {
                 securityLevels: details.room.securityLevels
                 onRequestJoin: if (details.room.backend) details.room.backend.requestJoin()
                 onAdmit: function (identityHex) { details.room.admitMember(identityHex); }
+            }
+
+            // ── Charter: who decides what, and how that changes (exo-267.1) ──
+            Flickable {
+                clip: true
+                contentWidth: width
+                contentHeight: charter.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                RoomCharter {
+                    id: charter
+                    objectName: "roomCharter"
+                    width: parent.width
+                    backend: details.room.backend
+                    room: details.room
+                }
             }
 
             // ── Accounts ──────────────────────────────────────────────────
@@ -187,6 +219,21 @@ Rectangle {
                 RoomFileShare {
                     id: fileShare
                     objectName: "roomFileShare"
+                    width: parent.width
+                    backend: details.room.backend
+                    room: details.room
+                }
+            }
+
+            // ── Quests: issued and closed by the room's LEZ multisig (exo-267.8) ──
+            Flickable {
+                clip: true
+                contentWidth: width
+                contentHeight: quests.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                RoomQuests {
+                    id: quests
+                    objectName: "roomQuests"
                     width: parent.width
                     backend: details.room.backend
                     room: details.room

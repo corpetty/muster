@@ -589,4 +589,43 @@ class MusterUi
     PROP(QString voiceJson="{}" READONLY)
     PROP(QString voiceResultJson="" READONLY)
     PROP(QString voiceResultSeq="0" READONLY)
+
+    // Quests (exo-267.8, docs/design/lez-quest-program.md): issued and closed by the room's
+    // LEZ multisig (a proposal the room votes on), taken and confirmed by a person's own LEZ
+    // account. loadQuests reads coordinate_quests into questsJson; the rest start a step
+    // and put its answer in questResultJson ({pending} | {error} | a proposal's pending JSON);
+    // verifyQuest puts coordinate_verify_quest's answer there too.
+    SLOT(void loadQuests())
+    SLOT(void proposeQuest(const QString &termsJson))
+    SLOT(void proposeQuestClose(const QString &questId))
+    SLOT(void proposeQuestCancel(const QString &questId))
+    SLOT(void questAccept(const QString &questId, const QString &account))
+    SLOT(void questConfirm(const QString &questId, const QString &account))
+    SLOT(void verifyQuest(const QString &refJson))
+    PROP(QString questsJson="[]" READONLY)
+    PROP(QString questResultJson="" READONLY)
+
+    // The room's charter (exo-267.1, coordinate_charter): the one in force, its history,
+    // and every charter proposal with its standing. proposeCharter sends a body or a
+    // {template: "circle", …} (coordinate_propose_charter) and puts its answer in
+    // charterResultJson ({intentId, founding} | {error, detail}).
+    SLOT(void loadCharter())
+    SLOT(void proposeCharter(const QString &specJson))
+    PROP(QString charterJson="{}" READONLY)
+    PROP(QString charterResultJson="" READONLY)
+
+    // The room's savings circle (exo-267.3, coordinate_circle): each round from the pot, who
+    // has paid in, every payout asked of the vault and whether it is the schedule's.
+    // circlePayIn pays THIS member's share for a round from an account they shared;
+    // proposeCirclePayout proposes a round's payout. Both answer in circleResultJson.
+    SLOT(void loadCircle())
+    SLOT(void circlePayIn(const QString &round))
+    SLOT(void proposeCirclePayout(const QString &round))
+    PROP(QString circleJson="{}" READONLY)
+    PROP(QString circleResultJson="" READONLY)
+
+    // A change of the room's LEZ multisig: add or remove a member, or its threshold
+    // (exo-267.6, coordinate_propose_lez_config). Its answer goes in lezConfigResultJson.
+    SLOT(void proposeLezConfig(const QString &specJson))
+    PROP(QString lezConfigResultJson="" READONLY)
 }
