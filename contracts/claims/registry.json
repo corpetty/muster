@@ -420,11 +420,11 @@
       "step": "open-room",
       "kind": "gap",
       "title": "Leaving a room re-keys nothing",
-      "body": "Leaving stops this device following the room, but it announces nothing and changes no key, and no method removes another member. The others still count the one who left, so each new room key is granted to them too: by reading the topic again, a former member opens every later message and voice note.",
-      "fix": "removing a member, carried by the room: leaving, or removing a member, is announced and moves the room to a new key that only the members who remain receive, so nothing sealed afterwards opens for the one who left. Muster's key handling already changes the key on removal; nothing in the room calls it yet",
+      "body": "Leaving stops this device following the room, but it announces nothing and changes no key. The others still count the one who left, so each new room key is granted to them too: by reading the topic again, a former member opens every later message and voice note. Removing a member does change the key, but only in a room that acts from a LEZ multisig: once the chain carries out a removal the room voted on, the proposer's Muster moves the room to a new key the removed member does not receive.",
+      "fix": "leaving, carried by the room as a removal is: leaving is announced and moves the room to a new key that only the members who remain receive, so nothing sealed afterwards opens for the one who left. A room on a LEZ multisig already does this when the chain carries out a removal; leaving does not yet, and nor does removing a member from any other room",
       "status": "partial",
       "credibility": "exposed",
-      "party": "a former member, who keeps every room key they were given and is granted the later ones"
+      "party": "a member who left, who keeps every room key they were given and is granted the later ones"
     },
     {
       "step": "open-room",

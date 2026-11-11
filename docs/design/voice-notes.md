@@ -944,8 +944,11 @@ sixth. Each stays true after this PR:
 3. **Co-resident modules, with the access policy off** (§13).
 4. **Leaving re-keys nothing.**
    - `coordinate_leave` announces nothing and re-keys nothing (`muster.lidl:133`).
-   - No method removes another member: F-16's "Removing a member rotates the epoch
-     immediately" is not built.
+   - Removing another member re-keys the room only in a room on a LEZ v0.3 multisig: once
+     the chain executes a removal the room voted on (`coordinate_propose_lez_config`), the
+     proposer's client re-keys the removed member out (`CoordinationSession.expel`, from
+     `main`'s exo-267.6), and they open no note sealed after it. No other room has a way to
+     remove a member.
    - So a member who left can still open every later note, as they can open later text, by
      reading the topic again.
 5. **No mix test.**
@@ -985,8 +988,9 @@ existing gap the claim names, and item 5 makes no claim:
   not run under it; the party is the co-resident modules);
 - "Leaving a room re-keys nothing" (`partial`: the key layer rotates on removal,
   `EpochCrypto.removeMember` (`epoch_crypto.nim:135`, exercised by
-  `epoch_crypto_test.nim:61`), and no room path calls it; the party is a former member). It
-  is a room-wide gap that no entry named before, and it leaves the F-16 protects claim at the
+  `epoch_crypto_test.nim:61`), and since `main`'s exo-267.6 a room on a LEZ v0.3 multisig
+  calls it when the chain executes a removal, but leaving calls nothing; the party is a
+  member who left). It is a room-wide gap that no entry named before, and it leaves the F-16 protects claim at the
   top of the same step half true (§18);
 - "A Muster from before voice notes hands them to the modules beside it" (`partial`: a
   member who runs a Muster with voice notes serves no audio, and nothing here reaches an
@@ -1994,10 +1998,12 @@ Still open:
   rotates the epoch immediately." That is true of the key layer: `EpochCrypto.removeMember`
   (`epoch_crypto.nim:135`) rotates it, as `epoch_crypto_test.nim:61` shows, and
   `probe_epoch_removal_immediate` shows the same for the epoch model in `crypto/epochs.nim`.
-  But no room path removes a member, which is the S10 gap "Leaving a room re-keys nothing" in
-  the same step. Reword it (for example "The key layer rotates the epoch on removal; nothing in the
-  room removes a member yet, the gap below"), or keep it. This PR leaves it as it is on
-  `main`;
+  But only a room on a LEZ v0.3 multisig removes a member (`main`'s exo-267.6: the
+  proposer's client re-keys them out once the chain executes the removal), and leaving
+  re-keys nothing, which is the S10 gap "Leaving a room re-keys nothing" in the same step.
+  Reword it (for example "The key layer rotates the epoch on removal; a room on a LEZ
+  multisig removes a member that way, and leaving does not yet, the gap below"), or keep it.
+  This PR leaves it as it is on `main`;
 - whether to coarsen `voice_status`'s peak for co-resident callers (§13);
 - the exact disclosure wording on the draft surface (§8);
 - whether the gaps of §10 stay registry entries of their own, as S10 added them, or fold into
