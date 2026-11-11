@@ -865,7 +865,7 @@ the notes it keeps (§6 rules 2 to 4), by event id: exactly the ids `reduceVoice
 in `parts`, whatever each note's state. So the flow, provenance and the room map agree with
 the fold on what is a part, and an entry under `voice/` that is none, by its key, its value,
 an equivocating later copy or a squatted note id, is no part in any of them.
-- **A `voice/` branch in `flow.nim`** (`:133-145` on this branch). On `main` an unknown
+- **A `voice/` branch in `flow.nim`** (`:146-158` on this branch). On `main` an unknown
   prefix falls through to envelope-only rows (`flow.nim:121-124`), which would show the room
   nothing about its own content. With the branch, each part shows:
   - room-member: `voice-note`, `voice-note-length`;
@@ -886,9 +886,9 @@ an equivocating later copy or a squatted note id, is no part in any of them.
   names the one fixed size, which marks a voice note but not its length
   (`room_graph.nim:118-122` on this branch). Its `content` carries no `part` (above). Pinned
   by `voice_test` §14, the `file/` facet by `swarm_test` §8.
-- **Provenance.** A `logProvenance` item (`intents.nim:829`, `:830` on this branch) for each
+- **Provenance.** A `logProvenance` item (`intents.nim:829`, `:839` on this branch) for each
   standing part, as a peer message in its author's name at the epoch whose key opened it
-  (`intents.nim:873-887` on this branch), and none for an entry that is no note's part.
+  (`intents.nim:882-896` on this branch), and none for an entry that is no note's part.
   Pinned by `voice_test` §15.
 
 `voice_test` pins those rows field for field, the way `swarm_test` §8 pins FileShare's.
