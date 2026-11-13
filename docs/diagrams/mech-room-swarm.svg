@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 736" width="880" height="736" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>FileShare: a file swarm whose tracker is the room</title>
+  <desc>A member shares a file by sealing it under a fresh key and uploading the ciphertext, under a neutral name, to their own Logos Storage node; the room carries the file's name, size, digest, content id and key, sealed to its members, and each seeder signs its own announce. A member fetches from the seeders the room lists, opens the ciphertext and refuses it if the digest differs. Room members see the file and every seeder's address; the store node, storage peers, the storage DHT and mix nodes see neither the plaintext nor the name. Until two asks of the Storage team land, the storage DHT sees the ciphertext's content id and who serves it, and anyone holding that id can fetch the ciphertext.</desc>
+<!-- provenance
+     serves:   POST
+     shows:    FileShare: share, the room as the tracker, fetch then seed; who sees what,
+               from a room member to the storage DHT; the gap until the Storage team's
+               asks land; and a private BitTorrent tracker beside it.
+     sources:  docs/design/room-swarm.md
+               module/src/crypto/blob_seal.nim
+               module/src/coordination/swarm.nim
+               module/src/coordination/swarm_live.nim
+               scripts/fileshare-self-test.sh
+     evidence: [from-source] The three steps and the who-sees-what rows, from room-
+                   swarm.md §5.2–§5.5 and the code that builds them
+               [measured] A private fetch at about 15 KB/s on logos.dev (room-swarm.md
+                   §3, S0); two runners share and fetch byte-identical in fileshare-self-
+                   test.sh
+               [from-source] The gap — the DHT sees the ciphertext's content id and its
+                   providers, and an advertised dataset is served to whoever asks — until
+                   asks 1 and 2 (room-swarm.md §3, §6; the claims registry's gap)
+               [from-source] The private-tracker comparison, from room-swarm.md §4
+     recheck:  Re-check when the Storage team's asks 1 and 2 land (a peer lookup the room
+               supplies; serving without announcing): the gap box and the storage DHT row
+               change then.
+-->
+
+  <rect width="880" height="736" fill="#E4E6E0"/>
+
+  <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">FileShare: a file swarm whose tracker is the room</text>
+  <text x="40" y="64" font-size="13.5" fill="#656E66">Logos Storage moves sealed bytes. The room decides who can read them, and whom to ask for them.</text>
+
+  <rect x="40" y="80" width="800" height="30" rx="5" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1.2"/>
+  <rect x="52" y="88" width="80" height="15" rx="7.5" fill="#1E6B52"/>
+  <text x="92" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#DFEDE6">BUILT · F-17</text>
+  <text x="144" y="99" font-size="10" fill="#2A4A3C">In every release since Muster 0.3.3: share, fetch and seed between two runners, byte for byte (fileshare-self-test.sh)</text>
+
+  <!-- ══ share → the room → fetch ══ -->
+  <rect x="40" y="130" width="250" height="104" rx="6" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.2"/>
+  <text x="56" y="152" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">1 · SHARE</text>
+  <text x="56" y="174" font-size="11" fill="#1A1F1C">Sealed before it leaves</text>
+  <text x="56" y="194" font-size="9.5" fill="#656E66">A fresh key for every file; the ciphertext</text>
+  <text x="56" y="207" font-size="9.5" fill="#656E66">goes, under a neutral name, to the</text>
+  <text x="56" y="220" font-size="9.5" fill="#656E66">sharer's own storage node.</text>
+
+  <rect x="314" y="130" width="250" height="104" rx="6" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.2"/>
+  <text x="330" y="152" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">2 · THE ROOM IS THE TRACKER</text>
+  <text x="330" y="174" font-size="11" fill="#1A1F1C">The index and the peer list</text>
+  <text x="330" y="194" font-size="9.5" fill="#656E66">Name, size, digest, content id and key,</text>
+  <text x="330" y="207" font-size="9.5" fill="#656E66">sealed to the members. Each seeder</text>
+  <text x="330" y="220" font-size="9.5" fill="#656E66">signs its own announce. No server.</text>
+
+  <rect x="588" y="130" width="252" height="104" rx="6" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.2"/>
+  <text x="604" y="152" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">3 · FETCH, THEN SEED</text>
+  <text x="604" y="174" font-size="11" fill="#1A1F1C">Checked before it is kept</text>
+  <text x="604" y="194" font-size="9.5" fill="#656E66">Ask the seeders the room lists, open it,</text>
+  <text x="604" y="207" font-size="9.5" fill="#656E66">check the digest: a mismatch is refused,</text>
+  <text x="604" y="220" font-size="9.5" fill="#656E66">never kept as a partial file.</text>
+
+  <path d="M 292 182 L 312 182" stroke="#4B33C4" stroke-width="1.4" fill="none"/>
+  <path d="M 306 177 L 312 182 L 306 187" stroke="#4B33C4" stroke-width="1.4" fill="none"/>
+  <path d="M 566 182 L 586 182" stroke="#4B33C4" stroke-width="1.4" fill="none"/>
+  <path d="M 580 177 L 586 182 L 580 187" stroke="#4B33C4" stroke-width="1.4" fill="none"/>
+
+  <!-- ══ who sees what ══ -->
+  <text x="40" y="266" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#1A1F1C">WHO SEES WHAT</text>
+  <text x="250" y="266" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">SEES</text>
+  <text x="600" y="266" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#656E66">NEVER SEES</text>
+
+  <!-- inside the room -->
+  <rect x="40" y="276" width="800" height="40" rx="5" fill="#F7F8F5" stroke="#C6CBC3" stroke-width="1"/>
+  <text x="56" y="300" font-size="11" font-weight="600" fill="#1A1F1C">A room member</text>
+  <text x="250" y="294" font-size="9.5" fill="#1A1F1C">The file's name, size and sharer; each seeder by name,</text>
+  <text x="250" y="307" font-size="9.5" fill="#1A1F1C">with their storage peer id and addresses (IP)</text>
+  <text x="600" y="300" font-size="9.5" fill="#656E66">—</text>
+
+  <!-- beyond the room: the ground turns dark -->
+  <rect x="40" y="322" width="800" height="196" rx="5" fill="#23282A"/>
+  <text x="56" y="346" font-size="11" font-weight="600" fill="#DCE2DE">The delivery store node</text>
+  <text x="250" y="346" font-size="9.5" fill="#DCE2DE">That the room's topic carried an envelope, when, and its size</text>
+  <text x="600" y="346" font-size="9.5" fill="#8FA3F5">The file, its content id, who shared it</text>
+  <path d="M 56 360 L 824 360" stroke="#3A4144" stroke-width="1"/>
+
+  <text x="56" y="380" font-size="11" font-weight="600" fill="#DCE2DE">A storage peer</text>
+  <text x="250" y="380" font-size="9.5" fill="#DCE2DE">The peer id and IP of a node fetching or serving</text>
+  <text x="250" y="393" font-size="9.5" fill="#DCE2DE">a ciphertext's content id, and when</text>
+  <text x="600" y="380" font-size="9.5" fill="#8FA3F5">The plaintext, the name, the room</text>
+  <path d="M 56 407 L 824 407" stroke="#3A4144" stroke-width="1"/>
+
+  <text x="56" y="427" font-size="11" font-weight="600" fill="#DCE2DE">The storage DHT</text>
+  <text x="250" y="427" font-size="9.5" fill="#DCE2DE">The ciphertext's content id and the peer ids serving it,</text>
+  <text x="250" y="440" font-size="9.5" fill="#DCE2DE">so the seeders of one file are linkable to each other</text>
+  <text x="600" y="427" font-size="9.5" fill="#8FA3F5">The plaintext, the name, the room,</text>
+  <text x="600" y="440" font-size="9.5" fill="#8FA3F5">who in the room anyone is</text>
+  <path d="M 56 454 L 824 454" stroke="#3A4144" stroke-width="1"/>
+
+  <text x="56" y="474" font-size="11" font-weight="600" fill="#DCE2DE">A mix node</text>
+  <text x="56" y="488" font-size="9" fill="#8FA3F5">private fetch only</text>
+  <text x="250" y="474" font-size="9.5" fill="#DCE2DE">One hop of a tunnelled download</text>
+  <text x="600" y="474" font-size="9.5" fill="#8FA3F5">Both ends of it together</text>
+  <text x="250" y="504" font-size="9" fill="#8FA3F5">A private fetch connects to no seeder and seeds nothing after; on logos.dev it ran at about 15 KB/s.</text>
+
+  <!-- ══ the gap ══ -->
+  <rect x="40" y="538" width="800" height="72" rx="6" fill="#F6E3DF" stroke="#A32D1E" stroke-width="1.2"/>
+  <text x="56" y="560" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#A32D1E">A GAP, UNTIL TWO ASKS OF THE STORAGE TEAM LAND</text>
+  <text x="56" y="580" font-size="11" fill="#1A1F1C">Anyone who holds a file&#39;s content id can fetch its ciphertext, and the DHT names its seeders to whoever asks.</text>
+  <text x="56" y="598" font-size="9.5" fill="#656E66">Without the key that is ciphertext only. The asks: a peer lookup the room supplies, and serving without announcing (storage-asks.md).</text>
+
+  <!-- ══ the comparison ══ -->
+  <rect x="40" y="628" width="800" height="62" rx="6" fill="#23282A"/>
+  <text x="56" y="650" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#8FA3F5">A PRIVATE BITTORRENT TRACKER</text>
+  <text x="56" y="672" font-size="11" fill="#DCE2DE">is a server that sees the members, the index and every peer's IP, and whoever has a file's hash can get its plaintext.</text>
+
+  <text x="40" y="716" font-size="11" fill="#3E463F"><tspan font-weight="600" fill="#1A1F1C">A late joiner sees files shared from their epoch on</tspan> — earlier ones only if a member shares them again (invariant 7).</text>
+</svg>

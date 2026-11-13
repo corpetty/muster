@@ -1,0 +1,17 @@
+{
+ "name": "xmr-multisig",
+ "width": 1280,
+ "crf": 30,
+ "segments": [
+  {"src": "x1-alice", "in": 9.0, "out": 17.0, "label": "Alice", "hold": 0.5},
+  {"src": "x1-alice", "in": 26.0, "out": 58.0, "label": "Alice", "lapse": 2, "hold": 1.2},
+  {"src": "x1-bob", "in": 74.0, "out": 84.0, "label": "Bob", "lapse": 2, "hold": 0.6},
+  {"src": "x1-carol", "in": 104.0, "out": 118.0, "label": "Carol", "lapse": 2, "hold": 0.6},
+  {"src": "x1-alice", "in": 118.0, "out": 142.0, "label": "Alice", "lapse": 6, "hold": 2.5},
+  {"src": "x2-alice", "in": 2.0, "out": 26.0, "label": "Alice", "lapse": 2, "hold": 1.5},
+  {"src": "x2-bob", "in": 54.0, "out": 64.0, "label": "Bob", "lapse": 2, "hold": 0.6},
+  {"src": "x2-carol", "in": 68.0, "out": 80.0, "label": "Carol", "lapse": 2, "hold": 0.8},
+  {"src": "x2-bob", "in": 82.0, "out": 2300.0, "label": "Bob", "speed": 180, "hold": 1.0},
+  {"pair": ["x2-alice", "x2-carol"], "at": 2310, "hold": 4, "labels": ["Alice", "Carol"]}
+ ]
+}

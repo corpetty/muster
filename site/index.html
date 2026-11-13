@@ -437,7 +437,7 @@ footer a{color:var(--ink-2)}
     <div class="head">
       <p class="eyebrow">Recorded, not drawn</p>
       <h2>See it run.</h2>
-      <p>Two people, two Basecamp installs, real transactions on the Sepolia testnet. Nothing here is mocked: the keys are in each person's Logos keystore, every signature is approved in the Logos Signer, and each payment is confirmed by the person it was owed to, from their own read of the chain.</p>
+      <p>Real Basecamp installs, one per person, doing real things: transactions on the Sepolia testnet and on Monero's stagenet, and files moved through Logos Storage. Nothing here is mocked: the keys are in each person's own keystore or wallet, every signature is approved by its owner, and each payment is confirmed by the person it was owed to, from their own read of the chain.</p>
     </div>
     <div class="reels">
       <figure class="reel">
@@ -464,8 +464,16 @@ footer a{color:var(--ink-2)}
         <video src="media/audit.mp4" poster="media/audit.jpg" muted loop playsinline preload="none" aria-label="Downloading an audit trail, verifying it from the file alone, and a tampered copy refused"></video>
         <figcaption><span class="n">06 · AN AUDIT YOU CAN CHECK</span><h3>One file proves what every signature covered</h3><p>Download a settled payment's audit trail, and a standalone verifier re-derives everything in it from the file alone: no log, no keys, no network. Change one character and it is refused, with the reason.</p></figcaption>
       </figure>
+      <figure class="reel">
+        <video src="media/fileshare.mp4" poster="media/fileshare.jpg" muted loop playsinline preload="none" aria-label="Alice shares a file into the room; Bob fetches it and seeds it"></video>
+        <figcaption><span class="n">07 · FILESHARE</span><h3>Share a file with the room, and only the room</h3><p>Alice shares a file from her Pictures. It is sealed on her machine under a key only the room holds, and Logos Storage moves the sealed bytes. Bob fetches it, byte for byte, and seeds it for the others: the room is the tracker, and there is no server.</p></figcaption>
+      </figure>
+      <figure class="reel">
+        <video src="media/xmr-multisig.mp4" poster="media/xmr-multisig.jpg" muted loop playsinline preload="none" aria-label="A 2-of-3 Monero multisig set up from a room, then a payment from it approved by two members and settled on stagenet"></video>
+        <figcaption><span class="n">08 · A MONERO MULTISIG</span><h3>A treasury three people hold, in XMR</h3><p>Three members set up a 2-of-3 Monero multisig from the room, each with their own wallet holding their key. Bob and Carol approve a payment; each wallet checks the spend before it signs, and it settles on Monero's stagenet. Muster carries the messages and never holds a Monero key.</p></figcaption>
+      </figure>
     </div>
-    <p class="reels-note">Muster 0.3 in Logos Basecamp 0.3.2, recorded on a virtual display and cut for length; waits for the chain are sped up, never removed. The scripts that recorded them are in <a href="https://github.com/corpetty/muster/tree/main/scripts/demo">scripts/demo</a>.</p>
+    <p class="reels-note">Muster 0.3 in Logos Basecamp 0.3.2, recorded on virtual displays and cut for length; waits for the chain are sped up, never removed. The scripts that recorded them are in <a href="https://github.com/corpetty/muster/tree/main/scripts/demo">scripts/demo</a>.</p>
   </div>
 </section>
 

@@ -1,0 +1,68 @@
+{
+ "name": "fileshare",
+ "width": 1280,
+ "segments": [
+  {
+   "src": "fs-alice",
+   "in": 9.0,
+   "out": 16.0,
+   "label": "Alice",
+   "hold": 0.6
+  },
+  {
+   "src": "fs-alice",
+   "in": 16.5,
+   "out": 25.0,
+   "label": "Alice",
+   "hold": 0.8
+  },
+  {
+   "src": "fs-alice",
+   "in": 26.0,
+   "out": 43.0,
+   "label": "Alice",
+   "lapse": 2
+  },
+  {
+   "src": "fs-alice",
+   "in": 43.0,
+   "out": 50.0,
+   "label": "Alice",
+   "hold": 1.8
+  },
+  {
+   "src": "fs-bob",
+   "in": 54.0,
+   "out": 61.0,
+   "label": "Bob",
+   "hold": 0.6
+  },
+  {
+   "src": "fs-bob",
+   "in": 61.0,
+   "out": 82.0,
+   "label": "Bob",
+   "lapse": 2,
+   "hold": 2.5
+  },
+  {
+   "src": "fs-alice",
+   "in": 84.0,
+   "out": 90.0,
+   "label": "Alice",
+   "hold": 1.5
+  },
+  {
+   "pair": [
+    "fs-alice",
+    "fs-bob"
+   ],
+   "at": 92,
+   "hold": 3.5,
+   "labels": [
+    "Alice",
+    "Bob"
+   ]
+  }
+ ]
+}
