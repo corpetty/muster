@@ -5,7 +5,7 @@ import QtQuick
 
 QtObject {
     // the contract's PROP names, in .rep order (the recorder snapshots exactly these)
-    readonly property var contractProps: ["health", "settingsJson", "accountJson", "intentId", "intentEffect", "intentTxhash", "intentState", "lastError", "balancesJson", "walletAccountsJson", "lezPreviewJson", "lezSendJson", "roomTopic", "messagesJson", "membersJson", "contactsJson", "intentsJson", "invitesJson", "activityJson", "connectivityJson", "securityLevelsJson", "roomAccountJson", "roomSubmitJson", "readinessJson", "offersJson", "composeOffersJson", "declineJson", "auditJson", "outsideJson", "outsideImportJson", "btcProposeJson", "splitJson", "tokenInfoJson", "openAssetsJson", "lezProposeJson", "lezMemberJson", "lezCreateJson", "frostCeremoniesJson", "frostCeremonyJson", "xmrMsigSetupsJson", "xmrMsigSetupJson", "xmrMsigSpendsJson", "xmrMsigProposeJson", "lezMsigCeremoniesJson", "lezMsigOpenJson", "lezMsigProposeJson", "lezMsigFundJson", "lezMsigRecoverJson", "memberAccountsJson", "discloseAccountJson", "lezMsigStateJson", "flowJson", "graphJson", "policyJson", "policyErrorJson", "accountsJson", "accountDiscloseJson", "driversJson", "availableActionsJson", "executeJson", "contributeJson", "conversationsJson", "pendingJson", "joinStatus", "rlnStatusJson", "keystoreStatusJson", "keystoreRequestsJson", "identityPlatformJson", "identityAskJson", "walletSummaryJson", "supportJson", "supportSendJson", "fileShareJson", "fileShareResultJson", "questsJson", "questResultJson", "charterJson", "charterResultJson", "circleJson", "circleResultJson", "lezConfigResultJson"]
+    readonly property var contractProps: ["health", "settingsJson", "accountJson", "intentId", "intentEffect", "intentTxhash", "intentState", "lastError", "balancesJson", "walletAccountsJson", "lezPreviewJson", "lezSendJson", "roomTopic", "messagesJson", "membersJson", "contactsJson", "intentsJson", "invitesJson", "activityJson", "connectivityJson", "securityLevelsJson", "roomAccountJson", "roomSubmitJson", "readinessJson", "offersJson", "composeOffersJson", "declineJson", "auditJson", "outsideJson", "outsideImportJson", "btcProposeJson", "splitJson", "tokenInfoJson", "openAssetsJson", "lezProposeJson", "lezMemberJson", "lezCreateJson", "frostCeremoniesJson", "frostCeremonyJson", "xmrMsigSetupsJson", "xmrMsigSetupJson", "xmrMsigSpendsJson", "xmrMsigProposeJson", "lezMsigCeremoniesJson", "lezMsigOpenJson", "lezMsigProposeJson", "lezMsigFundJson", "lezMsigRecoverJson", "memberAccountsJson", "discloseAccountJson", "lezMsigStateJson", "flowJson", "graphJson", "policyJson", "policyErrorJson", "accountsJson", "accountDiscloseJson", "driversJson", "availableActionsJson", "executeJson", "contributeJson", "conversationsJson", "pendingJson", "joinStatus", "rlnStatusJson", "keystoreStatusJson", "keystoreRequestsJson", "identityPlatformJson", "identityAskJson", "walletSummaryJson", "supportJson", "supportSendJson", "fileShareJson", "fileShareResultJson", "voiceJson", "voiceResultJson", "voiceResultSeq", "questsJson", "questResultJson", "charterJson", "charterResultJson", "circleJson", "circleResultJson", "lezConfigResultJson"]
     // every SLOT call, in order: [{slot, args}]
     property var calls: []
     function record(slot, args) { calls.push({ slot: slot, args: Array.prototype.slice.call(args) }); }
@@ -84,6 +84,9 @@ QtObject {
     property string supportSendJson: "{}"
     property string fileShareJson: "{}"
     property string fileShareResultJson: ""
+    property string voiceJson: "{}"
+    property string voiceResultJson: ""
+    property string voiceResultSeq: "0"
     property string questsJson: "[]"
     property string questResultJson: ""
     property string charterJson: "{}"
@@ -193,6 +196,13 @@ QtObject {
     function fetchFile(fileId, folder, privately) { record("fetchFile", arguments); }
     function seedFile(fileId, on) { record("seedFile", arguments); }
     function retractFile(fileId) { record("retractFile", arguments); }
+    function loadVoice() { record("loadVoice", arguments); }
+    function startVoiceRecording() { record("startVoiceRecording", arguments); }
+    function stopVoiceRecording() { record("stopVoiceRecording", arguments); }
+    function sendVoiceDraft() { record("sendVoiceDraft", arguments); }
+    function discardVoiceDraft() { record("discardVoiceDraft", arguments); }
+    function playVoiceNote(noteId) { record("playVoiceNote", arguments); }
+    function stopVoicePlayback() { record("stopVoicePlayback", arguments); }
     function loadQuests() { record("loadQuests", arguments); }
     function proposeQuest(termsJson) { record("proposeQuest", arguments); }
     function proposeQuestClose(questId) { record("proposeQuestClose", arguments); }
