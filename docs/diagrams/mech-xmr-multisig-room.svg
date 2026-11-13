@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 664" width="880" height="664" font-family="'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <title>A Monero multisig the room coordinates, and never holds</title>
+  <desc>Three members set up a Monero multisig and spend from it out of a Muster room. Each member's own Monero wallet holds their key and multisig state, and checks every spend with describe_transfer before it signs; the room carries the setup rounds, the sync data and the transaction sets between the wallets, in order, encrypted to the members and signed by each sender. Muster holds no Monero key and never signs a Monero transaction. It has run through the real UI on stagenet; it stays on stagenet while upstream calls Monero multisig experimental.</desc>
+<!-- provenance
+     serves:   POST
+     shows:    A Monero multisig set up and spent from a room: the four steps the room
+               carries between the members' own wallets, what Muster holds (no key, no
+               multisig state), what the room cannot fix, and how it differs from MMS and
+               monero-multisig-gui.
+     sources:  docs/design/monero-multisig-coordination.md
+               module/src/coordination/xmr_msig_setup.nim
+               module/src/coordination/xmr_msig_spend.nim
+               module/src/drivers/xmr_msig.nim
+               docs/labbook/monero-multisig-in-the-room.md
+     evidence: [from-source] The four steps, the first M approvals as the signers, blobs
+                   carried in parts signed by their author, describe_transfer before
+                   sign_multisig, final at 10 confirmations, and that Muster holds no Monero
+                   key or multisig state (design §2, §6)
+               [measured] Set up in 149 s and a 0.001 XMR spend final on every member
+                   about 13 minutes after submit, stagenet 2026-10-16; a 2-of-3 set up,
+                   funded, spent and Settled on all three cards through the real UI,
+                   2026-10-17 (design §8)
+               [from-source] What the room cannot fix (upstream's warning, no expiry, one
+                   spend at a time) and the comparison with MMS and monero-multisig-gui, from
+                   design §1 and §3
+               [illustrative] Alice, Bob and Carol are an example of three members; any M
+                   of N is supported
+     recheck:  Stagenet only (ADR-020). Re-check when monero_wallet_backend exposes
+               multisig (logos-monero-wallet-backend#8), when Monero multisig loses its
+               experimental status or FCMP++ multisig is defined, and at the mainnet gate
+               (exo-dcc.8).
+-->
+
+  <rect width="880" height="664" fill="#E4E6E0"/>
+
+  <text x="40" y="42" font-size="19" font-weight="600" fill="#1A1F1C" letter-spacing="-0.3">A Monero multisig the room coordinates, and never holds</text>
+  <text x="40" y="64" font-size="13.5" fill="#656E66">Each member's wallet holds the key and checks every spend. The room carries what the wallets pass each other.</text>
+
+  <rect x="40" y="80" width="800" height="30" rx="5" fill="#DFEDE6" stroke="#1E6B52" stroke-width="1.2"/>
+  <rect x="52" y="88" width="96" height="15" rx="7.5" fill="#1E6B52"/>
+  <text x="100" y="99" font-size="8" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.08em" text-anchor="middle" fill="#DFEDE6">RUN · STAGENET</text>
+  <text x="160" y="99" font-size="10" fill="#2A4A3C">Run through the real UI on stagenet, 2026-10-17: a 2-of-3 set up, funded, spent, and Settled on all three cards</text>
+
+  <!-- ══ the room: what it carries ══ -->
+  <rect x="40" y="130" width="800" height="142" rx="6" fill="#EAE6FA" stroke="#4B33C4" stroke-width="1.2"/>
+  <text x="56" y="150" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">THE ROOM</text>
+  <text x="122" y="150" font-size="9.5" fill="#656E66">end-to-end encrypted to the members; every step signed by whoever sent it</text>
+
+  <rect x="56" y="160" width="182" height="100" rx="5" fill="#F7F8F5" stroke="#4B33C4" stroke-width="1"/>
+  <text x="70" y="179" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">1 · SET UP</text>
+  <text x="70" y="199" font-size="11" fill="#1A1F1C">Three wallets, one address</text>
+  <text x="70" y="219" font-size="9.5" fill="#656E66">prepare, make, exchange:</text>
+  <text x="70" y="232" font-size="9.5" fill="#656E66">each round carried in order,</text>
+  <text x="70" y="245" font-size="9.5" fill="#656E66">until all 3 disclose one address</text>
+
+  <rect x="250" y="160" width="182" height="100" rx="5" fill="#F7F8F5" stroke="#4B33C4" stroke-width="1"/>
+  <text x="264" y="179" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">2 · AGREE</text>
+  <text x="264" y="199" font-size="11" fill="#1A1F1C">Recipient, amount, fee cap</text>
+  <text x="264" y="219" font-size="9.5" fill="#656E66">M members approve with</text>
+  <text x="264" y="232" font-size="9.5" fill="#656E66">their room keys; the first M</text>
+  <text x="264" y="245" font-size="9.5" fill="#656E66">counted are the signers</text>
+
+  <rect x="444" y="160" width="182" height="100" rx="5" fill="#F7F8F5" stroke="#4B33C4" stroke-width="1"/>
+  <text x="458" y="179" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">3 · SYNC AND BUILD</text>
+  <text x="458" y="199" font-size="11" fill="#1A1F1C">Wallets re-sync; one builds</text>
+  <text x="458" y="219" font-size="9.5" fill="#656E66">sync blobs and the set ride</text>
+  <text x="458" y="232" font-size="9.5" fill="#656E66">the room in parts, each part</text>
+  <text x="458" y="245" font-size="9.5" fill="#656E66">signed by its author</text>
+
+  <rect x="638" y="160" width="186" height="100" rx="5" fill="#F7F8F5" stroke="#4B33C4" stroke-width="1"/>
+  <text x="652" y="179" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#4B33C4">4 · CHECK, SIGN, SUBMIT</text>
+  <text x="652" y="199" font-size="11" fill="#1A1F1C">Each wallet checks first</text>
+  <text x="652" y="219" font-size="9.5" fill="#656E66">describe_transfer: it signs only</text>
+  <text x="652" y="232" font-size="9.5" fill="#656E66">if the set pays what was agreed;</text>
+  <text x="652" y="245" font-size="9.5" fill="#656E66">final at 10 confirmations</text>
+
+  <!-- step arrows -->
+  <path d="M 239 210 L 248 210" stroke="#4B33C4" stroke-width="1.4" fill="none"/>
+  <path d="M 433 210 L 442 210" stroke="#4B33C4" stroke-width="1.4" fill="none"/>
+  <path d="M 627 210 L 636 210" stroke="#4B33C4" stroke-width="1.4" fill="none"/>
+
+  <!-- ══ the wallets ══ -->
+  <path d="M 165 274 L 165 310" stroke="#4B33C4" stroke-width="1.4" stroke-dasharray="4 3" fill="none"/>
+  <path d="M 440 274 L 440 310" stroke="#4B33C4" stroke-width="1.4" stroke-dasharray="4 3" fill="none"/>
+  <path d="M 715 274 L 715 310" stroke="#4B33C4" stroke-width="1.4" stroke-dasharray="4 3" fill="none"/>
+  <text x="452" y="295" font-size="9" fill="#656E66">each wallet's own output, carried to the others</text>
+
+  <rect x="40" y="312" width="250" height="66" rx="6" fill="#F7F8F5" stroke="#1A1F1C" stroke-width="1.2"/>
+  <text x="56" y="333" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#1A1F1C">ALICE'S WALLET</text>
+  <text x="56" y="352" font-size="11" fill="#1A1F1C">monero-wallet-rpc, run by Alice</text>
+  <text x="56" y="368" font-size="9.5" fill="#656E66">holds Alice's key and multisig state</text>
+
+  <rect x="315" y="312" width="250" height="66" rx="6" fill="#F7F8F5" stroke="#1A1F1C" stroke-width="1.2"/>
+  <text x="331" y="333" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#1A1F1C">BOB'S WALLET</text>
+  <text x="331" y="352" font-size="11" fill="#1A1F1C">monero-wallet-rpc, run by Bob</text>
+  <text x="331" y="368" font-size="9.5" fill="#656E66">holds Bob's key and multisig state</text>
+
+  <rect x="590" y="312" width="250" height="66" rx="6" fill="#F7F8F5" stroke="#1A1F1C" stroke-width="1.2"/>
+  <text x="606" y="333" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#1A1F1C">CAROL'S WALLET</text>
+  <text x="606" y="352" font-size="11" fill="#1A1F1C">monero-wallet-rpc, run by Carol</text>
+  <text x="606" y="368" font-size="9.5" fill="#656E66">holds Carol's key and multisig state</text>
+
+  <!-- ══ what Muster holds, what it cannot fix ══ -->
+  <rect x="40" y="400" width="390" height="88" rx="6" fill="#F7F8F5" stroke="#1E6B52" stroke-width="1.2"/>
+  <text x="56" y="422" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#1E6B52">WHAT MUSTER HOLDS</text>
+  <text x="56" y="444" font-size="11" fill="#1A1F1C">No Monero key, and no multisig state.</text>
+  <text x="56" y="464" font-size="9.5" fill="#656E66">It never signs a Monero transaction. The re-derive-and-refuse</text>
+  <text x="56" y="477" font-size="9.5" fill="#656E66">check (invariant 1) runs in each member's own wallet.</text>
+
+  <rect x="450" y="400" width="390" height="88" rx="6" fill="#F7F8F5" stroke="#A32D1E" stroke-width="1.2"/>
+  <text x="466" y="422" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#A32D1E">WHAT THE ROOM CANNOT FIX</text>
+  <text x="466" y="444" font-size="11" fill="#1A1F1C">Upstream calls Monero multisig experimental.</text>
+  <text x="466" y="464" font-size="9.5" fill="#656E66">A dishonest member could take the funds, so: stagenet only.</text>
+  <text x="466" y="477" font-size="9.5" fill="#656E66">No expiry on a partial signature. One spend at a time.</text>
+
+  <!-- ══ the comparison ══ -->
+  <rect x="40" y="508" width="800" height="80" rx="6" fill="#23282A"/>
+  <text x="56" y="532" font-size="9" font-family="'DM Mono',ui-monospace,Menlo,monospace" font-weight="600" letter-spacing="0.1em" fill="#8FA3F5">THE COMPARISON</text>
+  <text x="56" y="554" font-size="11" fill="#DCE2DE">MMS carried these blobs over Bitmessage; monero-multisig-gui holds the keys itself and serves an HTTP API per peer over Tor.</text>
+  <text x="56" y="574" font-size="11" fill="#DCE2DE">Here the channel is the room, already encrypted to authenticated members, and each member's wallet keeps its key.</text>
+
+  <!-- ══ footnote ══ -->
+  <text x="40" y="616" font-size="11" font-weight="600" fill="#1A1F1C">Measured on stagenet, 2026-10-16: set up in 149 s; a 0.001 XMR spend final on every member about 13 minutes after submit.</text>
+  <text x="40" y="638" font-size="11" fill="#3E463F">Stagenet only until upstream drops its warning. Built before FCMP++: the wallet is re-created after Monero's upgrade.</text>
+</svg>

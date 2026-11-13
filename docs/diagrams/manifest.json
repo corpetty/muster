@@ -1287,6 +1287,108 @@
         }
       ],
       "recheck": "When a driver kind is added, or a check is added to src/drivers/conformance.nim."
+    },
+    {
+      "file": "mech-xmr-multisig-room.svg",
+      "serves": "POST",
+      "shows": "A Monero multisig set up and spent from a room: the four steps the room carries between the members' own wallets, what Muster holds (no key, no multisig state), what the room cannot fix, and how it differs from MMS and monero-multisig-gui.",
+      "sources": [
+        {
+          "path": "docs/design/monero-multisig-coordination.md",
+          "sha256": "083e408a9eb84ea301bb35411d476d3e007aa3021729f560fd40811f0d55f0a6",
+          "note": "the shape, the steps, what it cannot fix, the comparison, where it has run and the measured times"
+        },
+        {
+          "path": "module/src/coordination/xmr_msig_setup.nim",
+          "sha256": "620d9c903157b1d13aaff2ee800e6425f2652e8cb780f6a102528ca40c0082d7",
+          "note": "setup over the room: each round in order, the account acted from once every member disclosed it"
+        },
+        {
+          "path": "module/src/coordination/xmr_msig_spend.nim",
+          "sha256": "7d4783ee122cdfe439b171c3822cbfa57be339948bef09de295cf4306adbe3b8",
+          "note": "a spend: signers, sync, build, check-then-sign, submit, final at 10; blobs in signed parts"
+        },
+        {
+          "path": "module/src/drivers/xmr_msig.nim",
+          "sha256": "55e8b2a11f4d0d3143c678e2b2cca62e296b0dcea96b404a4e03cf0af0521d5a",
+          "note": "the effect (recipient, amount, fee cap), the two rounds and the describe-check"
+        },
+        {
+          "path": "docs/labbook/monero-multisig-in-the-room.md",
+          "sha256": "053f371e4c493dbffd98526b2f783d4ba8fad47c79b470a80665e2bb1784f8f2",
+          "note": "the stagenet runs, through the real UI on 2026-10-17"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "The four steps, the first M approvals as the signers, blobs carried in parts signed by their author, describe_transfer before sign_multisig, final at 10 confirmations, and that Muster holds no Monero key or multisig state (design §2, §6)"
+        },
+        {
+          "grade": "measured",
+          "note": "Set up in 149 s and a 0.001 XMR spend final on every member about 13 minutes after submit, stagenet 2026-10-16; a 2-of-3 set up, funded, spent and Settled on all three cards through the real UI, 2026-10-17 (design §8)"
+        },
+        {
+          "grade": "from-source",
+          "note": "What the room cannot fix (upstream's warning, no expiry, one spend at a time) and the comparison with MMS and monero-multisig-gui, from design §1 and §3"
+        },
+        {
+          "grade": "illustrative",
+          "note": "Alice, Bob and Carol are an example of three members; any M of N is supported"
+        }
+      ],
+      "recheck": "Stagenet only (ADR-020). Re-check when monero_wallet_backend exposes multisig (logos-monero-wallet-backend#8), when Monero multisig loses its experimental status or FCMP++ multisig is defined, and at the mainnet gate (exo-dcc.8)."
+    },
+    {
+      "file": "mech-room-swarm.svg",
+      "serves": "POST",
+      "shows": "FileShare: share, the room as the tracker, fetch then seed; who sees what, from a room member to the storage DHT; the gap until the Storage team's asks land; and a private BitTorrent tracker beside it.",
+      "sources": [
+        {
+          "path": "docs/design/room-swarm.md",
+          "sha256": "6ab67b598cc9a7dc985a8cf78d1ec474b12e936df55a25c29e3388dee02b26f0",
+          "note": "the design: sealed blobs, the room's file and seed events, fetching and seeding, who sees what (§5.5), the asks (§6)"
+        },
+        {
+          "path": "module/src/crypto/blob_seal.nim",
+          "sha256": "727dc76f74085b083a07719d0ffe941a90c27acd71f155c64f113606589c4129",
+          "note": "a fresh key per file, the digest checked on open, a neutral upload name"
+        },
+        {
+          "path": "module/src/coordination/swarm.nim",
+          "sha256": "da24897de04a52880a83eed676ef1226d781d6109681c2a72b654c7fcac077af",
+          "note": "file/<fid>, seed and retract events, author-signed, folded by reduceSwarm"
+        },
+        {
+          "path": "module/src/coordination/swarm_live.nim",
+          "sha256": "1df6ac50f89d4df3f201ebc49d8eaf2956da3f37521bc8a38e729ed35c2604c8",
+          "note": "share, fetch and seed from a pump"
+        },
+        {
+          "path": "scripts/fileshare-self-test.sh",
+          "sha256": "e4420950952fa006db4ea525931cb99c507b03fabb7c151f510c6798b3aeadaf",
+          "note": "two runners share a file and fetch it byte-identical"
+        }
+      ],
+      "evidence": [
+        {
+          "grade": "from-source",
+          "note": "The three steps and the who-sees-what rows, from room-swarm.md §5.2–§5.5 and the code that builds them"
+        },
+        {
+          "grade": "measured",
+          "note": "A private fetch at about 15 KB/s on logos.dev (room-swarm.md §3, S0); two runners share and fetch byte-identical in fileshare-self-test.sh"
+        },
+        {
+          "grade": "from-source",
+          "note": "The gap — the DHT sees the ciphertext's content id and its providers, and an advertised dataset is served to whoever asks — until asks 1 and 2 (room-swarm.md §3, §6; the claims registry's gap)"
+        },
+        {
+          "grade": "from-source",
+          "note": "The private-tracker comparison, from room-swarm.md §4"
+        }
+      ],
+      "recheck": "Re-check when the Storage team's asks 1 and 2 land (a peer lookup the room supplies; serving without announcing): the gap box and the storage DHT row change then."
     }
   ]
 }
