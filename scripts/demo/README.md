@@ -11,6 +11,8 @@ changes.
 | `split` | propose, agree, pay through the Logos Signer, confirmed by the creditor's own read | `clips/split.json` |
 | `safe` | a 2-of-2 Safe disclosed and checked against the chain; both owners approve; settled | `clips/safe.json` |
 | `explain` | the card's "Who sees this?" view and the room history | `clips/explain.json` |
+| `fileshare` | share a file into the room; another member fetches it and seeds it, through Logos Storage | `clips/fileshare.json` |
+| `xmr-multisig` | three members set up a 2-of-3 Monero multisig on stagenet, fund it, and spend from it by two approvals | `clips/xmr-multisig.json` |
 
 ## The tools
 
