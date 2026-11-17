@@ -70,7 +70,9 @@ jobs:
   # is one of them. Chain-bound e2e tests are not in the default group.
   suite:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # ~290 tests, each compiled with -d:release; compiling dominates, so nim's own cache is
+    # kept between runs (keyed on the sources, falling back to the newest one)
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: logos-co/setup-nix-cache-action@781f072122f4df6af0e33a7d355ebd20283e019e # v1.2.0
@@ -79,6 +81,11 @@ jobs:
           path: ~/.cache/muster/nimpkgs
           key: nimpkgs-${{ hashFiles('module/metadata.json') }}
           restore-keys: nimpkgs-
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/nim
+          key: nimcache-${{ hashFiles('module/src/**', 'module/tests/**', 'module/nim-lib/**', 'module/metadata.json') }}
+          restore-keys: nimcache-
       - name: module/tests/run-suite.sh
         env:
           OUT: ${{ runner.temp }}/suite
