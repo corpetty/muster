@@ -81,6 +81,9 @@ proc ceremonyView*(events: seq[Event], cid: string): CeremonyView =
     except CatchableError: discard       # a malformed entry is not part of the ceremony
 
 proc frostCeremonyOpen*(s: CoordinationSession, cid, network: string, t, n: int): string =
+  ## Open a ceremony; raises on a network FROST may not act on (exo-863).
+  let refusal = frostNetworkRefusal(network)
+  if refusal.len > 0: raise newException(ValueError, refusal)
   s.publish(Event(key: "frost/" & cid & "/open", value: $(%*{"network": network, "t": t, "n": n})))
   cid
 
@@ -100,6 +103,10 @@ proc frostCeremonyStep*(s: CoordinationSession, ks: Keystore, cid: string): stri
   let events = s.roomEvents()
   let v = ceremonyView(events, cid)
   if not v.open: return "waiting: the ceremony is not open"
+  # someone else may have opened it on a network this client refuses: take no step in it,
+  # so no share of this member's is ever made for it (exo-863)
+  let refusal = frostNetworkRefusal(v.network)
+  if refusal.len > 0: return "refused: " & refusal
   if v.hosts.len < v.n: return "waiting: " & $v.hosts.len & " of " & $v.n & " participants joined"
   let lab = ceremonyLabel(cid)
   let host = ks.frostHostPubkey(lab)
