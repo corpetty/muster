@@ -1,0 +1,113 @@
+# The checks a change to main must pass (exo-1ec.2, the audit of 2026-11-17, exo-863).
+#
+# Until this workflow, nothing ran the test suite or the repository's gates on a pull
+# request: the gates lived in an opt-in pre-commit hook, and the suite ran when someone
+# remembered. These jobs are the ones that need no flake evaluation of the muster module
+# (>7 GB, CLAUDE.md): run-suite.sh fetches the Nim closure at metadata.json's pins and takes
+# nim, gcc and libsodium from nixpkgs, never from the module's flake.
+#
+# Deliberately NOT here: `make build` and the runner, ui-parity.sh and every offscreen
+# self-test (they need the runner), LEZ/risc0 proving, and anything on a live network.
+# lgx-variants.yml builds the packages on a pull request that touches module/ or ui/.
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The pre-commit hook's repository gates, run on every change instead of only on the
+  # paths a hook happens to filter on, plus the Pages site's own checks, so a stale
+  # diagrams index is caught on the pull request and not at deploy time.
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Repository gates
+        run: |
+          set -uo pipefail
+          fail=0
+          gate() { echo "::group::$*"; "$@" || { echo "::error::failed: $*"; fail=1; }; echo "::endgroup::"; }
+          gate python3 docs/diagrams/tools/check-manifest.py
+          gate python3 scripts/check-readme-rot.py
+          gate python3 scripts/check-claims-registry.py
+          gate python3 scripts/check-family-registry.py
+          gate python3 scripts/check-action-corpus.py
+          gate python3 ui/tools/gen-claims-qml.py --check
+          gate python3 scripts/check-run-targets.py
+          gate python3 scripts/check-no-cpp.py
+          exit $fail
+      - name: The diagrams index is current
+        run: |
+          python3 docs/diagrams/tools/make-index.py
+          git diff --exit-code -- docs/diagrams/index.html \
+            || { echo "::error::index.html is stale — run docs/diagrams/tools/make-index.py and commit it"; exit 1; }
+      - name: The Pages site assembles and its links resolve
+        run: scripts/build-site.sh _site
+
+  # Invariant tests are append-only (CLAUDE.md, working agreements).
+  append-only:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - run: python3 scripts/check-invariant-tests-append-only.py "origin/${{ github.base_ref }}" HEAD
+
+  # Every unit test and invariant probe (module/tests/run-suite.sh); the conformance suite
+  # is one of them. Chain-bound e2e tests are not in the default group.
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: logos-co/setup-nix-cache-action@781f072122f4df6af0e33a7d355ebd20283e019e # v1.2.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/muster/nimpkgs
+          key: nimpkgs-${{ hashFiles('module/metadata.json') }}
+          restore-keys: nimpkgs-
+      - name: module/tests/run-suite.sh
+        env:
+          OUT: ${{ runner.temp }}/suite
+          JOBS: 4
+        run: module/tests/run-suite.sh
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: suite-logs
+          path: ${{ runner.temp }}/suite
+          if-no-files-found: ignore
+
+  # The LEZ programs' pure rule crates; the guests, hosts and provers need risc0 and stay out.
+  rust-cores:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            programs/lez-msig/target
+            programs/lez-quest/target
+          key: rust-cores-${{ hashFiles('programs/*/Cargo.lock') }}
+      - name: msig_core
+        working-directory: programs/lez-msig
+        run: cargo test -p msig_core --locked
+      - name: quest_core
+        working-directory: programs/lez-quest
+        run: cargo test -p quest_core --locked

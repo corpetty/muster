@@ -22,6 +22,7 @@
 # macOS (Darwin): nixpkgs' libsodium.dylib, no nixpkgs gcc; with no nim on PATH, the nim and
 # the clang the .lgx compiles with (the builder's nixpkgs, as a lock pins it); with no
 # timeout(1), nixpkgs coreutils'. The stock /bin/bash 3.2 runs it.
+# Linux with no nim on PATH (a fresh CI runner): the nim the .lgx compiles with, likewise.
 set -uo pipefail
 
 MODULE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -76,7 +77,7 @@ fi
 # directory's flake.lock when there is one, else, since flake.lock is gitignored and a fresh
 # clone has none, the builder's own lock (flake.nix overrides none of the builder's
 # nixpkgs), which `nix flake metadata` fetches without evaluating.
-if [ "$HOST_OS" = Darwin ] && ! command -v nim >/dev/null 2>&1; then
+if ! command -v nim >/dev/null 2>&1; then
   # A function, not $(python3 <<'PY' …): bash 3.2 matches quotes inside a heredoc in $(…).
   builder_nixpkgs() {
     if [ -f flake.lock ]; then cat flake.lock
@@ -96,9 +97,15 @@ print("github:%s/%s/%s" % (k["owner"], k["repo"], k["rev"]))'
   }
   NIXPKGS_PIN="$(builder_nixpkgs)"
   NIMDIR="$(nix build "$NIXPKGS_PIN#nim" --no-link --print-out-paths 2>/dev/null | tail -1)"
-  NIXCC="$(nix build "$NIXPKGS_PIN#stdenv.cc" --no-link --print-out-paths 2>/dev/null | tail -1)"
-  [ -x "$NIMDIR/bin/nim" ] && [ -x "$NIXCC/bin/clang" ] || { echo "no nim on PATH, and the builder's nixpkgs#nim or #stdenv.cc ($NIXPKGS_PIN) did not build"; exit 1; }
-  export PATH="$NIMDIR/bin:$NIXCC/bin:$PATH"
+  [ -x "$NIMDIR/bin/nim" ] || { echo "no nim on PATH, and the builder's nixpkgs#nim ($NIXPKGS_PIN) did not build"; exit 1; }
+  if [ "$HOST_OS" = Darwin ]; then
+    NIXCC="$(nix build "$NIXPKGS_PIN#stdenv.cc" --no-link --print-out-paths 2>/dev/null | tail -1)"
+    [ -x "$NIXCC/bin/clang" ] || { echo "no nim on PATH, and the builder's nixpkgs#stdenv.cc ($NIXPKGS_PIN) did not build"; exit 1; }
+    export PATH="$NIMDIR/bin:$NIXCC/bin:$PATH"
+  else
+    # after nixpkgs' gcc, which links against the libsodium above (its glibc, not the pin's)
+    export PATH="$NIXGCC/bin:$NIMDIR/bin:$PATH"
+  fi
 fi
 # macOS ships no timeout(1): take GNU coreutils' from nixpkgs, the one Linux runs. Last on
 # PATH, so it supplies only what the host lacks (timeout) and shadows none of its tools.
