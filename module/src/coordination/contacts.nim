@@ -7,6 +7,7 @@
 ## Pure Nim (json/os/tables) — headless-testable; the module wires the path in.
 
 import std/[json, os, tables, strutils]
+import ../security/private_files
 
 type
   Contact* = object
@@ -26,11 +27,10 @@ proc normId*(hex: string): string =
 
 proc save(b: ContactBook) =
   try:
-    createDir(parentDir(b.path))
     var o = newJObject()
     for id, c in b.byId:
       o[id] = %*{"alias": c.alias, "address": c.address}
-    writeFile(b.path, $o)
+    writePrivateFile(b.path, $o)
   except CatchableError: discard
 
 proc newContactBook*(path: string): ContactBook =

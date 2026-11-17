@@ -12,6 +12,7 @@ include muster_gen
 
 import std/[json, tables, strutils, os, algorithm, times, sets, sequtils, options]
 import ../src/dcbor/dcbor
+import ../src/security/private_files   # owner-only files beside the keystore (exo-863)
 import ../src/drivers/driver
 import ../src/drivers/safe
 import ../src/drivers/threshold      # a second coordination policy (Ed25519 k-of-n)
@@ -373,9 +374,16 @@ var gMixSaved = false               ## did the user persist a mix choice? (else 
 
 # Persist the infra settings beside the keystore, so a user's chosen endpoints
 # survive a restart. Best-effort — a missing/malformed file leaves the defaults.
+
+proc instanceDir(): string =
+  ## Where this instance keeps its files: the host's per-instance directory, else
+  ## MUSTER_DATA_DIR, else <tmp>/muster. moduleKeystore checks, before it opens or mints an
+  ## identity there, that the directory is this user's own (exo-863).
+  result = context().instancePersistencePath
+  if result.len == 0: result = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+
 proc settingsPath(): string =
-  var dir = context().instancePersistencePath
-  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  let dir = instanceDir()
   dir / "settings.json"
 
 var gKeystoreBackend = getEnv("MUSTER_KEYSTORE_BACKEND", "auto")   ## "off" | "interim" | "auto" (exo-d4d.2)
@@ -446,10 +454,9 @@ proc loadSettingsFile() =
 
 proc saveSettingsFile() =
   try:
-    createDir(parentDir(settingsPath()))
     # the Bitcoin node URL may carry its RPC credentials — kept beside the keystore,
     # like a bitcoin.conf, and never shown back (settings() redacts them)
-    writeFile(settingsPath(), $(%*{"rpc": gRpcUrl, "delivery": gDeliveryConfig,
+    writePrivateFile(settingsPath(), $(%*{"rpc": gRpcUrl, "delivery": gDeliveryConfig,
                                    # only a level the user chose: one from MUSTER_MIX stays the runner's
                                    "mix": (if gMixSaved: $gMix else: ""), "relayer": gRelayer,
                                    "evmChains": gEvmChains, "btcRpc": gBtcRpc, "xmrMsigRpc": gXmrMsigRpc, "lezRpc": gLezRpc, "lezChain": gLezChain,
@@ -521,8 +528,16 @@ proc demoChatIdOf(secpSeed: seq[byte]): string =
 
 proc moduleKeystore(): Keystore =
   if gKeystore == nil:
-    var dir = context().instancePersistencePath
-    if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+    let dir = instanceDir()
+    # A fallback under a shared temporary directory may have been made by another account,
+    # which would then hold this identity's keyfile beside it (exo-863): refuse, never use it.
+    ensurePrivateDir(dir)
+    if not dirOwnedByMe(dir):
+      raise newException(KeystoreError, "the data directory " & dir & " belongs to another " &
+        "user; set MUSTER_DATA_DIR to a directory of your own")
+    # NOT a secret: with no MUSTER_KEY_PASSPHRASE the keyfile is protected by its file
+    # permissions alone (0600, owner-only), and the UI must say so. The real protection is
+    # the platform's keystore (exo-833); this passphrase only keeps a copied file opaque.
     let pass = getEnv("MUSTER_KEY_PASSPHRASE", "muster-dev-passphrase")
     # dev/demo: MUSTER_DEV_SECP_KEY seeds this instance's account with a known secp
     # key (e.g. an anvil Safe owner key) so it signs Safe intents in-app AS a real
@@ -551,7 +566,7 @@ proc moduleKeystore(): Keystore =
       # {"error": …} response now, so one bad keyfile no longer crashes the module).
       raise newException(KeystoreError,
         "keystore locked (" & path & "): " & e.msg & ". The passphrase " &
-        "MUSTER_KEY_PASSPHRASE=\"" & pass & "\" does not match this keyfile. " &
+        "(MUSTER_KEY_PASSPHRASE, or the default when it is unset) does not match this keyfile. " &
         "For a dev/demo peer, delete the file to re-mint a fresh identity " &
         "(scripts/demo-peer.sh … --isolate --fresh does this for you); otherwise " &
         "set the passphrase this keyfile was created with.")
@@ -594,8 +609,7 @@ proc seedDemoContacts(book: ContactBook) =
 
 proc contactBook(): ContactBook =
   if gContacts == nil:
-    var dir = context().instancePersistencePath
-    if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+    let dir = instanceDir()
     gContacts = newContactBook(dir / "contacts.json")
     seedDemoContacts(gContacts)
   gContacts
@@ -896,8 +910,7 @@ proc invitesSince(): int64 =
   gInvitesSince
 
 proc dismissedInvitesPath(): string =
-  var dir = context().instancePersistencePath
-  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  let dir = instanceDir()
   dir / "dismissed_invites.json"
 
 proc loadDismissedInvites() =
@@ -918,23 +931,19 @@ proc clearInvite(ctopic: string) =
   loadDismissedInvites()
   gDismissedInvites.incl ctopic
   try:
-    let p = dismissedInvitesPath()
-    createDir(parentDir(p))
     var arr = newJArray()
     for t in gDismissedInvites: arr.add %t
-    writeFile(p, $arr)
+    writePrivateFile(dismissedInvitesPath(), $arr)
   except CatchableError: discard
 
 proc joinedRoomsPath(): string =
-  var dir = context().instancePersistencePath
-  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  let dir = instanceDir()
   dir / "joined_rooms.json"
 
 proc roomJournalPath(ctopic: string): string =
   ## The member's own copy of one room (exo-dcc.14), beside the joined rooms, named by a
   ## hash of the topic (a topic is a path, and names nothing anyway).
-  var dir = context().instancePersistencePath
-  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  let dir = instanceDir()
   var buf: seq[byte]
   for c in ctopic: buf.add byte(c)
   const d = "0123456789abcdef"
@@ -1132,8 +1141,7 @@ proc musterCoordinateInvites(): string =
   $arr
 
 proc roomTitlesPath(): string =
-  var dir = context().instancePersistencePath
-  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  let dir = instanceDir()
   dir / "room_titles.json"
 
 proc musterCoordinateLeave(roomTopic: string): string =
@@ -1590,8 +1598,7 @@ proc myPayTos(family: string): seq[string] =
   gMyLezPayTos
 
 proc splitBookPath(): string =
-  var dir = context().instancePersistencePath
-  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  let dir = instanceDir()
   dir / "split-pending.json"
 
 proc loadSplitBook() =
@@ -1604,10 +1611,7 @@ proc loadSplitBook() =
 
 proc saveSplitBook() =
   try:
-    let p = splitBookPath()
-    createDir(parentDir(p))
-    writeFile(p & ".tmp", $gSplitBook.toJson())
-    moveFile(p & ".tmp", p)
+    writePrivateFile(splitBookPath(), $gSplitBook.toJson())
   except CatchableError as e:
     if gLpDebug: stderr.writeLine("MUSTER-LP split book not saved: " & e.msg)
 
@@ -2853,14 +2857,12 @@ proc storage(): LpStorage =
   ## keeps its data in THIS instance's folder, never in ~/.logos_storage/data, which another
   ## app's node may hold (storage_lp.nim).
   if gStorage == nil:
-    var dir = context().instancePersistencePath
-    if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+    let dir = instanceDir()
     gStorage = newLpStorage(dir / "storage")
   gStorage
 
 proc swarmWorkDir(topic: string): string =
-  var dir = context().instancePersistencePath
-  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  let dir = instanceDir()
   dir / "fileshare" / toHex(sha256(topic.toOpenArrayByte(0, topic.high)))[0 ..< 16].toLowerAscii
 
 proc swarmNode(topic: string): SwarmNode =
@@ -5153,6 +5155,8 @@ proc musterFrostCeremonyOpen(ceremonyId, network, t, n: string): string =
   if ceremonyId.strip().len == 0 or '/' in ceremonyId: return $(%*{"error": "a ceremony id is a name without /"})
   if ni < 2 or ti < 1 or ti > ni: return $(%*{"error": "a t-of-n needs 1 <= t <= n and n >= 2"})
   let net = (if network.strip().len > 0: network.strip() else: "regtest")
+  let refusal = frostNetworkRefusal(net)
+  if refusal.len > 0: return $(%*{"error": "network-refused", "detail": refusal})
   discard frostCeremonyOpen(gSession, ceremonyId.strip(), net, ti, ni)
   let host = frostCeremonyJoin(gSession, moduleKeystore(), ceremonyId.strip())
   gFrostJoined.add (gSession, ceremonyId.strip())

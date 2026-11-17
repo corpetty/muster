@@ -17,7 +17,8 @@
 ##                   secrets held decrypted in module memory for the process life.
 ##   InMemoryKeystore — no persistence; for tests and raw-key call sites.
 
-import std/[os, streams]
+import std/os
+import ../security/private_files      # the keyfile is owner-only from its first byte (exo-863)
 import ./secp256k1
 import ./sodium
 import ./curve25519
@@ -279,17 +280,14 @@ proc writeKeyfile(path: string, secret: array[32, byte], encSeed: array[32, byte
   payload.add encSeed
   let sealed = secretboxSeal(wrapKey, payload)
 
-  let dir = parentDir(path)
-  if dir.len > 0: createDir(dir)
   var blob = @[byte Magic[0], byte Magic[1], byte Magic[2], Version]
   blob.add salt
   blob.add sealed
-  let fs = newFileStream(path, fmWrite)
-  if fs == nil: raise newException(KeystoreError, "cannot write keyfile: " & path)
-  fs.writeData(addr blob[0], blob.len)
-  fs.close()
-  try: setFilePermissions(path, {fpUserRead, fpUserWrite})
-  except CatchableError: discard
+  var bytes = newString(blob.len)
+  for i, b in blob: bytes[i] = char(b)
+  # owner-only from its first byte, replaced whole (exo-863): never readable, then narrowed
+  try: writePrivateFile(path, bytes)
+  except CatchableError as e: raise newException(KeystoreError, "cannot write keyfile: " & path & ": " & e.msg)
 
 proc readKeyfile(path, passphrase: string): (array[32, byte], array[32, byte], bool) =
   ## Returns (secpSecret, encSeed, upgradedFromV1). A v1 keyfile held only the secp
