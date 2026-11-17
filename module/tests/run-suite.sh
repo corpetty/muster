@@ -181,8 +181,16 @@ export FLAGS_STR; FLAGS_STR=$(printf '%q ' "${FLAGS[@]}")
 run_one_q() { eval "FLAGS=($FLAGS_STR)"; run_one "$1"; }
 export -f run_one_q
 : >"$OUT/results"
-echo "running ${#sel[@]} tests, $JOBS at a time; logs in $OUT"
-printf '%s\n' "${sel[@]}" | xargs -P "$JOBS" -I{} bash -c 'run_one_q "$1"' _ {}
+# Tests that hold a wall-clock budget run alone, after the rest: measured beside other
+# tests' compiles they time the machine's load, not the code (room_graph_scale_test failed
+# its ratio on a 4-vCPU CI runner with three neighbours; rpc_budget_test once beside a build).
+SERIAL=(room_graph_scale_test rpc_budget_test)
+is_serial() { local n; for n in "${SERIAL[@]}"; do [ "$n" = "$1" ] && return 0; done; return 1; }
+par=(); ser=()
+for f in "${sel[@]}"; do if is_serial "$(basename "$f" .nim)"; then ser+=("$f"); else par+=("$f"); fi; done
+echo "running ${#sel[@]} tests, $JOBS at a time (${#ser[@]} with a time budget alone, after); logs in $OUT"
+[ ${#par[@]} -gt 0 ] && printf '%s\n' "${par[@]}" | xargs -P "$JOBS" -I{} bash -c 'run_one_q "$1"' _ {}
+for f in ${ser[@]+"${ser[@]}"}; do run_one_q "$f"; done
 
 pass=$(grep -c '^PASS' "$OUT/results"); fail=$(grep -c '^FAIL' "$OUT/results")
 echo
