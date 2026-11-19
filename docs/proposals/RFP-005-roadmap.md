@@ -85,9 +85,9 @@ Muster's own catalogue. Design and decision log: `docs/design/lez-msig.md`.
 | F.8 spending limits | ✅ | program ✅; adding a limit and spending under it from the room (exo-0d3.12, PR #383, e2e against the real program) |
 | F.9 E2EE room per multisig, LEZ↔chat binding | ✅↪ | Muster's room, not `chat_module` (S.2 below) |
 | F.10 private default, public posture, selective disclosure | 🟡 | both postures ✅; disclosure tiers designed, not built (M4) |
-| U.1 a module other modules call | 🟡 | `muster_module` methods + `lez_msig_module` (prover only); full standalone API is M2 |
+| U.1 a module other modules call | 🟡 | `lez_msig_module`: the prover plus the public posture's key-free operations (PR #385); the private posture's full API is still Muster's |
 | U.2 QML mini-app in Basecamp, room beside proposals | 🟡 | Muster in Basecamp via its catalogue; a dedicated multisig view is M4 |
-| U.3 CLI on the headless core | 🟡 | `msig_exec` + `logoscore` calls; a documented CLI is M2 |
+| U.3 CLI on the headless core | 🟡 | `msig_exec` covers the public journey (PR #385, README); a `logoscore` wrapper is still to do |
 | U.4 IDL via SPEL | ⬜ | SPEL is thinning under 0.4; M3 decides SPEL or its successor |
 | U.5 per-action public/private documentation | 🟡 | design §7; the operator-facing table is M4 |
 | U.6 decode before signing | 🟡 | ✅ for the multisig's own actions; arbitrary targets wait on F.4 |
@@ -95,7 +95,7 @@ Muster's own catalogue. Design and decision log: `docs/design/lez-msig.md`.
 | R.1 M distinct current members, exactly this action, no replay | ✅ | `rules.rs`, `v03_state.rs` |
 | R.2 config change invalidates old approvals, cutoff defined | ✅ | config epoch; the cutoff is the queue; immediate cancel |
 | P.1 CU, size, proving time per operation | 🟡 | measured on v0.3 on a shared machine; rerun idle, on a laptop, and on 0.4 (M1, M3) |
-| P.2 cost as a function of M, M ≥ 5 viable | ✅ | ~15 s per approval; rerun on 0.4 |
+| P.2 cost as a function of M, M ≥ 5 viable | ✅ | ~12 s per approval on an idle 64-core machine (PR #385); rerun on 0.4 |
 | S.1 LEZ, private accounts | ✅ | |
 | S.2 the room on `chat_module` | ↪ | chat 0.3.0 has no member removal, so it cannot reconcile membership; binding seam ready (M6) |
 | S.3/S.4 testnet 0.4, deployed there | ⬜ | LEZ `v0.4.0-rc3` is tagged (2026-11-11); M3 |
@@ -124,9 +124,18 @@ Work done while waiting for feedback, each item in its own draft PR:
   against the real program on a local LEZ v0.3 zone.
 - **M2: the signing spec** (PR #384, `docs/design/lez-msig-signing.md`). It says what an
   approval signs, for integrators without Muster.
+- **M2: the program stands alone** (PR #385). `lez_msig_module` and the `msig_exec` CLI gain
+  key-free public-posture operations: state, propose, spend, check, prepare and send. The
+  program's README documents the whole no-Muster journey. It ran against a real sequencer with
+  every key outside the module.
+- **M1: the benchmark rerun on an idle machine** (PR #385, `BENCHMARKS.md`), with real proving:
+  - a private payment proves in 125.5 s at M=1, 170.6 s at M=5 and 232.0 s at M=10;
+  - that is about 111 s + 12.0 s per approval;
+  - the transaction is a constant 228 KB.
 - **Not done:**
   - the devnet deployment: the devnet's address is not reachable from the build host;
-  - real-proving runs from a room.
+  - real-proving runs from a room;
+  - a laptop-class benchmark.
 
 ## 3. Milestones
 
