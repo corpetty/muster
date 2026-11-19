@@ -74,7 +74,8 @@ ColumnLayout {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         text: holder.onPlatform ? qsTr("Kept in your Basecamp wallet, from its recovery phrase. Muster asks it to sign; it never holds the key.")
-                                : qsTr("Kept by Muster on this device.")
+                                : qsTr("Kept by Muster in a file on this device that only your account on it can read. "
+                                       + "Nothing backs it up: if this device is lost, so is this identity, and with it every room it is in.")
         color: Theme.palette.textSecondary
         font.pixelSize: Theme.typography.secondaryText
     }

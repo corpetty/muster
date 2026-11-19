@@ -58,9 +58,20 @@ type
     account*: FrostAccount
     pending: seq[seq[byte]]       ## the sighashes contributions currently verify against
 
+proc frostNetworkRefusal*(networkName: string): string =
+  ## Why FROST may not act on `networkName`, or "" when it may. module/src/frost/ is
+  ## demonstration-grade: its arithmetic is not constant time (frost/secp.nim), so a key it
+  ## makes or signs with may leak through timing. It never holds value on Bitcoin mainnet
+  ## (exo-863). Test networks and LEZ zones are unaffected.
+  if networkName == "mainnet":
+    "FROST in Muster is demonstration-grade (not constant time): Bitcoin mainnet is refused"
+  else: ""
+
 proc frostAccount*(networkName: string, recoveryData: seq[byte]): FrostAccount =
   ## The account a ceremony made, from its public recovery data alone. Raises on data
-  ## that is not a ChillDKG recovery record.
+  ## that is not a ChillDKG recovery record, and on a network FROST may not act on.
+  let refusal = frostNetworkRefusal(networkName)
+  if refusal.len > 0: raise newException(BtcError, refusal)
   let (o, p) = coordinatorRecover(recoveryData)
   let net = networkByName(networkName)
   let xonly = pointFromCompressed(o.threshPk).toXonly()
