@@ -48,7 +48,7 @@ The demo and the specified client are different codebases. The demo violates mos
 **Standalone app — the easy path.** `logos-standalone-app` hosts the muster UI and `muster_module` directly; no basecamp, no package manager.
 
 ```bash
-make build   # the slow first build — pre-builds the runner (minutes); do this once. Memory-capped by BUILD_MEM (`make help` shows this host's cap)
+make build   # the slow first build — pre-builds the runner (minutes); do this once. Set BUILD_MEM=10G to cap its memory on a machine short of it
 make run     # launch: the lifecycle dashboard (propose → approve → submit) + the walkthrough
 ```
 

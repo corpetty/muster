@@ -9,7 +9,7 @@
 #   1. Basecamp 0.3.2's AppImage (infra/basecamp/release-0.3.2.env), downloaded once, checked
 #      and extracted (no FUSE needed);
 #   2. the catalogue: scripts/catalog-release.sh --local, built from the COMMITTED tree (it
-#      refuses uncommitted module/ or ui/ changes) under BUILD_MEM, as `make build` is;
+#      refuses uncommitted module/ or ui/ changes), capped at BUILD_MEM if set, as `make build` is;
 #   3. a throwaway CA and a certificate for 127.0.0.1: Basecamp accepts only https for a
 #      repository and its downloads (docs/design/catalogue-install.md §7);
 #   4. an https server for the catalogue, for as long as Basecamp runs;
@@ -60,12 +60,10 @@ if [ ! -x "$APPRUN" ]; then
   (cd "$BASE" && rm -rf squashfs-root && "$IMG" --appimage-extract >/dev/null && mv squashfs-root "squashfs-$BASECAMP_TAG")
 fi
 
-# 2. the catalogue, memory-capped like the Makefile's builds (BUILD_MEM=… to change, empty
-#    for none; the hosts in the Makefile's UNCAPPED_HOSTS build uncapped)
+# 2. the catalogue, memory-capped like the Makefile's builds when BUILD_MEM is set
+#    (uncapped by default)
 if [ $BUILD = 1 ] || [ ! -f "$CAT/logos-repo.json" ]; then
-  UNCAPPED=$(sed -n 's/^UNCAPPED_HOSTS *:= *//p' Makefile)
-  case " $UNCAPPED " in *" $(hostname -s) "*) DEFMEM="" ;; *) DEFMEM=10G ;; esac
-  MEM=${BUILD_MEM-$DEFMEM}
+  MEM=${BUILD_MEM-}
   CAP=()
   [ -n "$MEM" ] && CAP=(systemd-run --user --scope --quiet -p "MemoryMax=$MEM" -p MemorySwapMax=0 nice -n 19)
   echo "building the catalogue from $(git rev-parse --short HEAD)${MEM:+ (memory-capped at $MEM)}; the first time takes a while…"

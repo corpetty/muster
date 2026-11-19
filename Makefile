@@ -21,24 +21,22 @@ CACHE := --accept-flake-config \
   --extra-substituters https://cache.nix.logos.co/public \
   --extra-trusted-public-keys public:l4HrXgL4nw246+LBh2SOJyhz64BoGegOYLheT/iIAPU=
 
-# A runner build's flake evaluation alone took 7.4 GB on 2026-10-05 and OOM-froze the
-# workstation (.claude/doctrine/codebase.md § Runner builds). `build`, `build-lgx` and
-# `appimage` run their nix calls in a user cgroup scope capped at BUILD_MEM, so only the
-# build dies if it runs over. The scope holds the evaluating nix client; derivations
-# still build under nix-daemon, outside it. The hosts in UNCAPPED_HOSTS (short hostnames)
-# have memory to spare and build uncapped; any other host defaults to 10G. On any host,
-# BUILD_MEM=<size> sets the cap and BUILD_MEM= (empty) builds uncapped.
-UNCAPPED_HOSTS := bugger
-BUILD_HOST     := $(firstword $(subst ., ,$(shell uname -n)))
-BUILD_MEM      ?= $(if $(filter $(UNCAPPED_HOSTS),$(BUILD_HOST)),,10G)
+# A runner build's flake evaluation alone took 7.4 GB on 2026-10-05 and OOM-froze a
+# workstation (.claude/doctrine/codebase.md § Runner builds). Builds are uncapped by
+# default. On a machine short of memory, set BUILD_MEM (e.g. `export BUILD_MEM=10G` in
+# your shell profile, or `make build BUILD_MEM=10G`): `build`, `build-lgx` and `appimage`
+# then run their nix calls in a user cgroup scope capped at it, so only the build dies if
+# it runs over. The scope holds the evaluating nix client; derivations still build under
+# nix-daemon, outside it.
+BUILD_MEM      ?=
 CAPPED          = $(if $(BUILD_MEM),systemd-run --user --scope --quiet -p MemoryMax=$(BUILD_MEM) -p MemorySwapMax=0 nice -n 19)
 # A capped recipe opens with CAP_CHECK, which refuses to start when the cap can't be
 # applied (never a silent fallback to uncapped), and its build line ends `|| $(CAP_KILLED)`,
 # which says so when the cap killed it (137) and keeps the exit status either way.
 CAP_CHECK       = [ -z "$(BUILD_MEM)" ] || $(CAPPED) true \
-  || { echo "make $@: cannot cap memory at BUILD_MEM=$(BUILD_MEM) with systemd-run --user; BUILD_MEM= builds uncapped"; exit 1; }
+  || { echo "make $@: cannot cap memory at BUILD_MEM=$(BUILD_MEM) with systemd-run --user; unset BUILD_MEM to build uncapped"; exit 1; }
 CAP_KILLED      = { s=$$?; [ $$s -ne 137 ] || echo "make $@: killed at the BUILD_MEM=$(BUILD_MEM) cap. Free memory, or build when the host is quieter; raise BUILD_MEM only if the host can spare it"; exit $$s; }
-CAP_NOTE        = $(if $(BUILD_MEM),memory-capped at BUILD_MEM=$(BUILD_MEM),uncapped on $(BUILD_HOST))
+CAP_NOTE        = $(if $(BUILD_MEM),memory-capped at BUILD_MEM=$(BUILD_MEM),uncapped; BUILD_MEM=<size> caps it)
 
 FLEET     ?= logos.dev
 FLEET_CFG := infra/fleets/$(FLEET).json

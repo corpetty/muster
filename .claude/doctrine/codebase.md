@@ -80,15 +80,16 @@ reaches.
   background.
 - **Keep it under a hard memory cap**, so that only the build dies if it runs
   over, not the session. `make build`, `make build-lgx` and `make appimage`
-  apply the cap themselves: their nix calls run in a `systemd-run --user
-  --scope` capped at `BUILD_MEM`. Each refuses to start if the cap can't be
-  applied, and says so when the build is killed at the cap. `BUILD_MEM`
-  defaults to `10G`, except on the hosts in the Makefile's `UNCAPPED_HOSTS`
-  (today `bugger`, which has memory to spare), where it defaults to uncapped.
-  Add a host there only when it really has the headroom. `BUILD_MEM=` builds
-  uncapped on any host; that is a deliberate choice, never a workaround for a
-  refused cap. A flake evaluated any other way (`nix build`/`nix run` by hand,
-  `make run`) is not capped, so on a capped host wrap it yourself:
+  apply the cap themselves when `BUILD_MEM` is set: their nix calls run in a
+  `systemd-run --user --scope` capped at it. Each refuses to start if the cap
+  can't be applied, and says so when the build is killed at the cap.
+  `BUILD_MEM` is unset by default, so a stranger's fresh clone builds with no
+  cap and no systemd dependency. A machine short of memory sets it once in its
+  shell profile (`export BUILD_MEM=10G`), so every build there is capped; a
+  machine with headroom leaves it unset. Unsetting it on a capped machine is a
+  deliberate choice, never a workaround for a refused cap. A flake evaluated
+  any other way (`nix build`/`nix run` by hand, `make run`) is not capped, so
+  on a machine short of memory wrap it yourself:
 
   ```bash
   systemd-run --user --scope -p MemoryMax=10G -p MemorySwapMax=0 nice -n 19 <command>
