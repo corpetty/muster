@@ -519,3 +519,50 @@ proc configJson*(c: MsigConfig): JsonNode =
      "timelockMs": $c.timelockMs, "openExecution": c.openExecution,
      "transfer": (c.actions and ActTransfer) != 0, "call": (c.actions and ActCall) != 0,
      "targets": c.targets.mapIt(hexOf(it)), "limits": c.limits.mapIt(limitJson(it))}
+
+# ── a config change, as the program applies it (core/src/rules.rs apply_changes) ──
+proc applyChanges*(c: MsigConfig, changes: seq[MsigChange]): MsigConfig =
+  ## The config after an executed config change, or a ValueError naming why the program would
+  ## refuse it. The room folds executed changes with this; the chain's own state is what
+  ## settlement re-reads, and the program's check is the one that counts. The checks are the
+  ## program's, except that a key is not checked to be a curve point (it was one when added).
+  result = c
+  for ch in changes:
+    case ch.kind
+    of ccAddMember:
+      if result.memberOf(ch.member.key).isSome: raise newException(ValueError, "member keys must be distinct")
+      result.members.add ch.member
+    of ccRemoveMember:
+      if result.memberOf(ch.removed).isNone: raise newException(ValueError, "not a member: " & hexOf(ch.removed))
+      if result.limits.anyIt(ch.removed in it.signers):
+        raise newException(ValueError, "a spending limit's signer: remove the limit first")
+      result.members = result.members.filterIt(it.key != ch.removed)
+    of ccSetRoles, ccSetWeight:
+      let k = (if ch.kind == ccSetRoles: ch.rolesKey else: ch.weightKey)
+      var found = false
+      for m in result.members.mitems:
+        if m.key == k:
+          found = true
+          if ch.kind == ccSetRoles: m.roles = ch.roles else: m.weight = ch.weight
+      if not found: raise newException(ValueError, "not a member: " & hexOf(k))
+    of ccSetThreshold: result.threshold = ch.threshold
+    of ccSetTimelock: result.timelockMs = ch.timelockMs
+    of ccSetOpenExecution: result.openExecution = ch.open
+    of ccSetActions: result.actions = ch.actions
+    of ccSetTargets: result.targets = ch.targets
+    of ccAddLimit: result.limits.add ch.limit
+    of ccRemoveLimit:
+      let before = result.limits.len
+      result.limits = result.limits.filterIt(it.id != ch.limitId)
+      if result.limits.len == before: raise newException(ValueError, "unknown spending limit " & $ch.limitId)
+  let r = result
+  if r.members.len == 0 or r.members.len > 32: raise newException(ValueError, "between 1 and 32 members")
+  for i, m in r.members:
+    if r.members[0 ..< i].anyIt(it.key == m.key): raise newException(ValueError, "member keys must be distinct")
+    if m.weight == 0: raise newException(ValueError, "every weight is at least 1")
+    if m.roles == 0 or (m.roles and not RoleAll) != 0: raise newException(ValueError, "every member holds a known role")
+  if r.threshold == 0 or r.threshold > approvalWeight(r, r.members.mapIt(it.key)):
+    raise newException(ValueError, "the threshold is between 1 and the approvers' total weight")
+  if not r.members.anyIt((it.roles and RolePropose) != 0): raise newException(ValueError, "someone must be able to propose")
+  if not r.openExecution and not r.members.anyIt((it.roles and RoleExecute) != 0):
+    raise newException(ValueError, "someone must be able to execute")

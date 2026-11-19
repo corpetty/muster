@@ -1341,7 +1341,10 @@ Item {
                             Layout.fillWidth: true
                             text: qsTr("Queued: proposal #%1, runs from %2").arg(modelData.nonce)
                                   .arg(new Date(Number(modelData.etaMs)).toLocaleString(Qt.locale(), Locale.ShortFormat))
-                            color: Theme.palette.textSecondary
+                                  + (modelData.proposerRemoved
+                                     ? qsTr(". Proposed by a member who has since been removed: it still runs unless you cancel it.")
+                                     : "")
+                            color: modelData.proposerRemoved ? Theme.palette.warning : Theme.palette.textSecondary
                             font.pixelSize: MusterStyle.caption
                             wrapMode: Text.WordWrap
                         }

@@ -222,8 +222,10 @@ proc ceremonyOf*(events: seq[Event], room, createKey: string): Option[MsigCeremo
   for c in ceremonies(events, room):
     if c.createKey == createKey.toLowerAscii(): return some(c)
 
-proc groupSecretOf*(events: seq[Event], ks: Keystore, room, createKey: string): Option[seq[byte]] =
-  ## This member's copy of a private multisig's group secret, sealed to them by its opener.
+proc groupSecretOf*(events: seq[Event], ks: Keystore, room, createKey: string,
+                    sealers: seq[string] = @[]): Option[seq[byte]] =
+  ## This member's copy of a private multisig's group secret, sealed to them by its opener, or,
+  ## for a member added later, by one of `sealers` (the members now, exo-0d3.13).
   let c = ceremonyOf(events, room, createKey)
   if c.isNone or not c.get.private: return
   let key = "lmsig/" & createKey.toLowerAscii() & "/gms/" & memberId(ks)
@@ -231,20 +233,33 @@ proc groupSecretOf*(events: seq[Event], ks: Keystore, room, createKey: string): 
     if e.key != key: continue
     try:
       let j = parseJson(e.value)
-      if j{"author"}.getStr().toLowerAscii() != c.get.opener: continue
+      let author = j{"author"}.getStr().toLowerAscii()
+      if author != c.get.opener and author notin sealers: continue
       let g = ks.sealOpen(unhx(j{"sealed"}.getStr()))
       if g.len == 32: return some(g)
     except CatchableError: discard
 
-proc publishNote*(s: CoordinationSession, ks: Keystore, c: MsigCeremony, n: int, note: seq[byte], hash: string) =
-  ## Seal the multisig's new note to every member, after the chain included `hash`.
-  let me = memberId(ks)
-  for m in c.members:
-    s.publishAuthored(ks, Event(key: "lmsig/" & c.createKey & "/note/" & $n & "/" & m, value: $(%*{
-      "author": me, "hash": hash, "sealed": hx(sealTo(encIdentityFromBytes(unhx(m)).x, note))})))
+proc sealGroupSecretTo*(s: CoordinationSession, ks: Keystore, createKey: string, gms: seq[byte], who: string) =
+  ## Seal this member's copy of the group secret to a member added after creation (exo-0d3.13).
+  s.publishAuthored(ks, Event(key: "lmsig/" & createKey.toLowerAscii() & "/gms/" & who.toLowerAscii(), value: $(%*{
+    "author": memberId(ks), "sealed": hx(sealTo(encIdentityFromBytes(unhx(who)).x, gms))})))
 
-proc latestNote*(events: seq[Event], ks: Keystore, room, createKey: string): tuple[found: bool, n: int, note: seq[byte], hash: string] =
-  ## The newest note sealed to this member by a member of the multisig. Only one transaction
+proc sealNoteTo*(s: CoordinationSession, ks: Keystore, createKey: string, n: int, note: seq[byte], hash, who: string) =
+  s.publishAuthored(ks, Event(key: "lmsig/" & createKey.toLowerAscii() & "/note/" & $n & "/" & who.toLowerAscii(), value: $(%*{
+    "author": memberId(ks), "hash": hash, "sealed": hx(sealTo(encIdentityFromBytes(unhx(who)).x, note))})))
+
+proc publishNote*(s: CoordinationSession, ks: Keystore, c: MsigCeremony, n: int, note: seq[byte], hash: string,
+                  members: seq[string] = @[]) =
+  ## Seal the multisig's new note to every member, after the chain included `hash`: to
+  ## `members` (the members now, exo-0d3.13), or the ceremony's when none are given.
+  for m in (if members.len > 0: members else: c.members):
+    s.sealNoteTo(ks, c.createKey, n, note, hash, m)
+
+proc latestNote*(events: seq[Event], ks: Keystore, room, createKey: string,
+                 authors: seq[string] = @[]): tuple[found: bool, n: int, note: seq[byte], hash: string] =
+  ## The newest note sealed to this member by a member of the multisig: one of `authors` (the
+  ## members now, exo-0d3.13; a removed member's note no longer counts), or, when none are
+  ## given, one the ceremony invited. Only one transaction
   ## spending a note can land (its nullifier), so each number has one note; the first counts.
   let c = ceremonyOf(events, room, createKey)
   if c.isNone: return
@@ -257,7 +272,8 @@ proc latestNote*(events: seq[Event], ks: Keystore, room, createKey: string): tup
       let n = parseInt(p[3])
       if n <= result.n: continue
       let j = parseJson(e.value)
-      if j{"author"}.getStr().toLowerAscii() notin c.get.members: continue
+      let author = j{"author"}.getStr().toLowerAscii()
+      if author notin (if authors.len > 0: authors else: c.get.members): continue
       let note = ks.sealOpen(unhx(j{"sealed"}.getStr()))
       result = (true, n, note, j{"hash"}.getStr())
     except CatchableError: discard
