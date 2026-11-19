@@ -1,0 +1,476 @@
+{
+  "about": "The room map holding a voice note (docs/design/voice-notes.md §10): each of its two parts is an entry named \"voice note\", by its author, and the store node learns one fixed size besides timing and topic, which marks a voice note but not its length; a FileShare entry is a \"shared file\". The members, the store node and the admission are the recorded split-alice-map's; the voice parts and the share are typed in the shapes reduceRoomGraph gives them (voice_test §14 pins a part's, field by field), since no runner records a voice note until S9. Replayed to before the first voice entry, the store node has learned no fixed size yet.",
+  "snapshot": "data/split-alice-map.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "props": {
+    "graphJson": {
+      "viewer": "cd3930fefce17daeba560f92b088ee16b2ac52067ba028d1e9bb1a6ea1e9954d7563dcc927c1a986ecfa833b4e026a1fdacc174092a7d56f0644463af0e2e208",
+      "readFrom": 0,
+      "seqMax": 3,
+      "epochs": [
+        {
+          "epoch": 0,
+          "fromSeq": 0,
+          "admitted": ""
+        },
+        {
+          "epoch": 1,
+          "fromSeq": 0,
+          "admitted": "34bd8ae3fb46fe30f0f0e26239cf2061ce91ebd295b9c23e42f3d960d20440bf1ddfb1eb763ffd609f65a03d8e76350a31e967daea48f50040cc94d87972da40"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "m:cd3930fefce17daeba560f92b088ee16b2ac52067ba028d1e9bb1a6ea1e9954d7563dcc927c1a986ecfa833b4e026a1fdacc174092a7d56f0644463af0e2e208",
+          "kind": "member",
+          "seq": -1,
+          "epoch": 0,
+          "attrs": {
+            "joined": 0
+          }
+        },
+        {
+          "id": "o:store-node",
+          "kind": "observer",
+          "seq": -1,
+          "epoch": 0,
+          "attrs": {}
+        },
+        {
+          "id": "m:34bd8ae3fb46fe30f0f0e26239cf2061ce91ebd295b9c23e42f3d960d20440bf1ddfb1eb763ffd609f65a03d8e76350a31e967daea48f50040cc94d87972da40",
+          "kind": "member",
+          "seq": 0,
+          "epoch": 1,
+          "attrs": {
+            "joined": 1
+          }
+        },
+        {
+          "id": "e:609f3c14c71a4df471cb009b70b247be6a618b86d284ff38d21c1da72921c0d2",
+          "kind": "entry",
+          "seq": 0,
+          "epoch": 1,
+          "attrs": {
+            "kind": "admit",
+            "cls": "peer-message",
+            "counted": true,
+            "guarantee": "sealed under the new epoch by the admitting member — the joiner reads from here on, nothing before (F-16)",
+            "subject": "m:34bd8ae3fb46fe30f0f0e26239cf2061ce91ebd295b9c23e42f3d960d20440bf1ddfb1eb763ffd609f65a03d8e76350a31e967daea48f50040cc94d87972da40",
+            "basis": "sealed",
+            "content": {
+              "value": 1,
+              "joiner": "34bd8ae3fb46fe30f0f0e26239cf2061ce91ebd295b9c23e42f3d960d20440bf1ddfb1eb763ffd609f65a03d8e76350a31e967daea48f50040cc94d87972da40",
+              "epoch": "1"
+            },
+            "facets": [
+              {
+                "about": "who could read it",
+                "class": "imperative",
+                "party": "",
+                "mechanism": "sealed under epoch 1's key: only the members of that epoch could open it"
+              },
+              {
+                "about": "that it exists",
+                "class": "exposed",
+                "party": "the store node",
+                "mechanism": "it keeps every envelope, so it sees when this one arrived and which topic it is on, never what it says"
+              },
+              {
+                "about": "who reads what",
+                "class": "imperative",
+                "party": "",
+                "mechanism": "the room re-keyed forward: the joiner reads from here on, nothing before (F-16)"
+              },
+              {
+                "about": "who was let in",
+                "class": "motivational",
+                "party": "the admitting member",
+                "mechanism": "any member may decide to admit; the room trusts that judgment"
+              }
+            ]
+          }
+        },
+        {
+          "id": "e:4b20df555652f1b5e777e465b5dfcac578896901b80af63460064094faa8e801",
+          "kind": "entry",
+          "seq": 1,
+          "epoch": 1,
+          "attrs": {
+            "kind": "voice",
+            "cls": "peer-message",
+            "counted": true,
+            "guarantee": "sealed to the room's epoch and signed by its author, bound to this room — the room's views read it only if that signature verifies",
+            "basis": "author-signed",
+            "content": {
+              "v": 1,
+              "ts": 1791807900,
+              "durMs": 7000,
+              "digest": "af9d356f0e3217d0a527f3343e45862063a53bcf0f024012caccee279f7088ee"
+            },
+            "facets": [
+              {
+                "about": "who could read it",
+                "class": "imperative",
+                "party": "",
+                "mechanism": "sealed under epoch 1's key: only the members of that epoch could open it"
+              },
+              {
+                "about": "that it exists",
+                "class": "exposed",
+                "party": "the store node",
+                "mechanism": "it keeps every envelope, so it sees when this one arrived, which topic it is on and its one fixed size, which marks a voice note but not its length; never what it says"
+              },
+              {
+                "about": "who sent it",
+                "class": "imperative",
+                "party": "",
+                "mechanism": "its author signed each part, bound to this room; the room's views drop a part whose signature fails"
+              },
+              {
+                "about": "what it says",
+                "class": "motivational",
+                "party": "its author",
+                "mechanism": "a member's word, as any message is"
+              }
+            ],
+            "account": "m:34bd8ae3fb46fe30f0f0e26239cf2061ce91ebd295b9c23e42f3d960d20440bf1ddfb1eb763ffd609f65a03d8e76350a31e967daea48f50040cc94d87972da40"
+          }
+        },
+        {
+          "id": "e:eb6ad3e34b900674a203ec8608072a1699d7aec478c1367ae3e44563b7e64f86",
+          "kind": "entry",
+          "seq": 2,
+          "epoch": 1,
+          "attrs": {
+            "kind": "voice",
+            "cls": "peer-message",
+            "counted": true,
+            "guarantee": "sealed to the room's epoch and signed by its author, bound to this room — the room's views read it only if that signature verifies",
+            "basis": "author-signed",
+            "content": {
+              "v": 1,
+              "ts": 1791807900,
+              "durMs": 7000,
+              "digest": "af9d356f0e3217d0a527f3343e45862063a53bcf0f024012caccee279f7088ee"
+            },
+            "facets": [
+              {
+                "about": "who could read it",
+                "class": "imperative",
+                "party": "",
+                "mechanism": "sealed under epoch 1's key: only the members of that epoch could open it"
+              },
+              {
+                "about": "that it exists",
+                "class": "exposed",
+                "party": "the store node",
+                "mechanism": "it keeps every envelope, so it sees when this one arrived, which topic it is on and its one fixed size, which marks a voice note but not its length; never what it says"
+              },
+              {
+                "about": "who sent it",
+                "class": "imperative",
+                "party": "",
+                "mechanism": "its author signed each part, bound to this room; the room's views drop a part whose signature fails"
+              },
+              {
+                "about": "what it says",
+                "class": "motivational",
+                "party": "its author",
+                "mechanism": "a member's word, as any message is"
+              }
+            ],
+            "account": "m:34bd8ae3fb46fe30f0f0e26239cf2061ce91ebd295b9c23e42f3d960d20440bf1ddfb1eb763ffd609f65a03d8e76350a31e967daea48f50040cc94d87972da40"
+          }
+        },
+        {
+          "id": "e:5caaf53726940c410ff6bb4cf8cfdcd0353f9007125f826dd2db99ce92030c14",
+          "kind": "entry",
+          "seq": 3,
+          "epoch": 1,
+          "attrs": {
+            "kind": "file",
+            "counted": false,
+            "basis": "author-signed",
+            "content": {
+              "author": "cd3930fefce17daeba560f92b088ee16b2ac52067ba028d1e9bb1a6ea1e9954d7563dcc927c1a986ecfa833b4e026a1fdacc174092a7d56f0644463af0e2e208",
+              "name": "minutes.pdf",
+              "mime": "application/pdf",
+              "size": 182344,
+              "digest": "62168cff8196f6b679dba235f5d6f353981fe0162a972081e76568ba92875b74",
+              "cid": "zDvZRwzm5424626b932a2ff9d191f0982447a979fddd8b4b",
+              "key": "0bc518d03f921c39ba53255d097412b4199eb9620cf5d87961eb3abb32921f34",
+              "scheme": "xchacha20poly1305-secretstream-64k.v1",
+              "network": "local",
+              "at": 1791807960
+            },
+            "facets": [
+              {
+                "about": "who could read it",
+                "class": "imperative",
+                "party": "",
+                "mechanism": "sealed under epoch 1's key: only the members of that epoch could open it"
+              },
+              {
+                "about": "that it exists",
+                "class": "exposed",
+                "party": "the store node",
+                "mechanism": "it keeps every envelope, so it sees when this one arrived and which topic it is on, never what it says"
+              },
+              {
+                "about": "this entry",
+                "class": "not-applicable",
+                "party": "",
+                "mechanism": "the fold counts it for nothing; its author signed it, bound to this room"
+              }
+            ],
+            "account": "m:cd3930fefce17daeba560f92b088ee16b2ac52067ba028d1e9bb1a6ea1e9954d7563dcc927c1a986ecfa833b4e026a1fdacc174092a7d56f0644463af0e2e208"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "src": "e:609f3c14c71a4df471cb009b70b247be6a618b86d284ff38d21c1da72921c0d2",
+          "dst": "e:4b20df555652f1b5e777e465b5dfcac578896901b80af63460064094faa8e801",
+          "kind": "parent",
+          "seq": 1,
+          "attrs": {
+            "credibility": "imperative",
+            "party": "",
+            "mechanism": "a hash link: the child's id commits to it"
+          }
+        },
+        {
+          "src": "m:34bd8ae3fb46fe30f0f0e26239cf2061ce91ebd295b9c23e42f3d960d20440bf1ddfb1eb763ffd609f65a03d8e76350a31e967daea48f50040cc94d87972da40",
+          "dst": "e:4b20df555652f1b5e777e465b5dfcac578896901b80af63460064094faa8e801",
+          "kind": "authored",
+          "seq": 1,
+          "attrs": {
+            "basis": "author-signed",
+            "credibility": "imperative",
+            "party": "",
+            "mechanism": "a signed entry by the member it names"
+          }
+        },
+        {
+          "src": "e:4b20df555652f1b5e777e465b5dfcac578896901b80af63460064094faa8e801",
+          "dst": "e:eb6ad3e34b900674a203ec8608072a1699d7aec478c1367ae3e44563b7e64f86",
+          "kind": "parent",
+          "seq": 2,
+          "attrs": {
+            "credibility": "imperative",
+            "party": "",
+            "mechanism": "a hash link: the child's id commits to it"
+          }
+        },
+        {
+          "src": "m:34bd8ae3fb46fe30f0f0e26239cf2061ce91ebd295b9c23e42f3d960d20440bf1ddfb1eb763ffd609f65a03d8e76350a31e967daea48f50040cc94d87972da40",
+          "dst": "e:eb6ad3e34b900674a203ec8608072a1699d7aec478c1367ae3e44563b7e64f86",
+          "kind": "authored",
+          "seq": 2,
+          "attrs": {
+            "basis": "author-signed",
+            "credibility": "imperative",
+            "party": "",
+            "mechanism": "a signed entry by the member it names"
+          }
+        },
+        {
+          "src": "e:eb6ad3e34b900674a203ec8608072a1699d7aec478c1367ae3e44563b7e64f86",
+          "dst": "e:5caaf53726940c410ff6bb4cf8cfdcd0353f9007125f826dd2db99ce92030c14",
+          "kind": "parent",
+          "seq": 3,
+          "attrs": {
+            "credibility": "imperative",
+            "party": "",
+            "mechanism": "a hash link: the child's id commits to it"
+          }
+        },
+        {
+          "src": "m:cd3930fefce17daeba560f92b088ee16b2ac52067ba028d1e9bb1a6ea1e9954d7563dcc927c1a986ecfa833b4e026a1fdacc174092a7d56f0644463af0e2e208",
+          "dst": "e:5caaf53726940c410ff6bb4cf8cfdcd0353f9007125f826dd2db99ce92030c14",
+          "kind": "authored",
+          "seq": 3,
+          "attrs": {
+            "basis": "author-signed",
+            "credibility": "imperative",
+            "party": "",
+            "mechanism": "a signed entry by the member it names"
+          }
+        }
+      ],
+      "crossings": [
+        {
+          "seq": -1,
+          "dir": "out",
+          "kind": "envelopes",
+          "observer": "o:store-node",
+          "fields": [
+            "timing",
+            "topic"
+          ],
+          "entries": 4,
+          "credibility": "exposed",
+          "party": "the store node",
+          "mechanism": "every entry is an envelope the store node keeps: it sees when each arrived and its topic, never what it says"
+        },
+        {
+          "seq": 0,
+          "dir": "join",
+          "kind": "admit",
+          "member": "m:34bd8ae3fb46fe30f0f0e26239cf2061ce91ebd295b9c23e42f3d960d20440bf1ddfb1eb763ffd609f65a03d8e76350a31e967daea48f50040cc94d87972da40",
+          "epoch": 1,
+          "entry": "e:609f3c14c71a4df471cb009b70b247be6a618b86d284ff38d21c1da72921c0d2",
+          "credibility": "imperative",
+          "party": "",
+          "mechanism": "the room re-keyed forward: they read from epoch 1 on, nothing before (F-16)"
+        }
+      ],
+      "fingerprints": [],
+      "dropped": 0
+    }
+  },
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomMapButton",
+        "triggered"
+      ]
+    },
+    {
+      "expect": {
+        "slot": "loadGraph"
+      }
+    },
+    {
+      "wait": 800
+    },
+    {
+      "set": [
+        "roomMap",
+        "selected",
+        "e:4b20df555652f1b5e777e465b5dfcac578896901b80af63460064094faa8e801"
+      ]
+    },
+    {
+      "expectProp": [
+        "roomMapInspectorTitle",
+        "text",
+        "voice note by Bob"
+      ]
+    },
+    {
+      "set": [
+        "roomMap",
+        "selected",
+        "e:5caaf53726940c410ff6bb4cf8cfdcd0353f9007125f826dd2db99ce92030c14"
+      ]
+    },
+    {
+      "expectProp": [
+        "roomMapInspectorTitle",
+        "text",
+        "~shared file by"
+      ]
+    },
+    {
+      "set": [
+        "roomMap",
+        "selected",
+        "o:store-node"
+      ]
+    },
+    {
+      "expectProp": [
+        "roomMapRow_Voice notes",
+        "text",
+        "each one's two envelopes, of one fixed size: that one was sent, never how long it is"
+      ]
+    },
+    {
+      "wait": 400
+    },
+    {
+      "shot": "store-node"
+    },
+    {
+      "set": [
+        "roomMap",
+        "selected",
+        ""
+      ]
+    },
+    {
+      "set": [
+        "roomMap",
+        "lens",
+        "leaks"
+      ]
+    },
+    {
+      "wait": 800
+    },
+    {
+      "expectProp": [
+        "roomMapFields_o:store-node",
+        "text",
+        "timing, topic, one fixed size"
+      ]
+    },
+    {
+      "shot": "leaks"
+    },
+    {
+      "set": [
+        "roomMap",
+        "following",
+        false
+      ]
+    },
+    {
+      "set": [
+        "roomMap",
+        "k",
+        0
+      ]
+    },
+    {
+      "wait": 300
+    },
+    {
+      "expectProp": [
+        "roomMap",
+        "k",
+        0
+      ]
+    },
+    {
+      "expectProp": [
+        "roomMapFields_o:store-node",
+        "text",
+        "timing, topic"
+      ]
+    },
+    {
+      "set": [
+        "roomMap",
+        "k",
+        1
+      ]
+    },
+    {
+      "wait": 300
+    },
+    {
+      "expectProp": [
+        "roomMapFields_o:store-node",
+        "text",
+        "timing, topic, one fixed size"
+      ]
+    }
+  ]
+}

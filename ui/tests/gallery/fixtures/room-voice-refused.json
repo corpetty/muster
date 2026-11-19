@@ -1,0 +1,613 @@
+{
+  "about": "A voice refusal describes the state it was made in (docs/design/voice-notes.md §8): the module's busy, said when another caller started recording between two reads of voice_status, goes once voice_status moves on (that recording ended); a Send refused as room-changed goes once another room is open. voiceJson and voiceResultJson are copied from the shapes voice_status and the voice methods pin (no runner records one until S9). A refusal dismissed stays hidden while the next call is in flight and shows again when that call's answer (voiceResultSeq one more) refuses in the same words, while a platform note once dismissed stays dismissed; while a call is in flight the last call's answer is not shown under its title; a Play refused codec names the decoder, too-large asks for no second Send, and a word from the device or the encoder reads as plain words.",
+  "snapshot": "data/statement-proposed.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "props": {
+    "voiceJson": {
+      "ready": {
+        "capture": "unknown",
+        "playback": "unknown",
+        "codec": "libopus 1.5.2",
+        "note": ""
+      },
+      "recording": {
+        "state": "idle",
+        "elapsedMs": 0,
+        "capMs": 60000,
+        "peak": 0,
+        "capped": false,
+        "silent": false,
+        "error": ""
+      },
+      "playing": null
+    },
+    "voiceResultJson": ""
+  },
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "click": "voiceRecordButton"
+    },
+    {
+      "expect": {
+        "slot": "startVoiceRecording"
+      }
+    },
+    {
+      "props": {
+        "voiceResultJson": {
+          "error": "busy"
+        },
+        "voiceResultSeq": "1"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "title",
+        "Recording did not start."
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "~already recording or playing"
+      ]
+    },
+    {
+      "shot": "busy"
+    },
+    {
+      "click": "voiceNoticeDismiss"
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "click": "voiceRecordButton"
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "wait": 300
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "props": {
+        "voiceResultJson": {
+          "error": "busy"
+        },
+        "voiceResultSeq": "2"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "~already recording or playing"
+      ]
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "ok",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "recording",
+            "elapsedMs": 3000,
+            "capMs": 60000,
+            "peak": 8000,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": null
+        }
+      }
+    },
+    {
+      "expectProp": [
+        "voiceRecording",
+        "visible",
+        true
+      ]
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "unknown",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "idle",
+            "elapsedMs": 0,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": null
+        }
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceRecordButton",
+        "visible",
+        true
+      ]
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "ok",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "draft",
+            "elapsedMs": 4200,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": null
+        }
+      }
+    },
+    {
+      "click": "voiceSendButton"
+    },
+    {
+      "expect": {
+        "slot": "sendVoiceDraft"
+      }
+    },
+    {
+      "props": {
+        "voiceResultJson": {
+          "error": "room-changed"
+        },
+        "voiceResultSeq": "3"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "title",
+        "Nothing was sent."
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "~belongs to another room"
+      ]
+    },
+    {
+      "shot": "room-changed"
+    },
+    {
+      "props": {
+        "roomTopic": "/muster/1/proof-1791573999/proto"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceDraft",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "props": {
+        "roomTopic": "/muster/1/proof-1791573223/proto"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "ok",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "draft",
+            "elapsedMs": 4200,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": true,
+            "error": ""
+          },
+          "playing": null
+        }
+      }
+    },
+    {
+      "click": "voiceSendButton"
+    },
+    {
+      "expect": {
+        "slot": "sendVoiceDraft"
+      }
+    },
+    {
+      "props": {
+        "voiceResultJson": {
+          "error": "silent",
+          "detail": ""
+        },
+        "voiceResultSeq": "4"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "~The recording is silent"
+      ]
+    },
+    {
+      "click": "voiceNoticeDismiss"
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "click": "voiceSendButton"
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "wait": 300
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "props": {
+        "voiceResultJson": {
+          "error": "silent",
+          "detail": ""
+        },
+        "voiceResultSeq": "5"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        true
+      ]
+    },
+    {
+      "click": "voiceDraftPlay"
+    },
+    {
+      "expect": {
+        "slot": "playVoiceNote",
+        "args": [
+          "draft"
+        ]
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "title",
+        ""
+      ]
+    },
+    {
+      "props": {
+        "voiceResultJson": {
+          "error": "codec"
+        },
+        "voiceResultSeq": "6"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "title",
+        "Nothing played."
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "~decoder"
+      ]
+    },
+    {
+      "click": "voiceSendButton"
+    },
+    {
+      "props": {
+        "voiceResultJson": {
+          "error": "too-large"
+        },
+        "voiceResultSeq": "7"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "title",
+        "Nothing was sent."
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "!Send again"
+      ]
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "unknown",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "idle",
+            "elapsedMs": 0,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": null
+        },
+        "voiceResultJson": ""
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "click": "voiceRecordButton"
+    },
+    {
+      "props": {
+        "voiceResultJson": {
+          "error": "device-format"
+        },
+        "voiceResultSeq": "8"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "title",
+        "Recording did not start."
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "~would not record"
+      ]
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "unknown",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "idle",
+            "elapsedMs": 0,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": "not-cbr"
+          },
+          "playing": null
+        },
+        "voiceResultJson": ""
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "~encoder"
+      ]
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "unknown",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": "Basecamp 0.3.2 can't use the microphone on macOS yet: it lacks the microphone permission."
+          },
+          "recording": {
+            "state": "idle",
+            "elapsedMs": 0,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": null
+        }
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "Basecamp 0.3.2 can't use the microphone on macOS yet: it lacks the microphone permission."
+      ]
+    },
+    {
+      "click": "voiceNoticeDismiss"
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "click": "voiceRecordButton"
+    },
+    {
+      "props": {
+        "voiceResultJson": {
+          "ok": true
+        },
+        "voiceResultSeq": "9"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}

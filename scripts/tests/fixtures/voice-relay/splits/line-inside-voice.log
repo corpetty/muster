@@ -1,0 +1,2 @@
+ui-host [ "muster_ui" ]: "[muster_ui] VOICE {\"ready\":{\"capture\":\"ok\",\"playback\":\"unknown\",\"codec\":\"libopus 1.5.2\",[2026-10-22 19:26:28.980] [info] [logos] [keystore_module] QMetaObject::invokeMethod: No such method LogosAPI::currentCallerJson()
+\"note\":\"\"},\"recording\":{\"state\":\"idle\",\"elapsedMs\":0,\"capMs\":60000,\"peak\":0,\"capped\":false,\"silent\":false,\"error\":\"\"},\"playing\":null}"

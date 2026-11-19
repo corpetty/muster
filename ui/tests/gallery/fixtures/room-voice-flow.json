@@ -1,0 +1,189 @@
+{
+  "about": "Who can see what, for a voice note's two parts (docs/design/voice-notes.md §10): the room plays it and learns its length; the store node keeps two envelopes of one fixed size, and when. The module's field names read as words. flowJson is copied from the rows flow.nim makes for a note's parts (voice_test §13 pins them; no runner records one until S9).",
+  "snapshot": "data/statement-proposed.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "props": {
+    "flowJson": {
+      "rows": [
+        {
+          "seq": 7,
+          "kind": "voice",
+          "intentId": "",
+          "field": "voice-note",
+          "to": "room-member",
+          "members": [
+            "589ab01dfc6c60f2fb6f4f14136607d939882cf6b65e5aa37e11f79233705f584b351ba34d3be62e787b12cc146dfaf09b9c3df21ae438383aaede5f32cb107b",
+            "4d613c133e2e7557b28b9a827ad7493cf8b137c160ad3f33ec9cc49b4b1eb58fc40ff65ca733a1d0bb541e716692f151bed3d8b6c7a608eb0928a446ad5a8866"
+          ],
+          "epoch": 1,
+          "declared": true
+        },
+        {
+          "seq": 7,
+          "kind": "voice",
+          "intentId": "",
+          "field": "voice-note-length",
+          "to": "room-member",
+          "members": [
+            "589ab01dfc6c60f2fb6f4f14136607d939882cf6b65e5aa37e11f79233705f584b351ba34d3be62e787b12cc146dfaf09b9c3df21ae438383aaede5f32cb107b",
+            "4d613c133e2e7557b28b9a827ad7493cf8b137c160ad3f33ec9cc49b4b1eb58fc40ff65ca733a1d0bb541e716692f151bed3d8b6c7a608eb0928a446ad5a8866"
+          ],
+          "epoch": 1,
+          "declared": true
+        },
+        {
+          "seq": 7,
+          "kind": "voice",
+          "intentId": "",
+          "field": "timing",
+          "to": "store-node",
+          "members": [],
+          "epoch": 1,
+          "declared": true
+        },
+        {
+          "seq": 7,
+          "kind": "voice",
+          "intentId": "",
+          "field": "topic",
+          "to": "store-node",
+          "members": [],
+          "epoch": 1,
+          "declared": true
+        },
+        {
+          "seq": 7,
+          "kind": "voice",
+          "intentId": "",
+          "field": "fixed-size",
+          "to": "store-node",
+          "members": [],
+          "epoch": 1,
+          "declared": true
+        },
+        {
+          "seq": 8,
+          "kind": "voice",
+          "intentId": "",
+          "field": "voice-note",
+          "to": "room-member",
+          "members": [
+            "589ab01dfc6c60f2fb6f4f14136607d939882cf6b65e5aa37e11f79233705f584b351ba34d3be62e787b12cc146dfaf09b9c3df21ae438383aaede5f32cb107b",
+            "4d613c133e2e7557b28b9a827ad7493cf8b137c160ad3f33ec9cc49b4b1eb58fc40ff65ca733a1d0bb541e716692f151bed3d8b6c7a608eb0928a446ad5a8866"
+          ],
+          "epoch": 1,
+          "declared": true
+        },
+        {
+          "seq": 8,
+          "kind": "voice",
+          "intentId": "",
+          "field": "voice-note-length",
+          "to": "room-member",
+          "members": [
+            "589ab01dfc6c60f2fb6f4f14136607d939882cf6b65e5aa37e11f79233705f584b351ba34d3be62e787b12cc146dfaf09b9c3df21ae438383aaede5f32cb107b",
+            "4d613c133e2e7557b28b9a827ad7493cf8b137c160ad3f33ec9cc49b4b1eb58fc40ff65ca733a1d0bb541e716692f151bed3d8b6c7a608eb0928a446ad5a8866"
+          ],
+          "epoch": 1,
+          "declared": true
+        },
+        {
+          "seq": 8,
+          "kind": "voice",
+          "intentId": "",
+          "field": "timing",
+          "to": "store-node",
+          "members": [],
+          "epoch": 1,
+          "declared": true
+        },
+        {
+          "seq": 8,
+          "kind": "voice",
+          "intentId": "",
+          "field": "topic",
+          "to": "store-node",
+          "members": [],
+          "epoch": 1,
+          "declared": true
+        },
+        {
+          "seq": 8,
+          "kind": "voice",
+          "intentId": "",
+          "field": "fixed-size",
+          "to": "store-node",
+          "members": [],
+          "epoch": 1,
+          "declared": true
+        }
+      ],
+      "matrix": {
+        "room-member": [
+          "voice-note",
+          "voice-note-length"
+        ],
+        "store-node": [
+          "fixed-size",
+          "timing",
+          "topic"
+        ]
+      }
+    }
+  },
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsTab",
+        "privacy"
+      ]
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsOpen",
+        true
+      ]
+    },
+    {
+      "set": [
+        "flowView",
+        "collapsed",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "flowFields_room-member",
+        "text",
+        "voice note, voice note length"
+      ]
+    },
+    {
+      "expectProp": [
+        "flowFields_store-node",
+        "text",
+        "one fixed size, timing, topic"
+      ]
+    },
+    {
+      "set": [
+        "flowView",
+        "rowsOpen",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}

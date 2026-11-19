@@ -19,8 +19,14 @@
 ##
 ## Emits ONE trace (the grader's envelope, oracle_emit) whose every state is one observed
 ## call's {"client_return_typed": ...}. `always` requires every call — health, propose
-## across a valid/edge family, and status of each resulting id — to be observed as its
-## typed string.
+## across a valid/edge family, status of each resulting id, voice_status, and the six other
+## voice methods with coordinate_messages and coordinate_proof — to be observed as its typed
+## string. voice_status (voice notes, docs/design/voice-notes.md §8) must also be listed in
+## the method table, and name the libopus the module links, with no audio device opened: so
+## the module's libopus and miniaudio are linked into this host. With no room joined, each
+## of the other eight replies exactly as that state gives (not-joined, not-recording,
+## no-draft, "ok", "[]"), listed as QString, and voice_status after them still reads both
+## devices "unknown".
 
 import std/[json, os, osproc, strutils]
 import ./oracle_emit
@@ -40,10 +46,11 @@ proc run(cmd: string, args: seq[string]): tuple[output: string, code: int] =
   (o, c)
 
 # ── linker flags for a C library the module core links (secp256k1; libsodium for the
-#    F-14 encryption identity and the keystore). The module build supplies them via
-#    nix.packages, mirroring tests/README's --passL guidance. Prefer an explicit env
-#    override, then pkg-config, then the nix store, then a bare -l<lib>. Returns raw
-#    linker tokens; callers prefix them for nim (--passL:) or pass them to g++ as-is. ──
+#    F-14 encryption identity and the keystore; libopus for voice notes). The module
+#    build supplies them via nix.packages, mirroring tests/README's --passL guidance.
+#    Prefer an explicit env override, then pkg-config, then the nix store, then a bare
+#    -l<lib>. Returns raw linker tokens; callers prefix them for nim (--passL:) or pass
+#    them to g++ as-is. ──
 proc libTokens(envVar, pcName, lib: string): seq[string] =
   let env = getEnv(envVar)
   if env.len > 0:
@@ -80,6 +87,16 @@ proc sodiumTokens(): seq[string] =
       fileExists(linked / "libsodium.so"):
     return @["-L" & linked, "-Wl,-rpath," & linked, "-lsodium"]
   libTokens("MUSTER_SODIUM_LIB", "libsodium", "sodium")
+proc opusTokens(): seq[string] =
+  # libopus, the voice codec the module links since voice notes (docs/design/voice-notes.md
+  # §9; metadata.json codegen.nim.link "opus"), found as libsodium is: under the grader the
+  # one grade-specs.sh linked beside its libsodium and gcc, else MUSTER_OPUS_LIB
+  # (run-suite.sh exports it), pkg-config, the store
+  let linked = moduleRoot / ".probe-env" / "opus"
+  if getEnv("MUSTER_OPUS_LIB").len == 0 and getEnv("MUSTER_NIMPKGS").len == 0 and
+      fileExists(linked / "libopus.so"):
+    return @["-L" & linked, "-Wl,-rpath," & linked, "-lopus"]
+  libTokens("MUSTER_OPUS_LIB", "opus", "opus")
 
 # ── the module's Nim closure (logos_sdk, nim-secp256k1, stint, the web3 stack). The
 #    staticlib compiles nim-lib/muster_module.nim, which imports all of it, but this
@@ -122,7 +139,8 @@ block buildHarness:
   ]
   for tok in secpTokens(): args.add "--passL:" & tok
   for tok in sodiumTokens(): args.add "--passL:" & tok
-  args.add closurePaths()
+  for tok in opusTokens(): args.add "--passL:" & tok
+  args.add closurePaths()                   # miniaudio's checkout among them: metadata.json pins it
   args.add harnessNim
   let (o, c) = run("nim", args)
   if c != 0 or not fileExists(harnessBin):

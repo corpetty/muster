@@ -24,6 +24,7 @@ This is the port of the UI backend from C++ (`ui/src/muster_ui_backend.cpp`) to 
   - **`backend.nim`**: every SLOT of the contract and the `MUSTER_AUTO*` autopilot (T5), slot for slot with `ui/src/muster_ui_backend.cpp`. It calls `muster_module` only through `mm.<method>Async`, the async twin of the client generated from `muster.lidl`, so the view never blocks. Included into `muster_app.nim`, because nimside wants each Impl in the module that declares the contract.
   - **`sched.nim`**: `after` / `every` / `barrier` on one QTimer.
 - **`headless/`**: the headless host (T7), logos-core and a module driven from stdin; see its README. It shares `app/logos_core.nim`'s `startCore` with the app.
+- **`tests/autovoice/`**: the voice autopilot's decisions (voice notes' S9) with no Qt and no runner, so it runs on a Mac too. `gen.py` makes a harness that includes `app/backend.nim` whole, against stubs generated from the `.rep` and `muster.lidl` (as `contract/` and the SDK's client are) and `fake_module.nim`, a fake `muster_module` with the voice state machine; `run.sh` builds it with the nim on PATH, else this flake's nixpkgs pin's, and checks the recorder's and the player's calls. A fake stands in for the module only, the process boundary; the backend is the real file.
 - **`nix/muster-client.nix`**: the typed `muster_module` client, generated at build time from `module/src/api/muster.lidl` by the pinned SDK's `lidl-gen`. Never committed.
 - **The runner**: `scripts/build-runner-nim.sh` (`make build-nim`) writes `.run/runner-nim/bin/muster-ui`, the app on the C++ runner's modules. `MUSTER_UI=nim` selects it in the self-tests and in `make run` / `run-fleet`.
 
@@ -40,6 +41,7 @@ scripts/nim-app-core-probe.sh                          # T4a: + logos-core and m
 scripts/build-runner-nim.sh                            # T6: .run/runner-nim (needs make build: it uses the C++ runner's modules)
 scripts/nim-headless-probe.sh                          # T7: the headless host drives muster_module from stdin (needs make build)
 MUSTER_UI=nim scripts/ui-parity.sh                     # the parity oracle: every offscreen self-test on the Nim build
+ui-nim/tests/autovoice/run.sh                          # the voice autopilot against a fake module, no Qt (any host; [<dir>/backend.nim] for another backend)
 ```
 
 ## Rules

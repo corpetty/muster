@@ -13,6 +13,9 @@ import Logos.Icons
 //   (children) the remedies, as buttons, at the right
 //   dismissible  a × that hides it until its words change: a new outcome always shows.
 //                A consumer ANDs `!dismissed` into its own `visible`.
+//   occasion     what the words answer, when the same words can come back as a new
+//                outcome (a retried call refused again): a × hides them for this
+//                occasion only. Empty, the words alone decide.
 Rectangle {
     id: notice
 
@@ -21,8 +24,10 @@ Rectangle {
     property string text: ""
     default property alias actions: remedies.data
     property bool dismissible: false
+    property string occasion: ""
     property string dismissedFor: ""
-    readonly property bool dismissed: dismissible && dismissedFor.length > 0 && dismissedFor === title + "\n" + text
+    readonly property string dismissKey: occasion + "\n" + title + "\n" + text
+    readonly property bool dismissed: dismissible && dismissedFor.length > 0 && dismissedFor === dismissKey
 
     readonly property color accent: tone === "error" ? MusterStyle.refused
                                   : tone === "warning" ? MusterStyle.warning : MusterStyle.info
@@ -78,12 +83,13 @@ Rectangle {
             spacing: Theme.spacing.small
         }
         IconAction {
+            objectName: notice.objectName.length > 0 ? notice.objectName + "Dismiss" : ""
             visible: notice.dismissible
             Layout.alignment: Qt.AlignTop
             size: 24
             label: qsTr("Dismiss")
             icon: LogosIcons.close
-            onClicked: notice.dismissedFor = notice.title + "\n" + notice.text
+            onClicked: notice.dismissedFor = notice.dismissKey
         }
     }
 }

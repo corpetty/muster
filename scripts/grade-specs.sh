@@ -46,14 +46,32 @@ ln -sfn "$("$REPO/module/tools/nim-closure.sh")" "$PROBE_ENV/nimpkgs"
 # host's glibc, which may be older than the one nixpkgs' libsodium needs ("GLIBC_ABI_GNU2_TLS
 # not found"), so that gcc is linked as .probe-env/cc, where config.nims compiles with it.
 # MUSTER_SODIUM (a host libsodium) keeps the host's compiler.
-NIXGCC=""
+# libopus (voice notes; exo-526's host probe builds the whole module, which links it) is the
+# one the .lgx ships, as in run-suite.sh: nixpkgs#libopus at the builder's pin
+# (module/tools/builder-nixpkgs.sh, read off a lock; 1.5.2 at e9f00bd), not nixpkgs' current
+# one (1.6.1 on 2026-10-23), which this took until PR 340's review. It runs under the gcc
+# above for the reason run-suite.sh gives: it was built on an older glibc than that gcc's,
+# and the probe loads the gcc's libc and libm itself. It is a build of its own, so a libopus
+# that fails to fetch or build costs exo-526 alone, never the libsodium and gcc every other
+# probe needs. A host MUSTER_SODIUM needs MUSTER_OPUS beside it, as in run-suite.sh.
+NIXGCC=""; OPUS="${MUSTER_OPUS:-}"
 if [ -n "${MUSTER_SODIUM:-}" ]; then
   SODIUM="$MUSTER_SODIUM"
 else
   { read -r SODIUM; read -r NIXGCC; } < <(nix build nixpkgs#libsodium.out nixpkgs#gcc.out --no-link --print-out-paths 2>/dev/null) || true
+  if [ -z "$OPUS" ]; then
+    PIN="$("$REPO/module/tools/builder-nixpkgs.sh" 2>/dev/null)" || PIN=""
+    if [ -n "$PIN" ]; then
+      OPUS="$(nix build "$PIN#libopus.out" --no-link --print-out-paths 2>/dev/null | tail -1)" || true
+    else
+      echo "warning: the builder's nixpkgs pin could not be read (module/flake.lock, or the builder's own lock)" >&2
+    fi
+  fi
 fi
 [ -f "$SODIUM/lib/libsodium.so" ] && ln -sfn "$SODIUM/lib" "$PROBE_ENV/sodium" \
   || echo "warning: libsodium not found (set MUSTER_SODIUM); probes that need it will not build" >&2
+[ -f "$OPUS/lib/libopus.so" ] && ln -sfn "$OPUS/lib" "$PROBE_ENV/opus" \
+  || echo "warning: libopus not found (set MUSTER_OPUS); exo-526's host probe will not build" >&2
 if [ -n "$NIXGCC" ] && [ -x "$NIXGCC/bin/gcc" ]; then ln -sfn "$NIXGCC/bin" "$PROBE_ENV/cc"; else rm -f "$PROBE_ENV/cc"; fi
 # exo-526's host harness was C++ and needed a g++ here; it is Nim since exo-607 T7, built
 # by the probe's own nim with the cc above.

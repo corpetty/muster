@@ -1,0 +1,5 @@
+[2026-10-22 19:22:02.501] [info] [logos] [muster_module] MUSTER-LP send/sub-result ok=1 json={"error":null,"success":true,"value":"716224689c1203e8c07d"}
+ui-host [ "muster_ui" ]: "[muster_ui] VOICE-RESULT stop {\"draft\":{\"durationMs\":2985,\"silent\":false,\"peak\":16383}}\nLogosAPIClient: invoking remote method \"muster_module\" \"voice_draft_send\" args_count: 0\nLogosAPIClient: getToken for module: \"muster_module\"\nLogosAPIClient: Found token for module: \"muster_module\"\nLogosAPIConsumer: Calling invokeRemoteMethod: \"muster_module\" \"voice_draft_send\" args_count: 0 timeout: 20000\n[LogosObject] LogosAPIConsumer: calling via LogosObject::callMethod \"voice_draft_send\"\n[LogosObject] RemoteLogosObject::callMethod \"voice_draft_send\" args: 0"
+ui-host [ "muster_ui" ]: "[muster_ui] VOICE-RESULT send {\"note\":\"48410f05599e54b38ffd8b515ba4017e\"}"
+[2026-10-22 19:22:05.574] [info] [logos] [muster_module] MUSTER-LP send/sub-result ok=1 json={"error":null,"success":true,"value":"99c679ecd61f7a8cb22a"}
+[2026-10-22 19:22:05.574] [info] [logos] [muster_module] MUSTER-LP send/sub-result ok=1 json={"error":null,"success":true,"value":"dca5f1ba00c9de911779"}

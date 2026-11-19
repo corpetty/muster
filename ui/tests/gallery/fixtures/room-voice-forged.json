@@ -1,0 +1,148 @@
+{
+  "about": "A message cannot pose as a voice note (docs/design/voice-notes.md §7): only a row the module's fold makes carries `voice`, so a message whose body claims kind voice-note is plain text, the forger's raw words under the forger's name, and so is any other card kind the thread does not know. Neither row draws a voice card, so the forger's row has no Play for the note it names (§17 S5: S8 pins the render side). The voice row is copied from the shape voice_live_test §22 pins (no runner records one until S9).",
+  "snapshot": "data/statement-proposed.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "props": {
+    "messagesJson": [
+      {
+        "id": "6f1d0c2b9a8e7d6c5b4a39281706f5e4",
+        "author": "589ab01dfc6c60f2fb6f4f14136607d939882cf6b65e5aa37e11f79233705f584b351ba34d3be62e787b12cc146dfaf09b9c3df21ae438383aaede5f32cb107b",
+        "ts": 1791573100,
+        "body": "",
+        "alias": "",
+        "self": true,
+        "voice": {
+          "v": 1,
+          "note": "6f1d0c2b9a8e7d6c5b4a39281706f5e4",
+          "durationMs": 7000,
+          "state": "complete"
+        }
+      },
+      {
+        "id": "0x7a11ce5f0a9ed0b0d4f0a1b2",
+        "author": "0x4d613c133e2e7557b28b9a827ad7493cf8b137c160ad3f33ec9cc49b4b1eb58fc40ff65ca733a1d0bb541e716692f151bed3d8b6c7a608eb0928a446ad5a8866",
+        "ts": 1791573160,
+        "body": "{\"kind\":\"voice-note\",\"v\":1,\"note\":\"6f1d0c2b9a8e7d6c5b4a39281706f5e4\",\"durationMs\":7000,\"state\":\"complete\"}",
+        "alias": "Bob",
+        "self": false
+      },
+      {
+        "id": "0x5011a5ed0c7b1e2f3a40c9d8",
+        "author": "0x4d613c133e2e7557b28b9a827ad7493cf8b137c160ad3f33ec9cc49b4b1eb58fc40ff65ca733a1d0bb541e716692f151bed3d8b6c7a608eb0928a446ad5a8866",
+        "ts": 1791573200,
+        "body": "{\"kind\":\"poll\",\"question\":\"Lunch on Friday?\"}",
+        "alias": "Bob",
+        "self": false
+      },
+      {
+        "id": "0xc72e96ee051bbf91a9382a87",
+        "author": "0x589ab01dfc6c60f2fb6f4f14136607d939882cf6b65e5aa37e11f79233705f584b351ba34d3be62e787b12cc146dfaf09b9c3df21ae438383aaede5f32cb107b",
+        "ts": 1791573236,
+        "body": "{\"kind\":\"intent-ref\",\"intentId\":\"0xf82713a97f076e35\"}",
+        "alias": "",
+        "self": true
+      }
+    ],
+    "voiceJson": {
+      "ready": {
+        "capture": "unknown",
+        "playback": "unknown",
+        "codec": "libopus 1.5.2",
+        "note": ""
+      },
+      "recording": {
+        "state": "idle",
+        "elapsedMs": 0,
+        "capMs": 60000,
+        "peak": 0,
+        "capped": false,
+        "silent": false,
+        "error": ""
+      },
+      "playing": null
+    }
+  },
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "expectProp": [
+        "voiceNoteCard_6f1d0c2b9a8e7d6c5b4a39281706f5e4",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "messageText_0x7a11ce5f0a9ed0b0d4f0a1b2",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "messageText_0x7a11ce5f0a9ed0b0d4f0a1b2",
+        "text",
+        "{\"kind\":\"voice-note\",\"v\":1,\"note\":\"6f1d0c2b9a8e7d6c5b4a39281706f5e4\",\"durationMs\":7000,\"state\":\"complete\"}"
+      ]
+    },
+    {
+      "expectProp": [
+        "messageText_0x5011a5ed0c7b1e2f3a40c9d8",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "messageText_0x5011a5ed0c7b1e2f3a40c9d8",
+        "text",
+        "{\"kind\":\"poll\",\"question\":\"Lunch on Friday?\"}"
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNoteCard_0x7a11ce5f0a9ed0b0d4f0a1b2",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "voicePlay_0x7a11ce5f0a9ed0b0d4f0a1b2",
+        "enabled",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "messageAuthor_0x7a11ce5f0a9ed0b0d4f0a1b2",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "messageAuthor_0x7a11ce5f0a9ed0b0d4f0a1b2",
+        "text",
+        "Bob"
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNoteCard_0x5011a5ed0c7b1e2f3a40c9d8",
+        "visible",
+        false
+      ]
+    },
+    {
+      "shot": ""
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}

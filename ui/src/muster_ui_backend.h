@@ -46,6 +46,15 @@ public:
     void seedFile(const QString &fileId, const QString &on) override;
     void retractFile(const QString &fileId) override;
 
+    // Voice notes (docs/design/voice-notes.md §8): muster_module's voice_*; no audio here.
+    void loadVoice() override;
+    void startVoiceRecording() override;
+    void stopVoiceRecording() override;
+    void sendVoiceDraft() override;
+    void discardVoiceDraft() override;
+    void playVoiceNote(const QString &noteId) override;
+    void stopVoicePlayback() override;
+
     // Quests (exo-267.8): through muster_module's coordinate_*quest* methods.
     void loadQuests() override;
     void proposeQuest(const QString &termsJson) override;
@@ -161,4 +170,8 @@ private:
     void scheduleJoinRetry();
     bool m_joinRetrying = false;
     int  m_joinAttempts = 0;   // bounds the re-announce so an empty room doesn't loop forever
+    // A voice call's answer: voiceResultJson, then voiceResultSeq one more (§8 of
+    // docs/design/voice-notes.md), so the view can tell a new answer from the last one.
+    void voiceAnswer(const QString &answer);
+    qint64 m_voiceAnswers = 0;
 };

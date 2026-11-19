@@ -1,0 +1,456 @@
+{
+  "about": "Recording a voice note from the message row (docs/design/voice-notes.md §8): the module's recording shows as a banner whoever started it, with the time, the level and Stop; Stop makes a draft whose surface shows Play, Send, Discard and who will see what before anything is sent, its Play waiting while a note in the thread plays (one stream at a time, as the card's); the module's refusal and its note show as it says them; the 250 ms read of voice_status runs while the microphone records or a note plays, not while a draft is only held, which the app's 1 s read of voice_status keeps (PR 340's review, a nit); the recording also shows in the indicator above every page, Muster's own words for the microphone being on, and a draft does not. voiceJson and voiceResultJson are copied from the shapes voice_status and the voice methods pin (no runner records one until S9).",
+  "snapshot": "data/statement-proposed.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "props": {
+    "voiceJson": {
+      "ready": {
+        "capture": "ok",
+        "playback": "unknown",
+        "codec": "libopus 1.5.2",
+        "note": ""
+      },
+      "recording": {
+        "state": "recording",
+        "elapsedMs": 1200,
+        "capMs": 60000,
+        "peak": 9000,
+        "capped": false,
+        "silent": false,
+        "error": ""
+      },
+      "playing": null
+    },
+    "voiceResultJson": ""
+  },
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "expectProp": [
+        "voiceRecording",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceRecordingTime",
+        "text",
+        "~0:01"
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceRecordButton",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "voicePoll",
+        "running",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicator",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicatorTitle",
+        "text",
+        "Muster is using the microphone"
+      ]
+    },
+    {
+      "expectProp": [
+        "appVoicePoll",
+        "running",
+        true
+      ]
+    },
+    {
+      "wait": 700
+    },
+    {
+      "expect": {
+        "slot": "loadVoice"
+      }
+    },
+    {
+      "shot": "recording"
+    },
+    {
+      "click": "voiceStopButton"
+    },
+    {
+      "expect": {
+        "slot": "stopVoiceRecording"
+      }
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "ok",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "draft",
+            "elapsedMs": 4200,
+            "capMs": 60000,
+            "peak": 12000,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": null
+        },
+        "voiceResultJson": {
+          "draft": {
+            "durationMs": 4200,
+            "silent": false,
+            "peak": 12000
+          }
+        },
+        "voiceResultSeq": "1"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceRecording",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceDraft",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceDraftTime",
+        "text",
+        "~0:04"
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceDisclosure",
+        "text",
+        "Everyone in this room can play it. Your voice can identify you, here and outside this room. The store node sees two sealed frames of one fixed size, and when."
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceDisclosure",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": "draft"
+    },
+    {
+      "expectProp": [
+        "voicePoll",
+        "running",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "appVoicePoll",
+        "running",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicator",
+        "visible",
+        false
+      ]
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "ok",
+            "playback": "ok",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "draft",
+            "elapsedMs": 4200,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": {
+            "note": "6f1d0c2b9a8e7d6c5b4a39281706f5e4",
+            "positionMs": 2000,
+            "durationMs": 7000,
+            "starting": false
+          }
+        }
+      }
+    },
+    {
+      "expectProp": [
+        "voiceDraftPlay",
+        "enabled",
+        false
+      ]
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "ok",
+            "playback": "ok",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "draft",
+            "elapsedMs": 4200,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": {
+            "note": "draft",
+            "positionMs": 1000,
+            "durationMs": 4200,
+            "starting": false
+          }
+        }
+      }
+    },
+    {
+      "expectProp": [
+        "voiceDraftPlay",
+        "enabled",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceDraftPlay",
+        "label",
+        "Stop"
+      ]
+    },
+    {
+      "expectProp": [
+        "voicePoll",
+        "running",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicator",
+        "visible",
+        false
+      ]
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "ok",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "draft",
+            "elapsedMs": 4200,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": null
+        }
+      }
+    },
+    {
+      "expectProp": [
+        "voiceDraftPlay",
+        "enabled",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceDraftPlay",
+        "label",
+        "Play it back"
+      ]
+    },
+    {
+      "expectProp": [
+        "voicePoll",
+        "running",
+        false
+      ]
+    },
+    {
+      "click": "voiceDraftPlay"
+    },
+    {
+      "expect": {
+        "slot": "playVoiceNote",
+        "args": [
+          "draft"
+        ]
+      }
+    },
+    {
+      "click": "voiceSendButton"
+    },
+    {
+      "expect": {
+        "slot": "sendVoiceDraft"
+      }
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "ok",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": "Basecamp 0.3.2 can't use the microphone on macOS yet: it lacks the microphone permission."
+          },
+          "recording": {
+            "state": "draft",
+            "elapsedMs": 4200,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": true,
+            "error": ""
+          },
+          "playing": null
+        },
+        "voiceResultJson": {
+          "error": "silent",
+          "detail": "Basecamp 0.3.2 can't use the microphone on macOS yet: it lacks the microphone permission."
+        },
+        "voiceResultSeq": "2"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "~Basecamp 0.3.2 can't use the microphone on macOS yet: it lacks the microphone permission."
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "~The recording is silent"
+      ]
+    },
+    {
+      "shot": "silent"
+    },
+    {
+      "click": "voiceDiscardButton"
+    },
+    {
+      "expect": {
+        "slot": "discardVoiceDraft"
+      }
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "ok",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "idle",
+            "elapsedMs": 0,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": null
+        },
+        "voiceResultJson": "ok",
+        "voiceResultSeq": "3"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceDraft",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceRecordButton",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voicePoll",
+        "running",
+        false
+      ]
+    },
+    {
+      "click": "voiceRecordButton"
+    },
+    {
+      "expect": {
+        "slot": "startVoiceRecording"
+      }
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}
