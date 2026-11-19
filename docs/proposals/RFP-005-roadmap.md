@@ -79,10 +79,10 @@ Muster's own catalogue. Design and decision log: `docs/design/lez-msig.md`.
 | F.2 lifecycle, expiry, off-chain collection, no payload in the clear | ✅ | approvals are collected in the room and verified in-program |
 | F.3 arbitrary program calls | ✅ | `Call` action; the room composer proposes calls |
 | F.4 proposal/target registry | ⬜ | designed (descriptors keyed by program + image id); M4 |
-| F.5 config changes through the quorum | 🟡 | program ✅; the room's membership following the program's is exo-0d3.13 (M1) |
+| F.5 config changes through the quorum | ✅ | program ✅; the room follows the program's members and config (exo-0d3.13, PR #382) |
 | F.6 role separation | ✅ | PROPOSE / APPROVE / EXECUTE, guarantees in the design |
 | F.7 time lock | ✅ | validity windows; ETA is pessimistic |
-| F.8 spending limits | 🟡 | program ✅; proposing a limit from the room is exo-0d3.12 (M1) |
+| F.8 spending limits | ✅ | program ✅; adding a limit and spending under it from the room (exo-0d3.12, PR #383, e2e against the real program) |
 | F.9 E2EE room per multisig, LEZ↔chat binding | ✅↪ | Muster's room, not `chat_module` (S.2 below) |
 | F.10 private default, public posture, selective disclosure | 🟡 | both postures ✅; disclosure tiers designed, not built (M4) |
 | U.1 a module other modules call | 🟡 | `muster_module` methods + `lez_msig_module` (prover only); full standalone API is M2 |
@@ -110,6 +110,23 @@ Muster's own catalogue. Design and decision log: `docs/design/lez-msig.md`.
 | Soft: weighted approvals | ✅ | |
 | Soft: proof of holding | ⬜ | out of scope unless funded as research |
 | Soft: mixed postures | ⬜ | not planned |
+
+## 2.2 Progress since this draft
+
+Work done while waiting for feedback, each item in its own draft PR:
+- **M1: the room follows the program's member set** (exo-0d3.13, PR #382).
+  - The room's copy of the config folds executed config changes.
+  - A removed member is re-keyed out, once.
+  - A private multisig's added member gets the group secret.
+  - Queued actions by a removed member are flagged beside their cancel.
+- **M1: spending limits from the room** (exo-0d3.12, PR #383). A limit is added through the
+  quorum, and a spend under it goes as one Spend, with no quorum and no time lock. It was run
+  against the real program on a local LEZ v0.3 zone.
+- **M2: the signing spec** (PR #384, `docs/design/lez-msig-signing.md`). It says what an
+  approval signs, for integrators without Muster.
+- **Not done:**
+  - the devnet deployment: the devnet's address is not reachable from the build host;
+  - real-proving runs from a room.
 
 ## 3. Milestones
 
