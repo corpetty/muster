@@ -2,7 +2,9 @@
 //! request in, one JSON answer out. `bin/msig_exec` (stdin/stdout) and the Logos module
 //! `lez_msig_module` both call `exec_request`, so the CLI and the module cannot drift.
 //!
-//! Requests: {"mode":"derive"|"exec"|"fund", ...}; see `bin/msig_exec.rs` for each field.
+//! Requests: {"mode":"derive"|"exec"|"fund"|"scan"|"send", ...}; see `bin/msig_exec.rs` for each
+//! field. The public posture's key-free modes (state, propose, spend, check, prepare,
+//! send_public) are `crate::public`'s.
 //! Answers: the mode's result, or {"error","detail"}.
 
 use std::collections::HashMap;
@@ -67,6 +69,9 @@ async fn send(rpc: &str, tx: LeeTransaction) -> Result<String, String> {
 
 async fn run(req: Value) -> Result<Value, String> {
     let mode = req.get("mode").and_then(Value::as_str).unwrap_or("exec");
+    if ["state", "propose", "spend", "check", "prepare", "send_public"].contains(&mode) {
+        return crate::public::run(mode, &req).await;
+    }
     if mode == "send" {
         return send_signed(&req).await;
     }

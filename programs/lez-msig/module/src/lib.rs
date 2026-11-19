@@ -1,4 +1,5 @@
-//! lez_msig_module: lez-msig's private posture as a Logos module (docs/design/lez-msig.md §6,
+//! lez_msig_module: lez-msig as a Logos module: the private posture's prover, and the public
+//! posture's key-free operations for integrators without Muster (docs/design/lez-msig.md §6,
 //! RFP-005 U.1). The module-impl C ABI, the `LezMsigModule` trait and `emit_job_done` are
 //! generated from `lez_msig_module.lidl` by logos-lidl-gen (`tools/regen.sh`; in nix the builder
 //! writes its own copy). The work itself is `msig_host::exec::exec_request`, the same function the
@@ -65,6 +66,31 @@ impl LezMsigModule for LezMsigModuleImpl {
         jobs::run_now(req).to_string()
     }
 
+    // ── the public posture without Muster (RFP-005 U.1, roadmap M2): no proof, no key ──
+    fn state(&mut self, request_json: String) -> String {
+        self.now("state", request_json)
+    }
+
+    fn propose(&mut self, request_json: String) -> String {
+        self.now("propose", request_json)
+    }
+
+    fn spend(&mut self, request_json: String) -> String {
+        self.now("spend", request_json)
+    }
+
+    fn check(&mut self, request_json: String) -> String {
+        self.now("check", request_json)
+    }
+
+    fn prepare(&mut self, request_json: String) -> String {
+        self.now("prepare", request_json)
+    }
+
+    fn send_public(&mut self, request_json: String) -> String {
+        self.now("send_public", request_json)
+    }
+
     fn job(&mut self, job_id: String) -> String {
         jobs::read(&caller(), &job_id).to_string()
     }
@@ -75,6 +101,13 @@ impl LezMsigModule for LezMsigModuleImpl {
 }
 
 impl LezMsigModuleImpl {
+    /// A request answered at once: a chain read, an encoding, or a send. Never a proof.
+    fn now(&mut self, mode: &str, request_json: String) -> String {
+        let Ok(mut req) = serde_json::from_str::<Value>(&request_json) else { return err("bad-request", "not JSON") };
+        req["mode"] = json!(mode);
+        jobs::run_now(req).to_string()
+    }
+
     fn submit(&mut self, mode: &str, request_json: String) -> String {
         let Ok(mut req) = serde_json::from_str::<Value>(&request_json) else { return err("bad-request", "not JSON") };
         for k in ["rpc", "program", "gms", "createKey"] {

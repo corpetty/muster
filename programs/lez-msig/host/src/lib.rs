@@ -7,9 +7,11 @@
 //! construction. It also builds either a public transaction or a privacy-preserving one, and
 //! decrypts the multisig's new note after a private execution.
 //!
-//! Nothing here touches a network: `msig_host::rpc` (later) and the tests bring the chain.
+//! Nothing here touches a network: `exec` (the private posture's executor) and `public` (the
+//! public posture without Muster: state, propose, spend, check, prepare, send) bring the chain.
 
 pub mod exec;
+pub mod public;
 
 use std::collections::{HashMap, HashSet};
 
