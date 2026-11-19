@@ -20,6 +20,15 @@
 //!         the multisig's newest note, read from the chain with the group's viewing key.
 //!   {"mode":"send","rpc","message","proof","witnesses":[{"signature","publicKey"}]} → {"hash"}:
 //!         a proved message sent with its signatures, each checked first.
+//!
+//! The public posture, key-free, for integrators without Muster (`msig_host::public`,
+//! docs/design/lez-msig-signing.md; README "Use it without Muster"):
+//!   {"mode":"state","rpc","program","createKey"} → the multisig's state, decoded
+//!   {"mode":"propose",…,"action","proposer","expiresMs"} → {"proposal","proposalId","approveMsg",…}
+//!   {"mode":"spend",…,"limit","to","amount","expiresMs"} → {"spend","spendMsg",…}
+//!   {"mode":"check",…,instruction} → {"ok"} or {"ok":false,"refusal"}: the program's own verdict
+//!   {"mode":"prepare",…,instruction,"payerKey"} → {"sign","message"}: unsigned, for the payer
+//!   {"mode":"send_public","rpc","message","witnesses"} → {"hash"}
 //! Errors: {"error","detail"}. A refusal the program makes surfaces as its MsigError code at
 //! proving time, before anything is sent (RFP U.7).
 //!

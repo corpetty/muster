@@ -17,6 +17,31 @@ the local CPU prover):
 
 Every transaction below was accepted by the state machine.
 
+## 2026-11-19: AMD EPYC 7C13, 64 cores, idle (exo-0d3.15)
+
+440 GB of memory. The same program build (`artifacts/msig.bin`) and accelerated k256.
+Nothing else was running when the run started: the load average was 3.2, left over from compiling
+the benchmark. During the run it was the prover's own, about 36. The run took 23 min 47 s, with a
+peak resident memory of 9.6 GB.
+
+| M | step | prove (s) | tx size (bytes) |
+|---|---|---|---|
+| 1 | create (3 members) | 109.6 | 227,751 |
+| 1 | fund (shield, native only) | 77.4 | 227,976 |
+| 1 | **execute: pay, 1 signature** | **125.5** | 228,010 |
+| 3 | create (3 members) | 108.5 | 227,751 |
+| 3 | **execute: pay, 3 signatures** | **144.0** | 228,010 |
+| 5 | create (5 members) | 108.9 | 227,751 |
+| 5 | **execute: pay, 5 signatures** | **170.6** | 228,010 |
+| 10 | create (10 members) | 116.9 | 227,751 |
+| 10 | **execute: pay, 10 signatures** | **232.0** | 228,010 |
+
+A least-squares fit through M = 1–10 gives about **111 s + 12.0 s · M**. M = 5 proves in
+under 3 minutes. M = 32, the members limit, extrapolates to about 8 minutes; it has not been
+measured. These figures replace the shared-machine ones below for P.2, which were about 15 s per
+approval. Still to come for P.1: a laptop-class machine, a GPU prover, and LEZ 0.4 (roadmap M1
+and M3).
+
 ## 2026-10-23: AMD EPYC, 64 cores, 503 GB. The guest uses RISC Zero's accelerated k256
 
 The machine was shared: Nim builds and a local sequencer ran alongside. Treat these as upper
@@ -38,7 +63,7 @@ Peak resident memory: 9.6 GB. The whole run took 28 min 40 s.
 The same 1-signature payment with stock (unaccelerated) k256 took **439.0 s**. Acceleration
 cuts it by 2.9×.
 
-## What the numbers say
+## What the numbers say (from the 2026-10-23 run; the idle run above lowers the per-approval cost to ~12 s)
 
 - **P.2 (approval verification as a function of M).**
   - Each further approval adds about 15 s of proving. A fit through M = 1–10 gives roughly
