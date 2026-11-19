@@ -405,12 +405,14 @@ type LezMsigSettlement* = ref object of Settlement
   ## time-locked action, send ExecuteQueued itself once the lock ends.
   sentKind: InstrKind
   proposal: MsigProposal
+  spend: MsigSpend          ## for a spend under a limit (exo-0d3.12)
   driver: LezMsigDriver
   etaMs, expiresMs: uint64
   queueSlackMs*: uint64     ## how late a Queue may land; 0 = QueueSlackMs
   queuedRef: string         ## the ExecuteQueued this settlement sent itself, once the lock ended
 
 const QueueSlackMs = 120_000'u64   ## a Queue claims to land within two minutes
+const SpendMarginMs = 120_000'u64  ## a Spend is not sent this close to the end of its period
 
 proc msigChainOf(s: LezMsigSettlement): MsigChain =
   if s.adapter of MsigChain: MsigChain(s.adapter) else: nil
@@ -433,6 +435,65 @@ proc myExecutor(c: MsigChain, d: LezMsigDriver, p: MsigProposal): tuple[ok: bool
 
 proc isoMs(ms: uint64): string = $fromUnix(int64(ms div 1000)).utc
 
+proc assembleSpend(s: LezMsigSettlement, c: MsigChain, d: LezMsigDriver, effect: Effect,
+                   contributions: seq[SettleContribution]): Assembled =
+  ## A spend under a limit (exo-0d3.12): read the state, then one Spend carrying the limit
+  ## signers' signatures over the spend, for the period now. The program checks it all again:
+  ## the epoch, the limit, the signers, the threshold, the period and what it already spent.
+  let sp = msigSpendOf(effect)
+  var r: MsigRead
+  try: r = c.readMsig(d.account.address)
+  except CatchableError as e:
+    return Assembled(ok: false, error: "not-settleable", detail: "could not read the multisig: " & e.msg)
+  if not r.found: return Assembled(ok: false, error: "not-settleable", detail: "the multisig is not on chain")
+  let st = r.state
+  if sp.epoch != st.epoch:
+    return Assembled(ok: false, error: "not-settleable",
+      detail: "stale-epoch: signed under epoch " & $sp.epoch & "; the configuration changed since (epoch " & $st.epoch &
+              "): spend again")
+  let l = st.config.limitOf(sp.limit)
+  if l.isNone: return Assembled(ok: false, error: "not-settleable", detail: "unknown-limit: the multisig has no limit " & $sp.limit)
+  if not st.nonceFree(sp.nonce):
+    return Assembled(ok: false, error: "not-settleable", detail: "nonce-spent: nonce " & $sp.nonce & " was already used")
+  let now = c.nowMs()
+  if now >= sp.expiresMs:
+    return Assembled(ok: false, error: "not-settleable", detail: "expired: the spend expired at " & isoMs(sp.expiresMs))
+  let periodMs = l.get.periodMs
+  let period = now div periodMs
+  if (period + 1) * periodMs - now < SpendMarginMs:
+    return Assembled(ok: false, error: "not-settleable",
+                     detail: "the limit's period ends at " & isoMs((period + 1) * periodMs) & ": send it once the next one begins")
+  var used = 0.u128
+  for u in st.usage:
+    if u.id == sp.limit and u.period == period: used = u.used
+  if used + sp.amount > l.get.amount:
+    return Assembled(ok: false, error: "not-settleable",
+                     detail: "over-limit: " & $used & " of " & $l.get.amount & " already spent this period; " & $sp.amount & " more is over")
+  let msg = spendMsg(sp)
+  var approvals: seq[MsigSigned]
+  for ct in contributions:
+    let sg = signedOf(Contribution(bytes: ct.bytes))
+    if sg.isNone or approvals.anyIt(it.key == sg.get.key): continue
+    if sg.get.key notin l.get.signers or not verifySig(sg.get.key, msg, sg.get.sig): continue
+    approvals.add sg.get
+  let have = approvals.len
+  let need = int(l.get.threshold)
+  if have < need:
+    return Assembled(ok: false, error: "insufficient-signatures", have: have, need: need,
+                     detail: $have & " of the limit's signers signed; it needs " & $need)
+  let ins = MsigInstruction(kind: ikSpend, spend: sp, spendApprovals: approvals, period: period, periodMs: periodMs)
+  let env = envelopePublic(d.account.createKey, ins)
+  let rows = msigShards(c.program, d.account.address, ins)
+  s.sentKind = ikSpend
+  s.spend = sp
+  s.driver = d
+  s.expiresMs = sp.expiresMs
+  Assembled(ok: true, have: have, need: need,
+    tx: PreparedTx(chain: d.account.chain, frm: s.relayer, to: hexOf(d.account.address),
+                   payload: $(%*{"lez": "v0.3", "msig": $ins.kind, "envelope": hexOf(env), "op": hexOf(borsh(ins)),
+                                 "rows": rows.mapIt(%*{"account": hexOf(it.account), "program": hexOf(it.program)}),
+                                 "spend": spendJson(sp)})))
+
 method assemble*(s: LezMsigSettlement, drv: Driver, effect: Effect,
                  contributions: seq[SettleContribution]): Assembled =
   ## Read the multisig's state (the program's own copy is the one that counts), then build
@@ -446,6 +507,7 @@ method assemble*(s: LezMsigSettlement, drv: Driver, effect: Effect,
   let d = LezMsigDriver(drv)
   let refusal = d.signRefusal(effect)
   if refusal.len > 0: return Assembled(ok: false, error: "not-settleable", detail: refusal)
+  if effect.isSpend: return s.assembleSpend(c, d, effect, contributions)
   let p = proposalOf(effect)
   let id = proposalId(p)
   var r: MsigRead
@@ -560,6 +622,9 @@ method watch*(s: LezMsigSettlement, txRef: TxRef): Finality =
       return Finality(status: fsFailed, detail: "the program refused the execution while proving: " & pc.failure(s.queuedRef))
   let r = c.readMsig(s.driver.account.address)
   if not r.found: return Finality(status: fsFailed, detail: "the multisig is no longer on chain")
+  if s.sentKind == ikSpend:
+    if not r.state.nonceFree(s.spend.nonce): return Finality(status: fsFinal, detail: "spent at height " & $r.height)
+    return Finality(status: fsFailed, detail: "the program refused the spend (included; nothing changed)")
   let id = proposalId(s.proposal)
   let isQueued = r.state.queue.anyIt(it.nonce == s.proposal.nonce and it.proposalId == id)
   case s.sentKind

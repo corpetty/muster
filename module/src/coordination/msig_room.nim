@@ -28,6 +28,7 @@ import ../crypto/binding
 import ./intent_events
 import ./live
 import ./member_accounts
+import stint
 
 const BindTag = "muster-msig/v1/bind"
 
@@ -178,8 +179,8 @@ proc joinInvited*(s: CoordinationSession, ks: Keystore): int =
 
 # ── proposing ────────────────────────────────────────────────────────────────
 proc takenNonces*(events: seq[Event], multisig: seq[byte]): seq[uint64] =
-  ## The nonces proposals in this room already use for this multisig: a new proposal takes
-  ## the lowest one neither the chain nor the room has used.
+  ## The nonces proposals and spends in this room already use for this multisig (they share
+  ## one window): a new one takes the lowest that neither the chain nor the room has used.
   for e in events:
     let p = e.key.split('/')
     if p.len == 3 and p[0] == "intent" and p[2] == "propose":
@@ -188,6 +189,9 @@ proc takenNonces*(events: seq[Event], multisig: seq[byte]): seq[uint64] =
         if eff.schemaId == LezMsigSchema:
           let pr = proposalOf(eff)
           if pr.multisig == multisig: result.add pr.nonce
+        elif eff.schemaId == LezMsigSpendSchema:
+          let sp = msigSpendOf(eff)
+          if sp.multisig == multisig: result.add sp.nonce
       except CatchableError: discard
 
 proc newMsigProposal*(events: seq[Event], ks: Keystore, d: LezMsigDriver, st: MsigState,
@@ -205,6 +209,24 @@ proc liveMsigPropose*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor
   ## proposer did not sign, so proposing IS the proposer's approval.
   let ttl = max(60'i64, int64(p.expiresMs div 1000) - nowSec)
   let id = liveProposeIntent(s, ks, driverFor, policy, lezMsigEffect(p), nowSec, msgSeq,
+                             d.account.accountId, ttlSec = ttl)
+  (id, liveContribute(s, ks, driverFor, id, "", "", bindingCtx, uint64(nowSec)))
+
+proc newMsigSpend*(events: seq[Event], d: LezMsigDriver, st: MsigState, limit: uint32, to: seq[byte],
+                   amount: UInt128, expiresMs: uint64): MsigSpend =
+  ## A spend under a limit (exo-0d3.12), at the chain's epoch and the next nonce free on chain
+  ## and in the room.
+  MsigSpend(multisig: d.account.address, zone: st.zone, epoch: st.epoch, limit: limit,
+            nonce: st.nextNonce(takenNonces(events, d.account.address)), to: to, amount: amount,
+            expiresMs: expiresMs)
+
+proc liveMsigSpend*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, policy: string,
+                    d: LezMsigDriver, sp: MsigSpend, nowSec: int64, msgSeq: uint64,
+                    bindingCtx: LinkContext): tuple[intentId, approval: string] =
+  ## Put a spend to the room, signed at once by this member (a signer of its limit): the
+  ## limit's other signers add theirs on its card, and no quorum is asked.
+  let ttl = max(60'i64, int64(sp.expiresMs div 1000) - nowSec)
+  let id = liveProposeIntent(s, ks, driverFor, policy, lezMsigSpendEffect(sp), nowSec, msgSeq,
                              d.account.accountId, ttlSec = ttl)
   (id, liveContribute(s, ks, driverFor, id, "", "", bindingCtx, uint64(nowSec)))
 

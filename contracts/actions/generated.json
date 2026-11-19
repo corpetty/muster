@@ -1910,7 +1910,9 @@
         "k": 2,
         "n": 3,
         "bypassesKnown": true,
-        "bypasses": []
+        "bypasses": [
+          "spending-limit"
+        ]
       },
       "manifest": {
         "declared": true,
@@ -2003,6 +2005,148 @@
       },
       "signRefusal": ""
     },
+    "lez-msig/spend": {
+      "kind": "lez-msig",
+      "variant": "spend",
+      "family": "lez.msig",
+      "effectExample": {
+        "schema": "muster.effect.lez-msig-spend.v1",
+        "fields": {
+          "spend": "beb04d51b9a92bd831b133c28412a9aee6e489b3ff81016801d36288f71960652e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e00000000000000000100000001000000000000000e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0ee803000000000000000000000000000000505c18a3010000"
+        }
+      },
+      "describe": {
+        "rounds": 1,
+        "threshold": 1,
+        "finality": "external",
+        "domain": "lez.msig.spend.v1"
+      },
+      "environment": "lez:local",
+      "profile": {
+        "declared": true,
+        "family": "lez.msig",
+        "settlement": "lez",
+        "locus": "contract",
+        "scheme": "shared-bytes",
+        "commits": "content",
+        "binding": "explicit",
+        "ordering": "dedup",
+        "expiry": "forced",
+        "setup": "register",
+        "membershipChange": "in-place",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "at-creation",
+          "signers": "at-settle",
+          "effect": "public"
+        },
+        "rounds": 1,
+        "secretState": false,
+        "maturity": "experimental",
+        "chain": "lez:local",
+        "account": "lez:local:beb04d51b9a92bd831b133c28412a9aee6e489b3ff81016801d36288f7196065",
+        "k": 2,
+        "n": 3,
+        "bypassesKnown": true,
+        "bypasses": [
+          "spending-limit"
+        ]
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 1,
+          "threshold": 1,
+          "finality": "external",
+          "domain": "lez.msig.spend.v1"
+        },
+        "requirements": [
+          {
+            "kind": "environment",
+            "name": "lez:local",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "lez:local",
+              "field": ""
+            }
+          },
+          {
+            "kind": "infra",
+            "name": "lez-sequencer-rpc",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "lez-sequencer-rpc",
+              "field": ""
+            }
+          },
+          {
+            "kind": "authority",
+            "name": "lez-msig-key",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "lez-msig-key",
+              "field": ""
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          },
+          {
+            "field": "action",
+            "to": "chain-observer"
+          },
+          {
+            "field": "approvals",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signers",
+            "to": "chain-observer"
+          },
+          {
+            "field": "executor",
+            "to": "chain-observer"
+          },
+          {
+            "field": "signed-tx",
+            "to": "rpc-provider"
+          }
+        ],
+        "touches": [
+          {
+            "target": "lez:local",
+            "mode": "write"
+          },
+          {
+            "target": "lez:local:beb04d51b9a92bd831b133c28412a9aee6e489b3ff81016801d36288f7196065",
+            "mode": "write"
+          },
+          {
+            "target": "lez:local:0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e",
+            "mode": "write"
+          }
+        ]
+      },
+      "signRefusal": ""
+    },
     "lez-msig/transfer": {
       "kind": "lez-msig",
       "variant": "transfer",
@@ -2046,7 +2190,9 @@
         "k": 2,
         "n": 3,
         "bypassesKnown": true,
-        "bypasses": []
+        "bypasses": [
+          "spending-limit"
+        ]
       },
       "manifest": {
         "declared": true,

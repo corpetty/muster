@@ -3083,7 +3083,10 @@ proc musterCoordinateIntents(): string =
     o["summary"] = %*{"kind": sm.kind, "amount": sm.amount, "unit": sm.unit, "to": sm.to, "text": sm.text}
     if prof.family in [LezMsigFamily, LezMsigPrivateFamily]:
       # the card decodes the proposal from the exact bytes the approvals sign (RFP U.6)
-      try: o["msig"] = msigbytes.proposalJson(proposalOf(effectFromJson(v.effectJson)))
+      try:
+        let eff = effectFromJson(v.effectJson)
+        o["msig"] = (if eff.isSpend: %*{"spend": msigbytes.spendJson(msigSpendOf(eff))}
+                     else: msigbytes.proposalJson(proposalOf(eff)))
       except CatchableError as e: o["msig"] = %*{"error": "does not decode: " & e.msg}
     # A LEZ multisig proposal whose call is the quest program's reads as the quest step it is
     # (exo-267.8): issue, close or withdraw, with the task when the room holds its terms.
@@ -4312,11 +4315,50 @@ proc msigActionOf(j: JsonNode): MsigAction =
     a
   else: raise newException(ValueError, "unknown action kind " & j{"kind"}.getStr())
 
+proc musterLezMsigSpend(d: LezMsigDriver, j: JsonNode): string =
+  ## {kind: spend, limit, to, amount, expiresInS?}: a spend under a spending limit (exo-0d3.12),
+  ## put to the room signed by this member, who must be one of the limit's signers. No quorum:
+  ## once the limit's threshold of its signers signed, anyone may settle it.
+  var limit: uint32
+  var to: seq[byte]
+  var amount: UInt128
+  var ttlMs = 24'u64 * 3600 * 1000
+  try:
+    limit = uint32(j["limit"].getInt())
+    to = lezIdOf(j["to"].getStr())
+    amount = parse(j["amount"].getStr(), UInt128)
+    if j.hasKey("expiresInS"): ttlMs = uint64(j["expiresInS"].getBiggestInt()) * 1000
+  except CatchableError as e: return $(%*{"error": "bad-action", "detail": e.msg})
+  let l = d.account.config.limitOf(limit)
+  if l.isNone: return $(%*{"error": "bad-action", "detail": "the multisig has no spending limit " & $limit})
+  let ks = moduleKeystore()
+  let own = msigLabel(d.account.createKey)
+  if labelAmong(ks, l.get.signers, @[own]).isNone:
+    return $(%*{"error": "not-a-limit-signer", "detail": "none of your keys signs for limit " & $limit})
+  var st: msigbytes.MsigState
+  try:
+    let r = msigLiveOf(d.account).readMsig(d.account.address)
+    if not r.found: return $(%*{"error": "not-on-chain", "detail": "the multisig is not on chain"})
+    st = r.state
+  except CatchableError as e: return $(%*{"error": "sequencer-unreachable", "detail": e.msg})
+  try:
+    let sp = newMsigSpend(gSession.roomEvents(), d, st, limit, to, amount, uint64(epochTime() * 1000) + ttlMs)
+    let why = d.signRefusal(effectFromJson(lezMsigSpendEffect(sp)))
+    if why.len > 0: return $(%*{"error": "refused", "detail": why})
+    inc gMsgSeq
+    let (id, approval) = liveMsigSpend(gSession, ks, driverFor, gCoordKind, d, sp, int64(epochTime()), gMsgSeq,
+                                       intentLinkContext(""))
+    $(%*{"intentId": id, "nonce": $sp.nonce, "epoch": $sp.epoch, "approval": approval, "spend": msigbytes.spendJson(sp)})
+  except CatchableError as e: $(%*{"error": "refused", "detail": e.msg})
+
 proc musterCoordinateProposeLezMsig(actionJson: string): string =
   ## Propose an action from the room's lez-msig account; proposing is the proposer's approval.
   if gSession == nil: return $(%*{"error": "not-joined"})
   let (ok, d, err) = msigAccountOfPolicy()
   if not ok: return err
+  try:
+    if parseJson(actionJson){"kind"}.getStr() == "spend": return musterLezMsigSpend(d, parseJson(actionJson))
+  except CatchableError as e: return $(%*{"error": "bad-action", "detail": e.msg})
   var action: MsigAction
   var ttlMs = 7'u64 * 24 * 3600 * 1000
   try:

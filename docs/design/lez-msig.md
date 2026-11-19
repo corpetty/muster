@@ -290,6 +290,23 @@ The coordination room is muster's room. Each multisig is created *from* a room.
    - **Queued actions.** One proposed by a member since removed survives (the R.2 cutoff is the
      queue). The queue flags it (`proposerRemoved`) beside its cancel.
 
+**Spending limits from the room (built, exo-0d3.12).** A limit is added like any config change:
+through the quorum and the time lock. A spend under it is a room intent of its own kind,
+`muster.effect.lez-msig-spend.v1`:
+- **What is signed.** The effect is the spend's exact bytes. Each contribution is a BIP-340
+  signature over `spend_msg` by one of the limit's signers, and only they count.
+- **The threshold** is the limit's, not the quorum's.
+- **Settlement** reads the state, then sends one `Spend` for the current period, with no Queue
+  even under a time lock. It refuses before sending:
+  - a spend over what the period has left;
+  - a stale epoch;
+  - a spend within two minutes of the period's end (it would land outside its window).
+- **Nonces.** Spends and proposals share the nonce window.
+- **The card** reads a spend in words from its bytes, naming the limit and saying no quorum is
+  asked.
+- **Tested** against the real program in `lez_msig_live_e2e` §8: a limit added, one signer
+  spending alone, and an over-limit spend refused.
+
 **Approval keys from accounts members shared (built, exo-1f9).** By default each member's
 client derives a fresh approval key for each multisig. A member may instead share an account
 of their own with the room (`coordinate_disclose_my_account`): its key signs a hash-input
