@@ -268,9 +268,27 @@ The coordination room is muster's room. Each multisig is created *from* a room.
    check is the only one that counts.
 4. **Execute / queue / cancel.** Any member with the keys settles. The card shows the queue's ETA
    and the expiry.
-5. **Reconcile.** On every executed config change, the room's membership follows the program's.
-   A removed member is evicted and the room re-keys forward. An added member is admitted (after
-   they disclose a key).
+5. **Reconcile (built, exo-0d3.13; `coordination/msig_members.nim`).** On every executed config
+   change, the room follows the program:
+   - **The room's copy of the config.** The disclosed config, then each config proposal the room
+     saw reach final, applied as the program applies it (`applyChanges`, the core's
+     `apply_changes`), one epoch each. So an added member's approval counts in the room, and a
+     removed member's stops counting, with no re-disclosure.
+     - A change applies when its proposal names the epoch the fold has reached, or an earlier
+       one no older than the disclosure (a queued change executes after its epoch).
+     - A change made outside the room leaves the room's copy behind until the account is
+       disclosed again.
+     - Settlement re-reads the chain either way.
+   - **Who reads the room.** A removed member who is in no other lez-msig of the room is
+     evicted, and the room re-keys forward (F-16).
+     - One client does it, so the epoch never forks: the removal's proposer's, or, when someone
+       removed themselves, the lowest remaining member's.
+   - **Adding a member.** A member added later must already be in the room and have shared an
+     account (exo-1f9) for the add to name. Their approval key is that account.
+   - **Private multisigs.** The add's proposer seals the group secret and the newest note to the
+     added member. Notes go to the members now, and a removed member's notes stop counting.
+   - **Queued actions.** One proposed by a member since removed survives (the R.2 cutoff is the
+     queue). The queue flags it (`proposerRemoved`) beside its cancel.
 
 **Approval keys from accounts members shared (built, exo-1f9).** By default each member's
 client derives a fresh approval key for each multisig. A member may instead share an account

@@ -65,6 +65,7 @@ import ../src/drivers/lez_msig         # lez-msig: approvals verified in-program
 import ../src/lez/msig as msigbytes    # its bytes
 import ../src/wallet/lez_msig_chain    # its chain seam
 import ../src/coordination/msig_room   # its creation ceremony, proposing
+import ../src/coordination/msig_members # the room following its member set across config changes (exo-0d3.13)
 import ../src/coordination/member_accounts   # a member's own accounts, disclosed to the room (exo-1f9)
 import ../src/crypto/account_labels          # …and the keystore labels they live under
 import ../src/wallet/lez_msig_private  # its private posture (exo-efa)
@@ -858,7 +859,9 @@ proc roomAccounts(): seq[RoomAccount] =
   ## (coordination/accounts.nim, exo-a50.1.3). None without a room. (Forward-declared
   ## above driverForKind, which resolves account-bound policies against it.)
   if gSession == nil: return @[]
-  reduceAccounts(gSession.roomEvents())
+  let evs = gSession.roomEvents()
+  # a lez-msig's config follows the config changes the room saw execute (exo-0d3.13)
+  reconcileLezMsig(evs, reduceAccounts(evs))
 
 var gMsgSeq: uint64 = 0     ## per-instance monotonic nonce, disambiguates identical posts
 
@@ -3983,6 +3986,16 @@ proc msigProver(): MsigProver =
     except CatchableError: return nil
   gMsigProver
 
+proc msigMembersNow(ck: string): seq[string] =
+  ## The room identities of a disclosed lez-msig's members now (exo-0d3.13): who its private
+  ## notes and group secret go to. Empty before it is disclosed: the ceremony's members then.
+  if gSession == nil: return
+  let evs = gSession.roomEvents()
+  for ra in reduceAccounts(evs):
+    if ra.family != LezMsigFamily: continue
+    let (ok, a, _) = lezMsigAccountOf(ra.chain, ra.address, ra.config)
+    if ok and msigbytes.hexOf(a.createKey) == ck.toLowerAscii(): return memberIdsNow(evs, gSession.topic, a)
+
 var gMsigPriv = initTable[string, MsigPrivate]()   ## create key → this member's private seam (its jobs)
 proc msigPrivFor(chain: string, program, createKey: seq[byte]): MsigPrivate =
   ## A private lez-msig's chain seam for THIS member (exo-efa): the group secret the opener
@@ -3992,7 +4005,7 @@ proc msigPrivFor(chain: string, program, createKey: seq[byte]): MsigPrivate =
   let ks = moduleKeystore()
   let ck = msigbytes.hexOf(createKey)
   if ck notin gMsigPriv:
-    let gms = groupSecretOf(gSession.roomEvents(), ks, gSession.topic, ck)
+    let gms = groupSecretOf(gSession.roomEvents(), ks, gSession.topic, ck, msigMembersNow(ck))
     if gms.isNone: raise newException(WalletError, "you hold no group secret for this private multisig")
     let p = msigProver()
     if p == nil: raise newException(WalletError, "lez_msig_module is not loaded: install it to prove a private multisig's transactions")
@@ -4003,11 +4016,11 @@ proc msigPrivFor(chain: string, program, createKey: seq[byte]): MsigPrivate =
     let cc = cer.get
     # once the chain includes a transaction this member sent, its new note goes to every member
     c.onNote = proc(n: int, note: seq[byte], hash: string) =
-      try: room.publishNote(moduleKeystore(), cc, n, note, hash)
+      try: room.publishNote(moduleKeystore(), cc, n, note, hash, msigMembersNow(cc.createKey))
       except CatchableError: discard
     gMsigPriv[ck] = c
   result = gMsigPriv[ck]
-  let ln = latestNote(gSession.roomEvents(), ks, gSession.topic, ck)
+  let ln = latestNote(gSession.roomEvents(), ks, gSession.topic, ck, msigMembersNow(ck))
   if ln.found: result.learn(ln.n, ln.note)
 
 proc msigLiveOf(a: LezMsigAccount): MsigLive =
@@ -4026,14 +4039,12 @@ proc msigMyNames(): seq[string] =
   except CatchableError: discard
 
 proc msigMemberOf(who: string): string =
-  ## The room identity whose ceremony join proved this approval key (lmsig/<ck>/key/<who>,
-  ## author-signed and signed by the key itself); "" when no ceremony in the room binds it.
+  ## The room identity this approval key belongs to: proved by a ceremony join (lmsig/<ck>/key/<who>,
+  ## author-signed and signed by the key itself), or shared by them as an account of their own
+  ## (exo-1f9); "" when nothing in the room binds it.
   if gSession == nil or not who.startsWith(ContributorPrefix): return ""
-  let key = who[ContributorPrefix.len .. ^1].toLowerAscii()
-  for c in ceremonies(gSession.roomEvents(), gSession.topic):
-    for id, k in c.keys:
-      if k == key: return id
-  ""
+  try: keyOwner(gSession.roomEvents(), gSession.topic, hexToBytes(who[ContributorPrefix.len .. ^1]))
+  except CatchableError: ""
 
 var gMsigCreated = initTable[string, tuple[hash: string, at: float]]()   ## create key → the Create this member sent
 var gMsigPumpAt = 0.0
@@ -4081,6 +4092,26 @@ proc msigTick() =
       if f.ck in gMsigPriv and not gMsigPriv[f.ck].included(f.job): still.add f
     except CatchableError: still.add f
   gMsigFunds = still
+  # a private multisig's member added since creation: the group secret and the newest note,
+  # sealed by the add's proposer (exo-0d3.13)
+  let evs = gSession.roomEvents()
+  for ra in reduceAccounts(evs):
+    if ra.family != LezMsigFamily: continue
+    let (ok, a, _) = lezMsigAccountOf(ra.chain, ra.address, ra.config)
+    if not ok or not a.private: continue
+    let ck = msigbytes.hexOf(a.createKey)
+    try:
+      let due = gmsAddsDue(evs, gSession.topic, a, me)
+      if due.len == 0: continue
+      let now = memberIdsNow(evs, gSession.topic, a)
+      let gms = groupSecretOf(evs, ks, gSession.topic, ck, now)
+      if gms.isNone: continue
+      let ln = latestNote(evs, ks, gSession.topic, ck, now)
+      for who in due:
+        gSession.sealGroupSecretTo(ks, ck, gms.get, who)
+        if ln.found: gSession.sealNoteTo(ks, ck, ln.n, ln.note, ln.hash, who)
+        echo "[muster] sealed private lez-msig ", ck[0 ..< 8], "'s group secret to added member ", who[0 ..< 12], "…"
+    except CatchableError: discard
   for c in ceremonies(gSession.roomEvents(), gSession.topic):
     if c.opener != me or not c.ready: continue
     if disclosed.anyIt(it.contains(c.createKey)): continue
@@ -4339,11 +4370,17 @@ proc musterLezMsigStateRead(acct: string): string =
     let r = msigLiveOf(la).readMsig(la.address)
     if not r.found: return $(%*{"error": "not-on-chain"})
     let me = moduleKeystore().lezMemberKey(myMsigLabel(moduleKeystore(), la))
+    # a queued action whose proposer was since removed: the current quorum may cancel it (exo-0d3.13)
+    let proposers = queuedProposers(gSession.roomEvents(), la.address)
+    var queue: seq[JsonNode]
+    for q in r.state.queue:
+      let pid = msigbytes.hexOf(q.proposalId)
+      let removed = pid in proposers and r.state.config.memberOf(proposers[pid]).isNone
+      queue.add %*{"nonce": $q.nonce, "proposalId": pid, "etaMs": $q.etaMs, "expiresMs": $q.expiresMs,
+                   "proposerRemoved": removed}
     $(%*{"account": a.id, "private": la.private, "epoch": $r.state.epoch, "nonceBase": $r.state.nonceBase, "balance": $r.balance,
          "config": msigbytes.configJson(r.state.config), "myKey": msigbytes.hexOf(me),
-         "queue": r.state.queue.mapIt(%*{"nonce": $it.nonce, "proposalId": msigbytes.hexOf(it.proposalId),
-                                         "etaMs": $it.etaMs, "expiresMs": $it.expiresMs}),
-         "height": $r.height})
+         "queue": queue, "height": $r.height})
   except CatchableError as e: $(%*{"error": "sequencer-unreachable", "detail": e.msg})
 
 proc musterLezMsigFund(account, amount: string): string =
@@ -4703,7 +4740,9 @@ proc memberChangePump() =
   if gSession == nil: return
   let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
   let holders = gSession.members().mapIt(toHex(it.toBytes()).toLowerAscii())
-  for (who, id) in removalsDue(gSession.roomEvents(), driverFor, gTopic, holders, me):
+  let evs = gSession.roomEvents()
+  # a LEZ multisig's removals (exo-267.6), and a lez-msig's (exo-0d3.13)
+  for (who, id) in removalsDue(evs, driverFor, gTopic, holders, me) & msigRemovalsDue(evs, gTopic, holders, me):
     for m in gSession.members():
       if toHex(m.toBytes()).toLowerAscii() == who:
         gSession.expel(m)
