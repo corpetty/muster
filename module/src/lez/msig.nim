@@ -362,6 +362,14 @@ proc decodeProposal*(b: openArray[byte]): MsigProposal =
   result.proposer = r.rfixed(32)
   if r.i != r.b.len: bad("trailing bytes after the proposal")
 
+proc decodeSpend*(b: openArray[byte]): MsigSpend =
+  ## A spend under a limit, as its signers sign it: exact bytes only.
+  var r = Reader(b: @b)
+  result.multisig = r.rfixed(32); result.zone = r.rfixed(32); result.epoch = r.ru64()
+  result.limit = r.ru32(); result.nonce = r.ru64(); result.to = r.rfixed(32)
+  result.amount = r.ru128(); result.expiresMs = r.ru64()
+  if r.i != r.b.len: bad("trailing bytes after the spend")
+
 proc decodeMsigConfig*(b: openArray[byte]): MsigConfig =
   var r = Reader(b: @b)
   result = r.rconfig()
@@ -513,6 +521,11 @@ proc proposalJson*(p: MsigProposal): JsonNode =
   %*{"multisig": hexOf(p.multisig), "zone": hexOf(p.zone), "epoch": $p.epoch, "nonce": $p.nonce,
      "action": actionJson(p.action), "expiresMs": $p.expiresMs, "proposer": hexOf(p.proposer),
      "proposalId": hexOf(proposalId(p))}
+
+proc spendJson*(s: MsigSpend): JsonNode =
+  %*{"multisig": hexOf(s.multisig), "zone": hexOf(s.zone), "epoch": $s.epoch, "limit": int(s.limit),
+     "nonce": $s.nonce, "to": hexOf(s.to), "amount": $s.amount, "expiresMs": $s.expiresMs,
+     "spendMsg": hexOf(spendMsg(s))}
 
 proc configJson*(c: MsigConfig): JsonNode =
   %*{"members": c.members.mapIt(memberJson(it)), "threshold": int(c.threshold),

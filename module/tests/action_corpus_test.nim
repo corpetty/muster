@@ -19,7 +19,7 @@ const Fixed = ["xmr-msig/spend", "safe/transfer", "safe/contract-call", "safe/de
                "invoke/module-call", "invoke/lez-transfer",
                "btc-p2wsh/spend", "btc-tapscript/spend", "btc-frost/spend",
                "lez-multisig/transfer", "lez-multisig/vault-init", "lez-frost/transfer",
-               "lez-msig/transfer", "lez-msig/config",
+               "lez-msig/transfer", "lez-msig/config", "lez-msig/spend",
                "evm-split/split", "evm-split/settle-up", "lez-split/split", "btc-split/split",
                "btc-split/settle-up", "monero-split/request"]
 const EntryFields = ["kind", "variant", "family", "effectExample", "describe", "environment",

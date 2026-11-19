@@ -1312,6 +1312,78 @@ Item {
                             JSON.stringify({ kind: "transfer", to: msigPayTo.text.trim(), amount: msigBox.payBase }))
                     }
                 }
+                // spending limits (exo-0d3.12): k of a limit's signers move up to its amount each
+                // period with no vote and no time lock: the one bypass of the quorum
+                Repeater {
+                    model: (msigBox.st && msigBox.st.config && msigBox.st.config.limits) ? msigBox.st.config.limits : []
+                    delegate: RowLayout {
+                        required property var modelData
+                        readonly property bool mine: (modelData.signers || []).indexOf(String(msigBox.st.myKey || "")) >= 0
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        LogosText {
+                            objectName: "msigLimit"
+                            Layout.fillWidth: true
+                            text: qsTr("Spending limit %1: %2 of %3 signers may spend up to %4 LEZ every %5 h, without a vote")
+                                  .arg(modelData.id).arg(modelData.threshold).arg((modelData.signers || []).length)
+                                  .arg(acc.lezText(modelData.amount)).arg(Number(modelData.periodMs) / 3600000)
+                                  + (parent.mine ? "" : qsTr(" (you are not one of its signers)"))
+                            color: Theme.palette.textSecondary
+                            font.pixelSize: MusterStyle.caption
+                            wrapMode: Text.WordWrap
+                        }
+                        ActionButton {
+                            objectName: "msigSpend"
+                            visible: parent.mine
+                            enabled: msigPayTo.text.trim().length > 0 && msigBox.payBase !== "" && msigBox.payBase !== "0"
+                            text: qsTr("Spend under limit %1").arg(modelData.id)
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: acc.lezMsigProposeRequested(String(acc.msigAccount.id), JSON.stringify({
+                                kind: "spend", limit: Number(modelData.id), to: msigPayTo.text.trim(), amount: msigBox.payBase }))
+                        }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+                    readonly property var members: (msigBox.st && msigBox.st.config) ? (msigBox.st.config.members || []) : []
+                    readonly property string limitBase: acc.lezBase(msigLimitAmount.text)
+                    LogosTextField {
+                        id: msigLimitAmount
+                        objectName: "msigLimitAmount"
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("limit, LEZ per period")
+                    }
+                    LogosTextField {
+                        id: msigLimitHours
+                        objectName: "msigLimitHours"
+                        Layout.preferredWidth: 90
+                        placeholderText: qsTr("hours")
+                    }
+                    LogosTextField {
+                        id: msigLimitK
+                        objectName: "msigLimitK"
+                        Layout.preferredWidth: 90
+                        placeholderText: qsTr("signers k")
+                    }
+                    ActionButton {
+                        objectName: "msigProposeLimit"
+                        readonly property int k: /^[0-9]+$/.test(msigLimitK.text.trim()) ? Number(msigLimitK.text.trim()) : 0
+                        enabled: parent.limitBase !== "" && parent.limitBase !== "0" && /^[0-9]+$/.test(msigLimitHours.text.trim())
+                                 && Number(msigLimitHours.text.trim()) > 0 && k >= 1 && k <= parent.members.length
+                        text: qsTr("Propose a spending limit")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: {
+                            var ids = ((msigBox.st.config && msigBox.st.config.limits) || []).map(function (l) { return Number(l.id); });
+                            var id = ids.length > 0 ? Math.max.apply(null, ids) + 1 : 1;
+                            acc.lezMsigProposeRequested(String(acc.msigAccount.id), JSON.stringify({
+                                kind: "config", changes: [{ change: "add-limit", limit: {
+                                    id: id, signers: parent.members.map(function (m) { return String(m.key); }),
+                                    threshold: k, amount: parent.limitBase,
+                                    periodMs: Number(msigLimitHours.text.trim()) * 3600000 } }] }));
+                        }
+                    }
+                }
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: Theme.spacing.small
