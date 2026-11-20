@@ -20,3 +20,5 @@ borsh = { version = "1.5.7", features = ["derive"] }
 lee_core = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.4.0-rc3" }
 lee = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.4.0-rc3", features = ["prove"] }
 risc0-build = "=3.0.5"
+sequencer_service_rpc = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.4.0-rc3", features = ["client"] }
+common = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.4.0-rc3" }
