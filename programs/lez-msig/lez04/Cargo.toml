@@ -22,3 +22,4 @@ lee = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = 
 risc0-build = "=3.0.5"
 sequencer_service_rpc = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.4.0-rc3", features = ["client"] }
 common = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.4.0-rc3" }
+key_protocol = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.4.0-rc3" }

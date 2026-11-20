@@ -13,10 +13,12 @@ lee.workspace = true
 lee_core = { workspace = true, features = ["host"] }
 borsh.workspace = true
 hex = "0.4"
+sha2 = "0.10"
 
 [dev-dependencies]
 lee = { workspace = true, features = ["test-utils"] }
 sequencer_service_rpc.workspace = true
 common.workspace = true
+key_protocol.workspace = true
 tokio = { version = "1.50", features = ["rt-multi-thread", "macros"] }
 rand = "0.8"

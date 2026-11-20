@@ -21,6 +21,15 @@ pub use msig_core;
 use msig_core::{Instruction, Key, Outflow, State};
 pub use msig_v04::{self, Placement, ProgramInstruction};
 use msig_v04::{key_of, multisig_account, seed};
+use sha2::{Digest, Sha256};
+
+/// The derivation id of a private multisig's fee account (D17): a regular private account the
+/// members derive from their group secret with LEE's `derive_regular_shared_account_keys(id)`,
+/// and witness `FeeOnly`, since the multisig's PDA cannot pay a fee. One per multisig, so two
+/// multisigs of one group never share a fee account.
+pub fn fee_derivation_id(create_key: &Key) -> [u8; 32] {
+    Sha256::new().chain_update(b"lez-msig/v1/fee-account").chain_update(create_key).finalize().into()
+}
 
 /// The guest program as built from `methods/guest`.
 pub fn program() -> Program {

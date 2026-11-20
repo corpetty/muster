@@ -12,4 +12,5 @@ LEZ v0.3 and v0.4 cannot share one dependency graph. The rules are the same `../
 Pins: LEZ `v0.4.0-rc3`. Both `Cargo.lock` files are seeded from LEZ rc3's own lockfile, because
 risc0-zkvm 3.0.5 is yanked and a fresh resolve picks 3.1.0, which does not build with LEZ.
 Build: `cargo build -p msig_methods04` (the guest, rzup's toolchain), `cargo test -p msig_host04`.
-The private posture on v0.4 (in-proof fees, async deposits) waits on its design rows (D13-D17).
+The private posture on v0.4 (in-proof fees, async deposits) is being ported (exo-05f). Its fee is decided (D17): a
+group fee account from the GMS, witnessed `FeeOnly` (`msig_host04::fee_derivation_id`).
