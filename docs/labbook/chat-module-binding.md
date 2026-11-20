@@ -34,8 +34,9 @@ optional dependency, `>=0.3.0`).
 
 1. **`remove_group_member` is not in the module.** The library has it as
    `remove_group_participants` (logos-chat PR #357), and the module (0.3.0) exposes only
-   `add_group_member`. A patch adds it to `chat_module.lidl`, the trait and `actions.rs`, and pins
-   the library at PR #357's head. It builds, the module's 58 unit tests pass, and the group doctest
+   `add_group_member`. osmaczko's draft logos-chat-module#92 exposed it for GroupV2.
+   logos-chat-module#103 updates #92: it merges `main` (GroupV3, `logosctl` doctests) and moves
+   the removal onto #357's GroupV3 path. The module's 58 unit tests pass, and the group doctest
    gains a removal step (below). Until it ships, Muster's removals are reported as failed, never
    skipped.
 2. **A chat address lives for one session.** Each `init` is a new installation with a new
