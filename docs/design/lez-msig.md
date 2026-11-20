@@ -307,9 +307,18 @@ when a private settlement fails, and a member can start it ("Read it from the ch
 A payment's credit to a public payee is a deferred public effect, so it can land a block after
 the multisig's note. Muster judges the multisig by its note and never by the payee's balance.
 
-What is not built:
-- **Real proving from a room.** The room flow has run in dev mode only
-  (`module/tests/lez_msig_private_e2e.nim`). Real proving is measured in §10.
+**Real proving from a room (run 2026-11-19, exo-0d3.15).** `module/tests/lez_msig_private_e2e.nim`
+ran all nine sections against a local zone started without dev mode
+(`MUSTER_LEZ_REAL_PROOFS=1 infra/lez/localnet.sh`), which verifies real receipts. Every private
+transaction was really proved on a 64-core machine, and the run took 765 s:
+- create;
+- a deposit;
+- a 2-of-3 payment;
+- a refusal while proving;
+- a note recovered from the chain;
+- a payment from that note.
+
+The public testnet run waits on the testnet funder.
 
 Every view of the room is the fold over its signed log.
 
