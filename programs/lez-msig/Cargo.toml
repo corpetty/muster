@@ -6,7 +6,7 @@
 [workspace]
 resolver = "2"
 members = ["core", "v03", "methods", "host", "module"]
-exclude = ["methods/guest"]
+exclude = ["methods/guest", "lez04"]
 
 [workspace.package]
 edition = "2021"
