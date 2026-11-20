@@ -44,10 +44,16 @@ Its 0.4 port is one actor handler (`actor_entrypoint!`); the payout is
 - **Private posture, in-process** [measured, dev-mode proofs], every step's fee paid in the proof
   by a GMS-derived regular account witnessed `RegularKey::FeeOnly`
   (`lez04/host/tests/v04_private.rs`, `v04_private_fee.rs`):
+  - a top-up of the group's fee account from a public account, the fee account paying that
+    transaction's own fee out of the credit, so a group starts with no funds;
   - a private Create;
   - a deposit from a public account into the private vault;
   - a 2-of-3 payment to a public payee (`custody_transfer` from the private PDA);
   - refusals below threshold and on a spent nonce.
+- **Private posture, live local zone** [measured, dev-mode receipts]: the same four steps against a
+  real 0.4.0-rc3 sequencer (`lez04/host/tests/live_private04.rs`). Each fee went to the zone's fee
+  inbox, priced from `getFeeState`, and the program was deployed immutable so every proof named no
+  program (D18).
 
 ## Performance
 
@@ -82,14 +88,33 @@ fee:
 | Execute refused below threshold, 700k gas limit | 5,606,640: (700,000 + 830) × 8 |
 | Execute refused below threshold, 4M gas limit | 32,006,640 |
 | Deploying the program (immutable) | about 8.6M |
+| Any private transaction, at the next block's ceiling of 9 | 5,704,443 reserved (5,070,616 at the head) |
+
+A private transaction's fee is flat [from source, `lez/programs/fee/core/src/assess.rs`]:
+`(PRIVATE_VERIFY_GAS + public cycles) × exec + PRIVATE_GAS_STOR × stor`. That is 409,764 gas for
+verifying the receipt plus 224,063 bytes of proof and padding, about 5.07M at base fee 8 whatever
+the program does inside the proof. So the private posture's 2-of-3 payment costs about what the
+public one does (4.66M), but its fee no longer grows with M: the approvals are verified inside the
+proof.
 
 ### Latency [measured]
 
 - The devnet made a block about once a minute, irregularly (local: every 15 s).
 - Muster's seven-step room flow took about 25 minutes there; a local zone runs it in about 5.
-- Proving a private step for real on 0.4 is not measured yet. On 0.3 the same payment proved in
-  about 136 s + 15 s·M on a 64-core EPYC, 228 KB per transaction whatever M
-  (`programs/lez-msig/BENCHMARKS.md`). We'll add 0.4's figures here.
+- **Real proving of a private step** on 0.4, local CPU prover, AMD EPYC 7C13 (64 cores), peak
+  memory 9.6 GB (`programs/lez-msig/BENCHMARKS.md`, `lez04/host/src/bin/msig_bench04.rs`):
+
+  | step | 0.4 (s) | 0.3 (s) |
+  |---|---|---|
+  | public → one private account (fee-account top-up) | 75 | (none) |
+  | public → the vault, plus the fee witness (deposit) | 169 | 92 (no fee) |
+  | create (3 / 10 members) | 184 / 192 | 130 / 140 |
+  | pay with M = 1 / 3 / 5 / 10 approvals | 195 / 209 / 235 / 298 | 151 / 172 / 209 / 288 |
+
+  - A payment proves in about 182 s + 11.5 s·M (0.3: 136 s + 15 s·M).
+  - **The in-proof fee costs about 95 s on every step**: the deposit and the top-up are the same
+    transfer, and the deposit's extra private account, the fee witness, is the difference.
+  - Transactions are 229–238 KB, flat in M (0.3: 228 KB).
 
 ## What worked as designed
 
@@ -134,7 +159,7 @@ workable, but it needs every program author to re-measure after any change.
   its limit. We understand the limit-burn may be deliberate anti-spam; if so, documenting it for
   program authors would help.
 
-### 2. A program-owned account cannot pay its own fee
+### 2. A program-owned account cannot pay its own fee, and the workaround costs proving time
 
 **What happens** [measured, `v04_private_fee.rs`]:
 - A private transaction pays its fee inside the proof, from a regular private account whose
@@ -148,6 +173,9 @@ workable, but it needs every program author to re-measure after any change.
 - We derive it from the group secret with `derive_regular_shared_account_keys`, so every member
   can use it. But anyone holding that secret, a removed member included, can drain it [inferred].
 - The vault itself, the one account the group already funds and controls, can never pay.
+
+- **It costs proving time** [measured]: the fee account is a second private account in every proof,
+  about 95 s of a 170–300 s step on a 64-core machine.
 
 **Ask, for discussion:** a way for a program to authorize its own PDA as a transaction's fee payer
 under the same rules that let it spend (a fee entry the program's handler approves). Group-owned
@@ -193,7 +221,25 @@ transaction makes.
 **Ask:** say so in the scanning docs, or give each note an index to its commitment. Wallets and
 indexers outside your workspace will hit this the first time a fee shares a proof.
 
-### 6. Things that surprised us, documented here for other program authors
+### 6. Private fee pricing has two cliffs a client has to know about
+
+**What happens** [from source, `lez/programs/fee/core/src/market.rs`]:
+- A reserve's surplus over the fee up to `MIN_PRIVATE_REFUND` (1,000,000) is kept as tip. A larger
+  one comes back as a refund publication, which the payer has to find and claim in a later proof.
+  So a client sizing its reserve generously pays for that with an extra claim step. We price at the
+  next block's ceiling, whose surplus at base fee 8 is about 634k, under the floor
+  (`msig_host04::private_reserve`).
+- A private transaction carries at most `MAX_PRIVATE_ACTIONS` (8) private actions. A multisig step
+  uses two (the vault and the fee account), so this doesn't bind us yet. A private payee, a call
+  with private rows, or claims of pending deposits each add actions, so it bounds what one step can
+  do.
+- `PRIVATE_VERIFY_GAS` and `PROOF_BYTES` are marked provisional (`FIXME: re-pin`).
+
+**Ask:** expose the private fee and the refund floor through `getFeeState`, so clients that
+cannot link `fee_core` (ours is Nim) need not copy the constants, and say when they will be
+re-pinned.
+
+### 7. Things that surprised us, documented here for other program authors
 
 - **A fresh public account must be admitted by its key** [measured]: funding one takes
   `--to-pk`. A program's own fresh PDA needs `PublicAccountEvidence::Pda` on Create.
