@@ -9,6 +9,10 @@
 from a public account, a 2-of-3 payment to a public payee, every step's fee from the group's fee
 account; below threshold and a spent nonce refused while proving.
 
+`v04_undisclosed.rs`: D18. The program deployed through the loader (segments, then an immutable
+header); a private Create proved undisclosed names no program and lands; a claim against a header the
+zone never saw is refused.
+
 `v04_bench.rs` (ignored): the same steps with REAL proving for M = 1, 3, 5, 10 (RFP P.1/P.2);
 `cargo test --release -p msig_host04 --test v04_bench -- --ignored --nocapture`.
 

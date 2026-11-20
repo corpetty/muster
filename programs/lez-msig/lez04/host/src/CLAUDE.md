@@ -11,4 +11,6 @@
   - `decrypt` / `decrypt_fee` read the new notes back. A note's commitment is not in the same
     `PrivateAction` as its ciphertext, so a decrypted account is matched against every commitment
     the transaction makes.
+- `with_undisclosed(header, proof)` (D18): private executions claim only that some immutable
+  program ran, against the header's mirror commitment.
 - `vault_balance`, `native_state`.

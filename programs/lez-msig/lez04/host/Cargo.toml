@@ -17,6 +17,8 @@ sha2 = "0.10"
 key_protocol.workspace = true
 
 [dev-dependencies]
+program_loader_core = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.4.0-rc3" }
+risc0-binfmt = "=3.0.4"
 lee = { workspace = true, features = ["test-utils"] }
 sequencer_service_rpc.workspace = true
 common.workspace = true

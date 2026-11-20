@@ -27,7 +27,7 @@ use lee::{
 use lee_core::{
     account::{Account, AccountId, Actor, ActorState, Nonce},
     native_token::{Message as NativeMessage, NATIVE_TOKEN_PROGRAM_ID},
-    program::MessageBody,
+    program::{MessageBody, ProgramHeader},
     Commitment, EncryptionScheme, FeeTransfer, MembershipProof, NullifierWitness, PrivateAction, PrivateWitness,
     RegularKey, SharedSecretKey, WitnessKind, DUMMY_COMMITMENT_HASH,
 };
@@ -56,6 +56,9 @@ pub struct Msig {
     pub placement: Placement,
     /// The private PDA's keys and its fee account's, from the group secret; None when public.
     keys: Option<GroupKeys>,
+    /// D18: prove private executions without disclosing which program ran, against this
+    /// immutable header and a membership proof of its mirror commitment.
+    undisclosed: Option<(ProgramHeader, MembershipProof)>,
 }
 
 struct GroupKeys {
@@ -88,7 +91,7 @@ fn no_seal(body: &MessageBody) -> Result<RecipientEncryption, lee::error::LeeErr
 impl Msig {
     /// A multisig over a public PDA.
     pub fn public(program: AccountId, create_key: Key) -> Self {
-        Self { program, create_key, placement: Placement::Public, keys: None }
+        Self { program, create_key, placement: Placement::Public, keys: None, undisclosed: None }
     }
 
     /// A multisig over a group-owned private PDA. Every member derives the same keys from the
@@ -98,7 +101,15 @@ impl Msig {
         let pda = group.derive_keys_for_pda(image, &seed(&create_key));
         let fee = group.derive_regular_shared_account_keys(&fee_derivation_id(&create_key));
         let placement = Placement::Private { npk: pda.generate_nullifier_public_key(), vpk: pda.generate_viewing_public_key() };
-        Self { program, create_key, placement, keys: Some(GroupKeys { pda, fee }) }
+        Self { program, create_key, placement, keys: Some(GroupKeys { pda, fee }), undisclosed: None }
+    }
+
+    /// D18: private executions claim only that SOME immutable program ran (its header's mirror
+    /// commitment is in the set), never which. The program must be deployed immutable at
+    /// `self.program`; `proof` is the mirror commitment's membership proof, read from the zone.
+    pub fn with_undisclosed(mut self, header: ProgramHeader, proof: MembershipProof) -> Self {
+        self.undisclosed = Some((header, proof));
+        self
     }
 
     fn keys(&self) -> &GroupKeys {
@@ -271,7 +282,10 @@ impl Msig {
             fee: transfer,
         };
         let simulation = Simulation { public_actor_states: public_states, admitted_accounts: None };
-        let programs = ProgramCatalog::from([(self.program, program())]);
+        let mut programs = ProgramCatalog::from([(self.program, program())]);
+        if let Some((header, proof)) = &self.undisclosed {
+            programs = programs.with_undisclosed(self.program, *header, proof.clone());
+        }
         let (output, proof) = lee::execute_and_prove(
             input,
             &simulation,

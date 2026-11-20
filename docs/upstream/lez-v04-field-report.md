@@ -91,6 +91,19 @@ fee:
   about 136 s + 15 s·M on a 64-core EPYC, 228 KB per transaction whatever M
   (`programs/lez-msig/BENCHMARKS.md`). We'll add 0.4's figures here.
 
+## What worked as designed
+
+- **`RegularKey::FeeOnly`** [measured]: a group's shared fee account pays the fee and is authorized
+  for nothing else.
+- **Undisclosed program claims** [measured, `lez04/host/tests/v04_undisclosed.rs`]: with the program
+  deployed immutable through the loader and `ProgramCatalog::with_undisclosed`, a private execution's
+  only claim is a commitment-set root. The program's account appears nowhere in the transaction's
+  bytes, and the zone accepts it. A default proof names the program. A claim against a header the
+  zone never saw is refused. This keeps the property 0.3 gave us for free; a sentence in the
+  program-author docs saying that private programs should deploy immutable would make it the
+  default rather than a discovery.
+- **Private PDAs and `custody_transfer`** [measured]: the same guest serves both postures unchanged.
+
 ## What we hit, and what would help
 
 ### 1. A refusal burns the whole gas limit, and nothing can estimate one
