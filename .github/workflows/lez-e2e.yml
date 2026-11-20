@@ -83,6 +83,7 @@ jobs:
           test -n "$prog"
           echo "PROGRAM=$prog" >> "$GITHUB_ENV"
       - name: The program alone, through its key-free operations (live_public)
+        if: hashFiles('programs/lez-msig/host/tests/live_public.rs') != ''
         working-directory: programs/lez-msig
         env:
           MSIG_LIVE_RPC: http://127.0.0.1:3040
