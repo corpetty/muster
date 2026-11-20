@@ -8,6 +8,8 @@
   - `private_tx` proves an instruction over the PDA; `deposit_tx` proves a public account's
     deposit into the vault.
   - Each pays its fee in the proof from the fee account, witnessed `FeeOnly` (`PrivateFee`).
+  - `top_up_fee_tx` proves a public account's top-up of the fee account, which pays that
+    transaction's own fee out of the credit, so a group needs no funds to start.
   - `decrypt` / `decrypt_fee` read the new notes back. A note's commitment is not in the same
     `PrivateAction` as its ciphertext, so a decrypted account is matched against every commitment
     the transaction makes.
