@@ -107,7 +107,7 @@ Muster's own catalogue. Design and decision log: `docs/design/lez-msig.md`.
 | P.2 cost as a function of M, M ≥ 5 viable | ✅ | ~12 s per approval on an idle 64-core machine (PR #385); rerun on 0.4 |
 | S.1 LEZ, private accounts | ✅ | |
 | S.2 the room on `chat_module` | ↪ | removal is in review (logos-chat #357); a limited integration (deliberation) is M3, the full binding M6 |
-| S.3/S.4 testnet 0.4, deployed there | 🟡 | the 0.4 program's public posture runs on a local 0.4.0-rc3 zone (PR #387); the devnet deployment and the private posture are M1 |
+| S.3/S.4 testnet 0.4, deployed there | 🟡 | deployed on the 0.4.0-rc3 devnet; the public posture runs there (PR #387); the private posture is M1 |
 | S.5/S.6 e2e against a standalone sequencer in CI, green | 🟡 | a workflow runs them on a local v0.3 zone (PR #386); 0.4 follows the port |
 | S.7 a test per hard requirement | 🟡 | below-threshold, R.2 and drain-before-create are covered; the full mapping is M4 |
 | S.8–S.10 README, API, CLI docs | 🟡 | M2 (API, CLI), M4 (README) |
@@ -151,8 +151,17 @@ Work done while waiting for feedback, each item in its own draft PR:
     2-of-3 pay, every transaction paying its fee).
   - `localnet.sh` runs 0.4 zones.
   - Decisions D13–D16 are taken; D17 and D18 are proposed.
+- **M1: on the 0.4 devnet** (2026-11-20, PR #387).
+  - lez-msig deployed immutable at `2tTh5nUpBxtTAoQBCQbzmG32JGapm2KaEpH9oxktGanG`.
+  - The public posture passed there: create on a fresh PDA, a refusal below threshold, a 2-of-3
+    payment.
+  - Muster's own client drives the multisig on a local 0.4 zone, 7/7.
+  - Measured at base fee 8: Create ≈ 0.83M, a 2-of-3 Execute ≈ 4.7M. **A refused transaction
+    burns its whole declared gas limit**, so Muster's sends need per-step limits (exo-50c).
+- **M3: chat_module, limited** (PR #388). Each multisig's discussion runs in a chat group that
+  follows its members. With a patched module exposing `remove_group_member`, removal was proven
+  on the live fleet: the removed member reads nothing after.
 - **Not done:**
-  - the devnet deployment (the funder waits for funds);
   - the private posture on 0.4;
   - Muster's client on 0.4;
   - a laptop-class benchmark.
@@ -364,7 +373,9 @@ custodians named so far.
 
 1. **The L1 boundary.** Muster coordinates and the Blockchain team builds the mechanism; is that
    the agreed split? Who is Muster's contact there (0xGunner)?
-2. **Devnet funds.** M1 targets the 0.4.0-rc3 devnet. Its funder account is
+2. **Devnet funds: answered.** The funder was funded and the program is deployed. More will be
+   needed for Muster's room runs there.
+   M1 targets the 0.4.0-rc3 devnet. Its funder account is
    `Public/A7D1JP1LZv9WnCuSZ5y89by5BvgbWJ7m4gUPzVM7KWDZ`, public key `ec559533fa2159ddc87e6b3486cfe3b72c18bc142ce1f509a79ccd73629d63db`; on 0.4 a
    fresh account is funded by its key. Who can send it devnet LEZ (James's prog-tui, or the L1
    bridge)?
