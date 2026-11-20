@@ -40,3 +40,26 @@
 8. **The lez-msig envelope is unchanged for the public posture.** `create_key ‖ 0 (Public) ‖ op`
    is the same bytes as on v0.3, so the room's proposals and approvals carry over. A private
    PDA's placement loses its identifier, so private addresses change (D13).
+9. **A refused transaction burns its whole declared gas.** Measured on a local 0.4.0-rc3 zone at
+   base fee 8 (exec and storage), the public posture:
+
+   | step | what the payer paid |
+   |---|---|
+   | Create (2-of-3) | 834,360 (fits a 110k gas limit) |
+   | Execute, 2 approvals, a payment | 4,657,224 (about 580k gas) |
+   | Execute refused below threshold, gas limit 4M | 32,006,640: the whole limit × 8, plus storage |
+
+   The sequencer refuses a `max_fee` below the fee reserve, which is about the gas limit × the
+   base fee ("max_fee 400000 below the fee reserve 8005280" for a 1M limit). A refusal then costs
+   the whole reserve. So Muster has to declare a gas limit close to what a step uses: under v0.3's
+   wallet default (2M gas), every refusal costs about 16M. Before a v0.4 settlement sends, it
+   should simulate the step, or use measured per-step limits. Whether the payer must also hold
+   the whole reserve was not tested.
+10. **The devnet makes a block about a minute apart**, irregularly (0.4.0-rc3 devnet,
+    2026-11-20). A local zone makes one every 15 s. Waits sized for a local zone time out there.
+11. **On the devnet** (2026-11-20), the program deployed immutable at
+    `2tTh5nUpBxtTAoQBCQbzmG32JGapm2KaEpH9oxktGanG` (hex `1c0a7ce6…8170d`); the deploy cost about
+    8.6M. `live_public04` passed there with a 700k gas limit:
+    - Create 834,360;
+    - an Execute refused below threshold 5,606,640: the whole limit, again;
+    - a 2-of-3 Execute that paid 4,687,312.

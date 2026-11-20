@@ -31,7 +31,9 @@ fn fund(rpc: &str, to: &AccountId, amount: u128, key: Option<&PublicKey>) {
 }
 
 async fn until(what: &str, mut cond: impl AsyncFnMut() -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(120);
+    // MSIG_LIVE_WAIT_S: a devnet makes a block about a minute apart; a local zone every 15 s
+    let wait = std::env::var("MSIG_LIVE_WAIT_S").ok().and_then(|v| v.parse().ok()).unwrap_or(120);
+    let deadline = Instant::now() + Duration::from_secs(wait);
     while !cond().await {
         assert!(Instant::now() < deadline, "timed out waiting for {what}");
         tokio::time::sleep(Duration::from_secs(3)).await;
@@ -43,10 +45,23 @@ async fn send(c: &SequencerClient, m: &Msig, op: Instruction, payer: &PrivateKey
     let pk = PublicKey::new_from_private_key(payer);
     let id = AccountId::from(&pk);
     let nonce = c.get_accounts_nonces(vec![id]).await.expect("getAccountsNonces")[0];
-    let fee = FeeDeclaration { payer: id, gas_limit: 4_000_000, tip: 0, max_fee: 500_000_000 };
+    let (gas, max) = fee_caps();
+    let fee = FeeDeclaration { payer: id, gas_limit: gas, tip: 0, max_fee: max };
     let msg = m.public_message(op, BTreeMap::from([(id, nonce)]), Some(fee));
     let tx = PublicTransaction::new(msg.clone(), lee::public_transaction::WitnessSet::for_message(&msg, &[payer]));
     c.send_transaction(LeeTransaction::Public(tx)).await.expect("sendTransaction");
+}
+
+/// The fee declaration: MSIG_LIVE_GAS and MSIG_LIVE_MAX_FEE, so a run on a funded devnet can keep
+/// its reserve within what the payer holds (the payer must cover its max fee).
+fn fee_caps() -> (u64, u128) {
+    let gas = std::env::var("MSIG_LIVE_GAS").ok().and_then(|v| v.parse().ok()).unwrap_or(4_000_000);
+    let max = std::env::var("MSIG_LIVE_MAX_FEE").ok().and_then(|v| v.parse().ok()).unwrap_or(500_000_000);
+    (gas, max)
+}
+
+fn fund_amount() -> u128 {
+    std::env::var("MSIG_LIVE_FUND").ok().and_then(|v| v.parse().ok()).unwrap_or(10_000_000_000)
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -61,7 +76,7 @@ async fn public_multisig_on_a_live_v04_zone() {
     let payer = PrivateKey::try_new(rand::random()).unwrap();
     let payer_pk = PublicKey::new_from_private_key(&payer);
     let payer_id = AccountId::from(&payer_pk);
-    fund(&rpc, &payer_id, 10_000_000_000, Some(&payer_pk));
+    fund(&rpc, &payer_id, fund_amount(), Some(&payer_pk));
     until("the payer's funds", async || c.get_account_balance(payer_id).await.unwrap_or(0) > 0).await;
 
     // 1. create, on a fresh public PDA
@@ -75,7 +90,13 @@ async fn public_multisig_on_a_live_v04_zone() {
     let state = async || c.get_account(m.account()).await.ok().flatten().and_then(|a| m.state_of(&a));
     until("the multisig on chain", async || state().await.is_some()).await;
     assert_eq!(state().await.unwrap().config.threshold, 2);
-    eprintln!("1. created at its fresh public PDA, admitted by evidence; the payer paid the fee");
+    if std::env::var("MSIG_LIVE_CREATE_ONLY").is_ok() {
+        eprintln!("1. created (payer now {}); stopping after Create (MSIG_LIVE_CREATE_ONLY)",
+                  c.get_account_balance(payer_id).await.unwrap_or(0));
+        return;
+    }
+    eprintln!("1. created at its fresh public PDA, admitted by evidence; the payer paid the fee (payer now {})",
+              c.get_account_balance(payer_id).await.unwrap_or(0));
 
     // 2. fund the vault, pay 2 of 3; below threshold changes nothing
     fund(&rpc, &m.account(), 5_000, None);
@@ -88,13 +109,16 @@ async fn public_multisig_on_a_live_v04_zone() {
                        expires_ms: 9_000_000_000_000, proposer: s[0].key() };
     let exec = |who: &[usize]| Instruction::Execute { proposal: p.clone(), approvals: who.iter().map(|&i| s[i].approve(&p)).collect(), executor: None };
     send(&c, &m, exec(&[0]), &payer).await;
-    tokio::time::sleep(Duration::from_secs(20)).await;
+    let before_refusal = c.get_account_balance(payer_id).await.unwrap_or(0);
+    until("the refused execution to land", async || c.get_account_balance(payer_id).await.unwrap_or(0) < before_refusal).await;
     assert_eq!(vault(&c, &m).await, 5_000, "below threshold, nothing moved");
+    eprintln!("   below threshold, refused (payer now {})", c.get_account_balance(payer_id).await.unwrap_or(0));
     send(&c, &m, exec(&[0, 1]), &payer).await;
     until("the payment", async || c.get_account_balance(to).await.unwrap_or(0) == 1_201).await;
     assert_eq!(vault(&c, &m).await, 3_800);
     let _ = Nonce(0);
-    eprintln!("2. 1 of 2 changed nothing; 2 of 3 paid 1200 out of the vault, in one transaction");
+    eprintln!("2. 1 of 2 changed nothing; 2 of 3 paid 1200 out of the vault, in one transaction (payer now {})",
+              c.get_account_balance(payer_id).await.unwrap_or(0));
 }
 
 async fn vault(c: &SequencerClient, m: &Msig) -> u128 {

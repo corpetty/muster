@@ -5,4 +5,7 @@
 `live_public04.rs`: the same program against a real v0.4 standalone sequencer
 (`MUSTER_LEZ_VERSION=v0.4.0-rc3 infra/lez/localnet.sh`, then `deploy`): create on a fresh PDA,
 below threshold, a 2-of-3 payment, every transaction paying its fee. Skipped unless
-`MSIG_LIVE_RPC` and `MSIG_LIVE_PROGRAM` are set.
+`MSIG_LIVE_RPC` and `MSIG_LIVE_PROGRAM` are set. On a funded devnet: `MSIG_LIVE_FUND`,
+`MSIG_LIVE_GAS` and `MSIG_LIVE_MAX_FEE` keep the payer's fees small (a refusal burns its whole
+gas limit), `MSIG_LIVE_WAIT_S` waits out minute-long blocks, `MSIG_LIVE_CREATE_ONLY` stops after
+Create. Passed on the 0.4.0-rc3 devnet, 2026-11-20 (`docs/labbook/lez-v04-port.md`).
