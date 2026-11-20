@@ -66,6 +66,9 @@ import ../src/lez/msig as msigbytes    # its bytes
 import ../src/wallet/lez_msig_chain    # its chain seam
 import ../src/coordination/msig_room   # its creation ceremony, proposing
 import ../src/coordination/msig_members # the room following its member set across config changes (exo-0d3.13)
+import ../src/coordination/msig_chat    # its deliberation in a chat_module group that follows its members (exo-7a5)
+import ../src/transport/chat_groups
+import ../src/transport/chat_groups_lp
 import ../src/coordination/member_accounts   # a member's own accounts, disclosed to the room (exo-1f9)
 import ../src/crypto/account_labels          # …and the keystore labels they live under
 import ../src/wallet/lez_msig_private  # its private posture (exo-efa)
@@ -231,6 +234,7 @@ proc myAddress(): Address                ## forward — this instance's secp acc
 
 proc roomAccounts(): seq[RoomAccount]   ## forward — the room's disclosed accounts, folded from the log
 proc msigTick()                         ## forward — lez-msig ceremonies on the intents tick (exo-0d3)
+proc msigChatTick()                     ## forward — each lez-msig's chat group follows its members (exo-7a5)
 proc msigMyNames(): seq[string]         ## forward — this member's lez-msig approval keys, as contributors
 proc msigLiveOf(a: LezMsigAccount): MsigLive   ## forward — the lez-msig chain seam for an account
 proc msigPrivFor(chain: string, program, createKey: seq[byte]): MsigPrivate   ## forward — a private one's, for this member (exo-efa)
@@ -2979,6 +2983,7 @@ proc musterCoordinateIntents(): string =
   lezPump()                            # complete any LEZ step the chain has since included
   frostPump()                          # advance joined FROST ceremonies and round 2
   msigTick()                           # lez-msig ceremonies: join, create, disclose (exo-0d3)
+  msigChatTick()                       # their chat groups follow their members (exo-7a5)
   xmrMsigPump()                        # advance joined Monero multisig setups (ADR-020)
   xmrSpendPump()                       # …and agreed spends from them: sync, build, sign, submit, confirm
   roundsPump()                         # a multi-round room decision's next round, approved once (exo-720)
@@ -4077,6 +4082,50 @@ proc msigPrivateTick(c: MsigCeremony, ks: Keystore, me: string) =
     let sent = pc.sendOp(msigbytes.borsh(MsigInstruction(kind: ikCreate, zone: hexToBytes(c.zone), config: configOf(c))))
     if sent.ok: gMsigCreated[c.createKey] = (sent.hash, epochTime())
 
+const ChatPackage = "chat_module"
+var gChat: LpChatGroups = nil
+var gChatAt = 0.0
+var gChatStatus = initTable[string, JsonNode]()   ## create key → the chat group as this client last saw it
+
+proc chatGroupsReady(): ChatGroups =
+  ## The platform's chat_module, when the host reports it running (or cannot say: the standalone
+  ## runner); nil while it is not installed or not ready. Never calls a module that is not ready.
+  let rec = moduleFacts().moduleRecord(ChatPackage)
+  if rec.answered and (not rec.known or rec.state != "ready"): return nil
+  if gChat == nil:
+    let p = presetOf(gDeliveryConfig)
+    gChat = newLpChatGroups(if p.len > 0: p else: "logos.dev")
+  if not gChat.ready(): return nil
+  gChat
+
+proc msigChatTick() =
+  ## Every 10 s: share this session's chat address, then, for each lez-msig of the room this
+  ## member's client stewards, create its chat group or bring its roster to the members now.
+  if gSession == nil or epochTime() - gChatAt < 10.0: return
+  gChatAt = epochTime()
+  let c = chatGroupsReady()
+  if c == nil: return
+  let ks = moduleKeystore()
+  let me = memberId(ks)
+  try:
+    let mine = c.address()
+    discard gSession.shareChatAddress(ks, mine)
+    let evs = gSession.roomEvents()
+    for ra in reduceAccounts(evs):
+      if ra.family != LezMsigFamily: continue
+      let (ok, a, _) = lezMsigAccountOf(ra.chain, ra.address, ra.config)
+      if not ok: continue
+      let convo = chatGroupOf(evs, gSession.topic, a)
+      let roster = (if convo.len > 0: c.members(convo) else: @[])
+      let plan = chatPlan(evs, gSession.topic, a, me, mine, roster)
+      let done = applyChatPlan(gSession, ks, c, a, plan, ra.label)
+      let ck = msigbytes.hexOf(a.createKey)
+      gChatStatus[ck] = %*{"convo": (if done.convo.len > 0: done.convo else: convo), "steward": plan.steward,
+                           "members": roster.mapIt(%*{"address": it.address, "pending": it.pending}),
+                           "missing": plan.missing, "done": done.done, "failed": done.failed}
+      for f in done.failed: echo "[muster] chat group ", ck[0 ..< 8], ": ", f
+  except CatchableError as e: echo "[muster] chat groups: ", e.msg
+
 proc msigTick() =
   ## On the intents tick: join every ceremony that invites this member; for one this member
   ## opened that every member joined, send Create from this member's own account, then
@@ -4420,9 +4469,12 @@ proc musterLezMsigStateRead(acct: string): string =
       let removed = pid in proposers and r.state.config.memberOf(proposers[pid]).isNone
       queue.add %*{"nonce": $q.nonce, "proposalId": pid, "etaMs": $q.etaMs, "expiresMs": $q.expiresMs,
                    "proposerRemoved": removed}
+    let ck = msigbytes.hexOf(la.createKey)
     $(%*{"account": a.id, "private": la.private, "epoch": $r.state.epoch, "nonceBase": $r.state.nonceBase, "balance": $r.balance,
          "config": msigbytes.configJson(r.state.config), "myKey": msigbytes.hexOf(me),
-         "queue": queue, "height": $r.height})
+         "queue": queue, "height": $r.height,
+         # its deliberation's chat group (exo-7a5): null until this client has seen chat_module
+         "chat": gChatStatus.getOrDefault(ck, newJNull())})
   except CatchableError as e: $(%*{"error": "sequencer-unreachable", "detail": e.msg})
 
 proc musterLezMsigFund(account, amount: string): string =
