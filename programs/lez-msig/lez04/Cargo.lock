@@ -5005,6 +5005,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "common",
+ "fee_core",
  "hex",
  "key_protocol",
  "lee",

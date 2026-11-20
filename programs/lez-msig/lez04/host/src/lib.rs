@@ -400,6 +400,20 @@ fn getrandom(b: &mut [u8; 32]) {
     std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(b)).expect("/dev/urandom");
 }
 
+/// The zone's fee inbox: every in-proof fee goes to it (fee_core).
+pub fn fee_inbox() -> AccountId {
+    fee_core::compute_fee_inbox_account_id(fee_core::fee_account_id())
+}
+
+/// The reserve a private transaction carries: LEZ's private fee
+/// (`(PRIVATE_VERIFY_GAS + public cycles)·exec + PRIVATE_GAS_STOR·stor`) at the next block's
+/// highest base fees, so it still covers the fee if the market steps once. Its surplus over the
+/// fee at the head stays under `MIN_PRIVATE_REFUND` at ordinary base fees and is kept as tip, so
+/// no refund publication comes back to claim.
+pub fn private_reserve(public_cycles: u64, next_exec_ceiling: u64, next_stor_ceiling: u64) -> u128 {
+    fee_core::assess::private_fee_required(public_cycles, next_exec_ceiling, next_stor_ceiling)
+}
+
 /// The native balance's actor state as a public account holds it (a payee's, the fee inbox's).
 pub fn native_state(account: &Account) -> ActorState {
     account.data.actor_state(NATIVE_TOKEN_PROGRAM_ID).clone()
