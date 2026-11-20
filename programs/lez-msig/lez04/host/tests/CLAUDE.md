@@ -5,7 +5,8 @@
 `v04_private_fee.rs`: D17 on LEE v0.4 state, dev-mode proofs. The group's fee account (from the GMS, witnessed
 `FeeOnly`) pays a private Create's fee; without its authorization key it cannot; the PDA cannot pay its own.
 
-`v04_private.rs`: the private posture end to end, dev-mode proofs: a private Create, a deposit
+`v04_private.rs`: the private posture end to end, dev-mode proofs: the group's fee account topped up
+from a public account (its first fee paid out of the credit), a private Create, a deposit
 from a public account, a 2-of-3 payment to a public payee, every step's fee from the group's fee
 account; below threshold and a spent nonce refused while proving.
 

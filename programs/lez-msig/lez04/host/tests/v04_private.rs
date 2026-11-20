@@ -2,6 +2,8 @@
 //! inside the proof from the group's fee account (D17). On LEE's own state, dev-mode proofs. Each
 //! step's new notes are decrypted with the group's keys, as any member would, and carried into the
 //! next step with a membership proof from the state:
+//! - the group's fee account topped up from a public account, paying its own first fee out of
+//!   the credit (no funds in the group needed);
 //! - a private Create;
 //! - a deposit into the vault from a public account;
 //! - a 2-of-3 payment out to a public payee;
@@ -14,8 +16,7 @@ use key_protocol::key_management::group_key_holder::GroupKeyHolder;
 use lee::{PrivateKey, PublicKey, V03State};
 use lee_core::{
     account::{Account, AccountId, Actor},
-    native_token::encode_balance,
-    Commitment, MembershipProof, Nullifier,
+    Commitment, MembershipProof,
 };
 use msig_core::sign::Signer;
 use msig_core::*;
@@ -37,12 +38,6 @@ fn config(s: &[Signer]) -> Config {
         targets: vec![],
         limits: vec![],
     }
-}
-
-fn funded(balance: u128) -> Account {
-    let mut a = Account::default();
-    a.data.set_actor_state(lee_core::native_token::NATIVE_TOKEN_PROGRAM_ID, encode_balance(balance));
-    a
 }
 
 /// A member's view of the zone: the state, the multisig's and the fee account's current notes.
@@ -85,7 +80,9 @@ impl Room {
     fn land(&mut self, p: Proven) {
         self.block += 1;
         self.state.transition_from_privacy_preserving_transaction(&p.tx, self.block, self.block * 1000).expect("the zone accepts it");
-        self.note = Some(p.post.expect("the multisig's new note decrypts"));
+        if p.post.is_some() {
+            self.note = p.post;
+        }
         self.fee_note = p.fee_post.expect("the fee account's new note decrypts");
     }
 
@@ -101,14 +98,10 @@ fn setup() -> Room {
     let s: Vec<Signer> = (0..3).map(|_| Signer::random()).collect();
     let depositor = PrivateKey::try_new([7; 32]).unwrap();
     let dep_id = AccountId::from(&PublicKey::new_from_private_key(&depositor));
-    let fee_note = funded(1_000);
-    let fee_c = Commitment::new(&m.fee_account().unwrap(), &fee_note);
-    let unrelated = Nullifier::for_account_update(&Commitment::new(&AccountId::new([1; 32]), &Account::default()), &[3; 32]);
     let state = V03State::new()
         .with_named_programs([(m.program, program())])
-        .with_public_account_balances([(AccountId::new(INBOX), 1), (AccountId::new(PAYEE), 1), (dep_id, 10_000)])
-        .with_private_accounts([(fee_c, unrelated)]);
-    Room { state, m, s, note: None, fee_note, depositor, block: 0 }
+        .with_public_account_balances([(AccountId::new(INBOX), 1), (AccountId::new(PAYEE), 1), (dep_id, 10_000)]);
+    Room { state, m, s, note: None, fee_note: Account::default(), depositor, block: 0 }
 }
 
 fn proposal(r: &Room, nonce: u64, amount: u128) -> Proposal {
@@ -133,6 +126,14 @@ fn the_private_vault_end_to_end_each_step_paying_its_fee() {
     let inbox = AccountId::new(INBOX);
     let payee = AccountId::new(PAYEE);
 
+    // the group's fee account, topped up from a public account: its first fee comes out of the credit
+    let dep = AccountId::from(&PublicKey::new_from_private_key(&r.depositor));
+    let depositor = PrivateKey::try_new([7; 32]).unwrap();
+    let p = r.m.top_up_fee_tx(&depositor, 0, 1_000 + FEE, None, FEE, inbox, r.states(&[dep, inbox])).expect("top-up proves");
+    r.land(p);
+    assert_eq!(vault_balance(&r.fee_note), 1_000, "the fee account holds the top-up less its own fee");
+    assert_eq!(vault_balance(&r.state.get_account_by_id(dep)), 10_000 - 1_000 - FEE);
+
     // Create
     let create = Instruction::Create { zone: ZONE, config: config(&r.s) };
     let p = r.m.private_tx(create, None, Some(r.fee()), r.states(&[inbox])).expect("create proves");
@@ -141,13 +142,11 @@ fn the_private_vault_end_to_end_each_step_paying_its_fee() {
     assert_eq!(vault_balance(&r.fee_note), 1_000 - FEE, "the fee left the group's fee account");
 
     // a deposit from a public account
-    let dep = AccountId::from(&PublicKey::new_from_private_key(&r.depositor));
     let nonce = r.state.get_account_by_id(dep).nonce.0;
-    let depositor = PrivateKey::try_new([7; 32]).unwrap();
     let p = r.m.deposit_tx(&depositor, nonce, 5_000, r.pre(), Some(r.fee()), r.states(&[dep, inbox])).expect("deposit proves");
     r.land(p);
     assert_eq!(vault_balance(r.note.as_ref().unwrap()), 5_000, "the vault's note holds the deposit");
-    assert_eq!(vault_balance(&r.state.get_account_by_id(dep)), 5_000);
+    assert_eq!(vault_balance(&r.state.get_account_by_id(dep)), 10_000 - 1_000 - FEE - 5_000);
 
     // 2 of 3 pays a public payee
     let pay = proposal(&r, 0, 1_200);
@@ -155,7 +154,7 @@ fn the_private_vault_end_to_end_each_step_paying_its_fee() {
     r.land(p);
     assert_eq!(vault_balance(r.note.as_ref().unwrap()), 3_800);
     assert_eq!(vault_balance(&r.state.get_account_by_id(payee)), 1 + 1_200, "the payee was credited publicly");
-    assert_eq!(vault_balance(&r.state.get_account_by_id(inbox)), 1 + 3 * FEE, "three fees reached the inbox");
+    assert_eq!(vault_balance(&r.state.get_account_by_id(inbox)), 1 + 4 * FEE, "four fees reached the inbox");
     assert_eq!(vault_balance(&r.fee_note), 1_000 - 3 * FEE);
 
     // below threshold: refused while proving, so nothing is sent and nothing is paid

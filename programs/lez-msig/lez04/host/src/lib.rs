@@ -83,6 +83,14 @@ pub struct Proven {
     pub fee_post: Option<Account>,
 }
 
+/// Where a private transaction's fee comes from: the fee account's current note, witnessed
+/// `FeeOnly`; or a credit the same transaction promotes into it (a top-up), whose witness the
+/// caller already holds.
+enum Fee {
+    Note(PrivateFee),
+    Credit { amount: u128, inbox: AccountId },
+}
+
 /// No durable async message is sealed by these transactions; one would be a bug.
 fn no_seal(body: &MessageBody) -> Result<RecipientEncryption, lee::error::LeeError> {
     Err(lee::error::LeeError::InvalidInput(format!("no seal for an async message to {:?}", body.to)))
@@ -230,7 +238,8 @@ impl Msig {
         let mut actors = self.private_public_actors(&op);
         let message = Program::serialize_message(self.envelope(op))?;
         let root = TransactionEntry::Sync(RootCall { to: self.root(), message });
-        self.prove(root, &mut actors, vec![], vec![self.pda_witness(pre)], fee, public_states, &[], BTreeMap::new())
+        let fee = fee.map(Fee::Note);
+        self.prove(root, &mut actors, vec![], vec![self.pda_witness(pre)], fee, public_states, &[], BTreeMap::new(), self.account())
     }
 
     /// A deposit into the private vault: a native transfer from `payer`'s public account, which
@@ -248,8 +257,44 @@ impl Msig {
         let sender = Actor::native_balance(from);
         let message = borsh::to_vec(&NativeMessage::Transfer { to: self.account(), amount }).expect("borsh");
         let root = TransactionEntry::Sync(RootCall { to: sender, message });
-        self.prove(root, &mut vec![sender], vec![from], vec![self.pda_witness(pre)], fee, public_states, &[payer],
-                   BTreeMap::from([(from, Nonce(payer_nonce))]))
+        self.prove(root, &mut vec![sender], vec![from], vec![self.pda_witness(pre)], fee.map(Fee::Note), public_states, &[payer],
+                   BTreeMap::from([(from, Nonce(payer_nonce))]), self.account())
+    }
+
+    /// A top-up of the group's fee account (D17) from `payer`'s public account, which signs. The
+    /// credit is promoted into the fee account's note, witnessed with its full key (every member
+    /// holds it), and the fee account pays this transaction's own fee out of it, so the first
+    /// top-up needs no funds in the group. `pre` is the fee account's current note, None the first
+    /// time.
+    #[allow(clippy::too_many_arguments)]
+    pub fn top_up_fee_tx(
+        &self,
+        payer: &PrivateKey,
+        payer_nonce: u128,
+        amount: u128,
+        pre: Option<(Account, MembershipProof)>,
+        fee_amount: u128,
+        inbox: AccountId,
+        public_states: HashMap<Actor, ActorState>,
+    ) -> Result<Proven, lee::error::LeeError> {
+        let from = AccountId::from(&PublicKey::new_from_private_key(payer));
+        let sender = Actor::native_balance(from);
+        let to = self.fee_account().expect("a private multisig has a fee account");
+        let message = borsh::to_vec(&NativeMessage::Transfer { to, amount }).expect("borsh");
+        let root = TransactionEntry::Sync(RootCall { to: sender, message });
+        let k = &self.keys().fee;
+        let witness = PrivateWitness {
+            vpk: k.generate_viewing_public_key(),
+            random_seed: random32(),
+            kind: WitnessKind::Regular(RegularKey::Authorized(k.authorization_secret_key)),
+            nullifier: match pre {
+                None => NullifierWitness::Init { commitment_root: DUMMY_COMMITMENT_HASH },
+                Some((account, membership_proof)) => NullifierWitness::Update { account, membership_proof },
+            },
+            address_openings: Default::default(),
+        };
+        self.prove(root, &mut vec![sender], vec![from], vec![witness], Some(Fee::Credit { amount: fee_amount, inbox }),
+                   public_states, &[payer], BTreeMap::from([(from, Nonce(payer_nonce))]), to)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -259,16 +304,23 @@ impl Msig {
         actors: &mut Vec<Actor>,
         authorized: Vec<AccountId>,
         mut witnesses: Vec<PrivateWitness>,
-        fee: Option<PrivateFee>,
+        fee: Option<Fee>,
         public_states: HashMap<Actor, ActorState>,
         signers: &[&PrivateKey],
         nonces: BTreeMap<AccountId, Nonce>,
+        promote: AccountId,
     ) -> Result<Proven, lee::error::LeeError> {
-        let a = self.account();
+        let payer = self.fee_account().expect("private");
         let transfer = fee.map(|f| {
-            actors.push(Actor::native_balance(f.inbox));
-            witnesses.push(self.fee_witness(f.note, f.proof));
-            FeeTransfer { payer: self.fee_account().expect("private"), recipient: f.inbox, amount: f.amount, refund_to: None }
+            let (amount, inbox) = match f {
+                Fee::Note(f) => {
+                    witnesses.push(self.fee_witness(f.note, f.proof));
+                    (f.amount, f.inbox)
+                }
+                Fee::Credit { amount, inbox } => (amount, inbox),
+            };
+            actors.push(Actor::native_balance(inbox));
+            FeeTransfer { payer, recipient: inbox, amount, refund_to: None }
         });
         let input = ProvingInput {
             claims: vec![],
@@ -291,7 +343,7 @@ impl Msig {
             &simulation,
             &programs,
             |_| SenderPresentation::Canonical,
-            |_, body: &MessageBody| body.to.account_id == a,
+            |_, body: &MessageBody| body.to.account_id == promote,
             no_seal,
         )?;
         let actions = &output.execution.private_actions;
