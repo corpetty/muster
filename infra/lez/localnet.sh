@@ -11,7 +11,10 @@
 #   infra/lez/localnet.sh status            the chain's height, the funder and its balance
 #   infra/lez/localnet.sh stop              stop it
 #
-# A FRESH chain each start (the database is wiped). 15s blocks, RISC0_DEV_MODE=1.
+# A FRESH chain each start (the database is wiped). 15s blocks, RISC0_DEV_MODE=1, so the zone
+# accepts dev-mode receipts only. MUSTER_LEZ_REAL_PROOFS=1 starts it without dev mode: it then
+# verifies real receipts, and every private transaction sent to it must be really proved
+# (minutes each; RFP-005 P.1, exo-0d3.15).
 #
 # Funding on v0.3. LEZ v0.3.0 has no faucet: native LEZ reaches an account at genesis,
 # over the bridge, or by a transfer from an account that holds some. So this script keeps
@@ -138,7 +141,11 @@ build() {
 launch() {
   # the subshell BECOMES the sequencer (exec), its output in the log: nothing is left
   # holding a caller's pipe open (a `$(…)` around this would otherwise never return)
-  ( cd "$2" && RISC0_DEV_MODE=1 RUST_LOG=info exec nohup "$SEQ" "$1" ) > "$3" 2>&1 < /dev/null &
+  if [ "${MUSTER_LEZ_REAL_PROOFS:-0}" = 1 ]; then
+    ( cd "$2" && unset RISC0_DEV_MODE && RUST_LOG=info exec nohup "$SEQ" "$1" ) > "$3" 2>&1 < /dev/null &
+  else
+    ( cd "$2" && RISC0_DEV_MODE=1 RUST_LOG=info exec nohup "$SEQ" "$1" ) > "$3" 2>&1 < /dev/null &
+  fi
   echo $! > "$4"
   for _ in $(seq 1 90); do
     [ "$(rpc getLastBlockId)" != null ] && return 0     # the RPC answers: up (any version's log)
