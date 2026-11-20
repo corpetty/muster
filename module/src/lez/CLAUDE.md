@@ -39,6 +39,10 @@ The LEZ *wallet* rails (public / shield / deshield / private transfers) live in
   - The BIP-340 witness set, the transaction hash, the `sendTransaction` payload, and a
     program deployment.
   - It is held to vectors that LEZ's own crates generated (`tests/vectors/lez-tx-v024`).
+  - The v0.3.0 message (`LezMessage3`) and the v0.4.0-rc3 one (`LezMessage4`: public actors, a
+    nonce map, admission evidence), the latter held to `tests/vectors/lez-msig/v04.json` from
+    LEZ v0.4's crates (`programs/lez-msig/lez04/host/src/bin/msig_vectors04.rs`). Traps:
+    `docs/labbook/lez-v04-port.md`.
 
 Rules:
 - Every layout cites the upstream file and revision it was read from. A live chain is the

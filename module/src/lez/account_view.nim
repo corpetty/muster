@@ -7,6 +7,11 @@
 ##            its program shards (lee_core account::ProgramShardSelector); the native
 ##            balance is the 16-byte little-endian shard of the native token program,
 ##            account 0 ("1111…" in base58). No single owner, no single data.
+##   v0.4.0   {nonce, data: {actor_states: {<program account, base58>: [u8]}}}: v0.3's shards,
+##            renamed (an actor is (account, program)). A v0.4 zone answers `null` for an
+##            account no one has used yet; only a client that knows it speaks to v0.4 reads that
+##            as a fresh account (LezRpc.getAccount04). Here a null still raises: from any other
+##            zone it is a failed read (roadmap M3, exo-0d3.9; exo-496).
 
 import std/json
 import stint
@@ -20,6 +25,7 @@ type
     nonce*: UInt128
     shards*: seq[tuple[program, data: seq[byte]]]  ## v0.3: every program shard
     v3*: bool                         ## the zone answered in v0.3.0's shape: which line it runs
+    v4*: bool                         ## the zone answered in v0.4's shape (actor states)
 
 proc u128Of(n: JsonNode): UInt128 =
   case n.kind
@@ -35,13 +41,14 @@ proc fresh*(a: LezAccountState): bool =
   a.owner.len == 0 and a.data.len == 0 and a.shards.len == 0 and a.nonce.isZero and a.balance.isZero
 
 proc accountStateOf*(j: JsonNode): LezAccountState =
-  ## getAccount's result, either line; raises ValueError on a shape it does not know.
+  ## getAccount's result, any line; raises ValueError on a shape it does not know, null included.
   if j.kind != JObject: raise newException(ValueError, "not an account: " & $j)
   result.nonce = u128Of(j["nonce"])
   let d = j{"data"}
-  if d != nil and d.kind == JObject and d.hasKey("shards"):             # v0.3.0
-    result.v3 = true
-    for program, data in d["shards"].pairs:
+  if d != nil and d.kind == JObject and (d.hasKey("shards") or d.hasKey("actor_states")):   # v0.3.0, v0.4
+    result.v3 = d.hasKey("shards")
+    result.v4 = d.hasKey("actor_states")
+    for program, data in d[(if result.v4: "actor_states" else: "shards")].pairs:
       let p = accountIdFromBase58(program)
       let bytes = bytesOf(data)
       result.shards.add (program: p, data: bytes)

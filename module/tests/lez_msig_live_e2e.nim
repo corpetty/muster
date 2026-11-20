@@ -58,7 +58,7 @@ let sessions = @[r.alice, r.bob, r.carol]
 proc chainFor(i: int): MsigLive = newMsigLive(rpc, kss[i], Chain, program, PayerLabel)
 for i in 0 ..< 3:
   let payer = chainFor(i).payer()
-  fundFrom(url, payer, e2eFund())
+  fundFrom(url, payer, e2eFund(), kss[i].lezMemberKey(PayerLabel))
 echo "every member's own LEZ account is funded"
 
 proc pollAll() =
@@ -113,7 +113,11 @@ echo "2. created on chain at its PDA from Alice's own account; disclosed and res
 # ── 3. fund, propose, approve, execute ────────────────────────────────────────
 fundFrom(url, a, "5000")
 waitFor("the funded vault", proc(): bool = alice.readMsig(a).balance >= 5000.u128)
-let recipient = hexToBytes("0e".repeat(32))
+# a recipient that exists: on LEZ v0.4 a credit to an account no one has used yet waits as a
+# pending message until its owner claims it, so the balance below would not move
+let recipient = publicAccountId(kss[0].lezMemberKey("lez-msig-e2e/recipient"))
+fundFrom(url, recipient, "1", kss[0].lezMemberKey("lez-msig-e2e/recipient"))
+waitFor("the recipient exists", proc(): bool = rpc.getAccount(recipient).balance >= 1.u128)
 let before = rpc.getAccount(recipient).balance
 let drv = LezMsigDriver(roomDriverFor(policy))
 var seqNo = 100'u64

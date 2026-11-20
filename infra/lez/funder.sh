@@ -112,7 +112,9 @@ case "${1:-account}" in
     [ $# -eq 3 ] || [ $# -eq 4 ] || { echo "usage: $0 [--zone Z] fund <public account id, hex or base58> <amount> [<its public key, hex>]" >&2; exit 2; }
     answers || { echo "$URL does not answer" >&2; exit 1; }
     # v0.4 admits a public account no one has used yet only by its key: pass it as the 4th argument
-    to=(--to "Public/$(b58 "$2")"); [ $# -eq 4 ] && to=(--to-pk "$4")
+    # (v0.3's CLI has no --to-pk, and needs none: there any account can be paid)
+    to=(--to "Public/$(b58 "$2")")
+    [ $# -eq 4 ] && w auth-transfer send --help 2>/dev/null | grep -q -- --to-pk && to=(--to-pk "$4")
     w auth-transfer send --amount "$3" --from "Public/$(funder_id)" "${to[@]}" ;;
   deploy)
     [ $# -eq 2 ] && [ -f "$2" ] || { echo "usage: $0 [--zone Z] deploy <program.bin (risc0's R0BF)>" >&2; exit 2; }

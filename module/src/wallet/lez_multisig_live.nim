@@ -90,6 +90,14 @@ proc getAccount*(r: LezRpc, id: seq[byte]): LezAccountState =
   try: accountStateOf(j)
   except ValueError as e: raise newException(WalletError, "LEZ getAccount: " & e.msg)
 
+proc getAccount04*(r: LezRpc, id: seq[byte]): LezAccountState =
+  ## A v0.4 zone's account: there `null` means no one has used it yet, a fresh account. Only for
+  ## a zone known to run v0.4 (MsigLive.zoneLine); from any other a null is a failed read.
+  let j = r.call("getAccount", %*[accountIdToBase58(id)])
+  if j.kind == JNull: return LezAccountState(v4: true)
+  try: accountStateOf(j)
+  except ValueError as e: raise newException(WalletError, "LEZ getAccount: " & e.msg)
+
 proc sendTransaction*(r: LezRpc, leeTx: seq[byte]): string =
   ## → the transaction hash (hex) the sequencer accepted into its mempool; not yet landed.
   ## Raises when it answers no hash: an empty hash would read as sent.
