@@ -1218,6 +1218,24 @@ Item {
                     color: parent.st.error && parent.st.error !== "not-a-lez-msig-policy" ? Theme.palette.error : Theme.palette.textSecondary
                     font.pixelSize: MusterStyle.caption
                 }
+                // its deliberation runs in a chat group that follows its members (exo-7a5)
+                LogosText {
+                    objectName: "msigChat"
+                    Layout.fillWidth: true
+                    readonly property var c: parent.st.chat || null
+                    readonly property var held: c ? (c.members || []).filter(function (m) { return !m.pending; }) : []
+                    readonly property var adding: c ? (c.members || []).filter(function (m) { return m.pending; }) : []
+                    visible: c !== null
+                    text: !c ? ""
+                          : !c.convo ? qsTr("Chat group: not created yet")
+                          : qsTr("Chat group: %n member(s), in the Chat app", "", held.length)
+                            + (adding.length > 0 ? qsTr("  ·  %n being added", "", adding.length) : "")
+                            + ((c.missing || []).length > 0 ? qsTr("  ·  %n not reachable in chat yet", "", c.missing.length) : "")
+                            + ((c.failed || []).length > 0 ? "  ·  ⚠ " + String(c.failed[0]) : "")
+                    color: c && (c.failed || []).length > 0 ? Theme.palette.warning : Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                    wrapMode: Text.WordWrap
+                }
                 LogosText {
                     objectName: "msigPrivateNote"
                     Layout.fillWidth: true
